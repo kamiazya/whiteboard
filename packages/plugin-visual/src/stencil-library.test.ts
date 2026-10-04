@@ -111,6 +111,23 @@ describe('reading a library off a document', () => {
     ).toEqual({ bucket: { displayName: 'Bucket', facets: {} } })
   })
 
+  it('carries no key at all for a refused stencil, not even one holding undefined', () => {
+    // toEqual treats an undefined-valued key as absent, so the assertion above cannot tell a reader
+    // that dropped the entry from one that kept it; what a caller is handed differs.
+    const library = readStencilLibrary({
+      [VISUAL_STENCILS_KEY]: {
+        stencils: {
+          bucket: { displayName: 'Bucket' },
+          bad: { displayName: 'Bad', color: 'red' },
+          'Not A Name': { displayName: 'x' },
+          placed: { displayName: 'Placed', x: 10 },
+        },
+      },
+    })
+    expect(Object.keys(library)).toEqual(['bucket'])
+    expect(library).toStrictEqual({ bucket: { displayName: 'Bucket', facets: {} } })
+  })
+
   it('answers by name, because a library has no order that survives storage', () => {
     // A deployment's assets keep REGISTRATION order and that order means
     // something. A library's does not survive the round trip through the

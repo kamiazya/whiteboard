@@ -55,6 +55,7 @@ describe('daemon URL builders keep the bytes clients sent before', () => {
       `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/versions/v%2F1/restore`,
     ],
     ['trashApiUrl', urls.trashApiUrl(WS), `/api/workspaces/${ENC_WS}/trash`],
+    ['trashEntryApiUrl', urls.trashEntryApiUrl(WS, 'd/1'), `/api/workspaces/${ENC_WS}/trash/d%2F1`],
     [
       'trashRestoreApiUrl',
       urls.trashRestoreApiUrl(WS, 'd/1'),

@@ -104,6 +104,51 @@ describe('applyViewportRequest', () => {
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 1 })
   })
 
+  // What the browser does with the combinations `wb_viewport_set` refuses, and
+  // with the defaults its parameter descriptions state: a frame from a daemon
+  // that did not refuse them still lands somewhere defined.
+  type Overrides = Partial<Omit<ViewportRequestPayload, 'type' | 'requestId'>>
+  const mountedHandle = (): SpatialEditorHandle => ({
+    setViewport: vi.fn(),
+    fitToContent: vi.fn(),
+    openProposal: vi.fn(),
+  })
+
+  it.each<[Overrides, string[] | undefined]>([
+    [{ mode: 'fit', zoom: 2 }, undefined],
+    [{ mode: 'fit', scrollX: 9, scrollY: 9 }, undefined],
+    [{ mode: 'fit', elementIds: ['a'], zoom: 2 }, ['a']],
+  ])('applies mode fit as a fit and ignores the position it was also given (%j)', (overrides, framed) => {
+    const handle = mountedHandle()
+    applyViewportRequest(payload(overrides), handle)
+    expect(handle.fitToContent).toHaveBeenCalledWith(framed)
+    expect(handle.setViewport).not.toHaveBeenCalled()
+  })
+
+  it.each<[Overrides, { x: number; y: number; zoom: number }]>([
+    [
+      { mode: 'move', elementIds: ['a'] },
+      { x: 0, y: 0, zoom: 1 },
+    ],
+    [
+      { mode: 'move', elementIds: [], scrollX: 3 },
+      { x: 3, y: 0, zoom: 1 },
+    ],
+    [
+      { mode: 'move', scrollY: 4 },
+      { x: 0, y: 4, zoom: 1 },
+    ],
+    [
+      { mode: 'move', zoom: 2 },
+      { x: 0, y: 0, zoom: 2 },
+    ],
+  ])('applies mode move as a move, ignoring elementIds and defaulting what is omitted to 0, 0 and 1 (%j)', (overrides, expected) => {
+    const handle = mountedHandle()
+    applyViewportRequest(payload(overrides), handle)
+    expect(handle.setViewport).toHaveBeenCalledWith(expected)
+    expect(handle.fitToContent).not.toHaveBeenCalled()
+  })
+
   it.each([
     [0, MIN_VIEWPORT_ZOOM],
     [-3, MIN_VIEWPORT_ZOOM],

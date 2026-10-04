@@ -296,10 +296,8 @@ export function SetupJourney({
  * this refuses a badge the page is not currently laying out — confetti at a
  * hidden element lands off screen.
  *
- * It used to disambiguate TWO badges: the settings page mounted each section
- * once per layout and hid one with `sm:` classes. It mounts a section once
- * now, so the loop is over one element in practice and the check is the
- * laid-out question alone.
+ * The loop is over one element in practice, since the settings page mounts a
+ * section once, and the check is the laid-out question alone.
  */
 export function findVisibleJourneyBadge(step: 'protect' | 'install'): HTMLElement | undefined {
   for (const el of Array.from(

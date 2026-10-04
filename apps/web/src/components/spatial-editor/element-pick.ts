@@ -196,14 +196,14 @@ export interface PickInputs {
   /**
    * The two locks, asked the same way.
    *
-   * They used to be asked differently — a path's lock was a predicate the
-   * probe applied, while a node's was applied by the CALLER, which handed
-   * over a box list with the locked ones already gone. Same rule, two
-   * shapes, and the difference was invisible: a surface reading one of them
-   * had no reason to think the other worked another way. A caller that
-   * wants locked things pickable anyway — the context menu, so Unlock stays
-   * reachable — now says so once per kind instead of swapping a list for
-   * one and passing a predicate for the other.
+   * A path's lock as a predicate the probe applies, with a node's applied by
+   * the CALLER, which hands over a box list with the locked ones already
+   * gone, would be the same rule in two shapes with the difference
+   * invisible: a surface reading one of them would have no reason to think
+   * the other worked another way. A caller that wants locked things pickable
+   * anyway — the context menu, so Unlock stays reachable — says so once per
+   * kind instead of swapping a list for one and passing a predicate for the
+   * other.
    */
   readonly isNodeLocked: (id: string) => boolean
   readonly isEdgeLocked: (id: string) => boolean

@@ -257,6 +257,10 @@ export interface SpatialEditorProps {
   readonly agentTouchedNodeIds?: ReadonlySet<string>
   /** Edge ids an agent just changed, outlined on the same terms as the nodes. */
   readonly agentTouchedEdgeIds?: ReadonlySet<string>
+  /** Stroke ids an agent just changed, outlined on the same terms. */
+  readonly agentTouchedLineIds?: ReadonlySet<string>
+  /** Comment ids an agent just added or resolved; their pin and bubble are outlined. */
+  readonly agentTouchedCommentIds?: ReadonlySet<string>
   /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (canvas id minted in the browser,
@@ -394,6 +398,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedEdgeIds,
       agentTouchedNodeIds,
       agentTouchedEdgeIds,
+      agentTouchedLineIds,
+      agentTouchedCommentIds,
       onToggleEdgeLock,
       onToggleNodeLock,
       onOpenInEditor,
@@ -555,7 +561,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       selectionMembers,
       selectionBox,
       minimapNodes,
-    } = useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    } = useSceneProjection({
+      scene,
+      bounds,
+      boxes,
+      canvas,
+      theme,
+      selectedId,
+      extraIds,
+      tagLibrary,
+    })
     /**
      * What the last committed stroke left behind, for the next press to be
      * judged against. A ref rather than state: nothing renders from it, and
@@ -959,21 +974,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * update has not been applied yet when this runs.
      */
     const toggleSelectionMember = (primaryId: string | null, hitId: string) => {
-      // NOTHING is dropped here. It used to clear the whole path selection,
-      // because Delete processed the selected edge FIRST and would have
-      // removed that instead of the node multi-selection — a real hazard
-      // while the two could not go together. Delete takes every selected
-      // stroke AND the nodes in one press now, so the reason is gone, and
-      // with it the reason to shrink a selection the person is growing:
-      // this is the shared path of shift-click and the touch gather, and
-      // shift means ADD everywhere else in this editor.
+      // NOTHING is dropped here, because shrinking a selection the person is
+      // growing is wrong: this is the shared path of shift-click and the touch
+      // gather, and shift means ADD everywhere else in this editor. Delete
+      // takes every selected stroke AND the nodes in one press, so a path
+      // selection beside a node multi-selection is no hazard.
       //
-      // A relation EDGE went on being dropped after ink stopped being,
-      // because the verbs behind an edge dispatched to a single target —
-      // `toggle-lock` would have locked the one surviving relation instead
-      // of the nodes being gathered. Those verbs take the set now (user
-      // decision, 2026-09-19), so the distinction has nothing left to rest
-      // on and an edge is kept like a stroke.
+      // A relation EDGE is kept like a stroke because the verbs behind an
+      // edge take the set (user decision, 2026-09-19); a verb dispatching to
+      // a single target would lock the one surviving relation instead of the
+      // nodes being gathered.
       //
       // A plain press still replaces — that clearing lives on the press
       // paths, not here. The caller supplies the anchor primary (the
@@ -1722,6 +1732,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           edgePaths={edgePaths}
           agentTouchedNodeIds={agentTouchedNodeIds}
           agentTouchedEdgeIds={agentTouchedEdgeIds}
+          agentTouchedLineIds={agentTouchedLineIds}
+          agentTouchedCommentIds={agentTouchedCommentIds}
+          commentChromeBoxes={commentChromeBoxes}
         />
         {selectionAndEditorLayers()}
       </div>

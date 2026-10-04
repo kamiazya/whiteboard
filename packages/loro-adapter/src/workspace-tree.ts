@@ -65,9 +65,9 @@ export const workspaceNodeMetaSchema = z.object({
    */
   name: z.string().min(1).optional(),
   /**
-   * Row-relocated meta (dual-plane collapse): state that used to live only
-   * in the daemon's `documents` table and is shared CRDT state by decision —
-   * every client sees the same timestamps. All optional so every workspace
+   * Row-relocated meta (dual-plane collapse): state that is shared CRDT state
+   * by decision, not the daemon's `documents` table alone — every client sees
+   * the same timestamps. All optional so every workspace
    * document written before this schema keeps parsing, including one whose
    * node still carries the retired `currentBranch` (ADR-0029): not strict.
    */
@@ -633,7 +633,7 @@ export function moveWorkspaceNodeToPath(doc: LoroDoc, from: string, to: string):
  * Answers null without writing when the id is already in the tree, which is
  * what makes a crashed fold safe to run again: the work list is derived from
  * "index rows not yet in the tree", so a document folded before the crash is
- * simply not work anymore.
+ * simply not on the work list.
  */
 export function adoptWorkspaceDocument(
   doc: LoroDoc,

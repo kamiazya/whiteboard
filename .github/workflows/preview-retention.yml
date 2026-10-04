@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   cloudflare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: read
     # The Cloudflare secrets are scoped to this environment. Binding it mints
@@ -129,7 +129,7 @@ jobs:
     # that job's environment binding just minted.
     needs: cloudflare
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       deployments: write
       pull-requests: read

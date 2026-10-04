@@ -108,8 +108,8 @@ export function advanceDrawing(c: InkClaimInputs, screenPoint: Point): boolean {
 }
 
 /**
- * The end of an ink drag. It replaced the marquee a press on ink used to
- * start, and two things that branch did for such a press came with it. Focus
+ * The end of an ink drag. A press on ink starts this rather than a marquee,
+ * and two things the marquee branch did for such a press come with it. Focus
  * is taken at the RELEASE because ink has no focusable element of its own,
  * so without it Delete and Escape land on `<body>` — and the browser's own
  * mousedown focus handling would undo one taken at the press. A double press

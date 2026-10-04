@@ -42,7 +42,7 @@ const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   clearDocCacheForTests()

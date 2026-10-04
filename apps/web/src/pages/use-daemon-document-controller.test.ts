@@ -78,7 +78,7 @@ describe('useDaemonDocumentController', () => {
   })
 
   it('still fetches the workspace list when an explicit workspaceId/path is given, populating controller.workspaces', async () => {
-    // The real pairing-payload caller always supplies a non-null workspaceId,
+    // The real caller (App's daemon route) always supplies a non-null workspaceId,
     // so listWorkspaces must run unconditionally for the switcher to have
     // anything to list — it must not be gated behind the wid===null branch.
     mockListWorkspaces.mockResolvedValue({

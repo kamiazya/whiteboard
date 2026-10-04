@@ -54,12 +54,11 @@ const SYMBOL_KEY = 'visual.symbol/v0'
  * drawing declares — healthy-versus-failing on an infrastructure board being
  * the case that named the rule.
  *
- * This used to demand two channels per pair, colour and silhouette, and the
- * reason it did is the reason one is now enough: colour is the channel most
- * often lost (a projector, a colour-blind reader, a greyscale print), so a
- * set leaning on both really leaned on silhouette for any reader who lost
- * it. Spending none does not weaken the vocabulary — it stops pretending,
- * and hands the lost-anyway channel to an axis that can state what it means.
+ * One channel per pair is enough: colour is the channel most often lost (a
+ * projector, a colour-blind reader, a greyscale print), so a set leaning on
+ * both really leans on silhouette for any reader who lost it. Spending none
+ * does not weaken the vocabulary — it stops pretending, and hands the
+ * lost-anyway channel to an axis that can state what it means.
  *
  * The badge is not a channel here either, though two members carry one. This
  * package contributes no node decoration (`render.ts`), so `visual.symbol`

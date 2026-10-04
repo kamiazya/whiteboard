@@ -19,7 +19,6 @@ import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 // file ran 1737ms and passed, then 3630ms and failed at
 // `findByLabelText('Icon database')` after three cases were added to two of
 // the other eight. Nothing about this file had changed.
-import { emojiSections } from '@kamiazya/whiteboard-plugin-visual/emoji'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -433,9 +432,12 @@ describe('a registered editor replaces the derived form', () => {
     // a claim about the DATA, so it is asserted rather than assumed: were
     // the row gone, the case below would pass on the free-entry cell and
     // stop testing what it says it tests.
-    expect(emojiSections().some((band) => band.options.some((row) => row.label === 'star'))).toBe(
-      true,
-    )
+    // Read through the loader the picker itself calls, not the table directly.
+    const catalog = bundledPlugins
+      .flatMap((plugin) => plugin.facets)
+      .find((facet) => facet.name === 'symbol')?.editor?.picker?.catalog
+    const bands = (await catalog?.load()) ?? []
+    expect(bands.some((band) => band.options.some((row) => row.label === 'star'))).toBe(true)
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
       target: { value: '⭐' },
     })

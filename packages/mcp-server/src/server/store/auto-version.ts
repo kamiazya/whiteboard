@@ -17,7 +17,7 @@ export interface AutoVersionOptions {
   readonly quietMs?: number
   readonly ceilingMs?: number
   /**
-   * Called when a checkpoint actually lands. The trigger no longer answers
+   * Called when a checkpoint actually lands. The trigger does not answer
    * its caller with an entry — the save happens long after the update that
    * signalled it — so this is how a broadcast reaches the surfaces watching.
    */

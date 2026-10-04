@@ -8,6 +8,7 @@ import {
   getWorkspaceNames,
   listDocuments,
   listTrash,
+  purgeTrashEntry,
   renameDocumentPath,
   restoreFromTrash,
   searchWorkspaceDocuments,
@@ -16,6 +17,7 @@ import {
 } from './daemon-api-client.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
+  type DocumentSearchHit,
   type LoadedMarkdown,
   type TrashRow,
   type WorkspaceFilesSource,
@@ -120,9 +122,8 @@ async function readListing(
 }
 
 /**
- * `WorkspaceFilesSource` over the daemon's HTTP API — the client calls
- * `WorkspaceFilesPanel` used to make itself, moved behind the seam so the
- * panel stops being daemon-only.
+ * `WorkspaceFilesSource` over the daemon's HTTP API — the client calls sit
+ * behind the seam so `WorkspaceFilesPanel` is not daemon-only.
  *
  * It is also the index SCREEN's one reader of the list and the trash: the
  * page reads through it (`refresh`) and the panel, its chips and the trash
@@ -140,6 +141,26 @@ export interface DaemonFilesSource extends WorkspaceFilesSource {
     readonly entries: readonly WorkspaceDocumentEntry[]
     readonly trash: readonly TrashRow[] | null
   }>
+}
+
+/**
+ * The daemon's search hit as the seam's result: optional fields are carried
+ * only when present, so a hit never reads as one with an `undefined` rank.
+ */
+function searchResultOf(
+  hit: Awaited<ReturnType<typeof searchWorkspaceDocuments>>['results'][number],
+): DocumentSearchHit {
+  return {
+    document: {
+      documentId: hit.documentId,
+      path: hit.path,
+      ...(hit.name === undefined ? {} : { name: hit.name }),
+      ...(hit.kind === undefined ? {} : { kind: hit.kind }),
+    },
+    contexts: hit.contexts,
+    ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
+    ...(hit.semanticRank === undefined ? {} : { semanticRank: hit.semanticRank }),
+  }
 }
 
 export function createDaemonFilesSource(
@@ -195,17 +216,7 @@ export function createDaemonFilesSource(
         query,
         limit,
       )
-      return res.results.map((hit) => ({
-        document: {
-          documentId: hit.documentId,
-          path: hit.path,
-          ...(hit.name === undefined ? {} : { name: hit.name }),
-          ...(hit.kind === undefined ? {} : { kind: hit.kind }),
-        },
-        contexts: hit.contexts,
-        ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
-        ...(hit.semanticRank === undefined ? {} : { semanticRank: hit.semanticRank }),
-      }))
+      return res.results.map(searchResultOf)
     },
 
     setDocumentName: (entry, name) =>
@@ -234,5 +245,8 @@ export function createDaemonFilesSource(
 
     restoreFromTrash: (documentId: string) =>
       afterWrite(restoreFromTrash(daemonFetch, daemonBaseUrl, workspaceId, documentId), true),
+
+    purgeFromTrash: (documentId: string) =>
+      afterWrite(purgeTrashEntry(daemonFetch, daemonBaseUrl, workspaceId, documentId), true),
   }
 }

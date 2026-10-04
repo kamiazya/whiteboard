@@ -194,8 +194,6 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       //
       // The stored bytes are read only here, on the path that already decided
       // to fold — once per COMPACT_DELTA_BYTES written, not once per save.
-      // `loro-store.ts` folds the same way in the browser, and for the same
-      // reason.
       const base = await this.store.loadSnapshot({ docRef })
       const merged = new LoroDoc()
       if (base !== null) merged.import(reassembleSnapshot(base.manifest, base.chunks))
@@ -287,8 +285,7 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     // unsaved edits survive.
     // One consistent read of snapshot and log, rather than one call each: the
     // fold this branch exists to follow can land AGAIN between those two
-    // calls, and this branch used to cover only the one that landed before
-    // it. `readRecord` is what closes that.
+    // calls, so two reads could straddle it. `readRecord` is what closes that.
     const record = await this.readRecord(docRef)
     if (record === null) {
       // The record is gone (deleted while catching up): nothing to carry, and

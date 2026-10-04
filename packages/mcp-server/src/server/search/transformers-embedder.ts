@@ -90,7 +90,7 @@ export async function loadEmbeddingPipeline(
 
 /**
  * The three ways loading fails need three different answers, and the one
- * that used to be logged for all of them ("unavailable") is actionable for
+ * one answer for all of them ("unavailable") is actionable for
  * none. `runtime-missing` is a packaging state the user fixes by installing
  * the optional peer; `weights-missing` is fixed by running the fetch
  * command; anything else is a real fault worth reporting as one.

@@ -197,9 +197,13 @@ describe('what an errand costs in tool calls', () => {
         // arrays (the snapshot's and `touched`'s). That is the shape to
         // check on an addition — a new capability that cost a round trip
         // would show here, and this one costs bytes a reader skips.
+        // +30 more on every canvas errand for the snapshot's `lineCount`:
+        // lines were cut at the edge cap with no total and `truncated`
+        // ignored them, so a board of 680 lines read back as 600 and
+        // complete. A total is what makes a cut visible.
         calls: 2,
         requestBytes: 1592,
-        responseBytes: 3364,
+        responseBytes: 3394,
       },
       // A DISCOVERY errand (足場4b): learn what this workspace's own stencil
       // library defines, then wear one of its ids. Two calls, and the id is
@@ -314,7 +318,7 @@ describe('what an errand costs in tool calls', () => {
         // snapshot used to drop them. The same bytes are the read a blind
         // agent was told to make (`wb_canvas_snapshot`'s row on rung 1);
         // the call count does not move.
-        responseBytes: 14196,
+        responseBytes: 14226,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
@@ -326,11 +330,14 @@ describe('what an errand costs in tool calls', () => {
       // names its own `documentId`, which five separate replies never had to
       // say. +268 bytes for -4 round trips is the trade this consolidation
       // actually makes, and it is worth stating rather than reporting the
-      // calls alone as a clean win.
+      // calls alone as a clean win. +160 more (3310 -> 3470) when each entry
+      // said whether the workspace pins it: both keepers keep pins, and a
+      // listing that cannot say which rows are pinned sends a model to a
+      // second read for something the first one held.
       'read every document in a workspace of 5': {
         calls: 2,
         requestBytes: 292,
-        responseBytes: 3310,
+        responseBytes: 3470,
       },
       // Axis B on a write, and the CONTRAST with the read above is the
       // thing to read here. Both went down, hard:
@@ -405,7 +412,7 @@ describe('what an errand costs in tool calls', () => {
         // bytes a dressed box. This is the price of the snapshot telling
         // the truth about what a node wears: before, the answer to "dress
         // six boxes" never said they were dressed. One call either way.
-        responseBytes: 3450,
+        responseBytes: 3480,
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading
@@ -420,7 +427,7 @@ describe('what an errand costs in tool calls', () => {
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,
-        responseBytes: 2104,
+        responseBytes: 2134,
       },
     })
   })

@@ -75,11 +75,14 @@ A wall of LOWs buries the HIGHs — do not inflate. A false HIGH wastes triage; 
 
 ## Filing the result (integrator)
 
-For each `triaged.items[i]`:
-- `track: "task"` → `TaskCreate` on the live board (set `blockedBy`/`relatedTo` from the item). Do soon.
-- `track: "issue"` → a whiteboard document with `type: issue` (`wb_workspace_edit`'s `document.create` op; see the `ticketing` skill). Durable backlog.
-- **Skip dupes** of existing Tasks / whiteboard issue documents (the triage agent flags `relatedTo`, but check the board yourself — it can't see it).
-- Quick wins (effort `S`, a few lines) that are safe and in-scope: per the resolve-on-the-spot discipline, just fix them now instead of filing.
+The fold is a numbered checklist, and step 4 is the one waves have skipped: the ledger stops
+advancing, the `audit-nudge` hook goes quiet for the wrong reason, and then reports an overdue
+audit that was in fact run.
+
+1. For each `triaged.items[i]`, `track: "task"` → `TaskCreate` on the live board (set `blockedBy`/`relatedTo` from the item). Do soon.
+2. `track: "issue"` → a whiteboard document with `type: issue` (`wb_workspace_edit`'s `document.create` op; see the `ticketing` skill). Durable backlog.
+3. **Skip dupes** of existing Tasks / whiteboard issue documents (the triage agent flags `relatedTo`, but check the board yourself — it can't see it). Quick wins (effort `S`, a few lines) that are safe and in-scope: per the resolve-on-the-spot discipline, just fix them now instead of filing.
+4. **Record the run, then commit the ledger with the fold** — `node .claude/scripts/record-audit.mjs audit-triage` appends to `.claude/audit-log.jsonl`. The `audit-nudge` SessionStart hook nudges every session once the newest `audit-triage` entry is older than 7 days (the "weekly" cadence made discoverable instead of remembered), and also names any `audit wave` commit that landed after the newest entry without touching the ledger.
 
 ## Cadence
 
@@ -90,16 +93,3 @@ Run it **after each fold/merge of a substantial slice**, and/or **weekly**, and 
 - Read-only: auditors and verifiers never edit.
 - Don't double-file: reconcile against the existing Task list + open whiteboard issues (`wb_document_list`, `type: issue`) before creating.
 - Trust runtime: if an audit finding disagrees with what the running app/test actually does, the runtime wins — verify before filing.
-
-## Record the run
-
-After folding the survivors, append the run to the tracked ledger so the
-`audit-nudge` SessionStart hook stops counting from the last one:
-
-```
-node .claude/scripts/record-audit.mjs audit-triage
-```
-
-Commit `.claude/audit-log.jsonl` with the fold. The hook nudges every session
-once the newest `audit-triage` entry is older than 7 days — that is the
-"weekly" cadence made discoverable instead of remembered.

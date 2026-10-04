@@ -1,6 +1,7 @@
 # ADR-0019: Workspace identity is three layers, in both keepers
 
-**Status:** Proposed
+**Status:** Accepted — in effect in both keepers (status corrected 2026-10-04;
+the 2026-08-29 addendum below records what shipped).
 
 ## Context
 

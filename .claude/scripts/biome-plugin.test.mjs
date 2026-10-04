@@ -3,8 +3,8 @@
 // leaves `pnpm lint` green over the exact shapes it was built to catch. So a
 // fixture pair pins both directions per plugin: the bad fixture must trip
 // EVERY rule the plugin declares, the good one none. Fixtures live under
-// .claude/scripts/fixtures/, which biome.json's `!.claude/**` keeps out of
-// the real lint run.
+// .claude/scripts/fixtures/, which biome.json's `!.claude/scripts/fixtures/**`
+// keeps out of the real lint run.
 //
 // The set of rules is READ FROM EACH PLUGIN (every `register_diagnostic`
 // message), never counted here: a title or an assertion carrying "all four

@@ -4,7 +4,7 @@ import * as favicon from '../lib/favicon.js'
 import { useFavicon } from './useFavicon.js'
 
 // The dynamic favicon exists only while a canvas page is mounted. Every
-// other surface (gallery, /pair, error pages) must see the static icon —
+// other surface (gallery, error pages) must see the static icon —
 // which is exactly the unmount cleanup's job, pinned here.
 describe('useFavicon lifecycle', () => {
   // Links are cleared on BOTH sides of a test. Testing Library's auto-cleanup

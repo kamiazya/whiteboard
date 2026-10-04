@@ -58,7 +58,7 @@ export function useInteractionState({ canvas }: InteractionStateInputs) {
    * RESOLVED at pointerup: zero movement opens the editor (node) or
    * creates (empty), any movement means it was a drag all along. Firing
    * at the release also sidesteps mousedown's default focus action, which
-   * used to blur the just-mounted textarea when we opened at the press.
+   * would blur the just-mounted textarea if we opened at the press.
    */
   const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
   /** In-flight marquee selection rect, in canvas space (Excalidraw

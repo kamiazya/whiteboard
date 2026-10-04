@@ -34,6 +34,12 @@ export type RestoreVersionResult =
   | { kind: 'not-found' }
   | { kind: 'invalid-target-path' }
   | { kind: 'output-exists'; targetPath: string }
+  | {
+      kind: 'kind-mismatch'
+      targetPath: string
+      sourceKind: DocumentKind
+      targetKind: DocumentKind
+    }
   | { kind: 'subtree-takes-no-target' }
   | { kind: 'subtree-needs-workspace-version' }
   | { kind: 'restored-in-place' }
@@ -54,7 +60,10 @@ export type RestoreVersionResult =
  *      a brand-new document carrying the SOURCE's kind; an existing one
  *      needs `overwrite` and goes through the SAME reconcile-onto-the-live-
  *      doc path as mode 1 — never a file swap, because a delta broadcast
- *      only means something against the doc it was diffed from.
+ *      only means something against the doc it was diffed from. A kind is
+ *      written once, at birth, so an existing target of the OTHER kind is
+ *      refused (`kind-mismatch`) rather than converted: the reconcile would
+ *      replace its whole content with the other kind's shape.
  *
  *   3. Subtree rollback (`subtree`, only with no distinct target): the
  *      document and every descendant go back to this version's state —
@@ -146,6 +155,40 @@ async function restoreInPlace(
   return { kind: 'restored-in-place' }
 }
 
+/**
+ * The overwrite arm of mode 2: reconcile the past onto the live target. A
+ * target of the OTHER kind is refused before anything is written or announced,
+ * because the reconcile replaces the whole content with the source's shape.
+ */
+async function restoreOntoExisting(
+  live: LiveDocuments,
+  versions: Pick<ServerDeps, 'versions'>['versions'],
+  ctx: RestoreContext,
+  targetPath: string,
+): Promise<RestoreVersionResult> {
+  const { workspaceId, path, past, label, progress, versionId } = ctx
+  const sourceKind = await live.kind(workspaceId, path)
+  const targetKind = await live.kind(workspaceId, targetPath)
+  if (sourceKind !== null && targetKind !== null && sourceKind !== targetKind) {
+    return { kind: 'kind-mismatch', targetPath, sourceKind, targetKind }
+  }
+  const targetDoc = await live.get(workspaceId, targetPath)
+  // A target that records no kind is declared by the first write that
+  // reaches it, so it takes the source's — the shape the merged content
+  // has — and a kind-aware consumer (editor routing) opens it correctly.
+  await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
+    label,
+    kind: targetKind === null ? sourceKind : null,
+    progress,
+  })
+  await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
+  return {
+    kind: 'restored-to-target',
+    targetPath,
+    elementCount: countSpatialNodes(targetDoc),
+  }
+}
+
 /** Mode 2: restore the past state into a DIFFERENT document. */
 async function restoreToTarget(
   live: LiveDocuments,
@@ -154,7 +197,7 @@ async function restoreToTarget(
   targetPath: string,
   input: RestoreVersionInput,
 ): Promise<RestoreVersionResult> {
-  const { workspaceId, path, past, label, progress, versionId } = ctx
+  const { workspaceId, path, past, versionId } = ctx
 
   if (!documentPathSchema.safeParse(targetPath).success) {
     return { kind: 'invalid-target-path' }
@@ -166,25 +209,7 @@ async function restoreToTarget(
     return { kind: 'output-exists', targetPath }
   }
 
-  if (targetAlreadyExists) {
-    const targetDoc = await live.get(workspaceId, targetPath)
-    // The merged content is the source's own shape (spatial nodes/edges
-    // vs. a markdown body), so the target's stored kind must follow it or
-    // a kind-aware consumer (editor routing) opens the overwritten
-    // document with the wrong editor.
-    const sourceKind = await live.kind(workspaceId, path)
-    await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
-      label,
-      kind: sourceKind,
-      progress,
-    })
-    await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
-    return {
-      kind: 'restored-to-target',
-      targetPath,
-      elementCount: countSpatialNodes(targetDoc),
-    }
-  }
+  if (targetAlreadyExists) return await restoreOntoExisting(live, versions, ctx, targetPath)
 
   // Genuinely new document: no live doc and no connected clients, so
   // there is nothing to reconcile against. The restored content is

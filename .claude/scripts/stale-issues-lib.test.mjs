@@ -34,7 +34,10 @@ const CASES = [
         { resource: 'packages/facet-ui/src/visual-ui.tsx' },
       ],
     },
-    verdicts: { 'packages/facet-engine/src/visual.ts': 'missing', 'packages/facet-ui/src/visual-ui.tsx': 'missing' },
+    verdicts: {
+      'packages/facet-engine/src/visual.ts': 'missing',
+      'packages/facet-ui/src/visual-ui.tsx': 'missing',
+    },
     stale: true,
   },
   {
@@ -136,7 +139,14 @@ for (const entry of CASES) {
 
 test('a missing source and a changed one are reported apart, not merged', () => {
   const [finding] = collectStaleIssues(
-    [{ documentId: 'x', path: 'p', generatedAt: AUG_23, sources: [{ resource: 'gone.ts' }, { resource: 'moved.ts' }] }],
+    [
+      {
+        documentId: 'x',
+        path: 'p',
+        generatedAt: AUG_23,
+        sources: [{ resource: 'gone.ts' }, { resource: 'moved.ts' }],
+      },
+    ],
     (resource) => (resource === 'gone.ts' ? 'missing' : 'changed'),
   )
   assert.deepEqual(finding.missing, ['gone.ts'])
@@ -194,7 +204,14 @@ test('a URL source is not checkable and does not make a document look fresh', ()
 test('a bundle-relative source is checked against the repo root, without its leading slash', () => {
   const seen = []
   collectStaleIssues(
-    [{ documentId: 'x', path: 'p', generatedAt: AUG_23, sources: [{ resource: '/docs/thing.md' }] }],
+    [
+      {
+        documentId: 'x',
+        path: 'p',
+        generatedAt: AUG_23,
+        sources: [{ resource: '/docs/thing.md' }],
+      },
+    ],
     (resource) => {
       seen.push(resource)
       return 'unchanged'

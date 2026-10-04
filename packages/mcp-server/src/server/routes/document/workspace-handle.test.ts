@@ -17,7 +17,7 @@ import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test
 const tmp = withTempDataDir('whiteboard-workspace-handle-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
@@ -132,6 +132,9 @@ describe('daemon routes address a workspace by its segment', () => {
     expect(res.status).toBe(404)
     // The unresolved handle passes through unchanged, so the existing message
     // still names what the caller actually typed.
-    expect(await res.json()).toEqual({ title: 'Workspace "no-such-workspace" not found' })
+    expect(await res.json()).toEqual({
+      error: 'workspace_not_found',
+      message: 'Workspace "no-such-workspace" not found',
+    })
   })
 })

@@ -221,7 +221,7 @@ describe('unlockReplicaKey', () => {
       credentials,
     })
 
-    // A copy wrapped under a passkey a daemon's pairing once registered has
+    // A copy wrapped under a passkey this browser no longer holds has
     // nothing left here that can open it.
     expect(outcome).toEqual({ ok: false, reason: 'unopenable' })
     expect(get).not.toHaveBeenCalled()

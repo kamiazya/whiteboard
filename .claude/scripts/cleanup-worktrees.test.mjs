@@ -1,17 +1,27 @@
 #!/usr/bin/env node
+
 // Regression coverage for cleanup-worktrees.mjs's merged/fresh detection.
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 //
 // Builds a throwaway "origin" + working repo pair per test (not the real
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
 
+import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
-import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'cleanup-worktrees.mjs')
@@ -79,7 +89,11 @@ test('keeps a stale-base fresh lane (no unique commits, but origin/main advanced
   git(seedDir, ['push', '--quiet', 'origin', 'main'])
 
   const withoutFlag = runCleanup(repoDir)
-  assert.match(withoutFlag, /keep lane-x/, 'stale-base fresh lane must be kept without --include-fresh')
+  assert.match(
+    withoutFlag,
+    /keep lane-x/,
+    'stale-base fresh lane must be kept without --include-fresh',
+  )
   assert.doesNotMatch(withoutFlag, /would remove lane-x/)
 
   const withFlag = runCleanup(repoDir, ['--include-fresh'])
@@ -109,7 +123,7 @@ test('removes a squash-merged lane whose remote branch was deleted after merge (
   assert.match(
     output,
     /would remove lane-squashed/,
-    'a published lane whose remote branch was deleted after a squash-merge should be removable without --include-fresh'
+    'a published lane whose remote branch was deleted after a squash-merge should be removable without --include-fresh',
   )
 })
 
@@ -190,17 +204,31 @@ test('a real run sweeps the MCP registration a removed worktree left under the m
   const proxy = (root) => `${root}/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`
   const dead = join(mainRoot, '.claude', 'worktrees', 'gone')
   const seeded = JSON.stringify({
-    projects: { [mainRoot]: { mcpServers: { whiteboard: { type: 'stdio', command: 'node', args: [proxy(dead)], env: {} } } } },
+    projects: {
+      [mainRoot]: {
+        mcpServers: {
+          whiteboard: { type: 'stdio', command: 'node', args: [proxy(dead)], env: {} },
+        },
+      },
+    },
   })
   writeFileSync(claudeJson, seeded)
-  const env = { ...process.env, HOME: home, USERPROFILE: home, CLEANUP_WORKTREES_REPO_ROOT: repoDir }
+  const env = {
+    ...process.env,
+    HOME: home,
+    USERPROFILE: home,
+    CLEANUP_WORKTREES_REPO_ROOT: repoDir,
+  }
 
   execFileSync('node', [scriptPath, '--dry-run'], { cwd: repoDir, encoding: 'utf-8', env })
   assert.equal(readFileSync(claudeJson, 'utf-8'), seeded, 'a dry run must not edit ~/.claude.json')
 
   const output = execFileSync('node', [scriptPath], { cwd: repoDir, encoding: 'utf-8', env })
   assert.match(output, /sweep: removed stale "whiteboard" registration/)
-  assert.equal(JSON.parse(readFileSync(claudeJson, 'utf-8')).projects[mainRoot].mcpServers.whiteboard, undefined)
+  assert.equal(
+    JSON.parse(readFileSync(claudeJson, 'utf-8')).projects[mainRoot].mcpServers.whiteboard,
+    undefined,
+  )
 })
 
 // A real run also sweeps ~/.claude.json, so point HOME at the scratch dir.
@@ -211,7 +239,11 @@ function realEnv(repoDir) {
 }
 
 function runReal(repoDir, extraArgs = [], cwd = repoDir) {
-  return execFileSync('node', [scriptPath, ...extraArgs], { cwd, encoding: 'utf-8', env: realEnv(repoDir) })
+  return execFileSync('node', [scriptPath, ...extraArgs], {
+    cwd,
+    encoding: 'utf-8',
+    env: realEnv(repoDir),
+  })
 }
 
 function squashMergedLane(name, { publish = true } = {}) {
@@ -245,7 +277,7 @@ test('a never-published lane with committed work is kept', () => {
 })
 
 test('a lane whose upstream is another remote is kept when absent under origin/', () => {
-  const { repoDir, laneDir } = squashMergedLane('lane-fork', { publish: false })
+  const { repoDir } = squashMergedLane('lane-fork', { publish: false })
   git(repoDir, ['config', 'branch.lane-fork.merge', 'refs/heads/lane-fork'])
   git(repoDir, ['config', 'branch.lane-fork.remote', 'fork'])
   const out = runCleanup(repoDir)
@@ -334,9 +366,17 @@ test('--help and an unrecognised option print usage and touch nothing: no fetch,
   for (const flag of ['--help', '--bogus', '--dryrun', '-n']) {
     const { repoDir, laneDir } = squashMergedLane(`lane-flag${flag.replace(/\W/g, '')}`)
     const mainBefore = git(repoDir, ['rev-parse', 'origin/main'])
-    const result = spawnSync('node', [scriptPath, flag], { cwd: repoDir, encoding: 'utf-8', env: realEnv(repoDir) })
+    const result = spawnSync('node', [scriptPath, flag], {
+      cwd: repoDir,
+      encoding: 'utf-8',
+      env: realEnv(repoDir),
+    })
 
-    assert.equal(result.status, flag === '--help' ? 0 : 2, `${flag}: ${result.stdout}${result.stderr}`)
+    assert.equal(
+      result.status,
+      flag === '--help' ? 0 : 2,
+      `${flag}: ${result.stdout}${result.stderr}`,
+    )
     assert.match(`${result.stdout}${result.stderr}`, /usage: cleanup-worktrees/, flag)
     assert.doesNotMatch(result.stdout, /removed lane|done:/, flag)
     assert.equal(existsSync(laneDir), true, `${flag} removed a worktree`)

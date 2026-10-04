@@ -10,6 +10,7 @@
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-canvas-render'
 import { flattenDrawnEdgePath, resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useMemo } from 'react'
 import { type NodeBox, unionBox } from '../../lib/spatial/geometry.js'
 import { buildMinimapNodes } from '../../lib/spatial/minimap.js'
@@ -24,6 +25,8 @@ export interface SceneProjectionInputs {
   readonly theme: ResolvedTheme
   readonly selectedId: string | null
   readonly extraIds: ReadonlySet<string>
+  /** What colours a tagged box in the scene, so the overview draws it the same. */
+  readonly tagLibrary?: TagLibrary
 }
 
 /** The smallest box covering both — scene bboxes are `{x,y,w,h}`. */
@@ -66,11 +69,12 @@ export function useSceneProjection({
   theme,
   selectedId,
   extraIds,
+  tagLibrary,
 }: SceneProjectionInputs) {
   // The committed surface's keyed projection, derived from the scene the
   // worker (or sync path) delivered — ~3ms of stringify against the
   // 66-125ms layout, so the worker protocol stays plain-data. The patch
-  // container below consumes it; the plain `svg` string is no longer
+  // container below consumes it; the plain `svg` string is not
   // read here.
   const keyed = useMemo(() => renderedCanvasKeyed({ scene, bounds }), [scene, bounds])
   // Routed edge paths in canvas coordinates, for edge hit-testing and the
@@ -187,14 +191,12 @@ export function useSceneProjection({
    */
   const palette = useMemo(() => resolveCanvasPalette(canvas, theme), [canvas, theme])
   /**
-   * Node boxes for the overview, with each authored colour resolved to the
-   * accent the scene already uses for it. A preset key resolves through that
-   * palette; a hex passes through; an unstyled node carries no colour and the
-   * overview falls back to its muted default.
+   * Node boxes for the overview, each colour (its own, else its tag's by the
+   * library) resolved to the accent the scene uses; none falls back to muted.
    */
   const minimapNodes = useMemo(
-    () => buildMinimapNodes(canvas.nodes, boxes, palette),
-    [boxes, canvas, palette],
+    () => buildMinimapNodes(canvas.nodes, boxes, palette, tagLibrary),
+    [boxes, canvas, palette, tagLibrary],
   )
 
   return {

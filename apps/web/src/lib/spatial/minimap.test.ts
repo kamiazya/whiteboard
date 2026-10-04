@@ -2,10 +2,12 @@
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import {
   buildMinimapNodes,
+  fitLargestRects,
   fitMinimap,
   type MinimapBox,
   projectBox,
@@ -153,6 +155,42 @@ describe('buildMinimapNodes', () => {
     ])
   })
 
+  describe('with the workspace tag library', () => {
+    const library: TagLibrary = {
+      health: { values: { ok: { color: '4' }, failing: { color: '1' } } },
+    }
+    const tagged = nodes([
+      textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a', tags: ['health:ok'] }),
+      textNode({
+        id: 'b',
+        x: 20,
+        y: 0,
+        width: 10,
+        height: 10,
+        text: 'b',
+        tags: ['health:failing'],
+        color: '#00ff00',
+      }),
+      textNode({ id: 'c', x: 40, y: 0, width: 10, height: 10, text: 'c', tags: ['plain'] }),
+    ])
+    const boxes = indexNodeBoxes({ nodes: tagged, edges: [] })
+
+    it('draws a tagged node in the colour the library declares, as the board does', () => {
+      const colours = buildMinimapNodes(tagged, boxes, SPATIAL_LIGHT_PALETTE, library).map(
+        (entry) => entry.color,
+      )
+      // An authored colour wins over the declared one, and a tag the library
+      // does not colour leaves the node on the overview's muted default.
+      expect(colours).toEqual([SPATIAL_LIGHT_PALETTE.presets['4'].stroke, '#00ff00', undefined])
+    })
+
+    it('draws the same nodes by their own colour alone when no library is given', () => {
+      expect(
+        buildMinimapNodes(tagged, boxes, SPATIAL_LIGHT_PALETTE).map((entry) => entry.color),
+      ).toEqual([undefined, '#00ff00', undefined])
+    })
+  })
+
   it('leaves an unstyled node with no color', () => {
     const n = nodes([textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hi' })])
     const boxes = indexNodeBoxes({ nodes: n, edges: [] })
@@ -201,5 +239,55 @@ describe('buildMinimapNodes', () => {
     const n = nodes([textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hi' })])
     const boxes = indexNodeBoxes({ nodes: n, edges: [] })
     expect(buildMinimapNodes(n, boxes, SPATIAL_LIGHT_PALETTE)[0]?.symbol).toBeUndefined()
+  })
+})
+
+describe('fitLargestRects', () => {
+  const rect = (x: number, y: number, w: number, h: number, color?: string) => ({
+    x,
+    y,
+    w,
+    h,
+    color,
+  })
+
+  it('answers nothing for no rects', () => {
+    expect(fitLargestRects([], 3, SIZE)).toEqual([])
+  })
+
+  it('keeps only the largest by area, largest first, and hands back each source', () => {
+    const small = rect(0, 0, 10, 10, 'small')
+    const big = rect(20, 0, 80, 80, 'big')
+    const mid = rect(0, 50, 30, 30, 'mid')
+    const kept = fitLargestRects([small, big, mid], 2, SIZE)
+    expect(kept.map((k) => k.source)).toEqual([big, mid])
+  })
+
+  it('keeps everything when there are fewer rects than the limit', () => {
+    const rects = [rect(0, 0, 10, 10), rect(20, 20, 10, 10)]
+    expect(fitLargestRects(rects, 5, SIZE)).toHaveLength(2)
+  })
+
+  it('does not reorder or mutate its input', () => {
+    const rects = [rect(0, 0, 1, 1), rect(0, 0, 9, 9), rect(0, 0, 4, 4)]
+    const before = [...rects]
+    fitLargestRects(rects, 2, SIZE)
+    expect(rects).toEqual(before)
+  })
+
+  it('fits the kept rects inside the box, scaling down but never up', () => {
+    const [only] = fitLargestRects([rect(0, 0, 400, 200)], 1, SIZE)
+    expect(only?.box).toEqual({ x: 0, y: 25, width: 100, height: 50 })
+    const [small] = fitLargestRects([rect(0, 0, 20, 10)], 1, SIZE)
+    expect(small?.box.width).toBe(20)
+    expect(small?.box.height).toBe(10)
+  })
+
+  it('fits the KEPT rects only, so a dropped outlier does not shrink the rest', () => {
+    const near = [rect(0, 0, 50, 50), rect(50, 50, 50, 50)]
+    const outlier = rect(10000, 10000, 1, 1)
+    const without = fitLargestRects(near, 2, SIZE).map((k) => k.box)
+    const withOutlier = fitLargestRects([...near, outlier], 2, SIZE).map((k) => k.box)
+    expect(withOutlier).toEqual(without)
   })
 })

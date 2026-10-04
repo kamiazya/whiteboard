@@ -133,17 +133,7 @@
       "ignoreIssues": { "vite.config.ts": ["exports"] }
     },
     "apps/web": {
-      "entry": [
-        // Compile-time-only regression guard (tsc --noEmit fails/passes
-        // around it); intentionally never imported at runtime.
-        "src/_type-probe.ts",
-        "scripts/*.mjs"
-      ],
-      "ignoreIssues": {
-        // Re-exports whose only purpose is to be resolved by tsc, so the
-        // probe fails to compile when a component or contract goes missing.
-        "src/_type-probe.ts": ["exports", "types"]
-      },
+      "entry": ["scripts/*.mjs"],
       // `src/**/*.css` is in the project so knip follows `@import "tailwindcss"` /
       // `@import "tw-animate-css"` in src/index.css: without it the `.css`
       // compiler is enabled but its imports are never followed, and both packages

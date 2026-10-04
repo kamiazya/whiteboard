@@ -1,4 +1,5 @@
 import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type PromoteWorkspaceResponse,
   promoteWorkspaceRequestSchema,
@@ -74,7 +75,7 @@ async function admittedWorkspace(
   }
   const workspaceId = await workspaceIdFromHandle(c, handle)
   if (!(await deps.workspaceDocuments.exists(workspaceId))) {
-    return { refusal: c.json({ title: `Workspace "${workspaceId}" not found` }, 404) }
+    return { refusal: c.json(workspaceNotFoundRefusal(handle), 404) }
   }
   return { workspaceId, deps }
 }

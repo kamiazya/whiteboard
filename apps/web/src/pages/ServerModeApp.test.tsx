@@ -33,6 +33,7 @@ type Workspace = { workspaceId: string; displayName?: string; segment?: string }
 function renderSignedIn(
   workspaces: Workspace[],
   onCreateWorkspace?: (displayName: string) => unknown,
+  options: { at?: string; onPatch?: (url: string, body: unknown) => Response } = {},
 ) {
   const fake = installFakeDaemonFetch({
     workspaces,
@@ -40,18 +41,29 @@ function renderSignedIn(
     ...(onCreateWorkspace === undefined ? {} : { onCreateWorkspace }),
   })
   // The fake answers the workspace routes; the session is the keeper's own.
-  const fetchFn = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
-    String(input) === '/auth/session'
-      ? Promise.resolve(
-          jsonResponse({
-            signedIn: true,
-            user: { userId: 'u-1', displayName: 'Ada', administrator: false },
-          }),
-        )
-      : fake(input, init),
-  )
+  const fetchFn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === '/auth/session') {
+      return Promise.resolve(
+        jsonResponse({
+          signedIn: true,
+          user: { userId: 'u-1', displayName: 'Ada', administrator: false },
+        }),
+      )
+    }
+    return fake(input, init)
+  })
+  // The shell's rename goes through the daemon client's own fetch, which is
+  // the global one, so the PATCH is answered there rather than on `fetchFn`.
+  const { onPatch } = options
+  if (onPatch !== undefined) {
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'PATCH'
+        ? Promise.resolve(onPatch(String(input), JSON.parse(String(init.body))))
+        : fake(input, init),
+    )
+  }
   render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[options.at ?? '/']}>
       <ServerModeApp fetchFn={fetchFn} />
     </MemoryRouter>,
   )
@@ -112,8 +124,14 @@ describe('the server-mode workspaces page creates a workspace', () => {
   })
 
   it('says a session that names no person was refused, and that nothing was created', async () => {
-    const fake = renderSignedIn([], () =>
-      jsonResponse({ error: 'requires_person_session', message: 'no person on this session' }, 403),
+    let attempts = 0
+    const fake = renderSignedIn([], (displayName) =>
+      attempts++ === 0
+        ? jsonResponse(
+            { error: 'requires_person_session', message: 'no person on this session' },
+            403,
+          )
+        : jsonResponse({ workspaceId: 'ws-2', segment: 'plans', displayName }, 201),
     )
 
     await createNamed('Plans')
@@ -125,6 +143,11 @@ describe('the server-mode workspaces page creates a workspace', () => {
     expect(posts(fake)).toHaveLength(1)
     // The form stays, with what was typed, so the person can retry.
     expect((screen.getByLabelText('New workspace name') as HTMLInputElement).value).toBe('Plans')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(posts(fake)).toHaveLength(2))
+    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'plans' }))
   })
 
   it('does not post twice for one submit', async () => {
@@ -134,5 +157,55 @@ describe('the server-mode workspaces page creates a workspace', () => {
     fireEvent.submit(screen.getByLabelText('New workspace name'))
 
     await waitFor(() => expect(posts(fake)).toHaveLength(1))
+  })
+})
+
+describe('the server-mode workspace shell renames the open workspace', () => {
+  const plans: Workspace = { workspaceId: 'ws-1', displayName: 'Plans', segment: 'plans' }
+
+  it('offers the name and the address of the workspace the address names', async () => {
+    renderSignedIn([plans], undefined, { at: '/w/plans' })
+
+    expect(((await screen.findByLabelText('Workspace name')) as HTMLInputElement).value).toBe(
+      'Plans',
+    )
+    expect((screen.getByLabelText('Workspace URL') as HTMLInputElement).value).toBe('plans')
+  })
+
+  it('patches the canonical id even when the address carries the segment', async () => {
+    const patches: Array<{ url: string; body: unknown }> = []
+    renderSignedIn([plans], undefined, {
+      at: '/w/plans',
+      onPatch: (url, body) => {
+        patches.push({ url, body })
+        return jsonResponse({ workspaceId: 'ws-1', displayName: 'Roadmap', segment: 'plans' })
+      },
+    })
+
+    fireEvent.change(await screen.findByLabelText('Workspace name'), {
+      target: { value: 'Roadmap' },
+    })
+
+    await waitFor(() => expect(patches).toHaveLength(1))
+    expect(patches[0]?.url).toMatch(/\/api\/workspaces\/ws-1$/)
+    expect(patches[0]?.body).toEqual({ displayName: 'Roadmap' })
+  })
+
+  it("says the keeper's refusal, and leaves the address where it was", async () => {
+    renderSignedIn([plans], undefined, {
+      at: '/w/plans',
+      onPatch: () =>
+        jsonResponse(
+          { error: 'segment_taken', message: 'Workspace segment "notes" is taken' },
+          409,
+        ),
+    })
+
+    const url = await screen.findByLabelText('Workspace URL')
+    fireEvent.change(url, { target: { value: 'notes' } })
+    fireEvent.keyDown(url, { key: 'Enter' })
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/notes/)
+    expect(opened.at(-1)).toMatchObject({ workspace: 'plans' })
   })
 })

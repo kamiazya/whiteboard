@@ -21,6 +21,8 @@
  * The nonce binds a reply to this attempt, so a stale window from an earlier
  * try cannot settle a new one.
  */
+
+import { isLoopbackHostname } from '@kamiazya/whiteboard-daemon-client/loopback-host'
 import { bytesToHex } from '@kamiazya/whiteboard-model'
 import {
   CROSS_ORIGIN_TRANSFER_PROTOCOL,
@@ -28,7 +30,6 @@ import {
   transferResponseSchema,
   transferWindowUrl,
 } from './cross-origin-transfer-protocol.js'
-import { isLoopbackHostname } from './loopback-host.js'
 
 /** The part of a `Window` this needs — what `window.open` returns, minus the rest. */
 export interface PopupHandle {

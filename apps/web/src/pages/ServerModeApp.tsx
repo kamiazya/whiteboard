@@ -182,6 +182,22 @@ function useKeeperWorkspaces() {
   return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute }).daemonWorkspaces
 }
 
+// The shell is built under the workspace route, so the seam it renames through
+// is made here rather than threaded down from the app.
+function OpenWorkspace({
+  fetchFn,
+  displayName,
+}: Readonly<{ fetchFn: Fetch; displayName: string }>) {
+  const workspaces = useKeeperWorkspaces()
+  return (
+    <ServerModeWorkspace
+      shell={
+        <ServerModeShell displayName={displayName} fetchFn={fetchFn} workspaces={workspaces} />
+      }
+    />
+  )
+}
+
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   const keeperWorkspaces = useKeeperWorkspaces()
   const [signed, setSigned] = useState<Signed | null | 'loading'>('loading')
@@ -271,11 +287,7 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
         path="/w/*"
         element={
           <SignedInOnly fetchFn={fetchFn}>
-            {(user) => (
-              <ServerModeWorkspace
-                shell={<ServerModeShell displayName={user.displayName} fetchFn={fetchFn} />}
-              />
-            )}
+            {(user) => <OpenWorkspace fetchFn={fetchFn} displayName={user.displayName} />}
           </SignedInOnly>
         }
       />

@@ -173,9 +173,9 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   })
 
   it('generates distinct default filePaths for two exports in the same millisecond', async () => {
-    // The default path used to be path + millisecond timestamp only, so two
-    // exports issued fast enough to land in the same millisecond would
-    // collide and the second write would silently clobber the first.
+    // A default path of path + millisecond timestamp alone would collide for
+    // two exports landing in the same millisecond, and the second write would
+    // silently clobber the first.
     const app = makeApp()
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
@@ -212,7 +212,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   })
 
   // `scale` is PNG-only: vector output is resolution-independent, and a
-  // caller sending one used to read a 200 as "honoured".
+  // caller sending one must not read a 200 as "honoured".
   it.each([
     ['frameId', 'frame-1'],
     ['scale', 2],

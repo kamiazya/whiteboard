@@ -25,7 +25,7 @@ export function useThemeFontsGeneration(): number {
  * itself refuses a held or in-flight one.
  *
  * Always the DOCUMENT look. The editor draws a canvas in the theme it
- * names, and no UI overrides that any more; ADR-0030 decision 6's argument
+ * names, and no UI overrides that; ADR-0030 decision 6's argument
  * survives a layer down, where a headless caller still asks for `'clean'`.
  */
 export function useThemeFaceFor(canvas: SpatialCanvas): void {

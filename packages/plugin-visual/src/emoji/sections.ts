@@ -8,6 +8,15 @@
  * those graphs. A dynamic import is the only thing a bundler treats as a
  * separate chunk, which is why `FacetPickerCatalogSpec.load` returns a
  * promise rather than a list.
+ *
+ * It has no package subpath: the emoji vocabulary has three readers, one
+ * vocabulary read three ways — this picker (through that dynamic import), the
+ * renderer resolving a `:name:` while drawing (`./shortcode`, on the READ path
+ * and so importing no search index) and the markdown editor's `:` completion
+ * (`./search`, which does). Each of the two latter is its own subpath because
+ * what they cost differs by an order of magnitude; what they must never differ
+ * on is what a name means, which is why all three go through `emojiSlug` over
+ * the same rows.
  */
 import type { FacetPickerCatalogSection } from '@kamiazya/whiteboard-facet-engine'
 import { EMOJI_GROUPS } from './catalog-data.js'

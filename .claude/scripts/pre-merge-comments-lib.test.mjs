@@ -110,13 +110,20 @@ test('cleanBody leaves plain prose alone', () => {
 })
 
 test('an unreadable PR blocks once and names what failed, then gets out of the way', () => {
-  const first = gateUnreadable({ pr: 2029, reason: 'HTTP 403: GraphQL is not available', alreadySeen: false })
+  const first = gateUnreadable({
+    pr: 2029,
+    reason: 'HTTP 403: GraphQL is not available',
+    alreadySeen: false,
+  })
   assert.equal(first.block, true)
   assert.match(first.message, /could not read PR #2029/)
   assert.match(first.message, /HTTP 403/)
   assert.match(first.message, /pulls\/<n>\/comments/)
 
-  assert.deepEqual(gateUnreadable({ pr: 2029, reason: 'x', alreadySeen: true }), { block: false, message: '' })
+  assert.deepEqual(gateUnreadable({ pr: 2029, reason: 'x', alreadySeen: true }), {
+    block: false,
+    message: '',
+  })
 })
 
 test('an unresolved PR number is said as such rather than as PR #null', () => {

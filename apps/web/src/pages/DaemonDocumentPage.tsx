@@ -3,7 +3,7 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { useAgentActivity } from '../hooks/use-agent-activity.js'
+import { agentTouchedProps, useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
@@ -89,15 +89,16 @@ function useDaemonDocument(
   }: DaemonDocumentPageProps,
   events: DocumentKeeperEvents,
 ): DocumentKeeperAnswer {
-  // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
-  // pairing payload, so this never needs to change once mounted.
+  // Stable across the page's lifetime: daemonBaseUrl/token come from the
+  // connection App mounts this page for, so this never needs to change once
+  // mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
   // The History column's backend: relative routes, resolved against the
   // daemon's base URL by `daemonFetch`.
   const versionsBackend = useMemo(() => createDaemonVersionsBackend(daemonFetch), [daemonFetch])
 
   // The sync stream and every route resolve against the daemon's own origin,
-  // never the page's — a hosted web app paired to a loopback daemon must not
+  // never the page's — a hosted web app connected to a loopback daemon must not
   // open the stream against its own page origin.
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
@@ -256,7 +257,7 @@ function useDaemonDocument(
 
   // The open document's kind, from the documents list summary (default
   // 'spatial'). It picks which editor DocumentEditorSurface mounts — the
-  // page itself no longer chooses an editor.
+  // page itself does not choose an editor.
   const documentKind: DocumentKind =
     controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
 
@@ -331,7 +332,7 @@ function useDaemonDocument(
       if (loaded === undefined) return undefined
       // No name. A document's name is the workspace's (ADR-0009 decision 2)
       // and the daemon summary carries no display name, so there is none to
-      // label the embed with — the facets deliberately no longer hold one.
+      // label the embed with — the facets deliberately hold none.
       // The summary DOES carry the kind, which decides what the target is.
       return loadedReferenceOf(loaded, controller.documents, target, documentId)
     },
@@ -498,8 +499,7 @@ function useDaemonDocument(
     topBar: daemonTopBarSlot(canvas, onNavigateBack),
     spatial: {
       editorRef: spatialEditorRef,
-      agentTouchedNodeIds: agentActivity.touchedNodeIds,
-      agentTouchedEdgeIds: agentActivity.touchedEdgeIds,
+      ...agentTouchedProps(agentActivity),
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),

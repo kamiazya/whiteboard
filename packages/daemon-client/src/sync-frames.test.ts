@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { parseServerTextMessage } from './sync-frame-text.js'
-import { versionCreatedMessageSchema } from './sync-frames.js'
+import { agentActivityMessageSchema, versionCreatedMessageSchema } from './sync-frames.js'
 
 const VALID_VERSION_CREATED = {
   type: 'version_created' as const,
@@ -10,19 +10,21 @@ const VALID_VERSION_CREATED = {
     createdAt: '2026-07-30T00:00:00.000Z',
     elementCount: 42,
     auto: false,
-    branchName: 'main',
   },
 }
 
 describe('versionCreatedMessageSchema', () => {
-  it('accepts valid version_created with branchName', () => {
+  it('accepts a valid version_created', () => {
     const result = versionCreatedMessageSchema.safeParse(VALID_VERSION_CREATED)
     expect(result.success).toBe(true)
   })
 
-  it('preserves branchName through parse', () => {
-    const result = versionCreatedMessageSchema.parse(VALID_VERSION_CREATED)
-    expect(result.version.branchName).toBe('main')
+  it('drops a branchName an older daemon still sends', () => {
+    const result = versionCreatedMessageSchema.parse({
+      ...VALID_VERSION_CREATED,
+      version: { ...VALID_VERSION_CREATED.version, branchName: 'main' },
+    })
+    expect(result.version).not.toHaveProperty('branchName')
   })
 
   it('accepts with optional label and operator', () => {
@@ -33,15 +35,6 @@ describe('versionCreatedMessageSchema', () => {
         label: 'snapshot',
         operator: { kind: 'ai', actor: 'process:agent-1' },
       },
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it('accepts a version row that carries no branchName', () => {
-    const { branchName: _, ...versionWithout } = VALID_VERSION_CREATED.version
-    const result = versionCreatedMessageSchema.safeParse({
-      ...VALID_VERSION_CREATED,
-      version: versionWithout,
     })
     expect(result.success).toBe(true)
   })
@@ -70,5 +63,31 @@ describe('parseServerTextMessage', () => {
     const warn = vi.fn()
     expect(parseServerTextMessage('{', warn)).toBeNull()
     expect(warn).toHaveBeenCalledWith(expect.any(String), 'malformed JSON', '{')
+  })
+})
+
+describe('agentActivityMessageSchema', () => {
+  const OPERATOR = { kind: 'ai', actor: 'process:agent-1' } as const
+  const FRAME = {
+    type: 'agent_activity' as const,
+    operator: OPERATOR,
+    touched: { nodes: ['n'], edges: ['e'], lines: ['l'], comments: ['c'] },
+    summary: 'added 4',
+  }
+
+  it('carries touched lines and comments through parse', () => {
+    expect(agentActivityMessageSchema.parse(FRAME).touched).toEqual(FRAME.touched)
+  })
+
+  it('still parses a frame from a daemon that names no lines or comments', () => {
+    const { lines: _l, comments: _c, ...older } = FRAME.touched
+    const parsed = agentActivityMessageSchema.safeParse({ ...FRAME, touched: older })
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.touched.lines).toBeUndefined()
+  })
+
+  it('reaches a page through the one text-frame parser', () => {
+    const parsed = parseServerTextMessage(JSON.stringify(FRAME), vi.fn())
+    expect(parsed).toMatchObject({ type: 'agent_activity', touched: FRAME.touched })
   })
 })

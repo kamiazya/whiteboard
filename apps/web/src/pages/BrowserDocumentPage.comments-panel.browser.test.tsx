@@ -18,8 +18,8 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 
@@ -113,7 +113,7 @@ afterEach(() => {
 })
 
 it('opens a rail listing this document conversations, open ones first and by default', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
@@ -136,7 +136,7 @@ it('opens a rail listing this document conversations, open ones first and by def
 })
 
 it('counts the OPEN conversations on the opener, so the rail need not be open to know', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
@@ -153,7 +153,7 @@ it('counts the OPEN conversations on the opener, so the rail need not be open to
 })
 
 it('marks a thread whose node is gone, instead of leaving it indistinguishable', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
@@ -176,7 +176,7 @@ it('marks a thread whose node is gone, instead of leaving it indistinguishable',
 })
 
 it('keeps the opener out of the editor surface, so it cannot swallow the editor own controls', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
@@ -226,7 +226,7 @@ it('lists a markdown document conversations, which no session is there to delive
   // annotation channel answers `[]` forever. The rail was therefore
   // permanently empty on a note, and its opener permanently read `0`, over
   // threads an MCP peer could write and nothing in the app could read.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingOneThread())
@@ -256,7 +256,7 @@ it('replies on a markdown document, where a reply has no session to travel throu
   // session, which for a note is wired to nothing — so without its own route
   // the rail would show a reply box that silently discards what is typed
   // into it, the one thing the panel's contract says a host must not offer.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingOneThread())
@@ -293,7 +293,7 @@ it('opens a conversation from the markdown body, end to end', async () => {
   // anchor reaches the rail, and the rail's first message reaches the
   // threads plane the list is read back from. A note has no session, so the
   // create has to take the same separate route its reply does.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingABody())
@@ -360,7 +360,7 @@ it('moves the reader into the conversation it opens, and Escape puts them back i
   // was wrong before is that the rail opened beside an editor still holding
   // the caret — the keyboard kept typing into the document, and on a phone
   // the virtual keyboard stayed up over the rail that had just opened.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingABody())
@@ -422,7 +422,7 @@ it('keeps the body highlight through an edit inside its own passage', async () =
   // Two layers only this test connects: the backfill that gave an imported
   // thread its mark at load, and the projection that draws from the mark
   // rather than from the quote.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingAMarkedPassage())
@@ -460,7 +460,7 @@ it('keeps the body highlight through an edit inside its own passage', async () =
 })
 
 it('offers the same opener on a markdown document, which has no canvas chrome to carry one', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
 
@@ -501,7 +501,7 @@ async function settledBackground(el: Element): Promise<string> {
 }
 
 it('shows the opener as pressed while the rail is open, not only to a screen reader', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
@@ -539,7 +539,7 @@ it('replies from the rail, and the reply joins the conversation it was typed int
   // `reply-to-thread`, the session writes it into the threads plane, and the
   // annotation channel republishes — no remote echo involved, which is what
   // makes it observable here at all.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
 
@@ -580,7 +580,7 @@ it('reaches a note thread from the body: its gutter marker opens the rail on tha
   // The round trip the rail alone could not close. A conversation about a
   // PASSAGE was reachable only by scanning a list that says nothing about
   // where in the document it points.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingAPlacedThread())
@@ -622,7 +622,7 @@ it('starts a conversation about the whole document from the rail, on a note', as
   // The one anchor with no place on any surface: nothing in the editor can
   // open it, so the rail carries the opener, and the thread it writes is
   // listed with the label that says what it is about.
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
   seededNotes.set(note.documentId, noteHoldingOneThread())

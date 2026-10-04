@@ -46,7 +46,7 @@ const log = getLogger('backup-blob-mirror')
 // latter changes no outcome, measured; do not mistake it for the thing keeping
 // non-content-addressed files out.
 //
-// Nothing WRITES a non-sharded tree under `blobs/` any more — version
+// Nothing WRITES a non-sharded tree under `blobs/`: version
 // thumbnails were the only one, and they are retired. The two halves stay
 // because backups already on disk still carry those pictures in their
 // `files` map, and a reader that no longer knows the shape would make a

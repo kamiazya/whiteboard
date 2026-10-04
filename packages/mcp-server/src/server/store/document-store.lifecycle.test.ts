@@ -422,7 +422,7 @@ describe('renameDocumentPath', () => {
       await renameDocumentPath('session1', 'a', 'b')
 
       // The stale phantom doc must not still shadow the just-renamed
-      // canvas's real content at the destination path.
+      // document's real content at the destination path.
       expect(peekDoc('session1', 'b')).toBeUndefined()
 
       const reloaded = await getDoc('session1', 'b')

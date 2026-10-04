@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { compareToLedger, parseDiagnostics, ratchetLedger } from './typecheck-tests-lib.mjs'
+import {
+  compareToLedger,
+  interruptedRun,
+  parseDiagnostics,
+  ratchetLedger,
+} from './typecheck-tests-lib.mjs'
 
 const OUTPUT = [
   "src/a.test.ts(3,5): error TS2322: Type 'string' is not assignable to type 'number'.",
@@ -140,5 +145,21 @@ describe('ratchetLedger', () => {
     expect(
       ratchetLedger(new Map([['src/a.test.ts', ['TS2339']]]), { 'src/a.test.ts': ['TS2322'] }).ok,
     ).toBe(false)
+  })
+})
+
+describe('interruptedRun', () => {
+  it('refuses a compiler killed by a signal, whose partial output would read as cleared debt', () => {
+    expect(interruptedRun({ status: null, signal: 'SIGKILL' })).toMatch(/SIGKILL/)
+  })
+
+  it('refuses a compiler that exited with a status tsc never uses for type errors', () => {
+    expect(interruptedRun({ status: 137, signal: null })).toMatch(/137/)
+  })
+
+  it('accepts a clean run and a run that reported type errors', () => {
+    expect(interruptedRun({ status: 0, signal: null })).toBeUndefined()
+    expect(interruptedRun({ status: 1, signal: null })).toBeUndefined()
+    expect(interruptedRun({ status: 2, signal: null })).toBeUndefined()
   })
 })

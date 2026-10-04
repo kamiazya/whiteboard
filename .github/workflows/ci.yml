@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,7 +76,7 @@ jobs:
         run: pnpm typecheck
 
   test-unit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       # One shard failing must not cancel its siblings: a cancelled job is not
@@ -131,7 +131,7 @@ jobs:
   # file) runs here automatically, so a new shared-layer package is covered
   # by CI the moment it registers a project, with no edit to this file.
   test-shared:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -149,7 +149,7 @@ jobs:
         run: node tools/checks/src/run-shared-layer-tests.mjs
 
   test-jsdom:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Sharded for the same reason test-unit and test-browser are, and only once
     # dry-run-docker stopped being the ceiling: on the ~half of pull requests
@@ -185,8 +185,8 @@ jobs:
         run: pnpm --filter @kamiazya/whiteboard-web test -- --shard=${{ matrix.shard }}/2
 
   test-browser:
-    runs-on: ubuntu-latest
-    # Run on bare ubuntu-latest with the pre-installed system Chrome.
+    runs-on: ubuntu-24.04
+    # Run on bare ubuntu-24.04 with the pre-installed system Chrome.
     timeout-minutes: 15
     # Sharded like test-unit: the browser job is the longest in the workflow
     # (5.0min measured on a green main) AND its flake family is contention-
@@ -226,7 +226,7 @@ jobs:
   # it on main costs a root-cause lane (.claude/skills/steward/reference/flake-shapes.md).
   stress-changed-tests:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # SPLIT so a browser file never shares a vitest process with a node or
     # jsdom one. Everywhere else in CI they are separate jobs — `test-browser`
     # x2, `test-jsdom` x2, `test-unit` x2 — and this lane was the only place
@@ -375,7 +375,7 @@ jobs:
     # Standing regression job: generate:sbom:npm only ran in release.yml before
     # this job existed, so an upstream cyclonedx-npm regression was invisible
     # until release time. Runs on every PR/push to catch it early.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -415,7 +415,7 @@ jobs:
   # the node half only: smoke:distribution:packaged adds the two CLI smokes,
   # which spend API quota wherever the CLI is installed.
   packaged-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -436,7 +436,7 @@ jobs:
   # network requests and the embedded font actually loaded, not silently
   # falling back to a system font.
   widget-smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
@@ -478,7 +478,7 @@ jobs:
     # What unchaining costs is only compute on a red
     # run: verify's smokes run even when a test job fails, which on a free
     # public repo is minutes, not money.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
@@ -588,7 +588,7 @@ jobs:
   # run's wall clock; as a job of their own they overlap the other jobs.
   # ci-gate.test.ts keeps them out of `verify`.
   extension-smokes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -631,7 +631,7 @@ jobs:
 
   dry-run-npm:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -663,7 +663,7 @@ jobs:
     # no artifact from verify — it checks out and builds the image from
     # source — so the edge was pure ordering, and it serialized the two
     # longest jobs in the workflow back to back.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # fetch-depth 2 rather than 0: on a pull_request event the checked-out
       # ref is the merge commit, whose first parent is the base branch tip, so
@@ -750,7 +750,7 @@ jobs:
   # native host is registered in the registry. Nothing else here runs on
   # Windows, so without this job no part of that path would ever execute.
   native-host-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -795,7 +795,7 @@ jobs:
       - verify
       - dry-run-npm
       - dry-run-docker
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     # A job-level block REPLACES the workflow's `contents: read` rather than
     # adding to it, so checkout's own permission is restated here.

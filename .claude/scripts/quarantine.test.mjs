@@ -64,7 +64,11 @@ test('a marker older than 14 days fails with its file named', () => {
 
 test('more than 8 quarantined tests fails on the cap', () => {
   const markers = Array.from({ length: 9 }, (_, i) => ({
-    file: `f${i}`, line: 1, date: '2026-09-04', issue: 'wb:x', reason: 'r',
+    file: `f${i}`,
+    line: 1,
+    date: '2026-09-04',
+    issue: 'wb:x',
+    reason: 'r',
   }))
   const verdict = judgeQuarantine(markers, NOW)
   assert.equal(verdict.ok, false)
@@ -76,7 +80,10 @@ test('live repo scan: reaches the real test surface, and the budget holds', () =
   // The subject-is-present floor: a glob that stops matching reports itself
   // as "0 quarantined" — which is what a broken scan looks like. The file
   // count proves the scan reached the surface it governs.
-  assert.ok(scannedFiles > 300, `scanned only ${scannedFiles} test files — the glob missed the surface`)
+  assert.ok(
+    scannedFiles > 300,
+    `scanned only ${scannedFiles} test files — the glob missed the surface`,
+  )
   const verdict = judgeQuarantine(markers, Date.now())
   assert.equal(verdict.ok, true, verdict.problems.join('\n'))
 })
@@ -87,7 +94,7 @@ test('live repo scan: reaches the real test surface, and the budget holds', () =
 // graveyard the cap exists to prevent.
 test('an undeclared skip is found, and a declared one is not', () => {
   const src = [
-    "// QUARANTINE(2026-09-01 wb:issues/x): parked on purpose",
+    '// QUARANTINE(2026-09-01 wb:issues/x): parked on purpose',
     "it.skip('declared', () => {})",
     "test.skip('undeclared', () => {})",
     "describe.skip('also undeclared', () => {})",

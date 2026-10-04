@@ -1,4 +1,4 @@
-import { isLoopbackHostname } from './loopback-host.js'
+import { isLoopbackHostname } from '@kamiazya/whiteboard-daemon-client/loopback-host'
 
 // Provisional production origin for the hosted app.
 // Update to the confirmed canonical domain once it is assigned.

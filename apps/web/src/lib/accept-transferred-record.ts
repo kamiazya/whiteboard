@@ -11,7 +11,7 @@
  *
  * WHO AUTHORISES IT. The person signed in to THIS keeper, through the
  * session `fetch` carries — the keeper's own authority, not evidence the
- * sender brings. No passkey is asked: no keeper pins one any more
+ * sender brings. No passkey is asked: no keeper pins one
  * (ADR-0050), and every keeper refuses a promote carrying an attestation.
  *
  * WHAT DOES NOT TRAVEL. Image bytes live in the SENDING browser's file store,

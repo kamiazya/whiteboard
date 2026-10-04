@@ -19,7 +19,7 @@ const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
 interface UseDocumentNamesOptions {
   workspaceId: string
   /**
-   * Local mode has no daemon to ask for `/names`, and nothing else to ask
+   * A browser-kept workspace has no daemon to ask for `/names`, and nothing else to ask
    * either: the browser page names its document through its own store
    * and hands the header the result, so this hook simply stays empty there.
    */
@@ -63,7 +63,7 @@ export function useDocumentNames({
   const effectiveNames = keptByBrowser ? EMPTY_NAMES : names
 
   // Daemon-mode rename commit. Returns whether the PUT succeeded so the
-  // caller can decide how to react; local mode never reaches it.
+  // caller can decide how to react; a browser-kept workspace never reaches it.
   const renameDocument = useCallback(
     async (targetPath: string, name: string): Promise<boolean> => {
       try {

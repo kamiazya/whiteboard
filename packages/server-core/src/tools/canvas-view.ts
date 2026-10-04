@@ -7,12 +7,14 @@ import {
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
   themeFontSchema,
+  withDeclaredColours,
 } from '@kamiazya/whiteboard-canvas-render'
 import { jsonCanvasDocumentSchema, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   documentIdSchema,
+  type SpatialCanvas,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -20,6 +22,7 @@ import { loadDocument } from '../document-io.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
+import { carriesATag, workspaceTagLibrary } from './tag-library.js'
 
 export const canvasViewInputSchema = z
   .object({
@@ -45,7 +48,14 @@ export const canvasViewOutputSchema = z
      */
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    /** The document itself: the widget lays it out, it is not pre-rendered. */
+    /**
+     * The document, for the widget to lay out rather than a pre-rendered
+     * picture — with the colour its tags declare in the workspace's tag
+     * library already on each box and edge that has none of its own. The
+     * widget has no store to read a library from, so this is the one place
+     * the board can be drawn by intent; its legend then follows from the
+     * tags and colours the scene carries, as it does for any board.
+     */
     scene: jsonCanvasDocumentSchema,
     /**
      * The document's conversations, for what the scene's flat projection
@@ -104,6 +114,21 @@ function referenceWireEntry(
   return [[target, loadedReferenceToWire(loaded)]]
 }
 
+/**
+ * `canvas` with the colour its tags declare in the workspace's library — the
+ * same read `wb_scene_render` makes, and for the same reason: a library is a
+ * listing plus a document read, and an untagged board has nothing one could
+ * colour.
+ */
+async function declaredColoursOf(
+  deps: ServerDeps,
+  workspaceId: string,
+  canvas: SpatialCanvas,
+): Promise<SpatialCanvas> {
+  if (!carriesATag(canvas)) return canvas
+  return withDeclaredColours(canvas, await workspaceTagLibrary(deps, workspaceId, 'deployment'))
+}
+
 export function createCanvasViewTool(deps: ServerDeps) {
   return {
     name: 'canvas_view' as const,
@@ -129,7 +154,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // ADR-0037 this was the same object; now the model carries `comments`,
         // `facets` and `embed` as its own fields and the format carries them
         // under its extension key.
-        scene: toJsonCanvas(canvas),
+        scene: toJsonCanvas(await declaredColoursOf(deps, input.workspaceId, canvas)),
         threads: readAnnotations(doc),
         ...(input.style === undefined ? {} : { style: input.style }),
         ...(themeFont === undefined ? {} : { themeFont }),

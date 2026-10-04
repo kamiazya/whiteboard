@@ -71,10 +71,10 @@ export type FacetGlyph =
  * to meet it.
  *
  * `payload: null` says the facet should not exist. It is the only way a
- * picker says that, which is the point — the derived form used to offer a
- * `Clear` button beside a segment that already meant the same thing, so
- * "no theme" had two controls and a reader had to guess whether they
- * differed.
+ * picker says that, which is the point — the derived form offers no `Clear`
+ * button beside a segment that already means the same thing, since "no
+ * theme" would have two controls and a reader would have to guess whether
+ * they differed.
  */
 export interface FacetPickerOption {
   readonly payload: unknown | null

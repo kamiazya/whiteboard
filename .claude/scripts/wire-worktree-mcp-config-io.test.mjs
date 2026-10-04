@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Regression coverage for wire-worktree-mcp.mjs's createConfigIO: the
 // atomic-write pair backing ~/.claude.json reads/writes. Exercised against a
 // real scratch file (never the developer-global ~/.claude.json) so the two
@@ -9,11 +10,21 @@
 //
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { test } from 'node:test'
 import { createConfigIO } from './wire-worktree-mcp.mjs'
 
 function withScratchDir(fn) {
@@ -66,10 +77,17 @@ test('createConfigIO writeConfig refuses to overwrite a file that changed since 
     // another Claude Code session) mutating the file after our read.
     writeFileSync(configPath, JSON.stringify({ projects: { a: 1, concurrent: true } }))
 
-    assert.throws(() => writeConfig({ ...config, projects: { ...config.projects, b: 2 } }), /changed since it was last read/)
+    assert.throws(
+      () => writeConfig({ ...config, projects: { ...config.projects, b: 2 } }),
+      /changed since it was last read/,
+    )
 
     const survivingContent = JSON.parse(readFileSync(configPath, 'utf8'))
-    assert.deepEqual(survivingContent, { projects: { a: 1, concurrent: true } }, 'the concurrent write must not be discarded')
+    assert.deepEqual(
+      survivingContent,
+      { projects: { a: 1, concurrent: true } },
+      'the concurrent write must not be discarded',
+    )
   })
 })
 

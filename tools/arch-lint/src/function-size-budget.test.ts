@@ -147,7 +147,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // that draws it.
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 81,
   'apps/web/src/components/shell/ShellMark.tsx#ShellMark': 80,
-  'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 339,
+  'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 178,
   'apps/web/src/components/spatial-editor/BoxTargetOverlay.tsx#BoxTargetOverlay': 95,
   // The six-level nested ternary choosing a menu is two named halves, which
   // costs the doc comments that say what each claims. The functions that split
@@ -192,9 +192,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The component itself: a `forwardRef` function expression, the largest
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1632,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1646,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 89,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 100,
   // The document picker and the URL dialog live in
@@ -326,8 +326,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 270,
-  'apps/web/src/lib/loro-store.ts#appendDelta': 73,
+  'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 270,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
   // One property on the options object; its reasoning is a named constant
@@ -507,10 +506,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/dispatcher.ts#dispatchRun': 62,
   'packages/mcp-server/src/cli/search-fetch-model.ts#runSearchFetchModel': 63,
   'packages/mcp-server/src/cli/server-doctor.ts#runServerDoctor': 59,
-  'packages/mcp-server/src/cli/server-restore.ts#runServerRestore': 98,
+  'packages/mcp-server/src/cli/server-restore.ts#runServerRestore': 82,
   'packages/mcp-server/src/cli/server-run.ts#runServerRun': 137,
   'packages/mcp-server/src/cli/server-status.ts#runServerStatus': 78,
-  'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 105,
+  'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 85,
   'packages/mcp-server/src/di/container.ts#resolveServerDeps': 94,
   // The membership gate argument and the admit wiring threaded from membershipWiring() (ADR-0041).
   'packages/mcp-server/src/server/app.ts#createApp': 138,
@@ -539,7 +538,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // workspace record rather than a loop over documents.
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 54,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 76,
-  'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 68,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 99,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 105,
   // The workspace list filters rows the caller is not admitted to (ADR-0041).
@@ -559,7 +557,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // down, where a per-process memoized fallback used to resolve its own.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,
   // The setter's write-side validation and the boolean answer to the lazy-row
-  // hazard (ADR-0042 decision 1 addendum) both belong beside tierFor/effectiveTier
+  // hazard (ADR-0042 decision 1 addendum) both belong beside effectiveTier
   // rather than in a second file over the same table; rotateKey (rotation
   // addendum) belongs beside keyFor/setTier for the same reason.
   'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 78,
@@ -573,7 +571,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // ENOTEMPTY on CI three times. The lines are a promise handle, its assignment,
   // the await, and three of comment saying why the await is there.
   'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 56,
-  'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 210,
+  'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 191,
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
@@ -605,7 +603,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.
   'packages/server-core/src/create-server.ts#createServer': 223,
-  'packages/server-core/src/operations/restore-version.ts#restoreToTarget': 61,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
   // The tool bodies left `execute` for module functions when the write
   // lock became the operation's own: `execute` takes the lock and calls
@@ -621,7 +618,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 135,
   'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 75,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
-  'packages/server-core/src/tools/version-restore.ts#createVersionRestoreTool': 64,
   // The one exported chunk-size constant is 18 characters longer than the local
   // `MAX_CHUNK_BYTES` it replaced, so the call sites that used to fit on one line
   // wrap. Absorbed here rather than shortened away, because the name's length is
@@ -665,7 +661,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 80,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
-  'packages/workspace-index/src/loro-workspace-document-index.test.ts#inMemoryWorkspaceDocs': 58,
 }
 
 function ledgerFor(isTest: boolean): Record<string, number> {

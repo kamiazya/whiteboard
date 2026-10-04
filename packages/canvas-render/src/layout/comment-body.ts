@@ -58,8 +58,8 @@ export const COMMENT_TEXT_MAX_WIDTH_PX = 200
  * line, and the second half of that sentence is what picked it. Measured
  * over the density corpus, HEIGHT dominates width: 120px is narrower and
  * scores WORSE (node overlap 199048 against 165653 at forty proposals),
- * because the label wraps to two lines and the taller box reaches a row it
- * used to clear. The same wrap costs the uncrowded board nine of its
+ * because the label wraps to two lines and the taller box reaches a row the
+ * shorter one clears. The same wrap costs the uncrowded board nine of its
  * seventeen clean bubbles — a regression the corpus's spread control is
  * there to catch.
  *

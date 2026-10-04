@@ -195,6 +195,23 @@ describe('replica-session-key: bounded lease lapse', () => {
     expect(noSource).toEqual({ kind: 'withheld', reason: 'unreachable' })
   })
 
+  it('replicaKeyProviderFor derives once per docKey and keeps a workspace-tree key apart from a document key', async () => {
+    const provider = replicaKeyProviderFor(
+      DAEMON,
+      WORKSPACE,
+      sourceWith(vi.fn(async () => jsonResponse(keyResponse({})))),
+    )
+    const documentKey = 'document:01BX5ZZKBKACTAV9WEVGEMMVRZ'
+    const first = await provider.keyFor(documentKey)
+    const again = await provider.keyFor(documentKey)
+    const tree = await provider.keyFor('workspace-tree:01BX5ZZKBKACTAV9WEVGEMMVRZ')
+    if (first === 'withheld' || again === 'withheld' || tree === 'withheld') {
+      throw new Error('the key should have been held')
+    }
+    expect(again.key).toBe(first.key)
+    expect(tree.key).not.toBe(first.key)
+  })
+
   it('replicaKeyProviderFor re-derives after a natural lapse + re-mint, with no forget() in between', async () => {
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
     const leaseExpiresAt = new Date('2026-01-01T01:00:00.000Z').toISOString()

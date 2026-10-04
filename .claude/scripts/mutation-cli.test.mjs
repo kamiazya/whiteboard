@@ -48,8 +48,18 @@ writeFileSync(
     files: {
       'src/a.ts': {
         mutants: [
-          { mutatorName: 'EqualityOperator', replacement: 'a > b', status: 'Survived', location: { start: { line: 12, column: 1 }, end: { line: 12, column: 9 } } },
-          { mutatorName: 'EqualityOperator', replacement: 'a < b', status: 'Killed', location: { start: { line: 3, column: 1 }, end: { line: 3, column: 9 } } },
+          {
+            mutatorName: 'EqualityOperator',
+            replacement: 'a > b',
+            status: 'Survived',
+            location: { start: { line: 12, column: 1 }, end: { line: 12, column: 9 } },
+          },
+          {
+            mutatorName: 'EqualityOperator',
+            replacement: 'a < b',
+            status: 'Killed',
+            location: { start: { line: 3, column: 1 }, end: { line: 3, column: 9 } },
+          },
         ],
       },
     },
@@ -130,5 +140,8 @@ test('mutation-comment: originalSource spans lines — first line tail, middle l
 })
 
 test('mutation-comment: originalSource on one line slices by columns', () => {
-  assert.equal(originalSource('0123456789', { start: { line: 1, column: 3 }, end: { line: 1, column: 6 } }), '234')
+  assert.equal(
+    originalSource('0123456789', { start: { line: 1, column: 3 }, end: { line: 1, column: 6 } }),
+    '234',
+  )
 })

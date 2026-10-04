@@ -1,3 +1,4 @@
+import { workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import type { DocRef } from './doc-ref.js'
 
 /**
@@ -30,4 +31,23 @@ export function docRefKey(docRef: DocRef): string {
     case 'workspace-tree':
       return `workspace-tree:${docRef.workspaceId}`
   }
+}
+
+const WORKSPACE_TREE_DOC_KEY = /^workspace-tree:(.+)$/
+
+/**
+ * The exact inverse of `docRefKey` for a `workspace-tree` ref: the workspace id
+ * whose record this key addresses, or `null` for any key `docRefKey` could not
+ * have written for one (a `document:*` key, another shape, or an id the
+ * workspace-id schema refuses).
+ *
+ * A reader that decides something from the key — which keeper owns the row,
+ * whether to seal it — asks here rather than parsing the prefix itself, so the
+ * spelling stays in this file and a change to it cannot leave the reader
+ * quietly answering for a shape that no longer exists.
+ */
+export function workspaceIdOfDocKey(key: string): string | null {
+  const workspaceId = WORKSPACE_TREE_DOC_KEY.exec(key)?.[1]
+  if (workspaceId === undefined) return null
+  return workspaceIdSchema.safeParse(workspaceId).success ? workspaceId : null
 }

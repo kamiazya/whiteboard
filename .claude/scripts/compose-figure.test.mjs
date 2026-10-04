@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Regression coverage for compose-figure.mjs.
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 //
@@ -7,13 +8,13 @@
 // take, silently produces — and the resulting figure shows a reviewer the
 // same picture twice under a "before" and an "after" label.
 
+import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
-import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'compose-figure.mjs')
@@ -73,7 +74,11 @@ function run(args) {
     })
     return { status: 0, stdout, stderr: '' }
   } catch (err) {
-    return { status: err.status, stdout: String(err.stdout ?? ''), stderr: String(err.stderr ?? '') }
+    return {
+      status: err.status,
+      stdout: String(err.stdout ?? ''),
+      stderr: String(err.stderr ?? ''),
+    }
   }
 }
 
@@ -111,7 +116,11 @@ test('says what to install when ImageMagick is absent, rather than throwing a st
       )
       return { status: 0, stdout, stderr: '' }
     } catch (err) {
-      return { status: err.status, stdout: String(err.stdout ?? ''), stderr: String(err.stderr ?? '') }
+      return {
+        status: err.status,
+        stdout: String(err.stdout ?? ''),
+        stderr: String(err.stderr ?? ''),
+      }
     }
   })()
   assert.equal(result.status, 1)
@@ -162,8 +171,19 @@ test('refuses two panels that differ only in metadata', needsImageMagick, () => 
   execFileSync('convert', [before, '-set', 'comment', 'a different stamp', after], {
     encoding: 'utf-8',
   })
-  assert.notEqual(readFileSync(before).equals(readFileSync(after)), true, 'fixture must differ in bytes')
-  const { status, stderr } = run(['--before', before, '--after', after, '--out', join(dir, 'f.png')])
+  assert.notEqual(
+    readFileSync(before).equals(readFileSync(after)),
+    true,
+    'fixture must differ in bytes',
+  )
+  const { status, stderr } = run([
+    '--before',
+    before,
+    '--after',
+    after,
+    '--out',
+    join(dir, 'f.png'),
+  ])
   assert.equal(status, 1)
   assert.match(stderr, /same picture/i)
 })
@@ -203,7 +223,11 @@ test('gives a wider panel a label band of its own width', needsImageMagick, () =
       encoding: 'utf-8',
     }).trim(),
   )
-  assert.equal(mean < white, true, `expected label text past x=60, got mean ${mean} vs white ${white}`)
+  assert.equal(
+    mean < white,
+    true,
+    `expected label text past x=60, got mean ${mean} vs white ${white}`,
+  )
 })
 
 test('refuses a missing input rather than composing half a figure', needsImageMagick, () => {

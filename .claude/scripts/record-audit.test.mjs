@@ -19,12 +19,18 @@ for (const file of ['record-audit.mjs', 'script-flags.mjs']) {
   copyFileSync(join(here, file), join(scratch, '.claude', 'scripts', file))
 }
 const logPath = join(scratch, '.claude', 'audit-log.jsonl')
-const record = (...args) => spawnSync('node', [join(scratch, '.claude', 'scripts', 'record-audit.mjs'), ...args], { encoding: 'utf8' })
+const record = (...args) =>
+  spawnSync('node', [join(scratch, '.claude', 'scripts', 'record-audit.mjs'), ...args], {
+    encoding: 'utf8',
+  })
 
 test('a known kind appends one {kind, at} row', () => {
   const result = record('audit-triage')
   assert.equal(result.status, 0, result.stderr)
-  const rows = readFileSync(logPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+  const rows = readFileSync(logPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line))
   assert.equal(rows.length, 1)
   assert.equal(rows[0].kind, 'audit-triage')
   assert.ok(!Number.isNaN(Date.parse(rows[0].at)))

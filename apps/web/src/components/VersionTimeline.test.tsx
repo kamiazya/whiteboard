@@ -40,7 +40,6 @@ function mkVersionsResponse(): Response {
         createdAt: '2026-04-23T02:00:00Z',
         elementCount: 5,
         auto: true,
-        branchName: 'main',
         operator: {
           kind: 'ai',
           peerId: 'peer-ai',
@@ -53,7 +52,6 @@ function mkVersionsResponse(): Response {
         createdAt: '2026-04-23T01:00:00Z',
         elementCount: 3,
         auto: true,
-        branchName: 'main',
         operator: {
           kind: 'human',
           peerId: 'peer-human',
@@ -73,7 +71,7 @@ function mkVersionsResponse(): Response {
         createdAt: '2026-04-23T01:30:00Z',
         elementCount: 4,
         auto: true,
-        branchName: 'feature', // the row records its lane; History lists every row regardless
+        branchName: 'feature', // an older daemon still names a lane; History lists every row regardless
       },
     ],
   })
@@ -222,7 +220,6 @@ describe('VersionTimeline', () => {
                 createdAt: future,
                 elementCount: 1,
                 auto: true,
-                branchName: 'main',
               },
             ],
           }),
@@ -275,7 +272,6 @@ describe('VersionTimeline', () => {
                 createdAt: '2026-04-23T02:00:00Z',
                 elementCount: 2,
                 auto: true,
-                branchName: 'main',
               },
             ],
           }),
@@ -634,7 +630,6 @@ describe('formatRelative display branches (via rendered version rows)', () => {
           createdAt,
           elementCount: 1,
           auto: true,
-          branchName: 'main',
         },
       ],
     })
@@ -809,7 +804,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
                 createdAt: '2026-04-23T02:00:00Z',
                 elementCount: 5,
                 auto: false,
-                branchName: 'main',
                 operator: { kind: 'human', peerId: 'peer-human', displayName: 'Alice' },
               },
             ],
@@ -989,7 +983,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
           createdAt: '2026-04-23T03:00:00Z',
           elementCount: 5,
           auto: true,
-          branchName: 'main',
           restoredFrom: 'v-old',
         },
         {
@@ -998,7 +991,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
           createdAt: '2026-04-23T02:00:00Z',
           elementCount: 4,
           auto: true,
-          branchName: 'main',
         },
         {
           id: 'v-old',
@@ -1007,7 +999,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
           elementCount: 3,
           auto: false,
           label: 'first draft',
-          branchName: 'main',
         },
       ],
     })

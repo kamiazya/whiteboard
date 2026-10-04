@@ -875,8 +875,8 @@ function midpointExtent(midpoints: readonly Point[]): {
  * the edge set fits its gate, otherwise the same search run over spatial
  * REGIONS of the canvas.
  *
- * Past `CROSSING_OPT_MAX_EDGES` the search used to be skipped wholesale, and
- * "skipped" is not a small loss — measured on a 345-edge clustered canvas, one
+ * Past `CROSSING_OPT_MAX_EDGES`, skipping the search wholesale is not a
+ * small loss — measured on a 345-edge clustered canvas, one
  * avoidable-ink violation per edge, against 29 across the entire small corpus.
  * A canvas that big is exactly what an AI-authored document grows into, so the
  * size where quality stops mattering is not the size where it stops being
@@ -1025,8 +1025,8 @@ export function assignEdgeAnchors(
     // disagree with what the committed render will pick, and the drop
     // then visibly re-sides an edge the preview never showed that way.
     let liveSides: ReadonlyMap<string, SidePair> = merged
-    // The live-drag path keeps the hard gate the committed path no longer
-    // needs. Regional optimization is worth several hundred ms once, when a
+    // The live-drag path keeps the hard gate the committed path does not
+    // need. Regional optimization is worth several hundred ms once, when a
     // change is committed; it is not worth it on a frame someone is dragging
     // through, and this branch exists precisely to serve those frames. A
     // canvas past the gate drags exactly as fast as it does today and picks

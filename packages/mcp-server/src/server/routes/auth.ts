@@ -12,17 +12,14 @@ import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route
 // the bearer itself (runtime.ts), so double-gating it here is redundant but
 // harmless, not a hole.
 //
-// Canvas/asset GET used to be carved out entirely (ADR-0002's original
-// decision: loopback bind + Host-loopback check + hard-to-guess ids were
-// judged sufficient, and tokenizing reads looked like it would break <img
-// src> thumbnails for no real gain). That containment assumption breaks once
-// a hosted origin is an admitted CORS caller (ADR-0005): an admitted origin,
-// or anyone who gets past the allowlist, could then read every canvas with
-// no credential at all. The client-side cost of closing this turned out to
-// be zero — every read already goes through a bearer-carrying fetch
-// (daemon-client's api-client.ts apiFetch, and every thumbnail/file consumer
-// fetches bytes and renders an object URL instead of a bare <img src>) — so
-// there is no reason left to leave the server side open.
+// Reads are gated too, not carved out. A loopback bind, a Host-loopback check
+// and hard-to-guess ids contain a read only while nobody else can reach the
+// port; once a hosted origin is an admitted CORS caller (ADR-0005), an
+// admitted origin, or anyone who gets past the allowlist, could read every
+// document with no credential at all. Gating reads costs clients nothing:
+// every read already goes through a bearer-carrying fetch (daemon-client's
+// api-client.ts apiFetch, and every thumbnail/file consumer fetches bytes and
+// renders an object URL instead of a bare <img src>).
 export function requiresDaemonAuth(path: string): boolean {
   if (!path.startsWith('/api/')) return false
   if (path === '/api/runtime/ping') return false

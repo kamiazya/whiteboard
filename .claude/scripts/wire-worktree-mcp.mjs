@@ -25,12 +25,21 @@
 // a realpath comparison, so a symlinked worktree checkout doesn't trip a
 // naive string compare).
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseScriptArgs } from './script-flags.mjs'
 import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs'
+import { parseScriptArgs } from './script-flags.mjs'
 import {
   assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,
@@ -137,7 +146,8 @@ export function createConfigIO(configPath, { writeFileSyncFn = writeFileSync } =
   return { readConfig, writeConfig }
 }
 
-const { readConfig: defaultReadConfig, writeConfig: defaultWriteConfig } = createConfigIO(CLAUDE_CONFIG_PATH)
+const { readConfig: defaultReadConfig, writeConfig: defaultWriteConfig } =
+  createConfigIO(CLAUDE_CONFIG_PATH)
 
 function defaultSpawn(cmd, args, options) {
   return spawnSync(cmd, args, { encoding: 'utf8', ...options })
@@ -167,7 +177,10 @@ function defaultMainCheckoutRoot(cwd) {
 }
 
 function defaultLiveWorktreePaths(mainCheckoutRoot) {
-  const raw = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: mainCheckoutRoot, encoding: 'utf8' })
+  const raw = execFileSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: mainCheckoutRoot,
+    encoding: 'utf8',
+  })
   // Line-ending-agnostic: matching per line (with a trim for a stray \r)
   // survives CRLF output, unlike splitting the stream on '\n\n'.
   return Array.from(raw.matchAll(/^worktree (.+)$/gm), (m) => resolve(m[1].trim()))
@@ -177,17 +190,29 @@ function defaultLiveWorktreePaths(mainCheckoutRoot) {
 // repository's .git, whose parent is that checkout.
 function mainCheckoutRoot(repoRoot) {
   try {
-    const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    }).trim()
+    const commonDir = execFileSync(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      },
+    ).trim()
     return resolve(commonDir, '..')
   } catch {
     return repoRoot
   }
 }
 
-function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride, mainCheckoutRootOverride }) {
+function wireWorktree({
+  worktreeRoot,
+  spawn,
+  readConfig,
+  log,
+  isMainCheckoutOverride,
+  claudeCliAvailableOverride,
+  mainCheckoutRootOverride,
+}) {
   const repoRoot = resolve(worktreeRoot)
   const mainCheckout = isMainCheckoutOverride ?? isMainCheckout(repoRoot)
 
@@ -269,7 +294,8 @@ function wireWorktree({ worktreeRoot, spawn, readConfig, log, isMainCheckoutOver
   // The add lands under the main checkout's key; the worktree's own key is the fallback for a
   // CLI that keys by the directory it ran in.
   const effective =
-    readExistingEntry(effectiveConfig, mainRoot, desired.name) ?? readExistingEntry(effectiveConfig, repoRoot, desired.name)
+    readExistingEntry(effectiveConfig, mainRoot, desired.name) ??
+    readExistingEntry(effectiveConfig, repoRoot, desired.name)
   const verified = verifyPostWrite(effective, registration)
   if (verified.outcome === 'wired') {
     log(
@@ -299,7 +325,9 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
   // Windows join() itself already returns backslashes and a hardcoded '/'
   // would never match, silently sweeping nothing.
   const keyedByWorktree = Object.keys(config.projects)
-    .filter((projectPath) => projectPath.startsWith(join(mainCheckoutRoot, '.claude', 'worktrees') + sep))
+    .filter((projectPath) =>
+      projectPath.startsWith(join(mainCheckoutRoot, '.claude', 'worktrees') + sep),
+    )
     .map((projectPath) => {
       const entry = config.projects[projectPath]?.mcpServers?.whiteboard
       return entry ? { name: 'whiteboard', path: resolve(projectPath) } : null
@@ -309,9 +337,14 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
   // `claude mcp add --scope local` keys a worktree's registration by the MAIN checkout, so the
   // entry wiring wrote lives there and names the worktree only in its args.
   const mainKey = resolve(mainCheckoutRoot)
-  const mainKeyProject = Object.keys(config.projects).find((projectPath) => resolve(projectPath) === mainKey)
+  const mainKeyProject = Object.keys(config.projects).find(
+    (projectPath) => resolve(projectPath) === mainKey,
+  )
   const pointedAt = stdioProxyRootOf(config.projects[mainKeyProject]?.mcpServers?.whiteboard)
-  const registered = pointedAt === null ? keyedByWorktree : [...keyedByWorktree, { name: 'whiteboard', path: pointedAt, projectKey: mainKeyProject }]
+  const registered =
+    pointedAt === null
+      ? keyedByWorktree
+      : [...keyedByWorktree, { name: 'whiteboard', path: pointedAt, projectKey: mainKeyProject }]
 
   const actions = planStaleSweep(registered, liveWorktreePaths)
   if (actions.length === 0) {
@@ -366,7 +399,8 @@ export async function main({
   if (flags.has('--sweep')) {
     const cwd = process.cwd()
     const mainCheckoutRoot = mainCheckoutRootOverride ?? defaultMainCheckoutRoot(cwd)
-    const liveWorktreePaths = liveWorktreePathsOverride ?? defaultLiveWorktreePaths(mainCheckoutRoot)
+    const liveWorktreePaths =
+      liveWorktreePathsOverride ?? defaultLiveWorktreePaths(mainCheckoutRoot)
     sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, writeConfig, log })
     return
   }

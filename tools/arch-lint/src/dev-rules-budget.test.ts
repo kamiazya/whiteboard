@@ -480,7 +480,12 @@ const CANVAS_RENDER_BUDGET = 108
 // neighbour above, so an addition says in its diff that it is one. A cut
 // lowers the pin; moving measurement history to `docs/contributing/architecture/`
 // is the cut `package-canvas-render.md` took.
-const TOOL_ARCH_LINT_BUDGET = 44
+//
+// 44 -> 45: one audit wave's guards each got the sentence that tells a reader
+// what they now see (reference directives and `import('x')` types, the
+// mechanics' inner order, the class-method reach, the retired-pairing comment
+// ban), written as the minimum that keeps the rule true.
+const TOOL_ARCH_LINT_BUDGET = 45
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

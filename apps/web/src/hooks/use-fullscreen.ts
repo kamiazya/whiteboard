@@ -5,11 +5,11 @@
  * question fullscreen answers is how much of the screen the app gets, and
  * that is the same question on every page — which is why the control lives
  * in the AppShell row (DESIGN.md's shell rule) and no page threads a
- * fullscreen target down any more. It used to be the browser document
- * page's `<main>`, which cost three things: the daemon page had no
- * fullscreen at all, the target needed a background of its own because an
- * element promoted to the top layer leaves the body's behind, and the
- * affordance rode in the document's top bar as a fourth kind of control.
+ * fullscreen target down. A page's `<main>` as the target would cost three
+ * things: the daemon page would have no fullscreen at all, the target would
+ * need a background of its own because an element promoted to the top layer
+ * leaves the body's behind, and the affordance would ride in the document's
+ * top bar as a fourth kind of control.
  *
  * `isFullscreen` follows the DOCUMENT (`fullscreenchange`), not our own
  * click: fullscreen can also be left with Escape or the browser's chrome.

@@ -15,9 +15,14 @@ const {
   positionals: [kind],
 } = parseScriptArgs({ argv: process.argv.slice(2), usage, maxPositionals: 1 })
 if (!KINDS.includes(kind)) {
-  process.stderr.write(`${kind === undefined ? 'missing kind' : `unknown kind ${kind}`}\n${usage}\n`)
+  process.stderr.write(
+    `${kind === undefined ? 'missing kind' : `unknown kind ${kind}`}\n${usage}\n`,
+  )
   process.exit(2)
 }
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
-appendFileSync(join(ROOT, '.claude/audit-log.jsonl'), `${JSON.stringify({ kind, at: new Date().toISOString() })}\n`)
+appendFileSync(
+  join(ROOT, '.claude/audit-log.jsonl'),
+  `${JSON.stringify({ kind, at: new Date().toISOString() })}\n`,
+)
 process.stdout.write(`[record-audit] recorded ${kind}\n`)

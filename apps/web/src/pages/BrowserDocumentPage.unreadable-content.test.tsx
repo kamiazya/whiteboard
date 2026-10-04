@@ -11,10 +11,13 @@
 import 'fake-indexeddb/auto'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  ensureBrowserWorkspace,
+  IdbDefaultDocumentPointer,
+} from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { ensureLocalWorkspace, IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -36,7 +39,7 @@ async function seedDocumentWithContent(
   content: { raw: unknown } | { snapshot: Uint8Array },
 ): Promise<void> {
   const index = new IdbDocumentIndex()
-  await ensureLocalWorkspace(index)
+  await ensureBrowserWorkspace(index)
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path: 'unreadable',
@@ -85,7 +88,7 @@ describe('a document this build cannot read', () => {
     // about. A switch from an unreadable document to a sound one would carry
     // the first one's failure across and turn the second into an error screen.
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const broken = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'broken',

@@ -831,6 +831,7 @@ export function MarkdownEditor({
             current={value.slice(passageProposals.placed.from, passageProposals.placed.to)}
             proposed={passageProposals.placed.text}
             conflicted={passageProposals.placed.conflicted}
+            author={proposals?.find((one) => one.id === passageProposals.open?.proposalId)?.author}
             at={{ x: passageProposals.open.x, y: passageProposals.open.y }}
             onDecide={(decision) => {
               onDecidePassage(

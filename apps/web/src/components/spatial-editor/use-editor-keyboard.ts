@@ -108,8 +108,8 @@ export function useEditorKeyboard({
    *
    * Each is empty when its own half is switched off — a keeper that cannot
    * lock a relation, or a composition with no node-lock handler — so the
-   * caller's "nothing to do" test is one length check rather than the three
-   * conditions it used to carry inline.
+   * caller's "nothing to do" test is one length check rather than three
+   * conditions carried inline.
    */
   const lockableSelection = (): { paths: readonly string[]; nodes: readonly string[] } => ({
     paths: edgeLockEnabled ? selectedInkIds : [],

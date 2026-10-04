@@ -4,7 +4,7 @@
  * https://developer.chrome.com/docs/extensions/reference/manifest
  */
 import { WHITEBOARD_GECKO_ID } from '@kamiazya/whiteboard-daemon-client/extension-names'
-import { version } from '../package.json'
+import { version } from '../package.json' with { type: 'json' }
 
 /**
  * The public half of the key the extension id is derived from, so a build

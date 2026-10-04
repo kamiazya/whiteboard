@@ -738,12 +738,24 @@ export function createDocumentSyncSession(
     window.removeEventListener('pagehide', onPageHide)
   }
 
+  // The stream replays neither restore frame, so a lock whose release was lost
+  // is released by a reconnect; remembering it is held keeps every other
+  // reconnect from reporting a restore change. A completion with no lock held
+  // still lands here: the restore rewrote the document, so undo is stale.
+  let restoreHeld = false
+  function releaseRestore(): void {
+    restoreHeld = false
+    deps.onRestoreChange(false, null)
+    clearUndo()
+  }
+
   function connect(): void {
     listenForPageLeaving()
     backend.connect({
       onConnected() {
         if (isStale()) return
         deps.onStatusChange('connected')
+        if (restoreHeld) releaseRestore()
         backend.sendClientReady()
         // Re-send everything this document holds. A backend whose transport
         // was down dropped the deltas made meanwhile — each push carries only
@@ -875,13 +887,13 @@ export function createDocumentSyncSession(
 
       onRestoreStarted(payload) {
         if (isStale()) return
+        restoreHeld = true
         deps.onRestoreChange(true, payload.label ?? null)
       },
 
       onRestoreComplete() {
         if (isStale()) return
-        deps.onRestoreChange(false, null)
-        clearUndo()
+        releaseRestore()
       },
 
       onViewportRequest(payload) {

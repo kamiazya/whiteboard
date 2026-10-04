@@ -128,6 +128,30 @@ function isStringArray(v) {
   return Array.isArray(v) && v.every((x) => typeof x === 'string')
 }
 
+const isString = (v) => typeof v === 'string'
+const optional = (check) => (v) => v === undefined || check(v)
+
+// One entry per top-level field DESIGN_SCHEMA constrains other than `testScenarios`.
+const FIELD_CHECKS = [
+  ['completionCriteria', isStringArray],
+  ['scope', isString],
+  ['contractChanges', optional(isString)],
+  ['risks', optional(isStringArray)],
+  ['properties', isNonBlankList],
+  ['blastRadius', isNonBlankList],
+  ['userReach', isNonBlankList],
+  ['benefit', isBenefitClaim],
+  ['manualVerification', optional(isString)],
+]
+
+function isValidTestScenarios(t) {
+  if (!t || typeof t !== 'object') return false
+  if (!Object.keys(t).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
+  return (
+    isStringArray(t.unit) && optional(isStringArray)(t.browser) && optional(isStringArray)(t.e2e)
+  )
+}
+
 // Guards a caller-provided `designDoc` against the same shape DESIGN_SCHEMA enforces on a
 // generated design, so a malformed/incomplete args.designDoc can't skip PlanReview's invariant
 // check by never passing through the schema-constrained agent() call in the first place. Checks
@@ -137,21 +161,8 @@ function isStringArray(v) {
 export function isValidDesignShape(d) {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return false
   if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
-  if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
-  if (typeof d.scope !== 'string') return false
-  if (d.contractChanges !== undefined && typeof d.contractChanges !== 'string') return false
-  if (!d.testScenarios || typeof d.testScenarios !== 'object') return false
-  if (!Object.keys(d.testScenarios).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
-  if (!isStringArray(d.testScenarios.unit)) return false
-  if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
-  if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false
-  if (d.risks !== undefined && !isStringArray(d.risks)) return false
-  if (!isNonBlankList(d.properties)) return false
-  if (!isNonBlankList(d.blastRadius)) return false
-  if (!isNonBlankList(d.userReach)) return false
-  if (!isBenefitClaim(d.benefit)) return false
-  if (d.manualVerification !== undefined && typeof d.manualVerification !== 'string') return false
-  return true
+  if (!FIELD_CHECKS.every(([key, check]) => check(d[key]))) return false
+  return isValidTestScenarios(d.testScenarios)
 }
 
 // Gates dev-loop's design-generation phase. `skipDesign` means "skip generation because a valid

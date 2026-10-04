@@ -12,6 +12,7 @@ import {
   listWorkspacesResponseSchema,
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
+  purgeTrashEntryResponseSchema,
   renameDocumentPathRequestSchema,
   renameDocumentPathResponseSchema,
   renameWorkspaceRequestSchema,
@@ -66,6 +67,10 @@ export const RULES: Record<string, Rule> = {
     response: workspaceNamesSchema,
   },
   'GET /api/workspaces/:workspaceId/trash': { answers: 'json', response: listTrashResponseSchema },
+  'DELETE /api/workspaces/:workspaceId/trash/:documentId': {
+    answers: 'json',
+    response: purgeTrashEntryResponseSchema,
+  },
   'POST /api/workspaces/:workspaceId/trash/:documentId/restore': {
     answers: 'json',
     response: restoreTrashResponseSchema,

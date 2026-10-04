@@ -29,7 +29,13 @@ after(() => {
  */
 function gitEnv(extra = {}) {
   const env = { ...process.env, ...extra }
-  for (const key of Object.keys(env)) if (/^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(key)) delete env[key]
+  for (const key of Object.keys(env))
+    if (
+      /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(
+        key,
+      )
+    )
+      delete env[key]
   return env
 }
 
@@ -83,7 +89,7 @@ test('a command that is not a merge is ignored without output', () => {
   assert.equal(git(work, ['log', '--oneline', '-1']).includes('next'), false)
 })
 
-test("a commit message that mentions a merge does not pull", () => {
+test('a commit message that mentions a merge does not pull', () => {
   const { origin, work } = makeRepoPair()
   commitFile(origin, 'next.txt', 'next\n', 'next')
   const command = "git commit -m 'note: gh pr merge 12 later'"

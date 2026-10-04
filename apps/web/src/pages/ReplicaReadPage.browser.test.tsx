@@ -583,14 +583,14 @@ describe('ReplicaReadPage states', () => {
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
   })
 
-  it('the reason reaches the page: unknown_credential is locked, not removed', async () => {
+  it('the reason reaches the page: requires_person_session is locked, not removed', async () => {
     await seedReplica()
     connectReplicaKeeper(null)
     forgetAllForTests()
     connectReplicaKeeper({
       baseUrl: DAEMON,
       token: 'tok',
-      fetch: refusalKeyFetch('unknown_credential'),
+      fetch: refusalKeyFetch('requires_person_session'),
     })
 
     render(

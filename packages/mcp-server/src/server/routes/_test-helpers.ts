@@ -73,9 +73,8 @@ export async function seedWorkspaceRow(dataDir: string, workspaceId: string): Pr
  * config is `vi.mock`ed per file and must be in place before the store
  * module loads.
  *
- * This used to be `getDefaultServerDeps`, which every router fell back to
- * when handed no deps — a second composition path in production. Routers
- * require their deps now; what a TEST needs is this.
+ * Routers require their deps and never compose their own: a fallback would be
+ * a second composition path in production. What a TEST needs is this.
  */
 export async function resolveTestServerDeps(dataDir: string): Promise<ServerDeps> {
   const { getDb } = await import('../store/db/index.js')

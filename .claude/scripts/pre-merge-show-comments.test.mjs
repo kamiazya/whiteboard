@@ -14,7 +14,11 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-const hook = resolve(dirname(fileURLToPath(import.meta.url)), 'hooks', 'pre-merge-show-comments.mjs')
+const hook = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  'hooks',
+  'pre-merge-show-comments.mjs',
+)
 
 const scratchDirs = []
 after(() => {
@@ -30,7 +34,12 @@ function scratch(prefix) {
 function cleanEnv(extra) {
   const env = { ...process.env, ...extra }
   for (const key of Object.keys(env)) {
-    if (/^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(key)) delete env[key]
+    if (
+      /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(
+        key,
+      )
+    )
+      delete env[key]
   }
   return env
 }
@@ -93,7 +102,12 @@ function runHook({ repo, command, env = {} }) {
   return { status: result.status, stderr: result.stderr, calls }
 }
 
-const review = JSON.stringify({ author: 'coderabbitai[bot]', path: 'src/a.ts', line: 3, body: 'This cast hides a null.' })
+const review = JSON.stringify({
+  author: 'coderabbitai[bot]',
+  path: 'src/a.ts',
+  line: 3,
+  body: 'This cast hides a null.',
+})
 
 test('an unreadable PR says so and blocks once, instead of exiting silently', () => {
   const repo = makeRepo()

@@ -36,6 +36,46 @@ describe('CanvasViewer', () => {
     expect(svg?.querySelector('rect')).toBeTruthy()
   })
 
+  // The widget is sent a scene whose tagged boxes already carry the colour
+  // the workspace's library declares, and no library: the legend has to follow
+  // from what the scene holds.
+  it('draws the legend of a board whose tags carry colour', () => {
+    const tagged: SpatialCanvas = {
+      nodes: [
+        textNode({
+          id: 'a',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 40,
+          text: 'api',
+          tags: ['health:ok'],
+          color: '4',
+        }),
+        textNode({
+          id: 'b',
+          x: 200,
+          y: 0,
+          width: 100,
+          height: 40,
+          text: 'db',
+          tags: ['health:failing'],
+          color: '1',
+        }),
+      ],
+      edges: [],
+    }
+    const { getByTestId } = render(<CanvasViewer canvas={tagged} measure={fakeMeasure} />)
+    const svg = getByTestId('canvas-viewer').innerHTML
+    expect(svg).toContain('data-wb-legend')
+    expect(svg).toContain('>health<')
+  })
+
+  it('draws no legend for a board whose boxes carry no tag', () => {
+    const { getByTestId } = render(<CanvasViewer canvas={canvas} measure={fakeMeasure} />)
+    expect(getByTestId('canvas-viewer').innerHTML).not.toContain('data-wb-legend')
+  })
+
   it('renders an empty canvas without throwing', () => {
     const empty: SpatialCanvas = { nodes: [], edges: [] }
     expect(() => render(<CanvasViewer canvas={empty} measure={fakeMeasure} />)).not.toThrow()

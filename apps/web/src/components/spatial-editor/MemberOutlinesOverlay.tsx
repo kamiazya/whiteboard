@@ -11,7 +11,8 @@ import type { Point } from '../../lib/spatial/viewport.js'
 
 export interface MemberOutlinesOverlayProps {
   readonly selectionMembers: readonly NodeBox[]
-  readonly edges: readonly Pick<CanvasEdge, 'id' | 'from' | 'to'>[]
+  /** Read only to find edges inside the members, so unused once `outlinedEdgeIds` names them. */
+  readonly edges?: readonly Pick<CanvasEdge, 'id' | 'from' | 'to'>[]
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly zoom: number
   /**
@@ -25,20 +26,26 @@ export interface MemberOutlinesOverlayProps {
   /**
    * Outline exactly these edges, whatever their ends. Without it an edge is
    * outlined only when BOTH ends are members, which is what a selection's
-   * area actions follow; an agent's edit can reach an edge alone.
+   * area actions follow; an agent's edit can reach an edge alone. The ids
+   * are looked up in `edgePaths`, so a stroke (which routes beside the edges
+   * but is not one) is named the same way.
    */
   readonly outlinedEdgeIds?: ReadonlySet<string>
 }
 
-/** The edges the outline marks: the named ones, else those inside the members. */
-function outlinedEdges(
+/** The ids the outline marks: the named ones, else the edges inside the members. */
+function outlinedEdgeIdsOf(
   edges: MemberOutlinesOverlayProps['edges'],
   members: readonly NodeBox[],
   named: ReadonlySet<string> | undefined,
-): MemberOutlinesOverlayProps['edges'] {
-  if (named !== undefined) return edges.filter((edge) => named.has(edge.id))
+): ReadonlySet<string> {
+  if (named !== undefined) return named
   const memberIds = new Set(members.map((member) => member.id))
-  return edges.filter((edge) => endIn(edge.from, memberIds) && endIn(edge.to, memberIds))
+  return new Set(
+    (edges ?? [])
+      .filter((edge) => endIn(edge.from, memberIds) && endIn(edge.to, memberIds))
+      .map((edge) => edge.id),
+  )
 }
 
 export function MemberOutlinesOverlay({
@@ -50,6 +57,7 @@ export function MemberOutlinesOverlay({
   testId = 'member-outlines',
   outlinedEdgeIds,
 }: MemberOutlinesOverlayProps) {
+  const marked = outlinedEdgeIdsOf(edges, selectionMembers, outlinedEdgeIds)
   return (
     <svg
       data-testid={testId}
@@ -66,11 +74,8 @@ export function MemberOutlinesOverlay({
         area actions like recolor, so the highlight marks them along
         with the member boxes — an edge leaving the area does not
         follow and stays unmarked. */}
-      {outlinedEdges(edges, selectionMembers, outlinedEdgeIds)
-        .flatMap((edge) => {
-          const routed = edgePaths.find((entry) => entry.id === edge.id)
-          return routed === undefined ? [] : [{ id: edge.id, path: routed.path }]
-        })
+      {edgePaths
+        .filter((entry) => marked.has(entry.id))
         .map(({ id, path }) => (
           <polyline
             key={`edge-${id}`}

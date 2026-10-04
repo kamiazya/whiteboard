@@ -297,9 +297,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // moved to the package root so `layout/` and `svg/` can both import it.
     // IN the lane, because the file it left was: the move changes nothing the
     // lane saw.
+    //
+    // 104 and 22 with `scene-children.ts`, `sceneChildrenOf` lifted out of
+    // `scene-bounds.ts` so a layout stage below it reads the one definition;
+    // in the lane for the same reason.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 21,
-      production: 103,
+      mutated: 22,
+      production: 104,
     })
   })
 

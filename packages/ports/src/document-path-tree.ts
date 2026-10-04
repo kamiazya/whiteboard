@@ -11,11 +11,11 @@
  * HTTP path stranded them again.
  *
  * The rules live here, as pure functions over rows, so every store keeps its
- * own storage and none owns the semantics alone. That is now literally every
- * store rather than both of two: the browser's IndexedDB `DocumentIndex` is
- * the third, which is what moved this file out of the daemon and beside
- * `compareDocumentPaths` — a rule each implementation re-derives from prose
- * is a rule they will re-derive differently.
+ * own storage and none owns the semantics alone. That is literally every
+ * store: the daemon's two and the browser's IndexedDB `DocumentIndex`, which
+ * is why this file sits in ports beside `compareDocumentPaths` — a rule each
+ * implementation re-derives from prose is a rule they will re-derive
+ * differently.
  */
 
 import { isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'

@@ -154,17 +154,16 @@ export type ConnectRelease =
  * the object-first click-A-click-B flow (the press and its own release both
  * land on A), and in the drag flow it just means "still choosing a target".
  *
- * Releasing over EMPTY canvas draws a line. It used to cancel, and could
- * not have done anything else: an edge is a RELATION and cannot end in
- * empty space, so there was nothing to make. ADR-0038 decision 2 split ink
- * from relation, and a line's end is exactly the `{kind:'point'}` this
- * release has been carrying all along — the same answer `endCommands` gives
- * the same release on an element that already exists.
+ * Releasing over EMPTY canvas draws a line: an edge is a RELATION and cannot
+ * end in empty space, so ink is all a release there can make. ADR-0038
+ * decision 2 split ink from relation, and a line's end is exactly the
+ * `{kind:'point'}` this release carries — the same answer `endCommands`
+ * gives the same release on an element that already exists.
  *
  * The click flow is unaffected, which is worth stating because it looks
  * like it should be: cancelling an armed connect means pressing empty
  * canvas, and `pointerdown-empty` resets to idle BEFORE its pointerup
- * arrives, so this arm never sees it. The only gesture that changed is a
+ * arrives, so this arm never sees it. The only gesture that draws a line is a
  * real drag off the connect handle.
  */
 export function connectRelease(

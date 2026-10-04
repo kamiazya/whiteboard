@@ -5,7 +5,7 @@
  *
  * Kept apart from `DaemonDocumentPage` along the seam its closures draw:
  * everything here
- * reads the pairing payload and the controller's resolved (workspace, path,
+ * reads the connection's props and the controller's resolved (workspace, path,
  * documents) and nothing else, and nothing outside reads its parts
  * separately — `contentDocumentId` travels with the backend because they
  * only make sense together, and `authError` resets on a new backend.
@@ -128,10 +128,9 @@ export function useDaemonDocumentBackend({
     const injected = createBackendRef.current?.(workspaceId, path, daemonFetch)
     if (injected) return { backend: injected, contentDocumentId: undefined }
     // Nothing is at this path (a stale URL — the document was deleted or
-    // never existed): no connection. The per-document contract used to catch
-    // this with a lazily created empty doc, which silently minted a blank
-    // canvas at the old path on the first edit; creating a document is an
-    // explicit act now (see the not-found state below).
+    // never existed): no connection. A lazily created empty doc here would
+    // silently mint a blank canvas at the old path on the first edit;
+    // creating a document is an explicit act (see the not-found state below).
     if (workspaceSyncDocumentId === undefined) return null
     return connectDaemonDocument({
       workspaceId,

@@ -27,7 +27,7 @@ import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
  * A browser test renders production code that reads `getBrowserWorkspaceId()`
  * at its ordinary call sites, but no test runs the boot chain that resolves
  * it — so without a seed here the accessor's unresolved-state throw reaches
- * any test whose fixture is purely in-memory (a `LocalStoreDouble`, say)
+ * any test whose fixture is purely in-memory (a `BrowserStoreDouble`, say)
  * rather than an IndexedDB one, where `claimIsolatedWhiteboardDb` seeds it.
  * A fixed per-file id, minted once, is what those call sites see; the same
  * default the jsdom setup installs, for the same reason.

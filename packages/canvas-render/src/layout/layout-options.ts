@@ -300,7 +300,7 @@ export interface SpatialLayoutOptions {
    * than read out of its envelope.
    *
    * ADR-0026 decision 1b makes the layer keeper-side: it is stored one level
-   * above content, so it no longer rides inside `x-whiteboard`. A markdown
+   * above content, so it does not ride inside `x-whiteboard`. A markdown
    * document has no envelope at all, which is the argument that decides it —
    * there is nowhere in a canvas key to put a markdown document's comments.
    *

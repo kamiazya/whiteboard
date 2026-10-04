@@ -47,7 +47,7 @@ describe('useDocumentNames', () => {
     expect(result.current.effectiveNames).toEqual({ documents: {}, pinned: [] })
   })
 
-  it('answers empty names in local mode without ever fetching', () => {
+  it('answers empty names for a browser-kept workspace without ever fetching', () => {
     const daemonFetch = vi.fn()
     const { result } = renderHook(() =>
       useDocumentNames({ workspaceId: 'ws', keptByBrowser: true, daemonFetch }),

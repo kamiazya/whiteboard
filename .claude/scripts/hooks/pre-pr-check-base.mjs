@@ -21,7 +21,8 @@ try {
 const command = input?.tool_input?.command ?? ''
 if (!runsGh(command, 'pr create')) process.exit(0)
 
-const git = (args, cwd) => execFileSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) }).trim()
+const git = (args, cwd) =>
+  execFileSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) }).trim()
 
 try {
   // Determine which branch is being published: --head wins; otherwise the
@@ -49,11 +50,7 @@ try {
     // on it turns a fast-merging main into a race against the pre-push
     // hook's multi-minute runtime.
     const changedFiles = (range) =>
-      new Set(
-        git(['-C', repoRoot, 'diff', '--name-only', range])
-          .split('\n')
-          .filter(Boolean),
-      )
+      new Set(git(['-C', repoRoot, 'diff', '--name-only', range]).split('\n').filter(Boolean))
     const branchFiles = changedFiles(`origin/main...${branch}`)
     const mainFiles = changedFiles(`${branch}...origin/main`)
     const overlapping = [...branchFiles].filter((file) => mainFiles.has(file))

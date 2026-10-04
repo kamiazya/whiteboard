@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
   resolveTestServerDeps,
+  seedWorkspaceRow,
   testDocumentRouterOptions,
   withTempDataDir,
 } from '../_test-helpers.js'
@@ -23,7 +24,7 @@ vi.mock('../../config.js', () => ({
 const tmp = withTempDataDir('whiteboard-restore-test-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
@@ -44,12 +45,8 @@ const createRouter = () =>
 // dynamic import.
 await import('../../sync-audience.js')
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
-afterEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(clearDocCacheForTests)
+afterEach(clearDocCacheForTests)
 
 describe('restore router', () => {
   it('returns a Hono instance', () => {
@@ -390,6 +387,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 404 when restoring a missing version id', async () => {
+    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createRouter()
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/nonexistent/restore',
@@ -402,6 +400,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 400 for an invalid version id', async () => {
+    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createRouter()
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/bad.id/restore',
@@ -659,7 +658,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     expect(listBody.documents.find((c) => c.path === 'canvas-new')?.kind).toBe('markdown')
   })
 
-  it('restoring a markdown-kind canvas onto an existing spatial-kind target syncs the target kind to match the restored content', async () => {
+  it('restoring a markdown-kind document onto an existing spatial-kind target with overwrite answers 409 document_kind_mismatch and leaves the target spatial', async () => {
     const app = createRouter()
 
     await createTestDocument(serverDeps, {
@@ -697,13 +696,14 @@ describe('overwrite restore reconciles instead of replacing', () => {
         body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
       },
     )
-    expect(restoreRes.status).toBe(200)
+    expect(restoreRes.status).toBe(409)
+    expect(await restoreRes.json()).toMatchObject({ error: 'document_kind_mismatch' })
 
     const listRes = await app.request('/api/workspaces/session1/documents')
     const listBody = (await listRes.json()) as {
       documents: { path: string; kind: string }[]
     }
-    expect(listBody.documents.find((c) => c.path === 'canvas-b')?.kind).toBe('markdown')
+    expect(listBody.documents.find((c) => c.path === 'canvas-b')?.kind).toBe('spatial')
   })
 
   it('restoring into an existing target path WITHOUT overwrite returns 409 output_exists', async () => {

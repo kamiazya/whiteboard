@@ -27,18 +27,18 @@ import { subscribedWorkspaceIds } from './sync-audience.js'
  * (`http-server.ts`) and server mode (`server-mode-http.ts`) — built and
  * declared once.
  *
- * Each root used to carry its own copy of these four declarations, each with
- * its own copy of the rationale, and a worker added to one root was simply
- * absent from the other: server mode, the MULTI-INSTANCE deployment the
- * backup lease was built for, took no scheduled backups at all until someone
- * noticed its registry call declared nothing. The registry made that
- * visible; this is what makes it structural. A worker added here reaches
+ * A copy of these four declarations per root, each with its own copy of the
+ * rationale, would leave a worker added to one root simply absent from the
+ * other: server mode, the MULTI-INSTANCE deployment the backup lease was
+ * built for, could take no scheduled backups at all while its registry call
+ * declared nothing. The registry makes that visible; this is what makes it
+ * structural. A worker added here reaches
  * both roots, and a root that wants the shared set has to supply every seam
  * the type names.
  *
  * What stays in each root is what is genuinely its own: the local daemon's
  * `idle-shutdown` (server mode never idles out), and the registry call that
- * arms the declarations. Everything a root used to hand-copy around that call
+ * arms the declarations. Everything a root would otherwise hand-copy around that call
  * — the sweeper's capped stop, the holder for the trigger `createApp` hands
  * back — is built here and carried on `SharedWorkers`, so a third root cannot
  * get either wrong: `composition-roots.guard.test.ts` requires it to pass

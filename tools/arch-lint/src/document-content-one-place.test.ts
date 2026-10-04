@@ -19,12 +19,13 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countNamedUses } from './named-use-scan.js'
 import { REPO_ROOT, SCAN_ROOTS } from './scan-roots.js'
-import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const OWNER = 'packages/loro-adapter/src/'
-const READS_CANVAS = /\breadSpatialCanvas(?:WithSkipped)?\s*\(/
-const READS_BODY = /\breadMarkdownBody\s*\(/
+const READS_CANVAS = ['readSpatialCanvas', 'readSpatialCanvasWithSkipped']
+const READS_BODY = ['readMarkdownBody']
 
 const READS_BOTH: Readonly<Record<string, string>> = {
   'apps/web/src/lib/read-loaded-file-document.ts':
@@ -42,14 +43,23 @@ const production = files
   .map((path) => ({ path, rel: relative(REPO_ROOT, path).split(sep).join('/') }))
   .filter(({ rel }) => !rel.startsWith(OWNER))
 
-function readsBoth(source: string, fileName?: string): boolean {
-  const code = stripCommentsAndStrings(source, fileName)
-  return READS_CANVAS.test(code) && READS_BODY.test(code)
+/** Both reads, each however spelled: bare, qualified, bracketed or through an aliased import. */
+function readsBoth(source: string, fileName = 'fixture.ts'): boolean {
+  return (
+    countNamedUses(fileName, source, READS_CANVAS) > 0 &&
+    countNamedUses(fileName, source, READS_BODY) > 0
+  )
 }
 
 const FIXTURES: readonly { readonly source: string; readonly both: boolean }[] = [
   { source: 'readSpatialCanvas(doc); readMarkdownBody(doc)', both: true },
   { source: 'readSpatialCanvasWithSkipped (doc)\nreadMarkdownBody (doc)', both: true },
+  {
+    source:
+      "import { readSpatialCanvas as canvasOf, readMarkdownBody as bodyOf } from 'x'\ncanvasOf(doc); bodyOf(doc)",
+    both: true,
+  },
+  { source: "loro['readSpatialCanvas'](doc); loro.readMarkdownBody(doc)", both: true },
   { source: 'readSpatialCanvas(doc)', both: false },
   { source: 'readMarkdownBody(doc)', both: false },
   { source: 'import { readSpatialCanvas, readMarkdownBody } from "x"', both: false },

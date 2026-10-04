@@ -1,14 +1,14 @@
 /**
  * What the canvas root treats as an OVERLAY rather than canvas surface.
  *
- * Two of the root's guards ask this question and used to answer it
- * separately, each with the same attribute lookup: the React pointer guard
- * (a press an overlay took must not start a gesture — capturing the pointer
+ * Two of the root's guards ask this question: the React pointer guard (a
+ * press an overlay took must not start a gesture — capturing the pointer
  * would retarget the control's own `click` to the root) and the native
  * `touchstart` refuser (a cancelled touchstart is what stops the platform
  * claiming a pan as a scroll, and it also suppresses the click and focus a
- * tap would produce). A control that opted in for one and not the other
- * worked under a mouse and was dead to a finger.
+ * tap would produce). Answering it separately in each, with its own
+ * attribute lookup, would let a control that opted in for one and not the
+ * other work under a mouse and be dead to a finger.
  *
  * `data-editor-overlay` is still the opt-in for a container that is chrome
  * without being a control (the minimap, a text editor's frame). What this

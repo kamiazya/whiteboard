@@ -116,8 +116,7 @@ async function cachedAsync(runId, fetch, shape) {
  * question about landing.
  */
 function gitInspector() {
-  const git = (args) =>
-    execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30_000 })
+  const git = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30_000 })
   const base = (() => {
     try {
       git(['rev-parse', '--verify', '--quiet', 'origin/main'])
@@ -127,9 +126,14 @@ function gitInspector() {
     }
   })()
   return (path, sinceIso) => {
-    const files = git(['ls-files', `*${path}`]).split('\n').filter(Boolean)
+    const files = git(['ls-files', `*${path}`])
+      .split('\n')
+      .filter(Boolean)
     if (files.length === 0) return { state: 'missing' }
-    const commits = commitsLandedAfter(git(['log', base, '--format=%cI\t%s', '--', ...files]), sinceIso)
+    const commits = commitsLandedAfter(
+      git(['log', base, '--format=%cI\t%s', '--', ...files]),
+      sinceIso,
+    )
     // A later commit whose SUBJECT names the file, touching it or not: the
     // shape a root-cause fix has, and "fixed in <sha>" is what the report
     // otherwise has no way to record.
@@ -139,7 +143,8 @@ function gitInspector() {
       sinceIso,
     )
     const namedBy = naming[0]?.[1]
-    if (commits.length === 0) return namedBy === undefined ? { state: 'unchanged' } : { state: 'unchanged', namedBy }
+    if (commits.length === 0)
+      return namedBy === undefined ? { state: 'unchanged' } : { state: 'unchanged', namedBy }
     return {
       state: 'changed',
       commits: commits.length,
@@ -158,8 +163,18 @@ function gitInspector() {
 function mainPassedAfter() {
   try {
     const passed = gh([
-      'run', 'list', '--branch', 'main', '--workflow', 'ci', '--status', 'success',
-      '--limit', '50', '--json', 'createdAt',
+      'run',
+      'list',
+      '--branch',
+      'main',
+      '--workflow',
+      'ci',
+      '--status',
+      'success',
+      '--limit',
+      '50',
+      '--json',
+      'createdAt',
     ])
     return (iso) => runPassedAfter(passed, iso)
   } catch {
@@ -196,7 +211,9 @@ async function listRuns(workflowFile, sinceIso) {
     ])
   const first = await page(1)
   const pages = Math.min(Math.ceil(first.total / RUNS_PER_PAGE), MAX_RUN_PAGES)
-  const rest = await Promise.all(Array.from({ length: Math.max(pages - 1, 0) }, (_, index) => page(index + 2)))
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(pages - 1, 0) }, (_, index) => page(index + 2)),
+  )
   return [first, ...rest].flatMap((batch) => batch.runs)
 }
 
@@ -230,7 +247,13 @@ async function unhealedFailures(since) {
           ...run,
           jobs: await cachedAsync(
             run.runId,
-            () => ghAsync(['api', `repos/{owner}/{repo}/actions/runs/${run.runId}/jobs`, '--jq', '[.jobs[] | {name, conclusion}]']),
+            () =>
+              ghAsync([
+                'api',
+                `repos/{owner}/{repo}/actions/runs/${run.runId}/jobs`,
+                '--jq',
+                '[.jobs[] | {name, conclusion}]',
+              ]),
             `v1-jobs-${run.conclusion}`,
           ),
         })),
@@ -248,8 +271,18 @@ async function unhealedFailures(since) {
 function main() {
   const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString()
   const runs = gh([
-    'run', 'list', '--branch', 'main', '--workflow', 'ci', '--status', 'failure',
-    '--limit', '100', '--json', 'databaseId,createdAt',
+    'run',
+    'list',
+    '--branch',
+    'main',
+    '--workflow',
+    'ci',
+    '--status',
+    'failure',
+    '--limit',
+    '100',
+    '--json',
+    'databaseId,createdAt',
   ]).filter((run) => run.createdAt >= since)
 
   const window = runs.map((run) => ({
@@ -260,11 +293,19 @@ function main() {
     // by an older version holds bare titles; `clusterFailures` accepts both,
     // so a cache written before this change still reads.
     annotations: cached(String(run.databaseId), () => {
-      const jobs = gh(['api', `repos/{owner}/{repo}/actions/runs/${run.databaseId}/jobs`, '--jq', '[.jobs[] | select(.conclusion=="failure") | .id]'])
+      const jobs = gh([
+        'api',
+        `repos/{owner}/{repo}/actions/runs/${run.databaseId}/jobs`,
+        '--jq',
+        '[.jobs[] | select(.conclusion=="failure") | .id]',
+      ])
       const annotations = []
       for (const jobId of jobs) {
         // A job IS a check run, so its annotations live at the same id.
-        for (const annotation of gh(['api', `repos/{owner}/{repo}/check-runs/${jobId}/annotations`])) {
+        for (const annotation of gh([
+          'api',
+          `repos/{owner}/{repo}/check-runs/${jobId}/annotations`,
+        ])) {
           // An EMPTY title used to mean "drop it". It does not: `ci-gate`'s
           // own summary carries the failed LEG under one
           // (`[ci-gate] test-unit (2): failure`), and that is the only thing
@@ -284,7 +325,12 @@ function main() {
     }),
   }))
 
-  const report = formatReport(clusterFailures(window), WINDOW_DAYS, gitInspector(), mainPassedAfter())
+  const report = formatReport(
+    clusterFailures(window),
+    WINDOW_DAYS,
+    gitInspector(),
+    mainPassedAfter(),
+  )
   if (report !== '') process.stdout.write(`${report}\n`)
   else if (!QUIET) {
     process.stdout.write(

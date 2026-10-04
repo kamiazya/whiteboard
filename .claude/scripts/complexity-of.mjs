@@ -47,7 +47,15 @@ const scoreFiles = (paths, cwd, sourceOf, displayPath) => {
   try {
     out = execFileSync(
       'pnpm',
-      ['exec', 'biome', 'lint', `--config-path=${work}`, '--reporter=json', '--max-diagnostics=none', ...paths],
+      [
+        'exec',
+        'biome',
+        'lint',
+        `--config-path=${work}`,
+        '--reporter=json',
+        '--max-diagnostics=none',
+        ...paths,
+      ],
       { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 26 },
     )
   } catch (error) {
@@ -64,7 +72,12 @@ try {
       linter: {
         rules: {
           recommended: false,
-          complexity: { noExcessiveCognitiveComplexity: { level: 'error', options: { maxAllowedComplexity: 1 } } },
+          complexity: {
+            noExcessiveCognitiveComplexity: {
+              level: 'error',
+              options: { maxAllowedComplexity: 1 },
+            },
+          },
         },
       },
     }),

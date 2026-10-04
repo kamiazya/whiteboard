@@ -24,7 +24,7 @@ concurrency:
 jobs:
   release-deployment:
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Deactivate and delete this PR's preview deployment records
         env:

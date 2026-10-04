@@ -52,12 +52,12 @@ type Axis = 0 | 1
 /**
  * One move on the grid, with everything that follows from its DIRECTION.
  *
- * The successor loop used to re-derive all of this from `dj === 0` at every
- * step — seven `horizontal ? … : …` between reading the cell and charging
- * the move, two of them allocating a fresh arrow function per step on the
- * hottest path in routing (measured at 16-27% of layout). Declared once here
- * the branches are gone from the loop and the accessors are allocated once
- * for the process, not once per expansion.
+ * Declared once, so the successor loop does not re-derive all of this from
+ * `dj === 0` at every step — seven `horizontal ? … : …` between reading the
+ * cell and charging the move, two of them allocating a fresh arrow function
+ * per step on the hottest path in routing (measured at 16-27% of layout) —
+ * and the accessors are allocated once for the process, not once per
+ * expansion.
  */
 interface GridStep {
   readonly di: number
@@ -172,8 +172,8 @@ function buildGrid(
       r.y + r.h + clearance >= minY,
   )
   // Distinct coordinates first, sorting only once the grid is known to fit:
-  // on a canvas past the cap every call used to build and sort both axes
-  // just to abandon them.
+  // on a canvas past the cap, building and sorting both axes up front would
+  // be abandoned work.
   const xSet = new Set<number>([start.x, end.x])
   const ySet = new Set<number>([start.y, end.y])
   const addX = (x: number) => {

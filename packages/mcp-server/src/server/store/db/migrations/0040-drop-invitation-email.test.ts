@@ -79,3 +79,31 @@ it('carries link invitations across the rebuild and drops email-only rows', asyn
   ])
   await db.destroy()
 })
+
+// Redemption looks an invitation up by its token hash, and every invitation belongs to a tenant;
+// the rebuilt table has to keep both guarantees the column list alone does not show.
+const insertInvitation = (id: string, tokenHash: string, tenantId: string | null) => sql`
+  insert into invitations (id, tokenHash, invitedBy, createdAt, expiresAt, tenantId)
+  values (${id}, ${tokenHash}, 'p-ada', 1, 2, ${tenantId})
+`
+
+it('refuses a second invitation carrying a token hash that is already taken', async () => {
+  const { db, migrateTo, migrateToHead } = await openMigrationHarness(dataDir)
+  await migrateTo(PRE_0040)
+  await migrateToHead()
+  await insertInvitation('i-1', 'same-hash', 't1').execute(db)
+  await expect(insertInvitation('i-2', 'same-hash', 't1').execute(db)).rejects.toThrow(
+    /UNIQUE|constraint/i,
+  )
+  await db.destroy()
+})
+
+it('refuses an invitation that names no tenant', async () => {
+  const { db, migrateTo, migrateToHead } = await openMigrationHarness(dataDir)
+  await migrateTo(PRE_0040)
+  await migrateToHead()
+  await expect(insertInvitation('i-1', 'hash-1', null).execute(db)).rejects.toThrow(
+    /NOT NULL|constraint/i,
+  )
+  await db.destroy()
+})

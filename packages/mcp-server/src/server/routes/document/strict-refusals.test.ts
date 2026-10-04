@@ -43,7 +43,7 @@ afterEach(() => {
 
 // Request bodies are strict so that a caller learns a field it sent did not
 // take effect. The refusal is only worth that if it names the field: a newer
-// page posting a field this daemon does not know used to be told that a field
+// page posting a field this daemon does not know must not be told that a field
 // it HAD sent was missing, which sends the person to the wrong place.
 const DOC = '/api/workspaces/session1/documents/canvas-a'
 

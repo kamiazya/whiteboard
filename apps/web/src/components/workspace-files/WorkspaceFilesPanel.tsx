@@ -16,8 +16,8 @@ import { PeekDialog } from './PeekDialog.js'
 import { RecentLane } from './RecentLane.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SelectionBar } from './SelectionBar.js'
+import { SourceTrashSection } from './SourceTrashSection.js'
 import { TagStrip } from './TagStrip.js'
-import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
@@ -82,10 +82,9 @@ export function WorkspaceFilesPanel({
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
    *
-   * A workspace switch nulls `documents`, and the panel used to answer that
-   * with one line of text — measured on a real switch, the panel's box went
-   * 552px -> 0 -> 552 for 47ms, which is the jolt everything below it
-   * inherits. The skeleton below reserves the same room instead, and
+   * A workspace switch nulls `documents`, and answering that with one line of
+   * text would jolt — measured on a real switch, the panel's box went
+   * 552px -> 0 -> 552 for 47ms, which everything below it inherits. The skeleton below reserves the same room instead, and
    * `.skeleton-appear`'s 300ms delay means a fast re-read never shows it at
    * all: quiet background, unchanged geometry.
    */
@@ -471,11 +470,9 @@ export function WorkspaceFilesPanel({
    */
 
   /**
-   * Pinning used to be settable only from the editor header's document
-   * switcher. That switcher is gone, and the ordering it fed
-   * (`compareDocumentEntries`) is still here — so the affordance moves onto
-   * the object it acts on rather than being lost with the menu it happened
-   * to live in.
+   * Pinning is settable here, on the object it acts on, because the ordering
+   * it feeds (`compareDocumentEntries`) is applied here — the affordance does
+   * not live in a menu elsewhere.
    */
   const togglePinned = useCallback(
     async (entry: WorkspaceDocumentEntry) => {
@@ -519,8 +516,8 @@ export function WorkspaceFilesPanel({
     [source, readList],
   )
   // The rename flow owns its own three states (see use-rename-document.ts)
-  // and takes `moveDocument` directly — it is declared above, so the ref that
-  // used to bridge the two is gone with it.
+  // and takes `moveDocument` directly — it is declared above, so no ref
+  // bridges the two.
   const rename = useRenameDocument({ source, moveDocument, refreshAndSelect })
   // The scope reset runs ABOVE this (it clears everything a document names
   // the moment the workspace changes), so it reaches the flow through a ref
@@ -780,21 +777,18 @@ export function WorkspaceFilesPanel({
           mounted it keeps showing that workspace's rows under the new
           address until its own read answers — measured with a trash read
           that never answers, which is the window this closes. */}
-      {documents !== null &&
-        source.listTrash !== undefined &&
-        source.restoreFromTrash !== undefined && (
-          <TrashSection
-            listTrash={source.listTrash.bind(source)}
-            restoreFromTrash={source.restoreFromTrash.bind(source)}
-            revision={revision}
-            onRestored={() => {
-              // A restore that landed but whose refresh failed leaves the list
-              // stale, not the restore undone — same rule as every other write
-              // here, so the trash section never invents its own error shape.
-              void readList().then(setDocuments, () => undefined)
-            }}
-          />
-        )}
+      {documents !== null && (
+        <SourceTrashSection
+          source={source}
+          revision={revision}
+          onRestored={() => {
+            // A restore that landed but whose refresh failed leaves the list
+            // stale, not the restore undone — same rule as every other write
+            // here, so the trash section never invents its own error shape.
+            void readList().then(setDocuments, () => undefined)
+          }}
+        />
+      )}
       <PeekDialog
         document={peek}
         loadRender={loadRender}

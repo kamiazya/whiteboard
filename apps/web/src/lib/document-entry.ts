@@ -5,6 +5,7 @@
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
 
 export interface WorkspaceDocumentEntry {
   readonly documentId: string
@@ -24,7 +25,7 @@ export interface WorkspaceDocumentEntry {
    * places that route a row by kind never see one — and the compile error
    * lands in whichever files-source builds the entry instead of at the
    * decision that has to be made. Measured by adding a third kind: the row
-   * renderer and the row outliner both stayed silent, and `local-files-source`
+   * renderer and the row outliner both stayed silent, and `browser-files-source`
    * and `daemon-files-source` failed in their place.
    */
   readonly kind?: DocumentKind
@@ -72,9 +73,9 @@ export interface WorkspaceDocumentEntry {
 }
 
 /**
- * The one document ordering: pinned first (in pin order), then by path.
- * Folder pane and search results both use it, so the two can never rank the
- * same pair differently.
+ * The one document ordering: pinned first (in pin order), then by path in
+ * the keeper's own `listDocuments` order, so the panel never ranks a pair
+ * differently from the index it was listed from.
  */
 export function compareDocumentEntries(
   left: { readonly path: string; readonly pinOrder?: number },
@@ -90,7 +91,7 @@ export function compareDocumentEntries(
   ) {
     return left.pinOrder - right.pinOrder
   }
-  return left.path.localeCompare(right.path)
+  return compareDocumentPaths(left.path, right.path)
 }
 
 /**

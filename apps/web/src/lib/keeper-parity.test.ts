@@ -59,7 +59,7 @@ type KeeperReach =
   | { readonly reach: 'gap'; readonly missing: string; readonly followUp: string }
 
 const BROWSER_VERSIONS = 'src/lib/browser-versions-backend.ts'
-const BROWSER_FILES = 'src/lib/local-files-source.ts'
+const BROWSER_FILES = 'src/lib/browser-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
@@ -320,9 +320,6 @@ function daemonReachingModules(): string[] {
   return (
     Object.entries(sources)
       .filter(([path]) => !path.includes('.test.'))
-      // Never imported at runtime: it re-exports types and one fetch to prove
-      // they resolve, and says so in its own header. Nothing about a keeper.
-      .filter(([path]) => !path.endsWith('/_type-probe.ts'))
       // A fake daemon answers for the daemon in a test; it is not a module the
       // app ships, so it has no keeper to be compared with.
       .filter(([path]) => !path.startsWith('/src/test-utils/'))
@@ -426,7 +423,7 @@ const FILES_SOURCE_OMISSIONS: Record<
 
 const FILES_SOURCE_KEEPERS = {
   daemon: '/src/lib/daemon-files-source.ts',
-  browser: '/src/lib/local-files-source.ts',
+  browser: '/src/lib/browser-files-source.ts',
 } as const
 
 /** The members `WorkspaceFilesSource` declares optional, from its own source. */

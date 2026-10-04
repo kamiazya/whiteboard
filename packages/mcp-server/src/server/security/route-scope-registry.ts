@@ -138,7 +138,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // decides whether a responder is trustworthy at all. Rate-limited in the
   // router.
 
-  // File routes: reading/writing a canvas's attached binary file. The
+  // File routes: reading/writing a document's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory
   // `/file/<fileId>` suffix — the same suffix-anchored parse the router uses.
   {
@@ -150,7 +150,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
 
   // The workspace-document sync surface: one snapshot/update pair for the
   // whole workspace document. Same tier as the per-document equivalents —
-  // a workspace-granularity update is still a canvas mutation, just scoped
+  // a workspace-granularity update is still a document mutation, just scoped
   // wider, and the snapshot answers the same content canvas:read grants.
   // Promotion merges the record AND writes explicit checkpoints for it
   // (ADR-0039), so it needs what both of those need.
@@ -167,7 +167,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: wHandle,
   },
 
-  // Canvas write operations that arrive as POST but mutate state.
+  // Document write operations that arrive as POST but mutate state.
   {
     name: 'document update/export',
     claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/, 'POST'),
@@ -189,7 +189,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // POSTs: they mutate only which documents this stream is told about, and
   // receiving a document's updates is exactly the access canvas:read already
   // grants. Scoping them to canvas:write by the method rule would leave a
-  // read-only grant able to fetch a canvas but never observe it change.
+  // read-only grant able to fetch a document but never observe it change.
   //
   // Matched exactly rather than by prefix: that rationale covers these three
   // routes, and a later mutating route under the same prefix would otherwise
@@ -220,7 +220,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // Destructive maintenance routes mounted under /api/workspaces need their
   // own narrower scope — without this rule they'd fall through to the
   // workspace:write fallback below, which is broader than what they
-  // actually mutate (attachment blobs / canvas version history) and would
+  // actually mutate (attachment blobs / document version history) and would
   // let any workspace:write grant trigger them.
   {
     name: 'files/purge-dangling',

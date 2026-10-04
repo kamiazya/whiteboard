@@ -4,11 +4,17 @@ import { pinnedMajor, wrongNodeBanner } from './node-version-banner.mjs'
 
 describe('the wrong-Node-major banner', () => {
   it('is silent on the pinned major', () => {
-    assert.equal(wrongNodeBanner({ pinned: '24', versions: { node: '24.3.0', unicode: '17.0' } }), null)
+    assert.equal(
+      wrongNodeBanner({ pinned: '24', versions: { node: '24.3.0', unicode: '17.0' } }),
+      null,
+    )
   })
 
   it('is silent when the pin is unreadable', () => {
-    assert.equal(wrongNodeBanner({ pinned: undefined, versions: { node: '22.1.0', unicode: '16.0' } }), null)
+    assert.equal(
+      wrongNodeBanner({ pinned: undefined, versions: { node: '22.1.0', unicode: '16.0' } }),
+      null,
+    )
   })
 
   it('names the pin, the running version, Unicode, both symptom families and the guard', () => {

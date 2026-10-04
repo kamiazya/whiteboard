@@ -48,7 +48,7 @@ the selection's own bounding box, so the result does not depend on which
 node you clicked first, and each is a single undo step.
 
 A locked node or edge cannot be selected, moved, restyled, or deleted, and
-MCP tools refuse to patch it too. Right-click it and choose **Unlock** to
+MCP tools refuse to patch, tag, or set facets on it too. Right-click it and choose **Unlock** to
 release it. Nodes and edges lock independently: locking a node does not
 lock the edges attached to it, and an edge between two locked nodes stays
 editable until you lock the edge itself. The lock is editor state — it is

@@ -54,7 +54,6 @@ export const signInRefusalSchema = z.enum([
   'hosted_domain_not_allowed',
   'claim_not_satisfied',
   'not_invited',
-  'email_invitations_disabled',
   'rule_refused',
   // ADR-0051: re-authenticating needs a session from a provider that can ask
   // the person to sign in again, which a reverse proxy cannot.

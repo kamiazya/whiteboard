@@ -45,7 +45,10 @@ try {
     if (!Array.isArray(open)) throw new Error('unexpected answer')
     pr = open[0]
   } catch (err) {
-    const why = String(err?.stderr ?? err?.message ?? '').trim().split('\n')[0].slice(0, 160)
+    const why = String(err?.stderr ?? err?.message ?? '')
+      .trim()
+      .split('\n')[0]
+      .slice(0, 160)
     console.log(
       `[post-push-pr-sync] pushed '${branch}' but could not look up its PR (${why}); check the PR title and body against the diff yourself.`,
     )

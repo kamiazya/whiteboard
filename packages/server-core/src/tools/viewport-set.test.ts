@@ -54,7 +54,8 @@ describe('wb_viewport_set tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'move',
-      elementIds: ['a'],
+      scrollX: 40,
+      scrollY: -20,
       zoom: 1.5,
     })
 
@@ -67,9 +68,37 @@ describe('wb_viewport_set tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'move',
-      elementIds: ['a'],
+      scrollX: 40,
+      scrollY: -20,
       zoom: 1.5,
     })
+  })
+
+  test('forwards the elements a fit frames', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store)
+    const sent: ViewportRequest[] = []
+    const tool = createViewportSetTool({
+      ...makeDeps(store),
+      clientNotifier: {
+        agentActivity: () => {},
+        versionCreated: () => {},
+        restoreProgress: () => {},
+        requestViewport: async (request) => {
+          sent.push(request)
+          return true
+        },
+      },
+    })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'fit',
+      elementIds: ['a'],
+    })
+
+    expect(sent[0]).toMatchObject({ mode: 'fit', elementIds: ['a'] })
   })
 
   test.each([
@@ -163,5 +192,38 @@ describe('wb_viewport_set tool', () => {
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
     ).rejects.toThrow(`Document ${DOCUMENT_ID} is a markdown document`)
+  })
+})
+
+describe('wb_viewport_set input', () => {
+  const routing = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }
+  const { inputSchema } = createViewportSetTool(makeTestDeps())
+
+  // The browser applies exactly one of the two: fit reads elementIds, move
+  // reads scrollX/scrollY/zoom, and what the other half names it drops while
+  // the tool answers delivered:true.
+  test.each([
+    ['move beside elementIds', { mode: 'move', elementIds: ['a'] }, /elementIds/],
+    ['move beside an empty elementIds', { mode: 'move', elementIds: [] }, /elementIds/],
+    ['fit beside a zoom', { mode: 'fit', zoom: 2 }, /fit/],
+    ['fit beside a scroll offset', { mode: 'fit', scrollX: 5 }, /fit/],
+    ['elementIds beside a zoom, mode omitted', { elementIds: ['a'], zoom: 2 }, /elementIds/],
+    ['elementIds beside a scroll offset', { elementIds: ['a'], scrollY: 5 }, /elementIds/],
+  ])('refuses %s, which the browser would half ignore', (_name, params, message) => {
+    const result = inputSchema.safeParse({ ...routing, ...params })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toMatch(message)
+  })
+
+  test.each([
+    ['nothing: fit the whole board', {}],
+    ['a fit of named elements', { mode: 'fit', elementIds: ['a'] }],
+    ['a bare fit', { mode: 'fit' }],
+    ['a bare move, to the origin at actual size', { mode: 'move' }],
+    ['a move to a position and zoom', { mode: 'move', scrollX: 1, scrollY: 2, zoom: 2 }],
+    ['a lone zoom, mode omitted', { zoom: 2 }],
+    ['a lone scroll offset, mode omitted', { scrollX: 3 }],
+  ])('accepts %s', (_name, params) => {
+    expect(inputSchema.safeParse({ ...routing, ...params }).success).toBe(true)
   })
 })

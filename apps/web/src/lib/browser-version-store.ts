@@ -9,7 +9,7 @@ import {
   countSpatialNodes,
   projectWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -54,7 +54,7 @@ const versionRowSchema = z
      *
      * REQUIRED, unlike `auto`, which is optional exactly because a row
      * written before it had to keep parsing. That reasoning
-     * does not apply here: no row written before this one exists any more —
+     * does not apply here: no row written before this one exists —
      * IndexedDB v19 emptied the store, because a past checkpoint's content is
      * reachable only by checking the record out at its own frontier and so
      * none could be backfilled. Requiring it is what keeps the read a single
@@ -168,7 +168,7 @@ export class BrowserVersionStore {
     const rows = await this.rowsOf(workspaceId, documentId)
     const autosNewestFirst = rows
       .filter((row) => row.auto === true)
-      .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      .sort((a, b) => b.createdAt - a.createdAt || compareCodeUnit(b.id, a.id))
       .map((row) => ({ id: row.id, restoredFrom: row.restoredFrom ?? null }))
     const referenced = new Set(
       rows.flatMap((row) => (row.restoredFrom === undefined ? [] : [row.restoredFrom])),
@@ -211,7 +211,7 @@ export class BrowserVersionStore {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
     if (placement === null) return false
     const rows = await this.rowsOf(workspaceId, placement.documentId)
-    const newest = rows.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))[0]
+    const newest = rows.sort((a, b) => b.createdAt - a.createdAt || compareCodeUnit(b.id, a.id))[0]
     if (newest === undefined) return false
     const record = await this.deps.docs.open(workspaceId)
     if (record === null) return false
@@ -226,7 +226,7 @@ export class BrowserVersionStore {
     if (placement === null) return []
     const rows = await this.rowsOf(workspaceId, placement.documentId)
     return rows
-      .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      .sort((a, b) => b.createdAt - a.createdAt || compareCodeUnit(b.id, a.id))
       .map((row) => toEntry(row, path))
   }
 
@@ -308,5 +308,29 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     ...(row.label === undefined ? {} : { label: row.label }),
     ...(row.operator === undefined ? {} : { operator: row.operator }),
     ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),
+  })
+}
+
+/**
+ * Removes every saved version of one document — what a permanent delete from
+ * the Trash owes the history that was kept so a restore could rejoin it.
+ *
+ * A function over the database rather than a method of the store: it needs no
+ * placement (the document is gone, so nothing resolves its path) and no
+ * workspace record, only the `[workspaceId, documentId]` the rows are keyed by.
+ */
+export async function deleteVersionRowsOfDocument(
+  workspaceId: string,
+  documentId: string,
+  dbName?: string,
+): Promise<void> {
+  await inTransaction(dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
+    const store = tx.objectStore(VERSIONS_STORE)
+    const ids = await request(
+      store
+        .index(VERSIONS_BY_DOCUMENT_INDEX)
+        .getAllKeys(IDBKeyRange.only([workspaceId, documentId])),
+    )
+    for (const id of ids) await request(store.delete(id))
   })
 }

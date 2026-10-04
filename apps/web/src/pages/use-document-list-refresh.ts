@@ -52,7 +52,7 @@ export function useDocumentListRefresh(options: {
       .catch((err: unknown) => {
         // A failed list refresh must not surface as an unhandled rejection;
         // the switcher just keeps showing its last-known list. One nobody is
-        // waiting on any more — superseded by a newer refresh, or the page
+        // waiting on — superseded by a newer refresh, or the page
         // already gone — is not reported either: the record would be filed
         // against whatever is on screen by then.
         if (generation !== generationRef.current) return

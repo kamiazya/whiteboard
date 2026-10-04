@@ -11,7 +11,6 @@
  * — the write check below, `wb_facet_list`'s answer, the layout's colour by
  * intent — takes it as a value.
  */
-import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   readTagLibrary,
@@ -20,9 +19,8 @@ import {
   tagLibraryObjection,
 } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { listWorkspaceDocuments, type UnknownWorkspace } from './stencil-library.js'
+import { readWorkspaceLibraryFacets, type UnknownWorkspace } from './workspace-library-document.js'
 
 // The constant is plugin-visual's, where the browser keeper reads it too; the
 // daemon's barrel and its callers keep naming it from here.
@@ -41,11 +39,9 @@ export async function workspaceTagLibrary(
   unknownWorkspace: UnknownWorkspace,
   listed?: readonly DocumentEntry[],
 ): Promise<TagLibrary> {
-  const entries = listed ?? (await listWorkspaceDocuments(deps, workspaceId, unknownWorkspace))
-  const library = entries.find((entry) => entry.path === TAG_LIBRARY_PATH)
-  if (library === undefined) return {}
-  const doc = await loadOrCreateDocument(deps, workspaceId, library.documentId)
-  return readTagLibrary(readFacets(doc))
+  return readTagLibrary(
+    await readWorkspaceLibraryFacets(deps, workspaceId, TAG_LIBRARY_PATH, unknownWorkspace, listed),
+  )
 }
 
 /** A write the workspace's own library forbids: the message names the key, its rule, and what was written. */

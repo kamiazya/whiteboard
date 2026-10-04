@@ -7,10 +7,10 @@
 // test is the guard, mirroring dev-loop-design-schema-sync.test.mjs's role for DESIGN_SCHEMA.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.join(__dirname, '..', '..', '..')
@@ -96,8 +96,12 @@ test('every repo-owned agentType in a workflow has an agent definition', () => {
     const source = readFileSync(path.join(workflowDir, file), 'utf8')
     for (const m of source.matchAll(/agentType: '([^']+)'/g)) referenced.add(m[1])
   }
-  const ours = [...referenced].filter((a) => !a.includes(':') && !BUILT_IN_AGENTS.includes(a)).sort()
-  const missing = ours.filter((a) => !existsSync(path.join(repoRoot, '.claude', 'agents', `${a}.md`)))
+  const ours = [...referenced]
+    .filter((a) => !a.includes(':') && !BUILT_IN_AGENTS.includes(a))
+    .sort()
+  const missing = ours.filter(
+    (a) => !existsSync(path.join(repoRoot, '.claude', 'agents', `${a}.md`)),
+  )
   assert.deepEqual(missing, [], `agentType with no .claude/agents/<name>.md: ${missing.join(', ')}`)
 })
 
@@ -105,10 +109,16 @@ test('every repo-owned agentType in a workflow has an agent definition', () => {
 // another project's coding standards in its own prompt (arrow-function bans this repo does not
 // have), so its "project standards" step applies the wrong rules here.
 test('the Simplify phase runs a repo-owned agent, not a foreign plugin agent', () => {
-  const source = readFileSync(path.join(repoRoot, '.claude', 'workflows', 'dev-loop.workflow.mjs'), 'utf8')
+  const source = readFileSync(
+    path.join(repoRoot, '.claude', 'workflows', 'dev-loop.workflow.mjs'),
+    'utf8',
+  )
   const match = source.match(/phase: 'Simplify', agentType: '([^']+)'/)
   assert.ok(match, "could not locate the Simplify phase's agentType in dev-loop.workflow.mjs")
-  assert.ok(!match[1].includes(':'), `Simplify runs plugin agent "${match[1]}"; use a repo-owned agent`)
+  assert.ok(
+    !match[1].includes(':'),
+    `Simplify runs plugin agent "${match[1]}"; use a repo-owned agent`,
+  )
 })
 
 // architecture-map.md promises `.claude/rules/package-<name>.md` is path-scoped, and dev-flow.md
@@ -128,7 +138,9 @@ test('every package-/tool-/app-<name>.md rule is path-scoped to its own director
     if (prefix === undefined) continue
     const dir = prefixes[prefix]
     const pkg = file.slice(prefix.length, -'.md'.length)
-    const frontmatter = readFileSync(path.join(rulesDir, file), 'utf8').match(/^---\n([\s\S]*?)\n---\n/)
+    const frontmatter = readFileSync(path.join(rulesDir, file), 'utf8').match(
+      /^---\n([\s\S]*?)\n---\n/,
+    )
     // Match a real `paths:` LIST ITEM, not a substring of the frontmatter: these blocks carry
     // explanatory comments, and a pattern mentioned only in a comment would otherwise satisfy the
     // guard while scoping nothing.
@@ -137,7 +149,11 @@ test('every package-/tool-/app-<name>.md rule is path-scoped to its own director
       .some((line) => new RegExp(`^\\s*-\\s*["']?${dir}/${pkg}/\\*\\*["']?\\s*$`).test(line))
     if (!isScoped) unscoped.push(file)
   }
-  assert.deepEqual(unscoped, [], `rules missing a "paths: <packages|tools>/<name>/**" frontmatter: ${unscoped.join(', ')}`)
+  assert.deepEqual(
+    unscoped,
+    [],
+    `rules missing a "paths: <packages|tools>/<name>/**" frontmatter: ${unscoped.join(', ')}`,
+  )
 })
 
 // The Workflow runtime executes each script as a function body (top-level `return` is legal, so
@@ -149,14 +165,26 @@ test('every workflow script parses as a workflow function body', () => {
   const workflowDir = path.join(repoRoot, '.claude', 'workflows')
   const bad = []
   for (const file of readdirSync(workflowDir).filter((f) => f.endsWith('.mjs'))) {
-    const source = readFileSync(path.join(workflowDir, file), 'utf8')
-      .replace(/^export const meta = /m, 'const meta = ')
+    const source = readFileSync(path.join(workflowDir, file), 'utf8').replace(
+      /^export const meta = /m,
+      'const meta = ',
+    )
     try {
       // The runtime runs scripts as an ASYNC function body (top-level await is legal), so the
       // parse check must use the async function constructor, not `new Function`.
       const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
       // Parse check of our own scripts, never executed
-      new AsyncFunction('args', 'agent', 'workflow', 'phase', 'log', 'parallel', 'pipeline', 'budget', source)
+      new AsyncFunction(
+        'args',
+        'agent',
+        'workflow',
+        'phase',
+        'log',
+        'parallel',
+        'pipeline',
+        'budget',
+        source,
+      )
     } catch (err) {
       bad.push(`${file}: ${err.message}`)
     }
@@ -195,7 +223,9 @@ test('every skill an agent preloads is shipped here or declared as an enabled pl
   const skillsDir = path.join(repoRoot, '.claude', 'skills')
   const settings = JSON.parse(readFileSync(path.join(repoRoot, '.claude', 'settings.json'), 'utf8'))
   const world = {
-    skillDirs: readdirSync(skillsDir).filter((d) => existsSync(path.join(skillsDir, d, 'SKILL.md'))),
+    skillDirs: readdirSync(skillsDir).filter((d) =>
+      existsSync(path.join(skillsDir, d, 'SKILL.md')),
+    ),
     enabledPlugins: settings.enabledPlugins ?? {},
   }
   const agents = readdirSync(agentsDir).filter((f) => f.endsWith('.md'))
@@ -205,7 +235,11 @@ test('every skill an agent preloads is shipped here or declared as an enabled pl
   // Reached, not assumed: an extraction that matched nothing would pass every id.
   assert.ok(preloaded.length >= 8, `only ${preloaded.length} preloaded skills found`)
   const missing = preloaded.filter(({ id }) => undeclaredSkills([id], world).length > 0)
-  assert.deepEqual(missing, [], 'agent preloads a skill that is neither in .claude/skills nor an enabled plugin')
+  assert.deepEqual(
+    missing,
+    [],
+    'agent preloads a skill that is neither in .claude/skills nor an enabled plugin',
+  )
 })
 
 test('a namespaced skill needs its plugin declared in settings.json', () => {
@@ -284,7 +318,10 @@ test('every settings.json hook script has a test that a test run picks up', () =
     const candidates = testCandidates(script)
     const exemption = TESTED_THROUGH_LIBRARY[script]
     const found = candidates.find((c) => tracked.has(c)) ?? exemption?.test
-    assert.ok(found && tracked.has(found), `${script} has no test; looked for ${candidates.join(', ')}`)
+    assert.ok(
+      found && tracked.has(found),
+      `${script} has no test; looked for ${candidates.join(', ')}`,
+    )
     // `test:scripts` globs `.claude/scripts/*.test.mjs` and nothing deeper; a hook test anywhere
     // else would exist, pass, and never run there.
     assert.ok(

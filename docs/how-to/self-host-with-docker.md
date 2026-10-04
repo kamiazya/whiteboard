@@ -64,7 +64,6 @@ non-zero exit code if any are missing or invalid.
 | `WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS` | `true`/`false` (default `false`). By default the server rejects a JWT that doesn't self-identify as an access token (RFC 9068 `typ: at+jwt` header or `token_use: access` claim), to stop an ID token from the same IdP being replayed as an access token. Set `true` only if your IdP's access tokens carry neither discriminator. See [Security model](../explanation/security-model.md#server-mode-trust-boundary). |
 | `WHITEBOARD_SERVER_HOST` | Address the server binds. Defaults to `0.0.0.0` (all interfaces) inside the container; the provided Compose file publishes the port on loopback only, so what is reachable from outside is decided there and by your reverse proxy. Flag: `--host`. |
 | `WHITEBOARD_SERVER_PORT` | Port the server binds, 1–65535. Defaults to `3099`. A value outside the range or not a plain integer **aborts startup**. Flag: `--port`. |
-| `WHITEBOARD_SERVER_TRUSTED_PROXY` | `true`/`false` (default `false`). Set `true` when a reverse proxy in front sets `X-Forwarded-For`, so access decisions use the forwarded client address; see [Reverse proxy and TLS](#reverse-proxy-and-tls). Flag: `--trusted-proxy`. |
 | `WHITEBOARD_SERVER_JWT_CLOCK_SKEW_SECONDS` | How many seconds of clock drift between your IdP and this server a token's `exp`/`nbf` tolerates. A bare non-negative integer; defaults to `60`. Anything else **aborts startup**. Flag: `--jwt-clock-skew`. |
 | `WHITEBOARD_SERVER_JWT_SCOPE_CLAIM` | Which JWT claim carries the granted scopes: `scope` (space-separated string, the RFC 9068 form) or `scp` (the form some IdPs, such as Microsoft Entra, use). Defaults to `scope`. Any other value **aborts startup**. Flag: `--jwt-scope-claim`. |
 
@@ -452,10 +451,6 @@ server {
 }
 ```
 
-If you place a proxy that sets `X-Forwarded-For`, also set
-`WHITEBOARD_SERVER_TRUSTED_PROXY=true` so the server uses the forwarded IP for
-access decisions.
-
 The browser's live sync is a long-lived event stream (`/api/sync/stream`). The
 server marks it `X-Accel-Buffering: no`, so nginx passes it through as it is
 written rather than holding it in a buffer; a proxy that ignores that header
@@ -527,7 +522,9 @@ volume has the correct ownership if you pre-populate it.
 ### Reclaiming unreferenced uploads
 
 Once a day the server deletes uploaded images that no live document, trashed
-document or saved version points at any more. Two settings govern it, both in
+document or saved version points at any more. A document deleted permanently
+from the Trash stops counting, so the images only it used go with the next
+pass; while it sits in the Trash, its images are kept. Two settings govern it, both in
 [Configuration](../reference/configuration.md):
 `WHITEBOARD_FILE_GC_INTERVAL_MS` (how often, `0` to switch it off) and
 `WHITEBOARD_FILE_GC_GRACE_MS` (how old an unreferenced file must be — this is

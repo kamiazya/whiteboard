@@ -18,14 +18,14 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countNamedUses } from './named-use-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const SCANNED = 'packages/mcp-server/src'
 const RESOLVER = 'packages/mcp-server/src/daemon/data-dir.ts'
 
-/** `resolveDefaultDataDir(` as a call, not an import or a comment. */
-const CALL = /\bresolveDefaultDataDir\s*\(/
+const RESOLVER_NAMES = ['resolveDefaultDataDir']
 
 const LOCAL =
   "layered: reached only through the dispatcher's main(), which loads the config file into the environment before any command runs"
@@ -43,16 +43,35 @@ const LEDGER: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/cli/server-stop.ts': SERVER,
 }
 
+/** A use of the resolver however spelled: bare, qualified, bracketed or through an aliased import. */
+function callsResolver(source: string, fileName = 'fixture.ts'): boolean {
+  return countNamedUses(fileName, source, RESOLVER_NAMES) > 0
+}
+
 const relOf = (path: string) => relative(REPO_ROOT, path).split(sep).join('/')
 const callers = walkSourceFiles(join(REPO_ROOT, SCANNED))
   .filter((path) => !isTestPath(path))
   .map(relOf)
   .filter((rel) => rel !== RESOLVER)
-  .filter((rel) =>
-    CALL.test(
-      stripCommentsAndStrings(readFileSync(join(REPO_ROOT, rel), 'utf8'), join(REPO_ROOT, rel)),
-    ),
-  )
+  .filter((rel) => callsResolver(readFileSync(join(REPO_ROOT, rel), 'utf8'), join(REPO_ROOT, rel)))
+
+describe('a resolver call is recognised in every spelling', () => {
+  it.each([
+    ['a bare call', 'const d = resolveDefaultDataDir(env)', true],
+    ['a qualified call', 'const d = dataDir.resolveDefaultDataDir(env)', true],
+    [
+      'an aliased import',
+      "import { resolveDefaultDataDir as pick } from '../daemon/data-dir.js'\nconst d = pick(env)",
+      true,
+    ],
+    ['a bracket access', "const d = dataDir['resolveDefaultDataDir'](env)", true],
+    ['a bare import', "import { resolveDefaultDataDir } from '../daemon/data-dir.js'", false],
+    ['a comment', '// resolveDefaultDataDir(env) is what main() layers over', false],
+    ['a string', "log.info('resolveDefaultDataDir(env)')", false],
+  ])('%s', (_label, source, calls) => {
+    expect(callsResolver(source)).toBe(calls)
+  })
+})
 
 describe('every data-directory resolver in the CLI is classified against the config file', () => {
   it('finds the resolvers it classifies', () => {

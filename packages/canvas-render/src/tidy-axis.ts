@@ -1,8 +1,8 @@
 /**
  * The coordinate vocabulary every tidy pass is written in.
  *
- * Each rule in `tidy.ts` is stated once and run twice, so each one used to
- * carry `axis === 'x' ? … : …` at every read of a position, every write of
+ * Each rule in `tidy.ts` is stated once and run twice, so each would
+ * otherwise carry `axis === 'x' ? … : …` at every read of a position, every write of
  * one, and every pick of an origin or a floor — 18 of them, each a branch a
  * reader has to resolve before seeing what the rule says, and each the one
  * place a rule can be written asymmetrically by accident.

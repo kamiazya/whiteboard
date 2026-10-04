@@ -12,8 +12,9 @@
  * whole content of the decision, and a summary of them would be a worse
  * version of the thing itself.
  */
+import type { Proposal } from '@kamiazya/whiteboard-model'
 import { CircleCheck, CircleX } from 'lucide-react'
-import type { CSSProperties } from 'react'
+import { ProposalAuthor } from '../proposals/ProposalAuthor.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
 export interface PassageProposalCardProps {
@@ -28,6 +29,8 @@ export interface PassageProposalCardProps {
    * be told about.
    */
   readonly conflicted: boolean
+  /** Who proposed it, when the proposal says. */
+  readonly author?: Proposal['author']
   readonly at: { readonly x: number; readonly y: number }
   readonly onDecide: (decision: 'adopted' | 'dismissed') => void
   readonly onClose: () => void
@@ -37,15 +40,15 @@ export function PassageProposalCard({
   current,
   proposed,
   conflicted,
+  author,
   at,
   onDecide,
   onClose,
 }: PassageProposalCardProps) {
-  const style: CSSProperties = { left: at.x, top: at.y }
   return (
     <div
       className="absolute z-30 w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md"
-      style={style}
+      style={{ left: at.x, top: at.y }}
       role="dialog"
       aria-label="Proposed change to this passage"
       data-testid="passage-proposal-card"
@@ -61,27 +64,16 @@ export function PassageProposalCard({
         </p>
         <p className="whitespace-pre-wrap break-words">{proposed}</p>
       </div>
+      <ProposalAuthor author={author} className="mb-1 block text-xs text-muted-foreground" />
       <div className="flex items-center justify-end gap-1">
         {/* Dismiss first, Adopt last: the rightmost is the one a thumb
             reaches without looking, and adopting is the act that writes. */}
-        <button
-          type="button"
-          className={ICON_VERB_CLASS}
-          aria-label="Dismiss this change"
-          title="Dismiss this change"
-          onClick={() => onDecide('dismissed')}
-        >
+        <VerbButton label="Dismiss this change" onSelect={() => onDecide('dismissed')}>
           <CircleX aria-hidden="true" className="size-5" />
-        </button>
-        <button
-          type="button"
-          className={ICON_VERB_CLASS}
-          aria-label="Adopt this change"
-          title="Adopt this change"
-          onClick={() => onDecide('adopted')}
-        >
+        </VerbButton>
+        <VerbButton label="Adopt this change" onSelect={() => onDecide('adopted')}>
           <CircleCheck aria-hidden="true" className="size-5" />
-        </button>
+        </VerbButton>
       </div>
       {/* A bare × is chrome, not a verb — it decides nothing about the
           passage, it puts the card away. */}
@@ -94,5 +86,27 @@ export function PassageProposalCard({
         <span aria-hidden="true">×</span>
       </button>
     </div>
+  )
+}
+
+function VerbButton({
+  label,
+  onSelect,
+  children,
+}: {
+  readonly label: string
+  readonly onSelect: () => void
+  readonly children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      className={ICON_VERB_CLASS}
+      aria-label={label}
+      title={label}
+      onClick={onSelect}
+    >
+      {children}
+    </button>
   )
 }

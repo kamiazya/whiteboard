@@ -47,7 +47,7 @@ jobs:
     # the scan would fail on authentication after paying for a full coverage
     # run. Skip the job outright rather than spend ~10 minutes to fail.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Measured on main: 1059-1781s, recently 1652-1682s, so 30 minutes left one
     # to two minutes of headroom on a suite that grows every wave. A run that
     # hits the limit is cancelled, not failed — no check goes red and the

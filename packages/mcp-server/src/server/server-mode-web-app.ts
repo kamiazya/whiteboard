@@ -5,8 +5,8 @@
  * calls is on the host that set it.
  *
  * The shell is marked `keeper: 'server'` through the runtime config, which is
- * what tells the app to sign in against this keeper rather than pair with a
- * local daemon. A keeper run without a build — from source, say — keeps the
+ * what tells the app to sign in against this keeper rather than reach a
+ * local daemon through the extension. A keeper run without a build — from source, say — keeps the
  * placeholder, so a browser always gets an answer.
  */
 

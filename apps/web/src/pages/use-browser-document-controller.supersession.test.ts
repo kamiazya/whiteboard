@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
 
 // Its own file rather than three more cases in the controller's: that one is
@@ -23,7 +23,7 @@ const snap: DocumentSnapshot = {
 // The check after `flushSave` is NOT covered here, deliberately. Everything it
 // catches the check after the load catches too, so no behavioural test can
 // kill it on its own — measured, it survives being deleted while these three
-// stay green. It is an optimisation (it skips a `loadLocalDocument` whose
+// stay green. It is an optimisation (it skips a `loadBrowserDocument` whose
 // result is already dead), and it is labelled as one in the source so the next
 // reader does not spend a lane trying to reach it.
 
@@ -82,7 +82,7 @@ describe('switchDocument supersession', () => {
 
   /** Mounts on C1 with two further documents to switch between. */
   async function twoMoreDocuments(
-    store: LocalStoreDouble,
+    store: BrowserStoreDouble,
     options: Parameters<typeof useBrowserDocumentController>[1],
   ) {
     await store.setDefaultDocumentId(C1)
@@ -99,7 +99,7 @@ describe('switchDocument supersession', () => {
   }
 
   it('a switch overtaken while LOADING lands on nothing, and the later one holds', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     const held = gate(async (id: string) => (await store.clock([id])).get(id))
     const { hook, a, b } = await twoMoreDocuments(store, {
       loro: store.loro,
@@ -132,7 +132,7 @@ describe('switchDocument supersession', () => {
   })
 
   it('a switch overtaken while PERSISTING THE POINTER leaves the pointer on the later one', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     const held = gate(async (id: string) => {
       await store.pointer.set(id)
       return id
@@ -170,7 +170,7 @@ describe('switchDocument supersession', () => {
     // sees: a stale failure turns the banner to "The canvas could not be
     // switched" about a switch that did not happen, over a document that
     // loaded fine.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     let failFor: string | null = null
     const held = gate(async (id: string) => {
       if (id === failFor) throw new Error('the overtaken load blew up')

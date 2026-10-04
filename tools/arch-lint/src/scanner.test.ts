@@ -1,5 +1,6 @@
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { scanSourceForBoundaryViolations } from './scanner.js'
+import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 
 function violationKinds(source: string) {
   return scanSourceForBoundaryViolations('fixture.ts', source).map((v) => v.kind)
@@ -154,6 +155,69 @@ describe('scanSourceForBoundaryViolations', () => {
 
   it('passes clean on compliant source with no banned constructs', () => {
     expect(violationKinds("import { z } from 'zod'\nexport const x = z.string()")).toHaveLength(0)
+  })
+})
+
+describe('scanSourceForBoundaryViolations — type-position and directive specifiers', () => {
+  it.each([
+    ['a typeof import type', "type Fs = typeof import('node:fs')"],
+    ['an import type with a member', "type S = import('node:stream').Readable"],
+    ['a generic import type', "type S = import('node:stream').Transform<string>"],
+    ['a template-literal import type', 'type Fs = typeof import(`node:fs`)'],
+    ['an import type nested in a signature', "function f(x: Array<import('node:fs').Stats>) {}"],
+    ['a types reference directive naming node', '/// <reference types="node" />\nexport {}'],
+    ['a types reference directive naming @types/node', '/// <reference types="@types/node" />'],
+  ])('flags a node builtin reached through %s', (_name, source) => {
+    expect(violationKinds(source)).toContain('node-builtin-import')
+  })
+
+  it('flags an inversify or loro-crdt module named in an import type', () => {
+    expect(violationKinds("type C = import('inversify').Container")).toContain('inversify-import')
+    expect(violationKinds("type D = typeof import('loro-crdt')")).toContain('loro-crdt-import')
+  })
+
+  it('reports the 1-based line an import type is on', () => {
+    const source = ['const a = 1', '', "type Fs = typeof import('node:fs')"].join('\n')
+    const found = scanSourceForBoundaryViolations('fixture.ts', source)
+    expect(found.map((v) => [v.name, v.line])).toEqual([['node:fs', 3]])
+  })
+
+  it('does not read an import type whose specifier is computed or absent', () => {
+    expect(violationKinds('type T = import(string)')).toEqual([])
+  })
+
+  it('collects an import type as a type-only edge and a reference path as a relative one', () => {
+    const sourceFile = ts.createSourceFile(
+      'fixture.ts',
+      [
+        '/// <reference path="./ambient.d.ts" />',
+        '/// <reference path="ambient-bare.d.ts" />',
+        '/// <reference types="vite/client" />',
+        "type A = typeof import('../x.js')",
+        "type B = import('./y.js').B",
+        "const c = await import('./z.js')",
+      ].join('\n'),
+      ts.ScriptTarget.Latest,
+      true,
+    )
+    expect(
+      collectModuleSpecifiers(sourceFile).map(({ specifier, typeOnly, line }) => [
+        specifier,
+        typeOnly,
+        line,
+      ]),
+    ).toEqual([
+      ['./ambient.d.ts', true, 1],
+      ['./ambient-bare.d.ts', true, 2],
+      ['vite/client', true, 3],
+      ['../x.js', true, 4],
+      ['./y.js', true, 5],
+      ['./z.js', false, 6],
+    ])
+  })
+
+  it('leaves a lib reference directive alone: it names no module', () => {
+    expect(violationKinds('/// <reference lib="es2022" />')).toEqual([])
   })
 })
 

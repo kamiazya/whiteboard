@@ -32,7 +32,7 @@ import {
 
 let tempDir: string
 // The deps a router is handed by its root; here, the test wiring over the
-// isolated data dir (routers no longer compose their own).
+// isolated data dir.
 let serverDeps: ServerDeps
 vi.mock('../../config.js', () => ({
   get DATA_DIR() {

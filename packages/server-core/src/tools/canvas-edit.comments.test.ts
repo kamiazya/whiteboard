@@ -95,6 +95,67 @@ describe('wb_canvas_edit comment ops', () => {
     expect(canvas.comments ?? []).toHaveLength(0)
   })
 
+  describe('a comment names a target that is on the canvas', () => {
+    const BOARD: SpatialCanvas = {
+      nodes: [NODE, textNode({ id: 'n2', x: 500, y: 40, width: 200, height: 80, text: 'other' })],
+      edges: [{ id: 'e1', from: { node: 'n1' }, to: { node: 'n2' } }],
+    }
+
+    async function add(comment: Record<string, unknown>) {
+      const store = new FakeDocumentStore()
+      await seedCanvas(store, BOARD)
+      const run = createCanvasEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'comment.add', comment: { text: 'c', ...comment } as never }],
+      })
+      return { run, store }
+    }
+
+    test.each([
+      [
+        'a node that is not there, with an anchor point',
+        { targetNodeId: 'ghost', x: 1, y: 2 },
+        /ops\[0\] \(comment\.add\).*node "ghost" is not on the canvas/,
+      ],
+      [
+        'an edge that is not there, with an anchor point',
+        { targetEdgeId: 'ghost', x: 1, y: 2 },
+        /ops\[0\] \(comment\.add\).*edge "ghost" is not on the canvas/,
+      ],
+      [
+        'an edge that is not there, without one',
+        { targetEdgeId: 'ghost' },
+        /edge "ghost" is not on the canvas/,
+      ],
+    ])('refuses %s, and stores nothing', async (_label, comment, refusal) => {
+      const { run, store } = await add(comment)
+
+      await expect(run).rejects.toThrow(refusal)
+
+      expect(await storedComments(store)).toHaveLength(0)
+    })
+
+    test('an edge with no anchor point is refused naming targetEdgeId, since only a node gives the server a corner to anchor at', async () => {
+      const { run } = await add({ targetEdgeId: 'e1' })
+
+      await expect(run).rejects.toThrow(/x\/y beside targetEdgeId/)
+    })
+
+    test.each([
+      ['a node', { targetNodeId: 'n2', x: 1, y: 2 }],
+      ['an edge', { targetEdgeId: 'e1', x: 1, y: 2 }],
+    ])('keeps the target of %s that is on the canvas, anchored where it was given', async (_label, comment) => {
+      const { run, store } = await add(comment)
+
+      await run
+
+      const [stored] = await storedComments(store)
+      expect(stored).toMatchObject(comment)
+    })
+  })
+
   test('comment.resolve marks the record and comment.resolve with resolved:false reopens it', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {

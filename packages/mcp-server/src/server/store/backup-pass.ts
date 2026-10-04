@@ -1,8 +1,8 @@
-import { lstat, readdir, rename, rm } from 'node:fs/promises'
+import { readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import { errnoCode, isMissingFileError } from '../../shared/errno.js'
-import { hasAncestorSymlink } from '../backup-restore.js'
+import { errnoCode } from '../../shared/errno.js'
+import { inspectOutputPath, isSafeSourcePath } from '../backup-restore.js'
 import { getLogger } from '../log.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server-mode-backup-restore.js'
@@ -65,7 +65,7 @@ export const serverBackupResultSchema = z.object({
    * reported as a success.
    *
    * `ok` remains, and remains true here: the operation did what it is
-   * responsible for. What it no longer claims is COMPLETENESS, which is what
+   * responsible for. What it does not claim is COMPLETENESS, which is what
    * `stores` is for.
    */
   stores: z.object({
@@ -98,9 +98,10 @@ export interface BackupPassOptions {
  * directory down before answering false.
  *
  * Every step cleans up the SAME way for the same reason — a pass that died
- * partway used to leave a directory whose name says backup and whose contents
- * are a fragment, and three readers took it at its name. Sharing the cleanup
- * is what stops a later step being added without one.
+ * partway would leave a directory whose name says backup and whose contents
+ * are a fragment (the comment in `performBackup` below names the readers that
+ * would take it at its name). Sharing the cleanup is what stops a later step
+ * being added without one.
  */
 async function stagedStep(
   staging: string,
@@ -137,13 +138,13 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     doMirror = mirrorBlobsIntoBackup,
   } = options
 
-  // A running server is no longer a refusal (ADR-0021 decision 3). "A backup
+  // A running server is not a refusal (ADR-0021 decision 3). "A backup
   // requiring downtime is one an operator takes rarely or never, and the
   // interval between backups is the data they lose."
   //
-  // Two things had to be true first, and both are. The rows are captured
+  // Two things make that safe. The rows are captured
   // through the database (`VACUUM INTO`) rather than by reading its bytes out
-  // from under a writer, and every write into the data directory now lands
+  // from under a writer, and every write into the data directory lands
   // atomically, so a copy cannot pick up a half-written blob or upload. The
   // third — that nothing DELETES while the copy runs — is the marker below.
   //
@@ -151,47 +152,28 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
   // copies a directory, so a database configured to live anywhere else is
   // simply absent from the result — and reporting success over blobs alone
   // hands the operator a backup they will trust and cannot restore from.
-  // Reject if the output path itself is a symlink or a plain file.
+  // Refuse a symlinked or plain-file output path, or one under a symlinked
+  // ancestor, instead of following it out of the operator's storage zone.
   try {
-    const st = await lstat(outputDir)
-    if (st.isSymbolicLink() || st.isFile()) {
-      return { kind: 'invalid-output-path' }
-    }
+    const state = await inspectOutputPath(outputDir, { requireDirectory: false })
+    if (state === 'unsafe') return { kind: 'invalid-output-path' }
     // An existing directory must be EMPTY, and that is checked here rather
     // than left to the copy helper. The helper only ever sees the staging
     // directory now — one this pass just cleared — so it has nothing to
     // refuse, and without this the refusal would fall through to the final
     // rename: after a full copy, a snapshot, and writes into the shared
     // mirror, with `rename`'s own error naming both paths.
-    if ((await readdir(outputDir)).length > 0) {
-      return { kind: 'invalid-output-path' }
-    }
-  } catch (err) {
-    if (!isMissingFileError(err)) {
-      return { kind: 'error', message: 'backup failed' }
-    }
-    // Missing output dir: helper creates it via cp().
-  }
-
-  // Reject if any ancestor path component is a symlink. An ancestor symlink
-  // (e.g. <safe>/link → /outside) would redirect the backup to a location
-  // outside the operator's intended storage zone, so fail-closed here instead
-  // of following the link.
-  try {
-    if (await hasAncestorSymlink(outputDir)) {
+    // A missing output directory is created by the copy helper.
+    if (state === 'present' && (await readdir(outputDir)).length > 0) {
       return { kind: 'invalid-output-path' }
     }
   } catch {
     return { kind: 'error', message: 'backup failed' }
   }
 
-  // Apply the same guard to the read-side path so a symlinked dataDir cannot
-  // be used to exfiltrate data outside the allowed zone.
-  try {
-    if (await hasAncestorSymlink(dataDir)) {
-      return { kind: 'error', message: 'backup failed' }
-    }
-  } catch {
+  // The same guard on the read-side path, so a symlinked dataDir cannot be
+  // used to exfiltrate data outside the allowed zone.
+  if (!(await isSafeSourcePath(dataDir))) {
     return { kind: 'error', message: 'backup failed' }
   }
 
@@ -236,12 +218,12 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // near end: a snapshot is not offered until the mirror has passed it).
     //
     // "Offered" is concrete here — it is appearing under a backup name. A
-    // pass that died partway used to leave a directory whose name says backup
-    // and whose contents are a fragment, and three readers took it at its
-    // name: retention counted it and pushed a real backup out of the window,
-    // the mirror's collector found it manifest-less and stopped collecting
-    // for good, and restore read the missing manifest as "taken before the
-    // mirror" and restored a data directory with no rows and no blobs in it,
+    // pass that died partway would leave a directory whose name says backup
+    // and whose contents are a fragment, and three readers would take it at
+    // its name: retention would count it and push a real backup out of the
+    // window, the mirror's collector would find it manifest-less and stop
+    // collecting for good, and restore would read the missing manifest as
+    // "taken before the mirror" and restore a data directory with no rows and no blobs in it,
     // reporting success.
     //
     // Same move the mirror already makes for one blob, for the same reason:

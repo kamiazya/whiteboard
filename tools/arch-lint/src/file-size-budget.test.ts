@@ -192,7 +192,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `dropQueuedWrite`, because the debounce timer and the queue stay closed
   // over by the factory (`function-size-budget.test.ts` carries the same path
   // for `createDocumentSyncSession`).
-  'apps/web/src/lib/document-sync-session.ts': 1167,
+  'apps/web/src/lib/document-sync-session.ts': 1179,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -393,7 +393,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // rows for the readable annotation layer, the snapshot's dressing and the
   // in-place rename, the node input losing `embed`, `proposals` on wb_document_get,
   // wb_viewport_set losing `animate` and describing `mode`, and the facet titles.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1021,
+  // Then one audit wave's reasons beside seven re-pinned rows (proposal
+  // `author`, `follow`, the snapshot's `lineCount`, listed pins, restore's
+  // kind, viewport coordinates, `document.create`'s `name`) and the totals.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1044,
   // The not-JSON refusal's assertion carries the reason it is strict: a mutation
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every
@@ -483,8 +486,10 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // through the snapshot, and the session-end checkpoint phase (whose body
   // lives in `smoke/lib`).
   // The canvas_view theme-font steps, with the widget's refresh-keeps-the-theme
-  // step, live in `smoke/lib/canvas-view-theme.mjs`.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2702,
+  // step, live in `smoke/lib/canvas-view-theme.mjs`; the listed-pin check is
+  // `smoke/lib/listed-pin.mjs`, leaving an import and a call here; so are the
+  // proposal-author and facet-write refusal checks (`smoke/lib/*.mjs`).
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2712,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

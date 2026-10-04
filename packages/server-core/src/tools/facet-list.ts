@@ -4,8 +4,9 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { computeTagsInUse, tagInUseSchema } from './document-tags.js'
-import { listWorkspaceDocuments, workspaceFacetRegistry } from './stencil-library.js'
+import { workspaceFacetRegistry } from './stencil-library.js'
 import { workspaceTagLibrary } from './tag-library.js'
+import { listWorkspaceDocuments } from './workspace-library-document.js'
 
 /**
  * What facets this deployment registered, so an agent can DISCOVER a key

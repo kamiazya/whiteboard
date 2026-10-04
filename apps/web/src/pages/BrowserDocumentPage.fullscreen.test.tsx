@@ -11,8 +11,8 @@ import 'fake-indexeddb/auto'
 import { act, cleanup, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // The top bar is React.lazy in the page; loading it in the collection phase
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (flake-shapes.md's
@@ -59,7 +59,7 @@ function setFullscreenElement(el: Element | null) {
 }
 
 async function renderLoaded() {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)
   await act(async () => {

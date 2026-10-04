@@ -26,7 +26,6 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { planServerModeAuth } = await import('./security/server-mode-auth-plan.js')
 
 let people: ServerModeAppOptions['people']
 let disposePeople: () => Promise<void>
@@ -176,45 +175,8 @@ describe('app — server-mode composition', () => {
     })
   })
 
-  // Req 2: server-mode config validation via planServerModeAuth
+  // Req 2: createApp refuses an invalid server-mode config
   describe('server-mode config validation', () => {
-    it('rejects non-HTTPS externalUrl', () => {
-      const plan = planServerModeAuth({
-        mode: 'server-mode',
-        bindHost: '0.0.0.0',
-        externalUrl: 'http://example.com',
-      })
-      expect(plan.ok).toBe(false)
-      if (!plan.ok) expect(plan.code).toBe('server_mode.external_url_must_be_https')
-    })
-
-    it('rejects missing externalUrl', () => {
-      const plan = planServerModeAuth({ mode: 'server-mode', bindHost: '0.0.0.0' })
-      expect(plan.ok).toBe(false)
-      if (!plan.ok) expect(plan.code).toBe('server_mode.external_url_required')
-    })
-
-    it('rejects wildcard allowedOrigins', () => {
-      const plan = planServerModeAuth({
-        mode: 'server-mode',
-        bindHost: '0.0.0.0',
-        externalUrl: 'https://example.com',
-        allowedOrigins: ['*'],
-      })
-      expect(plan.ok).toBe(false)
-      if (!plan.ok) expect(plan.code).toBe('server_mode.wildcard_origin_forbidden')
-    })
-
-    it('rejects externalUrl with path/query/fragment', () => {
-      const plan = planServerModeAuth({
-        mode: 'server-mode',
-        bindHost: '0.0.0.0',
-        externalUrl: 'https://example.com/some/path',
-      })
-      expect(plan.ok).toBe(false)
-      if (!plan.ok) expect(plan.code).toBe('server_mode.external_url_must_be_origin')
-    })
-
     it('createApp throws when publicBaseUrl is not HTTPS', () => {
       expect(() =>
         createApp({
@@ -245,34 +207,6 @@ describe('app — server-mode composition', () => {
           getStatus: () => makeInternalStatus(),
         }),
       ).toThrow('invalid server-mode config')
-    })
-
-    it('valid config produces a server-mode plan with normalized publicBaseUrl', () => {
-      const plan = planServerModeAuth({
-        mode: 'server-mode',
-        bindHost: '0.0.0.0',
-        externalUrl: 'https://example.com',
-        allowedOrigins: ['https://example.com'],
-      })
-      expect(plan.ok).toBe(true)
-      if (plan.ok && plan.kind === 'server-mode') {
-        expect(plan.publicBaseUrl).toBe('https://example.com')
-        expect(plan.allowedOrigins).toContain('https://example.com')
-        expect(plan.pnaHeader).toBe('disabled')
-      }
-    })
-
-    it('failure code does not echo raw externalUrl content', () => {
-      const plan = planServerModeAuth({
-        mode: 'server-mode',
-        bindHost: '0.0.0.0',
-        externalUrl: 'https://user:password@secret-internal.example.com/path?token=abc123',
-      })
-      expect(plan.ok).toBe(false)
-      const asText = JSON.stringify(plan)
-      expect(asText).not.toContain('password')
-      expect(asText).not.toContain('secret-internal')
-      expect(asText).not.toContain('token=abc123')
     })
   })
 
@@ -724,19 +658,6 @@ describe('app — server-mode composition', () => {
     expect(text).not.toMatch(/\/Users\//)
     expect(text).not.toMatch(/\/opt\//)
     expect(text).not.toMatch(/\.ts:\d/)
-  })
-
-  it('planServerModeAuth failure codes are opaque — raw input not echoed', () => {
-    const plan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: 'https://user:password@secret-internal.example.com/path?token=abc123',
-    })
-    expect(plan.ok).toBe(false)
-    const asText = JSON.stringify(plan)
-    expect(asText).not.toContain('password')
-    expect(asText).not.toContain('secret-internal')
-    expect(asText).not.toContain('token=abc123')
   })
 
   it('server-mode does NOT add CORS or Access-Control-Allow-Private-Network headers on /api/*', async () => {

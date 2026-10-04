@@ -16,7 +16,7 @@ import { fc, fcTest } from '../../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from '../db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql-document-store.js'
 
-// Fixed pool of docRefs, including a canvas/workspace-tree pair that share an
+// Fixed pool of docRefs, including a document/workspace-tree pair that share an
 // id string, so the model exercises the isolation boundary in addition to
 // plain multi-doc isolation.
 const DOC_REFS: readonly DocRef[] = [

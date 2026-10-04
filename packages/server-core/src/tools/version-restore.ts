@@ -1,8 +1,10 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { restoreVersion } from '../operations/restore-version.js'
+import { type RestoreVersionResult, restoreVersion } from '../operations/restore-version.js'
 import type { ServerDeps } from '../server-deps.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { DocumentKindMismatchError } from './errors.js'
 
 export const versionRestoreInputSchema = z
   .object({
@@ -17,7 +19,7 @@ export const versionRestoreInputSchema = z
     targetPath: documentPathSchema
       .optional()
       .describe(
-        'Restore into this path instead of in place: a path not yet taken becomes a new document holding the saved state; an existing one needs overwrite: true and is reconciled in place.',
+        'Restore into this path instead of in place: a path not yet taken becomes a new document holding the saved state; an existing one needs overwrite: true, is reconciled in place, and must be the same kind as the saved state.',
       ),
     overwrite: z
       .boolean()
@@ -83,6 +85,57 @@ export class SubtreeTakesNoTargetError extends Error {
   }
 }
 
+/** A kind-crossing overwrite refused in `document.set`'s voice: what the write would have replaced, and where to go instead. */
+function kindMismatchRefusal(result: {
+  targetPath: string
+  targetKind: DocumentKind
+}): DocumentKindMismatchError {
+  const detail =
+    result.targetKind === 'spatial'
+      ? 'Restoring a markdown version onto it would replace its nodes and edges with a single text node. Restore into a new targetPath instead.'
+      : 'Restoring a spatial version onto it would replace its markdown body with a canvas. Restore into a new targetPath instead.'
+  return new DocumentKindMismatchError(result.targetPath, result.targetKind, detail)
+}
+
+/**
+ * The operation's result union as this tool answers it: a success as one flat
+ * record, each refusal as a typed error an MCP caller reads from its text.
+ */
+function restoreOutput(
+  result: RestoreVersionResult,
+  base: Pick<VersionRestoreOutput, 'documentId' | 'restoredVersionId' | 'label'>,
+  targetPath: string | undefined,
+): VersionRestoreOutput {
+  switch (result.kind) {
+    case 'restored-in-place':
+      return { ...base, mode: 'in-place' }
+    case 'restored-to-target':
+      return {
+        ...base,
+        mode: 'into-target',
+        targetPath: result.targetPath,
+        elementCount: result.elementCount,
+      }
+    case 'restored-subtree':
+      return { ...base, mode: 'subtree', restoredCount: result.restoredCount }
+    case 'not-found':
+      throw new VersionNotFoundError(base.documentId, base.restoredVersionId)
+    case 'output-exists':
+      throw new RestoreTargetExistsError(result.targetPath)
+    case 'kind-mismatch':
+      throw kindMismatchRefusal(result)
+    case 'subtree-needs-workspace-version':
+      throw new SubtreeNeedsWorkspaceVersionError(base.restoredVersionId)
+    case 'subtree-takes-no-target':
+      throw new SubtreeTakesNoTargetError()
+    case 'invalid-target-path':
+      // Unreachable through this surface: the input schema validated the
+      // path before the operation saw it. Kept as a refusal rather than
+      // an assertion so a schema that loosens later still refuses.
+      throw new Error(`invalid targetPath: ${targetPath}`)
+  }
+}
+
 /**
  * The MCP surface of `restoreVersion` — all three of its modes, the same
  * operation the History panel's Restore button reaches over HTTP, so an
@@ -129,32 +182,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
         restoredVersionId: versionId,
         ...(label === undefined ? {} : { label }),
       }
-      switch (result.kind) {
-        case 'restored-in-place':
-          return { ...base, mode: 'in-place' }
-        case 'restored-to-target':
-          return {
-            ...base,
-            mode: 'into-target',
-            targetPath: result.targetPath,
-            elementCount: result.elementCount,
-          }
-        case 'restored-subtree':
-          return { ...base, mode: 'subtree', restoredCount: result.restoredCount }
-        case 'not-found':
-          throw new VersionNotFoundError(documentId, versionId)
-        case 'output-exists':
-          throw new RestoreTargetExistsError(result.targetPath)
-        case 'subtree-needs-workspace-version':
-          throw new SubtreeNeedsWorkspaceVersionError(versionId)
-        case 'subtree-takes-no-target':
-          throw new SubtreeTakesNoTargetError()
-        case 'invalid-target-path':
-          // Unreachable through this surface: the input schema validated the
-          // path before the operation saw it. Kept as a refusal rather than
-          // an assertion so a schema that loosens later still refuses.
-          throw new Error(`invalid targetPath: ${targetPath}`)
-      }
+      return restoreOutput(result, base, targetPath)
     },
   }
 }

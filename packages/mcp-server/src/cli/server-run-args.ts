@@ -34,7 +34,7 @@ type InlineField = (typeof INLINE_VALUE_FLAGS)[keyof typeof INLINE_VALUE_FLAGS]
 type InlineValues = { [K in InlineField]: string | undefined }
 
 export const SERVER_RUN_FLAGS: FlagTable<InlineField> = {
-  booleans: ['--json', '--dry-run', '--trusted-proxy'],
+  booleans: ['--json', '--dry-run'],
   values: INLINE_VALUE_FLAGS,
 }
 
@@ -43,7 +43,6 @@ export type ServerRunArgs =
       kind: 'ok'
       json: true
       dryRun: boolean
-      trustedProxy: boolean | undefined
     } & InlineValues)
   | { kind: 'usage-error'; message: string }
 
@@ -61,7 +60,6 @@ export function parseServerRunArgs(args: readonly string[]): ServerRunArgs {
     kind: 'ok',
     json: true,
     dryRun: scan.seen.has('--dry-run'),
-    trustedProxy: scan.seen.has('--trusted-proxy') ? true : undefined,
     externalUrl: scan.values.externalUrl,
     allowedOrigins: scan.values.allowedOrigins,
     authStrategy: scan.values.authStrategy,
@@ -98,7 +96,5 @@ export function mergeCliFlagsIntoEnv(
   if (flags.host !== undefined) env[ENV_KEYS.HOST] = flags.host
   if (flags.port !== undefined) env[ENV_KEYS.PORT] = flags.port
   if (flags.dataDir !== undefined) env[ENV_KEYS.DATA_DIR] = flags.dataDir
-  if (flags.trustedProxy === true) env[ENV_KEYS.TRUSTED_PROXY] = 'true'
-  if (flags.trustedProxy === false) env[ENV_KEYS.TRUSTED_PROXY] = 'false'
   return env
 }

@@ -10,11 +10,14 @@
  * `TypeError` raised INSIDE the catch that was meant to classify it, masking
  * the original failure. `errnoCode` is total over `unknown`.
  *
- * The scan reads code with comments and prose blanked, so a comment naming
- * `ENOENT` is not a hit. It looks for the two spellings a copy takes: the
- * cast, and a comparison of something called `code` against an errno literal
- * (POSIX names carry no underscore, which is what keeps Node's own
- * `ERR_*` codes out of it).
+ * The scan reads the syntax tree (`errno-spelling-scan.ts`), so a comment
+ * naming `ENOENT` is not a hit and neither is a spelling a text pattern
+ * would have keyed past. It looks for two families: what makes `.code`
+ * readable off a thrown value (an assertion to `ErrnoException` under any
+ * alias, or a variable declared as one), and a comparison of a `code` read
+ * against an errno literal in any order, as a `switch` case, or through an
+ * `includes` over a list of them. POSIX names carry no underscore, which is
+ * what keeps Node's own `ERR_*` codes out of it.
  *
  * Only migrations are allowlisted, as history: their text is not edited
  * after the fact. Every other site in the daemon package goes through the
@@ -24,16 +27,12 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { errnoSpellings as spellingsIn } from './errno-spelling-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const SCANNED = 'packages/mcp-server/src'
 const HELPER = 'packages/mcp-server/src/shared/errno.ts'
-
-/** `(x as NodeJS.ErrnoException).code`, with or without `| undefined` or `?.`. */
-const CAST = /NodeJS\.ErrnoException[^)]*\)\s*\??\.code\b/
-/** `code === 'ENOENT'`, `err.code !== 'EEXIST'`, `error?.code == "EPERM"`. */
-const COMPARISON = /\bcode\s*[!=]==?\s*['"]E[A-Z0-9]+['"]/
 
 /** Relative path -> why this file may still spell it. Both-sided. */
 const MIGRATION_HISTORY =
@@ -48,13 +47,8 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     MIGRATION_HISTORY,
 }
 
-function errnoSpellings(source: string): string[] {
-  const code = stripCommentsAndStrings(source)
-  return [CAST, COMPARISON].flatMap((pattern) => {
-    const hit = pattern.exec(code)
-    return hit ? [hit[0]] : []
-  })
-}
+const errnoSpellings = (source: string, fileName = 'fixture.ts'): string[] =>
+  spellingsIn(fileName, source)
 
 const files = walkSourceFiles(join(REPO_ROOT, SCANNED)).filter((path) => !isTestPath(path))
 const relOf = (path: string) => relative(REPO_ROOT, path).split(sep).join('/')
@@ -71,14 +65,14 @@ describe('an error code is read in one place', () => {
     const hits = files
       .map(relOf)
       .filter((rel) => ALLOWLIST[rel] === undefined)
-      .flatMap((rel) => errnoSpellings(sourceOf(rel)).map((spelling) => `${rel}: ${spelling}`))
+      .flatMap((rel) => errnoSpellings(sourceOf(rel), rel).map((spelling) => `${rel}: ${spelling}`))
     expect(
       hits,
       'use `isMissingFileError` / `isErrnoCode` / `errnoCode` from shared/errno.ts: a cast reads `.code` off a null throw and raises inside the catch',
     ).toEqual([])
   })
 
-  it('names the two spellings it looks for', () => {
+  it('names the spellings it looks for', () => {
     expect(
       errnoSpellings("if ((err as NodeJS.ErrnoException).code === 'ENOENT') x()"),
     ).toHaveLength(2)
@@ -88,13 +82,36 @@ describe('an error code is read in one place', () => {
     ).toHaveLength(1)
   })
 
+  it.each([
+    ['a reversed comparison', "if ('ENOENT' === err.code) x()"],
+    ['a bracket read', "if (err['code'] === 'ENOENT') x()"],
+    ['a switch on the code', "switch (err.code) { case 'ENOENT': return null }"],
+    ['an includes over errno literals', "if (['ENOENT', 'EEXIST'].includes(code)) x()"],
+    ['a cast under an alias type', 'const c = (err as ErrnoException).code'],
+    ['a cast read later', 'const e = err as NodeJS.ErrnoException\nthrow e'],
+    ['an angle-bracket cast', 'const c = (<NodeJS.ErrnoException>err).code'],
+    ['a typed local', 'const e: NodeJS.ErrnoException = err\nreturn e.code'],
+  ])('recognises %s', (_label, source) => {
+    expect(errnoSpellings(source)).not.toEqual([])
+  })
+
   it('does not read a comment, or a Node ERR_ code, as an errno', () => {
     expect(errnoSpellings("// code === 'ENOENT'\nconst x = 1")).toEqual([])
     expect(errnoSpellings("if (code === 'ERR_MODULE_NOT_FOUND') x()")).toEqual([])
+    expect(errnoSpellings("if (kind === 'ENOENT') x()")).toEqual([])
+    expect(errnoSpellings("switch (kind) { case 'ENOENT': return null }")).toEqual([])
+    expect(errnoSpellings("if (['ENOENT'].includes(kind)) x()")).toEqual([])
+    expect(errnoSpellings("if (['READY', 'DONE'].includes(code)) x()")).toEqual([])
+    expect(errnoSpellings("const m = { code: 'ENOENT' }")).toEqual([])
+    expect(
+      errnoSpellings('const t = (err: unknown): err is NodeJS.ErrnoException => !!err'),
+    ).toEqual([])
   })
 
   it('every allowlist entry still spells one', () => {
-    const stale = Object.keys(ALLOWLIST).filter((rel) => errnoSpellings(sourceOf(rel)).length === 0)
+    const stale = Object.keys(ALLOWLIST).filter(
+      (rel) => errnoSpellings(sourceOf(rel), rel).length === 0,
+    )
     expect(stale, 'an entry that outlives its site is how an allowlist stops being read').toEqual(
       [],
     )

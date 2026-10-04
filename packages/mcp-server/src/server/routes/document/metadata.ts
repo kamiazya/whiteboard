@@ -14,7 +14,7 @@ import { parseWorkspaceHandle } from '../../workspace-handle.js'
 import { firstOwned, invalidBodyRefusal, STORED_DOCUMENT_ANSWERS } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
-// User-facing workspace / canvas names.
+// User-facing workspace / document names.
 // When unnamed, the UI falls back to session id / path, so the API only returns stored values.
 //
 // GET /api/workspaces/:workspaceId/names

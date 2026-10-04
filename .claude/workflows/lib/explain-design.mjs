@@ -26,7 +26,11 @@ const CHECKPOINTS = [
   },
   {
     field: 'testScenarios.unit',
-    ok: (d) => !!d.testScenarios && typeof d.testScenarios === 'object' && stringList(d.testScenarios.unit) && d.testScenarios.unit !== undefined,
+    ok: (d) =>
+      !!d.testScenarios &&
+      typeof d.testScenarios === 'object' &&
+      stringList(d.testScenarios.unit) &&
+      d.testScenarios.unit !== undefined,
     supply: 'at least one nearest-layer test scenario (see the test-layer-selection skill)',
   },
   {

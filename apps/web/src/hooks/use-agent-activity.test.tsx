@@ -1,9 +1,14 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AGENT_HIGHLIGHT_MS, AGENT_PRESENCE_MS, useAgentActivity } from './use-agent-activity.js'
+import {
+  AGENT_HIGHLIGHT_MS,
+  AGENT_PRESENCE_MS,
+  agentTouchedProps,
+  useAgentActivity,
+} from './use-agent-activity.js'
 
 const REPORT = {
-  touched: { nodes: ['a', 'b'], edges: ['e'] },
+  touched: { nodes: ['a', 'b'], edges: ['e'], lines: ['l'], comments: ['c'] },
   summary: 'added 2',
 }
 
@@ -32,6 +37,30 @@ describe('useAgentActivity', () => {
     expect(result.current.state.summary).toBe('added 2')
     expect([...result.current.state.touchedNodeIds]).toEqual(['a', 'b'])
     expect([...result.current.state.touchedEdgeIds]).toEqual(['e'])
+    expect([...result.current.state.touchedLineIds]).toEqual(['l'])
+    expect([...result.current.state.touchedCommentIds]).toEqual(['c'])
+  })
+
+  it('names every highlight set for the editor, strokes and comments included', () => {
+    const { result } = renderHook(() => useAgentActivity())
+
+    act(() => result.current.report(REPORT))
+
+    const props = agentTouchedProps(result.current.state)
+    expect([...props.agentTouchedNodeIds]).toEqual(['a', 'b'])
+    expect([...props.agentTouchedEdgeIds]).toEqual(['e'])
+    expect([...props.agentTouchedLineIds]).toEqual(['l'])
+    expect([...props.agentTouchedCommentIds]).toEqual(['c'])
+  })
+
+  it('marks nothing extra when a frame names no lines or comments', () => {
+    // A daemon older than the page omits both fields.
+    const { result } = renderHook(() => useAgentActivity())
+
+    act(() => result.current.report({ touched: { nodes: ['a'], edges: [] }, summary: 'x' }))
+
+    expect(result.current.state.touchedLineIds.size).toBe(0)
+    expect(result.current.state.touchedCommentIds.size).toBe(0)
   })
 
   it('drops the highlight first and keeps the chip labelled', () => {
@@ -46,6 +75,8 @@ describe('useAgentActivity', () => {
     })
 
     expect(result.current.state.touchedNodeIds.size).toBe(0)
+    expect(result.current.state.touchedLineIds.size).toBe(0)
+    expect(result.current.state.touchedCommentIds.size).toBe(0)
     expect(result.current.state.active).toBe(true)
     expect(result.current.state.summary).toBe('added 2')
   })

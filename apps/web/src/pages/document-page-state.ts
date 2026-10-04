@@ -32,7 +32,7 @@ export interface LoadDegradedState {
 /**
  * Daemon only: the URL names a path the (non-empty) documents list does not
  * contain — deleted, renamed, or never existed. Rendered as an explicit
- * create-at-this-path offer; connecting anyway used to mint a blank canvas
+ * create-at-this-path offer; connecting anyway would mint a blank canvas
  * at the stale path on the first edit.
  */
 export interface DocumentMissingState {

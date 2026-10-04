@@ -76,7 +76,8 @@ rather than as prose each implementation re-reads:
 assertions stay here. `describeDocumentPinsConformance` covers the
 `DocumentPins` capability beside `DocumentIndex` (tree-backed indexes only;
 the legacy row index keeps no pinned list, which is why it is a capability
-and not a method on the port).
+and not a method on the port). `describeDocumentTrashConformance` covers
+the `DocumentTrash` capability (list, restore, purge) the same way.
 
 They must run unchanged in a browser like the rest of the package — the blob
 suite computes its expected digest with `globalThis.crypto.subtle`, never
@@ -112,7 +113,9 @@ in `arch-lint` fails on a second spelling of the stored key.
 
 `docRefKey` lives here for the same reason. It is a STORED key, and two
 stores that spell it differently cannot read each other's documents — with
-nothing to say so at compile time.
+nothing to say so at compile time. `workspaceIdOfDocKey` is its exact inverse, and
+`doc-ref-key-one-place.test.ts` fails on any other spelling of the key outside
+ports (frozen migrations skipped).
 
 ## Tests
 

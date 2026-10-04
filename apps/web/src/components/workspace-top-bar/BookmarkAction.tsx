@@ -6,11 +6,10 @@ import { cn } from '../../lib/utils.js'
 /**
  * Mark the current state as a point worth coming back to.
  *
- * This replaces the header's save dot, and the difference is not cosmetic.
- * The dot meant "you have edits no version holds yet" and pressing it took
- * a version; once checkpoints are taken automatically that state no longer
- * exists and there is nothing to press it for. What is left is a different
- * act — naming a point — and it belongs beside the list of points rather
+ * The header has no save dot: it would mean "you have edits no version holds
+ * yet" and pressing it would take a version, and with checkpoints taken
+ * automatically that state does not exist and there is nothing to press it
+ * for. What is left is a different act — naming a point — and it belongs beside the list of points rather
  * than in the document's chrome.
  *
  * The NAME is the whole value, which is why this opens a field instead of
@@ -31,7 +30,7 @@ export interface BookmarkActionProps {
   readonly outcome: SaveVersionOutcome
   /**
    * Bumped by the page to open the field from somewhere else — the ⌘/Ctrl+S
-   * shortcut, which no longer saves anything by itself. A counter rather
+   * shortcut, which saves nothing by itself. A counter rather
    * than a boolean so a second press re-opens it after a cancel.
    */
   readonly armed?: number

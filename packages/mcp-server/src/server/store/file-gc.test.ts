@@ -189,10 +189,10 @@ describe('purgeDanglingFiles', () => {
   })
 
   it('does not protect an upload whose id merely matches a plain (non-asset:) file value', async () => {
-    // Precision: a 'file' node's `file` value can also be a canvas
+    // Precision: a 'file' node's `file` value can also be a document
     // reference (wikilink-style embed) rather than an upload — only the
     // 'asset:' prefix means "this points at an uploaded blob". A same-named
-    // orphan upload must not be spared by a canvas-path collision.
+    // orphan upload must not be spared by a document-path collision.
     await saveDocument(
       'ws_precision',
       'page',
@@ -261,7 +261,6 @@ describe('purgeDanglingFiles', () => {
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
-          branchName: 'main',
         },
       ],
       load: async () => {
@@ -448,7 +447,6 @@ describe('purgeDanglingFiles', () => {
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
-          branchName: 'main',
         },
       ],
       load: async () => null,
@@ -522,6 +520,31 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
 
     expect(result.purgedCount).toBe(0)
     expect(await remainingFiles('ws_trash')).toEqual(['asset-t.png'])
+  })
+
+  it('collects an image only a permanently deleted document referenced', async () => {
+    const { deleteDocument, workspaceTreeIndex, resolveDocumentIdAtPath } = await import(
+      './document-store.js'
+    )
+    const { globalStoreScope } = await import('./store-scope.js')
+    await saveDocument('ws_purged', 'page', makeSpatialDocWithImage('asset-p'))
+    await saveDocument('ws_purged', 'other', makeSpatialDocWithImage('asset-o'))
+    await seedFile('ws_purged', 'asset-p', '.png', 500)
+    await seedFile('ws_purged', 'asset-o', '.png', 700)
+    const documentId = await resolveDocumentIdAtPath('ws_purged', 'page')
+    await deleteDocument('ws_purged', 'page')
+    expect((await purgeDanglingFiles('ws_purged')).purgedCount).toBe(0)
+
+    const index = await workspaceTreeIndex(globalStoreScope)
+    expect(
+      await index.purgeTrashEntry({ workspaceId: 'ws_purged', documentId: documentId ?? '' }),
+    ).toBe(true)
+    const result = await purgeDanglingFiles('ws_purged')
+
+    expect(result.purgedCount).toBe(1)
+    expect(result.purgedBytes).toBe(500)
+    // Only the purged document's image: a live document's is still referenced.
+    expect(await remainingFiles('ws_purged')).toEqual(['asset-o.png'])
   })
 
   const unreadable: Record<string, (doc: LoroDoc) => void> = {

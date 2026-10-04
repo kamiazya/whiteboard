@@ -46,39 +46,19 @@ import type {
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import { type Attestation, attestationSchema } from '@kamiazya/whiteboard-server-core'
+import {
+  type Attestation,
+  attestationSchema,
+  type VersionHistory,
+} from '@kamiazya/whiteboard-server-core'
 
 export type { OperatorInfo, VersionEntry }
 
-export interface VersionStore {
-  save(
-    workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-    opts: {
-      auto: boolean
-      label?: string
-      operator?: OperatorInfo
-      /** The version this point was produced by restoring; see `versionEntrySchema`. */
-      restoredFrom?: string
-      /** The person's evidence, when the operation asked for it; see `versionEntrySchema`. */
-      attestation?: Attestation
-    },
-  ): Promise<VersionEntry>
-  // Returns an independent past-state doc: the stored workspace record
-  // checked out at the version's frontiers, projected back to a standalone
-  // per-document doc. Null only for a missing version.
-  load(workspaceId: string, id: string): Promise<LoroDoc | null>
-  /**
-   * The whole WORKSPACE document checked out at this version — the input a
-   * subtree rollback walks. Null only for a missing version.
-   */
-  loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
+// What the keeper adds to the `VersionHistory` seam server-core owns: save,
+// load, loadWorkspaceAt and list are that seam's, documented there.
+export interface VersionStore extends VersionHistory {
+  // `list` answers a mutable array, which narrows the seam's readonly one.
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
-  // `path` is the document the caller is asking ABOUT, and both refuse a
-  // version another document owns — the refusal `loadPast` and restore
-  // already make, for the same reason: an id alone must not reach a history
-  // that is not this document's.
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
@@ -103,21 +83,15 @@ export interface VersionStore {
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
-// The `branchName` column outlived the branch (ADR-0029): every version is on
-// this one lane, so the store writes and publishes the constant and nothing
-// reads the stored value. Drop the column, then this, together.
-const VERSION_BRANCH = 'main'
-
 interface VersionRow {
   id: string
   documentId: string
   auto: number
   label: string | null
   // '' means the row records no operator at all. It has to be spelled on
-  // the KIND now that the actor is optional: the actor's emptiness used to
-  // carry both meanings ("nobody saved this" and "we do not know who"), and
-  // those separated the moment a keeper without an identity could legally
-  // name a kind and no actor.
+  // the KIND because the actor is optional: an empty actor would carry both
+  // meanings ("nobody saved this" and "we do not know who"), and a keeper
+  // without an identity can legally name a kind and no actor.
   operatorKind: '' | 'ai' | 'human' | 'system'
   operatorActor: string
   operatorDisplayName: string | null
@@ -154,7 +128,6 @@ function rowToEntry(row: VersionRow): VersionEntry {
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: row.auto === 1,
-    branchName: VERSION_BRANCH,
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
@@ -212,7 +185,6 @@ function versionRow({
     id,
     documentId,
     workspaceId,
-    branchName: VERSION_BRANCH,
     auto: opts.auto ? 1 : 0,
     label: opts.label ?? null,
     operatorKind: operator?.kind ?? '',
@@ -256,7 +228,6 @@ function savedVersion({
     createdAt: new Date(createdAt).toISOString(),
     elementCount,
     auto: opts.auto,
-    branchName: VERSION_BRANCH,
     ...(opts.label !== undefined ? { label: opts.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),

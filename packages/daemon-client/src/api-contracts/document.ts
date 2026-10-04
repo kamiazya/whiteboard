@@ -159,6 +159,11 @@ export const restoreTrashResponseSchema = z.object({
   }),
 })
 
+// DELETE /api/workspaces/:workspaceId/trash/:documentId — what was destroyed.
+export const purgeTrashEntryResponseSchema = z.object({
+  purged: z.object({ documentId: z.string().min(1) }),
+})
+
 export const deleteDocumentResponseSchema = z.object({
   ok: z.literal(true),
 })
@@ -312,6 +317,10 @@ export const documentSummarySchema = z.object({
   // always does, so in practice every row has it; a client that finds it
   // absent must not memoise a render of that row.
   contentDigest: z.string().min(1).optional(),
+  // Whether the workspace pins this document to the top of its file list,
+  // spelled as `wb_document_list` and `/api/v1` spell it. ABSENT, not false,
+  // when the keeper keeps no pins: silence about pins is not "none pinned".
+  pinned: z.boolean().optional(),
 })
 
 export const listDocumentsResponseSchema = z.object({
@@ -332,6 +341,7 @@ export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema
 export type TrashEntrySummary = z.infer<typeof trashEntrySummarySchema>
 export type ListTrashResponse = z.infer<typeof listTrashResponseSchema>
 export type RestoreTrashResponse = z.infer<typeof restoreTrashResponseSchema>
+export type PurgeTrashEntryResponse = z.infer<typeof purgeTrashEntryResponseSchema>
 export type RenameDocumentPathRequest = z.infer<typeof renameDocumentPathRequestSchema>
 export type RenameDocumentPathResponse = z.infer<typeof renameDocumentPathResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>

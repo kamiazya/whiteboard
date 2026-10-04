@@ -45,10 +45,20 @@ test('the PR number is read from the command only where it is a command', () => 
 })
 
 test('git push is matched through global flags, and not inside a message', () => {
-  for (const command of ['git push', 'git push -u origin feat', 'git -C /x push', 'cd /x && git -c a=b push']) {
+  for (const command of [
+    'git push',
+    'git push -u origin feat',
+    'git -C /x push',
+    'cd /x && git -c a=b push',
+  ]) {
     assert.equal(runsGitPush(command), true, command)
   }
-  for (const command of ["git commit -m 'git push later'", 'git status', 'git pushed', 'echo git push']) {
+  for (const command of [
+    "git commit -m 'git push later'",
+    'git status',
+    'git pushed',
+    'echo git push',
+  ]) {
     assert.equal(runsGitPush(command), false, command)
   }
 })

@@ -63,7 +63,12 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
       op: z.literal('document.create'),
       path: documentPathSchema,
       kind: z.literal('markdown'),
-      name: z.string().optional(),
+      name: z
+        .string()
+        .optional()
+        .describe(
+          'Display name, free text (`path` places the document). A frontmatter `title` is the same name: omit it or match it.',
+        ),
       markdown: z
         .string()
         .optional()
@@ -81,7 +86,7 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
       op: z.literal('document.create'),
       path: documentPathSchema,
       kind: z.literal('spatial'),
-      name: z.string().optional(),
+      name: z.string().optional().describe('Display name, free text (`path` places the document).'),
     })
     .strict(),
 ])

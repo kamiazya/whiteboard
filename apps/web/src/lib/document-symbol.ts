@@ -1,10 +1,10 @@
 /**
  * The mark a document wears, whichever kind it is.
  *
- * Both document pages need this and they used to answer it inline, which is
- * how one of them came to answer it for spatial documents only: the two
- * kinds keep the mark in different places, so the branch has to be written
- * down somewhere, and written twice it drifts. A SPATIAL document keeps its
+ * Both document pages need this, and answering it inline in each is how one
+ * of them comes to answer it for spatial documents only: the two kinds keep
+ * the mark in different places, so the branch has to be written down
+ * somewhere, and written twice it drifts. A SPATIAL document keeps its
  * symbol on the canvas envelope — the same bucket the edge-style facet uses
  * — while a MARKDOWN one keeps its in the frontmatter facets, which are no
  * canvas value at all and reach a page on the sync session's own reading.

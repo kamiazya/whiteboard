@@ -15,8 +15,7 @@ import { join } from 'node:path'
 import { isMissingFileError } from '../shared/errno.js'
 import { getLogger } from './log.js'
 
-// The filename/dirname literals formerly lived in web-origin-trust-store.ts,
-// which owned the reconnect trust store. That module is gone; this is now
+// The filename/dirname literals of a retired reconnect trust store; this is
 // their only reference. The lock entry is a directory, hence `recursive`
 // below — harmless for the plain JSON file, which `rm` removes either way.
 const LEGACY_TRUST_ARTIFACTS = ['trusted-web-origins.json', 'trusted-web-origins.lock']

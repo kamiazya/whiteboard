@@ -65,10 +65,21 @@ Two consequences worth knowing:
 
 - Preserved keys are emitted in lexicographic order, not authoring order. The
   same normalisation already applies to `facets`.
-- A preserved value must be representable in YAML. `NaN`, `Infinity` and
-  `undefined` are refused with a typed error rather than written as a corrupt
-  document — a write over `/api/v1` answers `400 okf_not_yaml_safe`, naming the
-  key.
+- A preserved value must survive being stored and written back out. These are
+  refused with a typed error rather than stored as something else — a write
+  over `/api/v1` answers `400 okf_not_yaml_safe`, naming the key:
+  - `NaN`, `Infinity` and `undefined`, which YAML cannot carry;
+  - a YAML type that is not a plain list or mapping — `!!set`, `!!omap` — and
+    `!!binary`, which the store would flatten to an empty mapping or a list of
+    byte values; write a plain list or mapping, or a string;
+  - an integer a double cannot hold exactly, in practice one past 2^53
+    (9007199254740992), which would be rounded to the nearest double and read
+    back as a different number; write it as a quoted string.
+- A spelling that means the same number is normalised, not refused: `0x10`
+  reads back as `16`, `0o17` as `15`, `1e3` as `1000`, `1.0` as `1`. A value
+  written as `012` reads back as `12`, as YAML 1.2 defines it. A mapping key
+  that is a list or mapping, not a string, is stored under its text (`? [a, b]` becomes the key `"[ a, b ]"`), and a number
+  used as a key becomes a string.
 
 Values are not validated against the OKF spec: a malformed `verified` block is
 carried through as faithfully as a well-formed one, because a consumer that

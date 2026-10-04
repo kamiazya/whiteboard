@@ -19,7 +19,7 @@
  * because `NEVER_COPIED` is not the set of secrets. It is the set of files
  * whose presence in a backup is worse than their absence, and those are
  * different questions: the daemon token costs nothing to lose (it is minted
- * fresh at spawn) while the daemon's identity key costs every pairing and
+ * fresh at spawn) while the daemon's identity key costs every pinned client and
  * every past attestation. So each entry says which, and why.
  */
 import { readdir, readFile } from 'node:fs/promises'

@@ -69,6 +69,84 @@ describe('serializeOkf', () => {
   })
 })
 
+describe('OkfNotYamlSafeError', () => {
+  // The message is what a caller logs or relays, and the name is how it is told from a serialiser defect.
+  function thrownBy(): OkfNotYamlSafeError {
+    try {
+      serializeOkf({
+        frontmatter: {
+          type: 'note',
+          facets: { 'x.y/v1': { bad: Number.NaN, worse: Number.POSITIVE_INFINITY } },
+        },
+        body: '',
+      })
+    } catch (error) {
+      return error as OkfNotYamlSafeError
+    }
+    throw new Error('serializeOkf did not throw')
+  }
+
+  it('names every offending key path in its message, joined by "; "', () => {
+    const { message } = thrownBy()
+    expect(message).toContain('facets.x.y/v1.bad: NaN is not yaml-safe')
+    expect(message).toMatch(/facets\.x\.y\/v1\.bad: [^;]+; facets\.x\.y\/v1\.worse: /)
+  })
+
+  it('carries its own name, so a caller reading err.name can tell it from a serialiser defect', () => {
+    expect(thrownBy().name).toBe('OkfNotYamlSafeError')
+  })
+})
+
+describe('a preserved root key that YAML parses into something the store cannot hold', () => {
+  const frontmatterOf = (line: string) => `---\ntype: note\n${line}\n---\nbody`
+  const refusalPaths = (text: string): unknown => {
+    const parsed = parseOkf(text)
+    if (!parsed.ok) throw new Error('fixture must parse')
+    try {
+      serializeOkf(parsed.value)
+    } catch (error) {
+      if (error instanceof OkfNotYamlSafeError) return error.issues.map((issue) => issue.path)
+      throw error
+    }
+    return null
+  }
+
+  // Each of these parses to a value a JSON-shaped store flattens: a Set and a
+  // Map to `{}`, bytes to an array of numbers, a digit run past 2^53 to its
+  // rounded neighbour. Refusing at the write keeps the author holding the
+  // content, where a silent normalisation would surface on a later read.
+  it.each([
+    ['a !!set', 'x: !!set {a, b}', ['x']],
+    ['an !!omap', 'x: !!omap [a: 1]', ['x']],
+    ['a !!binary', 'x: !!binary abc', ['x']],
+    ['an integer past 2^53', 'x: 9007199254740993', ['x']],
+    ['an integer past 2^53 nested in a list', 'x: [1, 12345678901234567890]', ['x', 1]],
+  ])('refuses %s, naming the key', (_label, line, path) => {
+    expect(refusalPaths(frontmatterOf(line))).toEqual([path])
+  })
+
+  // Value-preserving: the same number, spelled the way YAML 1.2's core
+  // schema reads it. The write succeeds and the key reads back as 16.
+  it.each([
+    ['a hexadecimal integer', 'x: 0x10', 'x: 16'],
+    ['an octal integer', 'x: 0o17', 'x: 15'],
+    ['an exponent', 'x: 1e3', 'x: 1000'],
+    ['a float with no fraction', 'x: 1.0', 'x: 1'],
+  ])('normalises %s to its decimal value rather than refusing it', (_label, line, expected) => {
+    const parsed = parseOkf(frontmatterOf(line))
+    if (!parsed.ok) throw new Error('fixture must parse')
+    expect(serializeOkf(parsed.value)).toContain(`\n${expected}\n`)
+  })
+
+  it('keeps a large integer that is the digits JS prints for its double, which is what serializeOkf writes', () => {
+    expect(refusalPaths(frontmatterOf('x: 38452588508904010'))).toBeNull()
+  })
+
+  it('keeps a safe integer at the boundary', () => {
+    expect(refusalPaths(frontmatterOf('x: 9007199254740991'))).toBeNull()
+  })
+})
+
 describe('serializeOkf spreads facetsRaw back at the root (OKF §4.1)', () => {
   it('emits preserved keys as root frontmatter, never as a nested `facetsRaw:` key', () => {
     const text = serializeOkf({

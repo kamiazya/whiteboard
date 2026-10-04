@@ -134,7 +134,7 @@ keeper refuses: `DocumentPathTakenError: Document path "…" already exists`. Fi
 fresh processes pass it (each process claims a clean database); only the
 in-process repeat reaches it, which is why it is first seen red on the PR's
 `Repeat changed tests in-process (3x)` step, never in a local single run.
-`local-list-documents-timing.browser.test.ts` was exactly this.
+`browser-list-documents-timing.browser.test.ts` was exactly this.
 
 Fix: reset in `beforeEach` (`beforeEach(clearWhiteboardDb)`), not once in
 `beforeAll` — a repeat reruns the test body, not the file's setup. A UNIQUE

@@ -24,6 +24,9 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
+import { assertCanvasFacetWritesRefused } from './lib/facet-write-refusals.mjs'
+import { assertListedRowIsNotPinned } from './lib/listed-pin.mjs'
+import { assertProposalAuthor, SMOKE_AUTHOR } from './lib/proposal-author.mjs'
 import { anAutomaticCheckpointFollowsAMoveOrDelete } from './lib/session-end-checkpoint.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -463,6 +466,7 @@ async function anEditWithNoModeIsProposedAndTheBatchActorIsStamped(ctx) {
   const proposedPassage = await callTool('wb_body_edit', {
     workspaceId: WORKSPACE_ID,
     documentId: withBody.documentId,
+    author: SMOKE_AUTHOR,
     ops: [
       {
         id: 'e2e-passage-proposed',
@@ -476,6 +480,7 @@ async function anEditWithNoModeIsProposedAndTheBatchActorIsStamped(ctx) {
   if (proposedPassage.applied !== 0 || proposedPassage.proposed?.changes?.length !== 1) {
     throw new Error(`the default did not propose a passage: ${JSON.stringify(proposedPassage)}`)
   }
+  assertProposalAuthor('wb_body_edit', proposedPassage)
   const proposedChange = proposedPassage.proposed.changes[0]
   if (proposedChange.op !== 'body.replace' || proposedChange.status !== 'open') {
     throw new Error(`proposed change has an unexpected shape: ${JSON.stringify(proposedChange)}`)
@@ -576,6 +581,7 @@ async function placementNamingAndDeletionRoundTrip(ctx) {
     throw new Error(`an unnamed document should carry no name: ${JSON.stringify(unnamedRow)}`)
   }
   console.log('[e2e] document.create/list → name round-trips, unnamed stays unnamed')
+  assertListedRowIsNotPinned(namedRow)
 
   // id → placement is a row of wb_document_list now; the standalone
   // wb_document_resolve is retired (ADR-0031 §4).
@@ -1285,6 +1291,8 @@ async function storedBendsDrawAndProposeModeStores(ctx) {
     throw new Error('wb_scene_render drew no edge through the stored bend')
   }
   console.log('[e2e] wb_canvas_edit + wb_scene_render → an edge is drawn through its stored bend')
+  await assertCanvasFacetWritesRefused(callToolExpectingError, WORKSPACE_ID, documentId)
+  console.log('[e2e] wb_canvas_edit → an invalid facet payload and a non-record bucket are refused')
 
   // The bend is deliberately NOT cleared: `edge.patch` merges, so it has no
   // way to REMOVE an optional field (the same is true of `label` and
@@ -1300,9 +1308,11 @@ async function storedBendsDrawAndProposeModeStores(ctx) {
     workspaceId: WORKSPACE_ID,
     documentId,
     mode: 'propose',
+    author: SMOKE_AUTHOR,
     ops: [{ op: 'node.patch', id: 'target', patch: { x: 900 } }],
   })
   const change = proposed.proposed?.changes?.[0]
+  assertProposalAuthor('wb_canvas_edit', proposed)
   if (proposed.applied !== 0 || change?.op !== 'node.patch' || change?.assumed?.x !== 10) {
     throw new Error(`propose returned unexpected shape: ${JSON.stringify(proposed)}`)
   }

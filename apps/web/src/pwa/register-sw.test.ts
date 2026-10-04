@@ -105,11 +105,8 @@ describe('setupSwRegistration', () => {
     expect(importRegister).not.toHaveBeenCalled()
   })
 
-  // The local daemon serves one page (/pair) and redirects every other path
-  // to the hosted app, so `/sw.js` there answers 302 to a different origin.
-  // Registering would make the browser fetch the hosted app's HTML as a
-  // worker script — a request that can never succeed and, under the page's
-  // CSP, never settles either.
+  // The PWA is a hosted-app concern: a document a keeper serves from its own
+  // origin never registers the worker.
   it('does not register on a daemon-served page', async () => {
     Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
     const importRegister = vi.fn()

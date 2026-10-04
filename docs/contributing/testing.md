@@ -33,7 +33,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 pnpm check:local         # every gate CI's check job runs
 pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
-pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
+pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior (spends API quota: it chains the claude and codex CLI smokes, which skip when the CLI is absent)
 ```
 
 A pull request that touches test files also runs CI's `stress-changed-tests` job: every changed
@@ -390,7 +390,7 @@ Which gate enforces each hosted-app security property (entry points for `securit
 | No Cloudflare secrets in `apps/web` config or `.github/workflows/` | `web-app-boundary.test.ts` (CF secrets drift guard) |
 | Preview origin is rejected at runtime (renders `invalid-config`) | `smoke:preview-origin` (behavioral) + bundle wiring check in `smoke:artifact` |
 | Production origin is an exact match (`https://kamiazya-whiteboard.pages.dev`), preview is a distinct class | `pages-origin-policy.test.ts` (`classifyPagesOrigin`) |
-| Preview origin never enters a trusted / local-daemon allowlist | `pages-origin-policy.test.ts` (preview ≠ production) + `web-app-boundary.test.ts` (no preview origin in `wrangler.toml`); local-daemon / server-mode wildcard rejection is held separately by `server-mode-exposure` |
+| Preview origin never enters a trusted / local-daemon allowlist | `pages-origin-policy.test.ts` (preview ≠ production) + `web-app-boundary.test.ts` (no preview origin in `wrangler.toml`); server-mode wildcard rejection is held separately by `server-mode-exposure` |
 
 ---
 

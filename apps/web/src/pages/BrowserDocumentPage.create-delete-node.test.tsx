@@ -13,7 +13,7 @@
 // persistence with the spatial editor mocked — no browser layout or input
 // fidelity at stake. The real-IDB contract stays pinned by the four
 // browser-mode keeper suites (see loro-store.browser.test.tsx).
-import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'

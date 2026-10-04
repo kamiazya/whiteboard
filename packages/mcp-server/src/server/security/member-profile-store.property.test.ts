@@ -41,12 +41,22 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-member-profiles-prop-'))
   handle = await createIsolatedDb({ dataDir: root })
   store = createMemberProfileStore(handle.db)
-  roles = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
+  roles = createWorkspaceRoles(handle.db)
 })
 afterAll(async () => {
   await handle.dispose()
   await rm(root, { recursive: true, force: true })
 })
+
+// The workspace's last owner cannot leave through the roles store, so removal
+// here deletes the membership row itself.
+async function dropMembership(workspaceId: string, profileId: string): Promise<void> {
+  await handle.rawDb
+    .deleteFrom('workspaceMemberships')
+    .where('workspaceId', '=', workspaceId)
+    .where('profileId', '=', profileId)
+    .execute()
+}
 
 // Every table the store writes, children first so no row outlives its parent.
 async function clearRows(): Promise<void> {
@@ -92,7 +102,7 @@ describe('membership seam', () => {
           model.set(pairKey, true)
           everAdded.add(op.ws)
         } else {
-          await roles.remove(op.ws, profileId)
+          await dropMembership(op.ws, profileId)
           model.set(pairKey, false)
         }
       }

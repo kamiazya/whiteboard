@@ -98,7 +98,6 @@ it('a version saved for a document reaches the tabs on it, and only those', asyn
     createdAt: '2026-09-27T00:00:00.000Z',
     elementCount: 0,
     auto: false,
-    branchName: 'main',
   }
   announceVersion(getBrowserWorkspaceId(), DOC, version)
 

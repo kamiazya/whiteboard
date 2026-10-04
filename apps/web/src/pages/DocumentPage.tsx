@@ -290,6 +290,22 @@ function markdownPaneProps({
   }
 }
 
+/**
+ * The agent-touch sets a keeper supplied, each omitted when absent — the
+ * editor's props are optional without `undefined`, so a bare pass-through
+ * would not type-check.
+ */
+function agentTouchProps(spatial: DocumentPageModel['spatial']) {
+  const { agentTouchedNodeIds, agentTouchedEdgeIds, agentTouchedLineIds, agentTouchedCommentIds } =
+    spatial
+  return {
+    ...(agentTouchedNodeIds === undefined ? {} : { agentTouchedNodeIds }),
+    ...(agentTouchedEdgeIds === undefined ? {} : { agentTouchedEdgeIds }),
+    ...(agentTouchedLineIds === undefined ? {} : { agentTouchedLineIds }),
+    ...(agentTouchedCommentIds === undefined ? {} : { agentTouchedCommentIds }),
+  }
+}
+
 function DocumentPageBody({
   model,
   versionRefreshSignal,
@@ -338,7 +354,7 @@ function DocumentPageBody({
   // ready — the naming is the whole value, and a row named nothing is
   // indistinguishable from the automatic checkpoint above it, so it happens
   // beside the list rather than in the chrome. Two routes reach it: the
-  // ⌘/Ctrl+S chord, which no longer saves anything by itself, and the
+  // ⌘/Ctrl+S chord, which saves nothing by itself, and the
   // document's ⋯ menu, which is what a finger has.
   const requestBookmark = useCallback(() => {
     setInspector('history')
@@ -493,8 +509,7 @@ function DocumentPageBody({
   // No variation chrome here, and no `?v=`: ADR-0029 retires the surface.
   // A proposal is drawn on the document a person is already looking at, so
   // a lane to switch onto — and an address that names which one — is the
-  // shape that decision rejects. What used to stand here was the chip, the
-  // preview hook that owned `?v=`, and the read-only tip it rendered.
+  // shape that decision rejects.
   //
   // The read-only slot itself SURVIVES: a past version still renders there
   // (History is unchanged by ADR-0029), and `preview` below is that one.
@@ -510,9 +525,9 @@ function DocumentPageBody({
    *
    * Same shape `INSPECTOR_ORDER` and `INSPECTOR_CHROME` already use, one step
    * further: the union drove the header's order and its labels, and the
-   * RENDER was the last place a panel was still named by hand — so a seventh
-   * `InspectorKind` compiled, took a place in the header, and showed nothing
-   * when pressed. It no longer compiles.
+   * RENDER was the last place a panel was named by hand — a seventh
+   * `InspectorKind` would take a place in the header and show nothing when
+   * pressed, so a union member with no arm here does not compile.
    *
    * A thunk rather than a node, so only the selected panel's JSX is built —
    * and so each arm keeps closing over exactly what it reads today instead of
@@ -558,7 +573,7 @@ function DocumentPageBody({
       {model.slots.replaceEditor ?? (
         <RestoreLock restoring={sync.restoreInProgress} label={sync.restoreLabel}>
           {preview ? (
-            <VersionPreview past={preview.past} theme={resolvedTheme} />
+            <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}
@@ -579,12 +594,7 @@ function DocumentPageBody({
                   editorKey={documentKey}
                   canvasLoaded={sync.loaded}
                   editorRef={attachSpatialHandle}
-                  {...(model.spatial.agentTouchedNodeIds === undefined
-                    ? {}
-                    : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}
-                  {...(model.spatial.agentTouchedEdgeIds === undefined
-                    ? {}
-                    : { agentTouchedEdgeIds: model.spatial.agentTouchedEdgeIds })}
+                  {...agentTouchProps(model.spatial)}
                   canvas={sync.canvas}
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}

@@ -176,7 +176,6 @@ describe('runMigrations', () => {
         id: 'v1',
         documentId: 'cv1',
         workspaceId: 'ws1',
-        branchName: 'main',
         auto: 1,
         label: null,
         operatorKind: 'system',

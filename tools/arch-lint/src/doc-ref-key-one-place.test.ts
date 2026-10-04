@@ -23,8 +23,14 @@ import { walkSourceFiles } from './source-scan.js'
 /** Where the one spelling lives. Exempt by construction: it IS the place. */
 const DECLARATION_SITE = 'packages/ports/src/doc-ref-key.ts'
 
-/** A key built from a kind prefix and an id, as a template or a concatenation. */
-const KEY_SPELLING = /`(?:document|workspace-tree):\$\{|['"](?:document|workspace-tree):['"]\s*\+/g
+/**
+ * A key written or read back by spelling its prefix: a template, a quoted
+ * prefix (a concatenation, a `slice('…'.length)`, a `startsWith`, a prefix
+ * constant) or a regex literal. The inverse is as much a copy as the writer —
+ * a parser that stops matching what `docRefKey` writes fails open.
+ */
+const KEY_SPELLING =
+  /`(?:document|workspace-tree):\$\{|['"]\^?(?:document|workspace-tree):['"]|\/\^?(?:document|workspace-tree):/g
 
 function spellings(source: string): number {
   const code = source
@@ -36,9 +42,14 @@ function spellings(source: string): number {
 
 const ALLOWLIST: Readonly<Record<string, { readonly count: number; readonly reason: string }>> = {
   'apps/web/src/lib/browser-idb-upgrades.ts': {
-    count: 4,
+    count: 5,
     reason:
       'an IndexedDB upgrade rewrites rows from the key shape an older database holds, so it must stay frozen rather than follow the live spelling',
+  },
+  'apps/web/src/test-utils/browser-document.ts': {
+    count: 1,
+    reason:
+      'a test fixture listing the raw store keys strips the document prefix back to ids, because ports exports no inverse for the document arm of the key',
   },
   'apps/web/src/test-utils/seed-sync-document.ts': {
     count: 1,
@@ -71,6 +82,19 @@ describe('the stored document key is spelled in one place', () => {
     expect(spellings(`const k = \`${HOLE}:${HOLE}\``)).toBe(0)
   })
 
+  it('recognises the key parsed back with a regex, a slice or a prefix test', () => {
+    expect(spellings('const m = /^workspace-tree:(.+)$/.exec(key)')).toBe(1)
+    expect(spellings('const m = key.match(/^document:(.+)$/)')).toBe(1)
+    expect(spellings("const id = key.slice('workspace-tree:'.length)")).toBe(1)
+    expect(spellings("if (key.startsWith('document:')) return")).toBe(1)
+    expect(spellings("const prefix = 'workspace-tree:'")).toBe(1)
+    // A concatenation is one spelling, not two.
+    expect(spellings("const k = 'document:' + id")).toBe(1)
+    expect(spellings('// /^workspace-tree:(.+)$/ in a comment')).toBe(0)
+    expect(spellings('const m = /^documents:(.+)$/.exec(key)')).toBe(0)
+    expect(spellings("const k = 'workspace-tree-index'")).toBe(0)
+  })
+
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
     expect(files.length).toBeGreaterThan(800)
@@ -98,7 +122,22 @@ describe('the stored document key is spelled in one place', () => {
     }
   })
 
-  it('the declaration site still spells both prefixes', () => {
-    expect(spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(2)
+  it('the declaration site still spells both prefixes and the inverse that parses one back', () => {
+    // Two templates in `docRefKey`, one regex in `workspaceIdOfDocKey`.
+    expect(spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(3)
+  })
+
+  it('leaves the frozen migrations out of the scan, one of which still slices the prefix', () => {
+    // `isExcludedPath` skips the migrations directory wholesale, so this is
+    // how migration 0007's `slice('workspace-tree:'.length)` stays allowed: a
+    // migration names the key as it stood when it ran and must not follow the
+    // live spelling. Pinned on both sides so the exclusion is a claim that is
+    // true rather than a directory that happens to be skipped.
+    const migration = join(
+      REPO_ROOT,
+      'packages/mcp-server/src/server/store/db/migrations/0007-adopt-workspace-tree.ts',
+    )
+    expect(isExcludedPath(migration)).toBe(true)
+    expect(spellings(readFileSync(migration, 'utf8'))).toBeGreaterThan(0)
   })
 })

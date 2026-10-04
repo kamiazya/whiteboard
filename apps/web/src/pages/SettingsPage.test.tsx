@@ -440,8 +440,8 @@ describe('SettingsPage — Connections', () => {
     expect(
       await within(section).findByRole('button', { name: /refresh storage usage/i }),
     ).toBeTruthy()
-    // ADR-0050: a local daemon is reached through the extension, so there are
-    // no paired web apps to list.
+    // ADR-0050: a local daemon is reached through the extension, so there is
+    // no list of web apps granted access to it.
     expect(within(section).queryByText('Paired web apps')).toBeNull()
   })
 })

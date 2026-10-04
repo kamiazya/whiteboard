@@ -356,7 +356,7 @@ export class SseStreamHub implements SseStreamSource {
 
   /**
    * Try the daemon again after a refusal, with whatever credential the
-   * injected `fetch` now carries. A rotated pairing token reaches the worker
+   * injected `fetch` now carries. A rotated token reaches the worker
    * as a re-init; the hub it keeps per origin has to try again, or every tab
    * stays "Sync off" after the person has done the one thing that fixes it.
    */

@@ -59,3 +59,9 @@ describe('wb_canvas_edit — the op batch ceiling', () => {
     expect(canvasEditInputSchema.safeParse(batch(201)).success).toBe(false)
   })
 })
+
+describe('wb_canvas_edit — what a model reads of the batch-level inputs', () => {
+  test('the parameter that moves a person\u2019s view says so', () => {
+    expect(canvasEditInputSchema.shape.follow.description).toMatch(/viewport/)
+  })
+})

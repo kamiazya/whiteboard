@@ -12,7 +12,7 @@ import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
 import { seedMathRandom } from './_helpers.js'
 
 // No snapshot test runs the boot chain that resolves the browser workspace
-// id (see browser-workspace-id.ts), so anything that reads it — LocalStoreDouble,
+// id (see browser-workspace-id.ts), so anything that reads it — BrowserStoreDouble,
 // BrowserIndexPage — throws unless a fixed id is seeded up front. Same seam
 // and rationale as test-utils/browser-setup.ts, which every non-docs browser
 // test already relies on for this. The id itself never renders — a page

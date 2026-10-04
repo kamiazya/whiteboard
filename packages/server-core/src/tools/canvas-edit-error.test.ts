@@ -1,6 +1,7 @@
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { z } from 'zod'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
@@ -22,6 +23,14 @@ describe('describeIssues', () => {
     expect(text).toContain('edges.0.to.node: ')
     expect(text).toContain('"ghost"')
     expect(text).not.toMatch(SOURCE_LEAK)
+  })
+
+  test('writes an issue about the value as a whole as its message alone, beside field issues', () => {
+    const error = new z.ZodError([
+      { code: 'custom', path: ['a', 0], message: 'bad element' },
+      { code: 'custom', path: [], message: 'whole value refused' },
+    ])
+    expect(describeIssues(error)).toBe('a.0: bad element; whole value refused')
   })
 })
 

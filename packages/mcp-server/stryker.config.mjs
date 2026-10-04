@@ -28,7 +28,6 @@ export default {
     // lane yet). NOTE: the guard test scans every quoted string in this array
     // block, comments included — no apostrophes here.
     'src/server/security/server-mode-env-config.ts',
-    'src/server/security/server-mode-auth-plan.ts',
     'src/server/security/server-mode-exposure.ts',
     'src/server/security/server-mode-record.ts',
   ],

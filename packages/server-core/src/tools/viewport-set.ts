@@ -16,6 +16,34 @@ const viewportSetInputSchema = z
     ...viewportRequestParamsSchema.shape,
   })
   .strict()
+  // The browser applies exactly one half of a request — fit reads elementIds,
+  // move reads scrollX/scrollY/zoom — and drops the other while the tool
+  // answers delivered:true. Refused here rather than on the shared params
+  // (which the wire frame is also built from) so a frame from an older
+  // daemon is still applied as the browser always has.
+  .superRefine((input, ctx) => {
+    const positioned =
+      input.scrollX !== undefined || input.scrollY !== undefined || input.zoom !== undefined
+    if (input.elementIds !== undefined && positioned) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'elementIds (frame these) and scrollX, scrollY or zoom (go to this position) cannot be sent together — the browser would apply only one. Send one or the other.',
+      })
+    } else if (input.mode === 'fit' && positioned) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'mode fit takes no scrollX, scrollY or zoom — it frames elementIds, or the whole board. Use mode move to go to a position.',
+      })
+    } else if (input.mode === 'move' && input.elementIds !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'mode move takes no elementIds — it goes to scrollX, scrollY at zoom. Use mode fit to frame elements.',
+      })
+    }
+  })
 type ViewportSetInput = z.infer<typeof viewportSetInputSchema>
 
 const viewportSetOutputSchema = z

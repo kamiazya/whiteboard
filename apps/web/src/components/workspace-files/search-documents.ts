@@ -63,9 +63,9 @@ export function searchDocuments<T extends WorkspaceDocumentEntry>(
  * The content answer, plus the documents that only their NAME or PATH
  * matched.
  *
- * Both halves are real answers to different questions, and the panel used to
- * show the second and then replace it with the first. A row that appears and
- * then vanishes reads as the document being found and unfound — and it
+ * Both halves are real answers to different questions, and the panel shows
+ * both: replacing the second with the first would make a row appear and then
+ * vanish, which reads as the document being found and unfound — and it
  * happens on the most ordinary input there is, a prefix: word-token search
  * cannot match "roa" against "Roadmap", and bigram search cannot match a
  * single CJK character against a longer name. Whatever the lexical layer

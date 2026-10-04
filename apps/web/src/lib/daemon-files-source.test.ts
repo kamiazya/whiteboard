@@ -302,7 +302,7 @@ describe('createDaemonFilesSource searchDocuments', () => {
 // exercised `loadMarkdown` at all, so the daemon adapter answered with the
 // route's `markdown` — the whole OKF projection — and every row thumbnail
 // and preview drew the frontmatter block as prose. The browser adapter had
-// always answered with the body (`local-files-source.test.ts`), which is
+// always answered with the body (`browser-files-source.test.ts`), which is
 // exactly the shape a contract test cannot catch when only one side has one.
 describe('createDaemonFilesSource loadMarkdown', () => {
   function okfFetchStub(payload: unknown): typeof globalThis.fetch {

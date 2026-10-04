@@ -19,8 +19,7 @@ import type {
   StorageReportPayload,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { DAEMON_RECORD_FILENAME } from '../../daemon/daemon-registry.js'
-import { DB_FILENAME } from '../store/db/location.js'
-import { storeAreaOf } from './data-layout.js'
+import { DB_FILENAME, storeAreaOf } from './data-layout.js'
 
 // Derived from the wire schema rather than written alongside it. A
 // hand-written interface beside a Zod schema can drift in the direction

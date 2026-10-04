@@ -106,11 +106,11 @@ const SITE_PREFIX: Record<string, string> = {
  * flatter or damn the answer. What it cannot see is the only thing it does not
  * claim — a facet nobody passed in, which is the point of `facetBuckets`.
  *
- * It does NOT classify. It used to split its answer by whether a path was
- * spelled under `x-whiteboard`, which worked only while the model WAS the
- * format — the very thing
+ * It does NOT classify. Whether a path is spelled under `x-whiteboard` says
+ * what a position costs an export only while the model IS the format — the
+ * very thing
  * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) ends.
- * What a position costs an export is now the projection ledger's answer, and
+ * What a position costs an export is the projection ledger's answer, and
  * keeping a second one here would be two authorities on one question.
  */
 export function censusSpatialModel(facets: readonly CensusFacet[]): SpatialModelCensus {

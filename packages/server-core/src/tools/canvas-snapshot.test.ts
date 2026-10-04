@@ -1,11 +1,12 @@
 import {
   setEdgeLock,
   setNodeLock,
+  writeCommentThread,
   writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
@@ -94,6 +95,7 @@ describe('wb_canvas_snapshot tool', () => {
       comments: [],
       nodeCount: 4,
       edgeCount: 1,
+      lineCount: 0,
       truncated: false,
     })
     expect(() => canvasSnapshotSchema.parse(result)).not.toThrow()
@@ -542,5 +544,97 @@ describe('projectCanvasSnapshot — what an edge and a line keep, and when it re
     expect(snapshot.edges).toHaveLength(SNAPSHOT_MAX_EDGES)
     expect(snapshot.edgeCount).toBe(SNAPSHOT_MAX_EDGES + 1)
     expect(snapshot.truncated).toBe(true)
+  })
+
+  const line = (i: number) => ({
+    id: `l${i}`,
+    from: { kind: 'point' as const, point: { x: 0, y: i } },
+    to: { kind: 'point' as const, point: { x: 5, y: i } },
+  })
+
+  test('is not truncated with exactly as many lines as it returns', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: [],
+      lines: Array.from({ length: SNAPSHOT_MAX_EDGES }, (_, i) => line(i)),
+    })
+
+    expect(snapshot.lines).toHaveLength(SNAPSHOT_MAX_EDGES)
+    expect(snapshot.lineCount).toBe(SNAPSHOT_MAX_EDGES)
+    expect(snapshot.truncated).toBe(false)
+  })
+
+  test('reports a cut line list as truncated, with the true line count', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: [],
+      lines: Array.from({ length: SNAPSHOT_MAX_EDGES + 1 }, (_, i) => line(i)),
+    })
+
+    expect(snapshot.lines).toHaveLength(SNAPSHOT_MAX_EDGES)
+    expect(snapshot.lineCount).toBe(SNAPSHOT_MAX_EDGES + 1)
+    expect(snapshot.truncated).toBe(true)
+    // Ink is not a relation, so the edge total must not absorb it.
+    expect(snapshot.edgeCount).toBe(0)
+  })
+
+  test('carries a line bends and facets, and nothing when it has none or an empty bucket', () => {
+    const snapshot = project({
+      nodes: [a, b],
+      edges: [],
+      lines: [
+        {
+          ...line(0),
+          bends: [{ x: 50, y: 60 }],
+          facets: { 'visual.ink/v0': {} },
+        },
+        { ...line(1), facets: {} },
+      ],
+    })
+
+    expect(snapshot.lines[0]).toMatchObject({
+      bends: [{ x: 50, y: 60 }],
+      facets: { 'visual.ink/v0': {} },
+    })
+    expect(snapshot.lines[1]).not.toHaveProperty('bends')
+    expect(snapshot.lines[1]).not.toHaveProperty('facets')
+    expect(() => canvasSnapshotSchema.parse({ ...snapshot, documentId: DOCUMENT_ID })).not.toThrow()
+  })
+})
+
+describe('wb_canvas_snapshot comments', () => {
+  const openThread = (id: string, anchor: CommentThread['anchor']): CommentThread => ({
+    id,
+    anchor,
+    status: 'open',
+    messages: [{ id: `${id}-m`, body: `about ${id}` }],
+  })
+
+  test('lists a thread anchored on the canvas and leaves out one anchored on the whole document', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'a' })],
+        edges: [],
+      })
+      writeCommentThread(doc, openThread('pin', { kind: 'spatial', x: 3, y: 4 }))
+      writeCommentThread(doc, openThread('whole', { kind: 'document' }))
+    })
+
+    const result = await createCanvasSnapshotTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+    })
+
+    // `comments` is the canvas's own layer: each entry stands at a canvas
+    // position, which a document-level thread does not have.
+    expect(result.comments.map((comment) => comment.id)).toEqual(['pin'])
+  })
+
+  test('tells a reader the document-level threads are not in the list, and where to find them', () => {
+    const { description } = createCanvasSnapshotTool(makeDeps(new FakeDocumentStore()))
+
+    expect(description).toMatch(/whole-document/i)
+    expect(description).toContain('wb_document_get')
   })
 })

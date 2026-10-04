@@ -74,7 +74,7 @@ export interface DocumentBackendHandlers {
   /**
    * The keeper refused this backend's credential (a 401 or 403 on the sync
    * stream or on a push). The backend does NOT retry — the caller surfaces
-   * the state so the person can pair again; a new connection is how it
+   * the state so the person can reconnect; a new connection is how it
    * clears.
    */
   onAuthError?: () => void

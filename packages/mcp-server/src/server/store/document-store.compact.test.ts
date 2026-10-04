@@ -164,10 +164,6 @@ describe('compactWorkspace', () => {
     expect(result).toEqual({ compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' })
   })
 
-  // canvas blobs no longer share their parent directory with the session
-  // dir, so the previous "non-directory parent" stat failure no longer
-  // applies. Coverage of the corrupt-snapshot branch lives below.
-
   it('treats an invalid workspace record as corruption instead of compacting over it', async () => {
     const { getDb } = await import('./db/index.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')

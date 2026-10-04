@@ -23,19 +23,18 @@ import { BUILT_IN_ICON_NAMES } from './icons/icons.js'
 /**
  * What the picker lists INLINE: absence, and nothing else.
  *
- * Two things used to sit here beside it, and each left for a different
- * reason. Five hardcoded EMOJI went because they were five of the nineteen
- * hundred the schema has always accepted — listing more would not have
- * fixed it, since a definition this file exports is loaded by the renderer,
- * the layout worker and the MCP server, none of which draws a picker.
+ * Neither a handful of hardcoded EMOJI nor the vendored ICONS belong here.
+ * A few emoji are a few of the nineteen hundred the schema accepts — listing
+ * more would not fix that, since a definition this file exports is loaded by
+ * the renderer, the layout worker and the MCP server, none of which draws a
+ * picker.
  *
- * The vendored ICONS went because of how they looked next to what replaced
- * them (user decision, 2026-09-11): a row of monochrome line drawings
- * directly above a grid of full-colour emoji reads as two unrelated
- * palettes, and the row was also indistinguishable from the CATEGORY row
- * below it, which picks a view rather than a value. As the catalog's first
- * band they are a category like any other, so a grid is now all monochrome
- * or all colour and never half of each.
+ * The vendored icons are the catalog's first band instead: a row of
+ * monochrome line drawings directly above a grid of full-colour emoji reads
+ * as two unrelated palettes, and the row would be indistinguishable from the
+ * CATEGORY row below it, which picks a view rather than a value. As a
+ * category like any other, a grid is all monochrome or all colour and never
+ * half of each.
  *
  * Absence stays inline because it is the one choice that belongs to no
  * category and has to be reachable without browsing to one.
@@ -89,9 +88,9 @@ export const SYMBOL_CATALOG: FacetPickerCatalogSpec = {
   entry: {
     label: 'Any character or emoji',
     // The placeholder names the SEARCH box, because free entry is not a
-    // second control any more: typing a character the catalog lacks offers
-    // it as the leading result. Two inputs for one gesture — the search
-    // already matched a pasted character — was one input too many.
+    // second control: typing a character the catalog lacks offers it as the
+    // leading result. Two inputs for one gesture — the search already matches
+    // a pasted character — would be one input too many.
     placeholder: 'Search, or paste a symbol',
     payload: { kind: 'emoji' },
     field: 'char',

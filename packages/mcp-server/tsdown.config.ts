@@ -18,7 +18,7 @@ export default defineConfig({
     // It runs only on the release path, so its precondition check had never
     // been reached.
     'server/server-mode-backup-restore': 'src/server/server-mode-backup-restore.ts',
-    'server/security/server-mode-auth-plan': 'src/server/security/server-mode-auth-plan.ts',
+    'server/security/server-mode-exposure': 'src/server/security/server-mode-exposure.ts',
     // The boot sequence the packaged server-mode smoke builds its apps with:
     // `createApp` requires `serverDeps` and a `dataLayout` (no router composes
     // its own, and none reads the process's data directory), and this is the
@@ -35,7 +35,7 @@ export default defineConfig({
   outDir: 'dist',
   // Deliberately NOT tsconfig.server.json. rolldown-plugin-dts passes
   // `--rootDir path.dirname(tsconfig)` to tsgo, so the tsconfig has to sit
-  // above every source the types are rolled up from — and `noExternal` below
+  // above every source the types are rolled up from — and `deps.alwaysBundle` below
   // pulls eleven sibling workspace packages into this dist. From mcp-server's own
   // directory their files are outside rootDir and tsgo refuses to emit for them.
   tsconfig: '../tsconfig.mcp-dts.json',
@@ -53,21 +53,23 @@ export default defineConfig({
   // tsdown defaults ESM to `.mjs`; this package is `"type": "module"`, so `.js`
   // already means ESM and the default would rename every published path.
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
-  external: ['yaml'],
-  noExternal: [
-    '@kamiazya/whiteboard-daemon-client',
-    '@kamiazya/whiteboard-history',
-    '@kamiazya/whiteboard-model',
-    '@kamiazya/whiteboard-codec',
-    '@kamiazya/whiteboard-canvas-render',
-    '@kamiazya/whiteboard-ports',
-    '@kamiazya/whiteboard-loro-adapter',
-    '@kamiazya/whiteboard-server-core',
-    // Composing a plugin set is this root's job (ADR-0013 decision 3), so
-    // the engine and the bundled plugin are its own imports now rather than
-    // only server-core's transitive ones.
-    '@kamiazya/whiteboard-facet-engine',
-    '@kamiazya/whiteboard-plugin-visual',
-    '@kamiazya/whiteboard-workspace-index',
-  ],
+  deps: {
+    neverBundle: ['yaml'],
+    alwaysBundle: [
+      '@kamiazya/whiteboard-daemon-client',
+      '@kamiazya/whiteboard-history',
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-canvas-render',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-loro-adapter',
+      '@kamiazya/whiteboard-server-core',
+      // Composing a plugin set is this root's job (ADR-0013 decision 3), so
+      // the engine and the bundled plugin are its own imports now rather than
+      // only server-core's transitive ones.
+      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-plugin-visual',
+      '@kamiazya/whiteboard-workspace-index',
+    ],
+  },
 })

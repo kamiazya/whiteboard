@@ -109,6 +109,9 @@ const SAMPLES: Record<string, readonly Sample[]> = {
     { label: 'restore', method: 'POST', url: daemonUrls.versionRestoreApiUrl(...doc, 'v1') },
   ],
   trashApiUrl: [{ label: 'list', method: 'GET', url: daemonUrls.trashApiUrl(WS) }],
+  trashEntryApiUrl: [
+    { label: 'purge', method: 'DELETE', url: daemonUrls.trashEntryApiUrl(WS, 'doc1') },
+  ],
   trashRestoreApiUrl: [
     { label: 'restore', method: 'POST', url: daemonUrls.trashRestoreApiUrl(WS, 'doc1') },
   ],

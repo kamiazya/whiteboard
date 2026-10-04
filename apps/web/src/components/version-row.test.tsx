@@ -36,7 +36,6 @@ const ROWS = [
     createdAt: ago(4 * 60_000),
     auto: true,
     elementCount: 24,
-    branchName: 'main',
     operator: { kind: 'ai' as const, peerId: 'daemon-x', displayName: 'Claude' },
   },
   {
@@ -45,7 +44,6 @@ const ROWS = [
     createdAt: ago(26 * 60_000),
     auto: false,
     elementCount: 22,
-    branchName: 'main',
     operator: { kind: 'human' as const },
   },
   {
@@ -54,7 +52,6 @@ const ROWS = [
     createdAt: ago(3 * 3600_000),
     auto: true,
     elementCount: 19,
-    branchName: 'main',
   },
 ]
 

@@ -17,7 +17,7 @@ import { FileVersionStore } from './version-store.js'
  * It exists because that listener was the ONLY trigger. The agent write
  * path (`wb_canvas_edit` -> `saveDocumentBodySnapshot` ->
  * `saveDocumentSnapshot`) reached the store directly and fired nothing, so
- * a canvas only an agent ever touched grew its op-log without bound. The
+ * a document only an agent ever touched grew its op-log without bound. The
  * seam is called from the write itself, so it works in every root — stdio
  * included, which mounts no router and runs no HTTP save subscription. What a
  * root has to do is install the checkpoint scheduler this signals (the

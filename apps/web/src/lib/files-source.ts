@@ -22,9 +22,8 @@ export interface LoadedMarkdown {
 /**
  * Everything `WorkspaceFilesPanel` asks of the world, as one seam.
  *
- * The panel used to call the daemon's client functions directly, which made
- * the three-pane browser daemon-only — the single obstacle the
- * one-browser-both-modes ticket names. These operations are the panel's
+ * The panel does not call the daemon's client functions directly, which would
+ * make the three-pane browser daemon-only. These operations are the panel's
  * whole data surface, measured from its imports rather than assumed: list,
  * create, rename, pin, and the two content reads its thumbnails and preview
  * need.
@@ -99,6 +98,12 @@ export interface WorkspaceFilesSource {
   listTrash?(): Promise<readonly TrashRow[]>
   /** Bring one evacuated document back under the SAME documentId. */
   restoreFromTrash?(documentId: string): Promise<void>
+  /**
+   * Destroy one trashed document for good. Rejects when the trash holds no
+   * such entry — the daemon answers 404, the browser keeper's index answers
+   * `false` — so the two keepers fail alike and the section can say so.
+   */
+  purgeFromTrash?(documentId: string): Promise<void>
   /**
    * The workspace's tag vocabulary in use, counted by what carries it
    * (ADR-0040 decision 5) — what the filter strip groups and counts. Both

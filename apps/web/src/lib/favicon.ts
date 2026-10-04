@@ -31,7 +31,7 @@ import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { LUCIDE_ICONS } from '@kamiazya/whiteboard-plugin-visual'
 import type { SyncStatus } from './document-sync-types.js'
-import { fitMinimap, projectBox } from './spatial/minimap.js'
+import { fitLargestRects } from './spatial/minimap.js'
 import type { StorageHealth } from './storage-health.js'
 
 export interface FaviconRect {
@@ -118,28 +118,21 @@ const DOT_COLOR: Record<Exclude<FaviconStatus, 'quiet'>, string> = {
 
 /**
  * Project scene node bounding boxes into the icon's board area. The fitting
- * math is the spatial editor's own minimap geometry (fitMinimap/projectBox
- * — one minimap implementation, two surfaces); this wrapper only adds what
- * a 32px icon needs: cap to the largest rects (beyond that is noise) and a
- * visible minimum size per rect.
+ * math is the spatial editor's own minimap geometry (`fitLargestRects` over
+ * fitMinimap/projectBox — one minimap implementation, two surfaces); this
+ * wrapper only adds what a 32px icon needs: its cap on rects and a visible
+ * minimum size per rect.
  */
 export function projectRectsToBoard(rects: readonly FaviconRect[]): FaviconRect[] {
-  if (rects.length === 0) return []
-  const kept = [...rects].sort((a, b) => b.w * b.h - a.w * a.h).slice(0, MAX_RECTS)
-  const boxes = kept.map((r) => ({ x: r.x, y: r.y, width: r.w, height: r.h }))
-  // A favicon has no viewport concept; the first content box stands in for
-  // fitMinimap's viewportRect, which never widens the fitted bounds.
-  const fit = fitMinimap(boxes, boxes[0], { width: INNER.w, height: INNER.h }, 0)
-  return boxes.map((box, i) => {
-    const p = projectBox(box, fit)
-    return {
-      x: INNER.x + p.x,
-      y: INNER.y + p.y,
-      w: Math.max(MIN_RECT_PX, p.width),
-      h: Math.max(MIN_RECT_PX, p.height),
-      color: kept[i].color,
-    }
-  })
+  return fitLargestRects(rects, MAX_RECTS, { width: INNER.w, height: INNER.h }).map(
+    ({ source, box }) => ({
+      x: INNER.x + box.x,
+      y: INNER.y + box.y,
+      w: Math.max(MIN_RECT_PX, box.width),
+      h: Math.max(MIN_RECT_PX, box.height),
+      color: source.color,
+    }),
+  )
 }
 
 function drawBoard(ctx: CanvasRenderingContext2D, status: FaviconStatus): void {

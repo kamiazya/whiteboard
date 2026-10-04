@@ -26,7 +26,6 @@ const VALID_FLAGS = {
   kind: 'ok' as const,
   json: true as const,
   dryRun: false,
-  trustedProxy: undefined,
   externalUrl: 'https://whiteboard.example.com',
   allowedOrigins: 'https://whiteboard.example.com',
   authStrategy: 'oauth-jwt',

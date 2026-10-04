@@ -4,6 +4,7 @@ import {
   type ReferenceSeams,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  compareCodeUnit,
   nodeFile,
   nodeKind,
   type SpatialCanvas,
@@ -81,7 +82,7 @@ export function useFileSeamScene({
           ? w >= COLLAPSE_MIN_W && h >= COLLAPSE_MIN_H
           : w >= EXPAND_MIN_W && h >= EXPAND_MIN_H
       })
-      .sort((a, b) => b.width * b.height - a.width * a.height || a.id.localeCompare(b.id))
+      .sort((a, b) => b.width * b.height - a.width * a.height || compareCodeUnit(a.id, b.id))
       .slice(0, EMBED_BUDGET)
     const next = new Set(candidates.map((node) => node.id))
     const unchanged =

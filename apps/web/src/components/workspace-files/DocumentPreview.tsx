@@ -1,11 +1,10 @@
 /**
  * The preview pane: the selected document, drawn.
  *
- * It used to pour the OKF source into a `<pre>` — frontmatter, `[[links]]`
- * and all — which showed the file rather than the document, and showed
- * nothing at all for a spatial one. This draws the same SVG the card
- * beside it draws small, so the two panes cannot disagree about what a
- * document looks like.
+ * It does not pour the OKF source into a `<pre>` — frontmatter, `[[links]]`
+ * and all — which would show the file rather than the document, and nothing
+ * at all for a spatial one. It draws the same SVG the card beside it draws
+ * small, so the two panes cannot disagree about what a document looks like.
  *
  * Reading, not editing. Opening is a separate, explicit act (the button),
  * for the reason VS Code's preview tab exists: browsing a folder should not

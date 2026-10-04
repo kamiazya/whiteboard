@@ -111,6 +111,12 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     return withWorkspaceWriteLock(input.workspaceId, () => super.restoreDocument(input))
   }
 
+  override async purgeTrashEntry(
+    input: Parameters<LoroWorkspaceDocumentIndex['purgeTrashEntry']>[0],
+  ): ReturnType<LoroWorkspaceDocumentIndex['purgeTrashEntry']> {
+    return withWorkspaceWriteLock(input.workspaceId, () => super.purgeTrashEntry(input))
+  }
+
   override async moveDocument(input: {
     workspaceId: string
     from: string

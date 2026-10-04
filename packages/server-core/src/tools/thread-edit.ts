@@ -167,6 +167,31 @@ function textAnchorRefusal(anchor: TextAnchor, content: DocumentContent): string
   return `the passage ${JSON.stringify(anchor.quote.exact)} is not in the ${where}`
 }
 
+/**
+ * The anchor as it is stored: a text anchor's offsets are moved to where its
+ * quote is.
+ *
+ * The quote is what finds a passage — `resolveTextAnchor` takes stored offsets
+ * as a shortcut and falls back to the quote when they select something else —
+ * so offsets a caller miscounted are a hint the quote overrides. Storing them
+ * as given would leave an anchor that contradicts itself; refusing would
+ * reject a call over a number a reader never uses. Offsets that already select
+ * the quote are kept, which is what keeps the chosen occurrence when the quote
+ * appears more than once.
+ */
+function storedAnchor(anchor: AnnotationAnchor, content: DocumentContent): AnnotationAnchor {
+  if (anchor.kind !== 'text') return anchor
+  const quoted = quotedText(anchor.nodeId, content)
+  if ('refusal' in quoted) return anchor
+  const placed = resolveTextAnchor(quoted.text, anchor)
+  return placed.kind === 'placed' ? { ...anchor, start: placed.start, end: placed.end } : anchor
+}
+
+/** Why a message body says nothing, or `undefined` when it says something. */
+function blankRefusal(body: string): string | undefined {
+  return body.trim() === '' ? 'the message body is blank; write what the comment says' : undefined
+}
+
 /** What one op of a `wb_thread_edit` batch is applied against. */
 interface ThreadEditContext {
   readonly doc: LoroDoc
@@ -205,11 +230,11 @@ const THREAD_EDIT_HANDLERS: {
     if (held.has(id)) {
       throw new ThreadEditError(index, op.op, `thread "${id}" is already on this document`)
     }
-    const refusal = anchorRefusal(op.anchor, ctx.content)
+    const refusal = blankRefusal(op.body) ?? anchorRefusal(op.anchor, ctx.content)
     if (refusal !== undefined) throw new ThreadEditError(index, op.op, refusal)
     writeCommentThread(doc, {
       id,
-      anchor: op.anchor,
+      anchor: storedAnchor(op.anchor, ctx.content),
       status: 'open',
       createdAt: now,
       messages: [
@@ -226,6 +251,8 @@ const THREAD_EDIT_HANDLERS: {
 
   'message.add': (ctx, op) => {
     const { doc, held, now, index } = ctx
+    const blank = blankRefusal(op.body)
+    if (blank !== undefined) throw new ThreadEditError(index, op.op, blank)
     // Refused rather than silently accepted: `writeThreadMessage` is a
     // no-op for a thread this replica does not hold, because opening a
     // container is the one write that cannot merge — two replicas that

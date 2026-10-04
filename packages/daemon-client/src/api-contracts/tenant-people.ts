@@ -50,7 +50,7 @@ export const tenantPeopleRefusalSchema = z.object({
     'not_deactivated',
     'sole_owner',
     // ADR-0051 decision 5: an action needs a recent sign-in at the provider,
-    // which a bearer cannot give and an older session no longer does.
+    // which a bearer cannot give and an older session does not.
     'sign_in_required',
     'reauthentication_required',
   ]),

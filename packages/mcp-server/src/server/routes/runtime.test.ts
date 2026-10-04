@@ -232,18 +232,13 @@ describe('daemon identity surfaces', () => {
   })
 })
 
-// What the unification FIXED, stated as a behaviour test rather than a claim.
-//
-// `/api/runtime/*` had its own credential branches — the daemon token, an
-// OAuth grant and a pairing token — and no macaroon branch. The global
-// `/api/*` gate already admitted a macaroon carrying the route's declared
-// scope, so the two disagreed: the registry said `runtime:read` opens
-// `/api/runtime/storage`, the outer gate agreed, and the inner one refused.
-// Failing closed, so not a hole — but a feature that did not work where the
-// registry said it did, with nothing red anywhere.
-//
-// It is not that the branch was forgotten once. It is that there was a place
-// for it to be forgotten, four times over.
+// `/api/runtime/*` answers to the same credential gate as every other route,
+// macaroon branch included, so the registry's `runtime:read` really does open
+// `/api/runtime/storage`. A route with credential branches of its own would
+// refuse a macaroon the global `/api/*` gate had already admitted: failing
+// closed, so not a hole, but a feature that does not work where the registry
+// says it does, with nothing red anywhere. These are the behaviour tests that
+// keep one gate the only place a credential is judged.
 describe('runtime routes — a macaroon reaches the read half, like every other narrow credential', () => {
   const ROOT_KEY = new Uint8Array(32).fill(11)
 

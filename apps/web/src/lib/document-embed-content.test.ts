@@ -14,12 +14,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { loadBrowserReference, resetEmbedIndexForTests } from './document-embed-content.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('document-embed-content')
@@ -46,7 +46,7 @@ describe('loadBrowserReference', () => {
 
   it('resolves the name of a legacy record through the fold, not a second read path', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/old',
@@ -84,7 +84,7 @@ describe('loadBrowserReference', () => {
     // says nothing, because the place the content actually lives was never
     // reached.
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/tree-only',
@@ -109,7 +109,7 @@ describe('loadBrowserReference', () => {
     // about the document" — so a fix that only handled REJECTIONS left the
     // designed signal folded into "no content" exactly as before.
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/unavailable',
@@ -139,7 +139,7 @@ describe('loadBrowserReference', () => {
     // A legacy record, so the read under test is the per-document store's:
     // a tree-held document answers from the projection and never reaches it.
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/unreadable',
@@ -164,7 +164,7 @@ describe('loadBrowserReference', () => {
 
   it('answers a spatial document with its canvas rather than an empty body', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'boards/plan',

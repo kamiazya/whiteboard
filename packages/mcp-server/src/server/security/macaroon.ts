@@ -232,8 +232,8 @@ export async function attenuateMacaroon(token: string, caveat: MacaroonCaveat): 
  * A token carrying no scope caveat is unnarrowed on this axis and resolves
  * to the full vocabulary. That is a real default rather than an oversight —
  * a token without one is the today-shaped credential this design is
- * replacing. Nothing mints a scoped token yet: a `daemon mint-token` CLI or a
- * pairing response is what would first attach a scope caveat.
+ * replacing. Nothing mints a scoped token yet: a `daemon mint-token` CLI is
+ * what would first attach a scope caveat.
  */
 function effectiveScopes(caveats: readonly MacaroonCaveat[]): readonly AuthScope[] {
   let scopes: readonly AuthScope[] = ALL_AUTH_SCOPES

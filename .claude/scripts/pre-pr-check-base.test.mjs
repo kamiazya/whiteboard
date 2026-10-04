@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Regression coverage for hooks/pre-pr-check-base.mjs's overlap rule.
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 //
@@ -9,13 +10,13 @@
 // pre-push hook's runtime. Builds a throwaway "origin" + working repo pair
 // per test (not the real repo).
 
+import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
-import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'pre-pr-check-base.mjs')
@@ -57,7 +58,12 @@ function makeRepoPair() {
 function runHook(cwd, command = 'gh pr create --title x') {
   const stdin = JSON.stringify({ tool_input: { command } })
   try {
-    execFileSync('node', [scriptPath], { cwd, input: stdin, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] })
+    execFileSync('node', [scriptPath], {
+      cwd,
+      input: stdin,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
     return { status: 0, stderr: '' }
   } catch (err) {
     return { status: err.status, stderr: String(err.stderr ?? '') }
@@ -93,4 +99,24 @@ test('a command that only mentions a PR creation does not fetch or block', () =>
   assert.equal(result.stderr, '')
   // No fetch ran, so the advance is still unknown to the clone.
   assert.equal(git(work, ['rev-list', '--count', 'feat..origin/main']), '0')
+})
+
+test('--head names the branch being published, whatever the checkout is on', () => {
+  const { origin, work } = makeRepoPair()
+  git(work, ['push', 'origin', 'feat'])
+  commitFile(origin, 'feat.txt', 'main moved it\n', 'advance touching feat.txt')
+  git(work, ['checkout', 'main'])
+  const result = runHook(work, 'gh pr create --head feat --title x')
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+})
+
+test('a leading `cd <checkout> &&` selects that checkout even when the hook runs elsewhere', () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'feat.txt', 'main moved it\n', 'advance touching feat.txt')
+  const elsewhere = mkdtempSync(join(tmpdir(), 'pre-pr-check-base-elsewhere-'))
+  scratchDirs.push(elsewhere)
+  const result = runHook(elsewhere, `cd ${work} && gh pr create --title x`)
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
 })

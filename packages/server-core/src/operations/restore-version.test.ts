@@ -174,7 +174,6 @@ class FakeVersions implements VersionHistory {
       createdAt: '2026-01-01T00:00:00.000Z',
       elementCount: 0,
       auto: options.auto,
-      branchName: 'main',
       ...(options.restoredFrom === undefined ? {} : { restoredFrom: options.restoredFrom }),
     }
   }
@@ -193,7 +192,6 @@ class FakeVersions implements VersionHistory {
         createdAt: '2026-01-01T00:00:00.000Z',
         elementCount: 0,
         auto: false,
-        branchName: 'main',
         ...(value.label === undefined ? {} : { label: value.label }),
       }))
   }
@@ -404,16 +402,47 @@ describe('restoreVersion restore-to-target mode', () => {
     expectAllCallsLocked(live)
   })
 
-  it('reconciles onto an existing target with overwrite and stamps the source kind', async () => {
+  it('reconciles onto an existing target of the SAME kind with overwrite, keeping that kind', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1', 'n2']), 'markdown')
-    live.seed('canvas-b', spatialDoc(['old']), 'spatial')
+    live.seed('canvas-b', spatialDoc(['old']), 'markdown')
     const result = await run(live, versionsWith({ v1: { doc: spatialDoc(['n1', 'n2']) } }), {
       targetPath: 'canvas-b',
       overwrite: true,
     })
     expect(result).toMatchObject({ kind: 'restored-to-target', targetPath: 'canvas-b' })
     expect(live.stored('canvas-b')?.kind).toBe('markdown')
+    expectAllCallsLocked(live)
+  })
+
+  it.each([
+    ['markdown', 'spatial'],
+    ['spatial', 'markdown'],
+  ] as const)('refuses to overwrite a %s target with a %s version, and writes nothing', async (sourceKind, targetKind) => {
+    const live = new FakeLive()
+    live.seed('canvas-a', spatialDoc(['n1']), sourceKind)
+    const target = spatialDoc(['precious'])
+    live.seed('canvas-b', target, targetKind)
+    const opsBefore = target.oplogVersion()
+    const events: RestoreProgressEvent[] = []
+
+    const result = await run(
+      live,
+      versionsWith({ v1: { doc: spatialDoc(['n1']) } }),
+      { targetPath: 'canvas-b', overwrite: true },
+      (event) => events.push(event),
+    )
+
+    expect(result).toEqual({
+      kind: 'kind-mismatch',
+      targetPath: 'canvas-b',
+      sourceKind,
+      targetKind,
+    })
+    expect(live.stored('canvas-b')?.kind).toBe(targetKind)
+    expect(target.oplogVersion().compare(opsBefore)).toBe(0)
+    expect(live.calls.map((call) => call.method)).not.toContain('save')
+    expect(events).toEqual([])
     expectAllCallsLocked(live)
   })
 

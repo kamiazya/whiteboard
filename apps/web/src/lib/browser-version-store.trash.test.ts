@@ -80,4 +80,47 @@ describe('a browser document delete and its saved versions', () => {
     expect(restored?.documentId).toBe(documentId)
     expect(await versionRows()).toEqual([expect.objectContaining({ id: saved.id, documentId })])
   })
+
+  it("drops the version rows with a purge from the Trash, and only that document's", async () => {
+    const index = new FoldingBrowserIndex()
+    const docs = new BrowserWorkspaceDocs()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const ids: Record<string, string> = {}
+    for (const path of ['purged', 'kept']) {
+      const { documentId } = await index.createDocument({ workspaceId, path, kind: 'spatial' })
+      ids[path] = documentId
+      const record = await docs.open(workspaceId)
+      if (record === null) throw new Error('no record')
+      writeWorkspaceDocumentContent(record, documentId, canvasDoc(path))
+      await docs.save(workspaceId, record)
+      await new BrowserVersionStore({ docs, index }).save(workspaceId, path, { label: path })
+    }
+    await index.deleteDocument({ workspaceId, path: 'purged' })
+
+    expect(await index.purgeTrashEntry({ workspaceId, documentId: ids.purged ?? '' })).toBe(true)
+
+    expect((await versionRows()).map((row) => row.documentId)).toEqual([ids.kept])
+  })
+
+  it('keeps the version rows when the purge finds nothing in the Trash', async () => {
+    const index = new FoldingBrowserIndex()
+    const docs = new BrowserWorkspaceDocs()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'live',
+      kind: 'spatial',
+    })
+    const record = await docs.open(workspaceId)
+    if (record === null) throw new Error('no record')
+    writeWorkspaceDocumentContent(record, documentId, canvasDoc('live'))
+    await docs.save(workspaceId, record)
+    await new BrowserVersionStore({ docs, index }).save(workspaceId, 'live')
+
+    expect(await index.purgeTrashEntry({ workspaceId, documentId })).toBe(false)
+
+    expect((await versionRows()).map((row) => row.documentId)).toEqual([documentId])
+  })
 })

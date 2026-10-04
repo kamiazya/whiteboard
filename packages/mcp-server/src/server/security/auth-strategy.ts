@@ -1,21 +1,20 @@
 // The scope vocabulary, and the decision shape a server-mode auth strategy
 // answers with.
 //
-// This file USED to carry a sync `AuthStrategy` seam as well —
-// `createLocalTokenAuthStrategy` and `createAuthStrategyMiddleware` — with a
-// header promising that "future server-mode strategies can plug into the same
-// call site". They were mounted nowhere, for the whole of their life, and the
-// reason is worth keeping: **they answered a yes/no.** A surface that already
-// knows the answer is yes still has to learn what the caller may DO, and the
-// websocket upgrade needed exactly that, so it grew its own credential
-// branches instead. A seam that answers the wrong question is not adopted, and
-// being unadopted is how it stayed wrong.
+// There is deliberately no sync `AuthStrategy` seam here (a
+// `createLocalTokenAuthStrategy` / `createAuthStrategyMiddleware` pair that
+// promised "future server-mode strategies can plug into the same call site"
+// was mounted nowhere, for the whole of its life), and the reason is worth
+// keeping: **such a seam answers a yes/no.** A surface that already knows the
+// answer is yes still has to learn what the caller may DO, so a surface that
+// needs that grows its own credential branches instead. A seam that answers
+// the wrong question is not adopted, and being unadopted is how it stays
+// wrong.
 //
-// `security/credential-resolver.ts` is the replacement, and it answers a
-// GRANT. The sync seam was deleted rather than left beside it: two components
-// for one job is the shape this work exists to remove.
+// `security/credential-resolver.ts` answers a GRANT. Two components for one
+// job is the shape to avoid, so no sync seam sits beside it.
 //
-// What stayed, because it has real callers:
+// What lives here, because it has real callers:
 //
 //   - `AUTH_SCOPES` / `AuthScope` / `ALL_AUTH_SCOPES` / `hasRequiredScopes` —
 //     the vocabulary, read by the resolver, the route-scope registry, the

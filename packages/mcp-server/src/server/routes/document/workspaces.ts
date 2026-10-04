@@ -42,7 +42,7 @@ import {
   segmentTaken,
   titleOr,
   titleRefusal,
-  workspaceNotFoundAs,
+  workspaceNotFound,
 } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -275,11 +275,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       }
       return c.json(response)
     } catch (err) {
-      const owned = firstOwned(err, [
-        segmentTaken,
-        workspaceNotFoundAs(`Workspace "${handle}" not found`),
-        corruptStored,
-      ])
+      const owned = firstOwned(err, [segmentTaken, workspaceNotFound, corruptStored])
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }
@@ -291,32 +287,23 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     const { workspaceId } = address
     try {
       const deps = options.serverDeps
+      // The operation's own rows are this response's rows: re-listing its
+      // fields here is how `pinned` went unanswered while the tool and
+      // `/api/v1` carried it.
       const { documents } = await wbDocumentList(deps, { workspaceId })
-      const response: ListDocumentsResponse = {
-        documents: documents.map((entry) => ({
-          path: entry.path,
-          documentId: entry.documentId,
-          ...(entry.name === undefined ? {} : { name: entry.name }),
-          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-          ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-          ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
-        })),
-      }
+      const response: ListDocumentsResponse = { documents }
       return c.json(response)
     } catch (err) {
       // "Empty" and "never registered" are different answers, and conflating
-      // them is what let a stale pairing render as an empty workspace with a
-      // Create button. The operation refuses an unknown workspace rather than
-      // answering with an empty list, which is what makes this translation
-      // possible without a second existence query.
+      // them lets a client holding a stale workspace id render it as an empty
+      // workspace with a Create button. The operation refuses an unknown
+      // workspace rather than answering with an empty list, which is what makes
+      // this translation possible without a second existence query.
       //
       // So the two cases a client must tell apart are: a workspace that
       // exists and holds nothing answers 200 with an empty array, and only an
       // ABSENT one answers 404. A 404 here therefore means gone, never empty.
-      const owned = firstOwned(err, [
-        workspaceNotFoundAs(`Workspace "${workspaceId}" not found`),
-        corruptStored,
-      ])
+      const owned = firstOwned(err, [workspaceNotFound, corruptStored])
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }
@@ -349,13 +336,8 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         return c.json(response)
       } catch (err) {
         // The tree index refuses an unknown workspace with a throw where the
-        // retired SQL index answered null; this surface's spelling of both
-        // is the same 404.
-        const owned = firstOwned(err, [
-          workspaceNotFoundAs(`Document "${path}" not found`),
-          hasDescendants,
-          corruptStored,
-        ])
+        // retired SQL index answered null; both are a 404.
+        const owned = firstOwned(err, [workspaceNotFound, hasDescendants, corruptStored])
         if (owned) return c.json(owned.body, owned.status)
         getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
         return c.json({ title: 'Failed to delete document.' } satisfies ApiErrorBody, 500)
@@ -406,7 +388,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       } catch (err) {
         // Absent is a 404 here and a throw there — the same translation the
         // delete makes, in the opposite direction. An unknown WORKSPACE is
-        // the same answer: nothing at that address.
+        // not a missing document: it answers as it does everywhere else.
         //
         // The path collision forwards the RAISED message rather than
         // rebuilding one from newPath: a subtree move collides on a PRODUCED

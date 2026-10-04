@@ -38,7 +38,9 @@ let mainCheckout
 
 try {
   // Resolve the main checkout root even if the merge ran from a linked worktree.
-  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim()
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    encoding: 'utf8',
+  }).trim()
   const repoRoot = resolve(process.cwd(), commonDir, '..')
   mainCheckout = repoRoot
   const current = execFileSync('git', ['-C', repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -49,12 +51,16 @@ try {
     process.exit(0)
   }
   execFileSync('git', ['-C', repoRoot, 'pull', '--ff-only', 'origin', 'main'], { encoding: 'utf8' })
-  const head = execFileSync('git', ['-C', repoRoot, 'log', '--oneline', '-1'], { encoding: 'utf8' }).trim()
+  const head = execFileSync('git', ['-C', repoRoot, 'log', '--oneline', '-1'], {
+    encoding: 'utf8',
+  }).trim()
   console.log(`[post-merge-pull-main] local main synced: ${head}`)
 } catch (err) {
   // Never block the session on sync failure (dirty tree, diverged main, offline);
   // surface it so the integrator handles it deliberately.
-  console.log(`[post-merge-pull-main] pull skipped: ${err?.message?.split('\n')[0] ?? 'unknown error'}`)
+  console.log(
+    `[post-merge-pull-main] pull skipped: ${err?.message?.split('\n')[0] ?? 'unknown error'}`,
+  )
 }
 
 // A merge is the moment a lane becomes reclaimable, so it is the moment to
@@ -65,7 +71,9 @@ try {
 try {
   if (mainCheckout !== undefined) {
     const dir = join(mainCheckout, '.claude', 'worktrees')
-    const lanes = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()) : []
+    const lanes = existsSync(dir)
+      ? readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory())
+      : []
     if (lanes.length >= LANE_NOTICE_THRESHOLD) {
       console.log(
         `[post-merge-pull-main] ${lanes.length} worktrees under .claude/worktrees — node .claude/scripts/cleanup-worktrees.mjs --dry-run`,

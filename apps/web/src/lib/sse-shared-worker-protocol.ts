@@ -10,7 +10,7 @@ import { z } from 'zod'
 
 export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
   // Sent once per port before any subscribe. The worker cannot obtain the
-  // daemon credential itself: it is a pairing session token held by the page.
+  // daemon credential itself: the token is held by the page.
   z.object({
     type: z.literal('init'),
     baseUrl: z.string().min(1),

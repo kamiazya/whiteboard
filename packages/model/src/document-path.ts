@@ -29,3 +29,19 @@ export function rebasePath(path: string, from: string, to: string): string {
   if (path === from) return to
   return path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : path
 }
+
+/**
+ * What is left of `path` once `folder` is dropped from the front, or
+ * `undefined` when `path` is not strictly below it — the folder itself, a
+ * sibling that merely shares its prefix, and an ancestor all answer
+ * `undefined`. The empty folder is the workspace root, which holds every
+ * path whole.
+ *
+ * The same segment boundary as `isSelfOrDescendant`, handed back as the
+ * remainder a caller reads the next segment from, so no caller has to
+ * re-derive the prefix and slice it off by length.
+ */
+export function pathBelow(folder: string, path: string): string | undefined {
+  if (folder === '') return path
+  return path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : undefined
+}

@@ -183,29 +183,25 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
     expect(result.svg).not.toContain('OTHER-NODE')
   })
 
-  test('a fragment the document does not hold is refused, naming it', async () => {
+  test('a fragment the document does not hold is refused in words for its kind', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE)
     const tool = createCanvasRenderSvgTool(makeDeps(store))
+    const ask = (documentId: string) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId,
+        embedReferences: false,
+        style: 'clean',
+        fragment: 'Nowhere',
+      })
 
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: BOARD_ID,
-        embedReferences: false,
-        style: 'clean',
-        fragment: 'Nowhere',
-      }),
-    ).rejects.toThrow(/Nowhere/)
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: NOTE_ID,
-        embedReferences: false,
-        style: 'clean',
-        fragment: 'Nowhere',
-      }),
-    ).rejects.toThrow(/Nowhere/)
+    await expect(ask(BOARD_ID)).rejects.toThrow(
+      `Document ${BOARD_ID} has no group labelled "Nowhere". A fragment names a group's label (or ^ plus a node id); check the canvas with wb_canvas_snapshot.`,
+    )
+    await expect(ask(NOTE_ID)).rejects.toThrow(
+      `Document ${NOTE_ID} has no heading "Nowhere". A fragment names a heading's text; check the body with wb_document_get.`,
+    )
   })
 })
 

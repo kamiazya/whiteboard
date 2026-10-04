@@ -217,8 +217,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     description: 'Delete the selected node(s) or edge',
     handledInline: true,
   },
-  // Escape does NOT clear a node selection, which this entry used to
-  // claim: `handleKeyDown`'s gesture arm requires a gesture in flight, and
+  // Escape does NOT clear a node selection: `handleKeyDown`'s gesture arm requires a gesture in flight, and
   // its earlier arms only retire an edge selection or a pending cut. What
   // it cancels is the gesture — and in a text edit that means DISCARDING
   // what was typed, with three outcomes worth knowing: an existing node

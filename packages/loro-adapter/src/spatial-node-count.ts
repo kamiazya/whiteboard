@@ -12,7 +12,7 @@ import { readSpatialCanvas } from './loro-bridge.js'
  *   outlive both of its nodes, so a nodes-only count is never 0 for a
  *   non-empty scene.
  * - The retired 'elements' movable list is not counted: nothing converts it
- *   into nodes any more and no reader draws it.
+ *   into nodes and no reader draws it.
  * - Soft-failing: a count is advisory, so a document whose canvas cannot be
  *   read (a markdown document has none) counts 0 rather than failing the save
  *   or response that asked.

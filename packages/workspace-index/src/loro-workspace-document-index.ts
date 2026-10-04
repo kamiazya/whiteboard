@@ -44,6 +44,7 @@ import type {
   DocumentEntry,
   DocumentIndex,
   DocumentPins,
+  DocumentTrash,
   ListDocumentsInput,
   MoveDocumentInput,
   RenameWorkspaceInput,
@@ -51,9 +52,11 @@ import type {
   ResolveDocumentInput,
   SetDocumentNameInput,
   SetDocumentPinnedInput,
+  TrashEntryInput,
   WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import {
+  blobRefKey,
   compareDocumentPaths,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
@@ -82,7 +85,7 @@ export interface WorkspaceRegistry {
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 }
 
-export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins {
+export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, DocumentTrash {
   /**
    * `blobs` is required, not optional.
    *
@@ -148,8 +151,8 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins {
    * link resolves to the same document it always did.
    *
    * Not part of the `DocumentIndex` port. The port is about placement, and
-   * this reaches into content and blob storage; a caller that wants it holds
-   * this class.
+   * this reaches into content and blob storage; it is the `DocumentTrash`
+   * capability instead.
    */
   async restoreDocument(input: {
     workspaceId: string
@@ -174,6 +177,38 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins {
       forgetTrashEntry(doc, input.documentId)
       await this.docs.save(input.workspaceId, doc)
       return restored
+    })
+  }
+
+  /**
+   * Destroys a trashed document for good.
+   *
+   * The BYTES go before the row, so a failure part-way leaves the row
+   * standing: the user still sees the entry, and purging it again finishes
+   * the job. The other order would leave bytes no listing points at and
+   * nothing would ever reclaim.
+   *
+   * The bytes stay when another trash row names the same blob. Content
+   * addressing makes that possible in principle (the export carries the
+   * documentId, so only a replica's copy of the same document could share
+   * one); a purge must not break that other row's restore.
+   * ponytail: the check is per workspace, blobs are global — widen it if one
+   * blob store ever serves rows of several workspaces' records.
+   */
+  async purgeTrashEntry(input: TrashEntryInput): Promise<boolean> {
+    return this.#serialise(input.workspaceId, async () => {
+      const doc = await this.#open(input.workspaceId)
+      const rows = readTrashEntries(doc)
+      const entry = rows.find((row) => row.documentId === input.documentId)
+      if (entry === undefined) return false
+      const shared = rows.some(
+        (row) =>
+          row.documentId !== entry.documentId && blobRefKey(row.blob) === blobRefKey(entry.blob),
+      )
+      if (!shared) await this.blobs.delete({ ref: entry.blob })
+      forgetTrashEntry(doc, entry.documentId)
+      await this.docs.save(input.workspaceId, doc)
+      return true
     })
   }
 

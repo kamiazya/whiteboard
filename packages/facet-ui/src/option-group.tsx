@@ -225,7 +225,7 @@ export interface FacetOptionProps {
    * is what a catalog IS.
    *
    * Ignored in a menu: a menu row is a row, and a grid of cells inside one
-   * is not a menu any more.
+   * is not a menu.
    */
   readonly layout?: 'chips' | 'cards' | 'grid'
 }

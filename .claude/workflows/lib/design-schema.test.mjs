@@ -33,7 +33,7 @@ test('keeps the existing required fields intact', () => {
   assert.ok(DESIGN_SCHEMA.required.includes('testScenarios'))
 })
 
-test('requires a non-empty `blastRadius` field naming the change\'s impacted call sites', () => {
+test("requires a non-empty `blastRadius` field naming the change's impacted call sites", () => {
   const blastRadius = DESIGN_SCHEMA.properties.blastRadius
   assert.equal(blastRadius.type, 'array')
   assert.equal(blastRadius.items.type, 'string')
@@ -99,10 +99,17 @@ test('the `benefit` pattern admits exactly the four claim kinds, and no bare pro
   const pattern = new RegExp(DESIGN_SCHEMA.properties.benefit.pattern)
   assert.equal(pattern.test('delta: p95 layout 66ms -> 40ms, pnpm bench interleaved'), true)
   assert.equal(
-    pattern.test('relocation: main thread stops paying 24-92ms of decode per list; clone of the bytes unmeasurable'),
+    pattern.test(
+      'relocation: main thread stops paying 24-92ms of decode per list; clone of the bytes unmeasurable',
+    ),
     true,
   )
-  assert.equal(pattern.test('elimination: a new document kind cannot miss a surface — Record<DocumentKind> fails the build'), true)
+  assert.equal(
+    pattern.test(
+      'elimination: a new document kind cannot miss a surface — Record<DocumentKind> fails the build',
+    ),
+    true,
+  )
   assert.equal(pattern.test('obvious: fixes a crash on an empty body, visible in the diff'), true)
   // The whole point of the field is that a column is CHOSEN. Prose that names no column is the
   // answer this rejects, along with a prefix carrying nothing after it.

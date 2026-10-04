@@ -89,7 +89,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.elementCount).toBe(3)
     expect(entry.auto).toBe(true)
     expect(entry.label).toBeUndefined()
-    expect(entry.branchName).toBe('main')
   })
 
   /**
@@ -346,12 +345,29 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(manuals.some((v) => v.id === manualEntry.id)).toBe(true)
   })
 
-  describe('branchName', () => {
-    it('publishes the one lane every version is on', async () => {
+  describe('the retired lane label', () => {
+    it('is neither answered by save nor by list', async () => {
       const doc = new LoroDoc()
       appendElement(doc, 'e1')
       const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-      expect(entry.branchName).toBe('main')
+      expect(entry).not.toHaveProperty('branchName')
+      const [listed] = await store.list('sess-1', 'canvas-a')
+      expect(listed).not.toHaveProperty('branchName')
+    })
+
+    it('is not on the stored row', async () => {
+      const doc = new LoroDoc()
+      appendElement(doc, 'e1')
+      const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+      const { getDb } = await import('./db/index.js')
+      const db = await getDb(tempDir)
+      const row = await db
+        .selectFrom('versions')
+        .selectAll()
+        .where('id', '=', entry.id)
+        .executeTakeFirstOrThrow()
+      expect(row).not.toHaveProperty('branchName')
+      expect(row.workspaceId).toBe('sess-1')
     })
   })
 

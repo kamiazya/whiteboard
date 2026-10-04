@@ -33,9 +33,9 @@ function notifyReady(): void {
 /**
  * The document's face set on a window, the worker global's on a worker.
  *
- * A worker has no `document`, and checking for one is how this module used to
- * decide it was not in a browser at all — which is right up until layout runs
- * off the main thread, where returning 'degraded' means the worker measures
+ * A worker has no `document`, and checking for one to decide this module is
+ * not in a browser at all is right only until layout runs off the main
+ * thread, where returning 'degraded' means the worker measures
  * with fallback metrics while the window measures with the real face. Two
  * different scenes for the same canvas is worse than a slow one, and it is
  * the same divergence class font.ts's doc comment exists to prevent.

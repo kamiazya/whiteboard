@@ -296,7 +296,52 @@ describe('the scheduled-backup settings', () => {
     })
 
     it('refuses a timezone that is not a real zone', () => {
-      expect(parseBackupSchedule({ WHITEBOARD_BACKUP_TZ: 'Mars/Olympus_Mons' }).ok).toBe(false)
+      const parsed = parseBackupSchedule({ WHITEBOARD_BACKUP_TZ: 'Mars/Olympus_Mons' })
+      expect(parsed.ok).toBe(false)
+      if (parsed.ok) return
+      expect(parsed.reason).toMatch(/IANA timezone/)
+      expect(parsed.reason).not.toMatch(/cron expression/)
+    })
+
+    /**
+     * The expression and the zone are two variables read as one setting, so a
+     * refusal has to say which one is wrong. A bad zone beside a fine
+     * expression once sent the operator to a cron variable they had not set.
+     */
+    describe('names the variable at fault', () => {
+      const BACKUP = { WHITEBOARD_BACKUP_DIR: '/var/backups/whiteboard' }
+      const variables = (env: NodeJS.ProcessEnv) =>
+        collectStorageEnvIssues(DATA_DIR, { ...BACKUP, ...env }).map((issue) => issue.variable)
+
+      it('names the timezone when only the zone is wrong', () => {
+        expect(variables({ WHITEBOARD_BACKUP_TZ: 'Mars/Olympus_Mons' })).toEqual([
+          'WHITEBOARD_BACKUP_TZ',
+        ])
+        expect(
+          variables({ WHITEBOARD_BACKUP_CRON: '30 2 * * 0', WHITEBOARD_BACKUP_TZ: 'Mars/Base' }),
+        ).toEqual(['WHITEBOARD_BACKUP_TZ'])
+      })
+
+      it('names the cron expression when only the expression is wrong', () => {
+        expect(variables({ WHITEBOARD_BACKUP_CRON: 'nightly please' })).toEqual([
+          'WHITEBOARD_BACKUP_CRON',
+        ])
+        expect(
+          variables({
+            WHITEBOARD_BACKUP_CRON: 'nightly please',
+            WHITEBOARD_BACKUP_TZ: 'Asia/Tokyo',
+          }),
+        ).toEqual(['WHITEBOARD_BACKUP_CRON'])
+      })
+
+      it('names both when both are wrong', () => {
+        expect(
+          variables({
+            WHITEBOARD_BACKUP_CRON: 'nightly please',
+            WHITEBOARD_BACKUP_TZ: 'Mars/Base',
+          }),
+        ).toEqual(['WHITEBOARD_BACKUP_CRON', 'WHITEBOARD_BACKUP_TZ'])
+      })
     })
 
     /** Never echo the value: a cron expression is not secret, but the rule is

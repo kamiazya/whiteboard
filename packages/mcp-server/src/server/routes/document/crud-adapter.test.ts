@@ -2,17 +2,16 @@
  * ADR-0018: the HTTP document routes are ADAPTERS over the `wb_document_*`
  * operations, not second implementations of them.
  *
- * The two used to be separate code paths performing the same delete, and
- * only one of them cleaned up. Sharing the pieces closed that gap
- * one piece at a time; sharing the OPERATION is what stops the next piece
- * from drifting, because there is no longer a second sequence to forget to
- * update.
+ * Two separate code paths performing the same delete drift: one of them
+ * grows a cleanup step the other forgets. Sharing the OPERATION is what stops
+ * that, because there is no second sequence to forget to update.
  *
  * Asserted through the seam the operation goes through rather than on the
- * rows afterwards: identical end state is exactly what the two divergent
- * implementations produced right up until one of them grew a step.
+ * rows afterwards: identical end state is exactly what two divergent
+ * implementations produce right up until one of them grows a step.
  */
 import { listDocumentsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { DocumentPins } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../_test-helpers.js'
@@ -190,8 +189,52 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     expect(body.documents[0]).toMatchObject({ path: 'a', shadowed: true })
   })
 
+  it('says per document whether it is pinned, the way the list tool and /api/v1 do', async () => {
+    const { deps } = await depsRecordingList()
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'b', kind: 'markdown' })
+    const listed = await deps.documentIndex.listDocuments({ workspaceId: 'ws-1' })
+    const pinnedId = listed.find((entry) => entry.path === 'b')?.documentId as string
+    await (deps.documentIndex as unknown as DocumentPins).setDocumentPinned({
+      workspaceId: 'ws-1',
+      documentId: pinnedId,
+      pinned: true,
+    })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    const parsed = listDocumentsResponseSchema.parse(await res.json())
+    expect(parsed.documents.map((d) => [d.path, d.pinned])).toEqual([
+      ['a', false],
+      ['b', true],
+    ])
+  })
+
+  // Absent, not false: a keeper that keeps no pins has said nothing about them,
+  // which is not the same as saying none are pinned.
+  it('omits pinned when the keeper keeps no pins', async () => {
+    const { deps } = await depsRecordingList()
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    const inner = deps.documentIndex
+    const pinless = new Proxy(inner, {
+      has: (target, key) => key !== 'listPinnedDocuments' && key in target,
+      get: (target, key) =>
+        key === 'listPinnedDocuments' || key === 'setDocumentPinned'
+          ? undefined
+          : (Reflect.get(target, key, target) as unknown),
+    })
+    const app = createWorkspacesRouter({ serverDeps: { ...deps, documentIndex: pinless } })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    const body = (await res.json()) as { documents: Record<string, unknown>[] }
+    expect(body.documents).toHaveLength(1)
+    expect(Object.keys(body.documents[0] ?? {})).not.toContain('pinned')
+  })
+
   // "Empty" and "never registered" are different answers, and conflating them
-  // is what let a stale pairing render as an empty workspace with a Create
+  // is what let a stale remembered workspace render as an empty workspace with a Create
   // button. The operation raises it; this surface translates it.
   it('answers 404 for a workspace that was never registered', async () => {
     const { deps } = await depsRecordingList()
@@ -200,6 +243,12 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     const res = await app.request('/api/workspaces/never-made/documents')
 
     expect(res.status).toBe(404)
+    // The router's own translation, for a workspace that vanishes after the
+    // guard in front of it: the same body as the guard's.
+    expect(await res.json()).toEqual({
+      error: 'workspace_not_found',
+      message: 'Workspace "never-made" not found',
+    })
   })
 })
 

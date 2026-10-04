@@ -4,9 +4,9 @@
 // mirrored inline copy — the drift test at the bottom is what keeps the two honest.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import path from 'node:path'
 import { SEVERITY_RANK, triageReview } from './fix-loop.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -17,8 +17,14 @@ const finding = (severity, title) => ({ severity, title, file: 'a.ts', detail: '
 test('confirmed findings at or above the threshold are actionable, below it are followups', () => {
   const review = { confirmedFindings: [finding('HIGH', 'h'), finding('LOW', 'l')], qa: [] }
   const { actionable, below } = triageReview(review, SEVERITY_RANK.MEDIUM)
-  assert.deepEqual(actionable.map((f) => f.title), ['h'])
-  assert.deepEqual(below.map((f) => f.title), ['l'])
+  assert.deepEqual(
+    actionable.map((f) => f.title),
+    ['h'],
+  )
+  assert.deepEqual(
+    below.map((f) => f.title),
+    ['l'],
+  )
 })
 
 // The defect this function exists to fix: a qa-scenario that FAILED with a reproduced bug used to
@@ -60,8 +66,13 @@ test('a missing or malformed review yields nothing actionable instead of throwin
 
 test('inline triageReview in dev-loop.workflow.mjs matches this module', () => {
   const source = readFileSync(workflowPath, 'utf8')
-  const match = source.match(/\nconst SEVERITY_RANK = [\s\S]*?\nfunction triageReview\(review, threshold\) \{[\s\S]*?\n\}\n/)
-  assert.ok(match, 'could not locate the inline SEVERITY_RANK + triageReview in dev-loop.workflow.mjs')
+  const match = source.match(
+    /\nconst SEVERITY_RANK = [\s\S]*?\nfunction triageReview\(review, threshold\) \{[\s\S]*?\n\}\n/,
+  )
+  assert.ok(
+    match,
+    'could not locate the inline SEVERITY_RANK + triageReview in dev-loop.workflow.mjs',
+  )
   // Evaluating our own source, not untrusted input
   const inline = new Function(`${match[0]}\nreturn { SEVERITY_RANK, triageReview }`)()
   assert.deepEqual(inline.SEVERITY_RANK, SEVERITY_RANK)
@@ -69,7 +80,10 @@ test('inline triageReview in dev-loop.workflow.mjs matches this module', () => {
     confirmedFindings: [finding('HIGH', 'h'), finding('LOW', 'l')],
     qa: [{ scenario: 'error-recovery', status: 'fail', notes: 'boom' }],
   }
-  assert.deepEqual(inline.triageReview(review, SEVERITY_RANK.MEDIUM), triageReview(review, SEVERITY_RANK.MEDIUM))
+  assert.deepEqual(
+    inline.triageReview(review, SEVERITY_RANK.MEDIUM),
+    triageReview(review, SEVERITY_RANK.MEDIUM),
+  )
 })
 
 // `${BASE}..HEAD` re-anchors on every fetch, so a long run whose origin/main advanced reviewed a

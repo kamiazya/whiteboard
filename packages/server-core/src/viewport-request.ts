@@ -25,15 +25,15 @@ export const viewportRequestParamsSchema = z
       .enum(['fit', 'move'])
       .optional()
       .describe(
-        'fit frames elementIds (none: the whole board); move goes to scrollX, scrollY at zoom. Omitted: move if you give scrollX, scrollY or zoom without elementIds, else fit.',
+        'fit frames elementIds (none: the whole board) and takes no scrollX, scrollY or zoom; move goes to scrollX, scrollY at zoom and takes no elementIds. Omitted: move if you give scrollX, scrollY or zoom, else fit.',
       ),
     /**
      * What to frame. Omitted with `mode: 'fit'` means the WHOLE board, which
      * is rarely what an agent pointing at something wants.
      */
     elementIds: z.array(nodeIdSchema).optional(),
-    scrollX: z.number().finite().optional(),
-    scrollY: z.number().finite().optional(),
+    scrollX: z.number().finite().optional().describe('move: pan offset on x; omitted is 0.'),
+    scrollY: z.number().finite().optional().describe('move: pan offset on y; omitted is 0.'),
     // Bounded by the editor's own range: an unbounded zoom is acted on or
     // dropped by the page while the tool still reports delivery.
     zoom: z
@@ -42,7 +42,7 @@ export const viewportRequestParamsSchema = z
       .max(MAX_VIEWPORT_ZOOM)
       .optional()
       .describe(
-        `Scale, ${MIN_VIEWPORT_ZOOM} to ${MAX_VIEWPORT_ZOOM}; 1 is actual size (not a percentage).`,
+        `Scale, ${MIN_VIEWPORT_ZOOM} to ${MAX_VIEWPORT_ZOOM}; 1 is actual size (not a percentage); omitted is 1.`,
       ),
   })
   .strict()

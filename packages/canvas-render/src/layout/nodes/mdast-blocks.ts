@@ -32,6 +32,7 @@ import { selectCanvasFragment } from '../../canvas-fragment.js'
 import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
 import { referenceFor, withReferenceSeams } from '../../references/seams.js'
+import { type SceneWalkNode, sceneChildrenOf } from '../../scene-children.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
 import { Parser } from '../../vendor/budoux/parser.js'
@@ -1241,21 +1242,15 @@ export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number
 }
 
 /** Whether any run anywhere under `nodes` satisfies `predicate`. */
-function someRun(nodes: readonly SceneNode[], predicate: (run: TextRunNode) => boolean): boolean {
+function someRun(
+  nodes: readonly SceneWalkNode[],
+  predicate: (run: TextRunNode) => boolean,
+): boolean {
   return nodes.some((node) => {
     if (node.kind === 'edge') return false
     if (node.kind === 'textRun') return predicate(node)
-    const branching = node as SceneNode & {
-      runs?: readonly SceneNode[]
-      children?: readonly SceneNode[]
-      items?: readonly SceneNode[]
-      cells?: readonly SceneNode[]
-      rows?: readonly SceneNode[]
-    }
-    return (['runs', 'children', 'items', 'cells', 'rows'] as const).some((key) => {
-      const branch = branching[key]
-      return branch !== undefined && someRun(branch, predicate)
-    })
+    const children = sceneChildrenOf(node)
+    return children !== undefined && someRun(children, predicate)
   })
 }
 

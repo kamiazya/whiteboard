@@ -8,8 +8,8 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
+import { IdbDefaultDocumentPointer, listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
@@ -135,7 +135,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
         timeout: 5000,
       },
     )
-    const deletedIds = (await listLocalDocuments(store)).map((doc) => doc.documentId)
+    const deletedIds = (await listBrowserDocuments(store)).map((doc) => doc.documentId)
     fireEvent.pointerDown(screen.getByRole('button', { name: 'More actions' }), { button: 0 })
     fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^delete$/i }))
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
@@ -151,14 +151,14 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     const pointer = new IdbDefaultDocumentPointer()
     await waitFor(
       async () => {
-        const ids = (await listLocalDocuments(store)).map((doc) => doc.documentId)
+        const ids = (await listBrowserDocuments(store)).map((doc) => doc.documentId)
         expect(ids).toHaveLength(1)
         expect(deletedIds).not.toContain(ids[0])
         expect(await pointer.get()).toBe(ids[0])
       },
       { timeout: 5000 },
     )
-    const [fresh] = await listLocalDocuments(store)
+    const [fresh] = await listBrowserDocuments(store)
     cleanup()
     renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(
@@ -168,7 +168,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       },
     )
     // The remount opened the fresh document rather than seeding another one.
-    expect((await listLocalDocuments(store)).map((doc) => doc.documentId)).toEqual([
+    expect((await listBrowserDocuments(store)).map((doc) => doc.documentId)).toEqual([
       fresh?.documentId,
     ])
     expect(await pointer.get()).toBe(fresh?.documentId)
@@ -185,7 +185,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       { timeout: 5000 },
     )
-    const [kept] = await listLocalDocuments(store)
+    const [kept] = await listBrowserDocuments(store)
     cleanup()
     await new IdbDefaultDocumentPointer().set('01ZZZZZZZZZZZZZZZZZZZZZZZZ')
 

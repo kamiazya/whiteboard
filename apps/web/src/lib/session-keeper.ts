@@ -7,7 +7,7 @@ import type { UserSettings } from './user-settings-store.js'
 
 /**
  * WHO KEEPS this session's workspace, and how to reach them — the derivations
- * `App` used to spell as four stacked ternaries among its thirty hooks.
+ * that would otherwise be four stacked ternaries among `App`'s thirty hooks.
  *
  * Pure, and here rather than in `App`, for the reason any decision chain is:
  * each answer is about its inputs alone, and a reader asking "which daemon is
@@ -38,9 +38,9 @@ export function effectiveProviderState(
  * Decided by the reconnection and provider state — ADR-0004 settles it at
  * page load — and these are the same two conditions the render tail uses to
  * choose a daemon tree over the browser one. Derived rather than read off the
- * address: the URL's own shape (`/local/*`) used to answer this, which is
- * exactly what three-layer identity exists to stop, and that guard could not
- * survive the two route families becoming one.
+ * address: three-layer identity exists so the URL's own shape (`/local/*`)
+ * does not decide this, and that shape could not survive the two route
+ * families becoming one.
  */
 export function daemonKeepsSession({
   forcedBrowser,

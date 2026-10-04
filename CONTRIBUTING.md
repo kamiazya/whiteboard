@@ -116,7 +116,7 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 ### Local checks before merging a release PR
 
 ```bash
-pnpm check:release-candidate   # typecheck, build, distribution + artifact checks, SBOM, tests, smokes
+pnpm check:release-candidate   # typecheck, build, distribution + artifact checks, SBOM, tests, smokes (spends API quota: chains the claude and codex CLI smokes)
 npm pack --dry-run             # verify the tarball includes dist/, skills/, package README, and LICENSE
 ```
 

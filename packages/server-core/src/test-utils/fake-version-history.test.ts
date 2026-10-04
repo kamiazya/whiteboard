@@ -34,7 +34,7 @@ describe('FakeVersionHistory', () => {
       branchName: 'wide-layout',
     })
 
-    expect(entry.branchName).toBeUndefined()
+    expect(entry).not.toHaveProperty('branchName')
   })
 
   test('a saved row carries the live element count and the attestation it was given', async () => {

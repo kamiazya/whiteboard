@@ -24,8 +24,8 @@
  * decision 2026-09-21): once a workspace has had a member, `membersOnly`
  * stays true even after the last one is removed, so a workspace never falls
  * back to origin trust by emptying. Nothing clears it. Every workspace is
- * members-only regardless (ADR-0046 d10), so the gate no longer consults the
- * marker; what it still decides is whether a workspace's creator is added as
+ * members-only regardless (ADR-0046 d10), so the gate does not consult the
+ * marker; what it decides is whether a workspace's creator is added as
  * its first member (`mcp-caller.ts`). See the 0030 migration for why
  * it is its own table rather than a column on `workspaces`.
  *

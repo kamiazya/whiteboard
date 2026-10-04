@@ -1,19 +1,16 @@
 /**
- * The daemon's durable identity keypair — the trust anchor that lets a
- * browser verify a loopback responder is the real daemon (and not a
- * port-squatting local process). The public key is pinned by the web app at
- * /pair consent time; every later signature is verified against that pin,
- * so a squatter advertising its own key gains nothing.
+ * The daemon's durable identity keypair. Its public key is published by the
+ * ping route as a `did:key`, which names the daemon as the actor on the
+ * versions it saves; the private key signs those versions' attestations
+ * (ADR-0039) and stays in this data dir, readable by the owning OS user only.
  *
- * Threat boundary: defends against a process that can bind a loopback port
- * but cannot read this data dir. A full-privilege local attacker can read
- * the private key and is out of scope — the daemon already trusts the OS
- * user boundary.
+ * Threat boundary: a full-privilege local attacker can read the private key
+ * and is out of scope — the daemon already trusts the OS user boundary.
  *
  * A corrupt or unreadable file regenerates a fresh keypair (rotation
- * semantics): paired browsers fail closed on the key mismatch and require a
- * fresh /pair approval, which re-pins. Losing the file costs re-approval
- * clicks, never a dead daemon.
+ * semantics): the `did:key` changes, and attestations signed under the old
+ * key no longer verify against the current one. Losing the file costs those
+ * attestations' provenance, never a dead daemon.
  */
 import {
   createPrivateKey,
@@ -103,8 +100,8 @@ function generateAndPersist(filepath: string): LoadedKeys {
     publicJwk: publicKey.export({ format: 'jwk' }),
     privateJwk: privateKey.export({ format: 'jwk' }),
   }
-  // Write-then-rename with owner-only perms, same posture as the pairing
-  // grants file: a half-written identity must never be observed, and the
+  // Write-then-rename with owner-only perms, as every secret file here is
+  // written: a half-written identity must never be observed, and the
   // private key is never group/world readable. The data dir may not exist yet
   // on a first start (identity generation can precede any store write).
   writeSecretFileAtomicSync(filepath, `${JSON.stringify(record, null, 2)}\n`)

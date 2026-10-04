@@ -39,17 +39,47 @@ function clusterOf(path: string): Cluster | undefined {
   return CLUSTERS.find((c) => path.startsWith(`./${c}/`))
 }
 
+// Named, type, re-export and side-effect imports in either quote, and dynamic
+// `import()`: a specifier the reader skips is an edge the guard cannot see.
 function specifiersOf(source: string): readonly string[] {
-  return [...source.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1] as string)
+  return [...source.matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1/g)].map(
+    (m) => m[2] as string,
+  )
 }
 
-const clusterSources = Object.entries(sourceModules)
-  .filter(([path]) => isProductionSource(path) && clusterOf(path) !== undefined)
-  .map(([path, source]) => ({
-    path,
-    cluster: clusterOf(path) as Cluster,
-    specifiers: specifiersOf(source),
-  }))
+interface ClusterSource {
+  readonly path: string
+  readonly cluster: Cluster
+  readonly specifiers: readonly string[]
+}
+
+function clusterSourcesOf(sources: Readonly<Record<string, string>>): readonly ClusterSource[] {
+  return Object.entries(sources)
+    .filter(([path]) => isProductionSource(path) && clusterOf(path) !== undefined)
+    .map(([path, source]) => ({
+      path,
+      cluster: clusterOf(path) as Cluster,
+      specifiers: specifiersOf(source),
+    }))
+}
+
+function crossingsOf(sources: readonly ClusterSource[]): readonly string[] {
+  return sources.flatMap(({ path, cluster, specifiers }) => {
+    const other = cluster === 'edges' ? 'nodes' : 'edges'
+    return specifiers.filter((s) => s.startsWith(`../${other}/`)).map((s) => `${path} imports ${s}`)
+  })
+}
+
+// `../x.js` resolves to a module sitting directly in `layout/` — the composer
+// or one of its helpers. Reaching it from a leaf inverts the direction.
+// Package-level reads (`../../x.js`) are fine.
+function inversionsOf(sources: readonly ClusterSource[]): readonly string[] {
+  return sources.flatMap(({ path, specifiers }) =>
+    specifiers.filter((s) => /^\.\.\/[^.][^/]*\.js$/.test(s)).map((s) => `${path} imports ${s}`),
+  )
+}
+
+const clusterSources = clusterSourcesOf(sourceModules)
 
 describe('layout cluster boundaries', () => {
   // A guard over a glob that matched nothing passes for the wrong reason.
@@ -65,22 +95,34 @@ describe('layout cluster boundaries', () => {
   })
 
   it('keeps edges/ and nodes/ free of each other', () => {
-    const crossings = clusterSources.flatMap(({ path, cluster, specifiers }) => {
-      const other = cluster === 'edges' ? 'nodes' : 'edges'
-      return specifiers
-        .filter((s) => s.startsWith(`../${other}/`))
-        .map((s) => `${path} imports ${s}`)
-    })
-    expect(crossings).toEqual([])
+    expect(crossingsOf(clusterSources)).toEqual([])
   })
 
   it('keeps both clusters below the composer that draws on them', () => {
-    // `../x.js` resolves to a module sitting directly in `layout/` — the
-    // composer or one of its helpers. Reaching it from a leaf inverts the
-    // direction. Package-level reads (`../../x.js`) are fine.
-    const inversions = clusterSources.flatMap(({ path, specifiers }) =>
-      specifiers.filter((s) => /^\.\.\/[^.][^/]*\.js$/.test(s)).map((s) => `${path} imports ${s}`),
-    )
-    expect(inversions).toEqual([])
+    expect(inversionsOf(clusterSources)).toEqual([])
+  })
+
+  it('reports a planted crossing and inversion in every import spelling', () => {
+    const planted = clusterSourcesOf({
+      './edges/a.ts': "import { n } from '../nodes/truncate.js'",
+      './edges/b.ts': "import '../nodes/truncate.js'",
+      './edges/c.ts': 'import { n } from "../nodes/truncate.js"',
+      './edges/d.ts': "export const m = () => import('../nodes/truncate.js')",
+      './nodes/e.ts': 'export const m = () => import("../edges/edge-geometry.js")',
+      './nodes/f.ts': 'import "../spatial-canvas.js"',
+      './nodes/g.ts': "import type {\n  T,\n} from '../compose-node.js'",
+      './nodes/ok.ts': "import { z } from '../../theme/z.js'\nimport { y } from './truncate.js'",
+    })
+    expect(crossingsOf(planted)).toEqual([
+      './edges/a.ts imports ../nodes/truncate.js',
+      './edges/b.ts imports ../nodes/truncate.js',
+      './edges/c.ts imports ../nodes/truncate.js',
+      './edges/d.ts imports ../nodes/truncate.js',
+      './nodes/e.ts imports ../edges/edge-geometry.js',
+    ])
+    expect(inversionsOf(planted)).toEqual([
+      './nodes/f.ts imports ../spatial-canvas.js',
+      './nodes/g.ts imports ../compose-node.js',
+    ])
   })
 })

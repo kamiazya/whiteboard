@@ -1,11 +1,11 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import {
   type ContentClock,
-  ensureLocalWorkspace,
-  listLocalDocuments,
-  loadLocalDocument,
-} from './local-document-summary.js'
+  ensureBrowserWorkspace,
+  listBrowserDocuments,
+  loadBrowserDocument,
+} from './browser-document-summary.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { LoroStoreLike } from './loro-store.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
@@ -20,10 +20,8 @@ import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from './workspac
  * has no last-edited time to report. It is also what lets a switch onto a
  * never-edited document find something to load.
  *
- * Three of the five create paths used to skip it (first boot, startFresh, and
- * the list page) while `createDocument` did it and said why. Routing them all
- * through here is what makes that inconsistency unrepresentable rather than
- * merely fixed.
+ * Every create path routes through here, so one that skips it is
+ * unrepresentable rather than merely avoided.
  *
  * The index row is rolled back if the content write fails, so a failed create
  * never leaves a document with nothing behind it.
@@ -36,8 +34,8 @@ export async function createSeededDocument(
   kind: DocumentSnapshot['kind'] = 'spatial',
   content?: Uint8Array,
 ): Promise<DocumentSnapshot> {
-  await ensureLocalWorkspace(index)
-  const taken = (await listLocalDocuments(index, clock).catch(() => [])).map((row) => row.path)
+  await ensureBrowserWorkspace(index)
+  const taken = (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path)
   const trimmed = name?.trim()
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
@@ -67,7 +65,7 @@ export async function createSeededDocument(
     }
     throw err
   }
-  const snap = await loadLocalDocument(index, entry.documentId, clock)
+  const snap = await loadBrowserDocument(index, entry.documentId, clock)
   if (snap === null) throw new Error('created document vanished before it could be read')
   return snap
 }

@@ -537,7 +537,7 @@ describe('backupDataDir and files that must not travel', () => {
 
   // The one exclusion here with a real cost, so it is asserted rather than
   // left to the ledger: a restored daemon generates a fresh identity, which
-  // changes its did:key and breaks every pairing. Weighed and accepted
+  // changes its did:key and breaks every client's pin on it. Weighed and accepted
   // (2026-09-19) because that is recoverable and a signing key living on in
   // a backup is not. If this test is ever deleted, the decision is being
   // reversed — do that deliberately, in `backup-restore.ts`'s comment too.

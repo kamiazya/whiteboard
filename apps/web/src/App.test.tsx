@@ -116,7 +116,7 @@ function rememberDaemon(daemonBaseUrl: string, extra: Record<string, unknown> = 
 
 let receivedDaemonPageProps: Record<string, unknown> | undefined
 // Toggled by the error-boundary test: throwing from the lazily-resolved page
-// exercises the paired branch's boundary, which must sit OUTSIDE Suspense to
+// exercises the daemon branch's boundary, which must sit OUTSIDE Suspense to
 // catch errors surfacing through the lazy path.
 let throwInDaemonDocumentPage = false
 vi.mock('./pages/DaemonDocumentPage.js', () => ({
@@ -130,7 +130,7 @@ vi.mock('./pages/DaemonDocumentPage.js', () => ({
 }))
 
 // Captures the daemon prop so a test can assert App resolves it from the
-// active connection (paired fragment / daemon provider state) rather
+// active connection (daemon provider state) rather
 // than merely mounting the page on the /settings route.
 let receivedSettingsPageProps: Record<string, unknown> | undefined
 
@@ -361,9 +361,9 @@ describe('reconnecting a remembered daemon through the extension', () => {
     expect(connectThroughExtensionMock).not.toHaveBeenCalled()
   })
 
-  // ADR-0050: a loopback address the pairing flow once remembered is not a
-  // way to reach a daemon any more. The page treats it as nothing remembered,
-  // and the person reconnects through the extension.
+  // ADR-0050: a remembered loopback address is not a way to reach a daemon.
+  // The page treats it as nothing remembered, and the person reconnects
+  // through the extension.
   it('does not reconnect to a remembered loopback address', async () => {
     rememberDaemon('http://127.0.0.1:3099')
     mockConnectResult = CONNECTED
@@ -425,7 +425,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
 
     await screen.findByTestId('daemon-document-page')
     expect(receivedDaemonPageProps).toMatchObject({ workspaceId, path: 'moved-note' })
-    // The link survived: once paired, it opens the document the address
+    // The link survived: once connected, it opens the document the address
     // named all along rather than whatever the (now moot) rewrite chose.
     expect(router.state.location.pathname).toBe(`/w/${workspaceId}/d/moved-note`)
   })

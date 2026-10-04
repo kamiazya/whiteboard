@@ -24,12 +24,22 @@ const log = getLogger('canvas-client-notifier')
 /**
  * The request minus its routing keys, typed as the wire's params rather than
  * a `Record<string, unknown>` the compiler could not compare — the shape a
- * field dropped on the way to the browser used to hide in. `sendViewportRequest`
+ * field dropped on the way to the browser would hide in. `sendViewportRequest`
  * strips any `undefined` a direct caller of the port left in.
  */
 function viewportPayload(request: ViewportRequest): ViewportRequestParams {
   const { workspaceId: _workspaceId, documentId: _documentId, ...params } = request
   return params
+}
+
+// The frame's arrays are mutable and the port's are readonly, so each is copied.
+function touchedForFrame(touched: AgentActivity['touched']) {
+  return {
+    nodes: [...touched.nodes],
+    edges: [...touched.edges],
+    lines: [...touched.lines],
+    comments: [...touched.comments],
+  }
 }
 
 /**
@@ -64,10 +74,7 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
           if (path === null) return
           sendAgentActivity(activity.workspaceId, path, {
             operator: { kind: 'ai', actor: DAEMON_AGENT_ACTOR },
-            touched: {
-              nodes: [...activity.touched.nodes],
-              edges: [...activity.touched.edges],
-            },
+            touched: touchedForFrame(activity.touched),
             summary: activity.summary,
           })
         } catch (err) {
@@ -111,14 +118,14 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
       try {
         const path = await pathOf(request.workspaceId, request.documentId)
         if (path === null) return false
-        // Only READY clients can apply a viewport, and `sendViewportRequest`
-        // caches the last one for replay on `client_ready` — so a pre-ready
-        // tab still gets it, and reporting `false` here would be a lie about
-        // a message that will land. Report on ready clients, which is what
-        // "someone is watching right now" means.
-        if (getReadyClientCount(request.workspaceId, path) === 0) return false
+        // `sendViewportRequest` records the request for replay on `client_ready`
+        // and sends it only to pages that already are ready, so it runs even
+        // with none: the first page to open inherits the request. What is
+        // REPORTED is narrower — only a READY client can apply a viewport, and
+        // "someone is watching right now" is what `delivered` means.
+        const watching = getReadyClientCount(request.workspaceId, path) > 0
         sendViewportRequest(request.workspaceId, path, nanoid(), viewportPayload(request))
-        return true
+        return watching
       } catch (err) {
         log.warning(
           { workspaceId: request.workspaceId, documentId: request.documentId, err },

@@ -7,6 +7,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   compareCodeUnit,
+  type ExtensionFacets,
   type SpatialCanvas,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
@@ -27,6 +28,7 @@ import { CanvasEditSession } from './canvas-edit-session.js'
 import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { DocumentKindMismatchError } from './errors.js'
+import { registryForFacetWrites } from './facet-write.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -50,6 +52,29 @@ export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.
  */
 
 /**
+ * The facets buckets a batch's ops write. Locks, tidy and comments carry none,
+ * and `node.patch` has no `facets` field at all — `wb_facet_set` is where a
+ * node's facets change.
+ */
+function facetBucketsOf(ops: CanvasEditInput['ops']): (ExtensionFacets | undefined)[] {
+  return ops.map((op) => {
+    switch (op.op) {
+      case 'node.add':
+        return op.node.facets
+      case 'edge.add':
+        return op.edge.facets
+      case 'line.add':
+        return op.line.facets
+      case 'edge.patch':
+      case 'line.patch':
+        return op.patch.facets
+      default:
+        return undefined
+    }
+  })
+}
+
+/**
  * The deployment's registry PLUS this workspace's own stencil library, which
  * is a document in it (ADR-0034 decision 4).
  *
@@ -57,9 +82,11 @@ export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.
  * fixed at distribution time, and a library is content that belongs to the
  * workspace holding it. A workspace with no library gets the base registry
  * back unchanged, same instance. Resolved only for a batch that NAMES a
- * stencil, because finding the library costs a document listing plus a read.
- * `facetRegistry` is used for stencils and nothing else here, which is what
- * makes that safe rather than clever.
+ * stencil — by `stencil` on an op or by a facets bucket whose facet takes one
+ * — because finding the library costs a document listing plus a read. The
+ * registry validates every facets bucket and resolves stencils, and the
+ * library adds stencil assets and nothing else, which is what makes resolving
+ * it lazily safe rather than clever.
  */
 async function resolveEditRegistry(deps: ServerDeps, input: CanvasEditInput) {
   const namesAStencil = input.ops.some(
@@ -67,7 +94,7 @@ async function resolveEditRegistry(deps: ServerDeps, input: CanvasEditInput) {
   )
   return namesAStencil
     ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
-    : deps.facetRegistry
+    : await registryForFacetWrites(deps, input.workspaceId, facetBucketsOf(input.ops))
 }
 
 /**
@@ -171,12 +198,10 @@ async function commitAsProposal({
 }): Promise<CanvasEditOutput> {
   const proposal = await storeCanvasProposal({
     deps,
-    workspaceId: input.workspaceId,
-    documentId: input.documentId,
-    ...(input.proposalId === undefined ? {} : { proposalId: input.proposalId }),
+    input,
     doc,
     before: canvas,
-    after: after,
+    after,
   })
   if (proposal === undefined) {
     throw new CanvasEditError(
@@ -376,9 +401,8 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   const s = new CanvasEditSession(canvas, doc, measure)
 
   // One handler per verb, keyed by the schema (canvas-edit-handlers.ts).
-  // It was a 16-case switch inline here, and the shape is what changed:
-  // a verb added to the schema and not to the table no longer compiles,
-  // where the switch simply fell through and reported a batch applied
+  // A verb added to the schema and not to the table does not compile, where
+  // an inline switch would simply fall through and report a batch applied
   // having ignored the op.
   const ctx: CanvasEditContext = { s, facetRegistry }
   input.ops.forEach((op, index) => {

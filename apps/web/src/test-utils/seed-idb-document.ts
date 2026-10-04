@@ -1,8 +1,8 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 
 /**
@@ -10,7 +10,7 @@ import { LoroStore } from '../lib/loro-store.js'
  * create path does: an index row, a content record, and (optionally) the
  * default pointer.
  *
- * A browser test cannot hand-write an id any more — the index mints it — so
+ * A browser test cannot hand-write an id — the index mints it — so
  * this returns the one it assigned. That is also why the content record is
  * written here rather than by the caller: it is keyed by that id, and a test
  * that seeds only the index gets a document with no last-edited time and no

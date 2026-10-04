@@ -294,7 +294,7 @@ To create a new member, add it with `node.add` and `within` rather than naming
 it here. Use `region.set` when you own the whole group; use plain `node.patch` /
 `node.remove` ops when you do not.
 
-**A lock binds you too.** A `patch` or `remove` on a locked element fails the batch. Unlocking is the
+**A lock binds you too.** A `patch` or `remove` on a locked element fails the batch, and so does `wb_facet_set` on it (its facets and its tags, including a tag rename that would reach it). Unlocking is the
 one op a locked element still accepts, so you can lift your own lock in the same call:
 `[{ op: "node.lock", id: "x", locked: false }, { op: "node.patch", id: "x", patch: { x: 40 } }]`.
 
@@ -356,7 +356,8 @@ keeps a role recognisable.
 
 ## Notes
 
-- **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
+- **Every applied write is a remote change.** A `mode: "apply"` call changes the document at once
+  (without a mode, content is stored as a proposal for the person to adopt instead); there is no
   separate "commit" step and no local undo. One `wb_canvas_edit` call is atomic — a rejected batch
   leaves nothing behind — but a batch that SUCCEEDS is not undoable, so save a
   `wb_version_save({ workspaceId, documentIds: [documentId], label })` before a risky one and call

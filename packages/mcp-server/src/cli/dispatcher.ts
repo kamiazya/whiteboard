@@ -66,9 +66,9 @@ whiteboard daemon rotate-replica-key --json --workspace=<id|segment> [--data-dir
 whiteboard daemon set-replica-tier   --json --workspace=<id|segment> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
 whiteboard daemon run            [--json] [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
-whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--trusted-proxy] [--data-dir=<path>]
+whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--data-dir=<path>]
 whiteboard server stop           --json [--data-dir=<path>]
-whiteboard server run            --json [--dry-run] [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--trusted-proxy] [--data-dir=<path>]
+whiteboard server run            --json [--dry-run] [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--data-dir=<path>]
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server grant-member   --json --workspace=<id|segment> --user=<id|name> [--data-dir=<path>]
@@ -452,7 +452,7 @@ async function dispatchServerRun(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${parsed.message}\n`)
     return 64
   }
-  // Dynamic import keeps server-mode dependencies (planServerModeAuth chain)
+  // Dynamic import keeps server-mode dependencies (server-mode exposure chain)
   // out of the read-only command path.
   const { runServerRun } = await import('./server-run.js')
   const outcome = await runServerRun({ flags: parsed, env: process.env })

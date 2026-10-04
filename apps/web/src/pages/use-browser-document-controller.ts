@@ -1,19 +1,19 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
-import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
-import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
   IdbDefaultDocumentPointer,
   idbContentClock,
-  listLocalDocuments,
-  loadLocalDocument,
-} from '../lib/local-document-summary.js'
+  listBrowserDocuments,
+  loadBrowserDocument,
+} from '../lib/browser-document-summary.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
+import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
+import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -138,7 +138,7 @@ async function openDeepLink(
       ? null
       : await stores.index.resolveDocument({ workspaceId, path }).catch(() => null)
   if (!alive() || requested === null) return null
-  const snap = await loadLocalDocument(stores.index, requested.documentId, stores.clock)
+  const snap = await loadBrowserDocument(stores.index, requested.documentId, stores.clock)
   if (!alive() || snap === null) return null
   await stores.pointer.set(requested.documentId)
   return alive() ? snap : null
@@ -164,7 +164,7 @@ async function openPointedAt(
     await stores.pointer.set(created.documentId)
     return alive() ? created : null
   }
-  const snap = await loadLocalDocument(stores.index, id, stores.clock)
+  const snap = await loadBrowserDocument(stores.index, id, stores.clock)
   if (!alive()) return null
   if (snap !== null) return snap
   const left = await openWhatIsLeft(stores, alive)
@@ -189,7 +189,7 @@ async function openWhatIsLeft(
   stores: OpeningStores,
   alive: StillMounted = () => true,
 ): Promise<DocumentSnapshot | null> {
-  const [next] = await listLocalDocuments(stores.index, stores.clock)
+  const [next] = await listBrowserDocuments(stores.index, stores.clock)
   if (!alive()) return null
   const opened = next ?? (await createSeededDocument(stores.index, stores.loro, stores.clock))
   if (!alive()) return null
@@ -448,10 +448,8 @@ export function useBrowserDocumentController(
       // aimed at a document that does not exist (which would reload degraded).
       fresh = await createSeededDocument(indexRef.current, loroRef.current, clockRef.current)
       const existingId = await pointerRef.current.get()
-      // Order no longer matters here. The old `del` removed only the document
-      // the pointer aimed at and cleared it as it went, so the drop had to
-      // precede the repoint or it silently no-op'd; deleting by path has no
-      // such coupling.
+      // Order does not matter here: deleting by path has no coupling to the
+      // pointer, so the drop need not precede the repoint.
       if (existingId !== null && existingId !== fresh.documentId) {
         try {
           const stale = await indexRef.current.resolveDocumentById({
@@ -477,15 +475,12 @@ export function useBrowserDocumentController(
       }
       await pointerRef.current.set(fresh.documentId)
     } catch {
-      // Recovery itself failed. If the failure landed on the final setDefaultDocumentId, the
-      // freshly-saved canvas is written but never pointed to — del() can't reach it (it only
-      // removes the current default), so drop the orphan via the pointer-independent
-      // removeDocument. Best-effort: cleanup failure must not mask the degraded view, which
-      // keeps the user on a retry-able state instead of showing "Saved" over a dangling pointer.
-      // No orphan cleanup here any more: `createSeededDocument` rolls its own
-      // index row back when the content write fails, and a failure after that
-      // point leaves a document that is complete and simply not pointed at —
-      // which the next create numbers around rather than trips over.
+      // Recovery itself failed. No orphan cleanup is needed:
+      // `createSeededDocument` rolls its own index row back when the content
+      // write fails, and a failure after that point leaves a document that is
+      // complete and simply not pointed at — which the next create numbers
+      // around rather than trips over. The degraded view keeps the user on a
+      // retry-able state instead of showing "Saved" over a dangling pointer.
       setPersistenceRef.current({
         kind: 'degraded',
         reason: 'recovery-failed',
@@ -499,7 +494,7 @@ export function useBrowserDocumentController(
   }, [])
 
   const listDocuments = useCallback((): Promise<DocumentSnapshot[]> => {
-    return listLocalDocuments(indexRef.current, clockRef.current)
+    return listBrowserDocuments(indexRef.current, clockRef.current)
   }, [])
 
   const createDocument = useCallback(
@@ -521,7 +516,7 @@ export function useBrowserDocumentController(
       if (generation !== switchGenerationRef.current) return false // superseded; optimisation only
       if (!flushed) return false
       try {
-        const loaded = await loadLocalDocument(indexRef.current, id, clockRef.current)
+        const loaded = await loadBrowserDocument(indexRef.current, id, clockRef.current)
         if (generation !== switchGenerationRef.current) return false // superseded while loading
         if (loaded === null) {
           // A missing target is a RECOVERABLE miss, not a degraded store: it
@@ -530,12 +525,11 @@ export function useBrowserDocumentController(
           // current document untouched and let the caller decide (the page
           // replaces the URL with the still-loaded document).
           //
-          // There is no longer a third outcome here. `load` used to answer
-          // 'corrupted' for a metadata row that would not parse; the index
-          // either holds the document or it does not, and whether its CONTENT
-          // reads is `LoroStore.load`'s answer to give, on the path that
-          // actually reads bytes. The degraded branch that used to sit here
-          // said "could not be switched" about a document that had switched.
+          // There is no third outcome here: the index either holds the
+          // document or it does not, and whether its CONTENT reads is
+          // `LoroStore.load`'s answer to give, on the path that actually reads
+          // bytes. A degraded branch here would say "could not be switched"
+          // about a document that had switched.
           return false
         }
         await pointerRef.current.set(id)

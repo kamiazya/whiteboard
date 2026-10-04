@@ -17,10 +17,10 @@ export interface RuntimeRouterOptions {
   getStatus: () => RuntimeStatusResponse
   /**
    * Every credential this router honours, resolved in one place. REQUIRED:
-   * the previous shape took the daemon token, the grant store and the pairing
-   * tokens as three optional fields, which is how the macaroon came to be
-   * admitted by the global `/api/*` gate and refused here — a feature the
-   * route-scope registry had already declared, not working, with nothing red.
+   * a credential kind held in its own optional field is a kind one gate can
+   * admit and another refuse — the macaroon was admitted by the global
+   * `/api/*` gate and refused here, a feature the route-scope registry had
+   * declared, not working, with nothing red.
    */
   credentialResolver: CredentialResolver
   /**

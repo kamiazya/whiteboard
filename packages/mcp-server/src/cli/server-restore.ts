@@ -1,14 +1,12 @@
-import { lstat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import type { z } from 'zod'
-import { hasAncestorSymlink } from '../server/backup-restore.js'
+import { inspectOutputPath, isSafeSourcePath } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
-import { isMissingFileError } from '../shared/errno.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 import type { serverRestoreOutputSchema } from './operator-json.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
@@ -50,37 +48,21 @@ export async function runServerRestore(
     return { kind: 'running-target' }
   }
 
-  // Reject if the target path itself is a symlink or a plain file.
+  // Refuse a symlinked or plain-file target, or one under a symlinked
+  // ancestor, so the restore cannot be redirected outside the operator's
+  // storage zone. An existing directory's emptiness is the helper's to
+  // enforce, and a missing one it creates.
   try {
-    const st = await lstat(targetDir)
-    if (st.isSymbolicLink() || st.isFile()) {
-      return { kind: 'invalid-target-path' }
-    }
-    // Existing directory: let helper enforce the non-empty check.
-  } catch (err) {
-    if (!isMissingFileError(err)) {
-      return { kind: 'error', message: 'restore failed' }
-    }
-    // Missing target: helper creates it via cp().
-  }
-
-  // Reject if any ancestor path component is a symlink, to prevent redirecting
-  // the restore to a location outside the operator's intended storage zone.
-  try {
-    if (await hasAncestorSymlink(targetDir)) {
+    if ((await inspectOutputPath(targetDir, { requireDirectory: false })) === 'unsafe') {
       return { kind: 'invalid-target-path' }
     }
   } catch {
     return { kind: 'error', message: 'restore failed' }
   }
 
-  // Apply the same guard to the read-side path so a symlinked backupDir cannot
-  // be used to read from outside the allowed zone.
-  try {
-    if (await hasAncestorSymlink(backupDir)) {
-      return { kind: 'error', message: 'restore failed' }
-    }
-  } catch {
+  // The same guard on the read-side path, so a symlinked backupDir cannot be
+  // used to read from outside the allowed zone.
+  if (!(await isSafeSourcePath(backupDir))) {
     return { kind: 'error', message: 'restore failed' }
   }
 

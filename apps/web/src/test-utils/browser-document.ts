@@ -12,11 +12,11 @@ import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { settleAutoCheckpoints } from '../pages/use-auto-checkpoint.js'
@@ -88,8 +88,8 @@ export async function clearNamedDb(dbName: string): Promise<void> {
  *
  * Sized on the measurement below — the tail re-created the database inside
  * 100ms — plus a margin, and paid only where there is a tail to wait for.
- * Every call used to pay it: the whole browser project went from 171-177s to
- * 222s, which is 46 seconds spent watching databases that were never coming
+ * Paid on every call instead, the whole browser project went from 171-177s
+ * to 222s — 46 seconds spent watching databases that were never coming
  * back.
  */
 const SETTLE_QUIET_MS = 150

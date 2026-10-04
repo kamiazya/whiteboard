@@ -22,12 +22,12 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
-import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
@@ -132,7 +132,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
 
 async function seedTwoDocuments(): Promise<{ roadmapId: string; sketchId: string }> {
   const index = new FoldingBrowserIndex()
-  await ensureLocalWorkspace(index)
+  await ensureBrowserWorkspace(index)
   const roadmap = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path: 'notes/roadmap',

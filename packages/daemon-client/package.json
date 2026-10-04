@@ -82,6 +82,10 @@
       "types": "./src/document-backend-contract.ts",
       "import": "./src/document-backend-contract.ts"
     },
+    "./loopback-host": {
+      "types": "./src/loopback-host.ts",
+      "import": "./src/loopback-host.ts"
+    },
     "./key-widths": {
       "types": "./src/key-widths.ts",
       "import": "./src/key-widths.ts"

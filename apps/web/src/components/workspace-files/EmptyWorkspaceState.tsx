@@ -33,7 +33,7 @@ export function EmptyWorkspaceState({
   /**
    * The one-line promise under the question. Passed by the page because it
    * is mode-dependent: "everything stays in this browser" is only true in
-   * local mode, and an onboarding line that lies is worse than none.
+   * a browser-kept workspace, and an onboarding line that lies is worse than none.
    */
   subtitle?: string
   /** What else the page offers from here, under the two objects. */

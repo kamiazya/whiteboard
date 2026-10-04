@@ -1,9 +1,9 @@
 /**
  * One place that answers "what does this credential carry".
  *
- * Every auth surface in this daemon used to hold its own copy of the
- * credential branches, each behind an OPTIONAL positional parameter. That shape makes
- * "the composition root forgot this argument" and "this daemon mints no
+ * Every auth surface in this daemon takes its credential branches from here
+ * rather than holding its own copy behind an OPTIONAL positional parameter.
+ * That shape makes "the composition root forgot this argument" and "this daemon mints no
  * macaroons" the same call, and it shipped exactly that defect: the macaroon
  * root key reached production with no caller while 39 tests reported the
  * feature working, on two surfaces, twice.
@@ -12,10 +12,10 @@
  * surface. A silently missing credential on one surface becomes either a type
  * error or a gap on every surface at once, which one end-to-end test catches.
  *
- * **It answers a GRANT, not a yes/no.** `auth-strategy.ts` attempted this
- * unification before and returned a verdict; a surface that needed the
- * SCOPES grew its own branches instead and the seam was adopted by nothing.
- * That is why this one can be adopted where that one could not.
+ * **It answers a GRANT, not a yes/no.** `auth-strategy.ts` records why a
+ * verdict cannot be adopted: a surface that needs the SCOPES grows its own
+ * branches instead. That is why this one can be adopted where a yes/no seam
+ * could not.
  *
  * What deliberately does NOT move here, because the surfaces genuinely differ:
  *
@@ -45,8 +45,6 @@ export interface ResolvedGrant {
   readonly kind: GrantKind
   /** What the holder may do. `anonymous` and `daemon-token` carry the full set. */
   readonly scopes: readonly AuthScope[]
-  /** Who the credential names, where it names anyone. */
-  readonly subject?: string
   /** Who an authenticator vouched for, when the credential names a PERSON —
    *  server mode's signed-in person. */
   readonly person?: AuthenticatorBinding

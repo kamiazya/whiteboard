@@ -11,7 +11,7 @@ export interface DocumentIdentity {
   /** The workspace's display name, falling back to the path when none is stored. */
   readonly name: string
   /**
-   * Commits a new display name. Absent in local mode, where the host page
+   * Commits a new display name. Absent for a browser-kept workspace, where the host page
    * owns renaming through its own store rather than through `/names`.
    */
   readonly onRename?: (next: string) => void

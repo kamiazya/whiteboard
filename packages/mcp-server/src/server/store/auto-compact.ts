@@ -5,13 +5,12 @@
  * documents. This is a different thing wearing the same file: a background
  * scheduler with its own timers, its own in-flight tracking, its own disposal
  * protocol and its own two test seams. The store announces a save; this module subscribes.
- * The dependency runs one way — which was NOT true before the split, and is
- * what made the split more than a file move.
+ * The dependency runs one way, which is what makes the split more than a file
+ * move.
  *
- * That direction is why the DB dispose hook is registered HERE. It used to run
- * whenever `document-store.ts` loaded, which was early and often; it now runs
- * when this module loads — which is exactly when a compaction could first be
- * scheduled, since nothing can schedule one without importing this file.
+ * That direction is why the DB dispose hook is registered HERE: it runs when
+ * this module loads — exactly when a compaction could first be scheduled,
+ * since nothing can schedule one without importing this file.
  */
 
 import type { CompactWorkspaceResult } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
@@ -230,15 +229,15 @@ export function _isDisposingAutoCompactForTests(): boolean {
 
 // ── test-only waiting, without a budget of its own ────────────────────
 // A debounce firing and a compaction settling are the two state changes a
-// test waits on, and both used to be waited on with `vi.waitFor(...,
-// { timeout: 2000 })` — a second, tighter wall-clock ceiling nested inside
-// the per-test one. The work under it is a shared CI runner's to schedule,
-// so the ceiling was the only thing in the arrangement that could fail, and
-// under momentary shard contention it did: two tests went red together on a
-// commit whose re-run was green, while the shard that failed had in fact run
-// nine seconds QUICKER than the one that passed.
+// test waits on. Waiting on them with `vi.waitFor(..., { timeout: 2000 })`
+// would nest a second, tighter wall-clock ceiling inside the per-test one.
+// The work under it is a shared CI runner's to schedule, so the ceiling is
+// the only thing in the arrangement that can fail, and under momentary shard
+// contention it does: two tests went red together on a commit whose re-run
+// was green, while the shard that failed had in fact run nine seconds QUICKER
+// than the one that passed.
 //
-// These seams replace the ceiling with the event itself. They have no
+// These seams wait on the event itself instead of a ceiling. They have no
 // timeout: a compaction that never settles overruns the test's own per-test
 // timeout, which is the one budget, and reports the test that was waiting.
 const autoCompactStateWaiters = new Set<() => void>()

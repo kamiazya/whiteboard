@@ -64,7 +64,7 @@ const checksumHex = createHash('sha512').update(tarballBytes).digest('hex')
 // shasum-compatible format: "<hex>  <filename>"
 writeFileSync(join(OUT_DIR, 'npm-tarball.sha512'), `${checksumHex}  ${tarballName}\n`)
 
-// Step 3: SBOM reference — real generation runs in publish-production.yml via
+// Step 3: SBOM reference — real generation runs in release.yml via
 // `pnpm generate:sbom:npm` (packages/mcp-server/scripts/release/generate-npm-sbom.mjs).
 // Dry-run intentionally skips SBOM generation: it does not build the artifact,
 // so there is nothing to attach a SBOM to. The placeholder records the policy.
@@ -72,7 +72,7 @@ const sbomPlaceholder = {
   schemaVersion: 1,
   status: 'skipped-dry-run',
   artifactId: 'npm-tarball',
-  note: 'SBOM generation runs in publish-production.yml before npm publish; see generate-npm-sbom.mjs',
+  note: 'SBOM generation runs in release.yml before npm publish; see generate-npm-sbom.mjs',
   tool: '@cyclonedx/cyclonedx-npm',
 }
 writeFileSync(
@@ -92,8 +92,8 @@ process.stdout.write(
       tarball: tarballName,
       fileSizeBytes: tarballBytes.length,
       checksum: { algorithm: 'SHA-512', hex: checksumHex },
-      sbomStatus: 'deferred',
-      note: 'no registry publish; no OIDC provenance; publish-workflow slice required',
+      sbomStatus: 'skipped-dry-run',
+      note: 'no registry publish; no OIDC provenance; the real publish runs in release.yml',
     },
     null,
     2,

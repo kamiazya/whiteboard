@@ -17,8 +17,8 @@ const TouchFormattingBarPanel = lazy(() => import('./TouchFormattingBarPanel.js'
  * by design (the layout viewport simply shrinks), so there is no occlusion
  * left to read; and a strip at the bottom of a touch screen is where a
  * formatting toolbar belongs whether or not a keyboard is covering the rest.
- * What that gate used to prevent — a bar floating mid-screen — is now
- * prevented by the geometry instead.
+ * What a keyboard-occlusion gate would prevent — a bar floating mid-screen —
+ * is prevented by the geometry instead.
  *
  * The web cannot extend the keyboard itself (no accessory rows, no custom
  * keys); this bar is the app's own strip, glued to where the keyboard ends.

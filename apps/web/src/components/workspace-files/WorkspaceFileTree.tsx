@@ -1,3 +1,4 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -16,7 +17,7 @@ export interface WorkspaceFileTreeProps {
   /**
    * Right-click or touch long-press on a document row — the object-action
    * menu hook. Without it the one-column view has NO route to
-   * rename/delete/pin on touch: the preview pane that used to carry those
+   * rename/delete/pin on touch: the preview pane that carries those
    * verbs does not render when a tap opens.
    */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
@@ -71,7 +72,7 @@ function buildTree(documents: readonly WorkspaceDocumentEntry[]): TreeNode[] {
 
   const freeze = (nodes: Map<string, MutableNode>): TreeNode[] =>
     [...nodes.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => compareCodeUnit(a.name, b.name))
       .map((n) => ({ name: n.name, path: n.path, canvas: n.canvas, children: freeze(n.children) }))
   return freeze(root)
 }

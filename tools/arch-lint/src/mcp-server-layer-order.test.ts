@@ -53,6 +53,13 @@ import {
 } from './adapter-reach.js'
 import { ADAPTER_HELPER_FILES } from './architecture-map.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
+import {
+  type DirectoryLoop,
+  directoryLoops,
+  resolvedImportEdges,
+  type SourceFile,
+  spellLoop,
+} from './directory-loops.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { isShippedPath } from './source-scan.js'
 import { resolveRelativeSource } from './value-import-closure.js'
@@ -112,12 +119,6 @@ function layerOf(path: string): Layer | undefined {
   return MECHANIC_DIRS.has(second as string) ? 'mechanics' : undefined
 }
 
-interface SourceFile {
-  /** Relative to `src/`, `/`-separated. */
-  readonly path: string
-  readonly text: string
-}
-
 /** One edge as the ledger spells it (a store file reaching a route), `(type)` when erased at emit. */
 function upwardEdges(files: readonly SourceFile[]): string[] {
   const known = new Set(files.map(({ path }) => path))
@@ -133,6 +134,49 @@ function upwardEdges(files: readonly SourceFile[]): string[] {
     }
   }
   return [...new Set(edges)].sort()
+}
+
+/**
+ * The order INSIDE the mechanics layer, bottom to top: a directory may import
+ * its own rank or any below. One rank for the layer as a whole cannot say that
+ * the tenant data layout sits under the stores, which sit under the modules
+ * that read them, so a store reaching `security/` — or a tenant module reaching
+ * back into `store/` — passed every other guard. `search`, `observability` and
+ * `release` have no edge to another mechanics directory in either direction,
+ * so they are filed at the bottom, where they may import nothing above them.
+ */
+const MECHANICS_ORDER: readonly (readonly string[])[] = [
+  ['tenant', 'search', 'observability', 'release'],
+  ['store'],
+  ['security', 'export'],
+]
+
+const mechanicsRank = (dir: string): number =>
+  MECHANICS_ORDER.findIndex((tier) => tier.includes(dir))
+
+/** The mechanics directory a path is under (`store` for a store file under `db/`), or `undefined`. */
+function mechanicsDirOf(path: string): string | undefined {
+  const [top, second] = path.split('/')
+  return top === 'server' && path.split('/').length > 2 && MECHANIC_DIRS.has(second as string)
+    ? second
+    : undefined
+}
+
+/** Loops among the mechanics directories, which the layer order alone allows. */
+const mechanicsDirectoryLoops = (files: readonly SourceFile[]): DirectoryLoop[] =>
+  directoryLoops(resolvedImportEdges(files), mechanicsDirOf)
+
+/** Imports from one mechanics directory to another that sits above it in {@link MECHANICS_ORDER}. */
+function mechanicsUpwardEdges(files: readonly SourceFile[]): string[] {
+  const upward = resolvedImportEdges(files).filter(({ from, to }) => {
+    const [a, b] = [mechanicsDirOf(from), mechanicsDirOf(to)]
+    return a !== undefined && b !== undefined && mechanicsRank(b) > mechanicsRank(a)
+  })
+  return [
+    ...new Set(
+      upward.map(({ from, to, typeOnly }) => `${from} -> ${to}${typeOnly ? ' (type)' : ''}`),
+    ),
+  ].sort()
 }
 
 const isShipped = isShippedPath
@@ -224,6 +268,68 @@ describe('what counts as an upward edge', () => {
   })
 })
 
+describe('what counts as a loop among the mechanics directories', () => {
+  const filesOf = (files: Record<string, string>): SourceFile[] =>
+    Object.entries(files).map(([path, text]) => ({ path, text }))
+
+  it('refuses a store that imports security when security imports the store, as a directory loop', () => {
+    const files = filesOf({
+      'server/store/zz-plant.ts': "import '../security/mcp-http.js'\n",
+      'server/security/mcp-http.ts': "import '../store/db/index.js'\n",
+      'server/store/db/index.ts': 'export const d = 1\n',
+    })
+    expect(mechanicsDirectoryLoops(files).map(spellLoop)).toEqual(['security,store'])
+    expect(mechanicsUpwardEdges(files)).toEqual([
+      'server/store/zz-plant.ts -> server/security/mcp-http.ts',
+    ])
+  })
+
+  it('counts a loop closed by a type-only edge, since a contract defined above is still a dependency', () => {
+    expect(
+      mechanicsDirectoryLoops(
+        filesOf({
+          'server/tenant/a.ts': "import type { T } from '../store/b.js'\n",
+          'server/store/b.ts': "import '../tenant/a.js'\nexport type T = 1\n",
+        }),
+      ).map(spellLoop),
+    ).toEqual(['store,tenant'])
+  })
+
+  it('refuses a tenant module reaching into the store, the edge the order puts the other way', () => {
+    expect(
+      mechanicsUpwardEdges(
+        filesOf({
+          'server/tenant/storage-report.ts': "import '../store/db/location.js'\n",
+          'server/store/db/location.ts': 'export const l = 1\n',
+        }),
+      ),
+    ).toEqual(['server/tenant/storage-report.ts -> server/store/db/location.ts'])
+  })
+
+  it('finds a loop between two directories of one rank, which the order allows', () => {
+    expect(
+      mechanicsDirectoryLoops(
+        filesOf({
+          'server/security/a.ts': "import '../export/b.js'\n",
+          'server/export/b.ts': "import '../security/a.js'\n",
+        }),
+      ).map(spellLoop),
+    ).toEqual(['export,security'])
+  })
+
+  it('allows the same directory and every downward edge, and ignores a directory outside the layer', () => {
+    const files = filesOf({
+      'server/security/a.ts': "import '../store/b.js'\nimport '../tenant/c.js'\nimport './d.js'\n",
+      'server/security/d.ts': 'export const d = 1\n',
+      'server/store/b.ts': "import '../tenant/c.js'\nimport '../routes/r.js'\n",
+      'server/tenant/c.ts': 'export const c = 1\n',
+      'server/routes/r.ts': "import '../store/b.js'\n",
+    })
+    expect(mechanicsDirectoryLoops(files)).toEqual([])
+    expect(mechanicsUpwardEdges(files)).toEqual([])
+  })
+})
+
 describe('mcp-server layer order', () => {
   const actual = upwardEdges(FILES)
 
@@ -277,6 +383,34 @@ describe('mcp-server layer order', () => {
 
   it('holds the ledger at its declared ceiling', () => {
     expect(Object.keys(UPWARD_EDGES).length).toBe(UPWARD_EDGES_CEILING)
+  })
+
+  it('has no loop among the mechanics directories', () => {
+    const edges = resolvedImportEdges(FILES).filter(
+      ({ from, to }) => mechanicsDirOf(from) !== undefined && mechanicsDirOf(to) !== undefined,
+    )
+    // The loop check over a graph with no cross-directory edge passes for the wrong reason.
+    expect(edges.length, 'no import between mechanics directories was read').toBeGreaterThan(20)
+    expect(
+      mechanicsDirectoryLoops(FILES).map(spellLoop),
+      'a directory loop among the mechanics directories — move what one side needs into the lower ' +
+        'directory (a constant a tenant module wants belongs in `tenant/data-layout.ts`, not in a store)',
+    ).toEqual([])
+  })
+
+  it('holds the order inside the mechanics layer', () => {
+    expect(
+      mechanicsUpwardEdges(FILES),
+      'a mechanics directory imports one above it in MECHANICS_ORDER — tenant < store < security, export',
+    ).toEqual([])
+  })
+
+  it('files every mechanics directory in the order', () => {
+    expect(
+      [...MECHANIC_DIRS].filter((dir) => mechanicsRank(dir) === -1),
+      'a mechanics directory belongs to no tier of MECHANICS_ORDER',
+    ).toEqual([])
+    expect(MECHANICS_ORDER.flat().filter((dir) => !MECHANIC_DIRS.has(dir))).toEqual([])
   })
 })
 

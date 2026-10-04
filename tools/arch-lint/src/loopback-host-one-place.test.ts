@@ -1,6 +1,6 @@
 /**
- * "Is this host loopback" is decided in ONE place per runtime, and this scan
- * is the executable half of that.
+ * "Is this host loopback" is decided in ONE place, and this scan is the
+ * executable half of that.
  *
  * It had been written four times with three different sets: the daemon's bind
  * validation, the database location, the hosted app's origin policy and the
@@ -9,9 +9,9 @@
  * refused as "not this machine" while the origin policy in the same app
  * called that very host `localhost`.
  *
- * Two homes, not one, because the runtimes cannot share a module: the web app
- * may not import `mcp-server`, and its set is the `URL.hostname` spelling
- * (brackets kept, no bare `::1`) where a bind host is written bare.
+ * The home is `daemon-client`, the browser-safe package both composition roots
+ * consume. It had been two homes, one per root, that disagreed on a bare `::1`
+ * which no caller could ever pass: both read `URL.hostname`, which brackets it.
  *
  * The scan reads code with comments removed and looks for the spelling a copy
  * takes: a `Set` literal, or an array literal asked `.includes(`, holding the
@@ -26,8 +26,8 @@ import { isTestPath, walkSourceFiles } from './source-scan.js'
 import { stripComments } from './strip-comments.js'
 
 const HOMES: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/shared/loopback-host.ts': 'the daemon half, bind-host and URL spellings',
-  'apps/web/src/lib/loopback-host.ts': 'the browser half, `URL.hostname` spelling',
+  'packages/daemon-client/src/loopback-host.ts':
+    'the `URL.hostname` spelling, shared by both roots',
 }
 
 const LOOPBACK_LITERAL = String.raw`['"]127\.0\.0\.1['"]`
@@ -52,7 +52,7 @@ const files = SCAN_ROOTS.flatMap((root) => walkSourceFiles(join(REPO_ROOT, root)
 const relOf = (path: string) => relative(REPO_ROOT, path).split(sep).join('/')
 const sourceOf = (rel: string) => readFileSync(join(REPO_ROOT, rel), 'utf8')
 
-describe('a loopback host is recognised in one place per runtime', () => {
+describe('a loopback host is recognised in one place', () => {
   it('scans a tree worth scanning', () => {
     expect(files.length).toBeGreaterThan(500)
     for (const home of Object.keys(HOMES)) expect(files.map(relOf)).toContain(home)
@@ -65,7 +65,7 @@ describe('a loopback host is recognised in one place per runtime', () => {
       .flatMap((rel) => loopbackSets(sourceOf(rel)).map((spelling) => `${rel}: ${spelling}`))
     expect(
       hits,
-      'call `isLoopbackHost` (packages/mcp-server/src/shared/loopback-host.ts) or `isLoopbackHostname` (apps/web/src/lib/loopback-host.ts): a second set drifts, and the web copy once refused `[::1]`',
+      'call `isLoopbackHostname` (packages/daemon-client/src/loopback-host.ts): a second set drifts, and the web copy once refused `[::1]`',
     ).toEqual([])
   })
 

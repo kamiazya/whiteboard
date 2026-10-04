@@ -232,7 +232,7 @@ const hubs = new Map<string, SseStreamHub>()
 const ports = new Map<MessagePort, PortState>()
 /**
  * Latest credential per origin. A hub outlives the `init` that created it,
- * while a pairing session token is rotated under it — so the token is read at
+ * while its session token can be rotated under it — so the token is read at
  * request time rather than captured when the hub is built.
  */
 const tokens = new Map<string, string | undefined>()
@@ -413,7 +413,7 @@ function fanOutUpdate(
 ): void {
   for (const [target, state] of ports) {
     if (target === from) continue
-    // Two daemons can mint the same document id, so a tab paired with one of
+    // Two daemons can mint the same document id, so a tab connected to one of
     // them must never be handed the other's edits.
     if (state.baseUrl !== baseUrl) continue
     if (!state.subscriptions.has(doc)) continue

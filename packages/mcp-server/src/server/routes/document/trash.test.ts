@@ -10,6 +10,7 @@
 
 import {
   listTrashResponseSchema,
+  purgeTrashEntryResponseSchema,
   restoreTrashResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
@@ -33,6 +34,7 @@ vi.mock('../../config.js', () => ({
 const { saveDocument, resolveDocumentIdAtPath } = await import('../../store/document-store.js')
 const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
+const { createTrashRouter } = await import('./trash.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
@@ -98,6 +100,58 @@ describe('trash routes', () => {
     expect(after.entries).toEqual([])
   })
 
+  it('purging a trashed document removes it from the trash for good, and it cannot be restored', async () => {
+    const WS = 'ws-trash-purge'
+    await saveDocument(WS, 'doomed', canvasDoc('to destroy'), { kind: 'spatial' })
+    await saveDocument(WS, 'kept', canvasDoc('stays'), { kind: 'spatial' })
+    const doomedId = await resolveDocumentIdAtPath(WS, 'doomed')
+    const keptId = await resolveDocumentIdAtPath(WS, 'kept')
+    const app = await appWithRealDeps()
+    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    await app.request(`/api/workspaces/${WS}/documents/kept`, { method: 'DELETE' })
+
+    const purged = await app.request(`/api/workspaces/${WS}/trash/${doomedId}`, {
+      method: 'DELETE',
+    })
+
+    expect(purged.status).toBe(200)
+    expect(purgeTrashEntryResponseSchema.parse(await purged.json()).purged.documentId).toBe(
+      doomedId,
+    )
+    const listed = listTrashResponseSchema.parse(
+      await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
+    )
+    expect(listed.entries.map((entry) => entry.documentId)).toEqual([keptId])
+    const restore = await app.request(`/api/workspaces/${WS}/trash/${doomedId}/restore`, {
+      method: 'POST',
+    })
+    expect(restore.status).toBe(404)
+    // Only the named entry went.
+    const keptRestore = await app.request(`/api/workspaces/${WS}/trash/${keptId}/restore`, {
+      method: 'POST',
+    })
+    expect(keptRestore.status).toBe(200)
+  })
+
+  it('refuses to purge a live document, or an entry already purged, with a 404', async () => {
+    const WS = 'ws-trash-purge-refused'
+    await saveDocument(WS, 'live', canvasDoc('still here'), { kind: 'spatial' })
+    const liveId = await resolveDocumentIdAtPath(WS, 'live')
+    const app = await appWithRealDeps()
+
+    const live = await app.request(`/api/workspaces/${WS}/trash/${liveId}`, { method: 'DELETE' })
+
+    expect(live.status).toBe(404)
+    expect(await resolveDocumentIdAtPath(WS, 'live')).toBe(liveId)
+    expect(
+      (
+        await app.request(`/api/workspaces/${WS}/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV`, {
+          method: 'DELETE',
+        })
+      ).status,
+    ).toBe(404)
+  })
+
   it('an invalid workspaceId is a 400 request error, not a 500 server error', async () => {
     const app = await appWithRealDeps()
 
@@ -108,13 +162,20 @@ describe('trash routes', () => {
       { method: 'POST' },
     )
     expect(restored.status).toBe(400)
+    const purged = await app.request('/api/workspaces/bad%20id/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV', {
+      method: 'DELETE',
+    })
+    expect(purged.status).toBe(400)
   })
 
-  it('a composition without the trash capability answers 501 on both routes', async () => {
+  it('a composition without the trash capability answers 501 on every trash route', async () => {
     // The default (in-memory) module binds an index with no listTrash /
     // restoreDocument, so resolveServerDeps leaves deps.trash undefined.
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
     expect(deps.trash).toBeUndefined()
+    // The workspace exists: an unknown one is refused before the capability
+    // is consulted, so it would hide the 501 this case is about.
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
 
     expect((await app.request('/api/workspaces/ws/trash')).status).toBe(501)
@@ -125,14 +186,46 @@ describe('trash routes', () => {
         })
       ).status,
     ).toBe(501)
+    expect(
+      (
+        await app.request('/api/workspaces/ws/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV', {
+          method: 'DELETE',
+        })
+      ).status,
+    ).toBe(501)
   })
 
-  it('unknown workspace answers 404 on list; unknown documentId answers 404 on restore', async () => {
+  // The guard in front of the document router answers an unknown workspace
+  // first; the trash router's own translation is for one that vanishes after.
+  it('the trash router alone answers an unknown workspace in the shared workspace voice', async () => {
+    await prepareDataDir(tmp.dir)
+    const db = await getDb(tmp.dir)
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
+
+    const res = await createTrashRouter({ serverDeps: deps }).request(
+      '/api/workspaces/ws-nowhere/trash',
+    )
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({
+      error: 'workspace_not_found',
+      message: 'Workspace "ws-nowhere" not found',
+    })
+  })
+
+  it('unknown workspace answers 404 on list and purge; unknown documentId answers 404 on restore', async () => {
     const WS = 'ws-trash-missing'
     await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
     const app = await appWithRealDeps()
 
     expect((await app.request('/api/workspaces/ws-nowhere/trash')).status).toBe(404)
+    expect(
+      (
+        await app.request('/api/workspaces/ws-nowhere/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV', {
+          method: 'DELETE',
+        })
+      ).status,
+    ).toBe(404)
     expect(
       (
         await app.request(`/api/workspaces/${WS}/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV/restore`, {

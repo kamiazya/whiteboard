@@ -67,7 +67,8 @@ every thread whole: where it is anchored, whether it is open or resolved, and
 every message with its author and time. A document nobody has commented on
 carries no `threads`. It is the one read that works on a markdown note;
 `wb_canvas_snapshot` lists a canvas's comments too, but only the opening
-message of each thread.
+message of each thread, and not the threads anchored on the document as a
+whole, which have no place on the canvas.
 
 `wb_thread_edit` writes to the layer: open a thread, reply to one, resolve or
 reopen it. Its answer is the document's threads, in the same whole shape, so

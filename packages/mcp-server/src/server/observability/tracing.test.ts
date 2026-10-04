@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureLogsForTests } from '../log.js'
 import {
   extractContextFromHeaders,
   getTracer,
@@ -225,35 +226,41 @@ describe('W3C traceparent propagation', () => {
 // ---------------------------------------------------------------------------
 
 describe('initTracing() role resolution', () => {
+  // The role decides the `whiteboard.role` resource attribute on every span; the one record
+  // initTracing logs is where it is observable without standing up an exporter.
+  let capture: ReturnType<typeof captureLogsForTests>
+
   beforeEach(() => {
     vi.stubEnv('WHITEBOARD_OTEL', '1')
     vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    capture = captureLogsForTests('info')
   })
 
   afterEach(async () => {
+    capture.restore()
     await shutdownTracing()
   })
 
-  it('uses options.role when provided', async () => {
-    const handle = await initTracing({ role: 'http-daemon' })
-    expect(handle).not.toBeNull()
-  })
+  const roleLogged = (): unknown =>
+    capture.records.find((r) => r.msg === 'tracing initialised')?.data?.role
 
-  it('falls back to WHITEBOARD_OTEL_ROLE env var when options.role is absent', async () => {
+  it('an explicit option wins over the environment', async () => {
     vi.stubEnv('WHITEBOARD_OTEL_ROLE', 'stdio-mcp')
-    const handle = await initTracing()
-    expect(handle).not.toBeNull()
-    vi.unstubAllEnvs()
-    // Re-stub so afterEach cleanup works cleanly.
-    vi.stubEnv('WHITEBOARD_OTEL', '1')
-    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+    await initTracing({ role: 'http-daemon' })
+    expect(roleLogged()).toBe('http-daemon')
   })
 
-  it('falls back to "unknown" when neither options.role nor env var is set', async () => {
-    vi.stubEnv('WHITEBOARD_OTEL_ROLE', '')
-    const handle = await initTracing()
-    expect(handle).not.toBeNull()
+  it('the environment names the role when no option is given', async () => {
+    vi.stubEnv('WHITEBOARD_OTEL_ROLE', 'stdio-mcp')
+    await initTracing()
+    expect(roleLogged()).toBe('stdio-mcp')
+  })
+
+  it('"unknown" when neither names one', async () => {
+    vi.stubEnv('WHITEBOARD_OTEL_ROLE', undefined)
+    await initTracing()
+    expect(roleLogged()).toBe('unknown')
   })
 })
 
@@ -429,7 +436,6 @@ describe('flushOnExit — signal-handler body', () => {
     // Capture log records to assert the warning is emitted via getLogger.
     // Always restore in finally so the elevated level and capture destination
     // cannot leak into subsequent tests when an earlier assertion throws.
-    const { captureLogsForTests } = await import('../log.js')
     const capture = captureLogsForTests('warning')
 
     try {

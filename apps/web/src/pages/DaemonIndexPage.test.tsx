@@ -1549,7 +1549,7 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('tab')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Storage' })).toBeNull()
 
-    // The operational surfaces (storage, pairing) live on their own route,
+    // The operational surfaces (storage, connections) live on their own route,
     // reached through the App-mounted shell's gear — the page itself owns no
     // settings affordance at all (AppShell ownership rule in DESIGN.md).
     expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
@@ -1757,7 +1757,7 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
 
     expect(await screen.findByText('What will you make first?')).toBeTruthy()
-    // Mode-honest copy: the daemon page must NOT show local mode's
+    // Mode-honest copy: the daemon page must NOT show the browser page's
     // "stays in this browser" promise — documents live in the daemon here.
     expect(screen.getByTestId('empty-state-subtitle').textContent).toBe(
       'Documents live in this workspace, kept by your local daemon.',

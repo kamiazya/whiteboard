@@ -82,7 +82,9 @@ expected. Rebase **only the one PR you will merge next** (rebasing all triggers 
 
 Repeat until the plan is drained:
 
-1. **Confirm the next PR's `verify` is green** (not just `mergeable`): `gh pr checks <n>`.
+1. **Confirm the next PR's `verify` is green** (not just `mergeable`): read the head commit's check-runs over REST —
+   `sha=$(gh api repos/{owner}/{repo}/pulls/<n> --jq .head.sha)`, then
+   `gh api --paginate repos/{owner}/{repo}/commits/$sha/check-runs --jq '.check_runs[] | "\(.name) \(.status) \(.conclusion)"'`.
    `mergeStateStatus: BLOCKED` with a passing `verify` is just branch-protection awaiting the
    merge action — fine to merge. A failing `verify` is not.
 2. **Merge** (squash, keep the `chore(deps):` title for release-please):
@@ -91,7 +93,7 @@ Repeat until the plan is drained:
    ```
    Do **not** use `--auto` (errors when repo auto-merge is off; only consider it for a pending CI
    after confirming with the human).
-3. **Rebase only the next PR** in the plan: `gh pr comment <next> --body "@dependabot rebase"`.
+3. **Rebase only the next PR** in the plan: `gh api repos/{owner}/{repo}/issues/<next>/comments -f body="@dependabot rebase"`.
    Wait — Dependabot takes a few minutes and **CI re-runs after rebase; pre-rebase CI is void**.
 4. Back to 1.
 
@@ -106,7 +108,7 @@ do NOT merge. File a backlog entry per the `ticketing` skill:
 - a whiteboard document at `issues/deps-migrate-<pkg>-<from>-to-<to>` with `type: issue` (created via
   `wb_workspace_edit` `document.create`, see the `ticketing` skill) carrying: breaking changes, affected paths, official migration guide
   link, and an action checklist. Reference the Dependabot PR number in the body.
-- Leave a pointer on the PR: `gh pr comment <n> --body "Migration tracked locally; holding this bump."`
+- Leave a pointer on the PR: `gh api repos/{owner}/{repo}/issues/<n>/comments -f body="Migration tracked locally; holding this bump."`
   (Do not close it — Dependabot will keep it rebased until the migration lands.)
 
 A **major is not automatically a migration**: if the only breaking change is a runtime floor we

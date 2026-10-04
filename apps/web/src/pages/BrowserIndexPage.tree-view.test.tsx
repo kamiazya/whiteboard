@@ -1,5 +1,5 @@
 /**
- * The three-pane document browser, in LOCAL mode, over the REAL IndexedDB
+ * The three-pane document browser, over a browser-kept workspace, over the REAL IndexedDB
  * stores (fake-indexeddb): the injected-double page tests cannot see a
  * wiring split between the page's stores and the panel's source, and this
  * file exists for exactly that seam.
@@ -8,8 +8,8 @@ import 'fake-indexeddb/auto'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { ensureLocalWorkspace } from '../lib/local-document-summary.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -36,7 +36,7 @@ describe('document kept in this browser browser (real stores)', () => {
 
   it('lands on the three-pane browser, no toggle in between', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     await seedIdbDocument(index, { path: 'roadmap', name: 'Roadmap', kind: 'markdown' })
 
     renderPage()
@@ -51,7 +51,7 @@ describe('document kept in this browser browser (real stores)', () => {
 
   it('opens a document from the browser through the same navigation', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     await seedIdbDocument(index, { path: 'roadmap', name: 'Roadmap', kind: 'markdown' })
 
     const onOpenDocument = renderPage()

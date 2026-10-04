@@ -31,7 +31,12 @@ export interface SceneTextMeasurer {
 export interface AgentActivity {
   readonly workspaceId: string
   readonly documentId: string
-  readonly touched: { readonly nodes: readonly string[]; readonly edges: readonly string[] }
+  readonly touched: {
+    readonly nodes: readonly string[]
+    readonly edges: readonly string[]
+    readonly lines: readonly string[]
+    readonly comments: readonly string[]
+  }
   /** One short human-readable line, e.g. "added 5 nodes". */
   readonly summary: string
 }
@@ -99,8 +104,8 @@ export interface ServerDeps {
    */
   documentIndex: DocumentIndex
   /**
-   * The trash a delete evacuated into: listable, and restorable under the
-   * SAME documentId. OPTIONAL because it is a capability of the tree-backed
+   * The trash a delete evacuated into: listable, restorable under the
+   * SAME documentId, and destroyable for good. OPTIONAL because it is a capability of the tree-backed
    * index the daemon composition binds, not part of the `DocumentIndex`
    * port — a deps literal without it simply has no trash surface, and the
    * routes answer 501 rather than pretending.
@@ -113,6 +118,8 @@ export interface ServerDeps {
       workspaceId: string
       documentId: string
     }): Promise<{ documentId: string; path: string } | null>
+    /** `false` when the trash holds no such entry. */
+    purge(input: { workspaceId: string; documentId: string }): Promise<boolean>
   }
   /**
    * How to measure text when laying a scene out, and which families that

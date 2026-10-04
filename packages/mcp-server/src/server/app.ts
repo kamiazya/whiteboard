@@ -41,7 +41,7 @@ import {
 } from './security/membership-gate.js'
 import { createWorkspacePeopleAdministration } from './security/people-administration.js'
 import { serverModePeopleKeeper } from './security/people-keepers.js'
-import { planServerModeAuth } from './security/server-mode-auth-plan.js'
+import { resolveServerModeExposure } from './security/server-mode-exposure.js'
 import {
   createServerModeApiAuthMiddleware,
   createServerModeMcpAuthMiddleware,
@@ -147,14 +147,12 @@ function mountMcpMiddleware(
   mcpAuth: ReturnType<typeof createLocalTokenMcpHttpAuthStrategy> | undefined,
 ): void {
   if (options.authMode === 'server-mode') {
-    const plan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
+    const exposure = resolveServerModeExposure({
       externalUrl: options.publicBaseUrl,
       allowedOrigins: [...options.allowedOrigins],
     })
-    if (plan.ok && plan.kind === 'server-mode') {
-      app.use('/mcp', createServerModeOriginMiddleware(plan.allowedOrigins))
+    if (exposure.ok) {
+      app.use('/mcp', createServerModeOriginMiddleware(exposure.allowedOrigins))
     }
     app.use('/mcp', createServerModeMcpAuthMiddleware(options.authStrategy, options.people))
   } else {
@@ -251,13 +249,11 @@ function appWiring(options: AppOptions) {
 
   let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
   if (options.authMode === 'server-mode') {
-    const plan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
+    const exposure = resolveServerModeExposure({
       externalUrl: options.publicBaseUrl,
       allowedOrigins: [...options.allowedOrigins],
     })
-    if (!plan.ok) throw new Error('invalid server-mode config')
+    if (!exposure.ok) throw new Error('invalid server-mode config')
     serverModeGetStatus = sanitizeServerModeStatus(options.getStatus, options.publicBaseUrl)
   }
 

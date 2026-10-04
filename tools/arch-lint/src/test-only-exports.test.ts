@@ -30,14 +30,19 @@
  * user, went away or changed class fails as stale, and each list's count is
  * pinned by equality so the number keeps saying where the cleanup stands.
  *
- * The method errs toward false negatives: a same-named identifier in any other
- * shipped file counts as production use, and a name a test reaches only
- * through a helper that hides the import is not counted as test use.
+ * A use is bound to the declaration it was imported from, through the module
+ * specifier and any barrel in between, so two exports sharing a name are judged
+ * apart. Where a binding cannot be resolved the method errs toward false
+ * negatives: a same-named import it cannot place, or a property read off an
+ * instance, in any other shipped file counts as production use, and a name a
+ * test reaches only through a helper that hides the import is not counted as
+ * test use.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { workspaceEntries } from './module-exports-resolve.js'
 import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
 import {
   findTestOnlyExports,
@@ -114,6 +119,8 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeCacheKey',
   'packages/canvas-render/src/layout/nodes/inline-junction.ts#tailCharacter',
   'packages/canvas-render/src/layout/passage-highlight.ts#passageBoxes',
+  'packages/canvas-render/src/quality/polyline-geometry.ts#Point',
+  'packages/canvas-render/src/quality/polyline-geometry.ts#Rect',
   'packages/canvas-render/src/quality/polyline-geometry.ts#segmentLength',
   'packages/canvas-render/src/references/targets.ts#REFERENCE_BUDGET',
   'packages/canvas-render/src/tidy-units.ts#mostlyInside',
@@ -134,7 +141,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/daemon-client/src/sse-stream-hub.ts#defaultRetryDelayMs',
   'packages/daemon-client/src/sse-stream-hub.ts#documentUpdateUrl',
   'packages/daemon-client/src/sse-stream-hub.ts#parseSseEvent',
-  'packages/daemon-client/src/sync-frames.ts#agentActivityMessageSchema',
   'packages/daemon-client/src/sync-sse-contract.ts#syncSubscribeResponseSchema',
   'packages/facet-engine/src/registry.ts#AssetKind',
   'packages/loro-adapter/src/thread-marks.ts#threadStyleKey',
@@ -171,6 +177,7 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/mcp-server/src/server/security/macaroon.ts#parseMacaroon',
   'packages/mcp-server/src/server/security/macaroon.ts#serializeMacaroon',
   'packages/mcp-server/src/server/security/mcp-auth.ts#requiresMcpHttpAuth',
+  'packages/mcp-server/src/server/security/oauth-jwt-validator.ts#refusalFor',
   'packages/mcp-server/src/server/security/origin-pattern.ts#formatOriginPatternEntry',
   'packages/mcp-server/src/server/security/sign-in-config.ts#providerAdmissionSchema',
   'packages/mcp-server/src/server/stdio-root.ts#bootStdioRoot',
@@ -196,6 +203,7 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/plugin-visual/src/emoji/shortcode.ts#emojiForShortcode',
   'packages/ports/src/document-index.ts#createDocumentInputSchema',
   'packages/ports/src/tokens.ts#defineToken',
+  'packages/reference-graph/src/linkify.ts#linkMarkupFor',
   'packages/reference-graph/src/reference-aggregate.ts#ReferenceAggregate',
   'packages/server-core/src/tools/document-set.ts#documentSetInputSchema',
   'packages/server-core/src/tools/facet-set.ts#DocumentHasNoFrontmatterError',
@@ -353,7 +361,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 155
+const DEBT_CEILING = 158
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 25
@@ -388,6 +396,17 @@ function readRepoFiles(): ScannedFile[] {
       }),
     )
     .map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
+}
+
+function readWorkspaceEntries(): Map<string, string> {
+  const manifests = ['apps', 'packages'].flatMap((group) =>
+    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `${group}/${entry.name}`)
+      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json')))
+      .map((dir) => ({ dir, text: readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf8') })),
+  )
+  return workspaceEntries(manifests)
 }
 
 // A name in the skip set is a directory this walk would otherwise enter: one
@@ -638,7 +657,8 @@ describe('what counts as an export only a test uses, on fixture files', () => {
 
 describe('exports only a test uses are held from both sides', () => {
   const files = readRepoFiles()
-  const found = findTestOnlyExports(files)
+  const entries = readWorkspaceEntries()
+  const found = findTestOnlyExports(files, entries)
   const classOf = new Map(found.map(({ key, class: cls }) => [key, cls]))
   const ownUsesOf = new Map(found.map(({ key, ownUses }) => [key, ownUses]))
   const lists: readonly { name: string; entries: readonly string[]; cls: TestOnlyClass }[] = [
@@ -652,6 +672,9 @@ describe('exports only a test uses are held from both sides', () => {
   it('scans a tree worth scanning', () => {
     // An empty or truncated scan agrees with every ledger below.
     expect(files.length).toBeGreaterThan(2500)
+    // Without the entries every package import is unresolved and judged by its name alone.
+    expect(entries.size).toBeGreaterThan(30)
+    expect(entries.get('@kamiazya/whiteboard-ports')).toBe('packages/ports/src/index.ts')
     expect(found.length).toBeGreaterThan(300)
   })
 

@@ -26,6 +26,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
+import { proposalAuthorSchema } from './proposal-author.js'
 
 // Geometry and identity are DERIVED from the stored node's own fields rather
 // than restated beside them, so a change to what an `x` may hold reaches this
@@ -60,9 +61,9 @@ const STORED_EXTENSION_FIELDS = { embed: true, facets: true, tags: true } as con
 /**
  * The model's own `facets` field, reached directly.
  *
- * The tool used to publish it as `x-whiteboard: { kind: "facets", ... }` —
- * JSON Canvas 1.0's extension key. That key made sense while the model WAS
- * the format. ADR-0037 ended that: a published input naming a foreign
+ * It is not published as `x-whiteboard: { kind: "facets", ... }`, JSON Canvas
+ * 1.0's extension key, which made sense while the model WAS the format.
+ * ADR-0037 ended that: a published input naming a foreign
  * format's extension key, when the model has none anywhere, tells a model
  * reading `tools/list` something untrue about the thing it is writing.
  *
@@ -201,7 +202,12 @@ export function draftContent(draft: NodeDraft): {
 }
 
 // `tags` omitted for the reason the node draft omits it (ADR-0040 decision 7).
-const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true })
+// `facets` is re-added through `WRITE_EXTENSION` for the reason the node draft
+// does: the stored edge's `.catch` would drop a malformed bucket unseen.
+const edgeDraftSchema = canvasEdgeSchema
+  .omit({ tags: true })
+  .extend(WRITE_EXTENSION)
+  .partial({ id: true })
 
 /**
  * Ink, which an edge cannot be: a LINE's ends are a node or a bare POINT, so
@@ -209,7 +215,13 @@ const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true
  * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2).
  */
-const lineDraftSchema = canvasLineSchema.partial({ id: true })
+const lineDraftSchema = canvasLineSchema.extend(WRITE_EXTENSION).partial({ id: true })
+
+// The patches are the model's, which proposals store too, so the write-side
+// `facets` is laid over them here rather than in the model, where the
+// read-side tolerance belongs.
+const edgePatchSchema = edgePatchFieldsSchema.extend(WRITE_EXTENSION)
+const linePatchSchema = linePatchFieldsSchema.extend(WRITE_EXTENSION)
 
 /**
  * A key of the draft, written beside `op` instead of inside it, is told
@@ -242,8 +254,8 @@ const draftKeysBelongInside = (
 /**
  * One step of a batch. The verbs are the ones the retired single-purpose
  * tools carried, so nothing an agent could do before is missing here — plus
- * `node.remove` / `edge.remove`, which had no tool at all: the only way to
- * delete anything used to be a whole-document replace.
+ * `node.remove` / `edge.remove`, which had no tool at all: without them the
+ * only way to delete anything is a whole-document replace.
  */
 /**
  * Where one id goes, a SELECTOR may go instead: every node inside a group,
@@ -402,9 +414,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       draftKeysBelongInside('edge', EDGE_DRAFT_KEYS),
     )
     .strict(),
-  z
-    .object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchFieldsSchema })
-    .strict(),
+  z.object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchSchema }).strict(),
   z
     .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
     .strict()
@@ -428,9 +438,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       draftKeysBelongInside('line', LINE_DRAFT_KEYS),
     )
     .strict(),
-  z
-    .object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchFieldsSchema })
-    .strict(),
+  z.object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchSchema }).strict(),
   z.object({ op: z.literal('line.remove'), id: nodeIdSchema }).strict(),
   z
     .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
@@ -482,10 +490,10 @@ const canvasOpSchema = z.discriminatedUnion('op', [
    * "This group contains exactly these." The ONE declarative op, and so the
    * only one that deletes something it was not told about.
    *
-   * It names MEMBERS by id and nothing else. The shape used to carry a full
-   * node declaration per member — the node union a second time, a third of
-   * this tool's bytes — and the lane showed what a model did with that:
-   * wrote x/y/width/height for every box, the ones already there included.
+   * It names MEMBERS by id and nothing else. A full node declaration per
+   * member would be the node union a second time, a third of this tool's
+   * bytes — and a model given one writes x/y/width/height for every box, the
+   * ones already there included.
    * Creating a member is `node.add` with `within`.
    *
    * Scope is STRICT containment in `within`'s stored box. That rule is what
@@ -560,13 +568,20 @@ export const canvasEditInputSchema = z
      * opinion beside it.
      */
     proposalId: annotationIdSchema.optional(),
+    /** Only meaningful with `mode: 'propose'`; see `proposalAuthorSchema`. */
+    author: proposalAuthorSchema,
     /**
      * Move a watching browser's viewport onto what this batch touched.
      * Defaults to true: an agent editing a board a human is looking at
      * should not leave them hunting for the change. Set false for
      * housekeeping edits that do not deserve to steal someone's view.
      */
-    follow: z.boolean().optional(),
+    follow: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether a watching browser's viewport jumps to what the batch touched. Default true; false for housekeeping that should not move a person's view.",
+      ),
   })
   .strict()
 export type CanvasEditInput = z.infer<typeof canvasEditInputSchema>

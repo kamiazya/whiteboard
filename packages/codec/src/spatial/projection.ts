@@ -40,15 +40,15 @@ const AS_NODE_KIND = { kind: 'degraded', to: "the format's node kind" } as const
 
 /**
  * Every field position the model can hold, and what projecting it onto JSON
- * Canvas costs. The model no longer spells the format's key anywhere, so this
+ * Canvas costs. The model does not spell the format's key anywhere, so this
  * table is the ONLY place that says which side of the line a field is on.
  *
- * This is the rung that replaces the one the format used to supply. While the
- * model IS the format, a field cannot be added without the format accepting
- * it, so nobody has to think about the export. ADR-0037 removes that refusal
- * deliberately — and a model free to grow, with nothing forcing anyone to say
- * what growing costs a reader who only speaks JSON Canvas, is the failure mode
- * that change would otherwise create.
+ * This is the rung that replaces the refusal the format would supply. While
+ * the model IS the format, a field cannot be added without the format
+ * accepting it, so nobody has to think about the export. ADR-0037 removes
+ * that refusal deliberately — and a model free to grow, with nothing forcing
+ * anyone to say what growing costs a reader who only speaks JSON Canvas, is
+ * the failure mode that change would otherwise create.
  *
  * `projection.test.ts` holds it in the four directions of
  * `.claude/rules/coverage-ledger.md` against the census's own path list, and
@@ -93,9 +93,8 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   // and that is the lie this split removes: the format's edge asserts that two
   // things are connected, which is exactly the claim a line does not make.
   //
-  // This is also where the `dropped` column went to ZERO. The four rows it
-  // held were an edge's point ends, which the format was right to refuse and
-  // which are no longer an edge's to have.
+  // Nothing here is `dropped`: an edge's point ends, which the format was
+  // right to refuse, are not an edge's to have.
   'lines[].id': EXTENSION,
   'lines[].from.kind': EXTENSION,
   'lines[].from.node': EXTENSION,
@@ -234,7 +233,7 @@ function liftNode(node: JsonCanvasNode): SpatialNode {
     ...(extension?.tags !== undefined && { tags: extension.tags }),
   }
   // The FORMAT keeps its four-armed discriminant — JSON Canvas 1.0 is not
-  // changing — and the model no longer has one (ADR-0038 decision 3), so this
+  // changing — and the model has none (ADR-0038 decision 3), so this
   // is where the two spellings meet. A group lifts to a node with no
   // resource: both say "a box that shows nothing".
   switch (node.type) {

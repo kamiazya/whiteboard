@@ -52,7 +52,7 @@ done
 
 PushNotification when a check flips to `failure` — that changes what the integrator does next.
 
-**Caveat (Draft PRs): the `WIP` check stays pending forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only `gh pr ready <PR>` settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`ci-gate`) specifically instead:**
+**Caveat (Draft PRs): the `WIP` check stays pending forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only taking the PR out of Draft settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`ci-gate`) specifically instead:**
 ```bash
 PR=<PR>
 while true; do
@@ -147,4 +147,4 @@ something.
 3. If it says **rate-limited**, parse the reset time and `ScheduleWakeup({ delaySeconds: <until reset + small buffer> })` — on wake, re-post `@coderabbitai review`. Loop until it actually reviews (cap the retries).
 4. If it **starts reviewing**, let it finish, then triage its comments via this skill / the `ci-triage` workflow. `Currently processing` can also STALL: one run sat on it for ~50 minutes with the comment's `updated_at` frozen at the acknowledgement. **Cut it off at 20 minutes with no movement in `updated_at`** — clear of a slow-but-live run (the ones that finish move within a few minutes, which is what CodeRabbit's own copy promises) and well short of the one dead run measured — then treat it as unavailable and fall back to the standing decision that AI review's absence does not block a merge (`dev-flow.md`), rather than waiting indefinitely. A deadline off two data points is a starting number, not a law: widen it if a run is ever seen to recover past it, and say so here.
 
-Bypass note: removing a PR from Draft (`gh pr ready <PR>`) is a deliberate human step (it signals "ready for human review/merge") — don't auto-undraft.
+Bypass note: removing a PR from Draft is a deliberate human step (it signals "ready for human review/merge") — don't auto-undraft. It is also not an agent step in a web session: GitHub's REST API has no route that marks a pull request ready for review (only a GraphQL mutation does, which a web session cannot reach), so the human does it from the PR page.

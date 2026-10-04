@@ -103,7 +103,7 @@ export function DocumentProperties({
           // is what a title bar wants anyway.
           //
           // The floor keeps an empty or one-word name a comfortable rename
-          // target now that the box no longer fills the row; past the ceiling
+          // target since the box does not fill the row; past the ceiling
           // the name ellipsises the way any title does.
           size={Math.min(Math.max((draftTitle ?? title).length + 2, 14), 44)}
           onChange={(event) => {

@@ -46,6 +46,18 @@ function surplus(actual, recorded) {
 }
 
 /**
+ * Why a compiler run cannot be judged, or undefined when it can. tsc exits 0
+ * when clean and 1 or 2 when it reports errors; a signal or any other status is
+ * a run that stopped part-way, and its partial output lists fewer errors than
+ * the program has — which the ledger comparison would read as debt paid down.
+ */
+export function interruptedRun({ status, signal }) {
+  if (signal) return `tsc was killed by ${signal} before it finished`
+  if (status !== 0 && status !== 1 && status !== 2) return `tsc exited with status ${status}`
+  return undefined
+}
+
+/**
  * Judges the actual per-file error codes against the ledger of files known to
  * carry errors. Every disagreement fails, and each says what kind it is:
  *  - `added`: errors in a file the ledger does not name — new debt;

@@ -134,31 +134,66 @@ function systemTimezone(): string | null {
   }
 }
 
+/**
+ * A schedule refusal that may name more than one variable: the expression and
+ * the zone are two settings read as one, and an operator who got both wrong
+ * should hear both. Absent `issues`, the refusal belongs to the cron variable.
+ */
+interface SettingRefusal {
+  ok: false
+  reason: string
+  issues?: readonly EnvIssue[]
+}
+type BackupScheduleParse = { ok: true; value: BackupSchedule } | SettingRefusal
+
+const DEFAULT_CRON = '0 3 * * *'
+
 const NEVER_FIRES = 'describes a time that can never occur, so no backup would ever run'
 
-export function parseBackupSchedule(
-  env: NodeJS.ProcessEnv = process.env,
-): ParsedSetting<BackupSchedule> {
-  const expression = env[BACKUP_CRON_ENV]?.trim() || '0 3 * * *'
+// Constructed paused and stopped immediately: this is a validity check, not
+// a scheduler. The daemon keeps its own timer loop.
+function probeCron(pattern: string, zone: string | null): Date | null | 'refused' {
+  try {
+    const cron = new Cron(pattern, { ...(zone ? { timezone: zone } : {}), paused: true })
+    try {
+      return cron.nextRun()
+    } finally {
+      cron.stop()
+    }
+  } catch {
+    return 'refused'
+  }
+}
+
+/**
+ * Which of the two variables a refused schedule is wrong in. The thrown
+ * message quotes the value, so it is not reused. Each half is probed alone:
+ * the expression without any zone, and the zone against an expression known
+ * to be valid.
+ */
+function refusedScheduleIssues(expression: string, explicitTimezone: string | null): EnvIssue[] {
+  const issues: EnvIssue[] = []
+  if (explicitTimezone === null || probeCron(expression, null) === 'refused') {
+    issues.push({ variable: BACKUP_CRON_ENV, reason: 'must be a 5- or 6-field cron expression' })
+  }
+  if (explicitTimezone !== null && probeCron(DEFAULT_CRON, explicitTimezone) === 'refused') {
+    issues.push({ variable: BACKUP_TZ_ENV, reason: 'must be a real IANA timezone' })
+  }
+  if (issues.length > 0) return issues
+  return [
+    {
+      variable: BACKUP_CRON_ENV,
+      reason: 'must be a 5- or 6-field cron expression readable in the configured timezone',
+    },
+  ]
+}
+
+export function parseBackupSchedule(env: NodeJS.ProcessEnv = process.env): BackupScheduleParse {
+  const expression = env[BACKUP_CRON_ENV]?.trim() || DEFAULT_CRON
   const explicitTimezone = env[BACKUP_TZ_ENV]?.trim() || null
   const timezone = explicitTimezone ?? systemTimezone()
 
-  // Constructed paused and stopped immediately: this is a validity check, not
-  // a scheduler. The daemon keeps its own timer loop.
-  const probe = (zone: string | null): Date | null | 'refused' => {
-    try {
-      const cron = new Cron(expression, { ...(zone ? { timezone: zone } : {}), paused: true })
-      try {
-        return cron.nextRun()
-      } finally {
-        cron.stop()
-      }
-    } catch {
-      return 'refused'
-    }
-  }
-
-  const next = probe(timezone)
+  const next = probeCron(expression, timezone)
   if (next === 'refused' && explicitTimezone === null && timezone !== null) {
     // The system named a zone that croner will not read — a blank `TZ`
     // resolves through ICU to the sentinel `Etc/Unknown`, which is refused
@@ -166,7 +201,7 @@ export function parseBackupSchedule(
     // the NAME rather than the startup. The expression is re-checked without
     // the zone rather than assumed innocent, since it may be the expression
     // that is wrong.
-    const withoutZone = probe(null)
+    const withoutZone = probeCron(expression, null)
     if (withoutZone !== 'refused') {
       return withoutZone === null
         ? { ok: false, reason: NEVER_FIRES }
@@ -174,11 +209,8 @@ export function parseBackupSchedule(
     }
   }
   if (next === 'refused') {
-    // The thrown message quotes the value, so it is not reused here.
-    return {
-      ok: false,
-      reason: `must be a 5- or 6-field cron expression${explicitTimezone ? ', and the timezone must be a real IANA zone' : ''}`,
-    }
+    const issues = refusedScheduleIssues(expression, explicitTimezone)
+    return { ok: false, reason: issues.map((issue) => issue.reason).join('; '), issues }
   }
   if (next === null) return { ok: false, reason: NEVER_FIRES }
   return { ok: true, value: { expression, timezone } }
@@ -209,6 +241,24 @@ export function parseBackupKeep(
   return { ok: true, value: parsed }
 }
 
+/** What each variable's own parser refuses, in one pass, before the cross-setting checks. */
+function parseSettingIssues(env: NodeJS.ProcessEnv): EnvIssue[] {
+  const issues: EnvIssue[] = []
+  for (const [variable, parse] of [
+    [FILE_GC_INTERVAL_ENV, parseFileGcIntervalMs],
+    [FILE_GC_GRACE_ENV, parseFileGcGraceMs],
+    [WORKSPACE_TAIL_ENV, parseWorkspaceTailMs],
+    [BACKUP_DIR_ENV, parseBackupDir],
+    [BACKUP_CRON_ENV, parseBackupSchedule],
+    [BACKUP_KEEP_ENV, parseBackupKeep],
+  ] as const) {
+    const parsed: { ok: true } | SettingRefusal = parse(env)
+    if (parsed.ok) continue
+    issues.push(...(parsed.issues ?? [{ variable, reason: parsed.reason }]))
+  }
+  return issues
+}
+
 /**
  * Every storage setting this process cannot honour, in one pass.
  *
@@ -220,19 +270,7 @@ export function collectStorageEnvIssues(
   dataDir: string,
   env: NodeJS.ProcessEnv = process.env,
 ): EnvIssue[] {
-  const issues: EnvIssue[] = []
-
-  for (const [variable, parse] of [
-    [FILE_GC_INTERVAL_ENV, parseFileGcIntervalMs],
-    [FILE_GC_GRACE_ENV, parseFileGcGraceMs],
-    [WORKSPACE_TAIL_ENV, parseWorkspaceTailMs],
-    [BACKUP_DIR_ENV, parseBackupDir],
-    [BACKUP_CRON_ENV, parseBackupSchedule],
-    [BACKUP_KEEP_ENV, parseBackupKeep],
-  ] as const) {
-    const parsed = parse(env)
-    if (!parsed.ok) issues.push({ variable, reason: parsed.reason })
-  }
+  const issues: EnvIssue[] = parseSettingIssues(env)
 
   // A destination is what arms the pass, so an interval or a retention count
   // without one configures nothing — and looks from the outside exactly like

@@ -13,10 +13,10 @@ import type { EmbeddedDocument, ResolvedReference } from './resolved.js'
  *
  * `resolveAlias` is codec's (a `[[target]]` to a document id), the other
  * three are the layout's: what labels a bare link, what a `![[embed]]`
- * draws, what a file node draws. They used to be produced by hand in every
- * composition root — one root answered canvases and not bodies, another
- * bodies and not canvases — and the layout, total by design, drew
- * placeholders for whichever was missing rather than failing. This is the
+ * draws, what a file node draws. Produced by hand in every composition root
+ * they diverge — one root answering canvases and not bodies, another bodies
+ * and not canvases — and the layout, total by design, draws placeholders for
+ * whichever is missing rather than failing. This is the
  * one producer; a root supplies the graph and gets all four.
  */
 export interface ReferenceSeams {

@@ -797,7 +797,7 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
 
   it('sweeps an upload-only workspace literally named "blobs" that has a files/ dir', async () => {
     // 'blobs' is a valid workspace id and the upload route can write to
-    // <dataDir>/blobs/files before any canvas ever creates a DB row for it
+    // <dataDir>/blobs/files before any document ever creates a DB row for it
     // -- this is exactly the upload-only-workspace case the sweeper exists
     // to cover, and it must not be excluded just because the name is
     // 'blobs'.

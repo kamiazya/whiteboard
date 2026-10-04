@@ -1,12 +1,17 @@
 import { hasOkfFrontmatter } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
-import { isWorkspaceSegmentTakenError, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  hasDocumentPins,
+  isWorkspaceSegmentTakenError,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
+  DocumentNameConflictError,
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundForCallerError,
   type WorkspaceNotFoundIntent,
@@ -22,7 +27,7 @@ import type {
   wbDocumentResolveOutputSchema,
 } from './document-crud.schemas.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
-import { createDocumentSetTool, parseWritableOkf } from './document-set.js'
+import { checkFrontmatterFacets, createDocumentSetTool, parseWritableOkf } from './document-set.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
@@ -120,6 +125,18 @@ export const BARE_BODY_TYPE = 'note'
  */
 const asOkfBody = (body: string): string => `---\ntype: ${BARE_BODY_TYPE}\n---\n\n${body}`
 
+/**
+ * `name` and an OKF `title` are the same thing — the workspace's name for the
+ * document — so both present and different is two answers to one question.
+ * A blank title counts as present: it would clear the name the same write just
+ * set, which is the silent loss this refuses.
+ */
+function refuseConflictingNames(name: string | undefined, title: string | undefined): void {
+  const given = name?.trim()
+  if (given === undefined || given === '' || title === undefined) return
+  if (title.trim() !== given) throw new DocumentNameConflictError(given, title.trim())
+}
+
 export async function wbDocumentCreate(
   deps: ServerDeps,
   rawInput: z.infer<typeof wbDocumentCreateInputSchema>,
@@ -133,18 +150,18 @@ export async function wbDocumentCreate(
 
   // Parsed BEFORE anything exists, so a refusal leaves nothing behind. The
   // body is applied by delegating to `wb_document_set` once the document
-  // exists, so a malformed one used to fail there — leaving an empty
+  // exists, so a malformed one would fail there — leaving an empty
   // document squatting the requested path while the caller held an error
   // saying the create had not happened, and the retry then collided with
   // the ghost.
   //
-  // It used to run AFTER the workspace bootstrap, "so a missing workspace
-  // still reports itself first". That order cannot survive the mint below:
-  // bootstrapping first would leave a freshly minted workspace behind every
-  // refused body, and the caller's retry would mint a SECOND one. What the
-  // old order bought was the error a caller gets when their request is
-  // wrong in BOTH ways at once, which no test pins and which is the less
-  // useful of the two — a malformed body has to be fixed either way.
+  // It runs BEFORE the workspace bootstrap too, though the other order would
+  // report a missing workspace first: bootstrapping first would leave a
+  // freshly minted workspace behind every refused body, and the caller's
+  // retry would mint a SECOND one. What that order would buy is the error a
+  // caller gets when their request is wrong in BOTH ways at once, which no
+  // test pins and which is the less useful of the two — a malformed body has
+  // to be fixed either way.
   //
   // A bare body is an input, not a mistake: a caller sending prose means a
   // note, and refusing it for a block they never wrote costs a round trip
@@ -175,6 +192,8 @@ export async function wbDocumentCreate(
     // workspace that does not exist yet; the read degrades to "nothing
     // declared", which is the truth about a workspace being born.
     await refuseFrontmatterTags(deps, input.workspaceId, preflight.frontmatter.tags)
+    await checkFrontmatterFacets(deps, input.workspaceId, preflight.frontmatter.facets)
+    refuseConflictingNames(input.name, preflight.frontmatter.title)
   }
 
   // Workspaces never materialize implicitly: a typo'd or hallucinated
@@ -215,10 +234,10 @@ export async function wbDocumentCreate(
     }),
   )
 
-  // Persist the document, not only its placement. Creation used to write the
-  // placement alone and leave the document to be conjured on first write,
-  // which is why nothing could say what a document was: there was no
-  // document yet to ask. The kind is written once, at birth.
+  // Persist the document, not only its placement. A placement alone leaves
+  // the document to be conjured on first write, and nothing could then say
+  // what a document is: there is no document yet to ask. The kind is written
+  // once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
   await saveDocumentSnapshot(deps, workspaceId, entry.documentId, doc)
@@ -279,6 +298,12 @@ export async function wbDocumentList(
   const entries = await rethrowWorkspaceNotFound(deps, input.workspaceId, 'read', () =>
     deps.documentIndex.listDocuments({ workspaceId: input.workspaceId }),
   )
+  // Read after the listing, so an unknown workspace has already been refused
+  // in the tool's vocabulary. An index without the capability says nothing
+  // about pins, which is not the same as saying none are pinned.
+  const pinned = hasDocumentPins(deps.documentIndex)
+    ? new Set(await deps.documentIndex.listPinnedDocuments({ workspaceId: input.workspaceId }))
+    : undefined
   return {
     documents: entries.map((entry) => ({
       documentId: entry.documentId,
@@ -287,6 +312,7 @@ export async function wbDocumentList(
       ...(entry.kind === undefined ? {} : { kind: entry.kind }),
       ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
       ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
+      ...(pinned === undefined ? {} : { pinned: pinned.has(entry.documentId) }),
     })),
   }
 }

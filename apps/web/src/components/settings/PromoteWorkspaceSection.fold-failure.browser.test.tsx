@@ -15,11 +15,11 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../../lib/fold-workspace.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
-import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -55,7 +55,7 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
     // One document each side of the fold: tree-held (survives a failed fold)
     // and a pre-fold legacy record (only a successful fold would carry it).
     const tree = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(tree)
+    await ensureBrowserWorkspace(tree)
     await tree.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'held',
@@ -63,11 +63,11 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
     })
     const legacy = new IdbDocumentIndex()
     // `legacy` is the row-plane index, whose `WORKSPACES_STORE` row `tree`'s
-    // `ensureLocalWorkspace` above never wrote — that call went through the
+    // `ensureBrowserWorkspace` above never wrote — that call went through the
     // tree-backed `FoldingBrowserIndex`, which registers a workspace as a
     // `workspace-tree:<id>` sync record instead. The row-plane index has its
     // own registry and needs it seeded explicitly.
-    await ensureLocalWorkspace(legacy)
+    await ensureBrowserWorkspace(legacy)
     const entry = await legacy.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'legacy-only',

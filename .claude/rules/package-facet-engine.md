@@ -175,3 +175,8 @@ paths:
 
 - Validating a registered facet's payload leniently on WRITE. Layer 2 is
   reject; only the storage READ layer drops.
+- Making the registry strict about unknown keys. `validateFacetWrite`
+  answers the PARSED value, so it strips an undeclared key, and the
+  editor's derived form depends on that (its draft keeps a previous
+  variant's field). An agent writer that must refuse one asks
+  `firstUnrecognizedKey(sent, parsed)`, as server-core's `facet-write.ts` does.

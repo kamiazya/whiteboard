@@ -117,7 +117,7 @@ export interface AppShellProps {
   /**
    * The keeper's half of the workspace switcher — where its workspaces come
    * from and what a switch means for it. Absent on a branch that has no
-   * workspace to name (the invalid-config and pairing-error screens), and the
+   * workspace to name (the invalid-config, not-found and connecting screens), and the
    * shell then states no subject rather than an empty one.
    *
    * Passed in rather than built here: the two keepers read their registries
@@ -144,7 +144,7 @@ export interface AppShellProps {
  *
  * The mark is the row's SUBJECT and its one state carrier. Left of the
  * spacer is "what you are working in"; right of it is the app and its own
- * state. There is no connection chip any more — a workspace's keeper and its
+ * state. There is no connection chip — a workspace's keeper and its
  * session are things about the workspace, so they belong on the thing that
  * names it rather than on a second widget at the other end of the row.
  */

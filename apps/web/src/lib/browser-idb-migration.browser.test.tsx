@@ -14,7 +14,7 @@
 // Stays in REAL-browser mode on purpose: this file is part of the real-IDB
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
-// fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
+// fake-indexeddb instead — see e.g. browser-document-summary.test.tsx.
 import {
   adoptWorkspaceDocument,
   resolveWorkspaceDocumentById,
@@ -24,6 +24,12 @@ import { chunkSnapshot, type SnapshotChunk } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
+import {
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  listBrowserDocuments,
+  loadBrowserDocument,
+} from './browser-document-summary.js'
 import {
   BROWSER_DEFAULT_SEGMENT,
   DB_VERSION,
@@ -46,12 +52,6 @@ import {
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import {
-  IdbDefaultDocumentPointer,
-  idbContentClock,
-  listLocalDocuments,
-  loadLocalDocument,
-} from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 import { purgeLegacyReconnectCredentials } from './purge-legacy-reconnect-credentials.js'
 
@@ -92,8 +92,8 @@ function migratedLocal() {
   const clock = idbContentClock(MIGRATION_DB)
   const ready = () => resolveBrowserWorkspaceId(MIGRATION_DB)
   return {
-    listDocuments: () => ready().then(() => listLocalDocuments(index, clock)),
-    load: (documentId: string) => ready().then(() => loadLocalDocument(index, documentId, clock)),
+    listDocuments: () => ready().then(() => listBrowserDocuments(index, clock)),
+    load: (documentId: string) => ready().then(() => loadBrowserDocument(index, documentId, clock)),
     getDefaultDocumentId: () => new IdbDefaultDocumentPointer(MIGRATION_DB).get(),
   }
 }

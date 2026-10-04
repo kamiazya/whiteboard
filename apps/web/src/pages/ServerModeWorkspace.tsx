@@ -2,7 +2,7 @@
  * A workspace opened in the web app a server-mode keeper serves (ADR-0047).
  *
  * The editor is the daemon's, unchanged: the keeper IS the daemon, reached at
- * this page's own origin. Three things differ from a paired local daemon, and
+ * this page's own origin. Three things differ from a local daemon, and
  * each is carried by what this hands the pages rather than by a branch inside
  * them: no token (the session cookie authenticates), no WebSocket (the keeper
  * serves SSE only), and no replica of the server's data in this browser.

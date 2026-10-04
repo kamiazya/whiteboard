@@ -1,8 +1,9 @@
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { type MeasureText, withDeclaredColours } from '@kamiazya/whiteboard-canvas-render'
 import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Focus } from 'lucide-react'
 import { type JSX, useMemo } from 'react'
+import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
@@ -37,15 +38,32 @@ import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewpor
  * anybody can take on a picture they cannot get closer to.
  */
 export function VersionPreview({
-  past,
+  past: stored,
   theme = 'light',
   maxWidth = 720,
+  tags,
 }: {
   readonly past: PastDocument
   readonly theme?: ResolvedTheme
   readonly maxWidth?: number
+  /**
+   * The workspace's tag vocabulary, whose library a past board is drawn by
+   * intent from, as the live one is — a version that looked coloured and
+   * legended while it was current must not read as grey when looked back on.
+   */
+  readonly tags?: Pick<TagVocabulary, 'library'>
 }): JSX.Element {
   const measure = useMemo(() => createBrowserMeasureText(), [])
+  // The viewer lays out what it is given and knows no library; colour by
+  // intent is applied to the canvas, as the layout itself applies it, so the
+  // legend (derived from the tags and colours the canvas carries) follows.
+  const past = useMemo<PastDocument>(
+    () =>
+      stored.kind === 'markdown'
+        ? stored
+        : { ...stored, canvas: withDeclaredColours(stored.canvas, tags?.library) },
+    [stored, tags?.library],
+  )
   if (past.kind === 'markdown') {
     return (
       <div data-testid="document-preview" className="h-full min-h-0 overflow-auto">

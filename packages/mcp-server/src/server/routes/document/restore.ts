@@ -47,6 +47,16 @@ type RestoreAnswer =
 const restored = (body: RestoreVersionResponse): RestoreAnswer => ({ status: 200, body })
 const refused = (body: ApiErrorBody, status: 400 | 404 | 409): RestoreAnswer => ({ status, body })
 
+/**
+ * The operation's schema backstop rejected the target; re-run the rich
+ * per-segment validator for the same 400 body this route has always sent.
+ */
+function invalidTargetAnswer(targetPath: string | undefined): RestoreAnswer {
+  const invalidTarget = refusedBy(() => validateDocumentPath(targetPath ?? ''))
+  if (invalidTarget) return refused(invalidTarget, 400)
+  return refused({ error: 'invalid_body', message: 'invalid restore options' }, 400)
+}
+
 function restoreAnswer(
   result: Awaited<ReturnType<typeof restoreVersion>>,
   { workspaceId, targetPath }: { workspaceId: string; targetPath: string | undefined },
@@ -55,14 +65,7 @@ function restoreAnswer(
     case 'not-found':
       return refused(errorBody('not_found', 'That version does not exist for this document.'), 404)
     case 'invalid-target-path':
-      // The operation's schema backstop rejected it; re-run the rich
-      // per-segment validator for the same 400 body this route has
-      // always sent.
-      {
-        const invalidTarget = refusedBy(() => validateDocumentPath(targetPath ?? ''))
-        if (invalidTarget) return refused(invalidTarget, 400)
-      }
-      return refused({ error: 'invalid_body', message: 'invalid restore options' }, 400)
+      return invalidTargetAnswer(targetPath)
     case 'subtree-takes-no-target':
       return refused(
         { error: 'invalid_body', message: 'subtree rollback cannot take a targetPath' },
@@ -81,6 +84,14 @@ function restoreAnswer(
         {
           error: 'output_exists',
           message: `Target document "${result.targetPath}" already exists. Pass overwrite=true to replace it.`,
+        },
+        409,
+      )
+    case 'kind-mismatch':
+      return refused(
+        {
+          error: 'document_kind_mismatch',
+          message: `Target document "${result.targetPath}" is a ${result.targetKind} document and this version is ${result.sourceKind}; a document's kind is written once, so restore into a new path instead.`,
         },
         409,
       )

@@ -7,7 +7,7 @@ import { globalStoreScope, type StoreScope } from './store-scope.js'
 // served each other's documents.
 //
 // LRU eviction keeps LoroDoc memory from growing without bound across many
-// documents or during long daemon uptime. One canvas can hold several MiB
+// documents or during long daemon uptime. One document can hold several MiB
 // of CRDT history, so cap the cache at 32 entries. This uses Map insertion order as
 // the minimal implementation with no extra dependency.
 //
@@ -17,7 +17,7 @@ import { globalStoreScope, type StoreScope } from './store-scope.js'
 // That is what keeps `document-store.ts` — which must evict after operations
 // that replace on-disk state — free of an import cycle with this file.
 //
-// Caveat: update handlers may keep live doc references. Evicting a canvas that still has
+// Caveat: update handlers may keep live doc references. Evicting a document that still has
 // active sync streams could leave callers mutating an old doc instance. In practice,
 // documents with active sync streams should stay recently touched and remain on the
 // hot side of the LRU.
@@ -134,7 +134,7 @@ export function evictWorkspaceDocs(
   }
 }
 
-// /debug helper: list cached canvas keys ("workspaceId/path") of one store.
+// /debug helper: list cached document keys ("workspaceId/path") of one store.
 export function getCacheKeys(scope: StoreScope = globalStoreScope): string[] {
   const own = `${scope.dataDir}::`
   return Array.from(cache.keys())

@@ -11,12 +11,13 @@
  * `[mark] ALPHA <spacer> gear`.
  */
 
-import { messageOf } from '@kamiazya/whiteboard-model'
-import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
+import { useCreateWorkspace } from '../../hooks/use-create-workspace.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { workspaceHandle, workspaceLabel } from '../../lib/workspace-handle.js'
 import type { WorkspaceRow, WorkspaceSwitcherSource } from '../../lib/workspace-switcher-source.js'
+import { WorkspaceIdentityFields } from './WorkspaceIdentityFields.js'
 
 export interface WorkspaceMenuProps {
   /**
@@ -43,22 +44,6 @@ export interface WorkspaceMenuProps {
   readonly onCounted?: (counts: ReadonlyMap<string, number>) => void
 }
 
-/**
- * Each layer is written on its OWN, never as a form submitting both. Sending
- * an unchanged segment back would turn every name edit into a segment write,
- * and the segment write is the one that can be refused for a collision.
- *
- * An emptied field writes nothing rather than clearing: the port has no way
- * to clear a layer, and a workspace without one is a state it arrives in,
- * not one to offer as an edit.
- */
-type RenamedLayers = Omit<RenameWorkspaceInput, 'workspaceId'>
-
-function unchanged(next: string, current: string | undefined): boolean {
-  const trimmed = next.trim()
-  return trimmed === '' || trimmed === current
-}
-
 export function WorkspaceMenu({
   current,
   workspaces,
@@ -70,38 +55,18 @@ export function WorkspaceMenu({
 }: WorkspaceMenuProps) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const newNameRef = useRef<HTMLInputElement>(null)
   const nameId = useId()
-  const urlId = useId()
-  // A ref, not the `busy` state below, and the difference is the whole guard.
-  // `busy` is a React SNAPSHOT: a second submit that runs before React
-  // re-renders still sees it false. Measured — two keydowns dispatched inside
-  // one batch call `create` twice; the same two through `fireEvent`, which
-  // flushes between them, call it once. Each browser create MINTS and
-  // persists a workspace.
-  const submitting = useRef(false)
+  const {
+    busy,
+    error,
+    submit: submitCreate,
+    clearError,
+  } = useCreateWorkspace({ source, onSwitch }, { onCreated: () => setCreating(false) })
 
   const active = workspaces.find((w) => workspaceHandle(w) === current)
   const create = source.create
   const rename = active === undefined ? undefined : source.rename
-
-  // Null means "not being edited", so the box shows the stored value. While
-  // it is a string the box shows THAT, because a committed name comes back
-  // normalised and re-rendering the normalised form on the keystroke that
-  // typed a space erases it — "Design team" typed one key at a time would
-  // arrive as "Designteam". Same reason `DocumentProperties` holds a draft.
-  const [nameDraft, setNameDraft] = useState<string | null>(null)
-  // The URL's draft is not the same device. It is the PENDING edit: this
-  // field does not commit per keystroke, so the draft is what has not been
-  // written yet rather than a rendering workaround.
-  const [urlDraft, setUrlDraft] = useState<string | null>(null)
-  // What the name held when the current edit began. Every keystroke is
-  // already committed, so Escape has nothing to discard — it has to put the
-  // previous name BACK, or "type, change your mind, Escape" silently keeps
-  // the half-typed one.
-  const nameBaseline = useRef(active?.displayName ?? '')
 
   useEffect(() => {
     if (creating) newNameRef.current?.focus()
@@ -132,63 +97,6 @@ export function WorkspaceMenu({
       .catch(() => {})
   }, [source, workspaces])
 
-  const failed = (cause: unknown, fallback: string) => {
-    submitting.current = false
-    setError(messageOf(cause, fallback))
-    setBusy(false)
-  }
-
-  const write = (input: RenamedLayers) => {
-    if (rename === undefined || active === undefined) return
-    setError(null)
-    rename(active.workspaceId, input)
-      .then((renamed) => {
-        // Taken from what rename ANSWERED rather than re-listed: a name edit
-        // navigates nowhere and remounts nothing, so the shell's own copy of
-        // the row is the only thing that can restate the head.
-        onRenamed(renamed)
-        // Only when the SEGMENT moved. The old handle stops answering the
-        // moment it changes, so a page left on it addresses a workspace that
-        // is no longer there.
-        const moved = workspaceHandle(renamed)
-        if (moved !== current) onSwitch(moved)
-      })
-      .catch((cause: unknown) => setError(messageOf(cause, 'Could not rename the workspace.')))
-  }
-
-  const commitUrl = () => {
-    if (urlDraft === null) return
-    const next = urlDraft
-    setUrlDraft(null)
-    if (unchanged(next, active?.segment)) return
-    write({ segment: next.trim() })
-  }
-
-  const submitCreate = () => {
-    const displayName = newName.trim()
-    if (create === undefined || displayName === '' || submitting.current) return
-    submitting.current = true
-    setBusy(true)
-    setError(null)
-    create(displayName)
-      .then((created) => {
-        // Released on SUCCESS too, not only on failure. `onSwitch` is an
-        // in-SPA route change for the browser keeper, so the shell does not
-        // remount and this instance survives the navigation — holding the
-        // guard would leave the form open with Create disabled until the
-        // popover happened to be closed and reopened.
-        submitting.current = false
-        setBusy(false)
-        setCreating(false)
-        // The handle CREATE answered with, never the name that was typed: a
-        // segment is derived from the name and may be suffixed past a
-        // collision, or absent entirely, in which case the address is the
-        // canonical id. Navigating to what was typed addresses nothing.
-        onSwitch(workspaceHandle(created))
-      })
-      .catch((cause: unknown) => failed(cause, 'Could not create the workspace.'))
-  }
-
   return (
     <>
       {active !== undefined && (
@@ -198,100 +106,16 @@ export function WorkspaceMenu({
         // would be that shape rebuilt one layer up. Read-only where the
         // keeper cannot write, never hidden — the name is the head, and
         // hiding the subject to say "you cannot edit it" removes the subject.
-        <div className="mb-2 flex flex-col gap-1 border-b pb-2">
-          <div className="flex items-center gap-2">
-            <label className="sr-only" htmlFor={nameId}>
-              Workspace name
-            </label>
-            <input
-              id={nameId}
-              value={nameDraft ?? active.displayName ?? ''}
-              readOnly={rename === undefined}
-              placeholder="Unnamed workspace"
-              onFocus={() => {
-                nameBaseline.current = active.displayName ?? ''
-              }}
-              onChange={(event) => {
-                if (rename === undefined) return
-                setNameDraft(event.target.value)
-                if (unchanged(event.target.value, active.displayName)) return
-                write({ displayName: event.target.value.trim() })
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation()
-                if (event.key !== 'Escape' || rename === undefined) return
-                event.preventDefault()
-                const shown = nameDraft ?? active.displayName ?? ''
-                setNameDraft(null)
-                // Compared against what the BOX holds, never against the
-                // stored name: the commit is async, so the row can still
-                // carry the old name here and comparing to it would decide
-                // "nothing changed" while a rename is already in flight.
-                if (shown !== nameBaseline.current && nameBaseline.current !== '') {
-                  write({ displayName: nameBaseline.current })
-                }
-                event.currentTarget.blur()
-              }}
-              onBlur={() => setNameDraft(null)}
-              className="min-w-0 flex-1 truncate bg-transparent text-sm font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground"
-            />
-            {sessionLabel != null && (
-              <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                {sessionLabel}
-              </span>
-            )}
-          </div>
-          {/* No label names this layer. ADR-0019 calls it the `segment`,
-              which is not a word to put in front of somebody, and every
-              plainer word invents a FOURTH name for a layer that has three.
-              The URL it lands in says the same thing without naming
-              anything. */}
-          <div className="flex items-center rounded-md border bg-background px-1.5 py-0.5 font-mono text-xs">
-            <span aria-hidden="true" className="text-muted-foreground">
-              /w/
-            </span>
-            <label className="sr-only" htmlFor={urlId}>
-              Workspace URL
-            </label>
-            <input
-              id={urlId}
-              enterKeyHint="done"
-              value={urlDraft ?? active.segment ?? ''}
-              readOnly={rename === undefined}
-              placeholder={active.workspaceId}
-              onChange={(event) => {
-                if (rename === undefined) return
-                setUrlDraft(event.target.value)
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation()
-                if (event.key === 'Enter') {
-                  if (isImeComposingKeydown(event.nativeEvent)) return
-                  event.preventDefault()
-                  commitUrl()
-                  return
-                }
-                if (event.key !== 'Escape') return
-                event.preventDefault()
-                setUrlDraft(null)
-                event.currentTarget.blur()
-              }}
-              // Committed on blur too: leaving a field having typed in it
-              // and losing the edit silently is the worse of the two
-              // surprises.
-              onBlur={commitUrl}
-              className="min-w-0 flex-1 bg-transparent outline-none"
-            />
-          </div>
-          {urlDraft !== null && !unchanged(urlDraft, active.segment) && (
-            <p className="text-xs text-muted-foreground">Links using the old URL stop working.</p>
-          )}
-          {error && (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          )}
-        </div>
+        <WorkspaceIdentityFields
+          className="mb-2 flex flex-col gap-1 border-b pb-2"
+          active={active}
+          current={current}
+          rename={rename}
+          onRenamed={onRenamed}
+          onSwitch={onSwitch}
+          sessionLabel={sessionLabel}
+          notice={error}
+        />
       )}
       <p className="px-1 pt-1 pb-0.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
         Switch to
@@ -350,7 +174,7 @@ export function WorkspaceMenu({
                 onChange={(event) => setNewName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter' || isImeComposingKeydown(event.nativeEvent)) return
-                  submitCreate()
+                  submitCreate(newName)
                 }}
                 className="rounded-md border bg-background px-2 py-1 text-sm"
               />
@@ -358,7 +182,7 @@ export function WorkspaceMenu({
                 <button
                   type="button"
                   disabled={busy || newName.trim() === ''}
-                  onClick={submitCreate}
+                  onClick={() => submitCreate(newName)}
                   className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
                 >
                   Create
@@ -367,7 +191,7 @@ export function WorkspaceMenu({
                   type="button"
                   onClick={() => {
                     setCreating(false)
-                    setError(null)
+                    clearError()
                   }}
                   className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                 >

@@ -1,4 +1,5 @@
 import { userInfo } from 'node:os'
+import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
@@ -10,11 +11,14 @@ import {
 import {
   type ApiErrorBody,
   issueText,
+  type ServerDeps,
   WorkspaceNotFoundForCallerError,
 } from '@kamiazya/whiteboard-server-core'
+import type { MiddlewareHandler } from 'hono'
 import type { z } from 'zod'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
 import { validationErrorBody } from '../../validators.js'
+import { refuseMalformedHandle } from '../../workspace-handle.js'
 
 export function defaultHumanDisplayName(): string {
   try {
@@ -62,12 +66,11 @@ export type ErrorAnswer = (
 /**
  * The first translation that owns `err`, or null for the caller to rethrow.
  *
- * Each route here walked its own chain of `if (err instanceof …) return
- * c.json(…)`, four or five deep, which is most of what made these handlers
- * hard to read. The SET stays at the call site on purpose: which errors a
+ * One translator replaces a per-route chain of `if (err instanceof …) return
+ * c.json(…)`, which is most of what made handlers hard to read. The SET stays at the call site on purpose: which errors a
  * route answers is part of what that route means, and a single translator
- * applied everywhere would silently start answering errors a handler used to
- * let through as a 500.
+ * applied everywhere would silently start answering errors a handler lets
+ * through as a 500.
  */
 export function firstOwned(
   err: unknown,
@@ -129,20 +132,58 @@ const isWorkspaceAbsent = (err: unknown): boolean =>
   isWorkspaceNotFoundError(err) || err instanceof WorkspaceNotFoundForCallerError
 
 /**
- * Nothing at that address. The WORKSPACE being absent and the DOCUMENT being
- * absent are one answer to a caller who named a document — which is why the
- * title is the caller's to supply.
+ * The workspace being absent, in the one voice every route answers it in.
+ * Both error spellings carry the id the caller's address resolved to.
+ */
+export const workspaceNotFound: ErrorAnswer = (err) =>
+  isWorkspaceAbsent(err)
+    ? {
+        status: 404,
+        body: workspaceNotFoundRefusal((err as { workspaceId: string }).workspaceId),
+      }
+    : null
+
+/**
+ * Nothing at that address: an absent DOCUMENT answers the title the caller
+ * supplies (only the route knows which path it was asked for), an absent
+ * WORKSPACE answers as every other route does.
  */
 export const notFoundAs =
   (title: string): ErrorAnswer =>
   (err) =>
-    isDocumentNotFoundError(err) || isWorkspaceAbsent(err) ? { status: 404, body: { title } } : null
+    isDocumentNotFoundError(err) ? { status: 404, body: { title } } : workspaceNotFound(err)
 
-/** Only the WORKSPACE half of the above, for a route with no document in its address. */
-export const workspaceNotFoundAs =
-  (title: string): ErrorAnswer =>
-  (err) =>
-    isWorkspaceAbsent(err) ? { status: 404, body: { title } } : null
+/**
+ * Refuses an unknown workspace before any `/api/workspaces/:workspaceId/*`
+ * route runs, in `workspaceNotFoundRefusal`'s voice.
+ *
+ * A middleware rather than a check in each handler: handlers that read a
+ * workspace's store answer an unknown one with an EMPTY result (names, version
+ * lists, a purge that frees nothing), and a write to it does nothing or mints a
+ * row for a workspace that does not exist, so each route's own translation of
+ * "absent" would have to be remembered. It also covers routers mounted after
+ * the one that registers it (the files router), which a call per route could
+ * not without threading deps into it.
+ *
+ * A malformed handle passes through: an address no workspace can have is the
+ * caller's mistake, and each route family words that 400 in its own voice (the
+ * document routes speak Problem Details, the rest `{ error, message }`). In
+ * server mode the membership gate sits in front and answers a stranger the same
+ * refusal for an unknown workspace as for a real one, so this cannot be used to
+ * learn which workspaces exist.
+ */
+export function refuseUnknownWorkspace(deps: Pick<ServerDeps, 'documentIndex'>): MiddlewareHandler {
+  return async (c, next) => {
+    const handle = c.req.param('workspaceId') ?? ''
+    if (refuseMalformedHandle(c, handle) !== null) return next()
+    // The index `/api/v1` asks, and for the same reason: it takes either layer
+    // of the address (ADR-0019) and is the registry the operations read.
+    if ((await deps.documentIndex.resolveWorkspace(handle)) === null) {
+      return c.json(workspaceNotFoundRefusal(handle), 404)
+    }
+    await next()
+  }
+}
 
 /** Stored data this server cannot read — a 500 that says which. */
 export const corruptStored: ErrorAnswer = (err) => handleCorruptStoredData(err)

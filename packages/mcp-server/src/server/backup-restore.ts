@@ -24,12 +24,12 @@ import {
 // version-store, routes/files):
 //   <data>/whiteboard.db                                   libsql DB
 //                                                          (workspaces, documents, versions
-//                                                           metadata + frontiers, branches,
+//                                                           metadata + frontiers,
 //                                                           runtime)
 //   <data>/<workspaceId>/files/<fileId>.<ext>              binary file blobs (image attachments)
-//   <data>/blobs/<workspaceId>/document/<documentId>.loro      Loro canvas snapshot
+//   <data>/blobs/<workspaceId>/document/<documentId>.loro      Loro document snapshot
 // Per-version `.loro` files are NOT written — version state is captured by
-// frontiers in the DB plus the live canvas snapshot.
+// frontiers in the DB plus the live document snapshot.
 //
 // MVP contract: copy the data dir wholesale, restore into a fresh dir,
 // verify the daemon can read it again. No archive format, no encryption,
@@ -68,7 +68,7 @@ export interface BackupRestoreOptions {
 // Used by CLI callers to fail-closed before passing paths to the helper, so
 // an ancestor symlink (e.g. `<safe>/link → /outside`) cannot redirect writes
 // to locations outside the operator's intended storage zone.
-export async function hasAncestorSymlink(p: string): Promise<boolean> {
+async function hasAncestorSymlink(p: string): Promise<boolean> {
   let current = resolve(p)
   while (true) {
     const parent = dirname(current)
@@ -83,6 +83,52 @@ export async function hasAncestorSymlink(p: string): Promise<boolean> {
     current = parent
   }
   return false
+}
+
+export type OutputPathState = 'missing' | 'present' | 'unsafe'
+
+/**
+ * Judge a path a command is about to WRITE to, before any byte moves. A
+ * symlinked ancestor (`<safe>/link -> /outside`) would redirect the write
+ * outside the operator's intended storage zone, so it is refused rather than
+ * followed.
+ *
+ * What the final component may be is the one thing callers differ on: a
+ * backup or restore target refuses a symlink or plain file and lets anything
+ * else through to its own emptiness check, while the support bundle writes
+ * into a directory and so also refuses every other kind (`requireDirectory`).
+ *
+ * Throws on anything but a missing component; callers answer that as a
+ * failure, never as a refusal, so an unreadable path is not mistaken for an
+ * unsafe one.
+ */
+export async function inspectOutputPath(
+  p: string,
+  options: { requireDirectory: boolean },
+): Promise<OutputPathState> {
+  if (await hasAncestorSymlink(p)) return 'unsafe'
+  let st: Awaited<ReturnType<typeof lstat>>
+  try {
+    st = await lstat(p)
+  } catch (err) {
+    if (isMissingFileError(err)) return 'missing'
+    throw err
+  }
+  const refused = options.requireDirectory ? !st.isDirectory() : st.isSymbolicLink() || st.isFile()
+  return refused ? 'unsafe' : 'present'
+}
+
+/**
+ * The read-side twin: a symlinked source directory would let a command read
+ * from outside the allowed zone. Fail-closed, so a path that cannot be
+ * examined is not safe either.
+ */
+export async function isSafeSourcePath(p: string): Promise<boolean> {
+  try {
+    return !(await hasAncestorSymlink(p))
+  } catch {
+    return false
+  }
 }
 
 async function assertWithinAllowed(
@@ -171,10 +217,9 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
  * - The daemon's Ed25519 private key signs version attestations (ADR-0039)
  *   and is the source of its `did:key`. Excluding it is the one exclusion
  *   here with a real cost: a restored daemon generates a fresh identity, so
- *   its did:key changes, every pairing has to be redone, and attestations
- *   signed by the old identity no longer verify against the current one.
- *   That cost was weighed and accepted (2026-09-19) because it is
- *   RECOVERABLE — re-pair, and read old attestations as history — while a
+ *   its did:key changes and attestations signed by the old identity no
+ *   longer verify against the current one. That cost is accepted because it
+ *   is RECOVERABLE — old attestations are read as history — while a
  *   signing key sitting in a backup is a forgery capability that outlives
  *   the machine it came from, and that is not. Encrypting the backup under
  *   a passphrase is the answer that keeps both, and it is a feature rather

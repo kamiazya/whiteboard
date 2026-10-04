@@ -98,13 +98,13 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   // callback rather than through its own effect closure — a ref kept
   // current every render, not the value `daemonKept` held when the effect
   // last ran. `switchBrowserWorkspace`'s rejection for an unrecognized
-  // (daemon) handle settles fast enough that it used to land AFTER a
-  // same-tick pairing renewal had already committed `daemonKept: true`
-  // (this ref) but BEFORE that render's effect cleanup had torn down the
-  // in-flight async call (the effect's own `cancelled` flag) — so the
-  // rewrite fired anyway, using a browserHandle/navigate that were still
-  // perfectly valid, just answering a question the app had already moved
-  // past. See that effect's comment for the storm this produced.
+  // (daemon) handle settles fast enough to land AFTER a same-tick daemon
+  // reconnection has committed `daemonKept: true` (this ref) but BEFORE that
+  // render's effect cleanup has torn down the in-flight async call (the
+  // effect's own `cancelled` flag) — so the rewrite would fire anyway, using
+  // a browserHandle/navigate that are still perfectly valid, just answering a
+  // question the app has already moved past. See that effect's comment for
+  // the storm this produces.
   const daemonKeptRef = useRef(daemonKept)
   daemonKeptRef.current = daemonKept
 
@@ -122,8 +122,8 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
   // the pathname this effect is about to supersede as "already synced"
   // stops the URL -> state effect, reading the SAME stale `location.pathname`
   // a moment later in the same flush, from parsing it back into `daemonView`
-  // — which is what turned a single stale address (a browser-keeper rewrite
-  // that raced a still-resolving pairing renewal) into the two effects
+  // — which is what turns a single stale address (a browser-keeper rewrite
+  // that raced a still-resolving daemon reconnection) into the two effects
   // alternately overwriting each other's fix, forever: each one's own
   // "did I already handle this path" ref never caught it, because the
   // address ping-ponged between exactly two values and neither effect saw
@@ -218,8 +218,8 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
       // Re-checked live (see `daemonKeptRef`'s comment): this effect's OWN
       // `daemonKept` closure is whatever it was when the effect last ran,
       // which for an address that just turned daemon-kept is stale by the
-      // time an async resolve/reject actually reaches here — the pairing
-      // renewal driving `daemonKept` true is a real network round trip, so
+      // time an async resolve/reject actually reaches here — the daemon
+      // reconnection driving `daemonKept` true is a real network round trip, so
       // it regularly loses the race against this rejection, but its state
       // update still lands (and this ref updates) before this callback
       // fires. Skipping stops the rewrite from ever reaching a now-daemon-

@@ -73,8 +73,8 @@ export function createSharedSseStreamSource(
 
   const cached = sources.get(baseUrl)
   if (cached) {
-    // The source is cached per origin but the pairing token is rotated under
-    // it, so a caller arriving with a fresher credential hands it on rather
+    // The source is cached per origin but the daemon's token can be rotated
+    // under it, so a caller arriving with a fresher credential hands it on rather
     // than silently reusing the one the worker was told about first.
     postWorkerRequest(cached.port, { type: 'init', baseUrl, token })
     return cached.source

@@ -31,16 +31,16 @@ function assertIsoTimestamp(value: string, label: string): string {
 // section (status, doctor) is rebuilt through a tight allow-list
 // from typed inputs. Raw `DaemonStatusResult` / `DaemonDoctorResult` /
 // log-source objects are NOT stringified wholesale — that pattern has
-// shipped Authorization / token / canvas-plaintext leaks before, and
+// shipped Authorization / token / document-plaintext leaks before, and
 // the redactor is a defence-in-depth net, not a primary boundary. There is
 // no log section: the daemon writes its records to stderr and keeps no file
 // to bundle.
 //
 // Excluded by contract:
-//   - canvas plaintext (Excalidraw scene / elements / files / rawPayload)
+//   - document plaintext (scene / elements / files / rawPayload)
 //   - migration bundle payload
 //   - raw MCP tool input / output
-//   - tokens (daemon token / PAT / cookie / session / pairing material)
+//   - tokens (daemon token / PAT / cookie / session material)
 //   - absolute local paths (the `dataDir` etc. become `[REDACTED_PATH]`
 //     via the redactor; structural fields like `pid`/`status`
 //     pass the allow-list)

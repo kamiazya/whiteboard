@@ -1,8 +1,7 @@
 // The pages a document is open in, and the text events the daemon sends them.
 //
 // Every page is reached over its SSE sync stream (sync-streams.ts holds the
-// streams): the WebSocket that used to carry the same traffic is retired
-// (ADR-0050 decision 1). This module is the document-level vocabulary the
+// streams); there is no WebSocket (ADR-0050 decision 1). This module is the document-level vocabulary the
 // rest of the daemon speaks — "announce a version", "ask the open pages to
 // move their viewport", "how many pages have this document open" — so a
 // caller names what it means and never which transport carries it.

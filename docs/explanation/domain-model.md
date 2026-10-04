@@ -138,7 +138,13 @@ That split is **gone**, in four steps recorded in the migration log:
   workspace's trash, so the file browser can list what went and restore it
   under the **same `documentId`** — anything that named the document (a
   share link, an embed) resolves to it again after a restore. The trash
-  section appears only when it holds something.
+  section appears only when it holds something. **Delete permanently** on a
+  trash row is the one step with no way back: after a confirmation it removes
+  the row and the evacuated content, so the document can no longer be restored
+  and the images only it used are no longer kept for it. It does not rewrite
+  the workspace's change history — edits recorded there before the delete stay
+  in it until that history is compacted. There is no automatic expiry: the
+  trash keeps what it holds until someone restores or deletes it.
 - Because placement is CRDT state, two replicas can merge into **one path
   holding two documents**. Nothing is auto-renamed: the earlier document
   keeps the path, later ones are listed as *shadowed* (the gallery badges

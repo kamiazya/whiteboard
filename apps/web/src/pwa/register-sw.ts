@@ -12,13 +12,9 @@ export interface SetupSwRegistrationOptions {
   isProd: boolean
   hasServiceWorker: boolean
   /**
-   * True when this document came from the local daemon rather than the hosted
-   * app. The daemon serves exactly one page (/pair) and redirects every other
-   * path to the hosted app, so `/sw.js` there answers 302 to a different
-   * origin: registering makes the browser fetch the hosted app's HTML as a
-   * worker script. That request can never succeed, and under the page's CSP it
-   * is blocked outright and never settles, stranding the dynamic import below.
-   * The PWA is a hosted-app concern; a consent page has nothing to cache.
+   * True when this document came from a daemon's own origin (a server-mode
+   * keeper, ADR-0047) rather than the hosted app. The PWA is a hosted-app
+   * concern: its worker is never registered against a keeper's origin.
    */
   isDaemonServed: boolean
   importRegister: ImportRegisterModule

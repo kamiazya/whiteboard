@@ -38,7 +38,6 @@ function mkVersionsResponse(count = 24): Response {
     elementCount: 58,
     label: `Version ${index + 1}`,
     auto: true,
-    branchName: 'main',
     operator: {
       kind: 'system' as const,
       peerId: 'peer-system',
@@ -151,9 +150,9 @@ describe('VersionTimeline browser mode', () => {
   })
 
   it('draws no lane column, even when the rows still carry a variation name', async () => {
-    // The fixture still serves rows on two lanes, because a document whose
-    // version rows still CARRY `branchName` is exactly the case that must
-    // draw one column of history. Lanes were the branch surface's view of
+    // The fixture still serves rows on two lanes, because an older daemon's
+    // version rows still CARRY `branchName` and that is exactly the case that
+    // must draw one column of history. Lanes were the branch surface's view of
     // this list; ADR-0029 retires that surface and leaves History as what it
     // answers on its own — what this used to be, and can I go back.
     scenario = 'two-lanes'

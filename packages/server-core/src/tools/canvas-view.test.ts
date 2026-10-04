@@ -10,15 +10,18 @@
 import {
   writeCommentThread,
   writeDocumentKind,
+  writeFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
+import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
@@ -466,5 +469,97 @@ describe('canvas_view with a reference that resolves to nothing', () => {
 
     expect(result.scene.nodes.map((n) => n.id).sort()).toEqual(['f', 't'])
     expect(result.references).toEqual({})
+  })
+})
+
+describe('canvas_view and the workspace tag library', () => {
+  const TAGS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W5'
+  const box = (id: string, x: number, tags?: string[], color?: '1' | '4') =>
+    textNode({
+      id,
+      x,
+      y: 0,
+      width: 100,
+      height: 50,
+      text: id,
+      ...(tags === undefined ? {} : { tags }),
+      ...(color === undefined ? {} : { color }),
+    })
+
+  async function seedBoard(nodes: ReturnType<typeof box>[], withLibrary: boolean) {
+    const store = new FakeDocumentStore()
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'board',
+      documentId: DOCUMENT_ID,
+      kind: 'spatial',
+    })
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, { nodes, edges: [] })
+    })
+    if (withLibrary) {
+      store.documentIndex.seed({
+        workspaceId: WORKSPACE_ID,
+        path: TAG_LIBRARY_PATH,
+        documentId: TAGS_ID,
+        kind: 'markdown',
+      })
+      await seedDoc(store, TAGS_ID, (doc) => {
+        writeDocumentKind(doc, 'markdown')
+        writeFacets(doc, {
+          [VISUAL_TAGS_KEY]: {
+            keys: { health: { values: { ok: { color: '4' }, failing: { color: '1' } } } },
+          },
+        } as never)
+      })
+    }
+    return store
+  }
+  const view = (store: FakeDocumentStore) =>
+    createCanvasViewTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+    })
+  const colourOf = (result: Awaited<ReturnType<typeof view>>, id: string) =>
+    result.scene.nodes.find((node) => node.id === id)?.color
+
+  test('sends each tagged box the colour the library declares for its tag', async () => {
+    const result = await view(
+      await seedBoard([box('a', 0, ['health:ok']), box('b', 200, ['health:failing'])], true),
+    )
+    expect(canvasViewOutputSchema.parse(result).scene.nodes).toHaveLength(2)
+    expect(colourOf(result, 'a')).toBe('4')
+    expect(colourOf(result, 'b')).toBe('1')
+  })
+
+  test('keeps the colour an author gave a box, and sends an untagged box none', async () => {
+    const result = await view(
+      await seedBoard(
+        [box('own', 0, ['health:ok'], '1'), box('plain', 200), box('tagged', 400, ['health:ok'])],
+        true,
+      ),
+    )
+    expect(colourOf(result, 'own')).toBe('1')
+    expect(colourOf(result, 'plain')).toBeUndefined()
+    // The subject is reached: a library that coloured nothing would pass the two above.
+    expect(colourOf(result, 'tagged')).toBe('4')
+  })
+
+  test('sends a tagged board uncoloured when the workspace declares no library', async () => {
+    const result = await view(await seedBoard([box('a', 0, ['health:ok'])], false))
+    expect(colourOf(result, 'a')).toBeUndefined()
+  })
+
+  test('lists the workspace only for a board that carries a tag', async () => {
+    const store = await seedBoard([box('a', 0)], true)
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    await view(store)
+    expect(listings).toBe(0)
   })
 })

@@ -93,8 +93,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
     'a flag in the upstream binding this file was deliberately NOT copied from; the comment names it to say what it avoids',
   'packages/mcp-server/src/server/backup-restore.ts#ERR_FS_CP_EEXIST':
     "Node's own error code, which the comment says the failure used to surface raw as",
-  'packages/mcp-server/src/server/routes/_test-helpers.ts#getDefaultServerDeps':
-    'opens with "This used to be" — the sentence is the record of what the helper replaced',
   'packages/mcp-server/src/server/security/auth-strategy.ts#createLocalTokenAuthStrategy':
     'the header says the file USED to carry it and why that seam was deleted',
   'packages/mcp-server/src/server/security/auth-strategy.ts#createAuthStrategyMiddleware':

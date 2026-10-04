@@ -66,10 +66,10 @@ export function applyStencil(
   // wears a mixture belonging to neither construct, which is the `excess`
   // shape ADR-0033 names.
   //
-  // Neither branch fires for the BUNDLED set any more: since ADR-0036 §5 no
-  // member carries a colour at all, so the channel is left for whatever
-  // second axis the drawing declares, and dressing a box by kind no longer
-  // destroys what its colour said. The rule stays for a vocabulary somebody
+  // Neither branch fires for the BUNDLED set: no member carries a colour at
+  // all (ADR-0036 §5), so the channel is left for whatever second axis the
+  // drawing declares, and dressing a box by kind does not destroy what its
+  // colour said. The rule stays for a vocabulary somebody
   // else authors, which still may spend colour — `canvas-edit.stencil.test.ts`
   // exercises it through a workspace library for exactly that reason.
   //

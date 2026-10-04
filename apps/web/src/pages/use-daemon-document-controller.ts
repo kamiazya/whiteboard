@@ -126,11 +126,11 @@ export function useDaemonDocumentController(
   }, [])
 
   // Resolution runs once per mount and once per retry() (daemonBaseUrl/
-  // workspaceId/path come from a stable pairing payload for the lifetime of
-  // this page). listWorkspaces always runs, even when workspaceId is
-  // supplied, so the switcher has a list to show — the real pairing-payload
-  // caller always passes a non-null workspaceId, so gating this fetch behind
-  // wid===null left it dead code.
+  // workspaceId/path are stable for the lifetime of this page).
+  // listWorkspaces always runs, even when workspaceId is supplied, so the
+  // switcher has a list to show — the real caller always passes a non-null
+  // workspaceId, so gating this fetch behind wid===null would leave it dead
+  // code.
   useEffect(() => {
     let cancelled = false
     const seq = resolveSeqRef.current
@@ -182,7 +182,7 @@ export function useDaemonDocumentController(
       cancelled = true
     }
     // daemonFetch/options are stable for the page's lifetime (App.tsx only
-    // mounts DaemonDocumentPage once per pairing); `attempt` is the only
+    // mounts DaemonDocumentPage once per daemon connection); `attempt` is the only
     // real dependency, bumped by retry().
   }, [attempt])
 

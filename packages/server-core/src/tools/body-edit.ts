@@ -24,6 +24,7 @@ import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
+import { proposalAuthorSchema } from './proposal-author.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 /**
@@ -53,6 +54,8 @@ export const bodyEditInputSchema = z
      * call opens its own.
      */
     proposalId: z.string().min(1).optional(),
+    /** Only meaningful when proposing; see `proposalAuthorSchema`. */
+    author: proposalAuthorSchema,
     ops: z.array(bodyEditOpSchema).min(1, 'a body edit carries at least one passage'),
   })
   .strict()
@@ -226,32 +229,32 @@ function assertAssumptionsHold(placed: readonly PlacedChange[], body: string): v
  */
 async function storeBodyProposal(args: {
   readonly deps: ServerDeps
-  readonly workspaceId: string
-  readonly documentId: string
-  readonly proposalId?: string
+  readonly input: Pick<BodyEditInput, 'workspaceId' | 'documentId' | 'proposalId' | 'author'>
   readonly doc: LoroDoc
   readonly changes: readonly BodyProposedChange[]
 }): Promise<Proposal> {
-  const open = readProposals(args.doc)
-  const continuing = open.find((existing) => existing.id === args.proposalId)
+  const { deps, input, doc } = args
+  const open = readProposals(doc)
+  const continuing = open.find((existing) => existing.id === input.proposalId)
   const proposal: Proposal = {
-    id: args.proposalId ?? mintProposalId(new Set(open.map((existing) => existing.id))),
-    // No author: server-core carries no operator identity, and a
-    // browser-kept workspace has nobody signed in to record.
+    id: input.proposalId ?? mintProposalId(new Set(open.map((existing) => existing.id))),
+    // The author is the caller's to name: server-core carries no operator
+    // identity, and a browser-kept workspace has nobody signed in to record.
     //
-    // A continuation keeps the time the proposal was OPENED — decision 8's
-    // batch is one request across several calls, so re-stamping here would
-    // make `createdAt` name the last call rather than the proposal.
+    // A continuation keeps the author and the time the proposal was OPENED —
+    // decision 8's batch is one request across several calls, so re-stamping
+    // here would make them name the last call rather than the proposal.
+    author: continuing?.author ?? input.author,
     createdAt: continuing?.createdAt ?? new Date().toISOString(),
     changes: [...args.changes],
   }
-  writeProposal(args.doc, proposal)
-  await saveDocumentSnapshot(args.deps, args.workspaceId, args.documentId, args.doc)
+  writeProposal(doc, proposal)
+  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
   // Read back rather than answering with the changes this call contributed.
   // The result is typed as a whole proposal, so it has to be one — and the
   // merge that produced it belongs to the container, so recomputing it here
   // would be a second implementation free to disagree with the first.
-  return readProposals(args.doc).find((stored) => stored.id === proposal.id) ?? proposal
+  return readProposals(doc).find((stored) => stored.id === proposal.id) ?? proposal
 }
 
 export function createBodyEditTool(deps: ServerDeps) {
@@ -299,9 +302,7 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
     assertDisjoint([...existing, ...placed])
     const proposed = await storeBodyProposal({
       deps,
-      workspaceId: input.workspaceId,
-      documentId: input.documentId,
-      proposalId: input.proposalId,
+      input,
       doc,
       changes: placed.map((entry) => entry.change),
     })

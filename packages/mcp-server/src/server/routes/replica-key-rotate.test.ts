@@ -43,7 +43,7 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
     const fixture = await makeApp({ known: [] })
     const res = await rotate(fixture.app, WS, { Authorization: `Bearer ${DAEMON_TOKEN}` })
     expect(res.status).toBe(404)
-    expect((await res.json()) as { error: string }).toMatchObject({ error: 'unknown_workspace' })
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'workspace_not_found' })
   })
 
   it('rotation is not gated on tier — a no-offline workspace still rotates 200', async () => {
@@ -150,7 +150,7 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
   // The bar is runtime:admin, not member-scoped — a passkey-bound member
   // session (ALL_AUTH_SCOPES under the accepted v1 posture) still reaches
   // it, the same honest limit the tier route records: this bar
-  // does not today separate an operator from a paired browser session.
+  // does not today separate an operator from a connected browser session.
 
   it('never mints a workspaces row as a side effect', async () => {
     const fixture = await makeApp()
@@ -168,6 +168,6 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
     await seedWorkspaceRow(fixture)
     await fixture.keys.setTier(WS, 'bounded')
     await rotate(fixture.app, WS, { Authorization: `Bearer ${DAEMON_TOKEN}` })
-    expect(await fixture.keys.tierFor(WS)).toBe('bounded')
+    expect(await fixture.keys.effectiveTier(WS)).toBe('bounded')
   })
 })

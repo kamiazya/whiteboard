@@ -1,5 +1,7 @@
 // @vitest-environment node
+import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
+import { fc, fcTest } from '../../test-utils/fast-check.js'
 import { folderContents } from './folder-contents.js'
 
 const docs = [
@@ -96,5 +98,48 @@ describe('folderContents pinned order', () => {
       'design/alpha',
       'design/beta',
     ])
+  })
+})
+
+// The keeper answers `listDocuments` in `compareDocumentPaths` order, so a
+// panel that re-sorts by the host's locale shows a different order from the
+// one the keeper (and `wb_document_list`) gave. The alphabet is small and
+// mixed-case on purpose: a locale fold only disagrees with a code-point
+// order where case or a hyphen sits against a letter, which a uniform draw
+// from the whole segment grammar reaches rarely.
+const segmentArbitrary = fc.stringMatching(/^[aAbB0]([aAbB0-]*[aAbB0])?$/)
+
+describe('folderContents order', () => {
+  fcTest.prop(
+    [
+      fc.uniqueArray(segmentArbitrary, { minLength: 2, maxLength: 12 }),
+      fc.constantFrom('', 'Design', 'a'),
+    ],
+    { numRuns: 100 },
+  )('lists the documents in the keeper path order', (names, folder) => {
+    const paths = names.map((name) => (folder === '' ? name : `${folder}/${name}`))
+    const { documents } = folderContents(
+      paths.map((path, index) => ({ documentId: String(index), path })),
+      folder,
+    )
+    expect(documents.map((d) => d.path)).toEqual([...paths].sort(compareDocumentPaths))
+  })
+
+  fcTest.prop(
+    [
+      fc.uniqueArray(segmentArbitrary, { minLength: 2, maxLength: 12 }),
+      fc.constantFrom('', 'Design', 'a'),
+    ],
+    { numRuns: 100 },
+  )('lists the folders in the keeper path order', (names, folder) => {
+    const prefix = folder === '' ? '' : `${folder}/`
+    const paths = names.map((name) => `${prefix}${name}/leaf`)
+    const { folders } = folderContents(
+      paths.map((path, index) => ({ documentId: String(index), path })),
+      folder,
+    )
+    expect(folders.map((f) => f.path)).toEqual(
+      names.map((name) => `${prefix}${name}`).sort(compareDocumentPaths),
+    )
   })
 })

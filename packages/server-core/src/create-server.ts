@@ -16,6 +16,7 @@ import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
 import { createCanvasViewTool } from './tools/canvas-view.js'
 import {
+  DocumentNameConflictError,
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundForCallerError,
   WorkspaceSegmentUnusableError,
@@ -42,7 +43,7 @@ import {
 } from './tools/document-search.js'
 import { OKF_YAML_SAFE_STAGE, OkfParseError } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
-import { DocumentKindMismatchError } from './tools/errors.js'
+import { DocumentKindMismatchError, FacetWriteRejectedError } from './tools/errors.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetListTool } from './tools/facet-list.js'
 import { createFacetSetTool } from './tools/facet-set.js'
@@ -474,6 +475,12 @@ const REFUSALS: readonly Refusal[] = [
   // A tag the workspace's own library does not admit (ADR-0040 decision 5);
   // the message names the ones it does.
   refusalOf(TagLibraryError, 'tag_not_in_library', 400),
+  // A registered facet's payload its own schema refuses, or one written where
+  // it does not belong (ADR-0013 decisions 6 and 10): the message names the
+  // key and what to change.
+  refusalOf(FacetWriteRejectedError, 'facet_write_rejected', 400),
+  // Two display names for one document, which no server choice could settle.
+  refusalOf(DocumentNameConflictError, 'document_name_conflict', 400),
 ]
 
 /** `said` is the reason as the caller's own words re-state it; the error's own message otherwise. */

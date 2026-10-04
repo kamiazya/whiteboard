@@ -84,10 +84,9 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'nodes[].width': NATIVE,
   'nodes[].height': NATIVE,
   'nodes[].color': EXTENSION,
-  // A resource is now what the model STORES, not something the projection
-  // builds — decision 3 took OCIF's shape into the model, and the row that
-  // used to sit here (`nodes[].type`, `degraded` to "the shape of the
-  // document") is gone with the discriminator it described. Text is a
+  // A resource is what the model STORES, not something the projection
+  // builds — decision 3 took OCIF's shape into the model, so there is no
+  // row for a node-type discriminator (`nodes[].type`). Text is a
   // resource (`text/markdown`), a file is a resource with a `location`, a
   // URL is a resource whose location is that URL, and `representationFor`
   // is nearly the identity.

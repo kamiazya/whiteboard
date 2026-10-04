@@ -400,9 +400,9 @@ export function sketchShape(
 /**
  * Every vertex the flattener produced — a rounded corner's chords, a hop's
  * samples — plus an anchor every `EDGE_STEP_PX` along any longer straight
- * run. Keeping only one point per step used to erase both: a hop is nine
+ * run. Keeping only one point per step would erase both: a hop is nine
  * points over ten pixels and a short stub is one bend inside the step, so
- * a sketched edge crossed other edges flat and cut its own corners.
+ * a sketched edge would cross other edges flat and cut its own corners.
  */
 function anchored(points: readonly Point[]): Point[] {
   const out: Point[] = []

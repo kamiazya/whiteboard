@@ -9,19 +9,19 @@ import {
 } from '../lib/browser-workspace-id.js'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 afterEach(cleanup)
 
 async function seededStore(snapshots: DocumentSnapshot[]) {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   for (const s of snapshots) await store.save(s)
   return store
 }
 
-function renderPage(store: LocalStoreDouble, revision?: unknown) {
+function renderPage(store: BrowserStoreDouble, revision?: unknown) {
   const onOpenDocument = vi.fn()
   const page = (rev?: unknown) => (
     <MemoryRouter initialEntries={['/']}>
@@ -180,11 +180,13 @@ describe('BrowserIndexPage', () => {
     const indexWithTrash = store.index as typeof store.index & {
       listTrash?: () => Promise<{ documentId: string; path: string; deletedAt: number }[]>
       restoreDocument?: (input: unknown) => Promise<null>
+      purgeTrashEntry?: (input: unknown) => Promise<boolean>
     }
     indexWithTrash.listTrash = async () => [
       { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'gone', deletedAt: 1_700_000 },
     ]
     indexWithTrash.restoreDocument = async () => null
+    indexWithTrash.purgeTrashEntry = async () => false
     renderPage(store)
 
     await screen.findByTestId('trash-section')
@@ -196,9 +198,11 @@ describe('BrowserIndexPage', () => {
     const indexWithTrash = store.index as typeof store.index & {
       listTrash?: () => Promise<{ documentId: string; path: string; deletedAt: number }[]>
       restoreDocument?: (input: unknown) => Promise<null>
+      purgeTrashEntry?: (input: unknown) => Promise<boolean>
     }
     indexWithTrash.listTrash = async () => []
     indexWithTrash.restoreDocument = async () => null
+    indexWithTrash.purgeTrashEntry = async () => false
     renderPage(store)
 
     await screen.findByText('What will you make first?')
@@ -281,10 +285,10 @@ describe('BrowserIndexPage', () => {
   })
 
   it('empty store shows the empty state whose action creates a spatial canvas', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     const { onOpenDocument } = renderPage(store)
 
-    // The privacy promise is only TRUE in local mode — a swap with the
+    // The privacy promise is only TRUE for a browser-kept workspace — a swap with the
     // daemon page's line would ship a lie, so the exact string is pinned
     // per page.
     expect((await screen.findByTestId('empty-state-subtitle')).textContent).toBe(
@@ -308,7 +312,7 @@ describe('BrowserIndexPage', () => {
     // that window returns to this same mount. The list it renders must
     // therefore include what it just created, or the onboarding empty state
     // sticks over a store that has a document (the back-from-editor bug).
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     renderPage(store)
 
     fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
@@ -319,7 +323,7 @@ describe('BrowserIndexPage', () => {
   })
 
   it('empty store also offers a markdown note, creating and opening one', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     const { onOpenDocument } = renderPage(store)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create a markdown note' }))
@@ -334,7 +338,7 @@ describe('BrowserIndexPage', () => {
   it('creates exactly one canvas for two presses inside a single tick', async () => {
     // Pins the createDisabled wiring: React flushes `creating` before a
     // second click can dispatch on the now-disabled button.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     const { onOpenDocument } = renderPage(store)
     const button = await screen.findByRole('button', { name: /create a canvas/i })
 
@@ -350,7 +354,7 @@ describe('BrowserIndexPage', () => {
     // list too — to number the new path — but swallows a failed read and
     // numbers from nothing, which the index's own uniqueness check then
     // polices. Success navigates away.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     store.index.listDocuments = () => Promise.reject(new Error('idb blocked'))
     const { onOpenDocument } = renderPage(store)
 
@@ -361,7 +365,7 @@ describe('BrowserIndexPage', () => {
   })
 
   it('surfaces a create failure and re-enables the create action', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     store.index.createDocument = () => Promise.reject(new Error('quota exceeded'))
     const { onOpenDocument } = renderPage(store)
 
