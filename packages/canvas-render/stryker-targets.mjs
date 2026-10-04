@@ -49,6 +49,9 @@ export const MUTATED = [
   'src/svg/hoist.ts',
   // Pure geometry and derivation with properties of their own.
   'src/scene-bounds.ts',
+  // How a scene nests, split out so a layout stage below `scene-bounds` reads
+  // it too. In the lane because the file it left was.
+  'src/scene-children.ts',
   'src/scene-digest.ts',
   // The rectangle arithmetic `scene-digest.ts`'s overlap and containment moved
   // into when the quality instruments stopped redeclaring it. In the lane for

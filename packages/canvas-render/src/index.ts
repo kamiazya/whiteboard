@@ -140,13 +140,9 @@ export {
   loadedReferenceToWire,
   loadedReferenceWireSchema,
 } from './references/wire-schema.js'
-export type { SceneWalkNode } from './scene-bounds.js'
-export {
-  MIN_SCENE_EXTENT_PX,
-  sceneBounds,
-  sceneChildrenOf,
-  sceneDocumentBounds,
-} from './scene-bounds.js'
+export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
+export type { SceneWalkNode } from './scene-children.js'
+export { sceneChildrenOf } from './scene-children.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
 export type { SvgDocumentOptions } from './svg/backend.js'

@@ -92,6 +92,7 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'edge-arrows.ts': 'leaf',
   'finite-box.ts': 'leaf',
   'measure.ts': 'leaf',
+  'scene-children.ts': 'leaf',
   'scene-entry-keys.ts': 'leaf',
   'xml-escape.ts': 'leaf',
   'scene-bounds.ts': 'scene-bounds',
