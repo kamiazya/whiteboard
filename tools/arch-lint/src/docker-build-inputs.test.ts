@@ -233,18 +233,29 @@ describe('a change that cannot alter whether the image builds', () => {
     expect(inertChange('.release-please-manifest.json', before, after)).toBe(true)
   })
 
-  it('is NOT inert when a dependency range moves', () => {
-    // The case the whole rule must not swallow: a dependency bump is also a
-    // semver string moving, and it can fail `pnpm install --frozen-lockfile`
-    // inside the build — which is exactly what this job exists to catch.
-    const before = '{"version":"1.0.0","dependencies":{"zod":"3.0.0"}}'
-    const after = '{"version":"1.0.1","dependencies":{"zod":"4.0.0"}}'
-    expect(inertChange('package.json', before, after)).toBe(false)
-  })
-
-  it('is NOT inert when anything else in the manifest moves', () => {
-    const before = '{"version":"1.0.0","scripts":{"build":"tsup"}}'
-    const after = '{"version":"1.0.1","scripts":{"build":"tsc"}}'
+  // A dependency bump is the case the whole rule must not swallow: it is also a
+  // semver string moving, and it can fail `pnpm install --frozen-lockfile`
+  // inside the build — which is exactly what this job exists to catch. A
+  // script NAMED version ends its trail in `version` but runs through
+  // `scripts`, which decides what the build runs: one build-deciding key
+  // anywhere on the trail is enough.
+  it.each([
+    [
+      'a dependency range moves',
+      '{"version":"1.0.0","dependencies":{"zod":"3.0.0"}}',
+      '{"version":"1.0.1","dependencies":{"zod":"4.0.0"}}',
+    ],
+    [
+      'anything else in the manifest moves',
+      '{"version":"1.0.0","scripts":{"build":"tsup"}}',
+      '{"version":"1.0.1","scripts":{"build":"tsc"}}',
+    ],
+    [
+      'a script NAMED version changes',
+      '{"version":"1.0.0","scripts":{"version":"changeset version"}}',
+      '{"version":"1.0.0","scripts":{"version":"rm -rf dist"}}',
+    ],
+  ])('is NOT inert when %s', (_case, before, after) => {
     expect(inertChange('package.json', before, after)).toBe(false)
   })
 
@@ -273,14 +284,6 @@ describe('a change that cannot alter whether the image builds', () => {
     // The release-please manifest is the one file whose keys need not say
     // `version`, so it is where a root-level difference could pass for one.
     expect(inertChange('.release-please-manifest.json', '{".":"0.0.19"}', '"0.1.0"')).toBe(false)
-  })
-
-  it('is NOT inert when a script NAMED version changes', () => {
-    // The trail ends in `version` but runs through `scripts`, which decides
-    // what the build runs: one build-deciding key anywhere on it is enough.
-    const before = '{"version":"1.0.0","scripts":{"version":"changeset version"}}'
-    const after = '{"version":"1.0.0","scripts":{"version":"rm -rf dist"}}'
-    expect(inertChange('package.json', before, after)).toBe(false)
   })
 
   it('lets the whole measured release diff skip the build', () => {

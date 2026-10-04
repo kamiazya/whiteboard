@@ -28,7 +28,7 @@ describe('markdownInputSchema', () => {
     // The limit exists because import time follows length, and `String#length`
     // is the length every runtime agrees on.
     const half = '😀'.repeat(MARKDOWN_MAX_CHARS / 2)
-    expect(half.length).toBe(MARKDOWN_MAX_CHARS)
+    expect(half).toHaveLength(MARKDOWN_MAX_CHARS)
     expect(markdownInputSchema.safeParse(half).success).toBe(true)
     expect(markdownInputSchema.safeParse(`${half}😀`).success).toBe(false)
   })

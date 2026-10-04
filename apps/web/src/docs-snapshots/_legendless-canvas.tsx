@@ -35,7 +35,7 @@ export function LegendlessCanvas({
   height,
   padding = 0,
   testId,
-}: LegendlessCanvasProps) {
+}: Readonly<LegendlessCanvasProps>) {
   const measure = useMemo(() => createBrowserMeasureText(), [])
   const svg = useMemo(
     () =>

@@ -94,7 +94,7 @@ it('a stationary empty double press still creates a node at the point', async ()
   ev(root, 'pointerup', 500, 500)
 
   await vi.waitFor(() => {
-    expect(latest.canvas.nodes.length).toBe(4)
+    expect(latest.canvas.nodes).toHaveLength(4)
     expect(nodeEditorContent(container)).not.toBeNull()
   })
 })

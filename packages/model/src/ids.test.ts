@@ -185,7 +185,7 @@ describe('length bounds on what a request can name', () => {
     expect(DOCUMENT_PATH_MAX_LENGTH).toBe(1024)
     const segment = 'a'.repeat(63)
     const fits = Array(16).fill(segment).join('/')
-    expect(fits.length).toBe(1023)
+    expect(fits).toHaveLength(1023)
     expect(documentPathSchema.safeParse(fits).success).toBe(true)
     expect(documentPathSchema.safeParse(`${fits}a`).success).toBe(true)
     expect(documentPathSchema.safeParse(`${fits}/a`).success).toBe(false)

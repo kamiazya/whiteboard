@@ -183,10 +183,10 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
     EXTENSION_FACET_KEY_PATTERN.test(key),
   )
   if (rootFacetKeys.length > 0) {
+    const quoted = rootFacetKeys.map((key) => JSON.stringify(key)).join(', ')
     throw new OkfParseError(
       OKF_ROOT_FACET_STAGE,
-      `${rootFacetKeys.map((key) => `"${key}"`).join(', ')} at the root of the frontmatter ` +
-        'look like facet keys, which are only read under `facets:` — move them there',
+      `${quoted} at the root of the frontmatter look like facet keys, which are only read under \`facets:\` — move them there`,
     )
   }
   const tags = writableTagsSchema.safeParse(parsed.value.frontmatter.tags ?? [])

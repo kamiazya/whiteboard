@@ -221,7 +221,7 @@ it('palette creation replaces the whole selection with the new node', async () =
       (b) => b.getAttribute('aria-label') === 'Note',
     ) as HTMLElement,
   )
-  await vi.waitFor(() => expect(latest.canvas.nodes.length).toBe(4))
+  await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(4))
   const created = latest.canvas.nodes.find((n) => !['a', 'b', 'c'].includes(n.id)) as {
     id: string
     x: number
