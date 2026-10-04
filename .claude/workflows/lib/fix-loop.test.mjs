@@ -86,6 +86,66 @@ test('inline triageReview in dev-loop.workflow.mjs matches this module', () => {
   )
 })
 
+// The inline copy is the one dev-loop actually RUNS. The test above compares it on a review no
+// finding of which sits ON a threshold, so a drift in the >= / < boundary passes it.
+test('inline triageReview agrees with this module for every severity at every threshold', () => {
+  const source = readFileSync(workflowPath, 'utf8')
+  const match = source.match(
+    /\nconst SEVERITY_RANK = [\s\S]*?\nfunction triageReview\(review, threshold\) \{[\s\S]*?\n\}\n/,
+  )
+  assert.ok(match)
+  // Evaluating our own source, not untrusted input
+  const inline = new Function(`${match[0]}\nreturn { triageReview }`)()
+  const severities = Object.keys(SEVERITY_RANK)
+  const review = {
+    confirmedFindings: [...severities, 'BOGUS'].map((s) => finding(s, s)),
+    qa: [{ scenario: 'q', status: 'fail', notes: 'n' }],
+  }
+  for (const threshold of Object.values(SEVERITY_RANK)) {
+    const expected = triageReview(review, threshold)
+    // the grid reaches the boundary: something sits at it and something just under it
+    assert.ok(
+      expected.actionable.length > 0 && expected.below.length > 0,
+      `threshold ${threshold} splits`,
+    )
+    assert.deepEqual(inline.triageReview(review, threshold), expected, `threshold ${threshold}`)
+  }
+})
+
+test('a finding AT the threshold is actionable and one rank below is a followup', () => {
+  const review = {
+    confirmedFindings: [finding('HIGH', 'h'), finding('MEDIUM', 'm'), finding('LOW', 'l')],
+    qa: [],
+  }
+  const { actionable, below } = triageReview(review, SEVERITY_RANK.MEDIUM)
+  assert.deepEqual(
+    actionable.map((f) => f.title),
+    ['h', 'm'],
+  )
+  assert.deepEqual(
+    below.map((f) => f.title),
+    ['l'],
+  )
+})
+
+test('a finding with an unknown severity ranks 0, so it is never actionable at the lowest threshold', () => {
+  const { actionable, below } = triageReview(
+    { confirmedFindings: [finding('BOGUS', 'x')], qa: [] },
+    SEVERITY_RANK.LOW,
+  )
+  assert.deepEqual(actionable, [])
+  assert.deepEqual(
+    below.map((f) => f.title),
+    ['x'],
+  )
+})
+
+test('a failed QA scenario enters at HIGH: actionable at a HIGH threshold, not at CRITICAL', () => {
+  const review = { confirmedFindings: [], qa: [{ scenario: 's', status: 'fail', notes: 'n' }] }
+  assert.equal(triageReview(review, SEVERITY_RANK.HIGH).actionable.length, 1)
+  assert.equal(triageReview(review, SEVERITY_RANK.CRITICAL).actionable.length, 0)
+})
+
 // `${BASE}..HEAD` re-anchors on every fetch, so a long run whose origin/main advanced reviewed a
 // diff containing spurious reversions of unrelated commits. Three dots pins the range to the
 // merge-base — the branch's own work — which is what review.workflow.mjs's own default already used.
