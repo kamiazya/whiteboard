@@ -215,6 +215,7 @@ describe('wbDocumentList shadowed threading', () => {
         path: 'a',
         kind: 'spatial',
         shadowed: true,
+        pinned: false,
       },
     ])
   })
@@ -329,6 +330,7 @@ describe('wbDocumentList', () => {
         path: 'a',
         kind: 'markdown',
         updatedAt: '2026-08-01T00:00:00.000Z',
+        pinned: false,
       },
     ])
   })

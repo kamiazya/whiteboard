@@ -1,7 +1,11 @@
 import { hasOkfFrontmatter } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
-import { isWorkspaceSegmentTakenError, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  hasDocumentPins,
+  isWorkspaceSegmentTakenError,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { saveDocumentSnapshot } from '../document-io.js'
@@ -279,6 +283,12 @@ export async function wbDocumentList(
   const entries = await rethrowWorkspaceNotFound(deps, input.workspaceId, 'read', () =>
     deps.documentIndex.listDocuments({ workspaceId: input.workspaceId }),
   )
+  // Read after the listing, so an unknown workspace has already been refused
+  // in the tool's vocabulary. An index without the capability says nothing
+  // about pins, which is not the same as saying none are pinned.
+  const pinned = hasDocumentPins(deps.documentIndex)
+    ? new Set(await deps.documentIndex.listPinnedDocuments({ workspaceId: input.workspaceId }))
+    : undefined
   return {
     documents: entries.map((entry) => ({
       documentId: entry.documentId,
@@ -287,6 +297,7 @@ export async function wbDocumentList(
       ...(entry.kind === undefined ? {} : { kind: entry.kind }),
       ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
       ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
+      ...(pinned === undefined ? {} : { pinned: pinned.has(entry.documentId) }),
     })),
   }
 }

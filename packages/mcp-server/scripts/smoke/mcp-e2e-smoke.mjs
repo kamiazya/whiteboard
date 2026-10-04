@@ -24,6 +24,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
+import { assertListedRowIsNotPinned } from './lib/listed-pin.mjs'
 import { anAutomaticCheckpointFollowsAMoveOrDelete } from './lib/session-end-checkpoint.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -576,6 +577,7 @@ async function placementNamingAndDeletionRoundTrip(ctx) {
     throw new Error(`an unnamed document should carry no name: ${JSON.stringify(unnamedRow)}`)
   }
   console.log('[e2e] document.create/list → name round-trips, unnamed stays unnamed')
+  assertListedRowIsNotPinned(namedRow)
 
   // id → placement is a row of wb_document_list now; the standalone
   // wb_document_resolve is retired (ADR-0031 §4).

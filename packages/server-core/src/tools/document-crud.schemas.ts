@@ -133,7 +133,18 @@ export const wbDocumentListInputSchema = z
 
 export const wbDocumentListOutputSchema = z
   .object({
-    documents: z.array(documentDetailSchema),
+    documents: z.array(
+      documentDetailSchema.extend({
+        // List-only: resolve reads one document and does not consult the pinned
+        // list. Absent, not false, on an index that keeps no pins.
+        pinned: z
+          .boolean()
+          .optional()
+          .describe(
+            'Whether the workspace pins this document to the top of its file list. Absent when this keeper keeps no pins.',
+          ),
+      }),
+    ),
   })
   .strict()
 
