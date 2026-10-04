@@ -8,6 +8,16 @@ import { z } from 'zod'
  * function, symbol). Cyclic references are rejected for the same reason a
  * cycle can never serialize to a finite document.
  *
+ * Two more shapes the YAML parser PRODUCES and the stored document cannot
+ * hold, because a preserved key travels through a JSON-shaped store between
+ * the write and the read: a non-plain object (`!!set` and `!!omap` parse to a
+ * Set and a Map, `!!binary` to bytes — each flattens to `{}` or an array of
+ * numbers). `parseOkf` hands an integer past 2^53 over as a bigint rather than
+ * the rounded number, so the same refusal covers it. Refusing at the write
+ * keeps the author holding the content. A spelling that parses to the same
+ * number (`0x10`, `1e3`) is not refused: it is a normalisation, and
+ * `docs/reference/export-formats.md` says so.
+ *
  * Zod's own recursive schema composition (`z.lazy` walking into array/object
  * children) would recurse into a cyclic object exactly the way `JSON.stringify`
  * does and stack-overflow before ever reporting an issue. This schema instead
@@ -25,6 +35,13 @@ function scalarUnsafety(node: unknown): string | undefined {
   return undefined
 }
 
+/** Whether `node` is an object the store keeps as written: an array, or a record with no class. */
+function isPlainContainer(node: object): boolean {
+  if (Array.isArray(node)) return true
+  const prototype = Object.getPrototypeOf(node)
+  return prototype === Object.prototype || prototype === null
+}
+
 export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((value, ctx) => {
   // Ancestor stack (not a whole-traversal seen set): a DAG where one object
   // is legitimately referenced from two different branches is not cyclic
@@ -39,6 +56,14 @@ export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((
       return
     }
     if (node === null || typeof node !== 'object') return
+    if (!isPlainContainer(node)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `${node.constructor.name} is not yaml-safe; use a plain list or mapping`,
+        path,
+      })
+      return
+    }
 
     if (ancestors.includes(node)) {
       ctx.addIssue({ code: 'custom', message: 'cyclic reference is not yaml-safe', path })

@@ -1,5 +1,5 @@
 import { normalizeOkfVerified, RESERVED_ROOT_KEYS } from '@kamiazya/whiteboard-model'
-import { parse as parseYaml } from 'yaml'
+import { parseDocument, visit } from 'yaml'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
 import { type OkfMarkdownDocument, okfMarkdownFrontmatterSchema } from './schema.js'
 
@@ -26,6 +26,49 @@ export function hasOkfFrontmatter(text: string): boolean {
 }
 
 const RESERVED = new Set<string>(RESERVED_ROOT_KEYS)
+
+/**
+ * The integer an unsafe-range scalar was WRITTEN as, or `undefined` when the
+ * double holds it as well as a double can: it is exact, or it is the very
+ * digits JS prints for that double (`serializeOkf` writes those, so a stored
+ * double must read back as itself).
+ */
+function writtenInteger(source: string, parsed: number): bigint | undefined {
+  try {
+    const written = BigInt(source.replace(/^\+/, ''))
+    return written === BigInt(parsed) || String(written) === String(parsed) ? undefined : written
+  } catch {
+    // Not an integer spelling (`1e20`): the number IS what was written.
+    return undefined
+  }
+}
+
+/**
+ * YAML to a JS value, except that an integer written past 2^53 comes back as
+ * the bigint it was written as instead of the neighbouring double it rounds
+ * to. The rounded number cannot be told from an exact one afterwards, so it
+ * would be stored as a different value than the author wrote; a bigint is
+ * what `yamlSafeValueSchema` already refuses, which turns the loss into the
+ * write-time refusal naming the key.
+ *
+ * Errors throw as `yaml`'s `parse` throws them. Its warnings (an unresolved
+ * tag) are not forwarded: the value is already what the document says.
+ */
+function parseYamlKeepingWrittenIntegers(text: string): unknown {
+  const doc = parseDocument(text)
+  const [firstError] = doc.errors
+  if (firstError !== undefined) throw firstError
+  visit(doc, {
+    Scalar(_key, node) {
+      if (typeof node.value !== 'number') return
+      if (!Number.isInteger(node.value) || Number.isSafeInteger(node.value)) return
+      const written =
+        typeof node.source === 'string' ? writtenInteger(node.source, node.value) : undefined
+      if (written !== undefined) node.value = written
+    },
+  })
+  return doc.toJS()
+}
 
 /**
  * OKF §4.1: consumers SHOULD preserve unknown frontmatter keys when
@@ -80,7 +123,7 @@ export function parseOkf(text: string): CodecParseResult<OkfMarkdownDocument> {
 
   let rawFrontmatter: unknown
   try {
-    rawFrontmatter = parseYaml(yamlText)
+    rawFrontmatter = parseYamlKeepingWrittenIntegers(yamlText)
   } catch (error) {
     return codecFailure('yaml', `malformed YAML frontmatter: ${(error as Error).message}`)
   }
