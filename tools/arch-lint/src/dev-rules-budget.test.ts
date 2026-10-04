@@ -485,7 +485,11 @@ const CANVAS_RENDER_BUDGET = 108
 // what they now see (reference directives and `import('x')` types, the
 // mechanics' inner order, the class-method reach, the retired-pairing comment
 // ban), written as the minimum that keeps the rule true.
-const TOOL_ARCH_LINT_BUDGET = 45
+//
+// 45 -> 46: one paragraph naming the shared AST helpers, the worker-URL edge,
+// the comparator ban and the v1 refusal coverage guard, each a guard a reader
+// of this directory now meets.
+const TOOL_ARCH_LINT_BUDGET = 46
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

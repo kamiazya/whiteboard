@@ -720,6 +720,15 @@ costs about 45 s over the tree under load against 1.9 s for the regex, and
 every one-place guard calls it. `source-scan.test.ts` holds it on planted
 cases, never on an oracle built from the code it judges.
 
+`ast-helpers.ts` is the one place `scriptKindOf`, `unwrapExpression` and
+`parseSource` live (`ast-helpers-one-place.test.ts`). `scanner.ts` reads
+`new URL('<literal>', import.meta.url)` as a value edge, so a worker built from
+a file binds like an import. `inline-comparator-ban.test.ts` keeps string
+orderings on `compareCodeUnit`; this tool and facet-engine restate it once,
+since neither may import model. `v1-refusals-cover-errors.test.ts` holds every
+error class in ports, model and server-core to a `REFUSALS` row or a reasoned
+`EXEMPT` entry.
+
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 
 `scan-roots.ts` owns `REPO_ROOT`, `workspaceDirs()` (every `packages/*`, `apps/*`

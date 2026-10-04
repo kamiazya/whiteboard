@@ -357,7 +357,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 338,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
-  // (`exactOptionalPropertyTypes`), and splitting it further would cut the
+  // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
   'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
