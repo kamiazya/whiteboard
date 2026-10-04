@@ -21,6 +21,7 @@ export interface FolderChild {
   readonly count: number
 }
 
+import { compareCodeUnit, pathBelow } from '@kamiazya/whiteboard-model'
 import { compareDocumentEntries } from '../../lib/document-entry.js'
 
 interface PathBearing {
@@ -33,28 +34,25 @@ export function folderContents<T extends PathBearing>(
   folder: string,
 ): { folders: readonly FolderChild[]; documents: readonly T[] } {
   const prefix = folder === '' ? '' : `${folder}/`
-  // Anchored at a segment boundary: `design-system` starts with `design` and
-  // is not inside it.
-  const inside = documents.filter((entry) => folder === '' || entry.path.startsWith(prefix))
-
   const here: T[] = []
   const counts = new Map<string, number>()
-  for (const entry of inside) {
-    // A folder's own document is already excluded: `design` does not start
-    // with `design/`, so the boundary filter above drops it before here.
-    const rest = entry.path.slice(prefix.length)
+  for (const entry of documents) {
+    // Anchored at a segment boundary: `design-system` is not inside `design`,
+    // and a folder's own document is not below itself.
+    const rest = pathBelow(folder, entry.path)
+    if (rest === undefined) continue
     const cut = rest.indexOf('/')
     if (cut === -1) {
       here.push(entry)
       continue
     }
-    const child = `${prefix}${rest.slice(0, cut)}`
-    counts.set(child, (counts.get(child) ?? 0) + 1)
+    const name = rest.slice(0, cut)
+    counts.set(name, (counts.get(name) ?? 0) + 1)
   }
 
   const folders = [...counts.entries()]
-    .map(([path, count]) => ({ path, name: path.slice(prefix.length), count }))
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .map(([name, count]) => ({ path: `${prefix}${name}`, name, count }))
+    .sort((left, right) => compareCodeUnit(left.name, right.name))
 
   return {
     folders,

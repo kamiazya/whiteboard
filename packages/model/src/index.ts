@@ -7,7 +7,7 @@ export { compareCodeUnit } from './compare.js'
 // the stable public surface.
 export { deriveWorkspaceSegment } from './derive-workspace-segment.js'
 export * from './document-kind.js'
-export { isSelfOrDescendant, rebasePath } from './document-path.js'
+export { isSelfOrDescendant, pathBelow, rebasePath } from './document-path.js'
 export {
   base64ToBytes,
   base64UrlToBytes,

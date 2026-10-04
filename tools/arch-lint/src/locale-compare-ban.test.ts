@@ -1,12 +1,13 @@
 /**
- * `localeCompare` is not called in shipped package source, outside a ledger of
- * display orders.
+ * `localeCompare` is not called in shipped package or web-app source, outside a
+ * ledger of display orders.
  *
  * Why it needs a scan. `localeCompare` reads the host's default locale and ICU
  * data, so an order built on it — a limit cut, a digest input, a tie-break, a
  * canonical pair — differs between two machines holding identical input, and
  * it folds case and punctuation, so it also disagrees with the code-unit order
- * the ports' `compareDocumentPaths` gives `listDocuments`. `compareCodeUnit`
+ * the ports' `compareDocumentPaths` gives `listDocuments` — so a panel that
+ * re-sorts a keeper's list by it shows a different order from the keeper's. `compareCodeUnit`
  * (`model`) is the one deterministic spelling, and a static analyser nudges
  * every reader toward the other, so only a rule about where the call may
  * appear holds.
@@ -31,6 +32,10 @@ interface LedgerEntry {
 }
 
 const LEDGER: Readonly<Record<string, LedgerEntry>> = {
+  'apps/web/src/components/spatial-editor/facet-widgets/field-suggestions.ts': {
+    uses: 1,
+    why: 'orders values a person typed, drawn in the Facets panel, where a code-unit order puts every Japanese value after every Latin one',
+  },
   'packages/plugin-visual/src/icons/shortcode.ts': {
     uses: 1,
     why: 'orders the completion list of built-in icon names a person scrolls, never persisted or digested',
@@ -39,25 +44,29 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
 
 const REASON = /^(\S+\s+){7,}\S+/
 
-function shippedPackageSource(): readonly string[] {
-  return walkSourceFiles(join(REPO_ROOT, 'packages'))
+function shippedSource(): readonly string[] {
+  return [
+    ...walkSourceFiles(join(REPO_ROOT, 'packages')),
+    ...walkSourceFiles(join(REPO_ROOT, 'apps/web/src')),
+  ]
     .map((absolute) => relative(REPO_ROOT, absolute).split(sep).join('/'))
-    .filter((path) => /^packages\/[^/]+\/src\//.test(path) && isShippedPath(path))
+    .filter((path) => /^(packages\/[^/]+|apps\/web)\/src\//.test(path) && isShippedPath(path))
 }
 
 function usesIn(path: string): number {
   return countNamedUses(path, readFileSync(join(REPO_ROOT, path), 'utf8'), BANNED)
 }
 
-const files = shippedPackageSource()
+const files = shippedSource()
 const used = new Map(
   files.map((path): [string, number] => [path, usesIn(path)]).filter(([, count]) => count !== 0),
 )
 
-describe('localeCompare is banned in shipped package source', () => {
+describe('localeCompare is banned in shipped package and web-app source', () => {
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
     expect(files.length).toBeGreaterThan(500)
+    expect(files.some((path) => path.startsWith('apps/web/src/'))).toBe(true)
   })
 
   it('every use is a ledgered display order', () => {

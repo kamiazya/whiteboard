@@ -1,3 +1,4 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { Folder } from 'lucide-react'
 import { useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -61,7 +62,7 @@ function buildFolderTree(documents: readonly WorkspaceDocumentEntry[]): FolderNo
 
   const freeze = (nodes: Map<string, MutableNode>): FolderNode[] =>
     [...nodes.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => compareCodeUnit(a.name, b.name))
       .map((n) => ({ name: n.name, path: n.path, children: freeze(n.children) }))
   return freeze(root)
 }

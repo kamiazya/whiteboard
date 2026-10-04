@@ -1,3 +1,4 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -71,7 +72,7 @@ function buildTree(documents: readonly WorkspaceDocumentEntry[]): TreeNode[] {
 
   const freeze = (nodes: Map<string, MutableNode>): TreeNode[] =>
     [...nodes.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => compareCodeUnit(a.name, b.name))
       .map((n) => ({ name: n.name, path: n.path, canvas: n.canvas, children: freeze(n.children) }))
   return freeze(root)
 }

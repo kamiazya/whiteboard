@@ -1,3 +1,5 @@
+import { pathBelow } from '@kamiazya/whiteboard-model'
+
 /**
  * Where a new document goes when it is made from inside a folder.
  *
@@ -17,9 +19,10 @@ export function newDocumentPathIn(folder: string, existingPaths: readonly string
   // function ever asks about contains a slash.
   const prefix = folder === '' ? '' : `${folder}/`
   const siblings = new Set(
-    existingPaths
-      .filter((path) => path.startsWith(prefix))
-      .map((path) => path.slice(prefix.length)),
+    existingPaths.flatMap((path) => {
+      const rest = pathBelow(folder, path)
+      return rest === undefined ? [] : [rest]
+    }),
   )
 
   if (!siblings.has('untitled')) return `${prefix}untitled`

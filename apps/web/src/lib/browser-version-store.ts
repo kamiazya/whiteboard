@@ -9,7 +9,7 @@ import {
   countSpatialNodes,
   projectWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -168,7 +168,7 @@ export class BrowserVersionStore {
     const rows = await this.rowsOf(workspaceId, documentId)
     const autosNewestFirst = rows
       .filter((row) => row.auto === true)
-      .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      .sort((a, b) => b.createdAt - a.createdAt || compareCodeUnit(b.id, a.id))
       .map((row) => ({ id: row.id, restoredFrom: row.restoredFrom ?? null }))
     const referenced = new Set(
       rows.flatMap((row) => (row.restoredFrom === undefined ? [] : [row.restoredFrom])),
@@ -211,7 +211,7 @@ export class BrowserVersionStore {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
     if (placement === null) return false
     const rows = await this.rowsOf(workspaceId, placement.documentId)
-    const newest = rows.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))[0]
+    const newest = rows.sort((a, b) => b.createdAt - a.createdAt || compareCodeUnit(b.id, a.id))[0]
     if (newest === undefined) return false
     const record = await this.deps.docs.open(workspaceId)
     if (record === null) return false
@@ -226,7 +226,7 @@ export class BrowserVersionStore {
     if (placement === null) return []
     const rows = await this.rowsOf(workspaceId, placement.documentId)
     return rows
-      .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      .sort((a, b) => b.createdAt - a.createdAt || compareCodeUnit(b.id, a.id))
       .map((row) => toEntry(row, path))
   }
 

@@ -10,11 +10,16 @@
  * them. `history` and `codec` cannot import `ports`, which is why the owner
  * sits in `model`.
  *
- * Two shapes are read from the syntax tree, never a text pattern on the name,
+ * Three shapes are read from the syntax tree, never a text pattern on the name,
  * so a line break, an alias or a nested call cannot walk past:
  * - a `.startsWith(` call whose argument is a template literal ending in `/`;
  * - a template holding a substitution directly followed by `<x>.slice(<y>.length)`,
- *   or the same joined with `+`, which is the root being swapped for another.
+ *   or the same joined with `+`, which is the root being swapped for another;
+ * - the same two once the `…/` prefix is bound to a name first
+ *   (`const prefix = folder === '' ? '' : `${folder}/``), so naming the
+ *   prefix does not walk past: `.startsWith(prefix)` and `<x>.slice(prefix.length)`.
+ *   The binding is read by name within the file, not by scope, which can
+ *   only over-count a same-named binding that is not a prefix.
  *
  * Tests and `test-utils` are out of scope: a fake keeper restating the rule is
  * how a test proves the real one.
@@ -49,6 +54,45 @@ function isSliceOffPrefix(node: ts.Expression): boolean {
   )
 }
 
+/** An expression that yields a `…/` template, however it is parenthesised or guarded. */
+function yieldsSlashTemplate(node: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node)) {
+    return yieldsSlashTemplate(node.expression)
+  }
+  if (ts.isConditionalExpression(node)) {
+    return yieldsSlashTemplate(node.whenTrue) || yieldsSlashTemplate(node.whenFalse)
+  }
+  return (
+    ts.isTemplateExpression(node) &&
+    node.templateSpans[node.templateSpans.length - 1]?.literal.text.endsWith('/') === true
+  )
+}
+
+/** Names the file binds to a `…/` prefix, whose later use is the same rule as the inline template. */
+function slashPrefixNames(file: ts.SourceFile): ReadonlySet<string> {
+  const names = new Set<string>()
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined &&
+      yieldsSlashTemplate(node.initializer)
+    ) {
+      names.add(node.name.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return names
+}
+
+/** `<x>.slice(<prefix>.length)` where `<prefix>` is a name bound to a `…/` template. */
+function isSliceOffBoundPrefix(node: ts.Node, prefixes: ReadonlySet<string>): boolean {
+  if (!ts.isCallExpression(node) || !isSliceOffPrefix(node)) return false
+  const length = node.arguments[0] as ts.PropertyAccessExpression
+  return ts.isIdentifier(length.expression) && prefixes.has(length.expression.text)
+}
+
 /** How many hand-spelled subtree tests and re-roots `source` holds. */
 function countPathSubtreeSpellings(fileName: string, source: string): number {
   const file = ts.createSourceFile(
@@ -58,6 +102,7 @@ function countPathSubtreeSpellings(fileName: string, source: string): number {
     true,
     scriptKind(fileName),
   )
+  const prefixes = slashPrefixNames(file)
   let found = 0
   const visit = (node: ts.Node): void => {
     if (
@@ -68,11 +113,14 @@ function countPathSubtreeSpellings(fileName: string, source: string): number {
       const [argument] = node.arguments
       if (
         argument !== undefined &&
-        ts.isTemplateExpression(argument) &&
-        argument.templateSpans[argument.templateSpans.length - 1]?.literal.text.endsWith('/')
+        (ts.isTemplateExpression(argument)
+          ? yieldsSlashTemplate(argument)
+          : ts.isIdentifier(argument) && prefixes.has(argument.text))
       ) {
         found += 1
       }
+    } else if (isSliceOffBoundPrefix(node, prefixes)) {
+      found += 1
     } else if (
       ts.isBinaryExpression(node) &&
       node.operatorToken.kind === ts.SyntaxKind.PlusToken &&
@@ -121,6 +169,19 @@ const FIXTURES: readonly { readonly source: string; readonly spellings: number }
   { source: 'path.startsWith(`@{root}/x`)', spellings: 0 },
   { source: 'const label = `@{kind}: @{name.slice(0, 8)}`', spellings: 0 },
   { source: 'const rest = `@{to}/@{path.slice(from.length)}`', spellings: 0 },
+  {
+    source:
+      "const prefix = folder === '' ? '' : `@{folder}/`\nconst rest = paths.filter((p) => p.startsWith(prefix))",
+    spellings: 1,
+  },
+  { source: 'const prefix = `@{folder}/`\nconst rest = path.slice(prefix.length)', spellings: 1 },
+  {
+    source: "const prefix = folder === '' ? '' : `@{folder}/`\nreturn `@{prefix}@{name}`",
+    spellings: 0,
+  },
+  { source: 'const prefix = `@{folder}-`\nconst hit = path.startsWith(prefix)', spellings: 0 },
+  { source: 'const hit = path.startsWith(prefix)', spellings: 0 },
+  { source: 'const rest = path.slice(prefix.length)', spellings: 0 },
   { source: '// path.startsWith(`@{root}/`)', spellings: 0 },
   { source: "log.warn('path.startsWith(`@{root}/`)')", spellings: 0 },
 ]
