@@ -43,7 +43,7 @@ You and your agent both reach the same whiteboard — they talk, the agent acts,
   <sub><i>Diagram drawn with whiteboard itself — its source is <a href="docs/assets/architecture.canvas">architecture.canvas</a>, a JSON Canvas 1.0 document any JSON Canvas-compatible tool can open.</i></sub>
 </p>
 
-`@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, reach the browser within about half a second while the daemon runs, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
+`@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Documents live locally in the daemon's data directory (`~/.whiteboard/` by default), reach the browser within about half a second while the daemon runs, and read back as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
 
 <p align="center">
   <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, live diagram synced from the agent in real time" width="780" />

@@ -6,7 +6,9 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
-cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
+cd whiteboard      # Node: match .node-version (currently 24). fnm, mise, nodenv and asdf (legacy version files on) read that file;
+                   # nvm reads only .nvmrc and Volta only package.json's "volta" key, so with nvm run `nvm use 24` (after `nvm install 24`) yourself
+                   # OS: macOS or Linux; on Windows work inside WSL2 (build:server ends in chmod +x)
                    # pnpm is pinned by package.json's packageManager (pnpm@11.12.0) — run `corepack enable` first,
                    # or an older global pnpm silently rewrites the lockfile and fails CI's --frozen-lockfile
                    # ImageMagick (convert/identify) is needed by pnpm test:scripts / pnpm check:local (compose-figure tests):
@@ -60,7 +62,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 Releases are automated by [release-please](https://github.com/googleapis/release-please) — merge the auto-generated `chore: release main` PR to publish.
 
 Keep published MCP wrapper configs on `@latest` unless you also update release-please sync rules. If you pin `@kamiazya/whiteboard-mcp@x.y.z` inside `.mcp.json` or plugin manifests, add the pinned fields to `release-please-config.json` `extra-files` at the same time.
-When upgrading `@modelcontextprotocol/sdk`, re-check the supported MCP protocol matrix in `docs/contributing/mcp-debugging.md` and the initialize negotiation tests.
+When upgrading the `@modelcontextprotocol/*` packages (`server`, `client`, `ext-apps` in `packages/mcp-server/package.json`), re-check the supported MCP protocol matrix in `docs/contributing/mcp-debugging.md` and the initialize negotiation tests.
 
 ## Where code goes
 

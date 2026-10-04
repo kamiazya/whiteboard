@@ -4,7 +4,14 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
 
 ## Prerequisites
 
-- Node.js **24** — the major `.node-version` pins and CI installs — and `pnpm`,
+- macOS or Linux. On Windows, work inside WSL2: `build:server` ends in
+  `chmod +x`, which `cmd` and PowerShell do not have, and CI runs everything
+  on Ubuntu except the extension's native-host smoke, the one job that runs on
+  Windows (the daemon itself does support Windows, through a named pipe).
+- Node.js **24** — the major `.node-version` pins and CI installs. fnm, mise,
+  nodenv and asdf (with legacy version files enabled) read that file; nvm
+  reads only `.nvmrc` and Volta only `package.json`'s `volta` key, so with nvm
+  run `nvm install 24 && nvm use 24` yourself. Also `pnpm`,
   pinned by `package.json`'s `packageManager` (pnpm@11.12.0): run `corepack enable`
   before `pnpm install`, or an older global pnpm rewrites the lockfile.
   Not a recommendation: `local-node-version.test.ts` fails on any other major,

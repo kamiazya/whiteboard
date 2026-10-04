@@ -39,11 +39,12 @@ body:
       description: Which part of the project does this affect?
       options:
         - MCP tools
-        - Canvas / Excalidraw UI
-        - Daemon / HTTP server
-        - WebSocket / real-time sync
-        - Templates
-        - Docker / server mode
+        - Web app (canvas and markdown editors)
+        - Browser extension
+        - Local daemon
+        - Live sync between the daemon and the browser
+        - Server mode / Docker
+        - Skills and plugins
         - Documentation
         - Developer tooling
         - Other
