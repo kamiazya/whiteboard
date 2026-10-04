@@ -12,7 +12,7 @@
  * code kept alive by a test: it is the only path one of the two suites has.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CatalogPopover } from './catalog-popover.js'
 
 afterEach(cleanup)
@@ -35,15 +35,16 @@ function mount(onMountContent = () => {}) {
  * placement case would be the same one. Standing a trigger at a chosen
  * height is the whole input to `place()`.
  */
-function standAt(trigger: HTMLElement, top: number) {
+function standAt(trigger: HTMLElement, top: number, right = 380) {
+  const left = right - 80
   const rect = {
     top,
     bottom: top + 26,
-    left: 300,
-    right: 380,
+    left,
+    right,
     width: 80,
     height: 26,
-    x: 300,
+    x: left,
     y: top,
   }
   trigger.getBoundingClientRect = () => ({ ...rect, toJSON: () => rect }) as DOMRect
@@ -182,5 +183,83 @@ describe('the panel opens somewhere a person can actually see it', () => {
     standAt(trigger, 120)
     fireEvent.scroll(document, {})
     expect(panel().style.top).toBe('152px')
+  })
+})
+
+/**
+ * The viewport is the other half of `place()`'s input. jsdom answers a fixed
+ * 1024x768, so every case states the size it reasons about rather than
+ * leaning on that default, and puts the window's own back afterwards.
+ */
+describe('the panel keeps its width and its height usable at any viewport', () => {
+  const restore: Array<() => void> = []
+  function viewport(width: number, height: number) {
+    for (const [key, value] of [
+      ['innerWidth', width],
+      ['innerHeight', height],
+    ] as const) {
+      const own = Object.getOwnPropertyDescriptor(window, key)
+      Object.defineProperty(window, key, { configurable: true, value })
+      restore.push(() => {
+        if (own === undefined) Reflect.deleteProperty(window, key)
+        else Object.defineProperty(window, key, own)
+      })
+    }
+  }
+  beforeEach(() => viewport(1024, 768))
+  afterEach(() => {
+    for (const undo of restore.splice(0).reverse()) undo()
+  })
+
+  function openAt(top: number, right: number) {
+    const trigger = mount()
+    standAt(trigger, top, right)
+    fireEvent.click(trigger)
+    return panel()
+  }
+
+  it('is 320px wide and right-aligned to a trigger in the middle of the page', () => {
+    const placed = openAt(40, 680)
+    expect(placed.style.width).toBe('320px')
+    expect(placed.style.left).toBe('360px')
+  })
+
+  it('keeps 8px from the left edge when the trigger is at the far left', () => {
+    expect(openAt(40, 80).style.left).toBe('8px')
+  })
+
+  it('keeps 8px from the right edge when the trigger is at the far right', () => {
+    // 1024 - 320 - 8: the panel's right edge sits 8px inside the viewport.
+    expect(openAt(40, 1024).style.left).toBe('696px')
+  })
+
+  it('narrows to the viewport less 8px each side on a phone', () => {
+    viewport(300, 768)
+    const placed = openAt(40, 280)
+    expect(placed.style.width).toBe('284px')
+    expect(placed.style.left).toBe('8px')
+  })
+
+  it('stays below when the room under it is enough, though there is more above', () => {
+    // Below: 768 - 494 - 6 - 8 = 260, at least the 240 floor. Above is 454,
+    // which is larger, and larger alone is no reason to flip.
+    const placed = openAt(468, 680)
+    expect(placed.style.top).toBe('500px')
+    expect(placed.style.bottom).toBe('auto')
+    expect(placed.style.maxHeight).toBe('260px')
+  })
+
+  it('takes the room above as its height when it flips up', () => {
+    // Below: 768 - 626 - 14 = 128. Above: 600 - 14 = 586.
+    const placed = openAt(600, 680)
+    expect(placed.style.top).toBe('auto')
+    expect(placed.style.maxHeight).toBe('586px')
+  })
+
+  it('floors the height at 240px when neither side has that much room', () => {
+    // Below: 300 - 156 - 14 = 130. Above: 130 - 14 = 116. Neither side is
+    // usable, so the floor answers and the panel scrolls.
+    viewport(1024, 300)
+    expect(openAt(130, 680).style.maxHeight).toBe('240px')
   })
 })
