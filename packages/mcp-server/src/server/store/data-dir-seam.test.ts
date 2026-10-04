@@ -1,7 +1,7 @@
 // Locks the contract that the storage layer follows the *effective* data
 // dir (getDataDir()) rather than the import-time DATA_DIR snapshot. This is
 // what makes `whiteboard daemon run --data-dir=<path>` actually isolate
-// canvas/DB storage instead of only relocating the daemon registry file.
+// document/DB storage instead of only relocating the daemon registry file.
 //
 // Deliberately NO vi.mock of config.js here: the point is to prove the real
 // modules re-read the seam. WHITEBOARD_DATA_DIR is pinned to a scratch dir
@@ -50,7 +50,7 @@ describe('storage layer follows the effective data dir seam', () => {
     const overrideEntries = await readdir(overrideDir)
     expect(overrideEntries).toContain('whiteboard.db')
 
-    // Canvas content lives in the sqlite db's Libsql snapshot tables now —
+    // Document content lives in the sqlite db's Libsql snapshot tables now —
     // in the WORKSPACE record — confirm the row landed under the override
     // dir's db, keyed to the workspace just saved into.
     const db = await getDb(overrideDir)
@@ -63,7 +63,7 @@ describe('storage layer follows the effective data dir seam', () => {
       .executeTakeFirst()
     expect(snapshotRow).toBeDefined()
 
-    // The import-time snapshot dir must stay untouched by canvas persistence.
+    // The import-time snapshot dir must stay untouched by document persistence.
     expect(existsSync(join(importBaseDir, 'whiteboard.db'))).toBe(false)
   })
 })

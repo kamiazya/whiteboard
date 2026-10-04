@@ -17,7 +17,7 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 export type { WorkspaceNames }
 
-// Workspace + canvas display names and pin order. Backed by:
+// Workspace + document display names and pin order. Backed by:
 //   workspaces.displayName       -> WorkspaceNames.workspace
 //   documents.displayName         -> WorkspaceNames.documents[path]
 //   documents.isPinned + pinOrder -> WorkspaceNames.pinned (sorted by pinOrder)

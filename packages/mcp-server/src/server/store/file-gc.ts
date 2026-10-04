@@ -71,7 +71,7 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
   for (const id of collectImageRefIds(doc)) sink.add(id)
 }
 
-// Internal-only description of a canvas/version that GC could not safely
+// Internal-only description of a document/version that GC could not safely
 // inspect. Not a persisted or wire type, so no Zod schema — kept as a
 // discriminated union purely to make the fail-closed reason legible in logs
 // and error messages.
@@ -80,7 +80,7 @@ type SkippedScanTarget =
   | { kind: 'unreadable-node'; treeId: string }
   | { kind: 'trash'; documentId: string; cause: unknown }
 
-// Walk every canvas in the workspace (live state plus past versions) and
+// Walk every document in the workspace (live state plus past versions) and
 // collect referenced fileIds.
 export class IncompleteFileGcScanError extends Error {
   constructor(
@@ -397,7 +397,7 @@ export async function purgeDanglingFiles(
     // deadlock against the lock this pass is running inside.
     const before = await catchUpWorkspaceDoc(workspaceId, scope)
     // List the candidate files BEFORE the reference scan: collecting
-    // references forks + checks out every version of every canvas,
+    // references forks + checks out every version of every document,
     // which is far too expensive to pay for a workspace that has no files
     // directory (or an empty one) — the common case for every workspace
     // the periodic sweeper visits that never had an upload.

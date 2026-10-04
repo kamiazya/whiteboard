@@ -377,8 +377,8 @@ export async function documentExists(
   return (await resolveDocumentIdAtPath(workspaceId, path, scope)) !== null
 }
 
-// ── delete a canvas and every file it owns ──
-// Returns false (never throws) for a missing canvas so callers can treat
+// ── delete a document and every file it owns ──
+// Returns false (never throws) for a missing document so callers can treat
 // "already gone" and "just deleted" the same way an idempotent DELETE
 // should.
 //
@@ -412,7 +412,7 @@ export function createDocumentTeardown(scope: StoreScope = globalStoreScope): Do
 
         // Force the next getDoc() to reload from disk (there is nothing left to
         // reload from — a fresh create should not inherit a doc instance that
-        // still holds the deleted canvas's history).
+        // still holds the deleted document's history).
         evictDoc(workspaceId, path, scope)
 
         return result
@@ -452,7 +452,7 @@ export async function deleteDocument(
 
     // The identity goes first, then the Libsql snapshot/delta/frontier
     // rows, so a crash between the two leaves an orphaned-but-unreachable
-    // snapshot rather than a listed canvas with no content.
+    // snapshot rather than a listed document with no content.
     const documentStore = await documentStoreReady(scope)
     await documentStore.deleteDoc({ docRef: { kind: 'document', workspaceId, documentId } })
 
@@ -460,12 +460,12 @@ export async function deleteDocument(
   })
 }
 
-// Null for both "no such canvas" and "the canvas records no kind" — its
+// Null for both "no such document" and "the document records no kind" — its
 // callers want the same thing from either, which is to stamp nothing.
 //
 // This deliberately does NOT resolve an unset kind to 'spatial' the way
 // listDocuments does. The difference is what the answer is used for: a list
-// renders a badge, while this feeds a WRITE onto a restored canvas's row.
+// renders a badge, while this feeds a WRITE onto a restored document's row.
 // A guess that gets stored outlives the guess — a markdown document that
 // predates kinds would become permanently spatial and open in the wrong
 // editor, which is the exact failure the callers' comments say they are
@@ -589,7 +589,7 @@ export async function compactWorkspace(
 
 // ── most-recent auto-compact timestamp across all documents ───────────
 // Used by the storage report to show "Auto-optimised Ns ago" without
-// client-side aggregation. Returns null when no canvas has been compacted yet.
+// client-side aggregation. Returns null when no document has been compacted yet.
 export async function readLatestCompactedAt(
   scope: StoreScope = globalStoreScope,
 ): Promise<number | null> {

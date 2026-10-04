@@ -183,8 +183,8 @@ const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type DeleteDocInput = z.infer<typeof deleteDocInputSchema>
 
 /**
- * Persistence for a single Loro-backed document (a canvas or the
- * workspace-tree). `docRef` carries the scope for every method; there is
+ * Persistence for a single Loro-backed document (a content document or the
+ * workspace tree). `docRef` carries the scope for every method; there is
  * no separate workspace-scoping field because the document itself is the
  * unit of storage.
  */

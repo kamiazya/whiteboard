@@ -340,7 +340,7 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
       try {
         // Revalidate containment immediately before the destructive call,
         // rather than trusting the check done once while building `ids`. A
-        // pass over every workspace can take a while (a full canvas scan
+        // pass over every workspace can take a while (a full document scan
         // each), and re-running the check here narrows the window in which a
         // workspace dir (or its files/ child) could have been swapped for a
         // symlink between discovery and this workspace's purge — for BOTH

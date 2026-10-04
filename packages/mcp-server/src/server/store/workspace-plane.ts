@@ -120,7 +120,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
       // live workspace document — the route save path holds it too, so a
       // tool write and a route save on the same workspace settle into a
       // definite order instead of interleaving their diff-writes. Safe
-      // to acquire while the tool surface's canvas-doc lock is held:
+      // to acquire while the tool surface's document lock is held:
       // the lock is re-entrant per async chain and nothing nests the
       // two the other way around anymore.
       const wrote = await withWorkspaceWriteLock(workspaceId, async () => {

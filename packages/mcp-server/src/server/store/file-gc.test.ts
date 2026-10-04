@@ -189,10 +189,10 @@ describe('purgeDanglingFiles', () => {
   })
 
   it('does not protect an upload whose id merely matches a plain (non-asset:) file value', async () => {
-    // Precision: a 'file' node's `file` value can also be a canvas
+    // Precision: a 'file' node's `file` value can also be a document
     // reference (wikilink-style embed) rather than an upload — only the
     // 'asset:' prefix means "this points at an uploaded blob". A same-named
-    // orphan upload must not be spared by a canvas-path collision.
+    // orphan upload must not be spared by a document-path collision.
     await saveDocument(
       'ws_precision',
       'page',

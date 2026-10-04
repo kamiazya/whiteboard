@@ -311,7 +311,7 @@ describe('saveDocument / loadDocument', () => {
   it('mints a canonical ULID for a new row, so both writers share one id space', async () => {
     // The document index and saveDocument both create rows in the same table.
     // The index mints ULIDs (the port's DocumentEntry accepts nothing else),
-    // while saveDocument minted nanoids — so every canvas created through the
+    // while saveDocument minted nanoids — so every document created through the
     // web UI became a row the agent surface must skip. Two writers, one
     // table, one id policy.
     await saveDocument('session1', 'ulid-mint', new LoroDoc())
@@ -350,7 +350,7 @@ describe('saveDocument / loadDocument', () => {
     expect(elements[0].x).toBe(100)
   })
 
-  // Daemon mode persists a canvas through THIS path, not through
+  // Daemon mode persists a document through THIS path, not through
   // documentStore — a separate implementation, so the sidecar-map contract
   // node/edge lock relies on has to be pinned here too. It holds because
   // saveDocument writes doc.export({ mode: 'snapshot' }) verbatim rather than

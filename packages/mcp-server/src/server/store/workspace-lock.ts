@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 
 // Per-workspace write barrier.
 //
-// Background: file-gc walks every canvas + version of a workspace to
+// Background: file-gc walks every document + version of a workspace to
 // compute the referenced-fileId set, then unlinks every file not in
 // the set. Without a write barrier a concurrent saveDocument() that
 // introduces a new image reference between collect and unlink can have

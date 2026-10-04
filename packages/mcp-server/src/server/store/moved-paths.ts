@@ -10,10 +10,10 @@ import type { StoreScope } from './store-scope.js'
  * so neither can forget half of the rule.
  *
  * A SOURCE path: a caller still reading through it should lazily create a
- * fresh canvas rather than resurrect the moved doc's cached instance. A
+ * fresh document rather than resurrect the moved doc's cached instance. A
  * DESTINATION path: a read that arrived before the move can lazily cache an
  * empty phantom doc there, and leaving that phantom cached would shadow the
- * just-moved canvas's real content.
+ * just-moved document's real content.
  *
  * The subtree is collected BEFORE `move` runs: afterwards the tree is the
  * only record of it, and it records the new paths only. `workspaceDoc` is
