@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isLoopbackHost } from '../../../shared/loopback-host.js'
+import { isLoopbackHostname } from '@kamiazya/whiteboard-daemon-client/loopback-host'
 import { DB_FILENAME } from '../../tenant/data-layout.js'
 
 export { DB_FILENAME }
@@ -55,7 +55,7 @@ export function resolveDatabaseLocation(
     throw new Error(`${DB_URL_ENV} is not a URL`)
   }
 
-  if (parsed.protocol === 'http:' && !isLoopbackHost(parsed.hostname)) {
+  if (parsed.protocol === 'http:' && !isLoopbackHostname(parsed.hostname)) {
     throw new Error(
       `${DB_URL_ENV} may only use http: for a loopback host; use libsql: or https: for a remote database`,
     )
