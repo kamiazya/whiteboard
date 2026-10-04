@@ -43,14 +43,12 @@ import {
   nodeUrl,
 } from '@kamiazya/whiteboard-model'
 import { CircleCheck, CircleX, ListChecks, X } from 'lucide-react'
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { cn } from '../../lib/utils.js'
 import { ProposalAuthor } from '../proposals/ProposalAuthor.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
-
-/** Screen px kept between the card and the root's edge once slid inside. */
-const CARD_EDGE_MARGIN_PX = 8
+import { useFitInside } from './use-fit-inside.js'
 
 /** How much of a node's own words identify it in a change's line. */
 const NAME_MAX_CHARS = 24
@@ -91,20 +89,9 @@ export function ProposalCard({
   const [perChange, setPerChange] = useState(false)
   const separable = open.length > 1
   // Slid back inside a root it would otherwise hang past, like the comment
-  // card and for the same reason: the root clips, so a card at the edge
-  // puts its verbs where no finger can reach them.
-  const [slide, setSlide] = useState({ x: 0, y: 0 })
-  useLayoutEffect(() => {
-    const el = cardRef.current
-    const parent = el?.offsetParent
-    if (el == null || !(parent instanceof HTMLElement)) return
-    const rect = el.getBoundingClientRect()
-    const next = {
-      x: Math.min(0, parent.clientWidth - CARD_EDGE_MARGIN_PX - (box.x + Math.ceil(rect.width))),
-      y: Math.min(0, parent.clientHeight - CARD_EDGE_MARGIN_PX - (box.y + Math.ceil(rect.height))),
-    }
-    setSlide((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
-  }, [box.x, box.y, box.width, proposal])
+  // card and for the same reason — and again when the disclosure below grows
+  // the card.
+  const slide = useFitInside(cardRef, box, proposal)
 
   useEffect(() => {
     cardRef.current?.focus()

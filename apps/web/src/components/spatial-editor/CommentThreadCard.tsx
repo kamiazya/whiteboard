@@ -20,21 +20,12 @@
  */
 import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
 import { Check, CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
-import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { CommentComposer } from '../annotations/CommentComposer.js'
 import { ReplyComposer } from '../annotations/ReplyComposer.js'
 import { ThreadMessage } from '../annotations/ThreadMessage.js'
-
-/** Screen px kept between the card and the root's edge once slid inside. */
-const CARD_EDGE_MARGIN_PX = 8
+import { useFitInside } from './use-fit-inside.js'
 
 export interface CommentThreadCardProps {
   readonly thread: CommentThread
@@ -76,49 +67,9 @@ export function CommentThreadCard({
     setEditing(null)
   }
   // A card opened on a bubble near the root's right or bottom edge is slid
-  // back inside once its real size is measurable — the same nudge the
-  // context menu gets, for the same reason: the root clips, so a card
-  // hanging past the edge has its reply box where no finger can reach it.
-  // Sliding rather than panning the canvas keeps the surface still under a
-  // reader who only opened a conversation; the keyboard pan is what moves
-  // the canvas, and only once they type. useLayoutEffect corrects before
-  // paint, so there is no visible jump.
-  const [slide, setSlide] = useState({ x: 0, y: 0 })
-  const fit = useCallback(() => {
-    const el = cardRef.current
-    const parent = el?.offsetParent
-    if (el == null || !(parent instanceof HTMLElement)) return
-    // Measured with the current slide applied, so the correction is taken
-    // from the card's natural place: subtract what is already applied.
-    const rect = el.getBoundingClientRect()
-    const naturalRight = box.x + Math.ceil(rect.width)
-    const naturalBottom = box.y + Math.ceil(rect.height)
-    const next = {
-      x: Math.min(0, parent.clientWidth - CARD_EDGE_MARGIN_PX - naturalRight),
-      y: Math.min(0, parent.clientHeight - CARD_EDGE_MARGIN_PX - naturalBottom),
-    }
-    setSlide((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
-  }, [box.x, box.y])
-  useLayoutEffect(fit, [fit, box.width, thread])
-
-  // And again whenever the card's own height changes, which it does AFTER
-  // that first measure: the body is laid out by canvas-render once a
-  // ResizeObserver has reported the width to wrap to, and the composer is a
-  // CodeMirror view created in an effect — both land after layout effects
-  // have run, so a one-shot measure slides the card by a height it no
-  // longer has and it hangs off the bottom of the root.
-  //
-  // The one-shot was always fragile for the same reason (a reply arriving
-  // from another writer grows the card under a reader who is not touching
-  // it); it only became reliably wrong here. No feedback loop: the
-  // correction moves the card, it does not resize it.
-  useLayoutEffect(() => {
-    const el = cardRef.current
-    if (el === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(fit)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [fit])
+  // back inside, and kept there as its body and composer settle or a reply
+  // from another writer grows it.
+  const slide = useFitInside(cardRef, box, thread)
 
   // Focus the CARD, not its reply box: a press that opens a conversation is
   // a request to read it, and pulling the caret into the box would send the
