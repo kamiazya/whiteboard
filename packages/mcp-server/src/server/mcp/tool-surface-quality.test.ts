@@ -500,8 +500,9 @@ describe('what the tool table costs to read', () => {
       wb_document_list: {
         // +153 wire, 0 visible: each row says whether the workspace pins it (an
         // output field; omitted when the keeper keeps no pins).
+        // +17 wire, 0 visible: `path` in the output states the model's 1024-character bound.
         visibleBytes: 473,
-        wireBytes: 1283,
+        wireBytes: 1300,
         descriptionWords: 32,
         parameters: 1,
         undescribed: 1,
@@ -515,8 +516,9 @@ describe('what the tool table costs to read', () => {
       // trials: 3 calls each before (a search that answered nothing, then
       // a list and a read of every document), 1 after.
       wb_document_search: {
+        // +17 wire, 0 visible: `path` in the output states the model's 1024-character bound.
         visibleBytes: 1410,
-        wireBytes: 2240,
+        wireBytes: 2257,
         descriptionWords: 68,
         parameters: 5,
         undescribed: 0,
@@ -716,11 +718,13 @@ describe('what the tool table costs to read', () => {
       wb_version_restore: {
         // +43 on both: `targetPath` must be the same kind as the saved state, since
         // restoring across kinds converted the target and is now refused.
-        visibleBytes: 1547,
+        // +17 on both: `targetPath` states the model's 1024-character path bound, so a
+        // path no request line could carry is refused by the schema, not by the transport.
+        visibleBytes: 1564,
         // +23 wire: `destructiveHint: true` stated — its `subtree` mode deletes the
         // documents created since the version. Client-side only; visible bytes unmoved.
         // +182: the output's documentId is the written document's ULID, schema'd as one.
-        wireBytes: 2404,
+        wireBytes: 2421,
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
@@ -781,8 +785,9 @@ describe('what the tool table costs to read', () => {
         // `title`, so a rename of one had no tool at any price (C5); the web
         // app renames both kinds.
         // +103 both: markdown `maxLength` on two arms (+38); `document.create` says facets go under `facets:` (+65).
-        visibleBytes: 3250,
-        wireBytes: 4794,
+        // +51 visible, +68 wire: the 1024-character path bound at three input sites and the output's path.
+        visibleBytes: 3301,
+        wireBytes: 4862,
         descriptionWords: 47,
         parameters: 22,
         undescribed: 14,
@@ -982,8 +987,8 @@ describe('what the tool table costs to read', () => {
       // `proposals` on wb_document_get (see those rows).
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
-      // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103).
-      visibleBytes: 40861,
+      // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103); +68 for the document path bound.
+      visibleBytes: 40929,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1008,8 +1013,8 @@ describe('what the tool table costs to read', () => {
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
-      // Then +158, the same bytes as visible.
-      wireBytes: 132156,
+      // Then +158, the same bytes as visible; +119 for the document path bound (see those rows).
+      wireBytes: 132275,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

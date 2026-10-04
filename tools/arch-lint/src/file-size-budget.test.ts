@@ -404,7 +404,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // kind, viewport coordinates, `document.create`'s `name`) and the totals.
   // Then two more reasons: restore's written id and the totals.
   // Then the markdown size limit and the explicit-propose sentence: two rows and the totals.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1050,
+  // Then the document path bound beside four rows and both totals.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1055,
   // The not-JSON refusal's assertion carries the reason it is strict: a mutation
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every
