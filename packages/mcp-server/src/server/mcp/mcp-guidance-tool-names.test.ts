@@ -61,6 +61,30 @@ describe('MCP guidance text', () => {
 })
 
 /**
+ * Every document-addressed tool refuses a path and wants the canonical
+ * `documentId`; paths are for placing a document and for links. Guidance that
+ * tells the model to address by path sends its first call into a refusal.
+ */
+describe('initialize instructions: how a document is addressed', () => {
+  const flat = (text: string) => text.replace(/\s+/g, ' ')
+  const ADDRESS_BY_PATH = /\baddress(?:es|ed)?\b[^.]*\bby (?:the |its |a )?path\b/i
+
+  it('names documentId as the address', () => {
+    expect(flat(WHITEBOARD_INSTRUCTIONS)).toContain('documentId')
+  })
+
+  it('does not tell the model to address a document by its path', () => {
+    expect(flat(WHITEBOARD_INSTRUCTIONS)).not.toMatch(ADDRESS_BY_PATH)
+  })
+
+  it('has a matcher that still reads the sentence it was written against', () => {
+    expect(
+      flat('Address a\ndocument by the path its workspace gives it, and keep the canonical id'),
+    ).toMatch(ADDRESS_BY_PATH)
+  })
+})
+
+/**
  * The draw-diagram prompt is the "a person just asked you to draw" case, and
  * `wb_canvas_edit` stores a default-mode batch as a proposal nobody sees. A
  * prompt that never says `apply` sends the agent into a drawing that stays
