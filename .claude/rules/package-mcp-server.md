@@ -97,7 +97,8 @@ scan says.
   rung that stops a new one being written; it caught one live instance, the
   disabled `/api/debug` router. It is scoped to `routes/` because
   `c.notFound()` is CORRECT twice outside `routes/`: the two UI catch-alls
-  in `app.ts` serve a browser.
+  in `app.ts` serve a browser. An `/api` path nothing routes is answered by
+  `createApp`'s `app.notFound` (`answerNotFound`) as JSON `not_found`.
 - **A page-facing write never mints.** `/api/w/:workspaceId/document/*`
   sits behind `refuseUnknownWorkspace` and `refuseTrashedDocument`
   (`routes/document.ts`'s `refuseUnaddressable`), so a fixture seeds its

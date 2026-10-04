@@ -72,7 +72,7 @@ paths:
   test exists now.
 
   At the PICK rather than over the loaded sections, measured: validating
-  the bundled catalog's 1914 rows costs 15-23ms of the thread that just
+  the bundled catalog's ~1.9k rows costs 15-23ms of the thread that just
   opened the panel, on every open. A row the facet refuses is a plugin
   defect its own catalog test owes; paying a frame per open to soften it is
   the wrong trade, and what this must not do — let it reach storage — it
@@ -227,4 +227,4 @@ so the component is legible even where no theme is defined.
   not loaded then. The write path still refuses a bad row, so nothing
   invalid is stored; what is lost is the plugin failing to start. The rows
   are the plugin's data, so the plugin owes the check —
-  `plugin-visual/src/emoji/catalog.test.ts` parses all 1914.
+  `plugin-visual/src/emoji/catalog.test.ts` parses every row.

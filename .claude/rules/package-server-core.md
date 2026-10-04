@@ -138,7 +138,9 @@ paths:
   judgement for every agent writer: `packages/server-core/src/tools/facet-write.ts` (canvas ops, OKF
   frontmatter and `wb_facet_set` all call `partitionFacetWrites`) and
   `element-lock.ts` beside it. A new refusal class needs a `REFUSALS` row in
-  `create-server.ts`, or its route answers 500.
+  `create-server.ts`, or its route answers 500 — `tools/arch-lint`'s
+  `v1-refusals-cover-errors.test.ts` fails on an error class in ports, model
+  or server-core with neither a row nor a reasoned `EXEMPT` entry.
 - A theme id in a clean render is asserted by the glow's filter id
   (`wb-glow`), never by the word `filter`: a drop shadow is a filter too,
   and the e2e smoke failed on exactly that substring once.
