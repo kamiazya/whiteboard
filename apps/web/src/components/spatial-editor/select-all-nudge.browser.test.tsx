@@ -6,12 +6,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -68,19 +66,7 @@ it('Cmd+A always consumes the event, so the browser never runs its own select-al
 
 it('Cmd+A on an empty canvas selects nothing but still consumes the event', () => {
   const empty: SpatialCanvas = { nodes: [], edges: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(empty)
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial: empty })
   const { container } = render(<Host />)
   const consumed = fireEvent.keyDown(rootOf(container), { code: 'KeyA', key: 'a', metaKey: true })
   expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()

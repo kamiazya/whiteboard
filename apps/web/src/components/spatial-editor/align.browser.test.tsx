@@ -120,19 +120,7 @@ it('offers neither row for a single-node selection', () => {
 
 it('hides only Distribute when the selection has exactly two nodes', () => {
   const two: SpatialCanvas = { nodes: initial.nodes.slice(0, 2), edges: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(two)
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial: two, size: { width: 900, height: 700 } })
   const { container } = render(<Host />)
   const root = rootOf(container)
 

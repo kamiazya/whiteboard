@@ -220,21 +220,13 @@ it('locks every selected relation in one press, not only the first', async () =>
     ],
   }
   const latest: { toggles: Array<[string, boolean]> } = { toggles: [] }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(twoEdges)
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          lockedEdgeIds={new Set<string>()}
-          onToggleEdgeLock={(edgeId, locked) => latest.toggles.push([edgeId, locked])}
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({
+    initial: twoEdges,
+    editorProps: {
+      lockedEdgeIds: new Set<string>(),
+      onToggleEdgeLock: (edgeId, locked) => latest.toggles.push([edgeId, locked]),
+    },
+  })
   const { container } = render(<Host />)
   const root = rootOf(container)
 
