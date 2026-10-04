@@ -105,13 +105,6 @@ interface AllowedDeclaration {
 }
 
 const ALLOWLIST: Readonly<Record<string, AllowedDeclaration>> = {
-  'apps/web/src/test-utils/seed-sync-document.ts': {
-    declarations: [
-      { text: 'chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)', times: 1 },
-    ],
-    reason:
-      'a test seed that chunks at the production size by literal where `DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES` from ports names it; kept here until it passes the constant',
-  },
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts': {
     declarations: [{ text: 'IMPORT_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
     reason: 'a migration replays with the value it originally wrote; its own comment says so',
@@ -265,7 +258,7 @@ describe('the snapshot chunk size is written in one place', () => {
     }
   })
 
-  it('the allowlist holds exactly the five classified declarations', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(5)
+  it('the allowlist holds exactly the four classified declarations', () => {
+    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
   })
 })

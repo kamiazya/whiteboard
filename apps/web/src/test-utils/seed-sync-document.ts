@@ -1,4 +1,4 @@
-import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
 import { openWhiteboardDb, SYNC_DOCUMENTS_STORE } from '../lib/browser-idb.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { openDocumentStore } from '../lib/replica-store.js'
@@ -33,7 +33,10 @@ export async function seedSyncDocument(
     // reads as evidence for a workspace id that no longer exists.
     const docRef = { kind: 'document', workspaceId: getBrowserWorkspaceId(), documentId } as const
     const store = openDocumentStore(dbName)
-    const { manifest, chunks } = chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)
+    const { manifest, chunks } = chunkSnapshot(
+      new Uint8Array(content.snapshot),
+      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+    )
     // Empty, matching what `LoroStore` writes: nothing in the browser reads a
     // frontier, and a fixture inventing one would be a value the first real
     // reader has to unpick.
