@@ -12,7 +12,9 @@ import {
   spatialNodeSchema,
   withNodeText,
 } from '@kamiazya/whiteboard-model'
+import { commentAnchor } from './canvas-edit-comment.js'
 import { fail } from './canvas-edit-error.js'
+import { patchWithCheckedFacets, withCheckedFacets } from './canvas-edit-facets.js'
 import { type CanvasEditInput, draftContent, type NodeDraft } from './canvas-edit-ops.js'
 import { DEFAULT_SIZE, outsideDetail, overlaps } from './canvas-edit-placement.js'
 import {
@@ -22,6 +24,7 @@ import {
   mintId,
 } from './canvas-edit-session.js'
 import { dressWithStencil } from './canvas-edit-stencil.js'
+import { lockedDetail } from './element-lock.js'
 import { publishedKind } from './published-node-kind.js'
 
 /**
@@ -369,7 +372,7 @@ const CANVAS_EDIT_HANDLERS: {
   [K in CanvasOp['op']]: (ctx: CanvasEditContext, op: OpNamed<K>, index: number) => void
 } = {
   'node.add': (ctx, op, index) => {
-    const draft = op.node
+    const draft = withCheckedFacets(ctx.facetRegistry, index, op.op, op.node, 'node')
     const id = draft.id ?? mintId(new Set(ctx.s.nodes.map((node) => node.id)), 'n')
     if (ctx.s.nodeAt(id) !== undefined) {
       fail(index, op.op, `node id "${id}" is already on the canvas; patch it or choose another id`)
@@ -412,7 +415,7 @@ const CANVAS_EDIT_HANDLERS: {
     // changes, so a refusal leaves nothing half-applied.
     for (const id of ids) {
       if (ctx.s.nodeLocks.has(id)) {
-        fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
+        fail(index, op.op, lockedDetail('node', id))
       }
     }
     for (const id of ids) ctx.s.patchNode(index, op.op, id, op.patch)
@@ -432,7 +435,7 @@ const CANVAS_EDIT_HANDLERS: {
     const node = ctx.s.nodeAt(op.id)
     if (node === undefined) fail(index, op.op, `node "${op.id}" is not on the canvas`)
     if (ctx.s.nodeLocks.has(op.id)) {
-      fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
+      fail(index, op.op, lockedDetail('node', op.id))
     }
     const nodeOwnText = nodeText(node)
     if (nodeOwnText === undefined) {
@@ -468,7 +471,7 @@ const CANVAS_EDIT_HANDLERS: {
     const ids = new Set(ctx.s.nodeTargets(index, op.op, op))
     for (const id of ids) {
       if (ctx.s.nodeLocks.has(id)) {
-        fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
+        fail(index, op.op, lockedDetail('node', id))
       }
     }
     // Edges and ink anchored on a removed node go with it — the model's
@@ -493,7 +496,7 @@ const CANVAS_EDIT_HANDLERS: {
     return
   },
   'edge.add': (ctx, op, index) => {
-    const draft = op.edge
+    const draft = withCheckedFacets(ctx.facetRegistry, index, op.op, op.edge, 'edge')
     const id = draft.id ?? mintId(elementIds(ctx), 'e')
     if (ctx.s.edgeAt(id) !== undefined) {
       fail(index, op.op, `edge id "${id}" is already on the canvas; patch it or choose another id`)
@@ -519,9 +522,12 @@ const CANVAS_EDIT_HANDLERS: {
     const edge = ctx.s.edgeAt(op.id)
     if (edge === undefined) fail(index, op.op, `edge "${op.id}" is not on the canvas`)
     if (ctx.s.edgeLocks.has(op.id)) {
-      fail(index, op.op, `edge "${op.id}" is locked; unlock it with an edge.lock op first`)
+      fail(index, op.op, lockedDetail('edge', op.id))
     }
-    const merged = { ...edge, ...op.patch }
+    const merged = {
+      ...edge,
+      ...patchWithCheckedFacets(ctx.facetRegistry, index, op.op, op.patch, 'edge'),
+    }
     for (const endpoint of endNodes(merged)) {
       if (ctx.s.nodeAt(endpoint) === undefined) {
         fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
@@ -538,7 +544,7 @@ const CANVAS_EDIT_HANDLERS: {
     const ids = new Set(ctx.s.edgeTargets(index, op.op, op))
     for (const id of ids) {
       if (ctx.s.edgeLocks.has(id)) {
-        fail(index, op.op, `edge "${id}" is locked; unlock it with an edge.lock op first`)
+        fail(index, op.op, lockedDetail('edge', id))
       }
     }
     ctx.s.edges = ctx.s.edges.filter((edge) => !ids.has(edge.id))
@@ -549,7 +555,7 @@ const CANVAS_EDIT_HANDLERS: {
     return
   },
   'line.add': (ctx, op, index) => {
-    const draft = op.line
+    const draft = withCheckedFacets(ctx.facetRegistry, index, op.op, op.line, 'edge')
     const id = draft.id ?? mintId(elementIds(ctx), 'l')
     if (ctx.s.lineAt(id) !== undefined) {
       fail(index, op.op, `line id "${id}" is already on the canvas; patch it or choose another id`)
@@ -571,7 +577,10 @@ const CANVAS_EDIT_HANDLERS: {
   'line.patch': (ctx, op, index) => {
     const line = ctx.s.lineAt(op.id)
     if (line === undefined) fail(index, op.op, `line "${op.id}" is not on the canvas`)
-    const merged = { ...line, ...op.patch }
+    const merged = {
+      ...line,
+      ...patchWithCheckedFacets(ctx.facetRegistry, index, op.op, op.patch, 'edge'),
+    }
     for (const endpoint of endNodes(merged)) {
       if (ctx.s.nodeAt(endpoint) === undefined) {
         fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
@@ -646,22 +655,7 @@ const CANVAS_EDIT_HANDLERS: {
     if (ctx.s.comments.some((comment) => comment.id === id)) {
       fail(index, op.op, `comment id "${id}" is already on the canvas`)
     }
-    let at = draft.x !== undefined && draft.y !== undefined ? { x: draft.x, y: draft.y } : undefined
-    if (at === undefined && draft.targetNodeId !== undefined) {
-      const target = ctx.s.nodeAt(draft.targetNodeId)
-      // Whole pixels: a node's own coordinates are unrounded numbers, and
-      // the comment's anchor is an integer.
-      if (target !== undefined) {
-        at = { x: Math.round(target.x + target.width), y: Math.round(target.y) }
-      }
-    }
-    if (at === undefined) {
-      fail(
-        index,
-        op.op,
-        'a comment needs an anchor: give x/y, or a targetNodeId that is on the canvas',
-      )
-    }
+    const at = commentAnchor(ctx.s, index, op.op, draft)
     const parsed = canvasCommentSchema.safeParse({
       ...draft,
       id,

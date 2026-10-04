@@ -294,7 +294,7 @@ To create a new member, add it with `node.add` and `within` rather than naming
 it here. Use `region.set` when you own the whole group; use plain `node.patch` /
 `node.remove` ops when you do not.
 
-**A lock binds you too.** A `patch` or `remove` on a locked element fails the batch. Unlocking is the
+**A lock binds you too.** A `patch` or `remove` on a locked element fails the batch, and so does `wb_facet_set` on it (its facets and its tags, including a tag rename that would reach it). Unlocking is the
 one op a locked element still accepts, so you can lift your own lock in the same call:
 `[{ op: "node.lock", id: "x", locked: false }, { op: "node.patch", id: "x", patch: { x: 40 } }]`.
 

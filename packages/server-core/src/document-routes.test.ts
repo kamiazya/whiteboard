@@ -217,6 +217,43 @@ describe('canvas CRUD routes', () => {
     expect(apiErrorReason(refused)).toContain('health:unknown')
   })
 
+  it('POST with a registered facet the schema refuses returns 400, not a server error', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'bad-facet',
+        kind: 'markdown',
+        markdown: '---\ntype: note\nfacets:\n  visual.symbol/v0: { kind: bogus }\n---\nBody.',
+        createWorkspace: true,
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const refused = await res.json()
+    expect(refused).toMatchObject({ error: 'facet_write_rejected' })
+    expect(apiErrorReason(refused)).toContain('visual.symbol/v0')
+  })
+
+  it('POST naming a document one way and titling it another returns 400', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'two-names',
+        kind: 'markdown',
+        name: 'Named',
+        markdown: '---\ntype: note\ntitle: Other\n---\nBody.',
+        createWorkspace: true,
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'document_name_conflict' })
+  })
+
   it('GET list returns 200 with an array', async () => {
     const app = makeApp()
     await app.request('/api/v1/workspaces/ws-1/documents', {

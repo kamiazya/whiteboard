@@ -72,3 +72,23 @@ export class WorkspaceSegmentUnusableError extends Error {
     this.name = 'WorkspaceSegmentUnusableError'
   }
 }
+
+/**
+ * A document has ONE display name, and `wb_workspace_edit`'s `document.create`
+ * can be handed it twice: as `name` and as the OKF `title` of its body. They
+ * land in the same place (the workspace's name for the document), so a pair
+ * that disagrees has no right answer a server could pick — whichever won
+ * would be a silent choice about what the caller meant.
+ */
+export class DocumentNameConflictError extends Error {
+  constructor(
+    readonly given: string,
+    readonly title: string,
+  ) {
+    super(
+      `name "${given}" and the frontmatter title "${title}" are two display names for one document. ` +
+        'Give one of them, or make them the same.',
+    )
+    this.name = 'DocumentNameConflictError'
+  }
+}

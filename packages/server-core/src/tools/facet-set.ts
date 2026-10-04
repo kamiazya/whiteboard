@@ -2,7 +2,9 @@ import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import {
   readCoreFacets,
   readDocumentKind,
+  readEdgeLocks,
   readFacets,
+  readNodeLocks,
   readSpatialCanvas,
   reconcileCoreFacets,
   reconcileFacets,
@@ -23,13 +25,10 @@ import { z } from 'zod'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import {
-  DocumentKindMismatchError,
-  EdgeNotFoundError,
-  FacetWriteRejectedError,
-  NodeNotFoundError,
-} from './errors.js'
-import { refuseUnusableStencilLibrary, workspaceFacetRegistry } from './stencil-library.js'
+import { lockedDetail } from './element-lock.js'
+import { DocumentKindMismatchError, EdgeNotFoundError, NodeNotFoundError } from './errors.js'
+import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
+import { refuseUnusableStencilLibrary } from './stencil-library.js'
 import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -244,9 +243,17 @@ export class NodeAndCanvasTargetError extends Error {
   }
 }
 
-/** "an edge", "a node" — the refusal names the object, so it has to read like one. */
-function article(target: FacetTarget): string {
-  return target === 'edge' ? 'an' : 'a'
+/**
+ * A lock binds this tool as it binds `wb_canvas_edit`: a person's promise that
+ * an agent will not change an element covers its facets and its tags alike,
+ * and a tag RENAME that would reach a locked element refuses the whole batch
+ * rather than rewriting some of what the board holds.
+ */
+class ElementLockedError extends Error {
+  constructor(kind: 'node' | 'edge', id: string) {
+    super(`${lockedDetail(kind, id)}. Nothing was written.`)
+    this.name = 'ElementLockedError'
+  }
 }
 
 export function createFacetSetTool(deps: ServerDeps) {
@@ -265,8 +272,8 @@ export function createFacetSetTool(deps: ServerDeps) {
 
 async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetSetOutput> {
   refuseIncoherentRequest(input)
-  const registry = await resolveWriteRegistry(deps, input)
-  const { sets, deletions } = partitionFacetWrites(registry, input, requiredTargetOf(input))
+  const registry = await registryForFacetWrites(deps, input.workspaceId, [input.facets])
+  const { sets, deletions } = partitionFacetWrites(registry, input.facets, requiredTargetOf(input))
   refuseUnusableStencilLibrary(deps, sets)
   await refuseBeforeAnyWrite(deps, input)
 
@@ -343,83 +350,6 @@ function requiredTargetOf(input: FacetSetInput): FacetTarget {
 }
 
 /**
- * The registry this batch is validated against.
- *
- * The WORKSPACE's, not only the deployment's, when the batch writes a facet
- * that takes a stencil: a stencil its own library defines must be writable
- * here too, or the two paths that dress a box disagree — `wb_canvas_edit`
- * applying an id this tool refuses is the shape a single composer exists to
- * prevent.
- *
- * Resolved only for such a write. A library can add nothing but stencil
- * assets, so every other write — a tag, a deletion, a shape — gets an
- * identical answer from the deployment's registry and must not pay a document
- * listing for it. Which facets take a stencil is asked OF the registry rather
- * than hardcoded as `visual.stencil/v0`: that is a plugin's declaration, and a
- * server spelling one plugin's key is a server no other plugin extends.
- */
-async function resolveWriteRegistry(deps: ServerDeps, input: FacetSetInput) {
-  const deploymentRegistry = deps.facetRegistry
-  const writesAStencilRef = Object.entries(input.facets ?? {}).some(
-    ([key, payload]) =>
-      payload !== null &&
-      Object.values(deploymentRegistry.assetRefsOf(key) ?? {}).includes('stencils'),
-  )
-  return writesAStencilRef
-    ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
-    : deploymentRegistry
-}
-
-/**
- * Split the batch's facets into validated SETS and DELETIONS, refusing any
- * payload the registry rejects (ADR-0013 decision 6).
- *
- * A registered facet's payload must satisfy its schema, its key must be the
- * current version, and its declared targets must include what this write
- * targets. Unregistered facets pass through unvalidated, for round-trip
- * safety. A registered payload is stored as the schema's PARSED value, and a
- * null payload deletes the key — deletion needs no target or schema check.
- *
- * Done once for the whole batch, before any document is opened: the payload is
- * shared, so a rejected facet is rejected for every document and there is
- * nothing to be gained by discovering it on the third one after two were
- * written.
- */
-function partitionFacetWrites(
-  registry: {
-    targetsOf: (key: string) => readonly FacetTarget[] | undefined
-    validateFacetWrite: (
-      key: string,
-      payload: unknown,
-    ) => { ok: true; value: unknown } | { ok: false; message: string }
-  },
-  input: FacetSetInput,
-  requiredTarget: FacetTarget,
-): { sets: Record<string, unknown>; deletions: string[] } {
-  const sets: Record<string, unknown> = {}
-  const deletions: string[] = []
-  for (const [key, payload] of Object.entries(input.facets ?? {})) {
-    if (payload === null) {
-      deletions.push(key)
-      continue
-    }
-    const targets = registry.targetsOf(key)
-    if (targets !== undefined && !targets.includes(requiredTarget)) {
-      throw new FacetWriteRejectedError(
-        key,
-        `its targets are [${targets.join(', ')}], and this write targets ${article(requiredTarget)} ${requiredTarget}`,
-      )
-    }
-    const result = registry.validateFacetWrite(key, payload)
-    if (!result.ok) {
-      throw new FacetWriteRejectedError(key, result.message)
-    }
-    sets[key] = result.value
-  }
-  return { sets, deletions }
-}
-
-/**
  * The refusals that need the WORKSPACE read: every document is confirmed to be
  * in it, and then what its tag library forbids is refused.
  *
@@ -432,6 +362,7 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Pro
   for (const documentId of input.documentIds) {
     await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
   }
+  await refuseLockedTargets(deps, input)
   if (input.tags === undefined) return
   const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
   if (Object.keys(library).length === 0) return
@@ -441,6 +372,65 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Pro
       refuseAgainstLibrary(library, tags, what)
     }
   }
+}
+
+/**
+ * Whether a rename changes this tag set: only an element that carries a
+ * renamed tag is one the rename "touches", and an untouched locked element is
+ * not a reason to refuse a vocabulary fix across the board.
+ */
+function renameReaches(
+  tags: readonly string[] | undefined,
+  rename: readonly { from: string }[],
+): boolean {
+  return (tags ?? []).some((tag) => rename.some((entry) => entry.from === tag))
+}
+
+/**
+ * Refuse a write that would change a locked node or edge — the element named
+ * by `nodeId` / `edgeId` for any write, and every locked element a board-wide
+ * rename would rewrite.
+ *
+ * Read from the document, and only for a write that can reach an element, so a
+ * document-level tag or facet write loads nothing here.
+ */
+async function refuseLockedTargets(deps: ServerDeps, input: FacetSetInput): Promise<void> {
+  const rename = input.tags?.rename ?? []
+  const reachesAnElement =
+    input.nodeId !== undefined || input.edgeId !== undefined || rename.length > 0
+  if (!reachesAnElement) return
+  for (const documentId of input.documentIds) {
+    const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
+    if (readDocumentKind(doc) !== 'markdown') refuseLockedIn(doc, input, rename)
+  }
+}
+
+function refuseLockedIn(
+  doc: LoroDoc,
+  input: FacetSetInput,
+  rename: readonly { from: string }[],
+): void {
+  const nodeLocks = readNodeLocks(doc)
+  const edgeLocks = readEdgeLocks(doc)
+  if (input.nodeId !== undefined) {
+    if (nodeLocks.has(input.nodeId)) throw new ElementLockedError('node', input.nodeId)
+    return
+  }
+  if (input.edgeId !== undefined) {
+    if (edgeLocks.has(input.edgeId)) throw new ElementLockedError('edge', input.edgeId)
+    return
+  }
+  // A board-wide rename: `target: 'canvas'` or a spatial document, the same
+  // site test the write itself applies.
+  const canvas = readSpatialCanvas(doc)
+  const lockedNode = canvas.nodes.find(
+    (node) => nodeLocks.has(node.id) && renameReaches(node.tags, rename),
+  )
+  if (lockedNode !== undefined) throw new ElementLockedError('node', lockedNode.id)
+  const lockedEdge = canvas.edges.find(
+    (edge) => edgeLocks.has(edge.id) && renameReaches(edge.tags, rename),
+  )
+  if (lockedEdge !== undefined) throw new ElementLockedError('edge', lockedEdge.id)
 }
 
 /**

@@ -11,6 +11,7 @@ import type { z } from 'zod'
 import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
+  DocumentNameConflictError,
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundForCallerError,
   type WorkspaceNotFoundIntent,
@@ -26,7 +27,7 @@ import type {
   wbDocumentResolveOutputSchema,
 } from './document-crud.schemas.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
-import { createDocumentSetTool, parseWritableOkf } from './document-set.js'
+import { checkFrontmatterFacets, createDocumentSetTool, parseWritableOkf } from './document-set.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
@@ -124,6 +125,18 @@ export const BARE_BODY_TYPE = 'note'
  */
 const asOkfBody = (body: string): string => `---\ntype: ${BARE_BODY_TYPE}\n---\n\n${body}`
 
+/**
+ * `name` and an OKF `title` are the same thing — the workspace's name for the
+ * document — so both present and different is two answers to one question.
+ * A blank title counts as present: it would clear the name the same write just
+ * set, which is the silent loss this refuses.
+ */
+function refuseConflictingNames(name: string | undefined, title: string | undefined): void {
+  const given = name?.trim()
+  if (given === undefined || given === '' || title === undefined) return
+  if (title.trim() !== given) throw new DocumentNameConflictError(given, title.trim())
+}
+
 export async function wbDocumentCreate(
   deps: ServerDeps,
   rawInput: z.infer<typeof wbDocumentCreateInputSchema>,
@@ -179,6 +192,8 @@ export async function wbDocumentCreate(
     // workspace that does not exist yet; the read degrades to "nothing
     // declared", which is the truth about a workspace being born.
     await refuseFrontmatterTags(deps, input.workspaceId, preflight.frontmatter.tags)
+    await checkFrontmatterFacets(deps, input.workspaceId, preflight.frontmatter.facets)
+    refuseConflictingNames(input.name, preflight.frontmatter.title)
   }
 
   // Workspaces never materialize implicitly: a typo'd or hallucinated

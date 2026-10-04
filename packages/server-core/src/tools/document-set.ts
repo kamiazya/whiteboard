@@ -16,13 +16,19 @@ import {
   writeMarkdownBody,
   writeTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { documentIdSchema, okfActorSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  type ExtensionFacets,
+  okfActorSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
+import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
@@ -154,6 +160,30 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
 }
 
 /**
+ * The frontmatter's `facets` bucket as it is stored, refused if a registered
+ * facet in it is one `wb_facet_set` would refuse for a document (ADR-0013
+ * decisions 6 and 10).
+ *
+ * A body is the other way to write a facet — the same payload as YAML instead
+ * of as a tool argument — so it is held to the same registry rule, before the
+ * document is opened. `wb_document_create` runs it in its preflight too, for
+ * the reason it runs the tag check there: the delegated write would otherwise
+ * refuse AFTER the mint and leave an empty document squatting the path.
+ */
+export async function checkFrontmatterFacets(
+  deps: ServerDeps,
+  workspaceId: string,
+  facets: ExtensionFacets | undefined,
+): Promise<ExtensionFacets | undefined> {
+  if (facets === undefined) return undefined
+  const registry = await registryForFacetWrites(deps, workspaceId, [facets])
+  // The sent bucket with each registered payload replaced by its parsed
+  // value: a body is a whole-document import, so what the caller wrote and the
+  // schema has no opinion on (an unregistered facet) round-trips as it came.
+  return { ...facets, ...partitionFacetWrites(registry, facets, 'document').sets }
+}
+
+/**
  * Whether a `generated` the caller sent is foreign provenance to preserve,
  * rather than this server's own stamp echoed back by an edit.
  *
@@ -268,6 +298,11 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // (ADR-0040 decision 5) — taken before the document is opened, so a
       // refusal leaves the stored body as it stands.
       await refuseFrontmatterTags(deps, input.workspaceId, frontmatter.tags)
+      const checkedFacets = await checkFrontmatterFacets(
+        deps,
+        input.workspaceId,
+        frontmatter.facets,
+      )
 
       const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
       // Captured before anything below writes, because both are what the
@@ -285,11 +320,11 @@ export function createDocumentSetTool(deps: ServerDeps) {
       //
       // Absent is not cleared: an OKF with no `title` says nothing about the
       // name, so omitting it must not erase one.
-      const { facets, title, generated, verified, ...coreFacets } = frontmatter
+      const { facets: _sent, title, generated, verified, ...coreFacets } = frontmatter
       await applyOkfTitle(deps, input, title)
       writeCoreFacets(doc, coreFacets)
-      if (facets) {
-        writeFacets(doc, facets)
+      if (frontmatter.facets !== undefined) {
+        writeFacets(doc, checkedFacets ?? {})
       }
 
       // A `generated` the document already declares is the truth about how

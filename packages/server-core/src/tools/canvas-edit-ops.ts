@@ -566,7 +566,12 @@ export const canvasEditInputSchema = z
      * should not leave them hunting for the change. Set false for
      * housekeeping edits that do not deserve to steal someone's view.
      */
-    follow: z.boolean().optional(),
+    follow: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether a watching browser's viewport jumps to what the batch touched. Default true; false for housekeeping that should not move a person's view.",
+      ),
   })
   .strict()
 export type CanvasEditInput = z.infer<typeof canvasEditInputSchema>

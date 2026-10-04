@@ -1,5 +1,6 @@
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
@@ -46,6 +47,34 @@ describe('wb_workspace_edit', () => {
       documentIds: [out.results[0]?.documentId ?? ''],
     })
     expect(first.documents[0]?.content).toContain('one')
+  })
+
+  it('refuses a create that names the document twice and differently, at that op', async () => {
+    const deps = await makeDeps()
+    await expect(
+      createWorkspaceEditTool(deps).execute({
+        workspaceId: WS,
+        ops: [
+          {
+            op: 'document.create',
+            path: 'twice',
+            kind: 'markdown',
+            name: 'Named',
+            markdown: '---\ntype: note\ntitle: Other\n---\nbody',
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      /ops\[0\] \(document\.create\).*name "Named" and the frontmatter title "Other"/,
+    )
+    expect(await deps.documentIndex.listDocuments({ workspaceId: WS })).toEqual([])
+  })
+
+  it('describes `name` on both kinds of document.create, since a model reads it every turn', () => {
+    const described = JSON.stringify(z.toJSONSchema(workspaceEditInputSchema))
+    // Two arms, each with its own sentence: the markdown one is the one that
+    // warns about a `title`.
+    expect(described.match(/Display name, free text/g)).toHaveLength(2)
   })
 
   it('stops at the failing op and says how far it got', async () => {
