@@ -342,12 +342,15 @@ const registrationVersion = (page) =>
     () =>
       new Promise((resolveVersion) => {
         setTimeout(() => resolveVersion(null), 1000)
-        navigator.serviceWorker.getRegistration().then((registration) => {
-          if (!registration?.active) return resolveVersion(null)
-          const channel = new MessageChannel()
-          channel.port1.onmessage = (e) => resolveVersion(e.data)
-          registration.active.postMessage('smoke:version', [channel.port2])
-        })
+        navigator.serviceWorker
+          .getRegistration()
+          .then((registration) => {
+            if (!registration?.active) return resolveVersion(null)
+            const channel = new MessageChannel()
+            channel.port1.onmessage = (e) => resolveVersion(e.data)
+            registration.active.postMessage('smoke:version', [channel.port2])
+          })
+          .catch(() => resolveVersion(null))
       }),
   )
 
