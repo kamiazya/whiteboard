@@ -28,12 +28,12 @@ import { runBackupInSubprocess } from './backup-subprocess.js'
 import type { Database } from './db/schema.js'
 import type { LeaseOutcome } from './lease.js'
 import { withLease } from './lease.js'
-import type { BackupSchedule } from './storage-env.js'
+import { type BackupSchedule, DEFAULT_BACKUP_CRON } from './storage-env.js'
 
 const log = getLogger('backup-scheduler')
 
 const DEFAULT_KEEP = 7
-const DEFAULT_SCHEDULE: BackupSchedule = { expression: '0 3 * * *', timezone: null }
+const DEFAULT_SCHEDULE: BackupSchedule = { expression: DEFAULT_BACKUP_CRON, timezone: null }
 
 export interface BackupSchedulerOptions {
   dataDir: string

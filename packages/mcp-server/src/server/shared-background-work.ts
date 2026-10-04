@@ -16,7 +16,12 @@ import {
   getWorkspaceDoc,
 } from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
-import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
+import {
+  DEFAULT_BACKUP_CRON,
+  parseBackupDir,
+  parseBackupKeep,
+  parseBackupSchedule,
+} from './store/storage-env.js'
 import type { StoreScope } from './store/store-scope.js'
 import { FileVersionStore } from './store/version-store.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
@@ -191,7 +196,7 @@ function createBackup(
   })
   return {
     backupScheduler,
-    backupTrigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
+    backupTrigger: backupSchedule.ok ? backupSchedule.value.expression : DEFAULT_BACKUP_CRON,
   }
 }
 
