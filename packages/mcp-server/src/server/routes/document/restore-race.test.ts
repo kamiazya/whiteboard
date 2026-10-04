@@ -14,6 +14,9 @@ const tmp = withTempDataDir('whiteboard-restore-race-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
+  // The page-facing document routes refuse an unknown workspace, so the
+  // workspace these tests write through exists before the first update.
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
 })
 
 vi.mock('../../config.js', () => ({
