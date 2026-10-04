@@ -73,6 +73,26 @@ const openPort = (name: string) => {
   return worker.port
 }
 
+/**
+ * Resolves once everything `port` sent before it has been handled. One port's
+ * messages arrive in order, but two ports' are not ordered against each other:
+ * a push from one can be handled before another's subscribe, and the fan-out
+ * then has nobody to reach. A snapshot-request is answered on the replica
+ * queue, after all of this port's earlier messages.
+ */
+const handled = (port: MessagePort, doc: string) =>
+  new Promise<void>((resolve, reject) => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type !== 'snapshot' || data.doc !== doc) return
+      port.removeEventListener('message', onMessage)
+      resolve()
+    }
+    port.addEventListener('message', onMessage)
+    port.postMessage({ type: 'snapshot-request', doc })
+    setTimeout(() => reject(new Error(`no snapshot came back for ${doc}`)), 10_000)
+  })
+
 it('carries one port push to another port of the same worker', async () => {
   // Two constructions, one worker — the property the polyfill cannot express,
   // and the whole basis for a replica that several tabs share.
@@ -85,6 +105,7 @@ it('carries one port push to another port of the same worker', async () => {
     port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
     port.postMessage({ type: 'subscribe', doc })
   }
+  await handled(b, doc)
 
   const echoedToSender = vi.fn()
   a.addEventListener('message', (e: MessageEvent) => {
@@ -136,16 +157,15 @@ it('keeps two daemon origins that share a document id apart', async () => {
   tab.getMap('m').set('k', 'origin-a-only')
   tab.commit()
   a.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
+  // Ordered rather than raced: the push is in the replica before b asks, so a
+  // shared replica would have to show the leak, not merely be able to.
+  await handled(a, doc)
 
   const snapshot = await new Promise<string>((resolve, reject) => {
     b.addEventListener('message', (e: MessageEvent) => {
       const data = e.data as { type?: string; snapshot?: string }
       if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
     })
-    // Ordering is guaranteed rather than raced: replica work runs on one
-    // queue, so this snapshot is answered strictly after the push above. A
-    // shared replica would therefore have to show the leak, not merely be
-    // able to.
     b.postMessage({ type: 'snapshot-request', doc })
     setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
   })
@@ -238,9 +258,9 @@ it('leaves a port that subscribed to a different document alone', async () => {
   tab.getMap('m').set('k', 'scoped')
   tab.commit()
   pushing.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
+  // Ordered rather than raced, the same way the origin case above is.
+  await handled(pushing, doc)
 
-  // Ordered rather than raced, the same way the origin case above is: replica
-  // work runs on one queue, so this answer is strictly after the push.
   await new Promise<string>((resolve, reject) => {
     elsewhere.addEventListener('message', (e: MessageEvent) => {
       const data = e.data as { type?: string; snapshot?: string }
@@ -269,6 +289,7 @@ it('keeps a port subscribed across a repeated init for the same origin', async (
   }
   // The same origin again, and deliberately no second subscribe.
   rotating.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
+  await handled(rotating, doc)
 
   const arrived = new Promise<string>((resolve, reject) => {
     rotating.addEventListener('message', (e: MessageEvent) => {
