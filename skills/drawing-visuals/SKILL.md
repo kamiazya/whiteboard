@@ -356,7 +356,8 @@ keeps a role recognisable.
 
 ## Notes
 
-- **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
+- **Every applied write is a remote change.** A `mode: "apply"` call changes the document at once
+  (without a mode, content is stored as a proposal for the person to adopt instead); there is no
   separate "commit" step and no local undo. One `wb_canvas_edit` call is atomic — a rejected batch
   leaves nothing behind — but a batch that SUCCEEDS is not undoable, so save a
   `wb_version_save({ workspaceId, documentIds: [documentId], label })` before a risky one and call
