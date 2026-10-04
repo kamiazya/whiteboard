@@ -722,7 +722,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     // "this workspace has no documents" from "you asked about a workspace this
     // daemon has never heard of", and the web app renders the first reading —
     // an empty state with a Create button — for what is actually the second.
-    // A stale pairing (a workspace id minted by an earlier install and kept
+    // A stale remembered workspace (a workspace id minted by an earlier install and kept
     // in the browser's localStorage) then looks exactly like data loss.
     // The v1 document routes already 404 an unknown workspace; this brings
     // the legacy list route into agreement.

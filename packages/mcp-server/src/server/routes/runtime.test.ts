@@ -235,8 +235,8 @@ describe('daemon identity surfaces', () => {
 // What the unification FIXED, stated as a behaviour test rather than a claim.
 //
 // `/api/runtime/*` had its own credential branches — the daemon token, an
-// OAuth grant and a pairing token — and no macaroon branch. The global
-// `/api/*` gate already admitted a macaroon carrying the route's declared
+// OAuth grant and a connected browser's token — and no macaroon branch. The
+// global `/api/*` gate already admitted a macaroon carrying the route's declared
 // scope, so the two disagreed: the registry said `runtime:read` opens
 // `/api/runtime/storage`, the outer gate agreed, and the inner one refused.
 // Failing closed, so not a hole — but a feature that did not work where the

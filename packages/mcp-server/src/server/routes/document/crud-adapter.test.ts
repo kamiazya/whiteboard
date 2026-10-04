@@ -236,7 +236,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   })
 
   // "Empty" and "never registered" are different answers, and conflating them
-  // is what let a stale pairing render as an empty workspace with a Create
+  // is what let a stale remembered workspace render as an empty workspace with a Create
   // button. The operation raises it; this surface translates it.
   it('answers 404 for a workspace that was never registered', async () => {
     const { deps } = await depsRecordingList()

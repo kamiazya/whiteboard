@@ -112,25 +112,9 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
   },
-  'packages/mcp-server/src/server/routes/document/crud-adapter.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
   'packages/mcp-server/src/server/routes/error-body-shape.test.ts': {
     count: 2,
     why: 'says the flow is gone, or what a migration drops',
-  },
-  'packages/mcp-server/src/server/routes/replica-key-rotate.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'packages/mcp-server/src/server/routes/runtime.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
   },
   'packages/mcp-server/src/server/store/version-store.ts': { count: 1, why: 'ordinary English' },
   'packages/ports/src/document-store.ts': { count: 1, why: 'ordinary English' },
