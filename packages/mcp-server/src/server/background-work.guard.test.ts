@@ -162,11 +162,15 @@ async function sourceFiles(dir: string): Promise<string[]> {
  * arming looked like a worker's.
  *
  * Every module under `store/` that owns a timer is therefore classified here:
- * either it IS a declared worker, named by its `LOOP_COSTS` key, or it runs
- * inside one and says which. A new timer-owning module fails until someone
- * answers which.
+ * either it IS a declared worker, named by its `LOOP_COSTS` key, runs inside
+ * one and says which, or its timer is a pause its own caller awaits — armed
+ * and settled inside one call, so nothing outlives the request that asked.
+ * A new timer-owning module fails until someone answers which.
  */
-const TIMER_OWNERS: Record<string, { worker: keyof typeof LOOP_COSTS } | { within: string }> = {
+const TIMER_OWNERS: Record<
+  string,
+  { worker: keyof typeof LOOP_COSTS } | { within: string } | { awaited: string }
+> = {
   'auto-compact.ts': { worker: 'auto-compact' },
   'backup-scheduler.ts': { worker: 'backup-scheduler' },
   'file-gc-sweeper.ts': { worker: 'file-gc-sweeper' },
@@ -175,6 +179,9 @@ const TIMER_OWNERS: Record<string, { worker: keyof typeof LOOP_COSTS } | { withi
   'backup-in-progress.ts': { within: 'backup-scheduler' },
   // Renews a lease for exactly as long as the leased work (the backup pass) runs.
   'lease.ts': { within: 'backup-scheduler' },
+  'db/busy-retry.ts': {
+    awaited: 'the backoff between SQLITE_BUSY retries, awaited by the statement that was refused',
+  },
 }
 
 describe('a timer-owning store module is a declared worker', () => {
@@ -198,6 +205,7 @@ describe('a timer-owning store module is a declared worker', () => {
 
   it('names, for each, a worker that is declared with its cost', () => {
     for (const [file, owner] of Object.entries(TIMER_OWNERS)) {
+      if ('awaited' in owner) continue
       const worker = 'worker' in owner ? owner.worker : owner.within
       expect(Object.keys(LOOP_COSTS), `${file} names ${worker}, which declares no cost`).toContain(
         worker,

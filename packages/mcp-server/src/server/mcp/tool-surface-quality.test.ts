@@ -162,7 +162,10 @@ describe('what the tool table costs to read', () => {
         // `ExtensionFacets` registration meets a scene that now echoes a tag
         // list too, and the registration pays for itself on every node and
         // every edge the answer repeats.
-        wireBytes: 20650,
+        //
+        // +28: `"maxItems":64` on an edge's and a line's `bends`, the cap
+        // the model now states (MAX_BENDS) rather than leaving unbounded.
+        wireBytes: 20678,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -1005,7 +1008,8 @@ describe('what the tool table costs to read', () => {
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows.
-      wireBytes: 131970,
+      // Then +28, canvas_view's bend cap (see that row).
+      wireBytes: 131998,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.
