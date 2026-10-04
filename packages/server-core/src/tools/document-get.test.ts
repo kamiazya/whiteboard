@@ -74,6 +74,28 @@ describe('wb_document_get reads a document in its own format', () => {
     expect(result?.frontmatter).toBeDefined()
   })
 
+  it('a root key the server does not interpret reads back under frontmatter.facetsRaw, and the published schema says so', async () => {
+    const deps = makeDeps()
+    const documentId = await createDoc(deps, 'markdown')
+    const doc = await loadOrCreateDocument(deps, 'ws', documentId)
+    writeCoreFacets(doc, { type: 'note', facetsRaw: { created: '2020-01-02' } })
+    await saveDocumentSnapshot(deps, 'ws', documentId, doc)
+    const tool = createDocumentGetTool(deps)
+
+    const [result] = (await tool.execute({ workspaceId: 'ws', documentIds: [documentId] }))
+      .documents
+
+    expect(result?.content).toContain('created:')
+    expect(result?.frontmatter?.facetsRaw).toEqual({ created: '2020-01-02' })
+    expect(result?.frontmatter).not.toHaveProperty('created')
+
+    // A caller reading the schema is the only one who can learn where an
+    // unrecognised root key lands, so the bucket carries its own sentence.
+    const frontmatterShape =
+      tool.outputSchema.shape.documents.element.shape.frontmatter.unwrap().shape
+    expect(frontmatterShape.facetsRaw.description).toMatch(/verbatim/)
+  })
+
   it('a spatial document comes back as JSON Canvas, with no frontmatter', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
