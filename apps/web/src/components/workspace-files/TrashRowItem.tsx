@@ -7,12 +7,18 @@ export interface TrashRowItemProps {
   busy: boolean
   onRestore: () => void
   /** Absent when the source cannot destroy an entry, which omits the action. */
-  purge?: ((documentId: string) => Promise<void>) | undefined
+  purge?: (documentId: string) => Promise<void>
   onPurgeSettled: () => void
 }
 
 /** One trash row: where the document was, when it went, and what can be done with it. */
-export function TrashRowItem({ row, busy, onRestore, purge, onPurgeSettled }: TrashRowItemProps) {
+export function TrashRowItem({
+  row,
+  busy,
+  onRestore,
+  purge,
+  onPurgeSettled,
+}: Readonly<TrashRowItemProps>) {
   return (
     <li className="flex items-center justify-between gap-2">
       <span className="min-w-0 truncate" title={row.path}>

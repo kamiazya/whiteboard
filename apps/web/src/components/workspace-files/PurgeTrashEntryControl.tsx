@@ -22,7 +22,7 @@ export function PurgeTrashEntryControl({
   purge,
   onSettled,
   disabled,
-}: PurgeTrashEntryControlProps) {
+}: Readonly<PurgeTrashEntryControlProps>) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

@@ -32,7 +32,7 @@ export function PurgeTrashEntryDialog({
   error,
   onCancel,
   onConfirm,
-}: PurgeTrashEntryDialogProps) {
+}: Readonly<PurgeTrashEntryDialogProps>) {
   return (
     <AlertDialog
       open={pending !== null}

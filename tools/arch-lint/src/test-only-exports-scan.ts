@@ -399,16 +399,18 @@ function isMemberName(node: ts.Identifier, parent: ts.Node | undefined): boolean
   )
 }
 
+function ownerAndMember(node: ts.Node): readonly [ts.Node?, ts.MemberName?] {
+  if (ts.isPropertyAccessExpression(node)) return [node.expression, node.name]
+  if (ts.isQualifiedName(node)) return [node.left, node.right]
+  return []
+}
+
 /** `ns.name` as an expression or a type, when `ns` is a static namespace import. */
 function namespaceMember(
   node: ts.Node,
   namespaces: ReadonlyMap<string, string | undefined>,
 ): Binding | undefined {
-  const [owner, member] = ts.isPropertyAccessExpression(node)
-    ? [node.expression, node.name]
-    : ts.isQualifiedName(node)
-      ? [node.left, node.right]
-      : []
+  const [owner, member] = ownerAndMember(node)
   if (owner === undefined || member === undefined || !ts.isIdentifier(owner)) return undefined
   return namespaces.has(owner.text)
     ? { name: member.text, spec: namespaces.get(owner.text), reexport: false }

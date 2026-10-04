@@ -184,7 +184,10 @@ function useKeeperWorkspaces() {
 
 // The shell is built under the workspace route, so the seam it renames through
 // is made here rather than threaded down from the app.
-function OpenWorkspace({ fetchFn, displayName }: { fetchFn: Fetch; displayName: string }) {
+function OpenWorkspace({
+  fetchFn,
+  displayName,
+}: Readonly<{ fetchFn: Fetch; displayName: string }>) {
   const workspaces = useKeeperWorkspaces()
   return (
     <ServerModeWorkspace

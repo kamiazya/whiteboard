@@ -77,7 +77,7 @@ export function directoryLoops(
     components.set(members.join(','), members)
   }
   return [...components.entries()]
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .sort(([left], [right]) => compareKeys(left, right))
     .map(([, members]) => ({
       members,
       edges: new Set(
@@ -86,6 +86,11 @@ export function directoryLoops(
           .map((c) => c.key),
       ).size,
     }))
+}
+
+const compareKeys = (left: string, right: string): number => {
+  if (left < right) return -1
+  return left > right ? 1 : 0
 }
 
 /** A loop spelled the way a ledger and a failure message name it. */

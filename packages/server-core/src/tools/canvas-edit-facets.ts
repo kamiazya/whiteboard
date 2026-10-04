@@ -33,7 +33,7 @@ function checkedFacets(
 }
 
 /** `value` with its `facets` replaced by the checked bucket, or absent when that is empty. */
-export function withCheckedFacets<T extends { facets?: ExtensionFacets | undefined }>(
+export function withCheckedFacets<T extends { facets?: ExtensionFacets }>(
   registry: FacetRegistry,
   index: number,
   op: string,
@@ -50,7 +50,7 @@ export function withCheckedFacets<T extends { facets?: ExtensionFacets | undefin
  * A patch's `facets` REPLACES the stored bucket, so an emptied one must say so
  * explicitly: dropping the key would keep what the element already had.
  */
-export function patchWithCheckedFacets<T extends { facets?: ExtensionFacets | undefined }>(
+export function patchWithCheckedFacets<T extends { facets?: ExtensionFacets }>(
   registry: FacetRegistry,
   index: number,
   op: string,

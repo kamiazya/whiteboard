@@ -21,8 +21,8 @@ export class FakeLiveDocuments implements LiveDocuments {
   async exists(_workspaceId: string, path: string): Promise<boolean> {
     return this.docs.has(path)
   }
-  async kind(_workspaceId: string, path: string): Promise<DocumentKind | null> {
-    return this.kinds.get(path) ?? 'spatial'
+  kind(_workspaceId: string, path: string): Promise<DocumentKind | null> {
+    return Promise.resolve(this.kinds.get(path) ?? 'spatial')
   }
   async list(): Promise<readonly { documentId?: string; path: string }[]> {
     return [...this.docs.keys()].map((path) => ({ path }))

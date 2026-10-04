@@ -35,8 +35,9 @@ import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS, tagLibrary } from './tasks.mjs'
 
 const VALUED_OPTIONS = ['trials', 'model', 'only', 'out', 'max-turns', 'max-budget-usd']
+const VALUED_FLAGS = VALUED_OPTIONS.map((name) => `[--${name}=<v>]`).join(' ')
 const USAGE = [
-  `usage: mcp-tool-surface-eval.mjs ${VALUED_OPTIONS.map((name) => `[--${name}=<v>]`).join(' ')} [--dry-run]`,
+  `usage: mcp-tool-surface-eval.mjs ${VALUED_FLAGS} [--dry-run]`,
   '  runs each task through a real model via the claude CLI - this SPENDS API QUOTA.',
   '  --dry-run seeds the fixture and runs every verifier without calling a model.',
 ].join('\n')

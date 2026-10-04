@@ -109,7 +109,7 @@ describe('the families a render declared but could not resolve', () => {
   })
 
   it('has a nested sample for every container kind', () => {
-    expect(Object.values(NESTED).filter((node) => node !== null).length).toBe(9)
+    expect(Object.values(NESTED).filter((node) => node !== null)).toHaveLength(9)
   })
 
   it('says nothing when no face was loaded at all, matching undrawable', () => {

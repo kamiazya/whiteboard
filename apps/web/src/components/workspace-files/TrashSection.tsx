@@ -19,7 +19,7 @@ export interface TrashSectionProps {
    * Destroy one entry for good. Optional like the rest of the trash seam: a
    * source that cannot omits the action rather than offering it.
    */
-  purgeFromTrash?: ((documentId: string) => Promise<void>) | undefined
+  purgeFromTrash?: (documentId: string) => Promise<void>
   /** The document list above holds a restored document now — re-read it. */
   onRestored: () => void
   /** External writes (a delete just landed) — re-read the trash. */

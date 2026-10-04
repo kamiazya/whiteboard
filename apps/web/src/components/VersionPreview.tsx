@@ -51,7 +51,7 @@ export function VersionPreview({
    * intent from, as the live one is — a version that looked coloured and
    * legended while it was current must not read as grey when looked back on.
    */
-  readonly tags?: Pick<TagVocabulary, 'library'> | undefined
+  readonly tags?: Pick<TagVocabulary, 'library'>
 }): JSX.Element {
   const measure = useMemo(() => createBrowserMeasureText(), [])
   // The viewer lays out what it is given and knows no library; colour by

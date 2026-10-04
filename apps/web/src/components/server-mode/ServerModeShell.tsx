@@ -112,7 +112,7 @@ function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
  * so a rename in flight is not torn down by closing it. Absent until the
  * list has said which row the address names, and for a keeper with no rename.
  */
-function WorkspaceRenameDisclosure({ workspaces }: { workspaces: KeeperWorkspaces }) {
+function WorkspaceRenameDisclosure({ workspaces }: Readonly<{ workspaces: KeeperWorkspaces }>) {
   const pathname = useLocation().pathname
   const { handleInAddress, activeRow, applyRename } = useShellWorkspaceRows(workspaces, pathname)
   if (activeRow === undefined || workspaces.source.rename === undefined) return null
@@ -151,12 +151,12 @@ export function ServerModeShell({
   displayName,
   fetchFn,
   workspaces,
-}: {
+}: Readonly<{
   displayName: string
   fetchFn: Fetch
   /** The keeper's workspace seam; without it the shell offers no rename. */
-  workspaces?: KeeperWorkspaces | undefined
-}) {
+  workspaces?: KeeperWorkspaces
+}>) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
   const announcement = notKeepingAnnouncement(connection?.state ?? null)

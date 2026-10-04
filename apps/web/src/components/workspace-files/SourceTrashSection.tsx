@@ -11,11 +11,11 @@ export function SourceTrashSection({
   source,
   revision,
   onRestored,
-}: {
+}: Readonly<{
   source: WorkspaceFilesSource
   revision: unknown
   onRestored: () => void
-}) {
+}>) {
   if (source.listTrash === undefined || source.restoreFromTrash === undefined) return null
   return (
     <TrashSection

@@ -60,14 +60,16 @@ interface Scan {
   readonly entries: ReadonlyMap<string, string>
 }
 
-function moduleOf(scan: Scan, from: string, spec: string): string | 'elsewhere' | 'unknown' {
+/** A scanned file is wrapped so a path cannot be mistaken for the two verdict words. */
+type ModuleLookup = { readonly path: string } | 'elsewhere' | 'unknown'
+
+function moduleOf(scan: Scan, from: string, spec: string): ModuleLookup {
   if (spec.startsWith('.')) {
-    return (
-      relativeCandidates(joinRelative(from, spec)).find((c) => scan.modules.has(c)) ?? 'unknown'
-    )
+    const path = relativeCandidates(joinRelative(from, spec)).find((c) => scan.modules.has(c))
+    return path === undefined ? 'unknown' : { path }
   }
   const entry = scan.entries.get(spec)
-  if (entry !== undefined) return scan.modules.has(entry) ? entry : 'unknown'
+  if (entry !== undefined) return scan.modules.has(entry) ? { path: entry } : 'unknown'
   return spec.startsWith(WORKSPACE_SCOPE) ? 'unknown' : 'elsewhere'
 }
 
@@ -79,7 +81,7 @@ function through(
   seen: Set<string>,
 ): Resolution {
   const target = moduleOf(scan, from, spec)
-  return target === 'elsewhere' || target === 'unknown' ? target : follow(scan, target, name, seen)
+  return typeof target === 'string' ? target : follow(scan, target.path, name, seen)
 }
 
 function followStars(
