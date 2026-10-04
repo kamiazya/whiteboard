@@ -41,10 +41,10 @@ function walkFiles(dir, keep) {
 }
 
 const ARTIFACT_EXTENSION = /\.(html|js|css|txt)$/
-const CLOUDFLARE_CONFIG_FILES = new Set(['_headers', '_redirects'])
+const CLOUDFLARE_CONFIG_FILES = new Set(['_headers'])
 
 // Collect all text artifact files: html, js, css, plain-text, and the
-// Cloudflare Pages config files (_headers, _redirects).
+// Cloudflare Pages config file (_headers).
 function collectArtifactFiles(dir) {
   return walkFiles(
     dir,
@@ -111,19 +111,22 @@ function main() {
     assert(headers.includes('Permissions-Policy'), '_headers: Permissions-Policy present')
   }
 
-  // ── _redirects copied (SPA fallback) ──────────────────────────────────────────
-  // apps/web has client-side routes with no matching dist/ file
-  // (/document/:workspaceId/:path, /w/:workspaceId, /local/:documentId); without this
-  // rule Cloudflare Pages 404s a direct load or reload of any of them.
-  console.log('\n[smoke-artifact] _redirects (SPA fallback)')
-  const redirects = readDist('_redirects')
-  assert(redirects !== null, 'dist/_redirects exists (Cloudflare Pages SPA fallback)')
-  if (redirects !== null) {
-    assert(
-      /^\/\*\s+\/index\.html\s+200\s*$/m.test(redirects),
-      '_redirects: catch-all rewrite to /index.html with a 200 (not a 3xx redirect)',
-    )
-  }
+  // ── SPA fallback ──────────────────────────────────────────────────────────────
+  // apps/web has client-side routes with no matching dist/ file (/w/:workspaceId,
+  // /local/:documentId, ...). Cloudflare Pages serves index.html for any such
+  // path only while the project has no top-level 404.html: its presence turns the
+  // single-page-app behaviour off and every deep link answers 404. (A `/*
+  // /index.html 200` rule in `_redirects` is not the mechanism — wrangler rejects
+  // it as an infinite loop and ignores it.)
+  console.log('\n[smoke-artifact] SPA fallback')
+  assert(
+    readDist('404.html') === null,
+    'dist/404.html absent (a top-level 404.html disables the Pages SPA fallback)',
+  )
+  assert(
+    readDist('_redirects') === null,
+    'dist/_redirects absent (the catch-all rewrite is rejected as a loop and does nothing)',
+  )
 
   // ── CSP integrity ─────────────────────────────────────────────────────────────
   console.log('\n[smoke-artifact] CSP directives')
