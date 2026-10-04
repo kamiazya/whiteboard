@@ -15,7 +15,7 @@ import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 afterEach(cleanup)
 
-const DAEMON = { baseUrl: 'http://127.0.0.1:9999', token: 'tok' }
+const DAEMON = { baseUrl: 'http://127.0.0.1:9999' }
 
 function settingsStore() {
   return {

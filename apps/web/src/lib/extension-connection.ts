@@ -3,14 +3,14 @@
  * no pairing to do — the extension admits this origin, the browser starts the
  * native host only for that extension, and the host reaches the daemon over
  * its owner-only socket with the daemon's own credential — so a connection is
- * a daemon that answers. The page holds no token, so a connection's is empty.
+ * a daemon that answers.
  */
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { bridgeFetch } from './bridge-loader.js'
 
 /** What asking for the daemon through the extension answered. */
 export type ExtensionConnection =
-  | { status: 'connected'; daemonBaseUrl: string; token: string }
+  | { status: 'connected'; daemonBaseUrl: string }
   | { status: 'none' }
 
 /**
@@ -28,7 +28,7 @@ export async function connectThroughExtension(
     const res = await fetchFn(`${BRIDGE_DAEMON_BASE_URL}/api/runtime/ping`, {
       signal: giveUp.signal,
     })
-    if (res.ok) return { status: 'connected', daemonBaseUrl: BRIDGE_DAEMON_BASE_URL, token: '' }
+    if (res.ok) return { status: 'connected', daemonBaseUrl: BRIDGE_DAEMON_BASE_URL }
   } catch {
     // No extension, no host, no daemon behind it, or no answer in time.
   } finally {

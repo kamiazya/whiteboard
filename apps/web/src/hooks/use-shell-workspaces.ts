@@ -1,6 +1,7 @@
 import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
 import { useMemo } from 'react'
 import { type WorkspaceRoute, workspacePath } from '../lib/app-routes.js'
+import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
 import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 
 /**
@@ -21,9 +22,7 @@ export function useShellWorkspaces({
   navigate,
   setDaemonRoute,
 }: {
-  readonly daemonShellTarget:
-    | { readonly baseUrl: string; readonly token: string | undefined }
-    | undefined
+  readonly daemonShellTarget: Readonly<ConnectedDaemon> | undefined
   readonly navigate: (to: string) => void
   /**
    * The daemon keeper's view setter. Taken rather than a ready-made
@@ -55,7 +54,7 @@ export function useShellWorkspaces({
                 import('../lib/daemon-api-client.js').then((m) =>
                   m
                     .listWorkspaces(
-                      m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                      m.createDaemonFetch(daemonShellTarget.baseUrl),
                       daemonShellTarget.baseUrl,
                     )
                     .then((res) => res.workspaces),
@@ -66,7 +65,7 @@ export function useShellWorkspaces({
               create: (displayName: string) =>
                 import('../lib/daemon-api-client.js').then((m) =>
                   m.createWorkspace(
-                    m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                    m.createDaemonFetch(daemonShellTarget.baseUrl),
                     daemonShellTarget.baseUrl,
                     displayName,
                   ),
@@ -74,7 +73,7 @@ export function useShellWorkspaces({
               rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
                 import('../lib/daemon-api-client.js').then((m) =>
                   m.renameWorkspace(
-                    m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                    m.createDaemonFetch(daemonShellTarget.baseUrl),
                     daemonShellTarget.baseUrl,
                     workspaceId,
                     input,

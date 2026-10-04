@@ -111,14 +111,12 @@ function ShellFrame({
  */
 export function DaemonWorkspaceScreen({
   daemonBaseUrl,
-  token,
   view,
   onView,
   onWorkInBrowser,
   workspaces,
 }: {
   daemonBaseUrl: string
-  token?: string
   view: WorkspaceRoute
   onView: (view: WorkspaceRoute) => void
   onWorkInBrowser: () => void
@@ -133,7 +131,6 @@ export function DaemonWorkspaceScreen({
           {view.kind === 'index' ? (
             <DaemonIndexPage
               daemonBaseUrl={daemonBaseUrl}
-              token={token}
               workspace={view.workspace}
               onWorkspaceResolved={(workspace) => onView({ kind: 'index', workspace })}
               onOpenDocument={(workspace, path) => onView({ kind: 'document', workspace, path })}
@@ -144,7 +141,6 @@ export function DaemonWorkspaceScreen({
               daemonBaseUrl={daemonBaseUrl}
               workspaceId={view.workspace}
               path={view.path}
-              token={token}
               onNavigateBack={() => onView({ kind: 'index', workspace: view.workspace })}
             />
           )}

@@ -9,13 +9,8 @@ import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/sync
 import { z } from 'zod'
 
 export const sseWorkerRequestSchema = z.discriminatedUnion('type', [
-  // Sent once per port before any subscribe. The worker cannot obtain the
-  // daemon credential itself: the token is held by the page.
-  z.object({
-    type: z.literal('init'),
-    baseUrl: z.string().min(1),
-    token: z.string().optional(),
-  }),
+  // Sent once per port before any subscribe.
+  z.object({ type: z.literal('init'), baseUrl: z.string().min(1) }),
   z.object({ type: z.literal('subscribe'), doc: z.string().min(1) }),
   z.object({ type: z.literal('unsubscribe'), doc: z.string().min(1) }),
   // A client->server control message (client_ready). It has to

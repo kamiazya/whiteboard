@@ -10,12 +10,11 @@ import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { CONNECT_TIMEOUT_MS, connectThroughExtension } from './extension-connection.js'
 
 describe('connectThroughExtension', () => {
-  it('pairs with the bridged daemon when it answers the ping, holding no token', async () => {
+  it('pairs with the bridged daemon when it answers the ping, holding no credential', async () => {
     const fetchFn = vi.fn<typeof fetch>(async () => jsonResponse({ ok: true }))
     expect(await connectThroughExtension(fetchFn)).toEqual({
       status: 'connected',
       daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
-      token: '',
     })
     expect(String(fetchFn.mock.calls[0]?.[0])).toBe(`${BRIDGE_DAEMON_BASE_URL}/api/runtime/ping`)
   })

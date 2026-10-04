@@ -1,26 +1,18 @@
 /**
- * The daemon's Authorization seam, deliberately in a module of its own.
- *
- * It does not sit in daemon-api-client.ts beside that file's response schemas,
- * which would make the seam a whole module rather than a function: a
- * SharedWorker importing it would pull the schema graph in and stall its
- * module load, leaving the worker unable to attach the credential without
- * duplicating the header — exactly what daemon-auth-seam.test.ts forbids.
- * Keeping it small lets every context share the one implementation.
+ * The daemon-addressed fetch, in a module of its own so a SharedWorker can
+ * import it without pulling daemon-api-client.ts's response-schema graph in
+ * and stalling its module load.
  */
 import { isBridgeDaemon } from './bridge-address.js'
 import { bridgeFetch } from './bridge-loader.js'
 
 /**
- * The daemon a session is connected to, as the pair every authorized call
- * needs — exactly what `createDaemonFetch` consumes. One declaration rather
- * than an inline literal per surface, because structural typing would let
- * one site's copy drift (a token quietly becoming optional, say) without a
- * single error anywhere.
+ * The daemon a session is connected to — exactly what `createDaemonFetch`
+ * consumes. One declaration rather than an inline literal per surface, so a
+ * surface cannot drift from the others without a type error.
  */
 export interface ConnectedDaemon {
   baseUrl: string
-  token: string | null
 }
 
 /**
@@ -36,25 +28,6 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
   return new URL(input, daemonBaseUrl)
 }
 
-/**
- * Cross-origin fetch wrapper for a connected daemon. Resolves relative
- * `/api/...` paths against `daemonBaseUrl` and attaches an `Authorization:
- * Bearer` header — but ONLY when the fully-resolved request URL's origin
- * equals the daemon's own origin. This mirrors apiFetch's same-origin-only
- * rule (`apiFetch` in packages/daemon-client/src/api-client.ts): the daemon
- * bearer token must never leak to an absolute external URL or a foreign-origin
- * Request object that happens to pass through this wrapper (e.g. an image
- * asset fetch).
- *
- * This is the SOLE place in apps/web allowed to set an Authorization header
- * toward the daemon (enforced by daemon-auth-seam.test.ts's source scan).
- * Keeping the token's attachment in one seam, rather than at each call site,
- * is what lets a browser-extension proxy replace this single function instead
- * of requiring an audit of every fetch in the app. That matters because an
- * extension is the only place a persisted daemon credential can live safely:
- * extension storage is scoped to the extension ID, not to a web origin that
- * another process can take over by claiming the port.
- */
 /**
  * A preconstructed Request rebuilt against the resolved URL, carrying its own
  * semantics through: losing `signal` in particular would break
@@ -86,35 +59,30 @@ function rebuiltRequestInit(
   }
 }
 
+/**
+ * Fetch wrapper for a connected daemon: resolves relative `/api/...` paths
+ * against `daemonBaseUrl` and sends the request through the transport that
+ * reaches it. The page holds no credential, so nothing is attached — the
+ * daemon authenticates the connection (a cookie, or the extension's bridge),
+ * never the request, and daemon-auth-seam.test.ts keeps it that way.
+ */
 export function createDaemonFetch(
   daemonBaseUrl: string,
-  // A function rather than a value when the credential outlives the wrapper: a
-  // session token is rotated while the page stays open, and a holder
-  // that captured the old one keeps presenting a dead credential. Callers that
-  // rebuild the wrapper on rotation (React memo on `token`) pass the string.
-  token?: string | (() => string | undefined),
   // The fetch this wrapper delegates to. Injectable so a caller that already
   // holds its own fetch (a test double, a same-origin page helper) can route
-  // its credential through this one seam instead of setting the header itself.
+  // through this one resolution step.
   baseFetch: typeof globalThis.fetch = fetch,
 ): typeof globalThis.fetch {
-  const daemonOrigin = new URL(daemonBaseUrl).origin
-  // A daemon reached through the extension (ADR-0050) has an address nothing
-  // on a network answers, so the bridge is its transport whatever fetch a
-  // caller handed in — several pass their own network one explicitly.
+  // A daemon reached through the extension has an address nothing on a network
+  // answers, so the bridge is its transport whatever fetch a caller handed in
+  // — several pass their own network one explicitly.
   const transport = isBridgeDaemon(daemonBaseUrl) ? bridgeFetch : baseFetch
 
   return async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
     const resolvedUrl = resolveRequestUrl(input, daemonBaseUrl)
-    const isDaemonOrigin = resolvedUrl.origin === daemonOrigin
-
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     )
-    const bearer = typeof token === 'function' ? token() : token
-    if (bearer && isDaemonOrigin) {
-      headers.set('Authorization', `Bearer ${bearer}`)
-    }
 
     if (input instanceof Request) {
       return transport(resolvedUrl, rebuiltRequestInit(input, init, headers))

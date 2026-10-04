@@ -69,14 +69,12 @@ export function shellDaemon({
   effectiveState,
 }: {
   forcedBrowser: boolean
-  connection: { daemonBaseUrl: string; token: string } | null
+  connection: { daemonBaseUrl: string } | null
   effectiveState: ProviderState
-}): { baseUrl: string; token: string | undefined } | undefined {
+}): ConnectedDaemon | undefined {
   if (forcedBrowser) return undefined
-  if (connection !== null) return { baseUrl: connection.daemonBaseUrl, token: connection.token }
-  if (effectiveState.kind === 'daemon') {
-    return { baseUrl: effectiveState.daemonBaseUrl, token: undefined }
-  }
+  if (connection !== null) return { baseUrl: connection.daemonBaseUrl }
+  if (effectiveState.kind === 'daemon') return { baseUrl: effectiveState.daemonBaseUrl }
   return undefined
 }
 
@@ -92,14 +90,12 @@ export function settingsDaemon({
   providerState,
 }: {
   forcedBrowser: boolean
-  connection: { daemonBaseUrl: string; token: string } | null
+  connection: { daemonBaseUrl: string } | null
   providerState: ProviderState
 }): ConnectedDaemon | undefined {
   if (forcedBrowser) return undefined
-  if (connection !== null) return { baseUrl: connection.daemonBaseUrl, token: connection.token }
-  if (providerState.kind === 'daemon') {
-    return { baseUrl: providerState.daemonBaseUrl, token: null }
-  }
+  if (connection !== null) return { baseUrl: connection.daemonBaseUrl }
+  if (providerState.kind === 'daemon') return { baseUrl: providerState.daemonBaseUrl }
   return undefined
 }
 

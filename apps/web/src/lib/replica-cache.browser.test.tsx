@@ -113,7 +113,7 @@ describe('cacheDaemonWorkspace', () => {
     // record would mark local edits as already-sent, and the push would
     // silently skip them forever.
     const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
-    connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch: snapshotStub(record) })
+    connectReplicaKeeper({ baseUrl: BASE, fetch: snapshotStub(record) })
     // The offline edit is seeded as if an earlier pull had already sealed
     // this replica — the same state `cacheDaemonWorkspace`'s own mark
     // leaves a workspace in once it has been pulled once.
@@ -161,7 +161,7 @@ describe('cacheDaemonWorkspace', () => {
 
   it('stores the pulled daemon record in the browser planes as a replica', async () => {
     const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
-    connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch: snapshotStub(record) })
+    connectReplicaKeeper({ baseUrl: BASE, fetch: snapshotStub(record) })
     const result = await cacheDaemonWorkspace({
       fetch: snapshotStub(record),
       daemonBaseUrl: BASE,
@@ -179,7 +179,7 @@ describe('cacheDaemonWorkspace', () => {
 
   it('a re-pull merges into the stored replica instead of forking it', async () => {
     const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
-    connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch: snapshotStub(record) })
+    connectReplicaKeeper({ baseUrl: BASE, fetch: snapshotStub(record) })
     const docs = new BrowserWorkspaceDocs()
     await cacheDaemonWorkspace({
       fetch: snapshotStub(record),
@@ -212,7 +212,7 @@ describe('cacheDaemonWorkspace', () => {
 
   it('a refused pull fails structurally and writes nothing', async () => {
     const fetch = snapshotStub(daemonRecord({ path: 'notes/plan', documentId: DOC_A }), 404)
-    connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch })
+    connectReplicaKeeper({ baseUrl: BASE, fetch })
     const result = await cacheDaemonWorkspace({
       fetch,
       daemonBaseUrl: BASE,
@@ -231,7 +231,6 @@ describe('cacheDaemonWorkspace', () => {
     const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
     connectReplicaKeeper({
       baseUrl: BASE,
-      token: 'tok',
       fetch: (async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.endsWith('/replica-key')) {
@@ -266,7 +265,7 @@ describe('cacheDaemonWorkspace', () => {
   it('a first pull with no registry entry lands sealed and reads back once registered', async () => {
     localStorage.removeItem(STORAGE_KEY)
     const record = daemonRecord({ path: 'notes/first-pull-marker', documentId: DOC_A })
-    connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch: snapshotStub(record) })
+    connectReplicaKeeper({ baseUrl: BASE, fetch: snapshotStub(record) })
     // The exact state both real callers (Settings' move, the background
     // refresh) are in mid-pull: no `storage.replicas` entry yet.
     const settings = createUserSettingsStore()

@@ -52,11 +52,7 @@ describe('createDaemonFetch to the extension bridge', () => {
     // A caller handing its own network fetch in — `daemon.fetch ?? fetch`, a
     // bound global — still reaches the bridge: nothing on a network answers
     // this address, so the network is never the right transport for it.
-    const res = await createDaemonFetch(
-      BRIDGE_DAEMON_BASE_URL,
-      undefined,
-      network,
-    )('/api/workspaces')
+    const res = await createDaemonFetch(BRIDGE_DAEMON_BASE_URL, network)('/api/workspaces')
 
     expect(res.status).toBe(200)
     expect(sent).toEqual([expect.objectContaining({ type: 'request', path: '/api/workspaces' })])

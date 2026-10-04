@@ -185,7 +185,6 @@ export function App({ providerState }: AppProps) {
     return (
       <DaemonWorkspaceScreen
         daemonBaseUrl={connection.daemonBaseUrl}
-        token={connection.token}
         view={daemonView}
         onView={setDaemonView}
         onWorkInBrowser={() => setForcedBrowser(true)}

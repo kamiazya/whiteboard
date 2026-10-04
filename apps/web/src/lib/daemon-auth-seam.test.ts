@@ -2,13 +2,11 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * Single-seam invariant: `createDaemonFetch` in daemon-api-client.ts is the
- * ONLY code path allowed to attach an `Authorization` header toward the
- * daemon origin. Centralizing it there keeps a browser-extension proxy — the
- * only place a persisted daemon credential can live safely, because extension
- * storage is scoped to the extension ID rather than to a web origin another
- * process can take over — a one-file swap instead of an audit of every fetch
- * call in the app.
+ * No-credential invariant: the page holds no daemon credential (the extension
+ * relays its requests and the daemon authenticates the connection, not the
+ * request), so nothing in apps/web may set an `Authorization` header. One
+ * appearing here would be a credential the page was never meant to carry,
+ * readable by any script on its origin.
  *
  * Sources are captured via Vite's build-time `import.meta.glob` (raw text),
  * mirroring canvas-render's import-guard.test.ts pattern, so this scans
@@ -19,8 +17,6 @@ const sourceModules = import.meta.glob('../**/*.{ts,tsx}', {
   eager: true,
   import: 'default',
 }) as Record<string, string>
-
-const ALLOWED_SETTER = './daemon-auth-fetch.ts'
 
 /**
  * Deliberately broad: a header name is case-insensitive (Fetch spec) and can
@@ -46,7 +42,7 @@ function isProductionSource(path: string): boolean {
   return !path.includes('.test.') && !path.includes('.stories.')
 }
 
-describe('daemon Authorization header single-seam guard', () => {
+describe('apps/web sets no Authorization header', () => {
   const productionSources = Object.entries(sourceModules).filter(([path]) =>
     isProductionSource(path),
   )
@@ -56,11 +52,10 @@ describe('daemon Authorization header single-seam guard', () => {
   })
 
   it.each(productionSources)('%s does not set an Authorization header', (path, contents) => {
-    if (path === ALLOWED_SETTER) return
     for (const pattern of AUTHORIZATION_HEADER_PATTERNS) {
       expect(
         pattern.test(contents),
-        `${path} matched an Authorization-header pattern (${pattern}) — only ${ALLOWED_SETTER} may set this header`,
+        `${path} matched an Authorization-header pattern (${pattern}) — the page holds no daemon credential`,
       ).toBe(false)
     }
   })
@@ -95,12 +90,5 @@ describe('daemon Authorization header single-seam guard', () => {
   it('the guard does not fire on an unrelated header', () => {
     const sample = "headers.set('Content-Type', 'application/json')"
     expect(AUTHORIZATION_HEADER_PATTERNS.some((pattern) => pattern.test(sample))).toBe(false)
-  })
-
-  it('mutation-check: the allowed setter itself matches the guarded pattern', () => {
-    const contents = sourceModules[ALLOWED_SETTER]
-    expect(contents).toBeDefined()
-    const matches = AUTHORIZATION_HEADER_PATTERNS.some((pattern) => pattern.test(contents ?? ''))
-    expect(matches, 'expected daemon-auth-fetch.ts to still set Authorization').toBe(true)
   })
 })

@@ -163,7 +163,7 @@ describe('server mode opens a workspace', () => {
       workspace: 'ws-1',
       serverMode: true,
     })
-    expect(last?.props.token).toBeUndefined()
+    expect(last?.props).not.toHaveProperty('token')
   })
 
   it('opens a document in the editor, synced the server-mode way', async () => {

@@ -94,7 +94,6 @@ vi.mock('./lib/extension-connection.js', async (importOriginal) => ({
 const CONNECTED: ExtensionConnection = {
   status: 'connected',
   daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
-  token: '',
 }
 
 /** A settings record that remembers `daemonBaseUrl`, as a later cold load finds it. */
@@ -211,17 +210,14 @@ describe('reconnecting a remembered daemon through the extension', () => {
 
     await screen.findByTestId('daemon-index-page')
     expect(connectThroughExtensionMock).toHaveBeenCalledOnce()
-    // The page holds no daemon token: the host supplies the daemon's own.
-    expect(receivedDaemonIndexPageProps).toMatchObject({
-      daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
-      token: '',
-    })
+    // The page holds no daemon credential: the host supplies the daemon's own.
+    expect(receivedDaemonIndexPageProps).toMatchObject({ daemonBaseUrl: BRIDGE_DAEMON_BASE_URL })
+    expect(receivedDaemonIndexPageProps).not.toHaveProperty('token')
     // The resolved daemon reaches the replica-key holder too, not only
     // the page.
     await vi.waitFor(() => {
       expect(connectReplicaKeeperMock).toHaveBeenLastCalledWith({
         baseUrl: BRIDGE_DAEMON_BASE_URL,
-        token: '',
       })
     })
   })
@@ -623,14 +619,14 @@ describe('App daemon provider state', () => {
     expect(receivedDaemonPageProps?.onNavigateBack).toBeInstanceOf(Function)
   })
 
-  it('hands the page no token: the browser holds none', async () => {
+  it('hands the page no credential: the browser holds none', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={DAEMON_STATE} />
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.token).toBeUndefined()
+    expect(receivedDaemonIndexPageProps).not.toHaveProperty('token')
   })
 
   it('returns to the index when DaemonDocumentPage invokes onNavigateBack', async () => {
@@ -1242,12 +1238,11 @@ describe('App /settings routing', () => {
     expect(receivedSettingsPageProps?.workspaceId).toBeUndefined()
   })
 
-  it('passes the daemon baseUrl/token when the provider state is "daemon"', async () => {
+  it('passes the daemon baseUrl when the provider state is "daemon"', async () => {
     renderAppWithRouter(DAEMON_STATE, '/settings')
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toEqual({
       baseUrl: DAEMON_STATE.kind === 'daemon' ? DAEMON_STATE.daemonBaseUrl : '',
-      token: null,
     })
   })
 
@@ -1278,7 +1273,6 @@ describe('App /settings routing', () => {
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toEqual({
       baseUrl: BRIDGE_DAEMON_BASE_URL,
-      token: '',
     })
     connectThroughExtensionMock.mockClear()
     mockConnectResult = { status: 'none' }

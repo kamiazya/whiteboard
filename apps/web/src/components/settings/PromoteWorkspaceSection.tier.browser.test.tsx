@@ -18,7 +18,7 @@ describe('PromoteWorkspaceSection tier line', () => {
 
     render(
       <PromoteWorkspaceSection
-        daemon={{ baseUrl: 'http://127.0.0.1:9999', token: 'tok' }}
+        daemon={{ baseUrl: 'http://127.0.0.1:9999' }}
         settingsStore={{ load: () => ({ migration: {} }) as never, update: () => {} }}
         workspaceId="ws-1"
         baseFetch={fetchStub as unknown as typeof globalThis.fetch}

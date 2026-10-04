@@ -40,7 +40,7 @@ import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 claimIsolatedWhiteboardDb('promote-section')
 
 const BASE = 'http://127.0.0.1:3099'
-const DAEMON = { baseUrl: BASE, token: 'tok-1' }
+const DAEMON = { baseUrl: BASE }
 
 interface StubOptions {
   updateDelayMs?: number
@@ -126,7 +126,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof globalThis.fetch
-  connectReplicaKeeper({ baseUrl: BASE, token: DAEMON.token, fetch: fetchImpl })
+  connectReplicaKeeper({ baseUrl: BASE, fetch: fetchImpl })
   return fetchImpl
 }
 
@@ -454,7 +454,7 @@ describe('PromoteWorkspaceSection', () => {
     // offer) belongs to the first daemon and must not read as this one's.
     render(
       <PromoteWorkspaceSection
-        daemon={{ baseUrl: 'http://127.0.0.1:4200', token: 'tok-2' }}
+        daemon={{ baseUrl: 'http://127.0.0.1:4200' }}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc())}
         reload={vi.fn()}
@@ -776,9 +776,9 @@ describe('PromoteWorkspaceSection', () => {
       return baseFetch(input, init)
     }) as typeof globalThis.fetch
     // Re-wires the session-key fetch to the intercepting one without
-    // changing baseUrl/token, so this is not a reconnect (no key forgotten
+    // changing baseUrl, so this is not a reconnect (no key forgotten
     // as a side effect of the swap itself).
-    connectReplicaKeeper({ baseUrl: BASE, token: DAEMON.token, fetch: interceptingFetch })
+    connectReplicaKeeper({ baseUrl: BASE, fetch: interceptingFetch })
     // After the demote-cache write for the promoted workspace lands, drop
     // the held key and start refusing — the next ask (replicaCarriesAll's
     // read-back) must re-mint and finds the session gone.

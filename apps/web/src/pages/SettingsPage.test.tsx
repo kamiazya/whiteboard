@@ -45,7 +45,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function renderAt(path: string, daemon?: { baseUrl: string; token: string | null }) {
+function renderAt(path: string, daemon?: { baseUrl: string }) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <SettingsPage daemon={daemon} />
@@ -311,7 +311,7 @@ describe('SettingsPage — Data & app setup journey', () => {
   })
 
   it('marks the daemon step connected when a daemon is provided', async () => {
-    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     expect(await within(section).findByText('connected')).toBeTruthy()
   })
@@ -389,7 +389,7 @@ describe('SettingsPage — Connections', () => {
         return jsonResponse({}, 404)
       }),
     )
-    renderAt('/settings/fonts', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/fonts', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     expect(
       await within(section).findByRole('button', { name: 'Install Noto Sans JP' }),
@@ -418,7 +418,7 @@ describe('SettingsPage — Connections', () => {
         return jsonResponse({}, 404)
       }),
     )
-    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     const button = await within(section).findByTestId('promote-workspace-open')
     expect(button.hasAttribute('disabled')).toBe(false)
@@ -435,7 +435,7 @@ describe('SettingsPage — Connections', () => {
         return jsonResponse({}, 404)
       }),
     )
-    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     expect(
       await within(section).findByRole('button', { name: /refresh storage usage/i }),
@@ -456,7 +456,7 @@ describe('SettingsPage — disconnecting from a daemon', () => {
   function renderConnections(onDisconnected = vi.fn()) {
     render(
       <MemoryRouter initialEntries={['/settings/connections']}>
-        <SettingsPage daemon={{ baseUrl: DAEMON, token: null }} onDisconnected={onDisconnected} />
+        <SettingsPage daemon={{ baseUrl: DAEMON }} onDisconnected={onDisconnected} />
       </MemoryRouter>,
     )
     return onDisconnected
@@ -601,7 +601,7 @@ describe('SettingsPage — storage evidence wiring', () => {
         return jsonResponse({}, 404)
       }),
     )
-    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     expect(await within(section).findByText(/103\.0 MiB on this computer/)).toBeTruthy()
   })
@@ -611,7 +611,7 @@ describe('SettingsPage — storage evidence wiring', () => {
       'fetch',
       vi.fn(async () => new Response('nope', { status: 500 })),
     )
-    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     // The step itself still reports connected — only the figure is absent.
     expect(await within(section).findByText('connected')).toBeTruthy()
@@ -620,15 +620,15 @@ describe('SettingsPage — storage evidence wiring', () => {
 })
 
 // ConnectionsSection/FontsSection build their daemon-aware fetch inline on
-// every render (`createDaemonFetch(daemon.baseUrl, ...)`), so a re-render
+// every render (`createDaemonFetch(daemon.baseUrl)`), so a re-render
 // with an unchanged daemon still hands DaemonApiContext a brand-new function
 // identity. Every consumer effect keyed on that identity (StorageReportCard's
 // fetch, FontsCard's refresh effect) then re-fires and
 // re-issues its daemon request — observable here as extra fetch calls with no
 // daemon change to justify them.
 describe('SettingsPage — daemon fetch identity is stable across unrelated re-renders', () => {
-  const DAEMON_A = { baseUrl: 'http://127.0.0.1:9999', token: 'tok-a' }
-  const DAEMON_B = { baseUrl: 'http://127.0.0.1:8888', token: 'tok-b' }
+  const DAEMON_A = { baseUrl: 'http://127.0.0.1:9999' }
+  const DAEMON_B = { baseUrl: 'http://127.0.0.1:8888' }
 
   function countingFetch(counts: { storage: number; fonts: number }) {
     return vi.fn(async (input: RequestInfo | URL) => {
@@ -677,8 +677,8 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
     swapTo,
   }: {
     path: string
-    initial?: { baseUrl: string; token: string | null }
-    swapTo?: { baseUrl: string; token: string | null }
+    initial?: { baseUrl: string }
+    swapTo?: { baseUrl: string }
   }) {
     const [daemon, setDaemon] = useState(initial)
     return (
@@ -701,9 +701,9 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
       <DaemonSwapHarness
         path="/settings/connections"
         initial={DAEMON_A}
-        // Same baseUrl/token VALUES, but a new object — proves the memo key
+        // Same baseUrl, but a new object — proves the memo key
         // is the primitive fields, not object identity.
-        swapTo={{ baseUrl: DAEMON_A.baseUrl, token: DAEMON_A.token }}
+        swapTo={{ baseUrl: DAEMON_A.baseUrl }}
       />,
     )
     const section = screen.getByTestId('settings-section')
@@ -724,7 +724,7 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
       <DaemonSwapHarness
         path="/settings/fonts"
         initial={DAEMON_A}
-        swapTo={{ baseUrl: DAEMON_A.baseUrl, token: DAEMON_A.token }}
+        swapTo={{ baseUrl: DAEMON_A.baseUrl }}
       />,
     )
     const baseline = await waitForStableCount(() => counts.fonts)
@@ -740,26 +740,6 @@ describe('SettingsPage — daemon fetch identity is stable across unrelated re-r
     vi.stubGlobal('fetch', countingFetch(counts))
 
     render(<DaemonSwapHarness path="/settings/connections" initial={DAEMON_A} swapTo={DAEMON_B} />)
-    const section = screen.getByTestId('settings-section')
-    await within(section).findByRole('button', { name: /refresh storage usage/i })
-    const baseline = await waitForStableCount(() => counts.storage)
-
-    fireEvent.click(screen.getByTestId('swap-daemon'))
-    const afterSwap = await waitForStableCount(() => counts.storage)
-    expect(afterSwap).toBeGreaterThan(baseline)
-  })
-
-  it('re-issues Connections requests when the daemon token changes to undefined', async () => {
-    const counts = { storage: 0, fonts: 0 }
-    vi.stubGlobal('fetch', countingFetch(counts))
-
-    render(
-      <DaemonSwapHarness
-        path="/settings/connections"
-        initial={DAEMON_A}
-        swapTo={{ baseUrl: DAEMON_A.baseUrl, token: null }}
-      />,
-    )
     const section = screen.getByTestId('settings-section')
     await within(section).findByRole('button', { name: /refresh storage usage/i })
     const baseline = await waitForStableCount(() => counts.storage)
@@ -816,7 +796,7 @@ describe('SettingsPage — the active section is mounted once', () => {
       'fetch',
       vi.fn(async () => jsonResponse({}, 404)),
     )
-    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999' })
 
     // findAll, not find: with two copies a single-element query throws on the
     // ambiguity, which reports as a broken query rather than as the duplicate

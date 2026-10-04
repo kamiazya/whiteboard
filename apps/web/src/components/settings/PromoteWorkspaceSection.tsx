@@ -40,11 +40,7 @@ import { type WorkspaceIdentity, workspaceLabel } from '../../lib/workspace-hand
 const log = getAppLogger('promote-workspace-section')
 
 function daemonFetch(daemon: ConnectedDaemon, baseFetch?: typeof globalThis.fetch) {
-  return createDaemonFetch(
-    daemon.baseUrl,
-    daemon.token ?? undefined,
-    baseFetch ?? globalThis.fetch.bind(globalThis),
-  )
+  return createDaemonFetch(daemon.baseUrl, baseFetch ?? globalThis.fetch.bind(globalThis))
 }
 
 export interface PromoteWorkspaceSectionProps {
@@ -269,7 +265,7 @@ export function PromoteWorkspaceSection({
     return () => {
       cancelled = true
     }
-  }, [daemon?.baseUrl, daemon?.token, baseFetch, workspaceId])
+  }, [daemon?.baseUrl, baseFetch, workspaceId])
   const [lastResult, setLastResult] = useState<PromotionResultRecord | undefined>(
     () => settingsStore.load().migration.promotion,
   )

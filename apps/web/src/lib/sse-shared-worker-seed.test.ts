@@ -93,7 +93,7 @@ beforeAll(() => {
   })
   port = worker.port
   port.start()
-  port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+  port.postMessage({ type: 'init', baseUrl: BASE })
 })
 
 function requestSnapshot(doc: string): Promise<Uint8Array> {

@@ -36,7 +36,6 @@ import { createUserSettingsStore } from './user-settings-store.js'
 
 interface ConnectedKeeper {
   baseUrl: string
-  token: string | null
   /** The wrapped, authorized fetch — named `daemonFetch` for `keeper-parity.test.ts`'s scan. */
   daemonFetch: typeof globalThis.fetch
 }
@@ -130,15 +129,14 @@ export function openDocumentStore(dbName?: string): DocumentStore {
 /**
  * Tells `openDocumentStore` which daemon this tab is connected to, so a
  * replica routes to a real `ReplicaSource` instead of the withheld answer an
- * absent one gets. `null` disconnects. A change of `baseUrl`/`token` (a
- * reconnect, or a token rotation) forgets whatever keys the PREVIOUS
+ * absent one gets. `null` disconnects. A change of `baseUrl` (a reconnect to
+ * another daemon) forgets whatever keys the PREVIOUS
  * connection held — a stale key must not keep answering after the session
  * that minted it is gone.
  */
 export function connectReplicaKeeper(
   daemon: {
     baseUrl: string
-    token: string | null
     fetch?: typeof globalThis.fetch
   } | null,
 ): void {
@@ -148,16 +146,9 @@ export function connectReplicaKeeper(
       ? null
       : {
           baseUrl: daemon.baseUrl,
-          token: daemon.token,
-          daemonFetch: createDaemonFetch(
-            daemon.baseUrl,
-            () => daemon.token ?? undefined,
-            daemon.fetch ?? fetch,
-          ),
+          daemonFetch: createDaemonFetch(daemon.baseUrl, daemon.fetch ?? fetch),
         }
-  const changed =
-    previous !== null &&
-    (daemon === null || previous.baseUrl !== daemon.baseUrl || previous.token !== daemon.token)
+  const changed = previous !== null && (daemon === null || previous.baseUrl !== daemon.baseUrl)
   if (changed) forgetDaemonKeys(previous.baseUrl)
 }
 
