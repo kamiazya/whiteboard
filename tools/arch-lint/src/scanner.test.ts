@@ -1,5 +1,5 @@
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 
 function violationKinds(source: string) {
@@ -187,7 +187,7 @@ describe('scanSourceForBoundaryViolations — type-position and directive specif
   })
 
   it('collects an import type as a type-only edge and a reference path as a relative one', () => {
-    const sourceFile = ts.createSourceFile(
+    const sourceFile = parseSource(
       'fixture.ts',
       [
         '/// <reference path="./ambient.d.ts" />',
@@ -197,8 +197,6 @@ describe('scanSourceForBoundaryViolations — type-position and directive specif
         "type B = import('./y.js').B",
         "const c = await import('./z.js')",
       ].join('\n'),
-      ts.ScriptTarget.Latest,
-      true,
     )
     expect(
       collectModuleSpecifiers(sourceFile).map(({ specifier, typeOnly, line }) => [
@@ -256,9 +254,10 @@ describe('scanSourceForBoundaryViolations — edges the other cases do not reach
 
 describe('collectModuleSpecifiers: a URL resolved against import.meta.url', () => {
   const specifiersOf = (text: string) =>
-    collectModuleSpecifiers(
-      ts.createSourceFile('fixture.ts', text, ts.ScriptTarget.Latest, true),
-    ).map(({ specifier, typeOnly }) => [specifier, typeOnly])
+    collectModuleSpecifiers(parseSource('fixture.ts', text)).map(({ specifier, typeOnly }) => [
+      specifier,
+      typeOnly,
+    ])
 
   it('reads the file a worker is built from as a value edge', () => {
     expect(
@@ -308,9 +307,10 @@ describe('collectModuleSpecifiers: a URL resolved against import.meta.url', () =
 
 describe('collectModuleSpecifiers: import.meta.glob patterns', () => {
   const specifiersOf = (text: string) =>
-    collectModuleSpecifiers(
-      ts.createSourceFile('fixture.ts', text, ts.ScriptTarget.Latest, true),
-    ).map(({ specifier, typeOnly }) => [specifier, typeOnly])
+    collectModuleSpecifiers(parseSource('fixture.ts', text)).map(({ specifier, typeOnly }) => [
+      specifier,
+      typeOnly,
+    ])
 
   it('reads a relative pattern, or each one of a list, as a value edge', () => {
     expect(specifiersOf("const m = import.meta.glob('./icons/*.svg')")).toEqual([
@@ -329,12 +329,7 @@ describe('collectModuleSpecifiers: import.meta.glob patterns', () => {
   })
 
   it('reports the line of the call', () => {
-    const file = ts.createSourceFile(
-      'fixture.ts',
-      "const a = 1\nconst m = import.meta.glob('./x/*.ts')",
-      ts.ScriptTarget.Latest,
-      true,
-    )
+    const file = parseSource('fixture.ts', "const a = 1\nconst m = import.meta.glob('./x/*.ts')")
     expect(collectModuleSpecifiers(file).map(({ line }) => line)).toEqual([2])
   })
 

@@ -42,6 +42,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
@@ -91,7 +92,7 @@ interface Use {
 }
 
 function parse(source: string, fileName = 'scanned.ts'): ts.SourceFile {
-  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true)
+  return parseSource(fileName, source)
 }
 
 /** A property whose declared type is a function — `foo: (x) => void` is a method too. */

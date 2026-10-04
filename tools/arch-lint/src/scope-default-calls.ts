@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
-import { unwrapExpression } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 import { walk } from './scan-roots.js'
 
 /**
@@ -56,7 +56,7 @@ function isStoreSource(file: string): boolean {
 }
 
 function parse(file: string): ts.SourceFile {
-  return ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
+  return parseSource(file, readFileSync(file, 'utf8'))
 }
 
 function hasExportModifier(node: ts.Node): boolean {

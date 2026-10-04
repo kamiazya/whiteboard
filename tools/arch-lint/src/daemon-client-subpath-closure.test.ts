@@ -27,8 +27,8 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { collectModuleSpecifiers } from './scanner.js'
 import {
@@ -211,12 +211,7 @@ function importedSubpaths(): string[] {
     include: (path) => /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path),
   })
   for (const file of files) {
-    const source = ts.createSourceFile(
-      file,
-      readFileSync(file, 'utf-8'),
-      ts.ScriptTarget.Latest,
-      true,
-    )
+    const source = parseSource(file, readFileSync(file, 'utf-8'))
     for (const { specifier } of collectModuleSpecifiers(source)) {
       if (specifier.startsWith(`${SERVER_CORE}/`)) subpaths.add(specifier)
     }

@@ -48,6 +48,7 @@ import { join, relative, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
 
@@ -150,13 +151,7 @@ function staticTitle(argument: ts.Expression | undefined): string | undefined {
  * title read as fitting.
  */
 function titlePaths(source: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    't.tsx',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  )
+  const sourceFile = parseSource('t.tsx', source)
   const paths: string[] = []
   const walk = (node: ts.Node, stack: readonly string[]): void => {
     const name = ts.isCallExpression(node) ? rootName(node.expression) : undefined

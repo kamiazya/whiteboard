@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { countNamedUses } from './named-use-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
@@ -59,7 +60,7 @@ function primitivesIn(
     }
     ts.forEachChild(node, visit)
   }
-  visit(ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true))
+  visit(parseSource(file, source))
   const names = PRIMITIVES.map((p) => p.name)
   return {
     uses: PRIMITIVES.filter((p) => countNamedUses(file, source, [p.name]) > 0).map((p) => p.what),

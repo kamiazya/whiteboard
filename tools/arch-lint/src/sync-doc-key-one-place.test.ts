@@ -14,11 +14,15 @@
  * The prefix constant is deliberately not exported, so a consumer cannot
  * reach it at all; what this scan finds is the literal spelled by hand. The
  * per-document half has no prefix to hide, so it is found by its join: a
- * template that is exactly a workspace handle, a slash and a path.
+ * string that is exactly a workspace handle, a slash and a path. Both are read
+ * from the syntax tree, because a template, a `+` chain and `[…].join()` build
+ * the same key and a text pattern for one passes the other two.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { walkSourceFiles } from './source-scan.js'
 
@@ -26,22 +30,150 @@ import { walkSourceFiles } from './source-scan.js'
 const DECLARATION_SITE = 'packages/daemon-client/src/sse-stream-hub.ts'
 
 /**
- * The wire prefix spelled by hand: a template with a hole after it, the
- * prefix as a whole quoted string (a `startsWith`, a `slice('…'.length)`, a
- * constant), a regex literal, or the constant's identifier. A quoted
- * `workspace:read` is an auth scope, not this key, so the quote must close
- * right after the colon.
+ * One piece of a string built by hand: text the code wrote, or a hole whose
+ * source text is kept so its NAME can be judged.
  */
-const WIRE_SPELLING =
-  /`workspace:\$\{|['"]\^?workspace:['"]|\/\^?workspace:|\bWORKSPACE_DOC_KEY_PREFIX\b/g
+type Part = { literal: string } | { hole: string }
+
+const literalPart = (literal: string): Part => ({ literal })
+
+/** Adjacent text merged, so `'workspace'` + `':'` reads as `workspace:`. */
+function merged(parts: readonly Part[]): Part[] {
+  const out: Part[] = []
+  for (const part of parts) {
+    const last = out.at(-1)
+    if (last !== undefined && 'literal' in last && 'literal' in part) {
+      out[out.length - 1] = literalPart(last.literal + part.literal)
+    } else if (!('literal' in part && part.literal === '')) {
+      out.push(part)
+    }
+  }
+  return out
+}
 
 /**
- * The per-document key spelled by hand: a whole template of
- * `<…workspaceId or …handle>/<…path>`. Closing the backtick right after the
- * path is what separates a key from a message that merely names a document
+ * The pieces a string-building expression is made of, whichever way it is
+ * spelled: a template, a `+` chain, or `[a, b].join('/')`. The three are one
+ * key written three ways, and a scan of one spelling passes the others.
+ */
+function partsOf(file: ts.SourceFile, raw: ts.Expression): Part[] {
+  const node = unwrapExpression(raw)
+  if (ts.isStringLiteralLike(node)) return [literalPart(node.text)]
+  if (ts.isTemplateExpression(node)) {
+    return merged([
+      literalPart(node.head.text),
+      ...node.templateSpans.flatMap((span) => [
+        ...partsOf(file, span.expression),
+        literalPart(span.literal.text),
+      ]),
+    ])
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    return merged([...partsOf(file, node.left), ...partsOf(file, node.right)])
+  }
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === 'join' &&
+    ts.isArrayLiteralExpression(unwrapExpression(node.expression.expression))
+  ) {
+    const [separator] = node.arguments
+    const array = unwrapExpression(node.expression.expression) as ts.ArrayLiteralExpression
+    if (separator !== undefined && ts.isStringLiteralLike(separator)) {
+      return merged(
+        array.elements.flatMap((element, index) => [
+          ...(index === 0 ? [] : [literalPart(separator.text)]),
+          ...partsOf(file, element),
+        ]),
+      )
+    }
+  }
+  return [{ hole: node.getText(file) }]
+}
+
+const WORKSPACE_PREFIX = 'workspace:'
+const HANDLE_NAME = /^[\w.]*(?:[wW]orkspaceId|[hH]andle)$/
+const PATH_NAME = /^[\w.]*[pP]ath$/
+
+/**
+ * The wire prefix spelled by hand: the prefix as a whole string (a
+ * `startsWith`, a `slice('…'.length)`, a constant), as the head of a string
+ * with a hole after it (template, concat or join), a regex literal, or the
+ * constant's identifier. A `workspace:read` is an auth scope, not this key, so
+ * the text must end right after the colon.
+ */
+function isWireSpelling(file: ts.SourceFile, node: ts.Node): boolean {
+  if (ts.isIdentifier(node)) return node.text === 'WORKSPACE_DOC_KEY_PREFIX'
+  if (ts.isRegularExpressionLiteral(node)) return /\^?workspace:/.test(node.text)
+  if (ts.isStringLiteralLike(node)) return /^\^?workspace:$/.test(node.text)
+  if (!isKeyBuilder(node)) return false
+  const [first, second] = partsOf(file, node as ts.Expression)
+  return (
+    first !== undefined &&
+    'literal' in first &&
+    first.literal === WORKSPACE_PREFIX &&
+    second !== undefined &&
+    'hole' in second
+  )
+}
+
+/**
+ * The per-document key spelled by hand: a whole string that is exactly
+ * `<…workspaceId or …handle>/<…path>`. Being nothing else is what separates a
+ * key from a message that merely names a document
  * (`Document "${workspaceId}/${path}" already exists`) or a longer URL.
  */
-const DOCUMENT_KEY_JOIN = /`\$\{[\w.]*(?:[wW]orkspaceId|[hH]andle)\}\/\$\{[\w.]*[pP]ath\}`/g
+function isDocumentKeyJoin(file: ts.SourceFile, node: ts.Node): boolean {
+  if (!isKeyBuilder(node)) return false
+  const parts = partsOf(file, node as ts.Expression)
+  const [id, slash, path] = parts
+  return (
+    parts.length === 3 &&
+    id !== undefined &&
+    'hole' in id &&
+    HANDLE_NAME.test(id.hole) &&
+    slash !== undefined &&
+    'literal' in slash &&
+    slash.literal === '/' &&
+    path !== undefined &&
+    'hole' in path &&
+    PATH_NAME.test(path.hole)
+  )
+}
+
+/**
+ * A string-building expression, judged at its outermost node: the inner `+` of
+ * `a + '/' + b` is a piece of the key, not a second one.
+ */
+function isKeyBuilder(node: ts.Node): boolean {
+  if (ts.isTemplateExpression(node)) return true
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    return !(
+      ts.isBinaryExpression(node.parent) &&
+      node.parent.operatorToken.kind === ts.SyntaxKind.PlusToken
+    )
+  }
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === 'join'
+  )
+}
+
+function countMatches(
+  source: string,
+  matches: (file: ts.SourceFile, node: ts.Node) => boolean,
+  fileName: string,
+): number {
+  const file = parseSource(fileName, source)
+  let count = 0
+  const visit = (node: ts.Node): void => {
+    if (matches(file, node)) count++
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return count
+}
 
 /**
  * Files that join a handle and a path into a key of their own, one that is
@@ -51,19 +183,12 @@ const DOCUMENT_KEY_JOIN = /`\$\{[\w.]*(?:[wW]orkspaceId|[hH]andle)\}\/\$\{[\w.]*
  */
 const PRIVATE_DOCUMENT_KEYS = new Set(['packages/history/src/checkpoints/scheduler.ts'])
 
-function code(source: string): string {
-  return source
-    .split('\n')
-    .filter((line) => !/^\s*(?:\/\/|\/\*|\*)/.test(line))
-    .join('\n')
+function spellings(source: string, fileName = 'p.ts'): number {
+  return countMatches(source, isWireSpelling, fileName)
 }
 
-function spellings(source: string): number {
-  return code(source).match(WIRE_SPELLING)?.length ?? 0
-}
-
-function documentJoins(source: string): number {
-  return code(source).match(DOCUMENT_KEY_JOIN)?.length ?? 0
+function documentJoins(source: string, fileName = 'p.ts'): number {
+  return countMatches(source, isDocumentKeyJoin, fileName)
 }
 
 const files = SCAN_ROOTS.flatMap((root) => walkSourceFiles(join(REPO_ROOT, root))).filter(
@@ -81,8 +206,18 @@ describe('the sync wire doc key is spelled in one place', () => {
     expect(spellings('if (key.startsWith(WORKSPACE_DOC_KEY_PREFIX)) return')).toBe(1)
     expect(spellings("const scope = 'workspace:read'")).toBe(0)
     expect(spellings(`// \`workspace:${HOLE}\` in a comment`)).toBe(0)
-    expect(spellings(` * a \`workspace:\` key in a doc block`)).toBe(0)
+    expect(spellings(`/**\n * a \`workspace:\` key in a doc block\n */`)).toBe(0)
+    expect(spellings('if (key.startsWith(`workspace:`)) return')).toBe(1)
     expect(spellings(`const k = \`workspaces:${HOLE}\``)).toBe(0)
+  })
+
+  it('recognises the wire prefix built by concatenation or join, and passes scopes through', () => {
+    expect(spellings("const k = 'workspace:' + id")).toBeGreaterThan(0)
+    expect(spellings("const k = ['workspace', id].join(':')")).toBe(1)
+    expect(spellings("const k = ('workspace' + ':' + id) as string")).toBe(1)
+    expect(spellings("const k = ['workspace', 'read'].join(':')")).toBe(0)
+    expect(spellings("const k = 'workspace:read:' + id")).toBe(0)
+    expect(spellings(`const k = \`workspace:read:${HOLE}\``)).toBe(0)
   })
 
   it('recognises a handle-and-path join under every name in use, and passes messages and URLs through', () => {
@@ -100,6 +235,17 @@ describe('the sync wire doc key is spelled in one place', () => {
     expect(documentJoins(`// \`${join('workspaceId', 'path')}\` in a comment`)).toBe(0)
   })
 
+  it('recognises a handle-and-path key built by concatenation or join', () => {
+    expect(documentJoins("const k = workspaceId + '/' + path")).toBe(1)
+    expect(documentJoins("const k = (handle + '/' + docPath) as string")).toBe(1)
+    expect(documentJoins("const k = [workspaceId, path].join('/')")).toBe(1)
+    expect(documentJoins("const k = [canvas.workspaceId, canvas.path].join('/')")).toBe(1)
+    expect(documentJoins("const url = base + '/' + path")).toBe(0)
+    expect(documentJoins("const k = [workspaceId, path].join(', ')")).toBe(0)
+    expect(documentJoins("const m = 'Document ' + workspaceId + '/' + path + ' exists'")).toBe(0)
+    expect(documentJoins("const k = workspaceId + '/api/' + path")).toBe(0)
+  })
+
   it('scans a tree worth scanning', () => {
     expect(files.length).toBeGreaterThan(800)
   })
@@ -109,7 +255,7 @@ describe('the sync wire doc key is spelled in one place', () => {
     for (const path of files) {
       const rel = relativeToRepo(path)
       if (rel === DECLARATION_SITE) continue
-      const found = spellings(readFileSync(path, 'utf8'))
+      const found = spellings(readFileSync(path, 'utf8'), path)
       if (found > 0) hits.push(`${rel}: ${found}`)
     }
     expect(hits).toEqual([])
@@ -120,7 +266,7 @@ describe('the sync wire doc key is spelled in one place', () => {
     for (const path of files) {
       const rel = relativeToRepo(path)
       if (rel === DECLARATION_SITE || PRIVATE_DOCUMENT_KEYS.has(rel)) continue
-      const found = documentJoins(readFileSync(path, 'utf8'))
+      const found = documentJoins(readFileSync(path, 'utf8'), path)
       if (found > 0) hits.push(`${rel}: ${found}`)
     }
     expect(hits).toEqual([])
@@ -130,9 +276,11 @@ describe('the sync wire doc key is spelled in one place', () => {
     // An exemption whose file stopped spelling the join is a stale entry; a
     // declaration site at zero would mean the builder moved.
     for (const rel of PRIVATE_DOCUMENT_KEYS) {
-      expect(documentJoins(readFileSync(join(REPO_ROOT, rel), 'utf8'))).toBeGreaterThan(0)
+      expect(documentJoins(readFileSync(join(REPO_ROOT, rel), 'utf8'), rel)).toBeGreaterThan(0)
     }
-    expect(documentJoins(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(1)
+    expect(
+      documentJoins(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'), DECLARATION_SITE),
+    ).toBe(1)
   })
 
   it('the declaration site spells it exactly as often as the grammar needs', () => {
@@ -140,6 +288,8 @@ describe('the sync wire doc key is spelled in one place', () => {
     // one use each in the builder, `workspaceIdOfSyncKey` (two) and
     // `workspaceHandleOfSyncKey`. A count that fell to zero would mean the
     // grammar moved and this scan guards a file that no longer holds it.
-    expect(spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(6)
+    expect(
+      spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'), DECLARATION_SITE),
+    ).toBe(6)
   })
 })

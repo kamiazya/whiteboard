@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { adapterFiles } from './adapter-files.js'
-import { unwrapExpression } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 import { collectModuleSpecifiers } from './scanner.js'
 
 /**
@@ -170,7 +170,7 @@ function readsProcessEnv(source: ts.SourceFile): boolean {
 
 /** The kinds of host reach one source text contains. Type-only imports are erased and do not count. */
 export function hostReachOf(fileName: string, text: string): Set<HostReachKind> {
-  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true)
+  const source = parseSource(fileName, text)
   const kinds = new Set<HostReachKind>()
   for (const { specifier, typeOnly } of collectModuleSpecifiers(source)) {
     const kind = kindOfSpecifier(specifier)

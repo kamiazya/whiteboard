@@ -1,5 +1,5 @@
-import ts from '@typescript/typescript6'
 import { ARCHITECTURE_MAP, allowedDependencies } from './architecture-map.js'
+import { parseSource } from './ast-helpers.js'
 import { collectModuleSpecifiers } from './scanner.js'
 
 /**
@@ -36,7 +36,7 @@ export function findSourceDirectionViolations(
   source: string,
 ): SourceDirectionViolation[] {
   const allowed = new Set([packageName, ...allowedDependencies(packageName)])
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true)
+  const sourceFile = parseSource(fileName, source)
   return collectModuleSpecifiers(sourceFile).flatMap(({ specifier, line }) => {
     const dependencyName = workspacePackageOf(specifier)
     return dependencyName !== undefined && !allowed.has(dependencyName)

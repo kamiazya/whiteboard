@@ -25,8 +25,8 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 import { classifyPath, walkSourceFiles } from './source-scan.js'
@@ -88,7 +88,7 @@ function testUtilsImports(source: string): string[] {
 
 /** Relative specifiers whose basename is a `_test-*` helper, other than a type-only (erased) edge. */
 function testHelperImports(path: string, source: string): string[] {
-  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+  const sourceFile = parseSource(path, source)
   return collectModuleSpecifiers(sourceFile)
     .filter(({ specifier, typeOnly }) => !typeOnly && /(?:^|\/)_test-[^/]*$/.test(specifier))
     .map(({ specifier }) => specifier)

@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
 import {
@@ -10,6 +9,7 @@ import {
   KNOWN_IMPORT_CYCLES,
   KNOWN_TYPE_CYCLES,
 } from './architecture-map.js'
+import { parseSource } from './ast-helpers.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection, type PackageManifest } from './direction-check.js'
 import {
@@ -280,12 +280,7 @@ function packageNameOf(specifier: string): string {
 function bareSpecifiersInScannedTrees(): { packageDir: string; specifier: string; file: string }[] {
   return CYCLE_SCAN_PACKAGES.flatMap((packageDir) =>
     listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.ts', '.tsx']).flatMap((file) => {
-      const sourceFile = ts.createSourceFile(
-        file,
-        readFileSync(file, 'utf-8'),
-        ts.ScriptTarget.Latest,
-        true,
-      )
+      const sourceFile = parseSource(file, readFileSync(file, 'utf-8'))
       return collectModuleSpecifiers(sourceFile)
         .map(({ specifier }) => specifier)
         .filter(

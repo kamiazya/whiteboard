@@ -12,7 +12,7 @@
 // unit test feeds it a fixture graph directly (cycle-check.ts's shape).
 
 import { posix } from 'node:path'
-import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 import { collectModuleSpecifiers } from './scanner.js'
 
 interface ReachedImport {
@@ -66,7 +66,7 @@ export function walkValueImportClosure(
 
   for (let next = 0; next < queue.length; next++) {
     const path = queue[next] as string
-    const sourceFile = ts.createSourceFile(path, host.read(path), ts.ScriptTarget.Latest, true)
+    const sourceFile = parseSource(path, host.read(path))
     for (const edge of collectModuleSpecifiers(sourceFile)) {
       if (edge.typeOnly) continue
       imports.push({ from: path, specifier: edge.specifier, line: edge.line, via: chainTo(path) })

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo } from './scan-roots.js'
 import { stripComments } from './strip-comments.js'
 
@@ -39,13 +40,7 @@ function isFunctionValued(initializer: ts.Expression | undefined): boolean {
 
 /** Names declared as functions at the top level of one script. */
 function topLevelFunctionNames(sourceText: string, fileName: string): string[] {
-  const source = ts.createSourceFile(
-    fileName,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.JS,
-  )
+  const source = parseSource(fileName, sourceText, true, ts.ScriptKind.JS)
   const names: string[] = []
   for (const statement of source.statements) {
     if (ts.isFunctionDeclaration(statement) && statement.name !== undefined) {

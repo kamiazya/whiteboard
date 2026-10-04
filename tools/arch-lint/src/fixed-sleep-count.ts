@@ -26,7 +26,7 @@
  * and balanced parentheses are not a regular language.
  */
 import ts from '@typescript/typescript6'
-import { unwrapExpression } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 
 interface PromiseSleep {
   readonly node: ts.NewExpression
@@ -233,13 +233,7 @@ function nearestBinding(from: ts.Node, name: string): ts.Node | undefined {
 
 export function countFixedSleeps(source: string): number {
   if (!/setTimeout|timers\/promises/.test(source)) return 0
-  const sourceFile = ts.createSourceFile(
-    't.tsx',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  )
+  const sourceFile = parseSource('t.tsx', source)
   const aliases = timerAliases(sourceFile)
   const promiseSleeps: PromiseSleep[] = []
   const calls: ts.CallExpression[] = []

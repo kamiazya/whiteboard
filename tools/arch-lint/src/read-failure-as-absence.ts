@@ -19,7 +19,7 @@
  * that cries wolf is a scan people delete.
  */
 import ts from '@typescript/typescript6'
-import { unwrapExpression } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 
 export interface AbsenceSite {
   /** `path#enclosingFunction`, stable across edits that only move lines. */
@@ -123,7 +123,7 @@ function promiseCatchSite(node: ts.Node): Found | null {
 }
 
 export function findReadFailuresAsAbsence(path: string, source: string): AbsenceSite[] {
-  const sf = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true)
+  const sf = parseSource(path, source)
   const sites: AbsenceSite[] = []
   const visit = (node: ts.Node): void => {
     const found = tryStatementSite(node) ?? promiseCatchSite(node)

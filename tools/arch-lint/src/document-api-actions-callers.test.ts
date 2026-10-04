@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
@@ -51,7 +52,7 @@ const SCAN_DIRS: readonly string[] = [
 ]
 
 function parse(source: string, name: string): ts.SourceFile {
-  return ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true)
+  return parseSource(name, source)
 }
 
 /** The string members of `DOCUMENT_API_ACTIONS`, read off the declaration. */
