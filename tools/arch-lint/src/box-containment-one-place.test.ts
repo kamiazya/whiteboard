@@ -23,12 +23,22 @@ import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const OWNER = 'packages/model/src/spatial.ts'
 
-/** Files that spell the rule themselves, with the reason each may. */
-const LEDGER: Readonly<Record<string, string>> = {
-  'packages/canvas-render/src/quality/rect.ts':
-    'the quality metrics are independent of the layout code they judge, so they do not call into the model',
-  'packages/canvas-render/src/layout/edges/edge-rules.ts':
-    "the edge router's own `{x, y, w, h}` Rect; `frameHolds` takes `{width, height}` and every call here would need an adapter",
+/**
+ * Files that spell the rule themselves: how many chains each may hold, and the
+ * reason. Counted, not merely listed, so a second copy appended to a ledgered
+ * file fails like a new file would.
+ */
+const LEDGER: Readonly<Record<string, { readonly chains: number; readonly reason: string }>> = {
+  'packages/canvas-render/src/quality/rect.ts': {
+    chains: 1,
+    reason:
+      'the quality metrics are independent of the layout code they judge, so they do not call into the model',
+  },
+  'packages/canvas-render/src/layout/edges/edge-rules.ts': {
+    chains: 1,
+    reason:
+      "the edge router's own `{x, y, w, h}` Rect; `frameHolds` takes `{width, height}` and every call here would need an adapter",
+  },
 }
 
 const CONTAINMENT = `a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height`
@@ -44,6 +54,34 @@ const FIXTURES: readonly { readonly source: string; readonly spells: boolean }[]
     source:
       'inner.x >= o.x && inner.y >= o.y && o.x + o.w >= inner.x + inner.w && o.y + o.h >= inner.y + inner.h',
     spells: true,
+  },
+  // The De Morgan form says the box is NOT inside, and the strict form is still the rule.
+  {
+    source:
+      'if (a.x < b.x || a.y < b.y || a.x + a.width > b.x + b.width || a.y + a.height > b.y + b.height) skip()',
+    spells: true,
+  },
+  {
+    source:
+      'a.x > b.x && a.y > b.y && a.x + a.width < b.x + b.width && a.y + a.height < b.y + b.height',
+    spells: true,
+  },
+  {
+    source:
+      '!(a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height)',
+    spells: true,
+  },
+  {
+    source:
+      'locked(a) && (a.x < b.x || a.y < b.y || a.x + a.width > b.x + b.width || a.y + a.height > b.y + b.height)',
+    spells: true,
+  },
+  { source: 'a.x < b.x || a.y < b.y', spells: false },
+  // Separation is a disjunction over near-against-far, which is not the rule.
+  {
+    source:
+      'a.x + a.width < b.x || b.x + b.width < a.x || a.y + a.height < b.y || b.y + b.height < a.y',
+    spells: false,
   },
   // Overlap and clamping share parts of the rule, and are not it.
   {
@@ -66,8 +104,8 @@ const production = files
   .filter((path) => !isTestPath(path))
   .map((path) => ({ path, rel: relative(REPO_ROOT, path).split(sep).join('/') }))
 
-const spelling = (path: string): boolean =>
-  containmentChains(path, readFileSync(path, 'utf8')).length > 0
+const chainsIn = (path: string): number =>
+  containmentChains(path, readFileSync(path, 'utf8')).length
 
 describe('box containment is written in one place', () => {
   it('recognises the rule in every spelling, and not a neighbouring one', () => {
@@ -79,12 +117,12 @@ describe('box containment is written in one place', () => {
   it('scans a tree worth scanning, and finds the model spelling it', () => {
     // An empty scan agrees with every rule; finding the owner is what keeps it honest.
     expect(production.length).toBeGreaterThan(1000)
-    expect(spelling(join(REPO_ROOT, OWNER))).toBe(true)
+    expect(chainsIn(join(REPO_ROOT, OWNER))).toBeGreaterThan(0)
   })
 
   it('has no other spelling than the owner and the ledgered files', () => {
     const spellings = production
-      .filter(({ path }) => spelling(path))
+      .filter(({ path }) => chainsIn(path) > 0)
       .map(({ rel }) => rel)
       .filter((rel) => rel !== OWNER && !(rel in LEDGER))
     expect(
@@ -93,11 +131,25 @@ describe('box containment is written in one place', () => {
     ).toEqual([])
   })
 
-  it('ledgers only files that still spell it', () => {
-    for (const rel of Object.keys(LEDGER)) {
+  it('holds every ledgered file to exactly the chains it claims', () => {
+    for (const [rel, { chains }] of Object.entries(LEDGER)) {
       const entry = production.find((file) => file.rel === rel)
       expect(entry, `${rel} is not a scanned production file`).toBeDefined()
-      expect(spelling(entry?.path ?? ''), `${rel} no longer spells containment`).toBe(true)
+      expect(chainsIn(entry?.path ?? ''), `${rel}: chains of containment, as ledgered`).toBe(chains)
+    }
+  })
+
+  it('counts a chain once however it is wrapped, and a second copy as a second', () => {
+    const copy = `a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height`
+    expect(containmentChains('f.ts', `const a = ${copy}`)).toHaveLength(1)
+    expect(containmentChains('f.ts', `const a = (${copy}) && !locked`)).toHaveLength(1)
+    expect(containmentChains('f.ts', `const a = ((${copy}) as boolean) && !locked`)).toHaveLength(1)
+    expect(containmentChains('f.ts', `const a = ${copy}\nconst b = ${copy}`)).toHaveLength(2)
+  })
+
+  it('gives every ledger entry a reason in a sentence', () => {
+    for (const [rel, { reason }] of Object.entries(LEDGER)) {
+      expect(reason.split(/\s+/).length, `${rel}'s reason is too short`).toBeGreaterThan(8)
     }
   })
 })
