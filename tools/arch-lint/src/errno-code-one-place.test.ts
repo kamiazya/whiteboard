@@ -102,6 +102,10 @@ describe('an error code is read in one place', () => {
     expect(errnoSpellings("switch (kind) { case 'ENOENT': return null }")).toEqual([])
     expect(errnoSpellings("if (['ENOENT'].includes(kind)) x()")).toEqual([])
     expect(errnoSpellings("if (['READY', 'DONE'].includes(code)) x()")).toEqual([])
+    // A list is an errno spelling only when EVERY element is one, and a list
+    // has to have one.
+    expect(errnoSpellings("if (['ENOENT', 'READY'].includes(code)) x()")).toEqual([])
+    expect(errnoSpellings('if ([].includes(code)) x()')).toEqual([])
     expect(errnoSpellings("const m = { code: 'ENOENT' }")).toEqual([])
     expect(
       errnoSpellings('const t = (err: unknown): err is NodeJS.ErrnoException => !!err'),
