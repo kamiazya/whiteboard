@@ -1,3 +1,4 @@
+import { VERSION_LABEL_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { BookmarkPlus, Loader2 } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
@@ -22,6 +23,17 @@ import { cn } from '../../lib/utils.js'
  * than the native attribute: a disabled button inside a Radix TooltipTrigger
  * swallows the pointer events the tooltip needs.
  */
+
+/**
+ * The name field's fixed attributes. `maxLength` is the ceiling a saved
+ * version's label is accepted at, so a name that would be refused after the
+ * field has closed cannot be typed in the first place.
+ */
+const NAME_FIELD = {
+  'aria-label': 'Name this point',
+  placeholder: 'Name this point',
+  maxLength: VERSION_LABEL_MAX_LENGTH,
+} as const
 
 export type SaveVersionOutcome = 'saved' | 'failed' | null
 
@@ -83,8 +95,7 @@ export function BookmarkAction({
           ref={fieldRef}
           type="text"
           value={draft}
-          aria-label="Name this point"
-          placeholder="Name this point"
+          {...NAME_FIELD}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {

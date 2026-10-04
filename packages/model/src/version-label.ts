@@ -9,4 +9,6 @@ import { z } from 'zod'
  * every read of the History panel and `wb_version_list` for as long as the
  * version lives.
  */
-export const versionLabelSchema = z.string().min(1).max(200)
+export const VERSION_LABEL_MAX_LENGTH = 200
+
+export const versionLabelSchema = z.string().min(1).max(VERSION_LABEL_MAX_LENGTH)

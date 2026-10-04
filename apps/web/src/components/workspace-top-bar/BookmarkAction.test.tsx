@@ -12,6 +12,7 @@
  *
  * So the control opens a field rather than saving on the spot.
  */
+import { VERSION_LABEL_MAX_LENGTH, versionLabelSchema } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '../ui/tooltip.js'
@@ -47,6 +48,17 @@ describe('BookmarkAction', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bookmark this point' }))
     expect(screen.getByRole('textbox')).toBeTruthy()
     expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('stops the name at the length a saved version accepts', () => {
+    // A longer name would be refused by the daemon only after the field had
+    // closed, so the person loses what they typed with no way to correct it.
+    renderAction()
+    fireEvent.click(screen.getByRole('button', { name: 'Bookmark this point' }))
+    const field = screen.getByRole('textbox') as HTMLInputElement
+    expect(field.maxLength).toBe(VERSION_LABEL_MAX_LENGTH)
+    expect(versionLabelSchema.safeParse('x'.repeat(field.maxLength)).success).toBe(true)
+    expect(versionLabelSchema.safeParse('x'.repeat(field.maxLength + 1)).success).toBe(false)
   })
 
   it('saves the typed name on Enter', () => {
