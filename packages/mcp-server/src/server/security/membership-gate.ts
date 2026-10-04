@@ -14,7 +14,6 @@ import { gatedWorkspaceHandle, ruleClaiming } from './route-scope-registry.js'
 import {
   membershipRefusal,
   type WorkspaceAccessDecision,
-  type WorkspaceAccessOptions,
   workspaceAccess,
 } from './workspace-access.js'
 
@@ -43,7 +42,6 @@ export async function membershipRefusalFor(
   c: Context,
   grant: ResolvedGrant,
   members: MemberProfileStore,
-  options: WorkspaceAccessOptions = {},
 ): Promise<Response | undefined> {
   const gated = gatedWorkspaceHandle(c.req.method, c.req.path)
   if (gated.kind === 'undecodable') {
@@ -55,7 +53,7 @@ export async function membershipRefusalFor(
   }
   if (gated.kind !== 'handle') return undefined
   const workspaceId = await workspaceIdFromHandle(c, gated.handle)
-  const access = await workspaceAccess(grant, workspaceId, members, options)
+  const access = await workspaceAccess(grant, workspaceId, members)
   if (access === 'admitted') return undefined
   log.warning(
     { workspaceId, rule: ruleClaiming(c.req.method, c.req.path), reason: access },
@@ -74,12 +72,8 @@ export type WorkspaceAdmit = (c: Context, workspaceId: string) => Promise<Worksp
 
 const NO_GRANT_RESOLVED: ResolvedGrant = { kind: 'external-bearer', scopes: [] }
 
-export function membershipAdmit(
-  members: MemberProfileStore,
-  options: WorkspaceAccessOptions = {},
-): WorkspaceAdmit {
-  return (c, workspaceId) =>
-    workspaceAccess(grantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members, options)
+export function membershipAdmit(members: MemberProfileStore): WorkspaceAdmit {
+  return (c, workspaceId) => workspaceAccess(grantOf(c) ?? NO_GRANT_RESOLVED, workspaceId, members)
 }
 
 /**

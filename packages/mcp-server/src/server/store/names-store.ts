@@ -1,10 +1,8 @@
 import type { WorkspaceNames } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
-  readPinnedDocumentIds,
   readWorkspaceDocuments,
   resolveWorkspaceDocument,
   setWorkspaceDocumentName,
-  setWorkspacePinned,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -12,6 +10,7 @@ import {
   openWorkspaceDocIfStored,
   requireDocumentAtPath,
   saveWorkspaceDoc,
+  workspaceTreeIndex,
 } from './document-store.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -53,7 +52,8 @@ export async function loadWorkspaceNames(
       pathById.set(entry.documentId, entry.path)
       if (entry.name !== undefined) documents[entry.path] = entry.name
     }
-    for (const documentId of readPinnedDocumentIds(workspaceDoc)) {
+    const index = await workspaceTreeIndex(scope)
+    for (const documentId of await index.listPinnedDocuments({ workspaceId })) {
       const path = pathById.get(documentId)
       if (path !== undefined) pinned.push(path)
     }
@@ -124,15 +124,9 @@ export async function setDocumentPinned(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const documentId = await requireDocumentAtPath(workspaceId, path, scope)
-  // The workspace record's pinned list is the only home this write has:
-  // the rows are no longer maintained, so a failure surfaces. Locked
-  // for the same reason as setDocumentDisplayName above.
-  await withWorkspaceWriteLock(workspaceId, async () => {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-    if (workspaceDoc !== null) {
-      setWorkspacePinned(workspaceDoc, documentId, pinned)
-      await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
-    }
-  })
+  // The workspace record's pinned list is the only home this write has: the
+  // rows are no longer maintained, so a failure surfaces. The index takes the
+  // workspace write lock itself, as every other mutator of the record does.
+  await (await workspaceTreeIndex(scope)).setDocumentPinned({ workspaceId, documentId, pinned })
   return loadWorkspaceNames(workspaceId, scope)
 }

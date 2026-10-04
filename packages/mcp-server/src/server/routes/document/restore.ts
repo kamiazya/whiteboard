@@ -80,7 +80,7 @@ function restoreAnswer(
       return refused(
         {
           error: 'output_exists',
-          message: `Target canvas "${result.targetPath}" already exists. Pass overwrite=true to replace it.`,
+          message: `Target document "${result.targetPath}" already exists. Pass overwrite=true to replace it.`,
         },
         409,
       )

@@ -1,4 +1,4 @@
-import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import type { VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
@@ -32,9 +32,8 @@ export class FakeVersionHistory implements VersionHistory {
       id: `v${this.next}`,
       path,
       createdAt: new Date(this.next * 1000).toISOString(),
-      elementCount: readSpatialCanvas(doc).nodes.length,
+      elementCount: countSpatialNodes(doc),
       auto: options.auto,
-      branchName: options.branchName ?? 'main',
       ...(options.label === undefined ? {} : { label: options.label }),
       ...(options.operator === undefined ? {} : { operator: options.operator }),
       ...(options.attestation === undefined ? {} : { attestation: options.attestation }),

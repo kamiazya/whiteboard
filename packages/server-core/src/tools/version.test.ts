@@ -135,7 +135,7 @@ describe('wb_version_save', () => {
     expect(notifier.versions[0]).toMatchObject({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      version: { id: result.saved[0]?.version.id, path: PATH, branchName: 'main' },
+      version: { id: result.saved[0]?.version.id, path: PATH },
     })
   })
 

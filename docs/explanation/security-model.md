@@ -151,6 +151,17 @@ past one. And every existing browser replica of this workspace becomes
 unreadable and must be downloaded again in full; there is no partial
 recovery.
 
+The browser says so rather than reporting damage. Each device records which
+key a cached copy was sealed under, and the next time it reaches the daemon
+and is handed the new key it sees the two differ: it discards the old copy,
+downloads the workspace again, and records the new key. A copy that cannot be
+opened for that reason is shown as "the daemon changed how this workspace is
+protected, so this copy has to be downloaded again", never as a damaged
+document. Two consequences to expect: edits made offline on that copy and not
+yet sent are lost with it, and "make readable offline" has to be turned on
+again for the workspace, because the passkey-wrapped key it relied on opened
+the old copy only.
+
 A member sees which tier applies to a workspace they are viewing as a plain
 sentence in **Settings → Connections → This workspace** — no jargon, no
 mention of "tier", "replica", or "key". See
@@ -194,7 +205,7 @@ recorded to seal it retroactively — the next IndexedDB open (`DB_VERSION`
 20) discards that record outright, chunks included, and the next daemon
 resolve re-pulls it sealed.
 
-**The offline read page shows one of five states**, decided from what the
+**The offline read page shows one of six states**, decided from what the
 daemon answered, what the in-memory key holder knows, and whether this
 device remembered a wrapped key — never from a raw network error read
 directly:
@@ -216,6 +227,11 @@ directly:
   device and refused the key as a membership refusal. The person is told
   plainly and offered no export and no retry that would send anything. A
   local daemon has one person and never answers this.
+- **Download again** — the daemon rotated the workspace key after this copy
+  was saved, so nothing on this device can open it. The copy is not damaged;
+  the page says it has to be downloaded again from the daemon, and offers a
+  Reconnect. No passkey turns this into an unlock, because the wrapped key
+  it opens is of the replaced key as well.
 
 A reason the daemon never answered (an unreachable network, an expired
 lease) never renders as removed: only a request the keeper actually reached

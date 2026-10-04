@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
+import { RestoreLock } from '../components/document-editor/RestoreLock.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -555,7 +556,7 @@ function DocumentPageBody({
       }
     >
       {model.slots.replaceEditor ?? (
-        <div className="relative h-full min-h-0 min-w-0">
+        <RestoreLock restoring={sync.restoreInProgress} label={sync.restoreLabel}>
           {preview ? (
             <VersionPreview past={preview.past} theme={resolvedTheme} />
           ) : (
@@ -581,6 +582,9 @@ function DocumentPageBody({
                   {...(model.spatial.agentTouchedNodeIds === undefined
                     ? {}
                     : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}
+                  {...(model.spatial.agentTouchedEdgeIds === undefined
+                    ? {}
+                    : { agentTouchedEdgeIds: model.spatial.agentTouchedEdgeIds })}
                   canvas={sync.canvas}
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
@@ -618,7 +622,7 @@ function DocumentPageBody({
               )}
             />
           )}
-        </div>
+        </RestoreLock>
       )}
       {model.slots.footer}
     </DocumentPageShell>

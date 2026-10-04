@@ -1,4 +1,7 @@
-import type { WorkspaceSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import {
+  DAEMON_DEFAULT_SEGMENT,
+  type WorkspaceSummary,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
@@ -39,9 +42,6 @@ import { useFollowWorkspaceWrites } from './use-follow-workspace-writes.js'
 // list that IndexPage rendered (see the design note for why).
 
 const WORKSPACE_GONE = 'This workspace is not on the daemon any more.'
-
-// The segment the daemon gives the first workspace a data directory bootstraps.
-const DAEMON_DEFAULT_SEGMENT = 'default'
 
 // With no address, the workspace the daemon calls `default` — the one an agent
 // reaches without being told an id — before first-listed, so the page and the

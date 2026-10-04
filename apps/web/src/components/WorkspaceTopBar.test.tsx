@@ -202,17 +202,6 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" />, { container: document.body })
     expect(screen.queryByLabelText('Back to documents')).toBeNull()
   })
-
-  it('hides HeaderBranchChip when the keeper answering has no branches', () => {
-    // It used to be `capabilities.branches: false`. That flag is gone — both
-    // keepers have variations — and whether to show the chip became the
-    // BACKEND's answer, which is per document: a browser page has no
-    // record-holding backend for a markdown body or before one loads.
-    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />, {
-      container: document.body,
-    })
-    expect(screen.queryByTestId('header-branch-chip')).toBeNull()
-  })
 })
 
 describe('WorkspaceTopBar — workspaceId URL encoding', () => {

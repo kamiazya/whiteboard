@@ -1,6 +1,6 @@
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { DocumentContainers } from './containers.js'
-import { readDocumentKind } from './document-envelope.js'
+import { readCoreFacets, readDocumentKind } from './document-envelope.js'
 import { readSpatialCanvas } from './loro-bridge.js'
 import { readMarkdownBody } from './markdown-body.js'
 
@@ -10,7 +10,7 @@ import { readMarkdownBody } from './markdown-body.js'
  */
 export type DocumentContent =
   | { kind: 'spatial'; canvas: SpatialCanvas }
-  | { kind: 'markdown'; body: string }
+  | { kind: 'markdown'; body: string; description?: string }
 
 /**
  * A document's content by kind — the one place that decides which half to
@@ -30,7 +30,15 @@ export type DocumentContent =
  * answers it.
  */
 export function readDocumentContent(doc: DocumentContainers, kind?: DocumentKind): DocumentContent {
-  return (readDocumentKind(doc) ?? kind) === 'markdown'
-    ? { kind: 'markdown', body: readMarkdownBody(doc) }
-    : { kind: 'spatial', canvas: readSpatialCanvas(doc) }
+  if ((readDocumentKind(doc) ?? kind) !== 'markdown') {
+    return { kind: 'spatial', canvas: readSpatialCanvas(doc) }
+  }
+  // The OKF summary rides with the body because search indexes it as text the
+  // document says about itself; both keepers read content through here.
+  const description = readCoreFacets(doc)?.description
+  return {
+    kind: 'markdown',
+    body: readMarkdownBody(doc),
+    ...(description === undefined ? {} : { description }),
+  }
 }

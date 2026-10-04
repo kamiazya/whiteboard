@@ -170,7 +170,11 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = scrubDevE
     // Non-leak: the token from the record must not appear in stdout or stderr
     if (stdoutBuf.includes(record.token)) fail(`${label}: token leaked to stdout`)
     if (stderrBuf.includes(record.token)) fail(`${label}: token leaked to stderr`)
-    assertNoLeak(`${label} stdout`, stdoutBuf)
+    // The ready line's `socketPath` is a documented field, not a leaked path:
+    // with no XDG_RUNTIME_DIR the socket falls back under /tmp and would trip
+    // the blanket /tmp/ check. Redact that one known-good value and nothing
+    // else, so any other /tmp/ path on stdout still fails.
+    assertNoLeak(`${label} stdout`, stdoutBuf.split(ready.socketPath).join('<socketPath>'))
     assertNoLeak(`${label} stderr`, stderrBuf)
 
     const authorized = await socketStatus(record.socketPath, record.token)

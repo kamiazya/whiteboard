@@ -124,6 +124,24 @@ Two obvious causes were refuted by measurement rather than argument: cutting
 `--maxWorkers` to 4 made it WORSE (33–39s, 40% more wall clock), and the
 shared-IndexedDB theory died on the twelve-file run.
 
+### seeded-identity-without-reset
+
+**A fixed identity seeded into a persistent store with no per-test reset passes
+once and fails its own second repetition.** The store outlives the test —
+IndexedDB, OPFS, a data dir — so a test that seeds a fixed document path into
+it finds that path already there on the next pass of `--repeats=3`, and the
+keeper refuses: `DocumentPathTakenError: Document path "…" already exists`. Five
+fresh processes pass it (each process claims a clean database); only the
+in-process repeat reaches it, which is why it is first seen red on the PR's
+`Repeat changed tests in-process (3x)` step, never in a local single run.
+`local-list-documents-timing.browser.test.ts` was exactly this.
+
+Fix: reset in `beforeEach` (`beforeEach(clearWhiteboardDb)`), not once in
+`beforeAll` — a repeat reruns the test body, not the file's setup. A UNIQUE
+per-run prefix (a counter folded into the path) is the other safe form.
+Reproduce before pushing with `node .claude/scripts/stress-changed.mjs`, which
+runs the job's two steps over the files you changed.
+
 ### teardown-wipes-dom
 
 **A test's own teardown wiping the DOM out from under React.**
@@ -198,3 +216,32 @@ canvas data could not be read." error screen that failed main three times in
 four days. Wait for the LAST write of the flow (here the pointer naming the
 row) and assert what the next step opened, not only that it rendered.
 Mutation: without the pointer wait, the stronger final assertion failed 4 of 6.
+
+### skip-waiting-ignored-on-the-runner
+
+**The PWA update-lifecycle smoke (`verify`) timed out at "the page to reload
+onto a controller" on the runner's Chrome stable and passed locally.** It was
+the HARNESS, not the app: Playwright's locator click on the update toast's
+Reload. Reproduced with Chrome 154 by pinning the smoke and two busy loops to
+one core (3 of 8, 3 of 8, 3 of 6). In a failing run the waiting worker
+receives the `SKIP_WAITING`, its own `skipWaiting()` stays pending with no
+request in flight on either side, and stopping the OLD worker over DevTools
+activates the new one at once; left alone, Chrome activates it after 300 s,
+its lame-duck ceiling — the old worker never reports itself idle.
+
+Ruled out one variable at a time, each eight starved rounds and 0 failures:
+a raw-DevTools driver doing the same steps, then that driver with Playwright's
+exact launch switches, its service-worker attachment, page network
+instrumentation, its page auto-attach, a DevTools mouse-event click, a 3 s
+settle after each load, and a message to the old worker while the new one
+waits. Inside the Playwright smoke, replacing only the locator click with a
+DOM `click()` on the same button took it to 0 of 16; disabling Playwright's
+service-worker network inspection did not (3 of 8). So the smoke clicks
+Reload through the DOM, which runs the same handler a person's click does —
+0 of 10 starved after the change.
+
+A timeout at that step still prints which document holds the page, every
+worker's state, what the page posted to a worker, what is in flight, the
+browser's view of every worker version, and what stopping the old worker
+does. "Activates once the old one is stopped" is this shape again; "never
+posted" is the toast's.

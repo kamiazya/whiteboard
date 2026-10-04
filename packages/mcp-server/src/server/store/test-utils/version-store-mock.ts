@@ -21,7 +21,6 @@ export function versionStoreMock(overrides: Partial<VersionStoreMock> = {}): Ver
     loadWorkspaceAt: vi.fn(),
     list: vi.fn(),
     earliestWorkspaceFrontiers: vi.fn().mockResolvedValue(null),
-    getFrontiersBase64: vi.fn(),
     isUnchangedSinceLastVersion: vi.fn().mockResolvedValue(false),
     pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     ...overrides,

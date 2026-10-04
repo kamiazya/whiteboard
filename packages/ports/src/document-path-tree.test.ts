@@ -1,22 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
-
-describe('isSelfOrDescendant', () => {
-  it('holds for the ancestor itself and for anything below it', () => {
-    expect(isSelfOrDescendant('design', 'design')).toBe(true)
-    expect(isSelfOrDescendant('design/x', 'design')).toBe(true)
-    expect(isSelfOrDescendant('design/x/y', 'design')).toBe(true)
-  })
-
-  it('does not hold for a sibling that merely shares the ancestor as a prefix', () => {
-    expect(isSelfOrDescendant('design-system', 'design')).toBe(false)
-    expect(isSelfOrDescendant('design-v2/x', 'design')).toBe(false)
-  })
-
-  it('does not hold for an ancestor of the path', () => {
-    expect(isSelfOrDescendant('design', 'design/x')).toBe(false)
-  })
-})
+import { findDescendantPath, planSubtreeMove } from './document-path-tree.js'
 
 describe('planSubtreeMove', () => {
   const rows = [

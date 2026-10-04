@@ -34,7 +34,7 @@ const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.j
 const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdated } = await import(
   '../../store/document-store.js'
 )
-const { countAliveNodes } = await import('@kamiazya/whiteboard-server-core')
+const { countSpatialNodes } = await import('@kamiazya/whiteboard-loro-adapter')
 const { createDocumentRouter } = await import('../document.js')
 
 const createRouter = () =>
@@ -147,7 +147,7 @@ describe('restore router (real node counts)', () => {
     // assert the response tracks whatever the live target doc actually
     // ended up holding rather than assuming an exact merged node set.
     const finalTargetDoc = await loadDocument('session1', 'canvas-b')
-    expect(restoreBody.elementCount).toBe(countAliveNodes(finalTargetDoc))
+    expect(restoreBody.elementCount).toBe(countSpatialNodes(finalTargetDoc))
     // And it must be the real (non-zero) count, not the retired stub's 0.
     expect(restoreBody.elementCount).toBeGreaterThan(0)
   })
@@ -742,8 +742,12 @@ describe('overwrite restore reconciles instead of replacing', () => {
       },
     )
     expect(restoreRes.status).toBe(409)
-    const body = (await restoreRes.json()) as { error: string }
+    const body = (await restoreRes.json()) as { error: string; message: string }
     expect(body.error).toBe('output_exists')
+    // A restore target is any document, not a canvas.
+    expect(body.message).toBe(
+      'Target document "canvas-b" already exists. Pass overwrite=true to replace it.',
+    )
   })
 
   // The overlay a client shows while a restore runs is driven by these two

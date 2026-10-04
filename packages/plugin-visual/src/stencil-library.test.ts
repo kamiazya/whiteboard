@@ -46,6 +46,20 @@ describe('the stencil-library facet', () => {
     ).toBe(false)
   })
 
+  it('takes the model’s colour: a preset or a hex colour, and refuses anything else naming the presets', () => {
+    const write = (color: string) =>
+      bundledFacetRegistry.validateFacetWrite(VISUAL_STENCILS_KEY, {
+        stencils: { box: { displayName: 'Box', color } },
+      })
+    expect(write('3').ok).toBe(true)
+    expect(write('#00ffAA').ok).toBe(true)
+    for (const bad of ['red', '7', '#fff']) {
+      const result = write(bad)
+      expect(result.ok).toBe(false)
+      if (!result.ok) expect(result.message).toMatch(/"1" to "6"/)
+    }
+  })
+
   it('refuses a stencil carrying position or text, which decision 3 forbids', () => {
     // `stencilAssetSchema` is strict about its own shape, so the rule that a
     // stencil never says WHERE or WHAT IT SAYS is enforced on the way in
@@ -80,6 +94,21 @@ describe('reading a library off a document', () => {
     // and a malformed one must not stop a drawing being read.
     expect(readStencilLibrary({})).toEqual({})
     expect(readStencilLibrary({ [VISUAL_STENCILS_KEY]: { stencils: 'nope' } })).toEqual({})
+  })
+
+  it('leaves out only the stencil the schema refuses, so one bad entry does not hide the rest', () => {
+    expect(
+      readStencilLibrary({
+        [VISUAL_STENCILS_KEY]: {
+          stencils: {
+            bucket: { displayName: 'Bucket' },
+            bad: { displayName: 'Bad', color: 'red' },
+            'Not A Name': { displayName: 'x' },
+            placed: { displayName: 'Placed', x: 10 },
+          },
+        },
+      }),
+    ).toEqual({ bucket: { displayName: 'Bucket', facets: {} } })
   })
 
   it('answers by name, because a library has no order that survives storage', () => {

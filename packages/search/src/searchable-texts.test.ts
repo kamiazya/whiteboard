@@ -11,6 +11,20 @@ describe('searchableTexts', () => {
     ])
   })
 
+  // OKF §4.1 says `description` feeds search snippets; leading with it also
+  // keeps the summary inside the embedder's token window on a long body.
+  it('gives a markdown document its description ahead of its body', () => {
+    expect(
+      searchableTexts({ kind: 'markdown', body: '# Roadmap', description: 'Quarterly summary' }),
+    ).toEqual(['Quarterly summary', '# Roadmap'])
+  })
+
+  it('leaves out a description that is empty', () => {
+    expect(searchableTexts({ kind: 'markdown', body: '# Roadmap', description: '' })).toEqual([
+      '# Roadmap',
+    ])
+  })
+
   // A canvas means through its RELATIONS: an edge label is content, and a
   // group label names a region the way a heading names a section.
   it('gives a canvas its node texts, group labels and edge labels', () => {
@@ -110,6 +124,27 @@ describe('a canvas through searchableTexts and into fullTextSearch', () => {
         { documentId: 'b', path: 'b', texts: ['nothing to do with any of this'] },
       ],
       'runbooks',
+    )
+    expect(results.map((result) => result.documentId)).toEqual(['a'])
+  })
+})
+
+describe('a markdown document through searchableTexts and into fullTextSearch', () => {
+  it('finds a document by a word only its description holds', () => {
+    const results = fullTextSearch(
+      [
+        {
+          documentId: 'a',
+          path: 'a',
+          texts: searchableTexts({
+            kind: 'markdown',
+            body: '# Notes\n\nNothing relevant.',
+            description: 'Quarterly zebracrossing summary',
+          }),
+        },
+        { documentId: 'b', path: 'b', texts: searchableTexts({ kind: 'markdown', body: 'x' }) },
+      ],
+      'zebracrossing',
     )
     expect(results.map((result) => result.documentId)).toEqual(['a'])
   })

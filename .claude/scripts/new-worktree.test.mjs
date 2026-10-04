@@ -3,13 +3,17 @@
 //
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 
-import { dirname, resolve } from 'node:path'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { runWireStep } from './new-worktree.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const scriptPath = resolve(__dirname, 'new-worktree.mjs')
 
 test('runWireStep: worktree setup completes (does not throw) even when the wire script exits nonzero', () => {
   const logs = []
@@ -120,4 +124,23 @@ test('a copy failure is reported and swallowed', () => {
   })
   assert.equal(ok, false)
   assert.ok(logs.some((m) => m.includes('disk full')))
+})
+
+// An unrecognised option must never become a branch name or a base ref: `--help` is a question,
+// and `foo --bogus` used to ask git for a base ref called `--bogus`.
+test('--help, an unknown option and a missing name print usage and create no worktree or branch', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'new-worktree-flags-'))
+  try {
+    execFileSync('git', ['init', '--quiet', scratch])
+    for (const args of [['--help'], ['--bogus'], ['--dry-run'], ['foo', '--bogus'], ['foo', 'main', 'extra'], []]) {
+      const result = spawnSync('node', [scriptPath, ...args], { cwd: scratch, encoding: 'utf-8', timeout: 20_000 })
+      const label = JSON.stringify(args)
+      assert.equal(result.status, args[0] === '--help' ? 0 : 2, `${label}: ${result.stdout}${result.stderr}`)
+      assert.match(`${result.stdout}${result.stderr}`, /usage: .*new-worktree/, label)
+      assert.equal(existsSync(join(scratch, '.claude', 'worktrees')), false, `${label} created a worktree directory`)
+      assert.equal(execFileSync('git', ['branch', '--list'], { cwd: scratch, encoding: 'utf-8' }).trim(), '', `${label} created a branch`)
+    }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
 })

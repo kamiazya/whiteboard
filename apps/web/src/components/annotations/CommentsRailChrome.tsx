@@ -1,6 +1,6 @@
 /**
  * The comments rail's panel, as the inspector's vessel hosts it — shared by
- * the browser and daemon document pages (previously duplicated verbatim). A
+ * the browser and daemon document pages. A
  * pure projection of `useCommentsRail`'s output plus one keeper answer:
  * whether the surface behind the rail is WRITABLE right now.
  *

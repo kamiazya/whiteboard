@@ -194,8 +194,10 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       // something that polls.
       const counted = []
       for (const row of workspaces) {
-        // ponytail: N x membersOnly (one PK lookup) per list — a batched
-        // query is the upgrade path if this shows up in a profile. Checked
+        // ponytail: N x (profileForBinding + isWorkspaceMember) per list — two
+        // lookups a row, the first answering the same person every time; a
+        // batched membership query is the upgrade path if this shows up in a
+        // profile. Checked
         // before the per-row documentCount read, so a filtered-out row costs no tree open.
         if (
           options.admit !== undefined &&
@@ -356,7 +358,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         ])
         if (owned) return c.json(owned.body, owned.status)
         getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
-        return c.json({ title: 'Failed to delete canvas.' } satisfies ApiErrorBody, 500)
+        return c.json({ title: 'Failed to delete document.' } satisfies ApiErrorBody, 500)
       }
     },
     { badRequest: 'problem-details' },
@@ -418,7 +420,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         ])
         if (owned) return c.json(owned.body, owned.status)
         getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
-        return c.json({ title: 'Failed to rename canvas.' } satisfies ApiErrorBody, 500)
+        return c.json({ title: 'Failed to rename document.' } satisfies ApiErrorBody, 500)
       }
     },
     { badRequest: 'problem-details' },

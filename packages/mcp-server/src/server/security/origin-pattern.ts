@@ -36,7 +36,7 @@
 //     or request origin compares equal to a portless one.
 
 import { z } from 'zod'
-import { validateOriginEntry } from './origin-validation.js'
+import { parseHttpsOrigin, validateOriginEntry } from './origin-validation.js'
 
 const exactOriginPatternSchema = z.object({
   kind: z.literal('exact'),
@@ -86,24 +86,9 @@ export function parseOriginPatternEntry(entry: string): OriginPatternParseResult
     return { ok: true, pattern: { kind: 'exact', origin: result.origin } }
   }
 
-  let parsed: URL
-  try {
-    parsed = new URL(entry)
-  } catch {
-    return { ok: false, reason: 'unparseable' }
-  }
-
-  if (parsed.protocol !== 'https:') return { ok: false, reason: 'not_https' }
-
-  if (
-    parsed.username !== '' ||
-    parsed.password !== '' ||
-    parsed.pathname !== '/' ||
-    parsed.search !== '' ||
-    parsed.hash !== ''
-  ) {
-    return { ok: false, reason: 'not_origin' }
-  }
+  const origin = parseHttpsOrigin(entry)
+  if (!origin.ok) return origin
+  const parsed = origin.parsed
 
   const hostname = parsed.hostname
   // A bracketed IPv6 host (e.g. "[::1]") never carries a leading "*."

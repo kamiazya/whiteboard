@@ -39,7 +39,7 @@ describe('worthStoring', () => {
 // Tier-2 conformance, the shape `canvas-viewer-geometry-conformance.test.ts`
 // uses: the unit test above proves the gate, and this proves the worker is
 // the caller. Without it the worker could keep a floor of its own and the
-// two could drift — which is the state this change found.
+// two could drift.
 describe('the layout worker gates through the shared floor', () => {
   it('calls worthStoring and declares no floor of its own', async () => {
     const loader = source['./layout-worker.ts']

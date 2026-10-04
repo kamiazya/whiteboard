@@ -727,14 +727,17 @@ describe('what the tool table costs to read', () => {
         // -29 on both and -1 parameter for `animate`, which the browser never read.
         // +183 on both and -1 undescribed for `mode`: without its description a
         // model sending scroll and zoom got `fit`, which ignores them, and was
-        // told delivered:true.
-        visibleBytes: 1054,
+        // told delivered:true. +162 and -1 undescribed: `zoom` bounded by the
+        // editor's range and described (1 is actual size, not a percentage),
+        // and `delivered` says a browser was TOLD, not that it confirmed.
+        visibleBytes: 1216,
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 1476,
-        descriptionWords: 52,
+        // Then +258: the +162 above plus `zoom`'s min/max.
+        wireBytes: 1734,
+        descriptionWords: 62,
         parameters: 7,
-        undescribed: 6,
+        undescribed: 5,
         strays: 'refused',
         names: ['wb_canvas_edit'],
       },
@@ -955,8 +958,8 @@ describe('what the tool table costs to read', () => {
       // errands that had no tool behind a step, none of them costing a call.
       // Then -366 for `embed` leaving wb_canvas_edit's input and +92 for
       // `proposals` on wb_document_get (see those rows).
-      // Then -29 and +183 on wb_viewport_set (see that row).
-      visibleBytes: 39427,
+      // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
+      visibleBytes: 39589,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -968,9 +971,6 @@ describe('what the tool table costs to read', () => {
       // Then +128 wire for `stencil: null` and +60 for the bare body, the
       // same bytes as visible; this branch's input convergence and resource
       // fold take the wire column down by an order more than either adds.
-      // Read beside the visible column: wire moves by the same +60 while
-      // parameters and undescribed do not move at all, because a bare-body
-      // arm reuses a parameter this table already counted.
       // Then -1,442 for wb_pairing_link_create's retirement.
       // Then +143 for stating `destructiveHint` on the six writes that left it
       // to the default (five `false` at +24, wb_version_restore `true` at +23):
@@ -981,12 +981,12 @@ describe('what the tool table costs to read', () => {
       // Then -366 for `embed` and +14,591 for the stored proposal schema in
       // wb_document_get's output (see those rows).
       // Then -29 and +183, the same bytes as visible; then +47, the two
-      // facet tools' titles.
-      wireBytes: 129771,
+      // facet tools' titles. Then +258 on wb_viewport_set (see that row).
+      wireBytes: 130029,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
-      // Then -1 and -2 on wb_viewport_set (`animate` left, `mode` described).
+      // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       parameters: 331,
-      undescribed: 205,
+      undescribed: 204,
     })
   })
 

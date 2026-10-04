@@ -404,17 +404,20 @@ try {
   if (!statusBRes.ok) throw new Error(`daemon B /status: ${statusBRes.status}`)
   const statusBText = await statusBRes.text()
   const statusB = JSON.parse(statusBText)
-  // storage.dataDir is a documented field of GET /api/runtime/status (asserted
-  // below), not a leaked path — under /tmp on Linux CI it otherwise trips
-  // BASE_LEAK_PATTERNS' blanket /tmp/ check. Redact only that known-good
-  // field (via a parsed-object copy, not a raw-text replace, so a payload
-  // that happens to contain the same substring elsewhere or JSON-escaped
-  // characters in the path can't dodge or over-match the leak scan) before
-  // running it, so any other /tmp/ path (e.g. a stray stack frame) still
-  // fails the check.
-  const statusBForLeakCheck = statusB.storage
-    ? { ...statusB, storage: { ...statusB.storage, dataDir: '<dataDir>' } }
-    : statusB
+  // storage.dataDir and socketPath are documented fields of GET
+  // /api/runtime/status (the former asserted below), not leaked paths — under
+  // /tmp on Linux CI, or with no XDG_RUNTIME_DIR so the socket falls back to
+  // /tmp, they otherwise trip BASE_LEAK_PATTERNS' blanket /tmp/ check. Redact
+  // only those known-good fields (via a parsed-object copy, not a raw-text
+  // replace, so a payload that happens to contain the same substring
+  // elsewhere or JSON-escaped characters in the path can't dodge or
+  // over-match the leak scan) before running it, so any other /tmp/ path
+  // (e.g. a stray stack frame) still fails the check.
+  const statusBForLeakCheck = {
+    ...statusB,
+    ...(statusB.storage ? { storage: { ...statusB.storage, dataDir: '<dataDir>' } } : {}),
+    ...(typeof statusB.socketPath === 'string' ? { socketPath: '<socketPath>' } : {}),
+  }
   assertNoLeak('runtime status B', JSON.stringify(statusBForLeakCheck), [TOKEN_B])
   if (statusB.storage?.dataDir !== restoredDataDir) {
     throw new Error(

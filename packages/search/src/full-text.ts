@@ -1,3 +1,4 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { snippetAround } from './snippet.js'
 
 /**
@@ -154,7 +155,7 @@ export function fullTextSearch(
     hits.push({ documentId: bag.doc.documentId, score, contexts: contextsFor(bag.doc, query) })
   }
   return hits
-    .sort((a, b) => b.score - a.score || a.documentId.localeCompare(b.documentId))
+    .sort((a, b) => b.score - a.score || compareCodeUnit(a.documentId, b.documentId))
     .slice(0, limit)
 }
 

@@ -30,6 +30,7 @@
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import {
   type CanvasEdge,
+  compareCodeUnit,
   isFrame,
   nodeKind,
   parseScopedTag,
@@ -401,7 +402,7 @@ function tagPartitions<T extends { readonly id: string }>(
   }
   const partitions: NamedPartition[] = []
   const multi: MultiKey[] = []
-  for (const [key, perElement] of [...values].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [key, perElement] of [...values].sort(([a], [b]) => compareCodeUnit(a, b))) {
     const count = [...perElement.values()].filter((list) => list.length >= 2).length
     if (count > 0) {
       multi.push({ key, count })

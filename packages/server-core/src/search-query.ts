@@ -16,6 +16,14 @@ const SEARCH_QUERY_PARAMS = {
   limit: 'limit',
 } as const
 
+/** The keys the route reads; any other is refused rather than ignored. */
+export const SEARCH_QUERY_KEYS: readonly string[] = Object.values(SEARCH_QUERY_PARAMS)
+
+/** The query-string name of an input field, for a refusal that must speak the wire's words. */
+export function searchWireName(field: string): string {
+  return (SEARCH_QUERY_PARAMS as Record<string, string>)[field] ?? field
+}
+
 export type SearchQueryInput = Omit<DocumentSearchInput, 'workspaceId'>
 
 /** The query string a client sends for `input`: `tags` repeat as `tag`, absent fields are left out. */

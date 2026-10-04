@@ -1,3 +1,5 @@
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+
 /**
  * Turning text into vectors is a RUNTIME capability, not a shared-layer one:
  * the model runs through onnxruntime-node in the daemon and
@@ -104,6 +106,6 @@ export function rankByVector(
 ): string[] {
   return documents
     .map((doc) => ({ id: doc.documentId, score: cosine(queryVector, doc.vector) }))
-    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+    .sort((a, b) => b.score - a.score || compareCodeUnit(a.id, b.id))
     .map((entry) => entry.id)
 }

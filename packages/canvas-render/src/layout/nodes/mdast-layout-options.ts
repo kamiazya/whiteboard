@@ -10,6 +10,7 @@ import type {
   SvgFragmentNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
+import type { CodeTokenLines, CodeTokenRole } from '../../highlight/code-token.js'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
@@ -79,23 +80,6 @@ export function bodyFont(
     sizePx,
   }
 }
-
-/**
- * The closed set of things a code token can be. Five roles including plain
- * (a token with no role), not forty TextMate scopes: at 10-12px inside a
- * node, finer resolution is discarded on the way out, and each role has to
- * hold its own contrast floor against the code surface.
- */
-export type CodeTokenRole = 'keyword' | 'string' | 'number' | 'comment'
-
-export interface CodeToken {
-  readonly text: string
-  /** Absent means plain — the token paints as body text. */
-  readonly role?: CodeTokenRole
-}
-
-/** One array per source line, in source order. */
-export type CodeTokenLines = readonly (readonly CodeToken[])[]
 
 export interface MdastLayoutOptions {
   readonly measure: MeasureText

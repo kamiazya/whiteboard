@@ -103,7 +103,6 @@ async function gatedCall(
     caller.grant,
     existing?.workspaceId ?? handle,
     caller.members,
-    { membersOnlyByDefault: true },
   )
   if (access !== 'admitted') throw refused(access)
   // The id just authorized, not the handle: the tool would resolve it again,

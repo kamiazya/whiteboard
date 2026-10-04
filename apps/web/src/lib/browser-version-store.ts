@@ -6,8 +6,8 @@ import {
 import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
 import {
   contentDigestOfDocument,
+  countSpatialNodes,
   projectWorkspaceDocument,
-  readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -40,22 +40,20 @@ const versionRowSchema = z
      * Whether a checkpoint took this point rather than a person.
      *
      * Optional for a load-bearing reason: this schema is `.strict()` and
-     * its reader SKIPS a row
-     * that fails to parse, so making either of these REQUIRED would silently
-     * delete the whole history of anyone who has rows from before them.
+     * its reader SKIPS a row that fails to parse, so making this REQUIRED
+     * would silently delete the whole history of anyone who has rows from
+     * before it.
      * Absent reads as `false`, which is what every existing row is.
      */
     auto: z.boolean().optional(),
-    /** The variation HEAD was on when the point was taken; absent reads as `main`. */
-    branchName: z.string().min(1).optional(),
     frontiers: z.instanceof(Uint8Array),
     /**
      * The identity of the CONTENT this point was taken of, so "has this
      * document changed?" can be asked about the document rather than about
      * the record.
      *
-     * REQUIRED, unlike `auto` and `branchName`, which are optional exactly
-     * because a row written before them had to keep parsing. That reasoning
+     * REQUIRED, unlike `auto`, which is optional exactly because a row
+     * written before it had to keep parsing. That reasoning
      * does not apply here: no row written before this one exists any more —
      * IndexedDB v19 emptied the store, because a past checkpoint's content is
      * reachable only by checking the record out at its own frontier and so
@@ -103,8 +101,6 @@ export class BrowserVersionStore {
       restoredFrom?: string
       /** A checkpoint took this point, not a person. */
       auto?: boolean
-      /** The variation HEAD was on. Omitted leaves the row on the default one. */
-      branchName?: string
     } = {},
   ): Promise<VersionEntry> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
@@ -120,15 +116,12 @@ export class BrowserVersionStore {
       path,
       ...(input.label === undefined || input.label === '' ? {} : { label: input.label }),
       createdAt: Date.now(),
-      elementCount: countNodes(projection),
+      elementCount: countSpatialNodes(projection),
       ...(input.operator === undefined ? {} : { operator: input.operator }),
       ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
-      // Written only when true / named, so a manual save on the default
-      // variation keeps writing exactly the row it wrote before this existed.
+      // Written only when true, so a manual save keeps writing exactly the
+      // row it wrote before `auto` existed.
       ...(input.auto === true ? { auto: true } : {}),
-      ...(input.branchName === undefined || input.branchName === ''
-        ? {}
-        : { branchName: input.branchName }),
       // The STORED record's frontier, never a live doc's: a checkpoint has to
       // point at ops that are on disk, and `open` reads what is.
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
@@ -305,15 +298,6 @@ export class BrowserVersionStore {
   }
 }
 
-function countNodes(doc: LoroDoc): number {
-  try {
-    return readSpatialCanvas(doc).nodes.length
-  } catch {
-    // A markdown document has no canvas to count; the advisory count is 0.
-    return 0
-  }
-}
-
 function toEntry(row: VersionRow, path: string): VersionEntry {
   return versionEntrySchema.parse({
     id: row.id,
@@ -321,7 +305,6 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: row.auto === true,
-    branchName: row.branchName ?? 'main',
     ...(row.label === undefined ? {} : { label: row.label }),
     ...(row.operator === undefined ? {} : { operator: row.operator }),
     ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),

@@ -20,9 +20,9 @@ import {
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -115,6 +115,15 @@ function placeAll(
       )
     }
     seen.add(op.id)
+    // `nodeId` is the anchor's way of naming a text node, which a markdown
+    // document has none of; resolving against the body would apply the edit to
+    // a passage the caller placed somewhere else.
+    if (op.anchor.nodeId !== undefined) {
+      throw new PassageNotApplicableError(
+        op.id,
+        `a markdown document has no node "${op.anchor.nodeId}"; omit nodeId to quote its body`,
+      )
+    }
     const resolved = resolveTextAnchor(body, op.anchor)
     if (resolved.kind !== 'placed') {
       throw new PassageNotApplicableError(op.id, 'its passage is no longer in the body')

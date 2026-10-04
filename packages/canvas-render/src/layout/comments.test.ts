@@ -17,7 +17,7 @@ import type {
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import {
   COMMENT_BUBBLE_OFFSET_PX,
   COMMENT_PIN_SIZE_PX,

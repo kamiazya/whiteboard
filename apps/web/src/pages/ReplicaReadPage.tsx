@@ -62,7 +62,7 @@ import {
 } from '../lib/replica-state-copy.js'
 import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
 import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
-import { ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
+import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
@@ -89,12 +89,14 @@ export interface ReplicaReadPageProps {
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'missing' }
+  | { kind: 'rotated' }
   | { kind: 'withheld'; reason: WithheldReason }
   | { kind: 'ready'; record: ReplicaRecord; entries: WorkspaceDocumentEntry[] }
 
 function keyInputFor(state: LoadState): ReplicaKeyInput {
   if (state.kind === 'withheld') return { withheld: state.reason }
   if (state.kind === 'ready') return 'readable'
+  if (state.kind === 'rotated') return 'rotated'
   return 'missing'
 }
 
@@ -167,6 +169,32 @@ function useReplicaSaveQueue(workspaceId: string) {
 }
 
 /**
+ * What a failed open means. A rotated key comes first, ahead of the generic
+ * arm that would call the copy missing: the bytes are there and intact, sealed
+ * under a key that is gone. A withheld key reads the holder's cached reason
+ * rather than believing 'unreachable' by default — the whole point of the
+ * removed state is that a daemon-refused key reads as removed, not as an
+ * ordinary disconnection.
+ */
+function loadFailureState(
+  error: unknown,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  precheck: ReturnType<typeof replicaKeyStatus>,
+): LoadState {
+  if (error instanceof ReplicaKeyRotatedError) return { kind: 'rotated' }
+  if (!(error instanceof ReplicaKeyWithheldError)) return { kind: 'missing' }
+  const status = replicaKeyStatus(daemonBaseUrl, workspaceId)
+  const reason =
+    status?.kind === 'withheld'
+      ? status.reason
+      : precheck?.kind === 'withheld'
+        ? precheck.reason
+        : 'unreachable'
+  return { kind: 'withheld', reason }
+}
+
+/**
  * Opens this workspace's stored replica and says what came back: the record
  * and its entries, a withheld reason, or nothing at all. Re-runs on an
  * `attempt` bump, which is how Reconnect and Unlock re-enter the SAME open
@@ -221,21 +249,7 @@ function useReplicaRecord({
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        if (error instanceof ReplicaKeyWithheldError) {
-          // Read the holder's cached reason rather than believing 'unreachable'
-          // by default — the whole point of the removed state is that a daemon-refused key
-          // reads as removed, not as an ordinary disconnection.
-          const status = replicaKeyStatus(daemonBaseUrl, workspaceId)
-          const reason =
-            status?.kind === 'withheld'
-              ? status.reason
-              : precheck?.kind === 'withheld'
-                ? precheck.reason
-                : 'unreachable'
-          setState({ kind: 'withheld', reason })
-          return
-        }
-        setState({ kind: 'missing' })
+        setState(loadFailureState(error, daemonBaseUrl, workspaceId, precheck))
       })
     return () => {
       cancelled = true
@@ -488,7 +502,7 @@ function ReplicaReader({
  * when there is nothing to say, since the visible copy says the same thing
  * for a sighted reader.
  *
- * 'locked' and 'needs-connection' both render NOTHING but a connectivity
+ * 'locked', 'needs-connection' and 'rotated' all render NOTHING but one
  * message, so a screen-reader user landing there (first mount, or after a
  * Reconnect attempt that settles back) must hear it — not just 'Loading…'
  * followed by silence.
@@ -507,7 +521,7 @@ function replicaLiveStatus({
   if (state.kind === 'loading') return 'Loading…'
   if (reconnecting) return 'Reconnecting…'
   if (pageState === 'removed') return REPLICA_STATE_COPY.removed.body
-  if (pageState === 'locked' || pageState === 'needs-connection') {
+  if (pageState === 'locked' || pageState === 'needs-connection' || pageState === 'rotated') {
     return REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')
   }
   if (pageState === 'unlockable') return REPLICA_STATE_COPY.unlockable.body
@@ -623,7 +637,7 @@ export function ReplicaReadPage({
           onRetrySave={retrySave}
         />
       )}
-      {(pageState === 'needs-connection' || pageState === 'locked') && (
+      {(pageState === 'needs-connection' || pageState === 'locked' || pageState === 'rotated') && (
         <ReplicaActionPanel
           state={pageState}
           body={REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')}

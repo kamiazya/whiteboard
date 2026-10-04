@@ -89,7 +89,7 @@ function membershipWiring(options: AppOptions): {
   return members === undefined
     ? { admit: undefined, firstMember: undefined }
     : {
-        admit: membershipAdmit(members, { membersOnlyByDefault: true }),
+        admit: membershipAdmit(members),
         firstMember: creatorAsFirstMember(members),
       }
 }

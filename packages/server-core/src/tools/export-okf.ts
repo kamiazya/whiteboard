@@ -2,22 +2,22 @@ import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
 import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
+  readDocumentKind,
   readFacets,
   readMarkdownBody,
   readTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { BARE_BODY_TYPE } from './document-crud.js'
-import { loadDocument } from './document-io.js'
-import { DocumentSerializeError } from './errors.js'
+import { DocumentKindMismatchError, DocumentSerializeError } from './errors.js'
 
 /**
- * OKF-Markdown is a single-document format (frontmatter + body); a spatial
- * canvas can have many independently-positioned text nodes. This
- * targets only the FIRST text node found (or an empty body when none
- * exists) — a real "canvas -> OKF" mapping for a full multi-node spatial
- * canvas is deferred to a future slice once the OKF-vs-spatial duality is
- * resolved in crdt.
+ * OKF-Markdown is a single-document format (frontmatter + body), which is what
+ * a markdown document is. A spatial canvas has no body — its nodes are
+ * independently positioned — so it is refused rather than projected onto one
+ * of its text nodes: there is no "read this document as OKF" for a JSON Canvas
+ * document (`wb_document_get` follows the document's kind instead).
  *
  * `DocumentStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this
  * field is accepted for API symmetry with the workspace-scoped tools and as a
@@ -49,6 +49,16 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     workspaceId: input.workspaceId,
     documentId: input.documentId,
   })
+  // A document that predates kinds carries none on its own doc; its index row
+  // may. One with neither is read as the markdown it has always been taken for.
+  const kind = readDocumentKind(doc) ?? entry?.kind
+  if (kind !== undefined && kind !== 'markdown') {
+    throw new DocumentKindMismatchError(
+      input.documentId,
+      kind,
+      'It has no body to export as OKF Markdown. Read it with wb_document_get, which answers JSON Canvas for a spatial document.',
+    )
+  }
   const facets = readFacets(doc)
   const body = readMarkdownBody(doc)
   // The trust family lives in its own bucket (ADR-0016 decision 4) and is

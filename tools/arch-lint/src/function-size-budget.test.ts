@@ -194,7 +194,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // keys carry its name.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1632,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 88,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 89,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasChrome': 100,
   // The document picker and the URL dialog live in
@@ -302,7 +302,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // undecided, not foreign, while its silent renewal is outstanding.
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 361,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 362,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
@@ -326,7 +326,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
   'apps/web/src/lib/layout-worker.ts#handleLayout': 67,
-  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 338,
+  'apps/web/src/lib/local-files-source.ts#createLocalFilesSource': 270,
   'apps/web/src/lib/loro-store.ts#appendDelta': 73,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),
   // which several authenticators decide there rather than at assertion time.
@@ -346,7 +346,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 450,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 451,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
@@ -355,7 +355,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // below are those pieces; each is a TABLE or a block of JSX rather than a
   // branch, which is the shape a size budget cannot tell from logic and a
   // complexity budget can.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 335,
+  'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 338,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
   // (`exactOptionalPropertyTypes`), and splitting it further would cut the
@@ -525,7 +525,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/document-tools.ts#registerDocumentTools': 278,
   'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts#runE2eCheckpointSmoke': 101,
   'packages/mcp-server/src/server/mcp/startup.smoke-impl.ts#runStartupSmoke': 67,
-  'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 115,
+  'packages/mcp-server/src/server/mcp/stdio-exit.smoke-impl.ts#runStdioExitSmoke': 107,
   'packages/mcp-server/src/server/mcp/stdio-lifecycle.ts#installStdioLifecycle': 68,
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts#assertSemanticSearchOptIn': 81,
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts#runPackedTarballSmoke': 131,
@@ -558,11 +558,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The update fan-out subscribes at construction from the deps the root hands
   // down, where a per-process memoized fallback used to resolve its own.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,
-  // The methods that start from a binding (`profileForBinding`, `isDeactivated`,
-  // `ensureProfile`) live in `bindingLookups`, the user listing in `usersOf` and
-  // the role lookup in `roleIn`, in the same file, so the membership insert and
-  // its clear still sit together here.
-  'packages/mcp-server/src/server/security/origin-pattern.ts#parseOriginPatternEntry': 61,
   // The setter's write-side validation and the boolean answer to the lazy-row
   // hazard (ADR-0042 decision 1 addendum) both belong beside tierFor/effectiveTier
   // rather than in a second file over the same table; rotateKey (rotation

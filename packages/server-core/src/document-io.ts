@@ -9,8 +9,8 @@ import {
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { getLogger } from '../log.js'
-import type { ServerDeps } from '../server-deps.js'
+import { getLogger } from './log.js'
+import type { ServerDeps } from './server-deps.js'
 
 const log = getLogger('document-io')
 

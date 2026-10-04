@@ -159,6 +159,24 @@ describe('stripCommentsAndStrings — what the parser knows and a char scan does
     expect(stripCommentsAndStrings(source)).toContain('isAuthorized(h)')
   })
 
+  it('takes the grammar from the file name, not from whichever reading has fewer errors', () => {
+    // `<p>don't</p>` is JSX text in a .tsx file and an unterminated string to
+    // a .ts one; the name decides, not whichever reading has fewer errors.
+    const source = "const a = <p>don't</p>\nconst b = 'text'"
+
+    expect(stripCommentsAndStrings(source, 'named.ts')).toBe("const a = <p>don''\nconst b = 'text'")
+    expect(stripCommentsAndStrings(source, 'named.tsx')).toBe(source)
+  })
+
+  it('does not answer a file from what the same text said under another name', () => {
+    const source = "const shared = <p>doesn't</p>\nconst after = 'text'"
+
+    const asTsx = stripCommentsAndStrings(source, 'first.tsx')
+    const asTs = stripCommentsAndStrings(source, 'second.ts')
+    expect(asTsx).not.toBe(asTs)
+    expect(stripCommentsAndStrings(source, 'first.tsx')).toBe(asTsx)
+  })
+
   it('reads JSX as JSX when the file is .tsx, named or not', () => {
     const source = 'const a = <A>{x}</A>\nconst b = isAuthorized(h)'
 

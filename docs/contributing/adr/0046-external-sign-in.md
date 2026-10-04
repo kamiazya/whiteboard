@@ -24,8 +24,8 @@ Built:
 > or command ever produced it, so the `honourEmailInvitations` provider option,
 > its admission arm and the store methods behind it are gone, and a
 > configuration that still names the option is refused at startup. The
-> invitation link is the only invitation; revoking one is not built. The
-> `invitations.email` column is still in the schema, unused.
+> invitation link is the only invitation; revoking one is not built. Migration
+> 0040 dropped the `invitations.email` column and its index.
 
 ## Context
 

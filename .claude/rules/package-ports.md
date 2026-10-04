@@ -73,7 +73,10 @@ rather than as prose each implementation re-reads:
 `describeDocumentIndexConformance`, `describeBlobStoreConformance` and
 `describeDocumentStoreConformance`. Each takes a factory returning
 `{ <port>, dispose }`, so the fixture stays with the implementation and the
-assertions stay here.
+assertions stay here. `describeDocumentPinsConformance` covers the
+`DocumentPins` capability beside `DocumentIndex` (tree-backed indexes only;
+the legacy row index keeps no pinned list, which is why it is a capability
+and not a method on the port).
 
 They must run unchanged in a browser like the rest of the package — the blob
 suite computes its expected digest with `globalThis.crypto.subtle`, never

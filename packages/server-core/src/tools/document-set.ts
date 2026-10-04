@@ -1,4 +1,9 @@
-import { type OkfMarkdownDocument, parseOkf, serializeOkf } from '@kamiazya/whiteboard-codec'
+import {
+  type OkfMarkdownDocument,
+  OkfNotYamlSafeError,
+  parseOkf,
+  serializeOkf,
+} from '@kamiazya/whiteboard-codec'
 import {
   readDocumentKind,
   readMarkdownBody,
@@ -14,9 +19,9 @@ import {
 import { documentIdSchema, okfActorSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
@@ -104,6 +109,9 @@ function detail(issues: readonly { path: PropertyKey[]; message: string }[]): st
   return ` — ${named}${rest > 0 ? ` (and ${rest} more)` : ''}`
 }
 
+/** The stage a write is refused at when its frontmatter holds a value YAML cannot carry. */
+export const OKF_YAML_SAFE_STAGE = 'frontmatter-yaml-safe'
+
 export class OkfParseError extends Error {
   constructor(
     public readonly stage: string,
@@ -133,9 +141,13 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
   try {
     serializeOkf(parsed.value)
   } catch (error) {
+    // Only the not-yaml-safe refusal is the caller's to fix; any other throw
+    // is a defect in the serialiser and keeps its own name.
+    if (!(error instanceof OkfNotYamlSafeError)) throw error
     throw new OkfParseError(
-      'frontmatter-yaml-safe',
-      error instanceof Error ? error.message : String(error),
+      OKF_YAML_SAFE_STAGE,
+      'frontmatter contains a value YAML cannot represent',
+      error.issues,
     )
   }
   return parsed.value

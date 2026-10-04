@@ -155,6 +155,30 @@ describe('fixed-duration sleeps in test files and the helpers they call', () => 
     ).toBe(0)
   })
 
+  it('does not take a callback handed to a call for a sleep helper, and does not throw on one', () => {
+    expect(
+      countFixedSleeps('use((ms: number) => new Promise((r) => setTimeout(r, ms)))\nuse(50)'),
+    ).toBe(0)
+    expect(
+      countFixedSleeps('use(function (ms) { return new Promise((r) => setTimeout(r, ms)) })'),
+    ).toBe(0)
+  })
+
+  it('resolves a name through a catch clause: bound by a catch variable, or not bound by a bare catch', () => {
+    const timers = "import { setTimeout as delay } from 'node:timers/promises'\n"
+    expect(countFixedSleeps(`${timers}try { run() } catch (delay) { delay(50) }`)).toBe(0)
+    expect(countFixedSleeps(`${timers}try { run() } catch (error) { await delay(50) }`)).toBe(1)
+    expect(countFixedSleeps(`${timers}try { run() } catch { await delay(50) }`)).toBe(1)
+  })
+
+  it('does not take a body that is one statement of another kind for a sleep helper', () => {
+    expect(
+      countFixedSleeps(
+        'function hold(ms: number) { const pending = new Promise((r) => setTimeout(r, ms)) }\nhold(50)',
+      ),
+    ).toBe(0)
+  })
+
   it('registers a helper only when the sleep is its whole body', () => {
     // A fake that sleeps and then answers is a latency injection; its literal is configuration.
     const fake =

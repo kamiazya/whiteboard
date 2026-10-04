@@ -35,20 +35,11 @@ export interface VersionPreviewSession {
 }
 
 /**
- * A history is a history, whoever keeps it.
- *
- * There was a `VersionTimelineCapabilities` prop here — `branches` and
- * `autoVersions`, one shape per keeper — and it is gone because the two
- * shapes had become identical: both keepers write rows carrying the
- * variation they were taken on, and both land a checkpoint once editing
- * settles. A pair that agrees declares no difference, which is the argument
- * that retired the provider's capability map (ADR-0004's 2026-09-05
- * addendum) one layer up.
- *
- * What the `false` side actually held up, measured before deleting it: ONE
- * assertion, the second direction of the lane test. The other four cases in
- * `version-row.test.tsx` passed `branches: false` and never looked at a
- * lane — they were rendering a configuration no keeper ships, for nothing.
+ * A history is a history, whoever keeps it: the panel takes no per-keeper
+ * capability prop, because both keepers list the same rows of one lane and
+ * land a checkpoint once editing settles. A pair that agrees declares no
+ * difference (ADR-0004's 2026-09-05 addendum, which retired the provider's
+ * capability map for the same reason).
  */
 interface Props {
   workspaceId: string
@@ -68,8 +59,7 @@ interface Props {
   onPreview?: (session: VersionPreviewSession | null) => void
   // Bumped by the caller (e.g. after a manual save, or a sync-stream
   // version_created frame) to force a refetch without waiting for the
-  // 15s poll. Only a value CHANGE triggers a refetch, matching
-  // HeaderBranchChip's refreshSignal contract.
+  // 15s poll. Only a value CHANGE triggers a refetch.
   refreshSignal?: number
   // The panel header's action slot — the page's own save affordance. It
   // sits in the header because that is where the panel's own title is: an

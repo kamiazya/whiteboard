@@ -4,6 +4,7 @@
 // uses — `<repo>/.dev-data`, or WHITEBOARD_DATA_DIR when that is set.
 import { readFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { readDaemonRecord } from './dev-daemon-socket-lib.mjs'
 import { stopDevDaemon } from './stop-http-dev-daemon-lib.mjs'
 import {
@@ -11,6 +12,12 @@ import {
   resolveDevDataDirEnv,
   resolveRepoRootFromGit,
 } from './with-dev-data-dir-lib.mjs'
+
+// Parsed before anything is read or signalled: an unrecognised flag is a refusal, not consent.
+parseScriptArgs({
+  argv: process.argv.slice(2),
+  usage: "usage: stop-http-dev-daemon.mjs  (takes no options; stops this checkout's dev daemon)",
+})
 
 const dataDir = resolveDevDataDirEnv(
   process.env,

@@ -20,16 +20,16 @@ import {
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import {
   DocumentKindMismatchError,
   EdgeNotFoundError,
   FacetWriteRejectedError,
   NodeNotFoundError,
 } from './errors.js'
-import { workspaceFacetRegistry } from './stencil-library.js'
+import { refuseUnusableStencilLibrary, workspaceFacetRegistry } from './stencil-library.js'
 import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -267,6 +267,7 @@ async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetS
   refuseIncoherentRequest(input)
   const registry = await resolveWriteRegistry(deps, input)
   const { sets, deletions } = partitionFacetWrites(registry, input, requiredTargetOf(input))
+  refuseUnusableStencilLibrary(deps, sets)
   await refuseBeforeAnyWrite(deps, input)
 
   const updated: FacetSetOutput['updated'] = []

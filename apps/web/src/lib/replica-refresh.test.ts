@@ -130,6 +130,21 @@ describe('scheduleReplicaRefresh', () => {
     })
   })
 
+  it('records the key generation the pull sealed the copy under', async () => {
+    const keyId = 'AAAAAAAAAAAAAAAAAAAAAA'
+    const cache = vi.fn().mockResolvedValue({
+      kind: 'ok',
+      syncedAt: '2026-09-01T12:00:00.000Z',
+      documentCount: 3,
+      keyId,
+    })
+    scheduleReplicaRefresh(deps({ cache }))
+
+    await vi.waitFor(() =>
+      expect(createUserSettingsStore().load().storage.replicas?.[WS]?.keyId).toBe(keyId),
+    )
+  })
+
   it('a different workspace on the same daemon is its own refresh', async () => {
     const cache = vi
       .fn()

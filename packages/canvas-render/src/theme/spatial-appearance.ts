@@ -1,7 +1,7 @@
 // The appearance seam for `layoutSpatialCanvas` (spatial-canvas.ts).
 // canvas-render's layout functions deliberately never invent a fill/stroke/
 // font (see `Appearance` in scene-graph.ts) — that decision belongs to the
-// theme layer (`../theme/spatial-theme.ts`'s `createSpatialTheme`, the ONE
+// theme layer (`theme/spatial-theme.ts`'s `createSpatialTheme`, the ONE
 // producer of this interface; see package-canvas-render.md decision #8). A
 // resolver is a set of FUNCTIONS rather than a static per-kind record
 // because appearance keys off both `node.type` and an authored
@@ -11,13 +11,13 @@
 // This interface is APPEARANCE-ONLY. It deliberately has no
 // paddingPx/labelFontSizePx/minContentWidthPx: those are geometry, not
 // appearance, and geometry must not vary by which resolver a surface
-// happens to use (see `../theme/spatial-geometry.ts` and the
-// `spatial-geometry-parity.test.ts` guard). A caller that wants a
+// happens to use (see `theme/spatial-geometry.ts` and the
+// `layout/spatial-geometry-parity.test.ts` guard). A caller that wants a
 // non-default geometry passes `SpatialLayoutOptions.geometry` explicitly at
 // the call site, never through this resolver.
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { SpatialSyntaxPalette } from '../../theme/spatial-palette.js'
+import type { SpatialSyntaxPalette } from './spatial-palette.js'
 
 /** What a resolver decided for one spatial node's chrome. */
 export interface SpatialNodeAppearance {

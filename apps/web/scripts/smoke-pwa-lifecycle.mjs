@@ -49,7 +49,14 @@ const state = {
 const versionHandler = (version) =>
   `\nself.addEventListener('message', (e) => { if (e.data === 'smoke:version') e.ports[0].postMessage('${version}') })\n`
 
+// Requests the server has taken and not yet answered, for a step's timeout dump.
+const serverInFlight = new Map()
+let requestSeq = 0
+
 async function respond(req, res) {
+  const id = ++requestSeq
+  serverInFlight.set(id, `${req.method} ${req.url}`)
+  res.on('close', () => serverInFlight.delete(id))
   let path = new URL(req.url, 'http://localhost').pathname
   const isNavigation = req.headers['sec-fetch-mode'] === 'navigate'
   if (path === '/' || !path.includes('.')) path = '/index.html'
@@ -95,14 +102,89 @@ function check(label, ok) {
 
 // A navigation destroys the execution context mid-evaluate, so a poll that
 // reads the page has to treat that as "not yet" rather than as a failure.
-async function until(label, read) {
+async function until(label, read, describe) {
   const deadline = Date.now() + STEP_TIMEOUT_MS
   for (;;) {
     const value = await read().catch(() => undefined)
     if (value) return value
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}`)
+    if (Date.now() > deadline) {
+      const seen = describe ? await describe().catch((err) => `describe failed: ${err}`) : undefined
+      const detail = seen === undefined ? '' : `\n${JSON.stringify(seen, null, 2)}`
+      throw new Error(`timed out waiting for ${label}${detail}`)
+    }
     await new Promise((r) => setTimeout(r, 100))
   }
+}
+
+// What the page holds when a step gives up: which document this is, which
+// worker controls it and what the registration carries, beside the browser's
+// console tail — the first run on a CI runner timed out on the reload step
+// and the bare message could not say which of those had not happened.
+const workerSummary = (page) =>
+  page.evaluate(async () => {
+    const sw = (w) => (w ? { url: w.scriptURL, state: w.state } : null)
+    const reg = await navigator.serviceWorker.getRegistration()
+    return {
+      href: location.href,
+      firstDocument: window.__smokeFirstDocument,
+      controller: sw(navigator.serviceWorker.controller),
+      installing: sw(reg?.installing),
+      waiting: sw(reg?.waiting),
+      active: sw(reg?.active),
+    }
+  })
+
+// Every request the page issued and has not seen finish or fail, with whether
+// a worker answered it: an active worker whose fetch event never settles is
+// what defers the waiting worker's skipWaiting.
+const requestsInFlight = new Map()
+function trackRequests(page) {
+  page.on('request', (r) =>
+    requestsInFlight.set(r, { url: r.url(), type: r.resourceType(), startedAt: Date.now() }),
+  )
+  page.on('requestfinished', (r) => requestsInFlight.delete(r))
+  page.on('requestfailed', (r) => requestsInFlight.delete(r))
+}
+const inFlight = () =>
+  [...requestsInFlight.entries()].map(([r, info]) => ({
+    ...info,
+    ageMs: Date.now() - info.startedAt,
+    fromServiceWorker: r.serviceWorker() !== null,
+  }))
+
+// The browser process's own view of every worker version: running status,
+// lifecycle status and the clients it controls, as the DevTools protocol
+// reports them. A page cannot see whether the worker controlling it is running.
+const workerVersions = new Map()
+let cdp
+async function trackWorkerVersions(page) {
+  cdp = await page.context().newCDPSession(page)
+  cdp.on('ServiceWorker.workerVersionUpdated', ({ versions }) => {
+    for (const v of versions) workerVersions.set(v.versionId, v)
+  })
+  cdp.on('ServiceWorker.workerErrorReported', ({ errorMessage }) => {
+    consoleTail.push(`[sw-error] ${errorMessage.errorMessage}`)
+  })
+  await cdp.send('ServiceWorker.enable')
+}
+const versionsSeen = () =>
+  [...workerVersions.values()].map((v) => ({
+    versionId: v.versionId,
+    status: v.status,
+    runningStatus: v.runningStatus,
+    controlledClients: v.controlledClients.length,
+  }))
+
+const consoleTail = []
+function tailConsole(page) {
+  page.on('console', (m) => {
+    consoleTail.push(`[${m.type()}] ${m.text()}`)
+    if (consoleTail.length > 40) consoleTail.shift()
+  })
+  page.on('pageerror', (err) => {
+    consoleTail.push(`[pageerror] ${err.message}`)
+    if (consoleTail.length > 40) consoleTail.shift()
+  })
 }
 
 const controllerVersion = (page) =>
@@ -149,19 +231,76 @@ async function waitForUpdate(page) {
   return toast
 }
 
+// Whether the old worker's running state is what holds the activation: stop
+// it from the browser side, then read every version again.
+async function stopActiveWorkerAndRead() {
+  const active = [...workerVersions.values()].find(
+    (v) => v.status === 'activated' && v.runningStatus === 'running',
+  )
+  if (!active) return 'no running activated version to stop'
+  await cdp.send('ServiceWorker.stopWorker', { versionId: active.versionId })
+  await new Promise((r) => setTimeout(r, 3000))
+  return versionsSeen()
+}
+
+// What the page, the server and the browser hold when the reload never lands.
+async function describeReloadStall(page) {
+  return {
+    ...(await workerSummary(page)),
+    posted: await page.evaluate(() => window.__smokePosted),
+    console: consoleTail,
+    requestsInFlight: inFlight(),
+    serverInFlight: [...serverInFlight.values()],
+    versions: versionsSeen(),
+    afterStoppingActive: await stopActiveWorkerAndRead().catch(
+      (err) => `stop probe failed: ${err}`,
+    ),
+    // Whether the waiting worker honours a skip at all from this page: the
+    // same message the toast's path sends, posted directly, then its state.
+    afterDirectSkip: await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.getRegistration()
+      reg?.waiting?.postMessage({ type: 'SKIP_WAITING' })
+      await new Promise((r) => setTimeout(r, 3000))
+      const sw = (w) => (w ? { url: w.scriptURL, state: w.state } : null)
+      return {
+        waiting: sw(reg?.waiting),
+        active: sw(reg?.active),
+        firstDocument: window.__smokeFirstDocument,
+      }
+    }),
+  }
+}
+
 // Messaging the controller while it is being replaced is avoided on purpose:
 // the swap is observed through the document being replaced, and the version
 // is asked of the controller once the new document holds it.
 async function acceptUpdate(page, toast) {
   await page.evaluate(() => {
     window.__smokeFirstDocument = true
+    // Every message the page sends a worker, so a step that gives up can say
+    // whether the toast's Reload ever asked the waiting worker to skip.
+    window.__smokePosted = []
+    const post = ServiceWorker.prototype.postMessage
+    ServiceWorker.prototype.postMessage = function (...args) {
+      window.__smokePosted.push({ to: this.state, message: JSON.stringify(args[0]) })
+      return post.apply(this, args)
+    }
   })
-  await toast.getByRole('button', { name: 'Reload' }).click()
-  await until('the page to reload onto a controller', () =>
-    page.evaluate(
-      () =>
-        window.__smokeFirstDocument === undefined && navigator.serviceWorker.controller !== null,
-    ),
+  // Clicked through the DOM, which runs the same handler a person's click
+  // does. Not a Playwright locator click: on Chrome 154 with a starved CPU
+  // that left the OLD worker unable to go idle, so the waiting one's
+  // skipWaiting() sat out the browser's five-minute lame-duck ceiling — 3 of 8
+  // runs, while a DOM click, a DevTools mouse event and a driver other than
+  // Playwright each swapped in about a second every time.
+  await toast.getByRole('button', { name: 'Reload' }).evaluate((button) => button.click())
+  await until(
+    'the page to reload onto a controller',
+    () =>
+      page.evaluate(
+        () =>
+          window.__smokeFirstDocument === undefined && navigator.serviceWorker.controller !== null,
+      ),
+    () => describeReloadStall(page),
   )
   check(
     "the toast's Reload moves the page onto the new worker",
@@ -246,6 +385,10 @@ const browser = await chromium.launch({
 try {
   const origin = `http://127.0.0.1:${server.address().port}/`
   const page = await (await browser.newContext()).newPage()
+  tailConsole(page)
+  trackRequests(page)
+  await trackWorkerVersions(page)
+  console.log(`[smoke-pwa-lifecycle] ${browser.browserType().name()} ${browser.version()}`)
   await installAndControl(page, origin)
   const toast = await waitForUpdate(page)
   await acceptUpdate(page, toast)

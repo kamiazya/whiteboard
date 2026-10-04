@@ -63,7 +63,7 @@ export class NodeNotFoundError extends Error {
     public readonly documentId: string,
     public readonly nodeId: string,
   ) {
-    super(`node not found: ${nodeId} in canvas ${documentId}`)
+    super(`node not found: ${nodeId} in document ${documentId}`)
     this.name = 'NodeNotFoundError'
   }
 }
@@ -74,7 +74,7 @@ export class EdgeNotFoundError extends Error {
     public readonly documentId: string,
     public readonly edgeId: string,
   ) {
-    super(`edge not found: ${edgeId} in canvas ${documentId}`)
+    super(`edge not found: ${edgeId} in document ${documentId}`)
     this.name = 'EdgeNotFoundError'
   }
 }

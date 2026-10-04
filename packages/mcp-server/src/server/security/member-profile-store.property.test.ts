@@ -2,7 +2,7 @@
  * Model-based: `isWorkspaceMember(ws, p)` must equal whether the LAST
  * add/remove op on that exact (ws, p) pair was an add, for any interleaved
  * sequence touching a small pool of workspaces and profiles — and
- * `listMembers(ws)` must never disagree with that same model.
+ * `roles.list(ws)` must never disagree with that same model.
  *
  * `membersOnly(ws)` is a SEPARATE, monotone model: true iff at least one
  * `addMember(ws, ·)` ever ran, for any workspace in the pool — removing
@@ -66,7 +66,7 @@ describe('membership seam', () => {
   // 0.9-1.1 s at the same load with one migration. 200 runs would still fit,
   // but 60 covers the add/remove interleavings that matter.
   fcTest.prop([fc.array(opArb, { maxLength: 30 })], withDefaults({ numRuns: 60 }))(
-    'isWorkspaceMember and listMembers agree with whichever op ran last per (workspace, profile) pair',
+    'isWorkspaceMember and the roles list agree with whichever op ran last per (workspace, profile) pair',
     async (ops) => {
       // Fresh state per run: fast-check reuses this function body across
       // generated cases over the one database.
@@ -106,13 +106,13 @@ describe('membership seam', () => {
           expect(status).toBe(expected ? 'member' : 'not-a-member')
         }
 
-        const members = await store.listMembers(ws)
+        const members = await roles.list(ws)
         const expectedIds = new Set(
           PROFILE_KEYS.filter((p) => model.get(`${ws}/${p}`) === true).map(
             (p) => profileIds.get(p) as string,
           ),
         )
-        expect(new Set(members.map((m) => m.id))).toEqual(expectedIds)
+        expect(new Set(members.map((m) => m.profile.id))).toEqual(expectedIds)
 
         expect(await store.membersOnly(ws)).toBe(everAdded.has(ws))
       }

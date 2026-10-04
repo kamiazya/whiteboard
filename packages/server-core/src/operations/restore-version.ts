@@ -1,13 +1,13 @@
 import {
+  countSpatialNodes,
   projectWorkspaceDocument,
   readWorkspaceNodes,
   reconcileDocContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentPathSchema } from '@kamiazya/whiteboard-model'
+import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
-import { countAliveNodes } from '../document-counts.js'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
 
 export interface RestoreVersionInput {
@@ -182,7 +182,7 @@ async function restoreToTarget(
     return {
       kind: 'restored-to-target',
       targetPath,
-      elementCount: countAliveNodes(targetDoc),
+      elementCount: countSpatialNodes(targetDoc),
     }
   }
 
@@ -206,7 +206,7 @@ async function restoreToTarget(
   // this path being served instead of the just-written snapshot.
   live.evict(workspaceId, targetPath)
   await recordMerge(versions, workspaceId, targetPath, past, versionId)
-  return { kind: 'restored-to-target', targetPath, elementCount: countAliveNodes(past) }
+  return { kind: 'restored-to-target', targetPath, elementCount: countSpatialNodes(past) }
 }
 
 /** Mode 1: roll the document AND every descendant back together. */
@@ -219,7 +219,7 @@ async function restoreSubtree(
 
   const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
   if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
-  const inSubtree = (p: string) => p === path || p.startsWith(`${path}/`)
+  const inSubtree = (p: string) => isSelfOrDescendant(p, path)
   const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
     node.type === 'document' && inSubtree(node.path) ? [node] : [],
   )

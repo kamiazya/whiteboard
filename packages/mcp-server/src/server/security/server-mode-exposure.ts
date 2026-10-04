@@ -29,6 +29,7 @@
 
 import { isLoopbackHost } from '../../shared/loopback-host.js'
 import { canonicalizeOriginPatternEntry, parseOriginPatternEntry } from './origin-pattern.js'
+import { validateOriginEntry } from './origin-validation.js'
 
 function bracketIpv6(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
@@ -108,31 +109,19 @@ function localDaemonExposure(input: ServerModeExposureInput): ServerModeExposure
 /** The https origin the deployment is reached at, or why it is refused. */
 function externalOrigin(
   externalUrl: string | undefined,
-): { ok: true; parsed: URL } | ServerModeExposureDecision {
+): { ok: true; origin: string } | ServerModeExposureDecision {
   if (!externalUrl) return { ok: false, code: 'server_mode.external_url_required' }
-  let parsed: URL
-  try {
-    parsed = new URL(externalUrl)
-  } catch {
-    // Unparseable — not a valid https URL.
-    return { ok: false, code: 'server_mode.external_url_must_be_https' }
+  // The failure decision never echoes the raw URL — sensitive query/credential
+  // data must not reach operator logs.
+  const result = validateOriginEntry(externalUrl)
+  if (result.ok) return { ok: true, origin: result.origin }
+  return {
+    ok: false,
+    code:
+      result.reason === 'not_origin'
+        ? 'server_mode.external_url_must_be_origin'
+        : 'server_mode.external_url_must_be_https',
   }
-  if (parsed.protocol !== 'https:') {
-    return { ok: false, code: 'server_mode.external_url_must_be_https' }
-  }
-  // Origin-only contract: credentials, non-root path, query string, and
-  // fragment are all rejected. The raw URL is never echoed in the failure
-  // decision — sensitive query/credential data must not reach operator logs.
-  if (
-    parsed.username !== '' ||
-    parsed.password !== '' ||
-    parsed.pathname !== '/' ||
-    parsed.search !== '' ||
-    parsed.hash !== ''
-  ) {
-    return { ok: false, code: 'server_mode.external_url_must_be_origin' }
-  }
-  return { ok: true, parsed }
 }
 
 /**
@@ -170,8 +159,7 @@ function normalizedAllowedOrigins(
 
 function serverModeExposure(input: ServerModeExposureInput): ServerModeExposureDecision {
   const external = externalOrigin(input.externalUrl)
-  if (!('parsed' in external)) return external
-  const parsed = external.parsed
+  if (!('origin' in external)) return external
 
   const normalized = normalizedAllowedOrigins(input.allowedOrigins ?? [])
   if (!('origins' in normalized)) return normalized
@@ -180,10 +168,9 @@ function serverModeExposure(input: ServerModeExposureInput): ServerModeExposureD
   return {
     ok: true,
     kind: 'server-mode',
-    // `URL.origin` normalises scheme + host + port, stripping the trailing
-    // slash that `URL.href` would include — consistent with the Origin header
-    // format browsers send.
-    publicBaseUrl: parsed.origin,
+    // The validator's origin normalises scheme + host + port with no trailing
+    // slash — consistent with the Origin header format browsers send.
+    publicBaseUrl: external.origin,
     allowedOrigins: normalizedOrigins,
     trustedProxy: input.trustedProxy ?? false,
   }

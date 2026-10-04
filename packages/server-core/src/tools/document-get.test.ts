@@ -6,6 +6,7 @@ import {
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -14,7 +15,6 @@ import { createBodyEditTool } from './body-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool } from './document-get.js'
-import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { createThreadEditTool } from './thread-edit.js'
 
 /**

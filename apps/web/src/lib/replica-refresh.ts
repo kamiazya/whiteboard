@@ -20,7 +20,7 @@
 import { bytesToBase64, messageOf } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { listWorkspaces } from './daemon-api-client.js'
-import { findReplicaForHandle, withReplicaEntry } from './replicas.js'
+import { findReplicaForHandle, pulledReplicaFields, withReplicaEntry } from './replicas.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
 const log = getAppLogger('replica-refresh')
@@ -163,8 +163,7 @@ async function pullReplica(deps: ReplicaRefreshDeps, key: string): Promise<void>
     createUserSettingsStore().update((current) =>
       withReplicaEntry(current, canonical, {
         daemonBaseUrl: deps.daemonBaseUrl,
-        syncedAt: result.syncedAt,
-        syncedFrontier: result.syncedFrontier,
+        ...pulledReplicaFields(result),
         // Captured for OFFLINE lookup: a URL usually carries the segment, and
         // offline is when it cannot be resolved.
         ...(summary.segment === undefined ? {} : { segment: summary.segment }),

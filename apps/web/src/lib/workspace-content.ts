@@ -58,20 +58,74 @@ class DocumentContentUnreadableError extends Error {
  */
 export async function loadDocumentContent(
   documentId: string,
-  options: {
-    /**
-     * The legacy per-document store to fall back on. Injected by a surface
-     * that was handed one (a page's store double in a test); the default is
-     * the real one.
-     */
-    readonly loro?: LoroStoreLike
-    readonly dbName?: string
-  } = {},
+  options: ProjectOptions = {},
 ): Promise<LoroDoc | null> {
-  // Whether the TREE could be read is its own fact: a workspace that did not
-  // open says nothing about the document either, so "the legacy row has no
-  // record" must not become "no content" underneath it.
-  const tree = await treeProjection(documentId, options.dbName)
+  return projectDocumentContent(await openContentRecord(options.dbName), documentId, options)
+}
+
+interface ProjectOptions {
+  /**
+   * The legacy per-document store to fall back on. Injected by a surface
+   * that was handed one (a page's store double in a test); the default is
+   * the real one.
+   */
+  readonly loro?: LoroStoreLike
+  readonly dbName?: string
+}
+
+/**
+ * The workspace record as one read found it, AND whether it could be read at
+ * all — the distinction `projectDocumentContent` needs and its callers must
+ * not be given: a workspace that did not open says nothing about a document,
+ * so "the legacy row has no record" must not become "no content" beneath it.
+ */
+export interface ContentRecord {
+  readonly workspace: LoroDoc | null
+  readonly read: boolean
+}
+
+/**
+ * Opens the workspace record once. Total on purpose: a read that failed is
+ * `read: false`, never a throw.
+ *
+ * A walk over many documents opens it ONCE and projects each document from
+ * that value (`projectDocumentContent`): the record holds every document, so
+ * opening it per document made a cold list quadratic in the workspace.
+ */
+async function openContentRecord(dbName?: string): Promise<ContentRecord> {
+  try {
+    // Inside an async body, so the synchronous `getBrowserWorkspaceId` throw
+    // that `openWorkspaceOrNull` exists to absorb lands in this catch.
+    const workspace = await new BrowserWorkspaceDocs(dbName).open(getBrowserWorkspaceId())
+    return { workspace, read: true }
+  } catch {
+    return { workspace: null, read: false }
+  }
+}
+
+/**
+ * `openContentRecord`, deferred to the first document that needs it and
+ * shared after — so a walk whose every document is answered from a cache
+ * never opens the record at all.
+ */
+export function lazyContentRecord(dbName?: string): () => Promise<ContentRecord> {
+  let opened: Promise<ContentRecord> | undefined
+  return () => {
+    opened ??= openContentRecord(dbName)
+    return opened
+  }
+}
+
+/**
+ * `loadDocumentContent` over a record the caller already opened: the tree's
+ * projection first, the legacy record after, with the same verdicts.
+ */
+export async function projectDocumentContent(
+  record: ContentRecord,
+  documentId: string,
+  options: ProjectOptions = {},
+): Promise<LoroDoc | null> {
+  const tree = treeProjection(record, documentId)
   if (tree.doc !== null) return tree.doc
   const treeUnread = !tree.read
   const result = await (options.loro ?? new LoroStore(options.dbName)).load(documentId)
@@ -86,21 +140,16 @@ export async function loadDocumentContent(
   return doc
 }
 
-/**
- * The tree's answer AND whether the tree could be read at all — the
- * distinction `loadDocumentContent` needs and its callers must not be given.
- * Total on purpose: a read that failed is `read: false`, never a throw.
- */
-async function treeProjection(
+/** The tree's answer for one document; a projection that throws is a tree that could not be read. */
+function treeProjection(
+  record: ContentRecord,
   documentId: string,
-  dbName: string | undefined,
-): Promise<{ doc: LoroDoc | null; read: boolean }> {
+): { doc: LoroDoc | null; read: boolean } {
+  if (!record.read) return { doc: null, read: false }
   try {
-    // Inside an async body, so the synchronous `getBrowserWorkspaceId` throw
-    // that `openWorkspaceOrNull` exists to absorb lands in this catch.
-    const workspace = await new BrowserWorkspaceDocs(dbName).open(getBrowserWorkspaceId())
     return {
-      doc: workspace === null ? null : projectWorkspaceDocument(workspace, documentId),
+      doc:
+        record.workspace === null ? null : projectWorkspaceDocument(record.workspace, documentId),
       read: true,
     }
   } catch {

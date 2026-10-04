@@ -174,8 +174,14 @@ describe('DaemonDocumentPage versions', () => {
         ).toBe(true)
       })
       // The announcement itself, by its role: a loose /saved/i also matches
-      // the empty-state copy beside it, which says what a checkpoint does.
-      await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Bookmark saved'))
+      // the empty-state copy beside it, which says what a checkpoint does. The
+      // page mounts its other live regions empty (the restore lock's, say), so
+      // the one that speaks is picked out by what it says.
+      await waitFor(() =>
+        expect(screen.getAllByRole('status').map((el) => el.textContent)).toContain(
+          'Bookmark saved',
+        ),
+      )
 
       vi.unstubAllGlobals()
     })

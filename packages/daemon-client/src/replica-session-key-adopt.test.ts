@@ -70,6 +70,14 @@ describe('adoptSessionKey', () => {
     expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'held', tier: 'offline' })
   })
 
+  it('keeps the key id a wrapped response carried, so an unlocked copy can be compared with the one it was sealed under', () => {
+    const keyId = base64Url(Uint8Array.from({ length: 16 }, (_, i) => 0x50 + i))
+
+    adoptSessionKey(DAEMON, WORKSPACE, { ...RESPONSE, keyId })
+
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'held', tier: 'offline', keyId })
+  })
+
   it('refuses a lease that has already expired rather than holding a dead key', () => {
     // A `bounded` blob that outlived its lease is the ordinary case after a
     // laptop sleeps: adopting it would hold bytes every read then rejects.

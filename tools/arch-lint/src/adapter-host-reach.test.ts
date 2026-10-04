@@ -77,6 +77,25 @@ describe('what counts as host reach', () => {
     expect(kindsOf(source)).toEqual(kinds)
   })
 
+  it('reads an assignment pattern whatever else it holds: a spread, a quoted key, other keys first', () => {
+    expect(kindsOf('let env, rest\n;({ ...rest, env } = process)\nexport const x = env')).toEqual([
+      'process.env',
+    ])
+    expect(kindsOf("let vars\n;({ 'env': vars } = process)\nexport const x = vars")).toEqual([
+      'process.env',
+    ])
+    expect(kindsOf('let cwd, env\n;({ cwd, env } = process)\nexport const x = [cwd, env]')).toEqual(
+      ['process.env'],
+    )
+    expect(kindsOf('let rest\n;({ ...rest } = process)\nexport const x = rest')).toEqual([])
+  })
+
+  it('reads a quoted key in a declaration pattern', () => {
+    expect(kindsOf("const { 'env': vars } = process\nexport const x = vars")).toEqual([
+      'process.env',
+    ])
+  })
+
   it("does not take another object's env for the process environment", () => {
     expect(
       kindsOf(

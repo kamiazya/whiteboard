@@ -156,3 +156,36 @@ describe('scanSourceForBoundaryViolations', () => {
     expect(violationKinds("import { z } from 'zod'\nexport const x = z.string()")).toHaveLength(0)
   })
 })
+
+describe('scanSourceForBoundaryViolations — edges the other cases do not reach', () => {
+  it('flags a node: builtin that has no bare spelling', () => {
+    expect(violationKinds("import { DatabaseSync } from 'node:sqlite'")).toContain(
+      'node-builtin-import',
+    )
+    expect(violationKinds("import test from 'node:test'")).toContain('node-builtin-import')
+  })
+
+  it('does not take a package that merely ends in node: for a builtin', () => {
+    expect(violationKinds("import x from 'not-node:'")).toEqual([])
+  })
+
+  it('an empty named import still evaluates its module, so it is a value edge', () => {
+    expect(violationKinds("import {} from 'node:fs'")).toContain('node-builtin-import')
+    expect(violationKinds("export {} from 'node:fs'")).toContain('node-builtin-import')
+  })
+
+  it('a mixed import is a value edge: one type-only binding does not exempt the rest', () => {
+    expect(violationKinds("import { type A, readFileSync } from 'node:fs'")).toContain(
+      'node-builtin-import',
+    )
+    expect(violationKinds("export { type A, readFileSync } from 'node:fs'")).toContain(
+      'node-builtin-import',
+    )
+  })
+
+  it('reports the 1-based line a banned global is read on', () => {
+    const source = ['const a = 1', '', 'const b = window.location', 'const c = 2'].join('\n')
+    const found = scanSourceForBoundaryViolations('fixture.ts', source)
+    expect(found.map((v) => [v.name, v.line])).toEqual([['window', 3]])
+  })
+})

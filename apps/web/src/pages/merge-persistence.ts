@@ -9,9 +9,9 @@ import type { BrowserPersistenceState } from '../lib/browser-persistence-state.j
  *
  * The rule follows from what the indicator promises — "your work is safe
  * here". It may only say that when BOTH writers agree, because the one that
- * is behind is precisely the one holding unsaved work. The page previously
- * showed the controller's state alone, which never moves for a body edit, so
- * the chip read `Saved` over text that had not been written: measured at
+ * is behind is precisely the one holding unsaved work. The controller's
+ * state alone never moves for a body edit, so reading it by itself shows
+ * `Saved` over text that has not been written: measured at
  * `saved / null / "Saved"` three seconds (six debounce periods) after typing.
  */
 

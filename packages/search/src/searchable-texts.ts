@@ -10,7 +10,7 @@ import {
 
 /** A document's content, as much of it as search needs to see. */
 export type SearchableContent =
-  | { readonly kind: 'markdown'; readonly body: string }
+  | { readonly kind: 'markdown'; readonly body: string; readonly description?: string }
   | { readonly kind: 'spatial'; readonly canvas: SpatialCanvas }
 
 /**
@@ -64,7 +64,15 @@ const SEARCHABLE = {
 } satisfies Record<NodeKind, (node: SpatialNode) => string | undefined>
 
 export function searchableTexts(content: SearchableContent): string[] {
-  if (content.kind === 'markdown') return [content.body]
+  if (content.kind === 'markdown') {
+    // OKF's `description` is the document's own summary and is what a snippet
+    // quotes (§4.1). It leads, so a long body that overflows the embedder's
+    // window still leaves the summary inside it.
+    const { description } = content
+    return description === undefined || description === ''
+      ? [content.body]
+      : [description, content.body]
+  }
   const texts: string[] = []
   for (const node of content.canvas.nodes) {
     // A node showing a resource nothing in the registry claims contributes

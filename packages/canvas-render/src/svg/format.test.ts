@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref, trustedHref } from './format.js'
+import { formatCoord, sanitizeHref, trustedHref } from './format.js'
 
 describe('formatCoord', () => {
   it('rounds to the fixed decimal precision and strips trailing zeros', () => {
@@ -37,31 +37,6 @@ describe('formatCoord', () => {
   it('does not use locale-dependent formatting for large numbers', () => {
     // toLocaleString would insert a thousands separator in en-US.
     expect(formatCoord(1234.5)).toBe('1234.5')
-  })
-})
-
-describe('escapeXmlText', () => {
-  it('escapes & < > in text content', () => {
-    expect(escapeXmlText('a & b < c > d')).toBe('a &amp; b &lt; c &gt; d')
-  })
-
-  it('strips XML-forbidden control characters', () => {
-    // XML 1.0 permits only #x9, #xA, #xD, and #x20-... among C0 controls.
-    expect(escapeXmlText('a\x00b\x01c\x08d')).toBe('abcd')
-    expect(escapeXmlText('keep\ttab\nand\rreturn')).toBe('keep\ttab\nand\rreturn')
-  })
-
-  it('strips lone (unpaired) surrogates', () => {
-    expect(escapeXmlText('a\uD800b')).toBe('ab')
-    expect(escapeXmlText('a\uDC00b')).toBe('ab')
-    // A valid surrogate pair (an astral character) is preserved.
-    expect(escapeXmlText('a😀b')).toBe('a😀b')
-  })
-
-  it('strips the XML noncharacters U+FFFE and U+FFFF', () => {
-    // XML 1.0 forbids these noncharacters; leaving them in would let
-    // escapeXmlText emit malformed XML.
-    expect(escapeXmlText('a￾b￿c')).toBe('abc')
   })
 })
 
@@ -117,19 +92,5 @@ describe('trustedHref', () => {
     // to read, and the only thing standing between that and a released SVG.
     expect(trustedHref('#node-01H')).toBe('#node-01H')
     expect(trustedHref('')).toBe('')
-  })
-})
-
-describe('escapeXmlAttr', () => {
-  it('escapes & < > " \' in attribute values', () => {
-    expect(escapeXmlAttr(`a & "b" < 'c' >`)).toBe('a &amp; &quot;b&quot; &lt; &apos;c&apos; &gt;')
-  })
-
-  it('strips XML-forbidden control characters and lone surrogates', () => {
-    expect(escapeXmlAttr('a\x00\uD800b')).toBe('ab')
-  })
-
-  it('strips the XML noncharacters U+FFFE and U+FFFF', () => {
-    expect(escapeXmlAttr('a￾b￿c')).toBe('abc')
   })
 })

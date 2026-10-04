@@ -42,6 +42,10 @@ export const MUTATED = [
   'src/tags/declared-colours.ts',
   // Serialization: escaping and character legality, byte-identical output.
   'src/svg/format.ts',
+  // The escaping half of the above, split out so `layout/` and `svg/` both
+  // reach it without either importing the other. Still in the lane: leaving it
+  // out would shrink what the lane sees of serialization.
+  'src/xml-escape.ts',
   'src/svg/hoist.ts',
   // Pure geometry and derivation with properties of their own.
   'src/scene-bounds.ts',

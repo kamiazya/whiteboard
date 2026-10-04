@@ -1,9 +1,10 @@
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { viewportRequestParamsSchema } from '../viewport-request.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { DocumentKindMismatchError } from './errors.js'
+import { DocumentKindMismatchError, NodeNotFoundError } from './errors.js'
 
 // The routing keys first, then the shared params by their one declaration —
 // written as a shape spread rather than `.extend`, so the keys a model reads
@@ -21,12 +22,15 @@ const viewportSetOutputSchema = z
   .object({
     documentId: documentIdSchema,
     /**
-     * Whether a browser was actually watching. A headless daemon is the
-     * normal case rather than an error, so this is a reported fact and not
-     * a thrown one — an agent that could not tell the difference would read
-     * every headless run as broken.
+     * Whether a browser was actually watching, and so was TOLD. The page sends
+     * no acknowledgement, so this is not "the view moved". A headless daemon
+     * is the normal case rather than an error, so this is a reported fact and
+     * not a thrown one — an agent that could not tell the difference would
+     * read every headless run as broken.
      */
-    delivered: z.boolean(),
+    delivered: z
+      .boolean()
+      .describe('True when a subscribed browser was sent the request; the page does not confirm.'),
   })
   .strict()
 type ViewportSetOutput = z.infer<typeof viewportSetOutputSchema>
@@ -47,7 +51,7 @@ export function createViewportSetTool(deps: ServerDeps) {
   return {
     name: 'wb_viewport_set' as const,
     description:
-      "Move a watching browser's view of a spatial canvas: frame specific elements, or pan and zoom directly. Answers delivered:false rather than failing when no browser is open, so it is safe to call headlessly. wb_canvas_edit already follows its own edits — use this to point at something you did not just change.",
+      "Move a watching browser's view of a spatial canvas: frame specific elements, or pan and zoom directly. Answers delivered:false rather than failing when no browser is open, so it is safe to call headlessly; delivered:true means a browser was told, not that it confirmed. wb_canvas_edit already follows its own edits — use this to point at something you did not just change.",
     inputSchema: viewportSetInputSchema,
     outputSchema: viewportSetOutputSchema,
     async execute(input: ViewportSetInput): Promise<ViewportSetOutput> {
@@ -64,6 +68,16 @@ export function createViewportSetTool(deps: ServerDeps) {
           entry.kind,
           'wb_viewport_set moves the view of a spatial canvas, and a markdown document has none.',
         )
+      }
+
+      // Before the notifier is consulted: with no browser open a typo'd id
+      // would otherwise read exactly like a correct one, and with one open it
+      // would frame nothing and still be reported delivered.
+      if (input.elementIds !== undefined && input.elementIds.length > 0) {
+        const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+        const present = new Set(canvas.nodes.map((node) => node.id))
+        const missing = input.elementIds.find((id) => !present.has(id))
+        if (missing !== undefined) throw new NodeNotFoundError(input.documentId, missing)
       }
 
       const notifier = deps.clientNotifier

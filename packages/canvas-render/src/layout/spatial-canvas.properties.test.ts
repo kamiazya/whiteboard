@@ -10,7 +10,7 @@ import { renderSceneToSvg } from '../svg/backend.js'
 import { facetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import {
   layoutSpatialCanvas,
   layoutSpatialEdges,

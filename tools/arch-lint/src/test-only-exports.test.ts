@@ -99,7 +99,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/sealed-document-store.ts#encodeEnvelope',
   'apps/web/src/lib/seen-documents.ts#recordSeen',
   'apps/web/src/lib/spatial/freehand.ts#simplifyStroke',
-  'apps/web/src/lib/spatial/viewport.ts#clampZoom',
   'apps/web/src/lib/theme-fonts.ts#loadedThemeFaces',
   'apps/web/src/lib/theme-fonts.ts#themeFontFamilies',
   'apps/web/src/lib/user-settings-store.ts#defaultUserSettings',
@@ -280,9 +279,9 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/codec/src/markdown/normalize.ts#normalizeMdast':
     'the equivalence the markdown round-trip contract is stated modulo, read by the codec and editor round-trip properties and named in package-codec.md',
   'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody':
-    'the inverse half of parseMarkdownBody that the markdown round-trip properties hold the codec to, documented as the pipeline scope in package-codec.md',
+    'the writer half of the markdown pipeline: held to parseMarkdownBody by the round-trip properties, and to the reference syntax the reader recognises by reference-writer.property.test.ts, ready for the bundle export that has no caller yet',
   'packages/codec/src/references/resolve-for-export.ts#resolveReferencesForExport':
-    'the export seam ADR-0017 decision 2 holds ready for the bundle export, waiting only on an injected resolver',
+    'the export seam ADR-0017 decision 2 holds ready for the bundle export: it emits link and image nodes that stringifyMarkdownBody writes as links, waiting only on an injected resolver',
   'packages/codec/src/spatial/codecs.ts#foreignRoundTrip':
     'the foreign-reader trip of the codec registry that codecs.property.test.ts checks every projection ledger against',
   'packages/codec/src/spatial/json-schema.ts#xWhiteboardJsonSchema':
@@ -354,7 +353,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 156
+const DEBT_CEILING = 155
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 25

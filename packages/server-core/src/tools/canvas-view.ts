@@ -16,10 +16,10 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadDocument } from '../document-io.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadDocument } from './document-io.js'
 
 export const canvasViewInputSchema = z
   .object({

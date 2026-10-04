@@ -10,7 +10,10 @@ tokens with server JWT authentication.
 > **The browser UI signs people in and opens their workspaces.** The image
 > carries the web app and serves it from the server's own address. People sign
 > in there, see the workspaces they are members of, and open one to read and
-> edit its documents; the browser keeps no copy of them. MCP clients use
+> edit its documents; the browser keeps no copy of them. A signed-in person
+> makes a new workspace with **New workspace** on the workspaces page, which is
+> where a fresh server's first person starts, and becomes its first member and
+> owner. MCP clients use
 > `/mcp`, and the HTTP API is under `/api`. A server run without the web build
 > (from source, say) answers the root URL with a placeholder page instead.
 >
@@ -523,15 +526,15 @@ volume has the correct ownership if you pre-populate it.
 
 ### Reclaiming unreferenced uploads
 
-Once a day the server deletes uploaded images that no live document, branch
-tip or saved version points at any more. Two settings govern it, both in
+Once a day the server deletes uploaded images that no live document, trashed
+document or saved version points at any more. Two settings govern it, both in
 [Configuration](../reference/configuration.md):
 `WHITEBOARD_FILE_GC_INTERVAL_MS` (how often, `0` to switch it off) and
 `WHITEBOARD_FILE_GC_GRACE_MS` (how old an unreferenced file must be — this is
 what protects an upload in the gap before the save that references it lands).
 
-This ran only in the local daemon until 2026-08-30, so a server-mode volume
-that has been running for a while will shed some space on its first pass.
+A server-mode volume that has been running for a while will shed some space on
+its first pass.
 
 Running more than one instance needs no configuration for this either, and
 unlike the backup there is no lease: every instance sweeps. Each pass reads

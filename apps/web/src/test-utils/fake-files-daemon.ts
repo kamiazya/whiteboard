@@ -40,9 +40,11 @@ interface Trashed {
 interface State {
   rows: Row[]
   trash: Trashed[]
+  /** Pinned document ids in pin order, so a pin survives a rename the way it does on the daemon. */
+  pinned: string[]
   counter: number
 }
-type Body = Record<string, string | undefined>
+type Body = Record<string, string | boolean | undefined>
 type Handler = (state: State, match: RegExpMatchArray, body: Body) => Response
 
 const notFound = () => jsonResponse({ title: 'Not found' }, 404)
@@ -89,6 +91,26 @@ function renameSubtree(state: State, from: string, to: string): void {
   )
 }
 
+function setPinned(state: State, path: string, pinned: boolean): Response {
+  const row = state.rows.find((candidate) => candidate.path === path)
+  if (row === undefined) return notFound()
+  if (!pinned) state.pinned = state.pinned.filter((id) => id !== row.id)
+  else if (!state.pinned.includes(row.id)) state.pinned = [...state.pinned, row.id]
+  return jsonResponse(namesAnswer(state))
+}
+
+/** The names route's answer: pinned documents as paths, in pin order. */
+function namesAnswer(state: State) {
+  const pathOf = new Map(state.rows.map((row) => [row.id, row.path]))
+  return {
+    documents: {},
+    pinned: state.pinned.flatMap((id) => {
+      const path = pathOf.get(id)
+      return path === undefined ? [] : [path]
+    }),
+  }
+}
+
 function setName(state: State, path: string, name: string | undefined): void {
   state.rows = state.rows.map((row) => {
     if (row.path !== path) return row
@@ -125,7 +147,10 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
     handle: (state, _match, body) => {
       const id = nextId(state)
       const row = { id, path: String(body.path), kind: body.kind as Row['kind'] }
-      state.rows = [...state.rows, body.name === undefined ? row : { ...row, name: body.name }]
+      state.rows = [
+        ...state.rows,
+        typeof body.name === 'string' ? { ...row, name: body.name } : row,
+      ]
       return jsonResponse({ workspaceId: 'ws', documentId: id, path: body.path }, 201)
     },
   },
@@ -141,9 +166,14 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
     method: 'PUT',
     pattern: /\/documents\/(.+)\/name$/,
     handle: (state, match, body) => {
-      setName(state, match[1] ?? '', body.name)
-      return jsonResponse({ documents: {}, pinned: [] })
+      setName(state, match[1] ?? '', typeof body.name === 'string' ? body.name : undefined)
+      return jsonResponse(namesAnswer(state))
     },
+  },
+  {
+    method: 'PUT',
+    pattern: /\/documents\/(.+)\/pin$/,
+    handle: (state, match, body) => setPinned(state, match[1] ?? '', body.pinned === true),
   },
   {
     method: 'GET',
@@ -167,7 +197,7 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
   {
     method: 'GET',
     pattern: /\/names$/,
-    handle: () => jsonResponse({ documents: {}, pinned: [] }),
+    handle: (state) => jsonResponse(namesAnswer(state)),
   },
   {
     method: 'GET',
@@ -192,7 +222,7 @@ export function createFakeFilesDaemon(seed: {
   readonly rows: readonly FakeFilesDaemonRow[]
   readonly trashed: readonly Pick<FakeFilesDaemonRow, 'path' | 'kind'>[]
 }): typeof globalThis.fetch {
-  const state: State = { rows: [], trash: [], counter: 0 }
+  const state: State = { rows: [], trash: [], pinned: [], counter: 0 }
   state.rows = seed.rows.map((row) => ({ ...row, id: nextId(state) }))
   state.trash = seed.trashed.map((row) => ({ ...row, id: nextId(state), deletedAt: 1_700_000 }))
 

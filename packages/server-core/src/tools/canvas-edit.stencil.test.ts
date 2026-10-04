@@ -21,6 +21,7 @@ import {
   visualPlugin,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -28,7 +29,6 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
-import { loadDocument } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -400,6 +400,34 @@ describe('a workspace\u2019s own stencil library', () => {
     await createCanvasEditTool(deps).execute(input as never)
 
     expect(listings).toBe(0)
+  })
+
+  test('a stencil the library holds badly costs only itself: the others still dress a box', async () => {
+    // Planted below the write path, as a synced or hand-edited library can
+    // be. The registry refuses a stencil whose facet payload its plugin
+    // rejects, and composing it whole used to put EVERY stencil write in the
+    // workspace behind that one entry, the bundled six included.
+    const library = {
+      'visual.stencils/v0': {
+        stencils: {
+          bucket: {
+            displayName: 'Bucket',
+            color: '2',
+            facets: { 'visual.shape/v0': { kind: 'cylinder' } },
+          },
+          worse: { displayName: 'W', facets: { 'visual.shape/v0': { kind: 'blob' } } },
+        },
+      },
+    }
+    const own = await runWithLibrary(library, addWearing('workspace.bucket'))
+    expect(resolveNodeShape(own.canvas.nodes.find((n) => n.id === 'b') as never)).toBe('cylinder')
+    const bundled = await runWithLibrary(library, addWearing('visual.datastore'))
+    expect(resolveNodeShape(bundled.canvas.nodes.find((n) => n.id === 'b') as never)).toBe(
+      'cylinder',
+    )
+    await expect(runWithLibrary(library, addWearing('workspace.worse'))).rejects.toThrow(
+      /workspace\.bucket/,
+    )
   })
 
   test('leaves the bundled vocabulary working beside it', async () => {

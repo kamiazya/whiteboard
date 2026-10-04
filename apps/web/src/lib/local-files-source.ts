@@ -20,7 +20,11 @@ import {
   STENCIL_LIBRARY_PATH,
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-plugin-visual'
-import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  type DocumentIndex,
+  hasDocumentPins,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
   fullTextSearch,
@@ -43,13 +47,81 @@ import {
 } from './local-document-summary.js'
 import { createTagBearersCache } from './local-files-source-tags.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
-import { loadDocumentContent } from './workspace-content.js'
+import {
+  type ContentRecord,
+  lazyContentRecord,
+  loadDocumentContent,
+  projectDocumentContent,
+} from './workspace-content.js'
 
 /** One document read from the store, with its content already read as the half its kind names. */
 interface LoadedDocument {
   documentId: string
   doc: LoroDoc
   content: DocumentContent
+}
+
+type ReadableEntry = { documentId: string; path: string; kind?: DocumentKind }
+
+/**
+ * One document's current content. A walk passes the workspace record it
+ * opened once, so N documents cost one open; a lone read opens its own.
+ */
+async function loadCurrentDocFrom(
+  loro: LoroStoreLike,
+  entry: WorkspaceDocumentEntry,
+  record?: () => Promise<ContentRecord>,
+): Promise<LoroDoc> {
+  const doc =
+    record === undefined
+      ? await loadDocumentContent(entry.documentId, { loro })
+      : await projectDocumentContent(await record(), entry.documentId, { loro })
+  if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
+  return doc
+}
+
+/**
+ * Every document's content, read and its KIND resolved, skipping what this
+ * build cannot read.
+ *
+ * Four methods here each wrote this walk out — list, load, branch on
+ * markdown vs spatial — and the branch is the one place the two stop being
+ * interchangeable, so `readDocumentContent` makes it: the document's own
+ * recorded kind, the index row's after it, and a canvas for a document that
+ * names neither. Skipping rather than failing is the rule everywhere it
+ * appears, and for one reason: a rename that repairs nine references of ten
+ * beats one that repairs none, and a panel that lists a tagless row beats
+ * one that does not open.
+ *
+ * The workspace record is opened once for the walk, and only if a document is
+ * read at all.
+ */
+async function* readDocumentsFrom(
+  loro: LoroStoreLike,
+  entries: readonly ReadableEntry[],
+): AsyncGenerator<LoadedDocument> {
+  const record = lazyContentRecord()
+  for (const entry of entries) {
+    let doc: LoroDoc
+    try {
+      doc = await loadCurrentDocFrom(
+        loro,
+        { documentId: entry.documentId, path: entry.path },
+        record,
+      )
+    } catch {
+      continue
+    }
+    let content: DocumentContent
+    try {
+      content = readDocumentContent(doc, entry.kind)
+    } catch {
+      // A canvas this build cannot parse is the same miss as an unreadable
+      // document: it carries nothing anyone here can read.
+      continue
+    }
+    yield { documentId: entry.documentId, doc, content }
+  }
 }
 
 /**
@@ -91,6 +163,69 @@ async function readLibrary<T>(
     return read(readFacets(await load(library)))
   } catch {
     return read(undefined)
+  }
+}
+
+/**
+ * Each pinned document's position in the pinned list, which IS its `pinOrder`
+ * — the same reading the daemon source takes of its names route. An index
+ * that keeps no pinned list lists everything unpinned.
+ */
+async function readPinOrder(index: DocumentIndex): Promise<ReadonlyMap<string, number>> {
+  if (!hasDocumentPins(index)) return new Map()
+  const pinned = await index.listPinnedDocuments({ workspaceId: getBrowserWorkspaceId() })
+  return new Map(pinned.map((documentId, position) => [documentId, position]))
+}
+
+/**
+ * Present exactly when the index keeps a pinned list, so a keeper that cannot
+ * pin omits the member rather than offering a pin that cannot persist. The
+ * seam names a path; the index pins an id.
+ */
+function pinMembers(index: DocumentIndex): Pick<WorkspaceFilesSource, 'setPinned'> {
+  if (!hasDocumentPins(index)) return {}
+  return {
+    async setPinned(entry, pinned) {
+      const workspaceId = getBrowserWorkspaceId()
+      const resolved = await index.resolveDocument({ workspaceId, path: entry.path })
+      if (resolved === null) throw new Error(`No document at "${entry.path}" to pin`)
+      await index.setDocumentPinned({ workspaceId, documentId: resolved.documentId, pinned })
+    },
+  }
+}
+
+/**
+ * Present exactly when the index keeps a trash (the tree index does; the port
+ * does not promise one). Structural rather than instanceof, for the same
+ * cross-realm reason ports' isWorkspaceNotFoundError exists.
+ */
+function trashMembers(
+  index: DocumentIndex,
+): Pick<WorkspaceFilesSource, 'listTrash' | 'restoreFromTrash'> {
+  if (!('listTrash' in index && 'restoreDocument' in index)) return {}
+  const folding = index as FoldingBrowserIndex
+  return {
+    async listTrash() {
+      const rows = await folding.listTrash({ workspaceId: getBrowserWorkspaceId() })
+      return rows.map((row) => ({
+        documentId: row.documentId,
+        path: row.path,
+        deletedAt: row.deletedAt,
+      }))
+    },
+    async restoreFromTrash(documentId) {
+      const restored = await folding.restoreDocument({
+        workspaceId: getBrowserWorkspaceId(),
+        documentId,
+      })
+      // null means nothing came back — surfacing it is what lets the
+      // section show its restore error instead of silently reloading
+      // with the row still there. The daemon path already rejects here
+      // (its route answers 404); the two keepers must agree.
+      if (restored === null) {
+        throw new Error(`Nothing restorable for "${documentId}"`)
+      }
+    },
   }
 }
 
@@ -177,46 +312,9 @@ export function createLocalFilesSource(
     }
   }
 
-  async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<LoroDoc> {
-    const doc = await loadDocumentContent(entry.documentId, { loro })
-    if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
-    return doc
-  }
-
-  /**
-   * Every document's content, read and its KIND resolved, skipping what this
-   * build cannot read.
-   *
-   * Four methods here each wrote this walk out — list, load, branch on
-   * markdown vs spatial — and the branch is the one place the two stop being
-   * interchangeable, so `readDocumentContent` makes it: the document's own
-   * recorded kind, the index row's after it, and a canvas for a document that
-   * names neither. Skipping rather than failing is the rule everywhere it
-   * appears, and for one reason: a rename that repairs nine references of ten
-   * beats one that repairs none, and a panel that lists a tagless row beats
-   * one that does not open.
-   */
-  async function* readableDocuments(
-    entries: readonly { documentId: string; path: string; kind?: DocumentKind }[],
-  ): AsyncGenerator<LoadedDocument> {
-    for (const entry of entries) {
-      let doc: LoroDoc
-      try {
-        doc = await loadCurrentDoc({ documentId: entry.documentId, path: entry.path })
-      } catch {
-        continue
-      }
-      let content: DocumentContent
-      try {
-        content = readDocumentContent(doc, entry.kind)
-      } catch {
-        // A canvas this build cannot parse is the same miss as an unreadable
-        // document: it carries nothing anyone here can read.
-        continue
-      }
-      yield { documentId: entry.documentId, doc, content }
-    }
-  }
+  const loadCurrentDoc = (entry: WorkspaceDocumentEntry, record?: () => Promise<ContentRecord>) =>
+    loadCurrentDocFrom(loro, entry, record)
+  const readableDocuments = (entries: readonly ReadableEntry[]) => readDocumentsFrom(loro, entries)
 
   const bearersByDocument = createTagBearersCache(readableDocuments)
 
@@ -233,12 +331,15 @@ export function createLocalFilesSource(
    * than dropping out of results entirely, and that miss is NOT cached —
    * the next search should try the document again.
    */
-  async function searchableTextsFor(entry: WorkspaceDocumentEntry): Promise<string[]> {
+  async function searchableTextsFor(
+    entry: WorkspaceDocumentEntry,
+    record: () => Promise<ContentRecord>,
+  ): Promise<string[]> {
     const stamp = entry.updatedAt ?? ''
     const cached = corpus.get(entry.documentId)
     if (cached !== undefined && cached.stamp === stamp) return cached.texts
     try {
-      const doc = await loadCurrentDoc(entry)
+      const doc = await loadCurrentDoc(entry, record)
       const texts = searchableTexts(readDocumentContent(doc, entry.kind))
       corpus.set(entry.documentId, { stamp, texts })
       return texts
@@ -273,6 +374,7 @@ export function createLocalFilesSource(
         throw err
       }
       if (entries.length === 0) return []
+      const pinOrderById = await readPinOrder(index)
       const stamps = await clock(entries.map((entry) => entry.documentId))
       // Tags for search and the filter chips: the local spelling of the
       // daemon's tag projection. A board's own tags are the document's
@@ -296,6 +398,7 @@ export function createLocalFilesSource(
         ...optional('carriedTags', carriedById.get(entry.documentId)),
         ...optional('updatedAt', stamps.get(entry.documentId)),
         ...optional('contentDigest', entry.contentDigest),
+        ...optional('pinOrder', pinOrderById.get(entry.documentId)),
       }))
     },
 
@@ -342,12 +445,13 @@ export function createLocalFilesSource(
       if (query.trim() === '') return []
       const entries = await this.listDocuments()
       const searchable: SearchableDocument[] = []
+      const record = lazyContentRecord()
       for (const entry of entries) {
         searchable.push({
           documentId: entry.documentId,
           path: entry.path,
           ...optional('name', entry.name),
-          texts: await searchableTextsFor(entry),
+          texts: await searchableTextsFor(entry, record),
         })
       }
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
@@ -400,35 +504,7 @@ export function createLocalFilesSource(
       return (await loadCurrentDoc(entry)).export({ mode: 'snapshot' })
     },
 
-    // Present exactly when the index keeps a trash (the tree index does; the
-    // port does not promise one). Structural rather than instanceof, for the
-    // same cross-realm reason ports' isWorkspaceNotFoundError exists.
-    ...('listTrash' in index && 'restoreDocument' in index
-      ? {
-          async listTrash() {
-            const rows = await (index as FoldingBrowserIndex).listTrash({
-              workspaceId: getBrowserWorkspaceId(),
-            })
-            return rows.map((row) => ({
-              documentId: row.documentId,
-              path: row.path,
-              deletedAt: row.deletedAt,
-            }))
-          },
-          async restoreFromTrash(documentId: string) {
-            const restored = await (index as FoldingBrowserIndex).restoreDocument({
-              workspaceId: getBrowserWorkspaceId(),
-              documentId,
-            })
-            // null means nothing came back — surfacing it is what lets the
-            // section show its restore error instead of silently reloading
-            // with the row still there. The daemon path already rejects here
-            // (its route answers 404); the two keepers must agree.
-            if (restored === null) {
-              throw new Error(`Nothing restorable for "${documentId}"`)
-            }
-          },
-        }
-      : {}),
+    ...pinMembers(index),
+    ...trashMembers(index),
   }
 }

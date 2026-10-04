@@ -255,6 +255,8 @@ export interface SpatialEditorProps {
    * selects nothing, and the caller clears it on its own schedule.
    */
   readonly agentTouchedNodeIds?: ReadonlySet<string>
+  /** Edge ids an agent just changed, outlined on the same terms as the nodes. */
+  readonly agentTouchedEdgeIds?: ReadonlySet<string>
   /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (canvas id minted in the browser,
@@ -391,6 +393,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedNodeIds,
       lockedEdgeIds,
       agentTouchedNodeIds,
+      agentTouchedEdgeIds,
       onToggleEdgeLock,
       onToggleNodeLock,
       onOpenInEditor,
@@ -1718,6 +1721,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           members={isMultiSelection ? selectionMembers : undefined}
           edgePaths={edgePaths}
           agentTouchedNodeIds={agentTouchedNodeIds}
+          agentTouchedEdgeIds={agentTouchedEdgeIds}
         />
         {selectionAndEditorLayers()}
       </div>

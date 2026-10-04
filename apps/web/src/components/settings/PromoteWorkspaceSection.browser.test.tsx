@@ -241,7 +241,6 @@ describe('PromoteWorkspaceSection', () => {
     )
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
     const confirm = await screen.findByTestId('promote-confirm')
-    expect(screen.queryByTestId('promote-passkey')).toBeNull()
     await userEvent.click(confirm)
     const result = await screen.findByTestId('promote-last-result')
     expect(result.textContent).toMatch(/moved 2 documents/i)

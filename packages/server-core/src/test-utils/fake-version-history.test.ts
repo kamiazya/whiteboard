@@ -25,6 +25,18 @@ const ATTESTATION: Attestation = {
 }
 
 describe('FakeVersionHistory', () => {
+  test('the port takes no branchName: a keeper has one lane of history', async () => {
+    const history = new FakeVersionHistory()
+
+    const entry = await history.save('ws', 'notes/plan', docWithNodes(1), {
+      auto: false,
+      // @ts-expect-error the port's save options no longer name a branch
+      branchName: 'wide-layout',
+    })
+
+    expect(entry.branchName).toBeUndefined()
+  })
+
   test('a saved row carries the live element count and the attestation it was given', async () => {
     const history = new FakeVersionHistory()
 

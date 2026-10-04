@@ -6,7 +6,7 @@ import {
 } from '@kamiazya/whiteboard-reference-graph'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { LoroStoreLike } from './loro-store.js'
-import { loadDocumentContent } from './workspace-content.js'
+import { lazyContentRecord, projectDocumentContent } from './workspace-content.js'
 
 /**
  * The browser keeper's answer to "what links here": the reference graph the
@@ -29,12 +29,18 @@ export function browserBacklinksReader(
   backlinks: BacklinkEntry[]
   unlinkedMentions: BacklinkEntry[]
 }> {
+  // One workspace-record open per ask, shared by every document that ask
+  // reads: the record holds them all, so a cold build would otherwise reopen
+  // it once per document.
+  let record = lazyContentRecord()
   const cache = new ContentFactsCache({
     // The workspace is the browser's active one — the only one this keeper
     // holds open — so the port's workspace argument has nothing to select.
-    loadDocument: (_workspaceId, documentId) => loadDocumentContent(documentId, { loro }),
+    loadDocument: async (_workspaceId, documentId) =>
+      projectDocumentContent(await record(), documentId, { loro }),
   })
   return async (documentId) => {
+    record = lazyContentRecord()
     const workspaceId = getBrowserWorkspaceId()
     const entries = await index.listDocuments({ workspaceId })
     return backlinksIn(entries, await cache.factsFor(workspaceId, entries), documentId)

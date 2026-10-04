@@ -9,11 +9,11 @@
 import { okfTimestampSchema, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { createCanvasSnapshotTool } from './canvas-snapshot.js'
-import { loadDocument } from './document-io.js'
 
 const NODE: SpatialCanvas['nodes'][number] = textNode({
   id: 'n1',
@@ -212,5 +212,29 @@ describe('wb_canvas_edit comment ops', () => {
     expect(result.comments).toEqual([
       { id: 'c1', x: 1, y: 2, text: 'feedback', author: 'human:reviewer' },
     ])
+  })
+})
+
+describe('wb_canvas_edit comment anchors on fractional nodes', () => {
+  test('comment.add on a node at fractional coordinates rounds the derived anchor to whole pixels', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [textNode({ id: 'n1', x: 0.4, y: 10.7, width: 200.5, height: 80, text: 'content' })],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'rename this' } }],
+    })
+
+    const [comment] = await storedComments(store)
+    expect(Number.isInteger(comment?.x)).toBe(true)
+    expect(Number.isInteger(comment?.y)).toBe(true)
+    expect(comment?.x).toBe(201)
+    expect(comment?.y).toBe(11)
   })
 })

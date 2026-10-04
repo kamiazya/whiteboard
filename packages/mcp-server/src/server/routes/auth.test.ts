@@ -55,8 +55,8 @@ describe('membershipAdmit', () => {
     dir = mkdtempSync(join(tmpdir(), 'auth-membership-admit-'))
     dbHandle = await createIsolatedDb({ dataDir: dir })
     const members = createMemberProfileStore(dbHandle.db)
-    // A gating member, so a member-less workspace's origin-trust fallback
-    // cannot make this pass for the wrong reason.
+    // A gating member, so the refusal is the missing grant's and not the
+    // workspace having nobody in it.
     const profile = await members.ensureProfile({
       binding: passkeyBinding('https://example.test', 'gating-member-cred'),
       displayName: 'Gating Member',

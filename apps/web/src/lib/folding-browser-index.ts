@@ -23,6 +23,7 @@ import {
   type DeleteDocumentInput,
   type DocumentEntry,
   type DocumentIndex,
+  type DocumentPins,
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
@@ -30,6 +31,7 @@ import {
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
   type SetDocumentNameInput,
+  type SetDocumentPinnedInput,
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
@@ -51,7 +53,7 @@ import {
 
 const log = getAppLogger('folding-browser-index')
 
-export class FoldingBrowserIndex implements DocumentIndex {
+export class FoldingBrowserIndex implements DocumentIndex, DocumentPins {
   private readonly inner: LoroWorkspaceDocumentIndex
   private readonly legacy: IdbDocumentIndex
   private folded: Promise<void> | null = null
@@ -226,6 +228,16 @@ export class FoldingBrowserIndex implements DocumentIndex {
   async setDocumentName(input: SetDocumentNameInput): Promise<void> {
     await this.ensureFolded()
     return this.inner.setDocumentName(input)
+  }
+
+  async listPinnedDocuments(input: ListDocumentsInput): Promise<string[]> {
+    await this.ensureFolded()
+    return this.inner.listPinnedDocuments(input)
+  }
+
+  async setDocumentPinned(input: SetDocumentPinnedInput): Promise<void> {
+    await this.ensureFolded()
+    return this.inner.setDocumentPinned(input)
   }
 
   /** What deletes evacuated; not on the port — callers hold this class. */

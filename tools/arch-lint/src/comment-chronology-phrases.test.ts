@@ -44,6 +44,10 @@ const PHRASES: ReadonlyArray<{ readonly pattern: RegExp; readonly name: string }
   { pattern: /\b(?:this|same) session measured\b/i, name: 'this session measured' },
   { pattern: /\bS(?:[3-9]|10)[ab]?\b/, name: 'slice label' },
   { pattern: /\bwave \d+\b/i, name: 'wave number' },
+  { pattern: /\bfirst increment\b/i, name: 'first increment' },
+  { pattern: /\bthis change (?:fixed|found|exists)\b/i, name: 'this change fixed/found/exists' },
+  { pattern: /\bbefore this change\b/i, name: 'before this change' },
+  { pattern: /\bpreviously duplicated\b/i, name: 'previously duplicated' },
 ]
 
 /**
@@ -107,8 +111,20 @@ describe('a source comment names the rule, not the working session that produced
       'slice label',
     ])
     expect(phrasesIn("  // wave 7's deletions were found by hand")).toEqual(['wave number'])
+    expect(phrasesIn('  // this first increment reads only the name')).toEqual(['first increment'])
+    expect(phrasesIn('  // the reason this change fixed it')).toEqual([
+      'this change fixed/found/exists',
+    ])
+    expect(phrasesIn('  // the case this change exists to cover')).toEqual([
+      'this change fixed/found/exists',
+    ])
+    expect(phrasesIn('  // what the hook did before this change')).toEqual(['before this change'])
+    expect(phrasesIn('  // previously duplicated across two pages')).toEqual([
+      'previously duplicated',
+    ])
     // Not a comment, and "session" as the app's own noun.
     expect(phrasesIn('  // React throws #130 with no name in it')).toEqual([])
+    expect(phrasesIn('  // a change to the type changes this change set')).toEqual([])
     expect(
       phrasesIn("  // Sonar's S2871 asks for the opposite; a hex colour is #fff or #123456"),
     ).toEqual([])

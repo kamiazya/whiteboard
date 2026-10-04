@@ -472,10 +472,9 @@ it('answers a conversation in a markdown editor, with the editing verbs the note
   await userEvent.click(box)
   await userEvent.keyboard('later')
   // Shift+Home rather than select-all: Ctrl+A is Cmd+A on a Mac, and
-  // `platform-independent-keys.test.ts` bans the chord for exactly the
-  // reason this change fixed in the composer itself — a chord that means
-  // one thing on Linux and another on a Mac. Ctrl+B stays legal because
-  // the composer binds both modifiers.
+  // `platform-independent-keys.test.ts` bans the chord: it means one thing
+  // on Linux and another on a Mac. Ctrl+B stays legal because the composer
+  // binds both modifiers.
   await userEvent.keyboard('{Shift>}{Home}{/Shift}')
   await userEvent.keyboard('{Control>}b{/Control}')
 

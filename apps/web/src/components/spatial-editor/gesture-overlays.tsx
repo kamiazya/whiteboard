@@ -24,7 +24,10 @@ export interface GestureOverlaysProps {
   readonly members: readonly NodeBox[] | undefined
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly agentTouchedNodeIds: ReadonlySet<string> | undefined
+  readonly agentTouchedEdgeIds: ReadonlySet<string> | undefined
 }
+
+const EMPTY_IDS: ReadonlySet<string> = new Set()
 
 /**
  * What is drawn in canvas space ABOUT the gesture in progress and the
@@ -73,7 +76,10 @@ function ReachOutlines({
   edgePaths,
   boxes,
   agentTouchedNodeIds,
+  agentTouchedEdgeIds,
 }: GestureOverlaysProps) {
+  const touchedNodes = agentTouchedNodeIds ?? EMPTY_IDS
+  const touchedEdges = agentTouchedEdgeIds ?? EMPTY_IDS
   const { state, canvas, viewport } = gesture
   return (
     <>
@@ -95,16 +101,18 @@ function ReachOutlines({
           zoom={viewport.zoom}
         />
       )}
-      {/* The same drawing in another colour. `edges` is empty on purpose: an
-        edge outline is far less legible than a box one, and the nodes are
-        what actually moved. */}
-      {agentTouchedNodeIds !== undefined && agentTouchedNodeIds.size > 0 && (
+      {/* The same drawing in another colour. Edges are outlined only when
+        the agent NAMED them: a selection's rule (both ends are members) would
+        mark every edge between two touched nodes, which the agent did not
+        change. The geometry is the editor's own routed `edgePaths`. */}
+      {(touchedNodes.size > 0 || touchedEdges.size > 0) && (
         <MemberOutlinesOverlay
           testId="agent-touch-outlines"
           stroke="var(--accent-foreground)"
-          selectionMembers={boxes.filter((entry) => agentTouchedNodeIds.has(entry.id))}
-          edges={[]}
-          edgePaths={[]}
+          selectionMembers={boxes.filter((entry) => touchedNodes.has(entry.id))}
+          edges={canvas.edges}
+          outlinedEdgeIds={touchedEdges}
+          edgePaths={edgePaths}
           zoom={viewport.zoom}
         />
       )}

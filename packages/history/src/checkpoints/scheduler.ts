@@ -27,6 +27,7 @@
  * keeper's — the daemon's version store, the browser's IndexedDB rows — and
  * so is what to do when one fails.
  */
+import { isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { frontiersToBase64 } from '../frontiers-base64.js'
 
@@ -107,13 +108,12 @@ interface Pending {
 
 /** The keys at or below a path: the path itself, or `path/` and anything after. */
 function isAtOrBelow(key: string, workspaceId: string, path: string): boolean {
-  const at = `${workspaceId}/${path}`
-  return key === at || key.startsWith(`${at}/`)
+  return isSelfOrDescendant(key, `${workspaceId}/${path}`)
 }
 
 /** The path a key at or below `from` has once `from` has become `to`. */
 function pathAfterMove(key: string, workspaceId: string, from: string, to: string): string {
-  return `${to}${key.slice(workspaceId.length + 1 + from.length)}`
+  return rebasePath(key.slice(workspaceId.length + 1), from, to)
 }
 
 /**

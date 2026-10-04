@@ -13,8 +13,8 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
+import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { saveDocumentSnapshot } from './document-io.js'
 
 /**
  * Turning one `wb_canvas_edit` batch into a proposal (ADR-0029 decision 7).
@@ -36,14 +36,17 @@ import { saveDocumentSnapshot } from './document-io.js'
  */
 
 /**
- * The verbs a proposal can carry, read off the stored union rather than
- * listed again. What is absent follows from ADR-0029's own decisions: `tidy`
- * has no anchor, `region.set` deletes what it was not told about (so it can
- * be neither drawn as a set of priors nor adopted in part), `comment.*` is
- * the annotation layer rather than content, and a lock is a claim on a
- * document rather than a change to it.
+ * The verbs a proposal can carry: the stored change vocabulary, plus
+ * `node.splice`. A splice is not a change of its own — it resolves to the
+ * `node.patch` of `text` the diff below reads off the board — so it is
+ * proposable without an arm in `proposedChangeSchema`, and the diff stores it
+ * as the patch it comes to. What is absent follows from ADR-0029's own
+ * decisions: `tidy` has no anchor, `region.set` deletes what it was not told
+ * about (so it can be neither drawn as a set of priors nor adopted in part),
+ * `comment.*` is the annotation layer rather than content, and a lock is a
+ * claim on a document rather than a change to it.
  */
-const PROPOSABLE: ReadonlySet<string> = new Set<string>(PROPOSED_CHANGE_OPS)
+const PROPOSABLE: ReadonlySet<string> = new Set<string>([...PROPOSED_CHANGE_OPS, 'node.splice'])
 
 export function isProposableOp(op: string): boolean {
   return PROPOSABLE.has(op)

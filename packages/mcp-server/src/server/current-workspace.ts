@@ -1,3 +1,4 @@
+import { DAEMON_DEFAULT_SEGMENT } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getLogger } from './log.js'
@@ -16,7 +17,6 @@ import { LibsqlDocumentStore } from './store/libsql/libsql-document-store.js'
 // workspace a browser opens. Claiming it here, rather than leaving the first
 // `createWorkspace: true` to mint it, is what keeps that call from creating a
 // second workspace beside an empty bootstrapped one.
-const DEFAULT_SEGMENT = 'default'
 const ensureCache = new Map<string, Promise<string>>()
 
 async function resolveWorkspaceId(db: Awaited<ReturnType<typeof getDb>>): Promise<string> {
@@ -83,9 +83,9 @@ export function ensureWorkspaceId(dataDir: string): Promise<string> {
     // Every boot, not only the first: a daemon that bootstrapped before this
     // existed has the workspace without a segment. A workspace that already
     // has one, or a segment another workspace already holds, is left alone.
-    if (await claimWorkspaceSegment(db, resolved, DEFAULT_SEGMENT)) {
+    if (await claimWorkspaceSegment(db, resolved, DAEMON_DEFAULT_SEGMENT)) {
       getLogger('current-workspace').info(
-        { workspaceId: resolved, segment: DEFAULT_SEGMENT },
+        { workspaceId: resolved, segment: DAEMON_DEFAULT_SEGMENT },
         'gave the current workspace its default segment',
       )
     }

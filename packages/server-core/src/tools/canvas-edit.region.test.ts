@@ -3,10 +3,10 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, EMPTY, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { canvasEditInputSchema, createCanvasEditTool, PLACEMENT_GUTTER_PX } from './canvas-edit.js'
-import { loadDocument } from './document-io.js'
 
 /**
  * `region.set` — the one declarative op. "This group contains exactly these",

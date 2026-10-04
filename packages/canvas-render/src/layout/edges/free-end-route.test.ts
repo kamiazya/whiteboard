@@ -66,7 +66,7 @@ describe('a line that ends at a point', () => {
 
   it('draws an edge whose BOTH ends are free', () => {
     // Nothing in the model forbids it, so the renderer may not answer with a
-    // dot. This is the shape a freehand stroke's first increment needs.
+    // dot. A freehand stroke is this shape.
     const routed = routeEdge([], {
       id: 'e',
       from: { kind: 'point', point: { x: 10, y: 10 } },

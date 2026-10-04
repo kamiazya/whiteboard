@@ -490,7 +490,6 @@ describe('App backend configuration chip', () => {
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
-    expect(screen.queryByTestId('backend-config-chip')).toBeNull()
     expect(screen.queryByText('Browser only')).toBeNull()
   })
 
@@ -500,7 +499,6 @@ describe('App backend configuration chip', () => {
         <App providerState={DAEMON_STATE} />
       </MemoryRouter>,
     )
-    expect(screen.queryByTestId('backend-config-chip')).toBeNull()
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
 

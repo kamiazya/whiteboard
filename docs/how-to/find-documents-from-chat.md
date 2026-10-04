@@ -21,7 +21,19 @@ Example prompts:
 > "Find the canvas where something depends on redis"
 
 The same search is available to tools over
-`GET /api/v1/workspaces/:id/search?q=…`.
+`GET /api/v1/workspaces/:id/search?q=…`. The query string reads four keys:
+
+| key | meaning |
+|---|---|
+| `q` | the words to match |
+| `kind` | `markdown` or `spatial`, to narrow by kind |
+| `tag` | a tag the document carries; repeat it (`tag=a&tag=b`) to require several |
+| `limit` | at most this many results (1–50, default 10) |
+
+A search needs `q`, a `tag` or a `kind` (a filter answers alone). Any other
+key is refused with `400 invalid_request` naming it, rather than ignored —
+`tags=x` would otherwise answer every document as though the filter had
+applied.
 
 ## Also search by meaning (optional)
 

@@ -105,8 +105,7 @@ export type Attestation = z.infer<typeof attestationSchema>
 /**
  * One row of a document's version history, as every surface publishes it —
  * the HTTP list route, the `version_created` broadcast, and the
- * `wb_version_*` tools. The server hydrates missing legacy metadata before
- * answering, so `branchName` is always present on the wire.
+ * `wb_version_*` tools.
  */
 export const versionEntrySchema = z.object({
   id: z.string(),
@@ -116,7 +115,13 @@ export const versionEntrySchema = z.object({
   label: z.string().optional(),
   auto: z.boolean(),
   operator: operatorInfoSchema.optional(),
-  branchName: z.string(),
+  /**
+   * The column ADR-0029 retired the branch from: always `main` where a daemon
+   * still writes it, and absent from a row a keeper never gave one. Optional
+   * so a reader survives the daemon that stops sending it — one required key
+   * would fail the whole History list and every `version_created` frame.
+   */
+  branchName: z.string().optional(),
   /**
    * The version this point was produced by RESTORING, when it was.
    *

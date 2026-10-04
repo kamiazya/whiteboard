@@ -1,3 +1,5 @@
+import { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM } from '@kamiazya/whiteboard-model'
+
 /**
  * Pure viewport math for the spatial editor's pan/zoom transform. The
  * viewport is component STATE, never canvas data — no function here reads
@@ -16,8 +18,8 @@ export interface Viewport {
   readonly zoom: number
 }
 
-export const MIN_ZOOM = 0.1
-export const MAX_ZOOM = 10
+export const MIN_ZOOM = MIN_VIEWPORT_ZOOM
+export const MAX_ZOOM = MAX_VIEWPORT_ZOOM
 
 /** One wheel notch's zoom step, shared by the editor and the read-only preview so a notch means the same on both. */
 export const ZOOM_WHEEL_FACTOR = 1.1

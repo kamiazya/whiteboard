@@ -28,6 +28,7 @@ import {
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { IdbDocumentStore } from './idb-document-store.js'
+import { sealedUnderSupersededKey } from './replicas.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
 import { SealedDocumentStore } from './sealed-document-store.js'
 import { createUserSettingsStore } from './user-settings-store.js'
@@ -54,6 +55,17 @@ function replicaDaemonBaseUrl(workspaceId: string): string | undefined {
   return createUserSettingsStore().load().storage.replicas?.[workspaceId]?.daemonBaseUrl
 }
 
+/** The key generation the registry says this daemon's replica was sealed under, if it says. */
+function recordedKeyId(workspaceId: string, daemonBaseUrl: string): string | undefined {
+  const entry = createUserSettingsStore().load().storage.replicas?.[workspaceId]
+  return entry?.daemonBaseUrl === daemonBaseUrl ? entry.keyId : undefined
+}
+
+function heldKeyId(daemonBaseUrl: string, workspaceId: string): string | undefined {
+  const status = sessionKeyStatus(daemonBaseUrl, workspaceId)
+  return status?.kind === 'held' ? status.keyId : undefined
+}
+
 /** A `ReplicaSource` only when the replica's own daemon is the one this tab is connected to. */
 function sourceFor(daemonBaseUrl: string): ReplicaSource | undefined {
   if (connected === null || connected.baseUrl !== daemonBaseUrl) return undefined
@@ -67,9 +79,23 @@ const routingProvider: ReplicaKeyProvider = {
     const workspaceId = match[1] as string
     const daemonBaseUrl = replicaDaemonBaseUrl(workspaceId)
     if (daemonBaseUrl === undefined) return 'plaintext'
-    return replicaKeyProviderFor(daemonBaseUrl, workspaceId, sourceFor(daemonBaseUrl)).keyFor(
-      documentId,
+    const resolved = await replicaKeyProviderFor(
+      daemonBaseUrl,
+      workspaceId,
+      sourceFor(daemonBaseUrl),
+    ).keyFor(documentId)
+    if (resolved === 'withheld') return resolved
+    // After the ask, so the holder's answer is the one compared: the key it
+    // now holds against the generation the stored bytes were sealed under.
+    // Writes are refused the same way as reads, because sealing a new chunk
+    // under the new key beside chunks under the old one leaves a record no
+    // single key opens.
+    return sealedUnderSupersededKey(
+      recordedKeyId(workspaceId, daemonBaseUrl),
+      heldKeyId(daemonBaseUrl, workspaceId),
     )
+      ? 'rotated'
+      : resolved
   },
 }
 

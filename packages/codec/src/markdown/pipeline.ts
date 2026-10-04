@@ -6,7 +6,7 @@ import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
 import { unified } from 'unified'
 import { fromRemarkRoot } from './from-remark.js'
-import { toRemarkRoot } from './to-remark.js'
+import { referenceLiteralExtension, toRemarkRoot } from './to-remark.js'
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath)
 
@@ -26,14 +26,19 @@ const stringifier = unified()
   .use(remarkStringify)
   .use(remarkGfm)
   .use(remarkMath)
-  .data('toMarkdownExtensions', [{ unsafe: [{ character: '$', inConstruct: 'phrasing' }] }])
+  .data('toMarkdownExtensions', [
+    { unsafe: [{ character: '$', inConstruct: 'phrasing' }] },
+    referenceLiteralExtension,
+  ])
 
 /**
  * Closed syntax set: CommonMark + GFM (tables/strikethrough/task lists) +
  * math ($..$ / $$..$$). `[[wikiLink]]`/`![[embed]]` are NOT parsed here —
  * they have no remark syntax extension in this package; resolving them from
  * plain text is `references/`'s job, applied as a separate pass over the
- * already-parsed MdastRoot.
+ * already-parsed MdastRoot. The writer is the other half of that split: it
+ * emits `[[…]]`/`![[…]]` bare, whether they sit in a text value or are typed
+ * nodes, so a body round-trips with its references readable.
  */
 export function parseMarkdownBody(body: string): MdastRoot {
   const tree = parser.parse(body)

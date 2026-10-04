@@ -8,13 +8,15 @@ import { withMkdirLock } from './mkdir-lock.js'
 // lock seeded with it always reads as held by a dead process.
 const DEAD_PID = 2 ** 31 - 1
 
-async function seedDeadLock(lockDirPath: string): Promise<void> {
+async function seedOwnedLock(lockDirPath: string, pid: number): Promise<void> {
   await mkdir(lockDirPath, { recursive: false })
   await writeFile(
     join(lockDirPath, 'owner.json'),
-    JSON.stringify({ pid: DEAD_PID, startedAt: new Date().toISOString() }),
+    JSON.stringify({ pid, startedAt: new Date().toISOString() }),
   )
 }
+
+const seedDeadLock = (lockDirPath: string) => seedOwnedLock(lockDirPath, DEAD_PID)
 
 describe('withMkdirLock', () => {
   let dir: string
@@ -95,5 +97,69 @@ describe('withMkdirLock', () => {
     await withMkdirLock(lockPath, async () => {}, { retryDelayMs: 5, timeoutMs: 2_000 })
 
     expect(await readdir(dir)).toEqual([])
+  })
+
+  describe('a reclamation that is itself interrupted', () => {
+    it('takes a lock whose holder died, even when its break lock was orphaned too', async () => {
+      await seedDeadLock(lockPath)
+      await seedDeadLock(`${lockPath}.break`)
+
+      let ran = false
+      await withMkdirLock(
+        lockPath,
+        async () => {
+          ran = true
+        },
+        { retryDelayMs: 5, timeoutMs: 3_000 },
+      )
+
+      expect(ran).toBe(true)
+      expect(await readdir(dir)).toEqual([])
+    })
+
+    it('waits out a break lock that has no owner file yet, and takes the lock once it is gone', async () => {
+      await seedDeadLock(lockPath)
+      await mkdir(`${lockPath}.break`)
+      const release = setTimeout(
+        () => void rm(`${lockPath}.break`, { recursive: true, force: true }),
+        100,
+      )
+
+      let ran = false
+      try {
+        await withMkdirLock(
+          lockPath,
+          async () => {
+            ran = true
+          },
+          { retryDelayMs: 5, timeoutMs: 3_000 },
+        )
+      } finally {
+        clearTimeout(release)
+      }
+
+      expect(ran).toBe(true)
+    })
+
+    // A dead holder plus a break lock a live waiter holds is not a lock the
+    // caller can ever take; it must hit the deadline, not spin on the reclaim.
+    // The timer only bounds how long a regression can spin before it is let
+    // go, so the failure names the missing timeout rather than hanging.
+    it('gives up at the deadline while a live waiter holds the break lock', async () => {
+      await seedDeadLock(lockPath)
+      await seedOwnedLock(`${lockPath}.break`, process.pid)
+      const letGo = setTimeout(
+        () => void rm(`${lockPath}.break`, { recursive: true, force: true }),
+        1_000,
+      )
+
+      try {
+        await expect(
+          withMkdirLock(lockPath, async () => {}, { retryDelayMs: 5, timeoutMs: 150 }),
+        ).rejects.toThrow(/Lock timeout/)
+      } finally {
+        clearTimeout(letGo)
+      }
+    })
   })
 })

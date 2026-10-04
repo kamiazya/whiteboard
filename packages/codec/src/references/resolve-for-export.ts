@@ -10,37 +10,33 @@ import type {
 
 export type DocumentPathResolver = (documentId: string) => string | null
 
-function wikiLinkExportText(alias: string | undefined, path: string): string {
-  const label = alias ?? path
-  return `[${label}](${path})`
+function exportReference(
+  node: Extract<MdastPhrasingContent, { type: 'wikiLink' | 'embed' }>,
+  resolver: DocumentPathResolver,
+): MdastPhrasingContent {
+  const path = resolver(node.documentId)
+  // The fragment stays on the address in every form: it is part of what
+  // the reference points at, and a plain-markdown reader can follow
+  // `path#heading` exactly as it follows the path.
+  const fragment = node.fragment === undefined ? '' : `#${node.fragment}`
+  if (path === null) {
+    const alias = node.type === 'wikiLink' ? node.alias : undefined
+    return {
+      type: 'text',
+      value: `[[${node.documentId}${fragment}${alias ? `|${alias}` : ''}]]`,
+    }
+  }
+  const address = `${path}${fragment}`
+  return node.type === 'embed'
+    ? { type: 'image', url: address, alt: address }
+    : { type: 'link', url: address, children: [{ type: 'text', value: node.alias ?? address }] }
 }
 
 function exportPhrasing(
   node: MdastPhrasingContent,
   resolver: DocumentPathResolver,
 ): MdastPhrasingContent {
-  if (node.type === 'wikiLink' || node.type === 'embed') {
-    const path = resolver(node.documentId)
-    // The fragment stays on the address in every form: it is part of what
-    // the reference points at, and a plain-markdown reader can follow
-    // `path#heading` exactly as it follows the path.
-    const fragment = node.fragment === undefined ? '' : `#${node.fragment}`
-    if (path === null) {
-      const alias = node.type === 'wikiLink' ? node.alias : undefined
-      return {
-        type: 'text',
-        value: `[[${node.documentId}${fragment}${alias ? `|${alias}` : ''}]]`,
-      }
-    }
-    const address = `${path}${fragment}`
-    return {
-      type: 'text',
-      value:
-        node.type === 'embed'
-          ? `![${address}](${address})`
-          : wikiLinkExportText(node.alias, address),
-    }
-  }
+  if (node.type === 'wikiLink' || node.type === 'embed') return exportReference(node, resolver)
   if ('children' in node) {
     return { ...node, children: node.children.map((child) => exportPhrasing(child, resolver)) }
   }
@@ -83,12 +79,15 @@ function exportTableCell(node: MdastTableCell, resolver: DocumentPathResolver): 
 }
 
 /**
- * Rewrites `wikiLink`/`embed` nodes into plain relative-path markdown links
- * for export to a reader that knows only plain markdown. Pure, single-document: the
- * documentId->path resolver is injected. An unresolved id stays as literal
- * `[[ID]]` text rather than being dropped, so re-applying export with
- * the same resolver is idempotent (nothing left to resolve differently the
- * second time).
+ * Rewrites `wikiLink`/`embed` nodes into `link`/`image` nodes carrying a
+ * relative path, for export to a reader that knows only plain markdown. The
+ * nodes are typed rather than pre-rendered text so the stringifier owns the
+ * link syntax and its escaping; a path or label holding a bracket or a
+ * parenthesis is written the way markdown reads it back. Pure,
+ * single-document: the documentId->path resolver is injected. An unresolved
+ * id stays as literal `[[ID]]` text (written bare by the stringifier)
+ * rather than being dropped, so re-applying export with the same resolver is
+ * idempotent (nothing left to resolve differently the second time).
  */
 export function resolveReferencesForExport(
   root: MdastRoot,

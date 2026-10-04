@@ -1,3 +1,5 @@
+import type { z } from 'zod'
+
 /**
  * The one refusal `wb_canvas_edit` and its helpers raise.
  *
@@ -32,4 +34,17 @@ export class CanvasEditError extends Error {
  */
 export function fail(opIndex: number, op: string, detail: string): never {
   throw new CanvasEditError(opIndex, op, detail)
+}
+
+/**
+ * A parse failure as the text a caller repairs from: every issue with the
+ * field path it is about. A bare message ("expected int") names no field, and
+ * a model reading it cannot tell which of the batch's values to change.
+ */
+export function describeIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) =>
+      issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message,
+    )
+    .join('; ')
 }

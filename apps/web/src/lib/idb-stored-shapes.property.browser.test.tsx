@@ -298,7 +298,6 @@ describe('BrowserVersionStore', () => {
       operator: arbitraryForSchema(operatorInfoSchema),
       restoredFrom: fc.string({ minLength: 1, maxLength: 10 }),
       auto: fc.boolean(),
-      branchName: fc.string({ maxLength: 12 }),
     },
     { requiredKeys: [] },
   )
@@ -310,7 +309,6 @@ describe('BrowserVersionStore', () => {
       expect(saved).toMatchObject({
         path: PATH,
         auto: input.auto === true,
-        branchName: input.branchName ? input.branchName : 'main',
         elementCount: 1,
       })
       expect(saved.label).toBe(input.label ? input.label : undefined)

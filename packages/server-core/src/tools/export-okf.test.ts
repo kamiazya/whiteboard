@@ -1,10 +1,15 @@
-import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeDocumentKind,
+  writeFacets,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { SnapshotNotFoundError } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { SnapshotNotFoundError } from './document-io.js'
+import { DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -66,6 +71,21 @@ describe('exportOkf', () => {
 
     expect(result.frontmatter.type).toBe('note')
     expect(result.markdown).not.toContain('canvas')
+  })
+
+  test('refuses a spatial document rather than projecting a text node as its body', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
+        edges: [],
+      })
+    })
+
+    await expect(
+      exportOkf(makeDeps(store), { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
+    ).rejects.toThrow(DocumentKindMismatchError)
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {

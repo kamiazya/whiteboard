@@ -202,6 +202,7 @@ Before closing a change:
 ```bash
 pnpm --filter @kamiazya/whiteboard-mcp typecheck
 pnpm build
+pnpm smoke:distribution:packaged:node   # CI's packaged-smoke job minus the CLI smokes (they spend API quota)
 ```
 
 ## PR Title Rule

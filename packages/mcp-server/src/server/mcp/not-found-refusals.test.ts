@@ -1,3 +1,4 @@
+import { createServer } from '@kamiazya/whiteboard-server-core'
 import { FakeVersionHistory } from '@kamiazya/whiteboard-server-core/test-utils/fake-version-history'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
@@ -91,7 +92,7 @@ const CALLS: Record<
 // A read has no `createWorkspace` to pass; the tool that takes one may say so.
 const TAKES_CREATE_WORKSPACE = new Set<string>(['wb_workspace_edit'])
 
-async function connect() {
+async function seededDeps() {
   const deps = {
     ...resolveServerDeps(createContainer(storeMemoryModule)),
     versions: new FakeVersionHistory(),
@@ -99,6 +100,11 @@ async function connect() {
     knownWorkspaceHandles: async () => [SEGMENT],
   }
   await deps.documentIndex.createWorkspace({ workspaceId: WORKSPACE_ID, segment: SEGMENT })
+  return deps
+}
+
+async function connect() {
+  const deps = await seededDeps()
   const server = new McpServer({ name: 'refusals', version: '0.0.0' })
   registerDocumentTools(server, deps as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
@@ -179,5 +185,49 @@ describe('a tool refused for an address that names nothing', () => {
     expect(text).not.toMatch(/Canvas/)
     expect(text).not.toContain('no saved snapshot')
     expect(text).not.toContain('records no kind')
+  })
+})
+
+/** The `/api/v1` read routes a browser reaches; each answers a missing address in the tools' voice. */
+const V1_READS: readonly ((workspace: string, documentId: string) => string)[] = [
+  (workspace) => `/api/v1/workspaces/${workspace}/documents`,
+  (workspace, documentId) => `/api/v1/workspaces/${workspace}/documents/${documentId}`,
+  (workspace) => `/api/v1/workspaces/${workspace}/search?q=x`,
+  (workspace) => `/api/v1/workspaces/${workspace}/document-tags`,
+  (workspace, documentId) => `/api/v1/workspaces/${workspace}/documents/${documentId}/backlinks`,
+  (workspace, documentId) => `/api/v1/workspaces/${workspace}/documents/${documentId}/okf`,
+]
+
+async function v1Refusal(path: string): Promise<{ status: number; reason: string }> {
+  const { app } = createServer(await seededDeps())
+  const res = await app.request(path)
+  const body = (await res.json()) as { error?: string; message?: string }
+  return { status: res.status, reason: body.message ?? '' }
+}
+
+describe('a /api/v1 route refused for an address that names nothing', () => {
+  it.each(
+    V1_READS.map((path) => [path('nope', UNKNOWN_DOCUMENT)] as const),
+  )("%s answers an unknown workspace in the tools' words", async (path) => {
+    const { status, reason } = await v1Refusal(path)
+
+    expect(status).toBe(404)
+    expect(reason).toContain(`Workspace not found: "${UNKNOWN_WORKSPACE}"`)
+    expect(reason).toContain(`Workspaces here: "${SEGMENT}"`)
+    expect(reason).not.toContain('Create it before adding')
+  })
+
+  it.each(
+    V1_READS.filter((path) => path('w', 'd').includes('/documents/')).map(
+      (path) => [path(SEGMENT, UNKNOWN_DOCUMENT)] as const,
+    ),
+  )('%s answers an unknown document with the id and the handle the caller gave', async (path) => {
+    const { status, reason } = await v1Refusal(path)
+
+    expect(status).toBe(404)
+    expect(reason).toContain(UNKNOWN_DOCUMENT)
+    expect(reason).toContain(`workspace ${SEGMENT}`)
+    expect(reason).not.toContain(WORKSPACE_ID)
+    expect(reason).not.toContain('no saved snapshot')
   })
 })

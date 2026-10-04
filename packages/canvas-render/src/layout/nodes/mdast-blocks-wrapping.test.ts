@@ -60,7 +60,7 @@ function linesOf(root: MdastRoot, maxWidth = MAX_WIDTH): readonly string[] {
 }
 
 /**
- * Captured from the space-only wrapper BEFORE this change, so the new breaker
+ * Captured from the space-only wrapper that preceded the line breaker, which
  * has to reproduce it exactly: English already wrapped correctly, and a line
  * breaker that "fixes" it has changed something nobody asked it to.
  */

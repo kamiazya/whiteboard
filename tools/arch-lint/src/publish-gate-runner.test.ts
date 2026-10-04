@@ -78,7 +78,7 @@ describe('publish tier wiring', () => {
     expect(script).not.toMatch(/mcp-jsdom|mcp-browser|web-browser/)
   })
 
-  it('includes build, check:release-artifacts, smoke:tarball, smoke:packaged, generate:sbom:npm, smoke:distribution:packaged', () => {
+  it('includes build, check:release-artifacts, smoke:tarball, smoke:packaged, generate:sbom:npm, smoke:distribution:packaged:node', () => {
     const ids = publishGates.map((g) => g.id)
     for (const expected of [
       'build',
@@ -86,7 +86,7 @@ describe('publish tier wiring', () => {
       'smoke:tarball',
       'smoke:packaged',
       'generate:sbom:npm',
-      'smoke:distribution:packaged',
+      'smoke:distribution:packaged:node',
     ]) {
       expect(ids, `publish tier must include gate "${expected}"`).toContain(expected)
     }
@@ -98,8 +98,8 @@ describe('publish tier wiring', () => {
     expect(rootPkg.scripts['test:mcp-node']).not.toMatch(/mcp-jsdom|mcp-browser|web-browser/)
   })
 
-  it('root smoke:distribution:packaged script exists', () => {
-    expect(rootPkg.scripts).toHaveProperty('smoke:distribution:packaged')
+  it('root smoke:distribution:packaged:node script exists', () => {
+    expect(rootPkg.scripts).toHaveProperty('smoke:distribution:packaged:node')
   })
 })
 
@@ -457,7 +457,7 @@ describe.each(TIERS)('$script CLI arg parsing (parseArgs)', ({ entry }) => {
 describe('smoke:distribution:packaged drift', () => {
   it('its node distribution smoke set matches the 7 node smokes in test:e2e:distribution:only', () => {
     const distScript = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
-    const packagedScript = rootPkg.scripts['smoke:distribution:packaged'] ?? ''
+    const packagedScript = rootPkg.scripts['smoke:distribution:packaged:node'] ?? ''
     const distNodeSmokes = (
       distScript.match(/node tests\/e2e\/distribution\/\S+\.mjs/g) ?? []
     ).sort()
@@ -468,10 +468,13 @@ describe('smoke:distribution:packaged drift', () => {
     expect(packagedNodeSmokes).toEqual(distNodeSmokes)
   })
 
-  it('includes smoke:claude and smoke:codex', () => {
+  it('is the two CLI smokes plus the node set, and the node set carries neither', () => {
     const packagedScript = rootPkg.scripts['smoke:distribution:packaged'] ?? ''
+    const nodeScript = rootPkg.scripts['smoke:distribution:packaged:node'] ?? ''
     expect(packagedScript).toContain('pnpm smoke:claude')
     expect(packagedScript).toContain('pnpm smoke:codex')
+    expect(packagedScript).toContain('pnpm smoke:distribution:packaged:node')
+    expect(nodeScript).not.toMatch(/smoke:(?:claude|codex)(?![\w:-])/)
   })
 })
 

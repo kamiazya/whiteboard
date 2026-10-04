@@ -12,6 +12,14 @@ export interface RunStdioExitSmokeOptions {
   trigger: 'stdin-end' | 'SIGTERM' | 'SIGINT'
   /** Bound on how long we wait for the child to exit after the trigger. */
   exitTimeoutMs?: number
+  /**
+   * Bound on how long we wait for the initialize response first. Separate
+   * from the exit bound on purpose: the exit is what this smoke measures,
+   * while the start is a cold `tsx` load of the whole server, which on a
+   * runner already running the other smokes takes longer than the exit
+   * budget allows for and is not the thing under test.
+   */
+  startupTimeoutMs?: number
 }
 
 function spawnMcpChild(
@@ -27,6 +35,31 @@ function spawnMcpChild(
   })
 }
 
+async function waitForInitializeResponse(
+  child: ChildProcessWithoutNullStreams,
+  seen: () => boolean,
+  stderr: () => string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!seen() && Date.now() < deadline) {
+    // A child that has already died can never produce the response we're
+    // waiting for; fail immediately instead of spinning until the timeout.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `[stdio-exit-smoke] child exited before sending an initialize response ` +
+          `(code=${child.exitCode} signal=${child.signalCode})\n${stderr()}`,
+      )
+    }
+    await new Promise((r) => setTimeout(r, 50))
+  }
+  if (!seen()) {
+    throw new Error(
+      `[stdio-exit-smoke] never observed initialize response within ${timeoutMs}ms\n${stderr()}`,
+    )
+  }
+}
+
 /**
  * Spawns the real stdio entry, performs a full MCP initialize handshake so
  * the server is actually up and connected to the transport, then applies
@@ -40,6 +73,7 @@ export async function runStdioExitSmoke({
   root,
   trigger,
   exitTimeoutMs = 5000,
+  startupTimeoutMs = 12_000,
 }: RunStdioExitSmokeOptions): Promise<void> {
   const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-stdio-exit-'))
   const child = spawnMcpChild(entry, root, tmpDataDir)
@@ -95,21 +129,12 @@ export async function runStdioExitSmoke({
       })}\n`,
     )
 
-    const deadline = Date.now() + exitTimeoutMs
-    while (!sawInitializeResponse && Date.now() < deadline) {
-      // A child that has already died can never produce the response we're
-      // waiting for; fail immediately instead of spinning until the timeout.
-      if (child.exitCode !== null || child.signalCode !== null) {
-        throw new Error(
-          `[stdio-exit-smoke] child exited before sending an initialize response ` +
-            `(code=${child.exitCode} signal=${child.signalCode})\n${stderrBuf}`,
-        )
-      }
-      await new Promise((r) => setTimeout(r, 50))
-    }
-    if (!sawInitializeResponse) {
-      throw new Error(`[stdio-exit-smoke] never observed initialize response\n${stderrBuf}`)
-    }
+    await waitForInitializeResponse(
+      child,
+      () => sawInitializeResponse,
+      () => stderrBuf,
+      startupTimeoutMs,
+    )
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })}\n`,
     )

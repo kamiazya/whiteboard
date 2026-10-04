@@ -30,6 +30,23 @@ function canonicalize(
   )
 }
 
+/**
+ * The one throw `serializeOkf` makes on purpose: a frontmatter value YAML has
+ * no representation for. A distinct class so a caller that wants to refuse
+ * THAT — a write, while the author still holds the content — can catch it
+ * without also catching a defect in the serialiser, which must stay loud.
+ */
+export class OkfNotYamlSafeError extends Error {
+  constructor(readonly issues: readonly { path: PropertyKey[]; message: string }[]) {
+    super(
+      `serializeOkf: frontmatter contains a value that is not yaml-safe: ${issues
+        .map((issue) => `${issue.path.map(String).join('.')}: ${issue.message}`)
+        .join('; ')}`,
+    )
+    this.name = 'OkfNotYamlSafeError'
+  }
+}
+
 export function serializeOkf(doc: OkfMarkdownDocument): string {
   const { facets, facetsRaw, ...rest } = doc.frontmatter
   const canonicalFacets = canonicalize(facets)
@@ -45,11 +62,7 @@ export function serializeOkf(doc: OkfMarkdownDocument): string {
 
   const safetyCheck = yamlSafeValueSchema.safeParse(frontmatter)
   if (!safetyCheck.success) {
-    throw new Error(
-      `serializeOkf: frontmatter contains a value that is not yaml-safe: ${safetyCheck.error.issues
-        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-        .join('; ')}`,
-    )
+    throw new OkfNotYamlSafeError(safetyCheck.error.issues)
   }
 
   // Only the newline yaml appends: `trimEnd()` also strips Unicode spaces,

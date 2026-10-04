@@ -3,13 +3,12 @@
 // installs one.
 import type { MdastFlowContent } from '@kamiazya/whiteboard-model/mdast'
 import type { CodeBlockNode, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
+import type { CodeTokenLines, CodeTokenRole } from '../../highlight/code-token.js'
 import type { FontDescriptor } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 import {
   baselineIn,
   bodyFont,
-  type CodeTokenLines,
-  type CodeTokenRole,
   type Cursor,
   codeFontSizePx,
   codeLineHeightPx,

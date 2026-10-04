@@ -1,9 +1,9 @@
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { loadOrCreateDocument } from './document-io.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 /**

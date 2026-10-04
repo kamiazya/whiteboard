@@ -1,4 +1,4 @@
-import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
+import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { parseBearerAuthorizationHeader } from '../security/bearer-token.js'
 import type { CredentialResolver } from '../security/credential-resolver.js'
@@ -17,7 +17,7 @@ type WorkspaceInfo = {
   documents: DocumentInfo[]
 }
 
-async function summarizeCanvas(
+async function summarizeDocument(
   workspaceId: string,
   path: string,
   scope: StoreScope,
@@ -26,7 +26,7 @@ async function summarizeCanvas(
   const doc = cached ?? (await loadDocument(workspaceId, path, scope))
   return {
     path,
-    nodeCount: countAliveNodes(doc),
+    nodeCount: countSpatialNodes(doc),
     cached: cached !== undefined,
   }
 }
@@ -81,7 +81,7 @@ export function createDebugRouter(options: CreateDebugRouterOptions) {
       workspaces.map(async ({ workspaceId }) => {
         const documents = await listDocuments(workspaceId, options.scope)
         const canvasInfos = await Promise.all(
-          documents.map(({ path }) => summarizeCanvas(workspaceId, path, options.scope)),
+          documents.map(({ path }) => summarizeDocument(workspaceId, path, options.scope)),
         )
         return { workspaceId, documents: canvasInfos }
       }),

@@ -81,7 +81,7 @@ for the duplication to exist.
 ## Tests
 
 - Vitest project: `workspace-index-node`.
-- Held to `describeDocumentIndexConformance` — the same 22 cases the in-memory,
+- Held to `describeDocumentIndexConformance` — the same cases the in-memory,
   libSQL and IndexedDB indexes pass. That is the evidence that a tree can keep
   the port's promises, as opposed to a comment claiming it.
 

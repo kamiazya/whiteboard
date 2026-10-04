@@ -12,8 +12,8 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame, parseScopedTag } from '@kamiazya/whiteboard-model'
 import type { LegendEntry, LegendKey, LegendSwatch, SceneLegend } from '@kamiazya/whiteboard-scene'
-import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
 import { scoreFacets } from '../quality/facet-score.js'
+import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 
 interface Tagged {
   readonly id: string

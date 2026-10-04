@@ -7,6 +7,7 @@ export { compareCodeUnit } from './compare.js'
 // the stable public surface.
 export { deriveWorkspaceSegment } from './derive-workspace-segment.js'
 export * from './document-kind.js'
+export { isSelfOrDescendant, rebasePath } from './document-path.js'
 export {
   base64ToBytes,
   base64UrlToBytes,
@@ -31,3 +32,4 @@ export * from './tags.js'
 export * from './text-anchor.js'
 export * from './trust.js'
 export { uint8ArrayAnyRealmSchema } from './uint8-array.js'
+export { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM } from './viewport.js'

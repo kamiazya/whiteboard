@@ -33,8 +33,8 @@ describe('resolveReferencesForExport', () => {
     const paragraph = exported.children[0]
     if (paragraph.type !== 'paragraph') throw new Error('expected paragraph')
     expect(paragraph.children).toEqual([
-      { type: 'text', value: '[go](plans.md#Launch)' },
-      { type: 'text', value: '![plans.md#Launch](plans.md#Launch)' },
+      { type: 'link', url: 'plans.md#Launch', children: [{ type: 'text', value: 'go' }] },
+      { type: 'image', url: 'plans.md#Launch', alt: 'plans.md#Launch' },
     ])
   })
 
@@ -44,7 +44,9 @@ describe('resolveReferencesForExport', () => {
 
     const paragraph = exported.children[0]
     if (paragraph.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(paragraph.children).toEqual([{ type: 'text', value: '[My Note](../notes/my-note.md)' }])
+    expect(paragraph.children).toEqual([
+      { type: 'link', url: '../notes/my-note.md', children: [{ type: 'text', value: 'My Note' }] },
+    ])
   })
 
   it('leaves an unresolved wikiLink as literal text', () => {
@@ -95,7 +97,7 @@ describe('resolveReferencesForExport', () => {
     const paragraphNode = list.children[0].children[0]
     if (paragraphNode.type !== 'paragraph') throw new Error('expected paragraph')
     expect(paragraphNode.children).toEqual([
-      { type: 'text', value: '[My Note](../notes/my-note.md)' },
+      { type: 'link', url: '../notes/my-note.md', children: [{ type: 'text', value: 'My Note' }] },
     ])
   })
 
@@ -124,7 +126,9 @@ describe('resolveReferencesForExport', () => {
     const table = exported.children[0]
     if (table.type !== 'table') throw new Error('expected table')
     const cell = table.children[0].children[0]
-    expect(cell.children).toEqual([{ type: 'text', value: '[My Note](../notes/my-note.md)' }])
+    expect(cell.children).toEqual([
+      { type: 'link', url: '../notes/my-note.md', children: [{ type: 'text', value: 'My Note' }] },
+    ])
   })
 
   it('rewrites a wikiLink nested inside emphasis', () => {
@@ -148,6 +152,8 @@ describe('resolveReferencesForExport', () => {
     if (paragraphNode.type !== 'paragraph') throw new Error('expected paragraph')
     const emphasis = paragraphNode.children[0]
     if (emphasis.type !== 'emphasis') throw new Error('expected emphasis')
-    expect(emphasis.children).toEqual([{ type: 'text', value: '[My Note](../notes/my-note.md)' }])
+    expect(emphasis.children).toEqual([
+      { type: 'link', url: '../notes/my-note.md', children: [{ type: 'text', value: 'My Note' }] },
+    ])
   })
 })

@@ -250,6 +250,13 @@ describe('replica-session-key: sessionKeyStatus', () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it('carries the key id the daemon named, so a caller can tell one key generation from another', async () => {
+    const keyId = base64Url(Uint8Array.from({ length: 16 }, (_, i) => 0x30 + i))
+    const fetchImpl = vi.fn(async () => jsonResponse(keyResponse({ keyId })))
+    await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
+    expect(sessionKeyStatus(DAEMON, WORKSPACE)).toEqual({ kind: 'held', tier: 'offline', keyId })
+  })
+
   it('answers held+tier after a key, withheld+reason after a refusal, and undefined after forget', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(keyResponse({ tier: 'offline' })))
     await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))

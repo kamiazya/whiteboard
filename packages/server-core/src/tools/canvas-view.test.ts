@@ -438,3 +438,33 @@ describe('canvas_view style (ADR-0030 decision 6)', () => {
     expect(plain.style).toBeUndefined()
   })
 })
+
+describe('canvas_view with a reference that resolves to nothing', () => {
+  test('still answers, with no entry for the dangling target', async () => {
+    const store = new FakeDocumentStore()
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'board',
+      documentId: DOCUMENT_ID,
+      kind: 'spatial',
+    })
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({ id: 't', x: 0, y: 0, width: 100, height: 50, text: 'see [[nowhere]]' }),
+          fileNode({ id: 'f', x: 200, y: 0, width: 200, height: 100, file: 'no/such/document' }),
+        ],
+        edges: [],
+      })
+    })
+    const tool = createCanvasViewTool(
+      makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    )
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result.scene.nodes.map((n) => n.id).sort()).toEqual(['f', 't'])
+    expect(result.references).toEqual({})
+  })
+})

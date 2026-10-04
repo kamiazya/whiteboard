@@ -326,7 +326,7 @@ the table alone.
    codec, so `parseBody: (text: string) => MdastRoot` is supplied by
    the caller (both current consumers pass codec's
    `parseMarkdownBody`). Appearance is likewise injected via a
-   `SpatialAppearanceResolver` (`layout/nodes/spatial-appearance.ts`) — a set of
+   `SpatialAppearanceResolver` (`theme/spatial-appearance.ts`) — a set of
    FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static
    per-kind record, because appearance keys off both `node.type` and an
    authored `node.color`/`x-whiteboard` hint. (Geometry constants —

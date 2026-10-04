@@ -23,10 +23,10 @@
  * `workspaceMembersOnly` is the one row a removal NEVER touches (user
  * decision 2026-09-21): once a workspace has had a member, `membersOnly`
  * stays true even after the last one is removed, so a workspace never falls
- * back to origin trust by emptying. Nothing clears it. Both composition roots
- * also close a workspace that never had a member (`membersOnlyByDefault`), so
- * what the marker still decides there is whether a workspace's creator is
- * added as its first member (`mcp-caller.ts`). See the 0030 migration for why
+ * back to origin trust by emptying. Nothing clears it. Every workspace is
+ * members-only regardless (ADR-0046 d10), so the gate no longer consults the
+ * marker; what it still decides is whether a workspace's creator is added as
+ * its first member (`mcp-caller.ts`). See the 0030 migration for why
  * it is its own table rather than a column on `workspaces`.
  *
  * FAIL-CLOSED HERE MEANS SCOPE OF CONSULTATION, NOT A PERMISSIVE DEFAULT: a
@@ -106,7 +106,6 @@ export interface MemberProfileStore {
    *  sign-in asks so it can say so instead of treating them as a newcomer. */
   isDeactivated(binding: AuthenticatorBinding): Promise<boolean>
   ensureProfile(input: EnsureProfileInput): Promise<MemberProfile>
-  listMembers(workspaceId: string): Promise<MemberProfile[]>
   /** Every user this tenant has, oldest first — what an operator or an
    *  administrator picks from. */
   listUsers(): Promise<{ id: string; displayName: string; deactivated: boolean }[]>
@@ -291,23 +290,6 @@ async function roleIn(db: TenantScoped, workspaceId: string, profileId: string) 
 export function createMemberProfileStore(db: TenantScoped): MemberProfileStore {
   return {
     ...bindingLookups(db),
-
-    async listMembers(workspaceId) {
-      const rows = await db
-        .selectFrom('workspaceMemberships')
-        .innerJoin('memberProfiles', 'memberProfiles.id', 'workspaceMemberships.profileId')
-        .select('memberProfiles.id')
-        .where('workspaceMemberships.workspaceId', '=', workspaceId)
-        .orderBy('memberProfiles.createdAt', 'asc')
-        .orderBy('memberProfiles.id', 'asc')
-        .execute()
-      const profiles: MemberProfile[] = []
-      for (const row of rows) {
-        const profile = await loadProfileWhere(db, 'id', row.id)
-        if (profile !== null) profiles.push(profile)
-      }
-      return profiles
-    },
 
     listUsers: () => usersOf(db),
 

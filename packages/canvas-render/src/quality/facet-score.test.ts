@@ -11,7 +11,7 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { type FacetScore, scoreFacets } from './facet-score.js'
 
 const box = (
@@ -493,6 +493,27 @@ describe('facet vocabulary: a scoped-tag key is a partition', () => {
     expect(s.multi).toEqual([{ key: 'region', count: 1 }])
     expect(s.channels.colour).toEqual({ use: 'contested', carriedBy: [] })
     expect(s.partitions).toBe(0)
+  })
+
+  // A tag key is lowercase ASCII, where the host's default collation happens to
+  // agree with code-unit order — Czech, for one, does not, and cannot be
+  // selected from inside a test. A comparator that reverses the order stands
+  // in for any host whose locale disagrees, so the multi list is judged
+  // against code-unit order rather than whatever `localeCompare` answers.
+  it('lists multi keys in code-unit order whatever the host locale collates', () => {
+    const twice = (key: string) => box(key, 0, 0, tagged([`${key}:a`, `${key}:b`]))
+    const board = ['tier', 'region', 'health'].map(twice)
+    const collate = vi.spyOn(String.prototype, 'localeCompare').mockImplementation(function (
+      this: string,
+      other: string,
+    ) {
+      return this < other ? 1 : this > other ? -1 : 0
+    })
+    try {
+      expect(score(board).multi.map((m) => m.key)).toEqual(['health', 'region', 'tier'])
+    } finally {
+      collate.mockRestore()
+    }
   })
 
   it("a plain tag is never a partition, and neither are the board's own tags", () => {

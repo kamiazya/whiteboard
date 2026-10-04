@@ -67,9 +67,9 @@ export interface CanvasClientNotifier {
    */
   versionCreated(event: VersionCreated): void
   /**
-   * A restore began or ended. A watching client locks its overlay on
-   * `started` and releases it on `complete`, so an implementation must
-   * forward both or neither.
+   * A restore began or ended. A watching client makes its editor read-only
+   * and says a restore is under way on `started`, and releases both on
+   * `complete`, so an implementation must forward both or neither.
    */
   restoreProgress(event: RestoreProgressEvent): void
 }
@@ -367,7 +367,6 @@ export interface VersionHistory {
     options: {
       auto: boolean
       label?: string
-      branchName?: string
       operator?: OperatorInfo
       /** Set when this point is the merge a restore produced; see `versionEntrySchema`. */
       restoredFrom?: string

@@ -18,18 +18,11 @@
  * is a rule they will re-derive differently.
  */
 
+import { isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
+
 /** How many segments a path has. */
 function depth(path: string): number {
   return path.split('/').length
-}
-
-/**
- * Whether `path` is `ancestor` itself or sits below it. Anchored at a
- * SEGMENT boundary, which is the whole point: `design-system` starts with
- * `design` and is not inside it.
- */
-export function isSelfOrDescendant(path: string, ancestor: string): boolean {
-  return path === ancestor || path.startsWith(`${ancestor}/`)
 }
 
 export interface PathRow {
@@ -71,7 +64,7 @@ export function planSubtreeMove(rows: readonly PathRow[], from: string, to: stri
   const moves = moving.map((row) => ({
     id: row.id,
     from: row.path,
-    path: `${to}${row.path.slice(from.length)}`,
+    path: rebasePath(row.path, from, to),
   }))
 
   // Every PRODUCED path, not just `to`: moving `a` onto a free `c` still

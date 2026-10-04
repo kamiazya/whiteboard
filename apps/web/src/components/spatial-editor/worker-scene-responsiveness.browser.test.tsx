@@ -1,5 +1,5 @@
 /**
- * The claim this change exists to make, measured rather than felt: while a
+ * The claim the layout worker exists to make, measured rather than felt: while a
  * large canvas is being laid out, the main thread keeps running — and it is
  * the WORKER doing it, not a canvas that happened to be cheap.
  *

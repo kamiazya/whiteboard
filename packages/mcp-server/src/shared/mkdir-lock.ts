@@ -47,9 +47,10 @@ async function loadOwnerMetadata(lockDirPath: string): Promise<LockOwner | null>
 // re-check is sound because while the break lock is held the main lock
 // cannot transition dead→live: acquiring requires the directory to be gone,
 // and removing it requires the break lock. Losers of the break-lock race
-// simply return to the acquire loop. A break lock orphaned by a crash is
-// itself removed once its recorded pid is dead.
-async function reclaimDeadLock(lockDirPath: string): Promise<void> {
+// wait and retry. A break lock orphaned by a crash is
+// itself removed once its recorded pid is dead. Answers whether the main lock
+// was removed, so a caller that lost the race knows it has not progressed.
+async function reclaimDeadLock(lockDirPath: string): Promise<boolean> {
   const breakLockPath = `${lockDirPath}.break`
   try {
     await mkdir(breakLockPath, { recursive: false })
@@ -60,14 +61,16 @@ async function reclaimDeadLock(lockDirPath: string): Promise<void> {
         await rm(breakLockPath, { recursive: true, force: true })
       }
     }
-    return
+    return false
   }
   try {
     await writeOwnerMetadata(breakLockPath)
     const owner = await loadOwnerMetadata(lockDirPath)
     if (owner && !isPidAlive(owner.pid)) {
       await rm(lockDirPath, { recursive: true, force: true })
+      return true
     }
+    return false
   } finally {
     await rm(breakLockPath, { recursive: true, force: true })
   }
@@ -78,10 +81,6 @@ export interface MkdirLockOptions {
   timeoutMs?: number
 }
 
-// Runs `fn` while holding the exclusive lock at `lockDirPath`. Callers must
-// ensure the lock's parent directory already exists. Waits (polling every
-// `retryDelayMs`) for a concurrent holder to release, reclaiming the lock
-// early if that holder's recorded pid is dead, and gives up after
 /**
  * One attempt at the exclusive create. `false` means somebody else holds it,
  * which is the only failure this function answers for — anything other than
@@ -104,7 +103,9 @@ async function tryAcquire(lockDirPath: string): Promise<boolean> {
  * A holder whose recorded pid is DEAD never released — the process died
  * holding it — so the lock is reclaimed immediately rather than waited out
  * to the deadline, which would leave every caller blocked until the timeout
- * on every subsequent run.
+ * on every subsequent run. A reclamation that lost the break-lock race has
+ * taken nothing, so it waits and answers to the deadline like any other
+ * contended attempt rather than spinning on a lock it cannot take.
  */
 async function waitForHolder(
   lockDirPath: string,
@@ -113,13 +114,16 @@ async function waitForHolder(
 ): Promise<void> {
   const owner = await loadOwnerMetadata(lockDirPath)
   if (owner && !isPidAlive(owner.pid)) {
-    await reclaimDeadLock(lockDirPath)
-    return
+    if (await reclaimDeadLock(lockDirPath)) return
   }
   if (Date.now() >= deadline) throw new Error(`Lock timeout waiting for: ${lockDirPath}`)
   await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
 }
 
+// Runs `fn` while holding the exclusive lock at `lockDirPath`. Callers must
+// ensure the lock's parent directory already exists. Waits (polling every
+// `retryDelayMs`) for a concurrent holder to release, reclaiming the lock
+// early if that holder's recorded pid is dead, and gives up after
 // `timeoutMs`.
 export async function withMkdirLock<T>(
   lockDirPath: string,

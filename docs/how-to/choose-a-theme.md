@@ -11,8 +11,7 @@ export that asks for it see the same look. Two themes ship with the bundled `vis
 
 The paper follows your UI mode: every theme carries a light and a dark palette, and the editor
 picks the one matching your settings. A themed export comes back on that same paper — the
-daemon's PNG and SVG routes use the theme's surface for the mode they were asked for, unless
-the request names a `background` of its own.
+daemon's PNG and SVG routes use the theme's surface for the mode they were asked for.
 
 ## From the editor
 

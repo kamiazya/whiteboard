@@ -125,7 +125,10 @@ export interface DocumentPageModel {
     readonly keeper?: 'daemon' | 'browser'
     readonly onNavigateBack?: () => void
   } | null
-  readonly spatial: Pick<SpatialEditorPaneProps, 'editorRef' | 'agentTouchedNodeIds' | 'children'>
+  readonly spatial: Pick<
+    SpatialEditorPaneProps,
+    'editorRef' | 'agentTouchedNodeIds' | 'agentTouchedEdgeIds' | 'children'
+  >
   /**
    * The workspace's tag vocabulary (ADR-0040 decision 5's two layers), as
    * the keeper answered it: what is in use anywhere in the workspace, for

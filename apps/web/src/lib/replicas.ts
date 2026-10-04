@@ -14,6 +14,26 @@ export interface ReplicaEntryInput {
   displayName?: string
   /** Base64 VersionVector of what the daemon is known to hold. */
   syncedFrontier?: string
+  /** The key generation the stored bytes are sealed under. */
+  keyId?: string
+}
+
+/**
+ * What a successful pull claims, in the registry's own fields — shared by the
+ * background refresh and the post-promote registration, so the key generation
+ * a pull sealed the copy under cannot be recorded by one and forgotten by the
+ * other.
+ */
+export function pulledReplicaFields(pull: {
+  syncedAt: string
+  syncedFrontier: string
+  keyId?: string
+}): Pick<ReplicaEntryInput, 'syncedAt' | 'syncedFrontier' | 'keyId'> {
+  return {
+    syncedAt: pull.syncedAt,
+    syncedFrontier: pull.syncedFrontier,
+    ...(pull.keyId === undefined ? {} : { keyId: pull.keyId }),
+  }
 }
 
 /**
@@ -41,6 +61,7 @@ export function withReplicaEntry(
           ...(entry.segment === undefined ? {} : { segment: entry.segment }),
           ...(entry.displayName === undefined ? {} : { displayName: entry.displayName }),
           ...(entry.syncedFrontier === undefined ? {} : { syncedFrontier: entry.syncedFrontier }),
+          ...(entry.keyId === undefined ? {} : { keyId: entry.keyId }),
         },
       },
     },
@@ -55,6 +76,7 @@ export interface ReplicaMatch {
   segment?: string
   displayName?: string
   syncedFrontier?: string
+  keyId?: string
 }
 
 /**
@@ -98,4 +120,18 @@ export function findReplicaForHandle(settings: UserSettings, handle: string): Re
     }
   }
   return null
+}
+
+/**
+ * Whether the key generation a copy was sealed under is a different one from
+ * the key now held. Only a pair that BOTH name a generation can differ: a copy
+ * recorded before rotation existed, or a daemon that predates it, answers
+ * "cannot tell" and is read as before — a guess here would call a readable
+ * copy superseded.
+ */
+export function sealedUnderSupersededKey(
+  recordedKeyId: string | undefined,
+  heldKeyId: string | undefined,
+): boolean {
+  return recordedKeyId !== undefined && heldKeyId !== undefined && recordedKeyId !== heldKeyId
 }

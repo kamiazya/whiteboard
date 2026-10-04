@@ -49,6 +49,7 @@ export {
   setProposedChangeStatus,
   writeProposal,
 } from './proposals.js'
+export { countSpatialNodes } from './spatial-node-count.js'
 export {
   markThreadPassages,
   type PassageRange,

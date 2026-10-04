@@ -360,6 +360,11 @@ function dropOmittedMembers(
   return droppedIds
 }
 
+/** Edges and lines answer to one id space, so a minted id must avoid both. */
+function elementIds(ctx: CanvasEditContext): Set<string> {
+  return new Set([...ctx.s.edges, ...ctx.s.lines].map((element) => element.id))
+}
+
 const CANVAS_EDIT_HANDLERS: {
   [K in CanvasOp['op']]: (ctx: CanvasEditContext, op: OpNamed<K>, index: number) => void
 } = {
@@ -489,9 +494,12 @@ const CANVAS_EDIT_HANDLERS: {
   },
   'edge.add': (ctx, op, index) => {
     const draft = op.edge
-    const id = draft.id ?? mintId(new Set(ctx.s.edges.map((edge) => edge.id)), 'e')
+    const id = draft.id ?? mintId(elementIds(ctx), 'e')
     if (ctx.s.edgeAt(id) !== undefined) {
       fail(index, op.op, `edge id "${id}" is already on the canvas; patch it or choose another id`)
+    }
+    if (ctx.s.lineAt(id) !== undefined) {
+      fail(index, op.op, `"${id}" is already the id of a line; edges and lines share one id space`)
     }
     // A FREE end names no node, so there is nothing to be missing —
     // the existence check is about a reference, and a point is not one
@@ -542,9 +550,12 @@ const CANVAS_EDIT_HANDLERS: {
   },
   'line.add': (ctx, op, index) => {
     const draft = op.line
-    const id = draft.id ?? mintId(new Set(ctx.s.lines.map((line) => line.id)), 'l')
+    const id = draft.id ?? mintId(elementIds(ctx), 'l')
     if (ctx.s.lineAt(id) !== undefined) {
       fail(index, op.op, `line id "${id}" is already on the canvas; patch it or choose another id`)
+    }
+    if (ctx.s.edgeAt(id) !== undefined) {
+      fail(index, op.op, `"${id}" is already the id of an edge; edges and lines share one id space`)
     }
     for (const endpoint of endNodes(draft)) {
       if (ctx.s.nodeAt(endpoint) === undefined) {
@@ -638,7 +649,11 @@ const CANVAS_EDIT_HANDLERS: {
     let at = draft.x !== undefined && draft.y !== undefined ? { x: draft.x, y: draft.y } : undefined
     if (at === undefined && draft.targetNodeId !== undefined) {
       const target = ctx.s.nodeAt(draft.targetNodeId)
-      if (target !== undefined) at = { x: target.x + target.width, y: target.y }
+      // Whole pixels: a node's own coordinates are unrounded numbers, and
+      // the comment's anchor is an integer.
+      if (target !== undefined) {
+        at = { x: Math.round(target.x + target.width), y: Math.round(target.y) }
+      }
     }
     if (at === undefined) {
       fail(

@@ -32,17 +32,17 @@ describe('autoVersionsOverCap', () => {
 })
 
 describe('sandwichedAutoVersionIds', () => {
-  const row = (id: string, branchName: string, auto: boolean) => ({ id, branchName, auto })
+  const row = (id: string, auto: boolean) => ({ id, auto })
 
-  it('removes the automatic rows strictly between a branch’s first and last manual save', () => {
+  it('removes the automatic rows strictly between the first and last manual save', () => {
     expect(
       sandwichedAutoVersionIds([
-        row('a1', 'main', true),
-        row('m1', 'main', false),
-        row('a2', 'main', true),
-        row('a3', 'main', true),
-        row('m2', 'main', false),
-        row('a4', 'main', true),
+        row('a1', true),
+        row('m1', false),
+        row('a2', true),
+        row('a3', true),
+        row('m2', false),
+        row('a4', true),
       ]),
     ).toEqual(['a2', 'a3'])
   })
@@ -50,30 +50,16 @@ describe('sandwichedAutoVersionIds', () => {
   it('never removes a manual save that sits inside the sandwich', () => {
     expect(
       sandwichedAutoVersionIds([
-        row('m1', 'main', false),
-        row('a1', 'main', true),
-        row('m2', 'main', false),
-        row('m3', 'main', false),
+        row('m1', false),
+        row('a1', true),
+        row('m2', false),
+        row('m3', false),
       ]),
     ).toEqual(['a1'])
   })
 
-  it('leaves a branch with fewer than two manual saves alone', () => {
-    expect(sandwichedAutoVersionIds([row('a1', 'main', true), row('m1', 'main', false)])).toEqual(
-      [],
-    )
-    expect(sandwichedAutoVersionIds([row('a1', 'main', true), row('a2', 'main', true)])).toEqual([])
-  })
-
-  it('judges each branch on its own rows', () => {
-    expect(
-      sandwichedAutoVersionIds([
-        row('m1', 'main', false),
-        row('a1', 'main', true),
-        row('m2', 'main', false),
-        row('m3', 'idea', false),
-        row('a2', 'idea', true),
-      ]),
-    ).toEqual(['a1'])
+  it('leaves a document with fewer than two manual saves alone', () => {
+    expect(sandwichedAutoVersionIds([row('a1', true), row('m1', false)])).toEqual([])
+    expect(sandwichedAutoVersionIds([row('a1', true), row('a2', true)])).toEqual([])
   })
 })

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import type { ViewportRequestPayload } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { MAX_VIEWPORT_ZOOM, MIN_VIEWPORT_ZOOM } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorHandle } from './spatial/editor-handle.js'
 import { applyViewportRequest } from './viewport-request.js'
@@ -101,5 +102,24 @@ describe('applyViewportRequest', () => {
     }
     applyViewportRequest(payload({ mode: 'move' }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 1 })
+  })
+
+  it.each([
+    [0, MIN_VIEWPORT_ZOOM],
+    [-3, MIN_VIEWPORT_ZOOM],
+    [1e9, MAX_VIEWPORT_ZOOM],
+    [100, MAX_VIEWPORT_ZOOM],
+    [Number.NaN, 1],
+    [Number.POSITIVE_INFINITY, 1],
+  ])('clamps a zoom of %s to the editor range so the pan/zoom never goes non-finite', (zoom, expected) => {
+    // An older daemon forwards the value unbounded; the screen/canvas
+    // transform divides by zoom, so 0 would turn every coordinate into NaN.
+    const handle: SpatialEditorHandle = {
+      setViewport: vi.fn(),
+      fitToContent: vi.fn(),
+      openProposal: vi.fn(),
+    }
+    applyViewportRequest(payload({ mode: 'move', scrollX: 5, scrollY: 6, zoom }), handle)
+    expect(handle.setViewport).toHaveBeenCalledWith({ x: 5, y: 6, zoom: expected })
   })
 })

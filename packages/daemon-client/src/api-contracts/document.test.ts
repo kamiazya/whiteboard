@@ -10,11 +10,13 @@
  * z.infer type alignment is checked at the TypeScript level by annotating
  * parsed results with the exported type aliases.
  */
+import { workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   type CompactWorkspaceResult,
   compactWorkspaceResultSchema,
   createWorkspaceRequestSchema,
+  DAEMON_DEFAULT_SEGMENT,
   type DocumentSummary,
   documentSummarySchema,
   type ListDocumentsResponse,
@@ -217,9 +219,9 @@ describe('versionEntrySchema', () => {
     expect(versionEntrySchema.safeParse({ ...valid, elementCount: NaN }).success).toBe(false)
   })
 
-  it('rejects missing branchName', () => {
+  it('accepts a row that carries no branchName', () => {
     const { branchName: _omit, ...missing } = valid
-    expect(versionEntrySchema.safeParse(missing).success).toBe(false)
+    expect(versionEntrySchema.safeParse(missing).success).toBe(true)
   })
 })
 
@@ -281,6 +283,15 @@ describe('workspaceSummarySchema', () => {
   it('parses a well-formed value', () => {
     const result: WorkspaceSummary = workspaceSummarySchema.parse(valid)
     expect(result.workspaceId).toBe('ws-abc')
+  })
+
+  it('spells the daemon default segment as the README tells an agent to address it', () => {
+    expect(DAEMON_DEFAULT_SEGMENT).toBe('default')
+  })
+
+  it('carries the daemon default segment as a well-formed workspace address', () => {
+    const result = workspaceSummarySchema.parse({ ...valid, segment: DAEMON_DEFAULT_SEGMENT })
+    expect(workspaceSegmentSchema.safeParse(result.segment).success).toBe(true)
   })
 
   it('roundtrip preserves fields', () => {

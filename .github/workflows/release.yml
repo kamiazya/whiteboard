@@ -22,9 +22,21 @@ on:
   workflow_dispatch:
     inputs:
       force_publish_tag:
-        description: 'Tag to re-run publishing for, e.g. mcp-server-v0.0.2. Runs publish-mcp (npm publish, which fails on a version npm already has) AND docker-publish-sign (pushes the image and re-tags latest). Leave blank to run neither.'
+        description: 'Tag to re-run publishing for, e.g. mcp-server-v0.0.2. Leave blank to run neither half. Which halves run is chosen by publish_npm and publish_docker.'
         required: false
         default: ''
+      # Each half is retried on its own: npm publish fails on a version npm
+      # already has, so re-running only the image must not schedule it, and the
+      # reverse for a failed npm publish. Both default on, which is what a
+      # dispatch did before the split.
+      publish_npm:
+        description: 'With a tag: run publish-mcp (npm publish, which fails on a version npm already has).'
+        type: boolean
+        default: true
+      publish_docker:
+        description: 'With a tag: run docker-publish-sign (pushes the image and re-tags latest).'
+        type: boolean
+        default: true
 
 # No workflow-level `permissions` block on purpose: a write granted here is
 # ambient to every job that does not override it, and the only job that needs
@@ -92,7 +104,7 @@ jobs:
 
   publish-mcp:
     needs: release-please
-    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || inputs.force_publish_tag != '' }}
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_npm) }}
     runs-on: ubuntu-latest
     environment: production-npm
     permissions:
@@ -188,7 +200,7 @@ jobs:
 
   docker-publish-sign:
     needs: release-please
-    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || inputs.force_publish_tag != '' }}
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_docker) }}
     runs-on: ubuntu-latest
     environment: production-docker
     permissions:

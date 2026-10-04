@@ -8,10 +8,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
-import type { SpatialAppearanceResolver } from './layout/nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneDigest } from './scene-digest.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
+import type { SpatialAppearanceResolver } from './theme/spatial-appearance.js'
 
 const appearance: SpatialAppearanceResolver = {
   resolveNode: () => ({}),

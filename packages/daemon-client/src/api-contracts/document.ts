@@ -175,6 +175,14 @@ export const renameDocumentPathResponseSchema = z.object({
   path: z.string(),
 })
 
+// The segment the daemon gives the workspace a fresh data directory
+// bootstraps — what an agent addresses before it has been told any id, and the
+// one a client opens when it names no address. A constant on the contract
+// because the daemon's claim and the client's lookup are one agreement across
+// a process boundary: a client that spelled it itself would silently fall back
+// to the first listed workspace when the daemon changed it.
+export const DAEMON_DEFAULT_SEGMENT = 'default'
+
 // Workspace + canvas listings consumed by IndexPage to render the
 // "open workspaces" grid.
 //

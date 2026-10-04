@@ -82,7 +82,10 @@ describe('a tenant-bound handle', () => {
     expect(crossTenantTouches).toBeGreaterThan(0)
   })
 
-  fcTest.prop([fc.array(opArb, { maxLength: 25 })], withDefaults({ numRuns: 40 }))(
+  // `size: 'max'` makes the 25 real: fast-check sizes an explicit `maxLength`
+  // as small unless told otherwise, so runs averaged three ops with a ceiling
+  // of ten, and one seed in six reached no other tenant's row in forty runs.
+  fcTest.prop([fc.array(opArb, { maxLength: 25, size: 'max' })], withDefaults({ numRuns: 40 }))(
     'never reads, changes or removes another tenant rows',
     async (ops) => {
       await handle.rawDb.deleteFrom('workspaceMemberships').execute()

@@ -14,7 +14,7 @@ import {
   type StencilAssetInput,
   stencilAssetSchema,
 } from '@kamiazya/whiteboard-facet-engine'
-import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
+import { canvasColorSchema, type ExtensionFacets } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
@@ -39,6 +39,27 @@ export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
 export const STENCIL_LIBRARY_PATH = 'stencils'
 
 /**
+ * The engine passes a stencil's `color` through uninterpreted, because the
+ * colour of a node belongs to the FORMAT (see `stencil.ts`). This is the
+ * format's half: the model's own colour schema is the predicate, so a
+ * library cannot hold a colour a node could not carry. It narrows the
+ * engine's own string rather than adopting the union, because the union's
+ * refusal reads only "must be a 6-digit hex color" and hides the presets an
+ * author most likely meant.
+ */
+const stencilColorSchema = stencilAssetSchema.shape.color
+  .unwrap()
+  .refine((color) => canvasColorSchema.safeParse(color).success, {
+    message: 'must be a preset "1" to "6" or a 6-digit hex color like "#ff0000"',
+  })
+
+const libraryStencilSchema = stencilAssetSchema.extend({ color: stencilColorSchema.optional() })
+
+const stencilNameSchema = z
+  .string()
+  .regex(FACET_SEGMENT_PATTERN, 'a stencil name must be a lowercase segment, like "bucket"')
+
+/**
  * `visual.stencils/v0` — the facet that makes a DOCUMENT a workspace's
  * stencil library (ADR-0034 decision 4; the authoring format was settled on
  * 2026-09-11 and this is it).
@@ -61,12 +82,7 @@ export const STENCIL_LIBRARY_PATH = 'stencils'
  * ITSELF — who it is for, what it extends — can, without moving to v1.
  */
 export const visualStencilsFacetSchema = z.object({
-  stencils: z.record(
-    z
-      .string()
-      .regex(FACET_SEGMENT_PATTERN, 'a stencil name must be a lowercase segment, like "bucket"'),
-    stencilAssetSchema,
-  ),
+  stencils: z.record(stencilNameSchema, libraryStencilSchema),
 })
 
 /**
@@ -79,9 +95,10 @@ export const visualStencilsFacetSchema = z.object({
  *
  * DEGRADES rather than throws. A document that is not a library is the
  * overwhelmingly common case and answers `{}` here; so does one whose
- * payload the schema refuses, because a malformed library must not stop a
- * drawing being read — the write path is where a bad library is rejected,
- * loudly, with the author present.
+ * outer shape is wrong. A stencil the schema refuses is left out and the
+ * rest stay, because a malformed library must not stop a drawing being read
+ * — the write path is where a bad library is rejected, loudly, with the
+ * author present.
  *
  * BY NAME, because there is no other order to be faithful to. A
  * deployment's assets are answered in registration order — the bundled
@@ -98,9 +115,16 @@ export function readStencilLibrary(
 ): Readonly<Record<string, StencilAssetInput>> {
   const raw = facets?.[VISUAL_STENCILS_KEY]
   if (raw === undefined) return {}
-  const parsed = visualStencilsFacetSchema.safeParse(raw)
-  if (!parsed.success) return {}
-  return Object.fromEntries(
-    Object.entries(parsed.data.stencils).sort(([left], [right]) => (left < right ? -1 : 1)),
-  )
+  const outer = z.object({ stencils: z.record(z.string(), z.unknown()) }).safeParse(raw)
+  if (!outer.success) return {}
+  // One stencil at a time: a library is content, and one entry the schema
+  // refuses must not take the others with it.
+  const valid: [string, StencilAssetInput][] = []
+  for (const [name, stencil] of Object.entries(outer.data.stencils)) {
+    if (!stencilNameSchema.safeParse(name).success) continue
+    const parsed = libraryStencilSchema.safeParse(stencil)
+    if (parsed.success) valid.push([name, parsed.data])
+  }
+  valid.sort(([left], [right]) => (left < right ? -1 : 1))
+  return Object.fromEntries(valid)
 }

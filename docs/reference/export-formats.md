@@ -67,7 +67,8 @@ Two consequences worth knowing:
   same normalisation already applies to `facets`.
 - A preserved value must be representable in YAML. `NaN`, `Infinity` and
   `undefined` are refused with a typed error rather than written as a corrupt
-  document.
+  document — a write over `/api/v1` answers `400 okf_not_yaml_safe`, naming the
+  key.
 
 Values are not validated against the OKF spec: a malformed `verified` block is
 carried through as faithfully as a well-formed one, because a consumer that
@@ -101,16 +102,6 @@ extension key, `x-whiteboard`, allowed at three sites:
   field by field. A consumer that drops the extension draws the same edge
   with its own computed routing — bends are the clearest case of something
   JSON Canvas simply has no vocabulary for.
-
-One thing is dropped rather than carried: **an edge with a free end**. The
-document model lets an edge run from a node to a bare point on the canvas;
-JSON Canvas 1.0 requires both ends to name a node, and no extension shape
-would make such an edge *readable* by a consumer rather than merely present
-in a key it ignores. So a point-ended edge is omitted from **both** modes —
-the whole edge, not one of its fields — and it is the only entry in the loss
-table whose unit is the element. Anchoring it to an invented zero-size node
-would make the export a document with a box the author never drew, which is a
-worse answer than an absence the table names.
 
 No other non-standard field is ever emitted, at any level. Foreign keys on an
 imported document (another tool's vendor fields) are stripped on parse and

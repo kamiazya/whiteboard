@@ -20,32 +20,12 @@ function toInvalidConfigState(err: unknown): Extract<ProviderState, { kind: 'inv
 /**
  * Which keeper answers, and nothing else.
  *
- * There WAS a `WhiteboardCapabilities` map here, and its own history is the
- * argument for deleting it: `workspaces` left when the browser keeper stopped
- * being definitionally single-workspace (ADR-0019), `versions` left when it
- * kept its own history, `branches` left when it kept its own variations on
- * the workspace record, and `merge` leaves now that it commits one. Every one
- * for the same reason — a flag both keepers set the same way gates nothing,
- * and the copy built on it promises a difference that is not there.
- *
- * With the last one gone the map is EMPTY, so the map goes too rather than
- * standing as a shape waiting for a difference to appear. An empty map kept
- * "for later" is the one thing `provider.capability-reach.test.ts` could
- * never have refused, because it had no entries left to judge; if a real
- * difference appears, it comes back carrying that difference.
- *
- * What replaced it is better than a flag, and this is the part worth
- * carrying forward: where the keepers still differ, the difference is a fact
- * about a DOCUMENT rather than about a keeper, answered where it is known by
- * something that cannot forget to mention it. The first instance was the
- * since-retired branches backend's `hasBranches`: a markdown body has no
- * record-holding backend, so no variations.
- *
- * `VersionTimelineCapabilities` stood beside it here as the second example,
- * and it is gone: the browser keeper's rows grew the variation they were
- * taken on and its checkpoints landed, so the pair said `{true, true}` on
- * both sides and declared nothing. The relocation is the durable idea; that
- * one instance of it expired.
+ * There is no capability map: a flag both keepers set the same way gates
+ * nothing, and the copy built on it promises a difference that is not there.
+ * Where the keepers still differ, the difference is a fact about a DOCUMENT
+ * rather than about a keeper, answered where it is known by something that
+ * cannot forget to mention it. If a real keeper-level difference appears, a
+ * map returns carrying that difference.
  */
 export type ProviderState =
   | { readonly kind: 'browser' }

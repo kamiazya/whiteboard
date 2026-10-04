@@ -13,6 +13,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import { setLogSink } from '../log.js'
 import {
   FakeDocumentStore,
@@ -21,7 +22,6 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from './canvas-edit.js'
-import { loadDocument } from './document-io.js'
 import { createFacetSetTool } from './facet-set.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'

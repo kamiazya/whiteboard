@@ -347,7 +347,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   describe('branchName', () => {
-    it('defaults branchName to "main" when omitted', async () => {
+    it('publishes the one lane every version is on', async () => {
       const doc = new LoroDoc()
       appendElement(doc, 'e1')
       const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
