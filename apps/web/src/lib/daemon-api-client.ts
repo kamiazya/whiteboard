@@ -64,11 +64,11 @@ import {
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
+import { daemonContractError } from './daemon-contract-error.js'
 // Re-exported so existing callers keep one import site; the implementation
 // lives in its own module so a SharedWorker can use it without this file's
 // schema graph.
-import { createDaemonFetch } from './daemon-auth-fetch.js'
-import { daemonContractError } from './daemon-contract-error.js'
+import { createDaemonFetch } from './daemon-fetch.js'
 
 export { createDaemonFetch }
 

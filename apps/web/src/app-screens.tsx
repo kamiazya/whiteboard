@@ -5,7 +5,7 @@ import { UnsavedChangesNotice } from './components/connection/UnsavedChangesNoti
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
-import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
+import type { ConnectedDaemon } from './lib/daemon-fetch.js'
 import type { ReplicaMatch } from './lib/replicas.js'
 
 // Every page below is lazy for the reason its own comment gives, and they are

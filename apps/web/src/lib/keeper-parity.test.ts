@@ -125,7 +125,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   },
   'src/contexts/DaemonApiContext.tsx': {
     reach: 'daemon-itself',
-    why: 'carries the authorized fetch for a connected daemon, so it is the connection itself rather than a feature built on one',
+    why: 'carries the daemon-addressed fetch for a connected daemon, so it is the connection itself rather than a feature built on one',
   },
   'src/contexts/VersionsBackendContext.tsx': {
     reach: 'both-keepers',

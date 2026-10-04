@@ -7,7 +7,7 @@
  * native host to start, so that window is no longer a single round trip.
  */
 import { describe, expect, it } from 'vitest'
-import { renewalPending, settingsDaemon, shellDaemon } from './session-keeper.js'
+import { daemonForSession, renewalPending } from './session-keeper.js'
 
 describe('renewalPending', () => {
   it('holds while a reconnection is in flight and nothing has answered', () => {
@@ -38,32 +38,43 @@ describe('renewalPending', () => {
 // address and nothing more.
 describe('the daemon a session talks to', () => {
   const connection = { daemonBaseUrl: 'https://daemon.whiteboard.invalid' }
+  const configured = { kind: 'daemon', daemonBaseUrl: 'https://configured.example' } as const
 
-  it('is the reconnected one, over any configured daemon', () => {
-    const effectiveState = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' } as const
-    expect(shellDaemon({ forcedBrowser: false, connection, effectiveState })).toEqual({
-      baseUrl: 'https://daemon.whiteboard.invalid',
-    })
+  it.each([
+    [
+      'is the reconnected one, over any configured daemon',
+      connection,
+      configured,
+      'https://daemon.whiteboard.invalid',
+    ],
+    [
+      'is the configured one when nothing reconnected',
+      null,
+      configured,
+      'https://configured.example',
+    ],
+  ] as const)('%s', (_why, reconnected, providerState, baseUrl) => {
     expect(
-      settingsDaemon({ forcedBrowser: false, connection, providerState: effectiveState }),
-    ).toEqual({ baseUrl: 'https://daemon.whiteboard.invalid' })
+      daemonForSession({ forcedBrowser: false, connection: reconnected, providerState }),
+    ).toEqual({ baseUrl })
   })
 
-  it('is the address alone for a configured daemon', () => {
-    const state = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' } as const
-    expect(shellDaemon({ forcedBrowser: false, connection: null, effectiveState: state })).toEqual({
-      baseUrl: 'http://127.0.0.1:3099',
-    })
+  it.each([
+    ['a reconnection', connection, configured],
+    ['a configured daemon', null, configured],
+  ] as const)('is none once the person chose the browser, over %s', (_why, reconnected, providerState) => {
     expect(
-      settingsDaemon({ forcedBrowser: false, connection: null, providerState: state }),
-    ).toEqual({ baseUrl: 'http://127.0.0.1:3099' })
+      daemonForSession({ forcedBrowser: true, connection: reconnected, providerState }),
+    ).toBeUndefined()
   })
 
-  it('is none once the person chose the browser', () => {
-    const effectiveState = { kind: 'browser' } as const
-    expect(shellDaemon({ forcedBrowser: true, connection, effectiveState })).toBeUndefined()
+  it('is none when nothing names a daemon', () => {
     expect(
-      settingsDaemon({ forcedBrowser: true, connection, providerState: effectiveState }),
+      daemonForSession({
+        forcedBrowser: false,
+        connection: null,
+        providerState: { kind: 'browser' },
+      }),
     ).toBeUndefined()
   })
 })

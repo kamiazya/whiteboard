@@ -27,12 +27,11 @@ import {
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import {
   browserDocumentPath,
+  daemonForSession,
   daemonKeepsSession,
   effectiveProviderState,
   renewalPending,
   replicaRead,
-  settingsDaemon,
-  shellDaemon,
 } from './lib/session-keeper.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { workspaceHandleOrNull } from './lib/workspace-handle.js'
@@ -138,7 +137,7 @@ export function App({ providerState }: AppProps) {
 
   // Which daemon the SHELL is talking to. Hoisted above the render branches
   // because a hook cannot live inside one.
-  const shell = shellDaemon({ forcedBrowser, connection, effectiveState })
+  const shell = daemonForSession({ forcedBrowser, connection, providerState: effectiveState })
   const daemonShellTarget = useDaemonShellTarget(shell)
 
   useDaemonThemeFonts(daemonShellTarget)
@@ -154,7 +153,7 @@ export function App({ providerState }: AppProps) {
   // rather than inside one of those branches' own scope. Off the RAW provider
   // state, not the effective one: the escape hatch is its own `forcedBrowser`
   // argument.
-  const settings = settingsDaemon({ forcedBrowser, connection, providerState: state })
+  const settings = daemonForSession({ forcedBrowser, connection, providerState: state })
 
   useReplicaKeeper(settings)
 

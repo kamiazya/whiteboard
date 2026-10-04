@@ -157,7 +157,7 @@ describe('a source comment does not describe the retired pairing flow', () => {
   it('reads the comment sources worth reading', () => {
     // A scan over an empty list reports clean, which reads as a rule being kept.
     expect(files.length).toBeGreaterThan(1_500)
-    expect(files).toContain('apps/web/src/lib/daemon-auth-fetch.ts')
+    expect(files).toContain('apps/web/src/lib/daemon-fetch.ts')
     expect(hits.size).toBeGreaterThan(5)
   })
 

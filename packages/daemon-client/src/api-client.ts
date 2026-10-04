@@ -53,7 +53,8 @@ export const runtimeConfigSchema = z
     // Used to construct absolute URLs for same-origin API calls.
     publicOrigin: bareOriginSchema.optional(),
     // Base URL of the local whiteboard daemon the app is connected to.
-    // e.g. 'http://127.0.0.1:3099'
+    // e.g. 'https://daemon.whiteboard.invalid' — the address the extension
+    // bridge answers to; the local daemon listens on no network port.
     daemonBaseUrl: bareOriginSchema.optional(),
     // Set by a server-mode keeper that serves this app from its own origin
     // (ADR-0047): sign-in and the API are same-origin, and the session is

@@ -40,7 +40,7 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '../lib/app-routes.js'
 import { celebrate } from '../lib/celebrate.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
-import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
+import type { ConnectedDaemon } from '../lib/daemon-fetch.js'
 import { disconnectFromDaemon } from '../lib/disconnect-daemon.js'
 import type { FaviconStyle } from '../lib/favicon.js'
 import {

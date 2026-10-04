@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
-import { createDaemonFetch } from './daemon-auth-fetch.js'
+import { createDaemonFetch } from './daemon-fetch.js'
 
 const DAEMON = 'http://127.0.0.1:3099'
 
