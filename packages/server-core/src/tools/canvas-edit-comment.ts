@@ -1,6 +1,7 @@
 /**
  * Where a `comment.add` op pins its comment.
  */
+import { commentCornerOf } from '@kamiazya/whiteboard-model'
 import { fail } from './canvas-edit-error.js'
 import type { CanvasEditInput } from './canvas-edit-ops.js'
 import type { CanvasEditSession } from './canvas-edit-session.js'
@@ -33,7 +34,8 @@ export function commentAnchor(
   // Whole pixels: a node's own coordinates are unrounded numbers, and the
   // comment's anchor is an integer.
   if (target !== undefined) {
-    return { x: Math.round(target.x + target.width), y: Math.round(target.y) }
+    const corner = commentCornerOf(target)
+    return { x: Math.round(corner.x), y: Math.round(corner.y) }
   }
   // An edge is drawn along a route the renderer decides, so the server has no
   // corner of it to anchor at the way it has a node's; the caller says.

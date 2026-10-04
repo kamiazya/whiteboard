@@ -12,6 +12,7 @@
  * matrix exists to catch, one level up.
  */
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { commentCornerOf } from '@kamiazya/whiteboard-model'
 import { Eye, EyeOff, MessageSquare, MessageSquarePlus } from 'lucide-react'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
@@ -34,7 +35,7 @@ export function commentOnNodeItem(
     icon: <MessageSquarePlus />,
     onSelect: () =>
       setCommentCompose({
-        point: { x: node.x + node.width, y: node.y },
+        point: commentCornerOf(node),
         targetNodeId: node.id,
       }),
   }
