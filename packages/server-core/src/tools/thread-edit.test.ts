@@ -411,6 +411,140 @@ describe('wb_thread_edit refuses an anchor that names nothing on the document', 
   })
 })
 
+describe('wb_thread_edit refuses a blank message', () => {
+  async function seededThread(store: FakeDocumentStore) {
+    const tool = createThreadEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'thread.add', threadId: 't1', anchor: { kind: 'document' }, body: 'first' }],
+    })
+    return tool
+  }
+
+  test.each([
+    ['spaces', '   '],
+    ['a newline and a tab', '\n\t'],
+    ['a non-breaking space', '\u00a0'],
+  ])('on thread.add, a body of %s', async (_name, body) => {
+    const store = new FakeDocumentStore()
+    await seedBoard(store)
+
+    await expect(
+      createThreadEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'thread.add', anchor: { kind: 'document' }, body }],
+      }),
+    ).rejects.toThrow(/ops\[0\] \(thread\.add\).*blank.*Nothing was written/)
+
+    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(readAnnotations(doc)).toEqual([])
+  })
+
+  test('on message.add, and nothing earlier in the batch is kept', async () => {
+    const store = new FakeDocumentStore()
+    await seedBoard(store)
+    const tool = await seededThread(store)
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          { op: 'thread.resolve', threadId: 't1' },
+          { op: 'message.add', threadId: 't1', body: '  ' },
+        ],
+      }),
+    ).rejects.toThrow(/ops\[1\] \(message\.add\).*blank/)
+
+    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const [thread] = readAnnotations(doc)
+    expect(thread?.status).toBe('open')
+    expect(thread?.messages).toHaveLength(1)
+  })
+})
+
+// The quote is what finds a passage (`resolveTextAnchor` takes stored offsets
+// as a shortcut and falls back to the quote), so the offsets a caller counts
+// are a hint. A model cannot count characters reliably, so a wrong hint is
+// stored as where the quote actually is rather than refused or kept as a lie.
+describe('wb_thread_edit stores a text anchor at where its quote is', () => {
+  async function anchorStored(
+    seed: (store: FakeDocumentStore) => Promise<void>,
+    anchor: Anchor,
+  ): Promise<AnnotationAnchor | undefined> {
+    const store = new FakeDocumentStore()
+    await seed(store)
+    const result = await createThreadEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'thread.add', anchor, body: 'about this' }],
+    })
+    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(result.threads[0]?.anchor).toEqual(readAnnotations(doc)[0]?.anchor)
+    return readAnnotations(doc)[0]?.anchor
+  }
+
+  test.each<[string, Anchor]>([
+    [
+      'offsets past the end of the body',
+      { kind: 'text', quote: { exact: 'migration' }, start: 100, end: 109 },
+    ],
+    [
+      'offsets that select other text',
+      { kind: 'text', quote: { exact: 'migration' }, start: 0, end: 9 },
+    ],
+    [
+      'offsets of the wrong width',
+      { kind: 'text', quote: { exact: 'migration' }, start: 4, end: 6 },
+    ],
+  ])('on a note, for %s', async (_name, anchor) => {
+    expect(await anchorStored(seedMarkdown, anchor)).toEqual({
+      kind: 'text',
+      quote: { exact: 'migration' },
+      start: 4,
+      end: 13,
+    })
+  })
+
+  test('on a text node, for offsets that select other text', async () => {
+    expect(
+      await anchorStored(seedBoard, {
+        kind: 'text',
+        nodeId: 'a',
+        quote: { exact: 'beta' },
+        start: 0,
+        end: 4,
+      }),
+    ).toEqual({ kind: 'text', nodeId: 'a', quote: { exact: 'beta' }, start: 6, end: 10 })
+  })
+
+  test('keeps offsets that already select the quote, even when the quote occurs twice', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeMarkdownBody(doc, 'echo one, echo two')
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      path: 'doc',
+      kind: 'markdown',
+    })
+    const anchor: Anchor = { kind: 'text', quote: { exact: 'echo' }, start: 10, end: 14 }
+
+    const result = await createThreadEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'thread.add', anchor, body: 'the second one' }],
+    })
+
+    expect(result.threads[0]?.anchor).toEqual(anchor)
+  })
+})
+
 describe('wb_thread_edit edge anchors on a canvas with several edges', () => {
   const TWO_EDGES: SpatialCanvas = {
     nodes: BOARD.nodes,
