@@ -15,10 +15,10 @@
 //     (redactDiagnosticText + auth-marker scrub on every stringy field)
 //   - Authorization / Bearer / JWKS URI never appear in any section
 
-import { lstat, mkdir, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { hasAncestorSymlink } from '../server/backup-restore.js'
+import { inspectOutputPath } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import {
@@ -27,7 +27,6 @@ import {
   supportBundleDoctorSectionSchema,
   supportBundleManifestSchema,
 } from '../shared/diagnostics/support-bundle.js'
-import { isMissingFileError } from '../shared/errno.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   OPERATOR_JSON_SCHEMA_VERSION,
@@ -228,36 +227,22 @@ export async function runServerSupportBundle(
 
   // ── Output-dir path safety ────────────────────────────────────────
 
-  // Reject if any ancestor path component is a symlink.
+  // The bundle is written INTO a directory, so anything but a real, empty one
+  // (or a missing one, created here) is refused.
   try {
-    if (await hasAncestorSymlink(outputDir)) {
+    const state = await inspectOutputPath(outputDir, { requireDirectory: true })
+    if (state === 'unsafe') {
       return fail('support bundle refused: output path is not a safe directory.')
+    }
+    if (state === 'present') {
+      if ((await readdir(outputDir)).length > 0) {
+        return fail('Could not write support bundle. The output directory must be empty.')
+      }
+    } else {
+      await mkdir(outputDir, { recursive: true })
     }
   } catch {
     return fail('support bundle failed')
-  }
-
-  // Reject symlink or plain-file final component; accept missing or
-  // existing empty directory.
-  try {
-    const st = await lstat(outputDir)
-    if (!st.isDirectory()) {
-      return fail('support bundle refused: output path is not a safe directory.')
-    }
-    const entries = await readdir(outputDir)
-    if (entries.length > 0) {
-      return fail('Could not write support bundle. The output directory must be empty.')
-    }
-  } catch (err) {
-    if (!isMissingFileError(err)) {
-      return fail('support bundle failed')
-    }
-    // Missing output dir: create it.
-    try {
-      await mkdir(outputDir, { recursive: true })
-    } catch {
-      return fail('support bundle failed')
-    }
   }
 
   // ── Collect data ─────────────────────────────────────────────────

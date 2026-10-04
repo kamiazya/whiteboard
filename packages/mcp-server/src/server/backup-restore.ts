@@ -85,6 +85,52 @@ export async function hasAncestorSymlink(p: string): Promise<boolean> {
   return false
 }
 
+export type OutputPathState = 'missing' | 'present' | 'unsafe'
+
+/**
+ * Judge a path a command is about to WRITE to, before any byte moves. A
+ * symlinked ancestor (`<safe>/link -> /outside`) would redirect the write
+ * outside the operator's intended storage zone, so it is refused rather than
+ * followed.
+ *
+ * What the final component may be is the one thing callers differ on: a
+ * backup or restore target refuses a symlink or plain file and lets anything
+ * else through to its own emptiness check, while the support bundle writes
+ * into a directory and so also refuses every other kind (`requireDirectory`).
+ *
+ * Throws on anything but a missing component; callers answer that as a
+ * failure, never as a refusal, so an unreadable path is not mistaken for an
+ * unsafe one.
+ */
+export async function inspectOutputPath(
+  p: string,
+  options: { requireDirectory: boolean },
+): Promise<OutputPathState> {
+  if (await hasAncestorSymlink(p)) return 'unsafe'
+  let st: Awaited<ReturnType<typeof lstat>>
+  try {
+    st = await lstat(p)
+  } catch (err) {
+    if (isMissingFileError(err)) return 'missing'
+    throw err
+  }
+  const refused = options.requireDirectory ? !st.isDirectory() : st.isSymbolicLink() || st.isFile()
+  return refused ? 'unsafe' : 'present'
+}
+
+/**
+ * The read-side twin: a symlinked source directory would let a command read
+ * from outside the allowed zone. Fail-closed, so a path that cannot be
+ * examined is not safe either.
+ */
+export async function isSafeSourcePath(p: string): Promise<boolean> {
+  try {
+    return !(await hasAncestorSymlink(p))
+  } catch {
+    return false
+  }
+}
+
 async function assertWithinAllowed(
   target: string,
   options: BackupRestoreOptions,

@@ -506,10 +506,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/cli/dispatcher.ts#dispatchRun': 62,
   'packages/mcp-server/src/cli/search-fetch-model.ts#runSearchFetchModel': 63,
   'packages/mcp-server/src/cli/server-doctor.ts#runServerDoctor': 59,
-  'packages/mcp-server/src/cli/server-restore.ts#runServerRestore': 98,
+  'packages/mcp-server/src/cli/server-restore.ts#runServerRestore': 82,
   'packages/mcp-server/src/cli/server-run.ts#runServerRun': 137,
   'packages/mcp-server/src/cli/server-status.ts#runServerStatus': 78,
-  'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 105,
+  'packages/mcp-server/src/cli/server-support-bundle.ts#runServerSupportBundle': 85,
   'packages/mcp-server/src/di/container.ts#resolveServerDeps': 94,
   // The membership gate argument and the admit wiring threaded from membershipWiring() (ADR-0041).
   'packages/mcp-server/src/server/app.ts#createApp': 138,
@@ -571,7 +571,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // ENOTEMPTY on CI three times. The lines are a promise handle, its assignment,
   // the await, and three of comment saying why the await is there.
   'packages/mcp-server/src/server/store/backup-in-progress.ts#withBackupMarker': 56,
-  'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 210,
+  'packages/mcp-server/src/server/store/backup-pass.ts#performBackup': 191,
   'packages/mcp-server/src/server/store/backup-scheduler.ts#createBackupScheduler': 207,
   'packages/mcp-server/src/server/store/backup-subprocess.ts#runBackupInSubprocess': 64,
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
