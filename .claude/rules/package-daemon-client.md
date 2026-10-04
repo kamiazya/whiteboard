@@ -12,6 +12,10 @@ paths:
   `did:key` helpers and the URL builders. The barrel
   (`api-contracts/index.ts`) is deliberately NARROW — it is the whole
   contract surface apps/web reads (`api-contracts-barrel.test.ts` pins it).
+- Which hostnames name this machine (`./loopback-host`'s
+  `isLoopbackHostname`, over `URL.hostname`'s spelling: brackets kept, no
+  bare `::1`). Both roots read it; `loopback-host-one-place.test.ts` fails a
+  second set.
 - **Strict requests, tolerant answers.** The hosted app and the daemon update
   independently, so a schema the browser parses an answer with is NOT
   `.strict()` and one the daemon parses a request with is; the line is the
