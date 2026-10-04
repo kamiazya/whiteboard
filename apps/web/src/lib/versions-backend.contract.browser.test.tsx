@@ -191,7 +191,6 @@ function daemonHarness(): VersionsBackendHarness {
     createdAt: new Date(Date.now() + seq).toISOString(),
     elementCount: 1,
     auto: restoredFrom !== undefined,
-    branchName: 'main',
     ...(label === undefined || label === '' ? {} : { label }),
     ...(restoredFrom === undefined ? {} : { restoredFrom }),
   })

@@ -116,13 +116,6 @@ export const versionEntrySchema = z.object({
   auto: z.boolean(),
   operator: operatorInfoSchema.optional(),
   /**
-   * The column ADR-0029 retired the branch from: always `main` where a daemon
-   * still writes it, and absent from a row a keeper never gave one. Optional
-   * so a reader survives the daemon that stops sending it — one required key
-   * would fail the whole History list and every `version_created` frame.
-   */
-  branchName: z.string().optional(),
-  /**
    * The version this point was produced by RESTORING, when it was.
    *
    * A restore reconciles a past state onto the live document, so what comes
@@ -147,10 +140,7 @@ export type VersionEntry = z.infer<typeof versionEntrySchema>
  * A version as the MCP tools answer it: what an agent acts on, and nothing
  * the History PANEL needs that an agent does not. `path` repeats the
  * document it asked about, `elementCount` is panel
- * decoration, and `branchName` is the legacy column ADR-0029 retired the
- * branch from (always `main` on the wire). Measured on the errand
- * scoreboard, four saved versions answered 1,948 bytes with them and 1,316
- * without; a model reads that answer in every turn that follows.
+ * decoration; a model reads that answer in every turn that follows.
  *
  * The operator keeps who and how they are shown, not the peer and agent
  * ids a person never types.

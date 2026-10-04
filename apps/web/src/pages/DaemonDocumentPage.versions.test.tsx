@@ -136,7 +136,6 @@ describe('DaemonDocumentPage versions', () => {
                   createdAt: '2026-01-01T00:00:00Z',
                   elementCount: 3,
                   auto: false,
-                  branchName: 'main',
                 },
               }),
             )
@@ -314,7 +313,6 @@ describe('DaemonDocumentPage versions', () => {
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 3,
                     auto: true,
-                    branchName: 'main',
                   },
                 ],
               }),
@@ -421,7 +419,6 @@ describe('DaemonDocumentPage versions', () => {
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 3,
                     auto: true,
-                    branchName: 'main',
                   },
                 ],
               }),

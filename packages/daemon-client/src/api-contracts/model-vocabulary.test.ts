@@ -45,7 +45,7 @@ const schemas = Object.values(modules).flatMap((mod) => Object.values(mod).filte
 // is a different entity that has a path and an id of its own.
 const NOT_A_DOCUMENT: ReadonlyMap<string, string> = new Map([
   [
-    'attestation,auto,branchName,createdAt,elementCount,id,label,operator,path,restoredFrom',
+    'attestation,auto,createdAt,elementCount,id,label,operator,path,restoredFrom',
     'a version entry: `id` is the version, and `path` the document it belongs to',
   ],
   [

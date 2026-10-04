@@ -196,7 +196,6 @@ describe('versionEntrySchema', () => {
     createdAt: '2024-01-01T00:00:00.000Z',
     elementCount: 42,
     auto: false,
-    branchName: 'main',
   }
 
   it('parses a well-formed value', () => {
@@ -219,9 +218,10 @@ describe('versionEntrySchema', () => {
     expect(versionEntrySchema.safeParse({ ...valid, elementCount: NaN }).success).toBe(false)
   })
 
-  it('accepts a row that carries no branchName', () => {
-    const { branchName: _omit, ...missing } = valid
-    expect(versionEntrySchema.safeParse(missing).success).toBe(true)
+  it('publishes no branchName, and drops one an older daemon still sends', () => {
+    expect(Object.keys(versionEntrySchema.shape)).not.toContain('branchName')
+    const parsed = versionEntrySchema.parse({ ...valid, branchName: 'main' })
+    expect(parsed).not.toHaveProperty('branchName')
   })
 })
 
@@ -232,7 +232,6 @@ describe('listVersionsResponseSchema', () => {
     createdAt: '2024-01-01T00:00:00.000Z',
     elementCount: 1,
     auto: true,
-    branchName: 'main',
   }
   const valid: ListVersionsResponse = { versions: [entry] }
 
@@ -258,7 +257,6 @@ describe('saveVersionResponseSchema', () => {
     createdAt: '2024-06-01T00:00:00.000Z',
     elementCount: 5,
     auto: false,
-    branchName: 'feature',
   }
   const valid: SaveVersionResponse = { version: entry }
 

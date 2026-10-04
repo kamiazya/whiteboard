@@ -174,7 +174,6 @@ class FakeVersions implements VersionHistory {
       createdAt: '2026-01-01T00:00:00.000Z',
       elementCount: 0,
       auto: options.auto,
-      branchName: 'main',
       ...(options.restoredFrom === undefined ? {} : { restoredFrom: options.restoredFrom }),
     }
   }
@@ -193,7 +192,6 @@ class FakeVersions implements VersionHistory {
         createdAt: '2026-01-01T00:00:00.000Z',
         elementCount: 0,
         auto: false,
-        branchName: 'main',
         ...(value.label === undefined ? {} : { label: value.label }),
       }))
   }

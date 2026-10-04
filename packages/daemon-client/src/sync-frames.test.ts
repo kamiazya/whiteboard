@@ -10,19 +10,21 @@ const VALID_VERSION_CREATED = {
     createdAt: '2026-07-30T00:00:00.000Z',
     elementCount: 42,
     auto: false,
-    branchName: 'main',
   },
 }
 
 describe('versionCreatedMessageSchema', () => {
-  it('accepts valid version_created with branchName', () => {
+  it('accepts a valid version_created', () => {
     const result = versionCreatedMessageSchema.safeParse(VALID_VERSION_CREATED)
     expect(result.success).toBe(true)
   })
 
-  it('preserves branchName through parse', () => {
-    const result = versionCreatedMessageSchema.parse(VALID_VERSION_CREATED)
-    expect(result.version.branchName).toBe('main')
+  it('drops a branchName an older daemon still sends', () => {
+    const result = versionCreatedMessageSchema.parse({
+      ...VALID_VERSION_CREATED,
+      version: { ...VALID_VERSION_CREATED.version, branchName: 'main' },
+    })
+    expect(result.version).not.toHaveProperty('branchName')
   })
 
   it('accepts with optional label and operator', () => {
@@ -33,15 +35,6 @@ describe('versionCreatedMessageSchema', () => {
         label: 'snapshot',
         operator: { kind: 'ai', actor: 'process:agent-1' },
       },
-    })
-    expect(result.success).toBe(true)
-  })
-
-  it('accepts a version row that carries no branchName', () => {
-    const { branchName: _, ...versionWithout } = VALID_VERSION_CREATED.version
-    const result = versionCreatedMessageSchema.safeParse({
-      ...VALID_VERSION_CREATED,
-      version: versionWithout,
     })
     expect(result.success).toBe(true)
   })

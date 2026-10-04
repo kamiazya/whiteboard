@@ -300,14 +300,14 @@ describe('api-contracts: the enums that degrade, degrade', () => {
     createdAt: '2026-01-01T00:00:00Z',
     elementCount: 1,
     auto: false,
-    branchName: 'main',
   }
 
-  it('lists a version row from a daemon that no longer sends branchName', () => {
-    const { branchName: _retired, ...withoutBranch } = version
-    const parsed = listVersionsResponseSchema.parse({ versions: [withoutBranch] })
+  it('lists a version row from a daemon that still sends branchName, without it', () => {
+    const parsed = listVersionsResponseSchema.parse({
+      versions: [{ ...version, branchName: 'main' }],
+    })
     expect(parsed.versions).toHaveLength(1)
-    expect(parsed.versions[0]?.branchName).toBeUndefined()
+    expect(parsed.versions[0]).not.toHaveProperty('branchName')
   })
 
   it('reads an operator kind it has no word for as system, keeping the row', () => {
