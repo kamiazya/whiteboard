@@ -1,8 +1,7 @@
 import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
-import type { z } from 'zod'
 import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
-import type { ReplicaTier } from './api-contracts/replica-key.js'
+import type { ReplicaKeyResponse, ReplicaTier } from './api-contracts/replica-key.js'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
 import { deriveDocumentKey } from './read-plane.js'
 
@@ -95,9 +94,6 @@ function keyBytes(value: string): Uint8Array<ArrayBuffer> {
   if (bytes === null) throw new Error('replica key response is not base64url')
   return bytes
 }
-
-/** What `/replica-key` answers, parsed — the shape a cold start wraps and adopts. */
-export type ReplicaKeyResponse = z.infer<typeof replicaKeyResponseSchema>
 
 /**
  * The ONE conversion from a parsed response to what the holder keeps.
@@ -307,8 +303,11 @@ export function forgetAllForTests(): void {
   unreachableAt.clear()
 }
 
+/** A document's key at the epoch it is derived for, or `'withheld'` while the daemon will not hand one out. */
+export type ReplicaKeyAnswer = { key: CryptoKey; epoch: number } | 'withheld'
+
 export interface ReplicaKeyProvider {
-  keyFor(docKey: string): Promise<{ key: CryptoKey; epoch: number } | 'withheld'>
+  keyFor(docKey: string): Promise<ReplicaKeyAnswer>
 }
 
 // Non-extractable derived CryptoKeys, memoised per (daemon, workspace,
@@ -340,7 +339,7 @@ export function replicaKeyProviderFor(
       const derived = await deriveDocumentKey({
         workspaceKey: result.workspaceKey,
         workspaceKeySalt: result.workspaceKeySalt,
-        documentId: docKey,
+        docKey,
         epoch: EPOCH,
       })
       // forget()/forgetAllForTests() may have run while the request or the derive

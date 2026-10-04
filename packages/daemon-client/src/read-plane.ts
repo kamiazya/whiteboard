@@ -38,15 +38,16 @@ export const sealedEnvelopeSchema = z
 
 export type SealedEnvelope = z.infer<typeof sealedEnvelopeSchema>
 
+/** `docKey` is the key the replica files a document under — the stored key, not a sync key. */
 export interface DocumentKeyContext {
-  documentId: string
+  docKey: string
   epoch: number
 }
 
 const textEncoder = new TextEncoder()
 
 // A JSON array's own delimiters mark each element's boundary, so
-// (documentId, epoch) pairs that would collide under bare string
+// (docKey, epoch) pairs that would collide under bare string
 // concatenation ("a1" + "2" === "a" + "12") encode distinctly.
 //
 // epoch is re-validated here (not just at the persisted-envelope boundary in
@@ -54,8 +55,8 @@ const textEncoder = new TextEncoder()
 // `null` — every non-finite epoch would otherwise collapse to the same info
 // / additionalData for a given document, defeating the epoch-scoped
 // separation this module exists to provide.
-function contextBytes(tag: string, { documentId, epoch }: DocumentKeyContext) {
-  return textEncoder.encode(JSON.stringify([tag, documentId, epochSchema.parse(epoch)]))
+function contextBytes(tag: string, { docKey, epoch }: DocumentKeyContext) {
+  return textEncoder.encode(JSON.stringify([tag, docKey, epochSchema.parse(epoch)]))
 }
 
 const WORKSPACE_KEY_BYTES = 32
@@ -103,7 +104,7 @@ export async function deriveDocumentKey(input: DeriveDocumentKeyInput): Promise<
 
 /**
  * Seals plaintext under a document key. `aad` binds the ciphertext to the
- * (documentId, epoch) it was sealed for, so a caller that opens it under a
+ * (docKey, epoch) it was sealed for, so a caller that opens it under a
  * different document or a bumped epoch is refused even if it somehow holds
  * a key that would otherwise decrypt the bytes.
  */

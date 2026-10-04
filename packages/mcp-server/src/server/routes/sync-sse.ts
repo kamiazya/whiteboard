@@ -9,9 +9,9 @@
 // and adjusts its subscriptions over POST, because SSE itself is one-way.
 
 import {
-  WORKSPACE_DOC_KEY_PREFIX,
   workspaceDocKey,
-  workspaceIdOfDocKey,
+  workspaceHandleOfSyncKey,
+  workspaceIdOfSyncKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import {
   MAX_DOCS_PER_STREAM,
@@ -65,11 +65,11 @@ async function canonicalDocKey(
   key: string,
   resolve: (handle: string) => Promise<string> = resolveWorkspaceHandleToId,
 ): Promise<string> {
-  const handle = workspaceIdOfDocKey(key)
+  const handle = workspaceHandleOfSyncKey(key)
   if (handle === null) return key
   const workspaceId = await resolve(handle)
   if (workspaceId === handle) return key
-  return key.startsWith(WORKSPACE_DOC_KEY_PREFIX)
+  return workspaceIdOfSyncKey(key) !== null
     ? workspaceDocKey(workspaceId)
     : docKey(workspaceId, key.slice(handle.length + 1))
 }
@@ -117,7 +117,7 @@ async function firstMembershipRefusal(
   if (admit === undefined) return null
   const decidedAdmitted = new Set<string>()
   for (const key of keys) {
-    const workspaceId = workspaceIdOfDocKey(key)
+    const workspaceId = workspaceHandleOfSyncKey(key)
     if (workspaceId === null || decidedAdmitted.has(workspaceId)) continue
     const access = await admit(c, workspaceId)
     if (access !== 'admitted') {

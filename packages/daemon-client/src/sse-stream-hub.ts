@@ -176,25 +176,35 @@ function isAuthRefusal(status: number): boolean {
  * because a workspace id contains no ':' and no '/', so no per-document
  * key ever starts with this prefix without a slash following it.
  */
-export const WORKSPACE_DOC_KEY_PREFIX = 'workspace:'
+const WORKSPACE_DOC_KEY_PREFIX = 'workspace:'
 
 export function workspaceDocKey(workspaceId: string): string {
   return `${WORKSPACE_DOC_KEY_PREFIX}${workspaceId}`
 }
 
 /**
- * The workspace a doc key addresses, for a caller that needs the id rather
- * than the route — the daemon's membership gate, in particular, decides once
- * per workspace rather than per document key. A `workspace:` key names it
- * directly; a per-document key is `${workspaceId}/${path}`, split on the
- * first slash (a path may contain more, a workspace id never does). `null`
- * for a malformed key — `canvasDocUrl` refuses through this same split.
+ * The workspace id a workspace-granularity sync key names, or `null` for any
+ * other key — a per-document key, the bare prefix, or the STORED key shape
+ * (`workspace-tree:<id>`, ports' `docRefKey`, a different grammar).
  */
-export function workspaceIdOfDocKey(doc: string): string | null {
-  if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
-    const workspaceId = doc.slice(WORKSPACE_DOC_KEY_PREFIX.length)
-    return workspaceId.length === 0 ? null : workspaceId
-  }
+export function workspaceIdOfSyncKey(doc: string): string | null {
+  if (!doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) return null
+  const workspaceId = doc.slice(WORKSPACE_DOC_KEY_PREFIX.length)
+  return workspaceId.length === 0 ? null : workspaceId
+}
+
+/**
+ * The workspace a sync key addresses, for a caller that needs it rather than
+ * the route — the daemon's membership gate, in particular, decides once per
+ * workspace rather than per document key. A `workspace:` key names it
+ * directly; a per-document key is `${handle}/${path}`, split on the first
+ * slash (a path may contain more, a handle never does). What comes back is
+ * the HANDLE the client wrote, which a daemon resolves to an id before it
+ * keys anything by it. `null` for a malformed key — `canvasDocUrl` refuses
+ * through this same split.
+ */
+export function workspaceHandleOfSyncKey(doc: string): string | null {
+  if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) return workspaceIdOfSyncKey(doc)
   const slash = doc.indexOf('/')
   if (slash <= 0 || slash === doc.length - 1) return null
   return doc.slice(0, slash)
@@ -219,9 +229,9 @@ export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
 
 function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot'): string | null {
   const base = baseUrl.replace(/\/$/, '')
-  const workspaceId = workspaceIdOfDocKey(doc)
+  const workspaceId = workspaceHandleOfSyncKey(doc)
   if (workspaceId === null) return null
-  if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
+  if (workspaceIdOfSyncKey(doc) !== null) {
     return `${base}${workspaceDocumentApiUrl(workspaceId, action)}`
   }
   // Raw halves: documentApiUrl encodes per segment itself.
@@ -431,7 +441,7 @@ export class SseStreamHub implements SseStreamSource {
   private async follow(docs: readonly string[]): Promise<void> {
     const byWorkspace = new Map<string, string[]>()
     for (const doc of docs) {
-      const workspaceId = workspaceIdOfDocKey(doc) ?? ''
+      const workspaceId = workspaceHandleOfSyncKey(doc) ?? ''
       byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), doc])
     }
     for (const group of byWorkspace.values()) {

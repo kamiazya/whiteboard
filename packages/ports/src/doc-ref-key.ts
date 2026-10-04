@@ -46,7 +46,7 @@ const WORKSPACE_TREE_DOC_KEY = /^workspace-tree:(.+)$/
  * spelling stays in this file and a change to it cannot leave the reader
  * quietly answering for a shape that no longer exists.
  */
-export function workspaceIdOfDocKey(key: string): string | null {
+export function workspaceIdOfStoredDocKey(key: string): string | null {
   const workspaceId = WORKSPACE_TREE_DOC_KEY.exec(key)?.[1]
   if (workspaceId === undefined) return null
   return workspaceIdSchema.safeParse(workspaceId).success ? workspaceId : null

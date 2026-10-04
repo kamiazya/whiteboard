@@ -9,7 +9,7 @@ describe('the widths the read plane and the wrap share', () => {
   const context = {
     workspaceKey: new Uint8Array(32).fill(1),
     workspaceKeySalt: new Uint8Array(16).fill(2),
-    documentId: 'doc',
+    docKey: 'doc',
     epoch: 0,
   }
 

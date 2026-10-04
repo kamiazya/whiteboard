@@ -5,7 +5,9 @@ import {
   documentUpdateUrl,
   parseSseEvent,
   SseStreamHub,
-  workspaceIdOfDocKey,
+  workspaceDocKey,
+  workspaceHandleOfSyncKey,
+  workspaceIdOfSyncKey,
 } from './sse-stream-hub.js'
 import { flush } from './test-utils/flush.js'
 
@@ -511,19 +513,38 @@ describe('doc-key URL mapping', () => {
   })
 })
 
-describe('workspaceIdOfDocKey', () => {
+describe('workspaceHandleOfSyncKey', () => {
   it('reads the workspace id straight off a workspace-scope key', () => {
-    expect(workspaceIdOfDocKey('workspace:ws-1')).toBe('ws-1')
+    expect(workspaceHandleOfSyncKey('workspace:ws-1')).toBe('ws-1')
   })
 
   it('reads the workspace id off the first slash of a per-document key', () => {
-    expect(workspaceIdOfDocKey('ws-1/nested/path')).toBe('ws-1')
+    expect(workspaceHandleOfSyncKey('ws-1/nested/path')).toBe('ws-1')
   })
 
   it('refuses a malformed key', () => {
-    expect(workspaceIdOfDocKey('workspace:')).toBeNull()
-    expect(workspaceIdOfDocKey('no-slash-here')).toBeNull()
-    expect(workspaceIdOfDocKey('/leading-slash')).toBeNull()
+    expect(workspaceHandleOfSyncKey('workspace:')).toBeNull()
+    expect(workspaceHandleOfSyncKey('no-slash-here')).toBeNull()
+    expect(workspaceHandleOfSyncKey('/leading-slash')).toBeNull()
+  })
+})
+
+describe('workspaceIdOfSyncKey', () => {
+  it('reads the id off a workspace-scope key', () => {
+    expect(workspaceIdOfSyncKey('workspace:ws-1')).toBe('ws-1')
+  })
+
+  it('answers null for a per-document key, which names a handle and a path rather than a workspace-scope subscription', () => {
+    expect(workspaceIdOfSyncKey('ws-1/nested/path')).toBeNull()
+  })
+
+  it('answers null for the bare prefix and for the stored key shape', () => {
+    expect(workspaceIdOfSyncKey('workspace:')).toBeNull()
+    expect(workspaceIdOfSyncKey('workspace-tree:ws-1')).toBeNull()
+  })
+
+  it('is the inverse of workspaceDocKey', () => {
+    expect(workspaceIdOfSyncKey(workspaceDocKey('ws-1'))).toBe('ws-1')
   })
 })
 

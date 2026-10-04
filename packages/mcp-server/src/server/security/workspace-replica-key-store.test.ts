@@ -276,7 +276,7 @@ describe('rotateKey', () => {
   // anything at all.
   it('denies pre-rotation ciphertext under the post-rotation key, real AES-GCM open', async () => {
     const before = await store.keyFor('ws-1')
-    const context = { documentId: 'doc-1', epoch: 0 }
+    const context = { docKey: 'doc-1', epoch: 0 }
     const plaintext = new TextEncoder().encode('secret board content')
     const preKey = await deriveDocumentKey({
       workspaceKey: before.key,
