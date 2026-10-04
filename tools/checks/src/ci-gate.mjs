@@ -28,6 +28,8 @@
 //   - `skipped` is waved through. A job that fails to start also reports
 //     `skipped`, so it is allowed per job, with a reason.
 
+import { isRunAsScript } from './is-run-as-script.mjs'
+
 /**
  * Jobs whose `skipped` is a legitimate outcome, each with the reason it can
  * happen. Anything not listed here must reach `success`.
@@ -253,4 +255,4 @@ async function main() {
   process.stdout.write(`[ci-gate] every job in this run succeeded (${jobs.length} jobs)\n`)
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) await main()
+if (isRunAsScript(import.meta.url)) await main()

@@ -73,7 +73,9 @@ test('a positional beyond the allowance is refused, and a lone "-" counts as a p
   assert.deepEqual(run(['-'], { maxPositionals: 1 }).parsed.positionals, ['-'])
 })
 
-const SCRIPT_FLAGS = fileURLToPath(new URL('./script-flags.mjs', import.meta.url))
+const IS_RUN_AS_SCRIPT = fileURLToPath(
+  new URL('../../tools/checks/src/is-run-as-script.mjs', import.meta.url),
+)
 
 function withScratch(body) {
   const dir = mkdtempSync(join(tmpdir(), 'script-flags-'))
@@ -90,7 +92,7 @@ function node(args) {
   return result.stdout.trim()
 }
 
-const PROBE = `import { isRunAsScript } from ${JSON.stringify(SCRIPT_FLAGS)}
+const PROBE = `import { isRunAsScript } from ${JSON.stringify(IS_RUN_AS_SCRIPT)}
 console.log(isRunAsScript(import.meta.url))
 `
 

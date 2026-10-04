@@ -38,7 +38,8 @@ import {
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs'
-import { isRunAsScript, parseScriptArgs } from './script-flags.mjs'
+import { isRunAsScript } from '../../tools/checks/src/is-run-as-script.mjs'
+import { parseScriptArgs } from './script-flags.mjs'
 import {
   assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,

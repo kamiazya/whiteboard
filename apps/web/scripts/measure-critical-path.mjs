@@ -97,6 +97,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 import { serveDist } from '../../../tools/checks/src/serve-dist.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -358,6 +359,6 @@ async function main() {
 
 // Importable for its own tests; runs only when executed directly, exactly as
 // `smoke-bundle-size.mjs` does.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunAsScript(import.meta.url)) {
   await main()
 }

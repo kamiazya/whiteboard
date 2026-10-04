@@ -14,6 +14,7 @@
 // comment saying "nothing to say" is the noise that gets bots muted.
 
 import { readFileSync } from 'node:fs'
+import { isRunAsScript } from '../../tools/checks/src/is-run-as-script.mjs'
 
 /**
  * The exact source a mutant replaced, so a survivor can be recognised by WHAT
@@ -259,4 +260,4 @@ async function main(argv) {
   if (body !== '') process.stdout.write(`${body}\n`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main(process.argv)
+if (isRunAsScript(import.meta.url)) await main(process.argv)

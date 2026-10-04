@@ -8,6 +8,7 @@
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 // Also consumed by verify-export-font-dist.mjs (prefixed with 'dist') so the
@@ -38,7 +39,7 @@ export function copyExportFontIntoDist(srcDir = SRC_DIR, destDir = DEST_DIR) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunAsScript(import.meta.url)) {
   copyExportFontIntoDist()
   console.log(`copied ${FONT_FILES.length} files ${SRC_DIR} -> ${DEST_DIR}`)
 }

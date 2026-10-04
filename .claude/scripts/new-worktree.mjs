@@ -13,7 +13,8 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, cpSync as nodeCpSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isRunAsScript, parseScriptArgs } from './script-flags.mjs'
+import { isRunAsScript } from '../../tools/checks/src/is-run-as-script.mjs'
+import { parseScriptArgs } from './script-flags.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 

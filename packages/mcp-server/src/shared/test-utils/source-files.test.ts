@@ -70,6 +70,7 @@ describe('the guards that walk production sources', () => {
     'env-docs-contract.test.ts',
     'persisted-json-surface.test.ts',
     'release/web-api-paths-mounted.test.ts',
+    'routes/error-body-shape.test.ts',
     'store/db/raw-database-callers.test.ts',
     'store/default-backup-cron.test.ts',
     'tenant/data-layout-callers.test.ts',
