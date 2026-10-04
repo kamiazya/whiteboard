@@ -227,10 +227,8 @@ async function handleMessage(c: Context, admit: WorkspaceAdmit | undefined) {
   const stream = syncStreamById(parsed.data.streamId)
   if (!stream) return unknownStream(c, parsed.data.streamId)
 
-  // `client_ready` is the one message a client sends: it used to be joined
-  // by a `viewport_response` that acknowledged a viewport request, which no
-  // client ever sent — the route that awaited it answered 504 to every real
-  // caller and was deleted with it.
+  // `client_ready` is the one message a client sends: a viewport request is
+  // fired once and never awaited, so there is no acknowledgement message.
   //
   // Upsert rather than require an existing subscription: subscribe and
   // client_ready are separate POSTs with no ordering guarantee between them,

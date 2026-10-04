@@ -14,7 +14,7 @@ import {
 const tmp = withTempDataDir('whiteboard-live-doc-test-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
@@ -136,9 +136,9 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     expect(elements[0].type).toBe('ellipse')
   })
 
-  // A body Loro cannot decode used to escape the handler as a thrown
-  // decode error — the sibling workspace-document route already answers
-  // this with 400, and a client sending garbage is not a server failure.
+  // A body Loro cannot decode is answered with 400 rather than escaping the
+  // handler as a thrown decode error, as the sibling workspace-document route
+  // does: a client sending garbage is not a server failure.
   it('refuses bytes Loro cannot decode with 400, and leaves the document as it was', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     for (const bytes of [new Uint8Array(), new Uint8Array([1, 2, 3])]) {

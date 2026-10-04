@@ -21,7 +21,7 @@ import {
 const tmp = withTempDataDir('whiteboard-workspaces-test-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
@@ -62,7 +62,7 @@ const { createSelfHostStoreLocalModule } = await import('../../../di/store-local
 
 // These routes are adapters over the document index (ADR-0018), so forcing
 // one to fail means making the OPERATION fail, not stubbing a store function
-// the route no longer calls. `Object.create` rather than a spread: the index
+// the route does not call. `Object.create` rather than a spread: the index
 // is a class instance, and spreading one drops every method it inherits from
 // its prototype.
 async function routerFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
@@ -112,9 +112,8 @@ describe('GET /api/workspaces', () => {
     const json = (await res.json()) as {
       workspaces: Array<{ workspaceId: string; documentCount?: number }>
     }
-    // `documentCount` joined the row when the switcher started showing it.
-    // This case pins WHICH workspaces are listed, so it carries the field
-    // rather than asserting a shape the route no longer has.
+    // This case pins WHICH workspaces are listed, so it carries the row's
+    // `documentCount` rather than asserting a bare id.
     expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a', documentCount: 1 }])
   })
 
@@ -239,7 +238,7 @@ describe('GET /api/workspaces', () => {
 // there. This router keeping a second way in meant two creation surfaces with
 // their own validation and error wording over one operation.
 describe('POST /api/workspaces/:workspaceId/documents', () => {
-  it('is not a route any more: creation goes through /api/v1', async () => {
+  it('is not a route: creation goes through /api/v1', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
@@ -730,9 +729,6 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     const res = await app.request('/api/workspaces/never-registered/documents')
     expect(res.status).toBe(404)
   })
-
-  // listDocuments no longer walks per-workspace directories, so the previous
-  // "broken session directory" 500 case no longer applies.
 })
 
 describe('GET /api/workspaces/:workspaceId/documents', () => {

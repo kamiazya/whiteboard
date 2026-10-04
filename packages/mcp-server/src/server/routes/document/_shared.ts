@@ -66,12 +66,11 @@ export type ErrorAnswer = (
 /**
  * The first translation that owns `err`, or null for the caller to rethrow.
  *
- * Each route here walked its own chain of `if (err instanceof …) return
- * c.json(…)`, four or five deep, which is most of what made these handlers
- * hard to read. The SET stays at the call site on purpose: which errors a
+ * One translator replaces a per-route chain of `if (err instanceof …) return
+ * c.json(…)`, which is most of what made handlers hard to read. The SET stays at the call site on purpose: which errors a
  * route answers is part of what that route means, and a single translator
- * applied everywhere would silently start answering errors a handler used to
- * let through as a 500.
+ * applied everywhere would silently start answering errors a handler lets
+ * through as a 500.
  */
 export function firstOwned(
   err: unknown,

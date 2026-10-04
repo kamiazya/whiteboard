@@ -1,8 +1,8 @@
 /**
  * What the editor is allowed to upload is declared once, in daemon-client's
  * `api-contracts/files`, and the daemon's file route has to answer that set
- * with 204 through the real app. The route used to carry a list of its own,
- * so the two could — and did — disagree without either side's tests noticing.
+ * with 204 through the real app. A list of its own in the route would let the
+ * two disagree without either side's tests noticing.
  */
 import {
   MAX_FILE_UPLOAD_BYTES,

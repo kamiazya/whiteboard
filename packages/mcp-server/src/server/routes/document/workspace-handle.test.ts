@@ -17,7 +17,7 @@ import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test
 const tmp = withTempDataDir('whiteboard-workspace-handle-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)

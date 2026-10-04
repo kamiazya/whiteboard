@@ -17,7 +17,7 @@ import {
 const tmp = withTempDataDir('whiteboard-versions-test-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
@@ -348,8 +348,8 @@ describe('versions API', () => {
 })
 
 // Reading a past state, which is what makes "see it, then decide" possible.
-// The panel used to offer restore behind a confirmation and nothing else, so
-// the only way to learn what a version held was to apply it and look.
+// Without this read, restore behind a confirmation is the only way to learn
+// what a version held: apply it and look.
 describe('GET /versions/:id/document', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })

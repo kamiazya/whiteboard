@@ -108,9 +108,9 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   /**
    * One version's CONTENT, for previewing it before deciding to restore.
    *
-   * The panel used to offer restore behind a confirmation dialog and nothing
-   * else, so the only way to find out what a version held was to apply it and
-   * look. This is the read that makes "see it, then decide" possible.
+   * Without this read, restoring behind a confirmation dialog is the only way
+   * to find out what a version held: apply it and look. This is the read that
+   * makes "see it, then decide" possible.
    *
    * Projected here rather than shipped as CRDT bytes: what a viewer needs is
    * something to draw, and the two shapes below are what every surface that

@@ -24,7 +24,7 @@ vi.mock('../../config.js', () => ({
 const tmp = withTempDataDir('whiteboard-restore-test-')
 
 // The deps a router is handed by its root; here, the test wiring over the
-// temp data dir (routers no longer compose their own).
+// temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)

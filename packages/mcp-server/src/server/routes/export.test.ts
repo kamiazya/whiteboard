@@ -409,8 +409,8 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(body).toMatchObject({ error: 'payload_too_large' })
   })
 
-  // A field the contract does not define used to be dropped on the floor,
-  // so a caller sending one read a 200 as "honoured".
+  // A field the contract does not define is refused rather than dropped, so a
+  // caller sending one never reads a 200 as "honoured".
   it.each([
     ['minFontPx', 12],
     ['frameId', 'frame-1'],

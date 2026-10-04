@@ -2,15 +2,13 @@
  * ADR-0018: the HTTP document routes are ADAPTERS over the `wb_document_*`
  * operations, not second implementations of them.
  *
- * The two used to be separate code paths performing the same delete, and
- * only one of them cleaned up. Sharing the pieces closed that gap
- * one piece at a time; sharing the OPERATION is what stops the next piece
- * from drifting, because there is no longer a second sequence to forget to
- * update.
+ * Two separate code paths performing the same delete drift: one of them
+ * grows a cleanup step the other forgets. Sharing the OPERATION is what stops
+ * that, because there is no second sequence to forget to update.
  *
  * Asserted through the seam the operation goes through rather than on the
- * rows afterwards: identical end state is exactly what the two divergent
- * implementations produced right up until one of them grew a step.
+ * rows afterwards: identical end state is exactly what two divergent
+ * implementations produce right up until one of them grows a step.
  */
 import { listDocumentsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentPins } from '@kamiazya/whiteboard-ports'
