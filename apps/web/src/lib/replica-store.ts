@@ -148,7 +148,7 @@ export function connectReplicaKeeper(
           baseUrl: daemon.baseUrl,
           daemonFetch: createDaemonFetch(daemon.baseUrl, daemon.fetch ?? fetch),
         }
-  const changed = previous !== null && (daemon === null || previous.baseUrl !== daemon.baseUrl)
+  const changed = previous !== null && previous.baseUrl !== daemon?.baseUrl
   if (changed) forgetDaemonKeys(previous.baseUrl)
 }
 

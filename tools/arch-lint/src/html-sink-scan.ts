@@ -38,7 +38,7 @@ const SINK_WORDS = new RegExp(
   [...PARSING_CALLS, ...MARKUP_PROPERTIES, ...MARKUP_ATTRIBUTES, PROPS_KEY].join('|'),
   'i',
 )
-const DOCUMENT_WRITE = new RegExp(`\\b(${[...DOCUMENT_WRITERS].join('|')})\\b`)
+const DOCUMENT_WRITE = new RegExp(String.raw`\b(${[...DOCUMENT_WRITERS].join('|')})\b`)
 const DOCUMENT_WORD = new RegExp([...DOCUMENT_NAMES].join('|'), 'i')
 
 export function mayHoldHtmlSink(source: string): boolean {
