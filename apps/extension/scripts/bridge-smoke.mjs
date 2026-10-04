@@ -177,7 +177,7 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
   })
   try {
     // From inside a browser document: its connection popover is where the
-    // loopback probe lives, so that is where the two paths could meet.
+    // extension's connect button and the install prompt could meet.
     await page.getByText('Canvas', { exact: true }).click()
     await page.waitForURL(/\/d\//, { timeout: 20_000 })
     await page
@@ -187,17 +187,16 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
     const popover = page.getByRole('dialog')
     const viaExtension = popover.getByRole('button', { name: /connect through the extension/i })
     await viaExtension.waitFor({ timeout: 20_000 })
-    // ADR-0050 keeps the loopback probe beside the extension only where the
-    // extension does not answer; offered both, nothing says which daemon
-    // each button reaches. The probe always shows its port field, or the
-    // unsupported-browser notice in its place.
-    const loopbackOffered =
-      (await popover.getByTestId('daemon-port-input').count()) +
-      (await popover.getByRole('link', { name: 'How to connect a daemon' }).count())
+    // The popover asks for the extension (and links "How to connect a daemon")
+    // only where none answers; once it does, the connect button must be the
+    // only way offered, or nothing says which of two paths a person is on.
+    const getTheExtensionOffered = await popover
+      .getByRole('link', { name: 'How to connect a daemon' })
+      .count()
     check(
-      loopbackOffered === 0,
-      'the popover offers the extension instead of the loopback probe once the extension answers',
-      `${loopbackOffered} loopback element(s) beside the extension's button: ${(await popover.innerText()).slice(0, 300)}`,
+      getTheExtensionOffered === 0,
+      "the popover offers the extension's connect button instead of the install prompt once the extension answers",
+      `${getTheExtensionOffered} install-prompt link(s) beside the extension's button: ${(await popover.innerText()).slice(0, 300)}`,
     )
     await Promise.all([page.waitForEvent('load', { timeout: 20_000 }), viaExtension.click()])
     // Nothing is seeded yet, so this is a fresh daemon's own workspace: the

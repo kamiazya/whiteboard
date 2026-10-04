@@ -38,15 +38,7 @@ describe('createDaemonFetch', () => {
     expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces`)
   })
 
-  it('attaches an Authorization header when a token is configured', async () => {
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
-    await daemonFetch('/api/workspaces')
-    const [, initArg] = fetchMock.mock.calls[0]
-    const headers = new Headers(initArg?.headers)
-    expect(headers.get('Authorization')).toBe('Bearer my-token')
-  })
-
-  it('does not attach an Authorization header when no token is configured', async () => {
+  it('attaches no Authorization header to a daemon request', async () => {
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
     await daemonFetch('/api/workspaces')
     const [, initArg] = fetchMock.mock.calls[0]
@@ -55,7 +47,7 @@ describe('createDaemonFetch', () => {
   })
 
   it('preserves method/headers/body for a Request-object input, same-origin', async () => {
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
     const req = new Request(`${DAEMON_BASE_URL}/api/documents`, {
       method: 'POST',
       headers: { 'X-Custom': 'yes' },
@@ -66,11 +58,10 @@ describe('createDaemonFetch', () => {
     expect(initArg?.method).toBe('POST')
     const headers = new Headers(initArg?.headers)
     expect(headers.get('X-Custom')).toBe('yes')
-    expect(headers.get('Authorization')).toBe('Bearer my-token')
   })
 
   it('preserves the abort signal (and request semantics) from a Request-object input', async () => {
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
     const controller = new AbortController()
     const req = new Request(`${DAEMON_BASE_URL}/api/documents`, {
       method: 'GET',
@@ -89,7 +80,7 @@ describe('createDaemonFetch', () => {
   it('sets duplex: "half" when forwarding a Request whose body is a stream', async () => {
     // Fetch spec: passing a ReadableStream as `body` requires `duplex: 'half'`
     // in RequestInit, or the call throws in browsers/undici that enforce it.
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
     const req = new Request(`${DAEMON_BASE_URL}/api/documents`, {
       method: 'POST',
       body: JSON.stringify({ a: 1 }),
@@ -100,8 +91,8 @@ describe('createDaemonFetch', () => {
     expect(initArg?.duplex).toBe('half')
   })
 
-  it('never attaches the daemon token to an absolute external URL', async () => {
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+  it('sends an absolute external URL untouched', async () => {
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
     await daemonFetch('https://evil.example/x')
     const [urlArg, initArg] = fetchMock.mock.calls[0]
     expect(String(urlArg)).toBe('https://evil.example/x')
@@ -109,8 +100,8 @@ describe('createDaemonFetch', () => {
     expect(headers.get('Authorization')).toBeNull()
   })
 
-  it('never attaches the daemon token to a foreign-origin Request object', async () => {
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+  it('sends a foreign-origin Request object untouched', async () => {
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
     const req = new Request('https://evil.example/x', { method: 'GET' })
     await daemonFetch(req)
     const [, initArg] = fetchMock.mock.calls[0]

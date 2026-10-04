@@ -10,6 +10,7 @@ import {
   annotationAnchorSchema,
   type CommentThread,
   canvasCommentFromThread,
+  commentCornerOf,
   commentMessageSchema,
   commentThreadSchema,
   compareMessages,
@@ -409,5 +410,27 @@ describe('spatialAnchorRect', () => {
     ).toBeUndefined()
     // A set with no rect stored and no node alive has nowhere to be drawn.
     expect(spatialAnchorRect({ kind: 'spatial', nodeIds: ['x', 'y'], x: 1, y: 2 })).toBeUndefined()
+  })
+})
+
+describe('commentCornerOf', () => {
+  it('is the top-right corner of the box, whatever its height', () => {
+    expect(commentCornerOf({ x: 10, y: 20, width: 30 })).toEqual({ x: 40, y: 20 })
+    const tall = { x: -5.5, y: 0.25, width: 2, height: 99 }
+    expect(commentCornerOf(tall)).toEqual({ x: -3.5, y: 0.25 })
+  })
+
+  it('is where a node comment projects to, so the pin and the projection agree', () => {
+    const node = { id: 'n', x: 12, y: 7, width: 100, height: 40 }
+    const projected = canvasCommentFromThread(
+      {
+        id: 't',
+        anchor: { kind: 'text', nodeId: 'n', quote: { exact: 'q' }, start: 0, end: 1 },
+        status: 'open',
+        messages: [{ id: 'm', body: 'b' }],
+      },
+      (id) => (id === 'n' ? node : undefined),
+    )
+    expect(projected && { x: projected.x, y: projected.y }).toEqual(commentCornerOf(node))
   })
 })

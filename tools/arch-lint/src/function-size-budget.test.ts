@@ -160,7 +160,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/navigation.ts#reduceTouchPress': 65,
   'apps/web/src/components/spatial-editor/CanvasContextMenu.tsx#CanvasContextMenu': 218,
   'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 97,
-  'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 191,
+  'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 151,
   // One branch per item kind instead of a nested JSX ternary.
   'apps/web/src/components/spatial-editor/ContextMenu.tsx#ContextMenu': 259,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
@@ -174,7 +174,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/MarkdownNodeEditor.tsx#MarkdownNodeEditor': 246,
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
   'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapOverlay': 108,
-  'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 160,
+  'apps/web/src/components/spatial-editor/ProposalCard.tsx#ProposalCard': 137,
   'apps/web/src/components/spatial-editor/SelectionOverlay.tsx#SelectionOverlay': 319,
   'apps/web/src/components/spatial-editor/SnapGuidesOverlay.tsx#SnapGuidesOverlay': 76,
   // The editor's JSX, cut into the layers it always had: canvas space under
@@ -416,8 +416,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // of the three the daemon page was missing.
   'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
-  'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
-  'apps/web/src/pwa/register-sw.ts#setupSwRegistration.register': 58,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,

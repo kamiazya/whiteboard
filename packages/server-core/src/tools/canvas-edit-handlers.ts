@@ -24,7 +24,7 @@ import {
   mintId,
 } from './canvas-edit-session.js'
 import { dressWithStencil } from './canvas-edit-stencil.js'
-import { lockedDetail } from './element-lock.js'
+import { lockedDetail, lockedEdgeLossDetail } from './element-lock.js'
 import { publishedKind } from './published-node-kind.js'
 
 /**
@@ -317,6 +317,53 @@ function refuseListedEdges(
   }
 }
 
+/**
+ * The edges a membership change removes, each with the consequence that
+ * removes it — the sentence a refusal of a locked one needs.
+ */
+function leavingEdges(
+  ctx: CanvasEditContext,
+  members: ReadonlySet<string>,
+  keep: ReadonlySet<string> | undefined,
+  droppedIds: ReadonlySet<string>,
+): Map<string, string> {
+  const leaving = new Map<string, string>()
+  for (const edge of ctx.s.edges) {
+    const dropped = endNodes(edge).find((end) => droppedIds.has(end))
+    if (dropped !== undefined) {
+      leaving.set(edge.id, `would be stranded when region.set drops node "${dropped}"`)
+    } else if (
+      keep !== undefined &&
+      endIn(edge.from, members) &&
+      endIn(edge.to, members) &&
+      !keep.has(edge.id)
+    ) {
+      leaving.set(edge.id, 'would be deleted by region.set leaving it out of edges')
+    }
+  }
+  return leaving
+}
+
+/**
+ * `region.set` deletes edges as a side effect of what it omits, and a lock
+ * covers an edge however the deletion is routed to it — so a locked edge that
+ * would leave is refused up front, before anything moves.
+ */
+function refuseLockedEdgeLoss(
+  ctx: CanvasEditContext,
+  index: number,
+  op: string,
+  members: ReadonlySet<string>,
+  listed: readonly string[] | undefined,
+  inScope: readonly SpatialNode[],
+): void {
+  const droppedIds = new Set(inScope.filter((node) => !members.has(node.id)).map((n) => n.id))
+  const keep = listed === undefined ? undefined : new Set(listed)
+  for (const [id, consequence] of leavingEdges(ctx, members, keep, droppedIds)) {
+    if (ctx.s.edgeLocks.has(id)) fail(index, op, lockedEdgeLossDetail(id, consequence))
+  }
+}
+
 /** Remove the edges a membership change leaves stranded or unlisted. */
 function removeLeavingEdges(
   ctx: CanvasEditContext,
@@ -324,19 +371,10 @@ function removeLeavingEdges(
   keep: ReadonlySet<string> | undefined,
   droppedIds: ReadonlySet<string>,
 ): void {
-  const removedEdges = new Set<string>()
-  for (const edge of ctx.s.edges) {
-    const strandedBy = endIn(edge.from, droppedIds) || endIn(edge.to, droppedIds)
-    const unlistedAmongMembers =
-      keep !== undefined &&
-      endIn(edge.from, members) &&
-      endIn(edge.to, members) &&
-      !keep.has(edge.id)
-    if (strandedBy || unlistedAmongMembers) {
-      removedEdges.add(edge.id)
-      ctx.s.touchedEdges.add(edge.id)
-      ctx.s.edgeLocks.delete(edge.id)
-    }
+  const removedEdges = leavingEdges(ctx, members, keep, droppedIds)
+  for (const id of removedEdges.keys()) {
+    ctx.s.touchedEdges.add(id)
+    ctx.s.edgeLocks.delete(id)
   }
   ctx.s.edges = ctx.s.edges.filter((edge) => !removedEdges.has(edge.id))
 }
@@ -472,6 +510,16 @@ const CANVAS_EDIT_HANDLERS: {
     for (const id of ids) {
       if (ctx.s.nodeLocks.has(id)) {
         fail(index, op.op, lockedDetail('node', id))
+      }
+    }
+    for (const edge of ctx.s.edges) {
+      const endpoint = endNodes(edge).find((end) => ids.has(end))
+      if (endpoint !== undefined && ctx.s.edgeLocks.has(edge.id)) {
+        fail(
+          index,
+          op.op,
+          lockedEdgeLossDetail(edge.id, `would be deleted with node "${endpoint}"`),
+        )
       }
     }
     // Edges and ink anchored on a removed node go with it — the model's
@@ -626,6 +674,7 @@ const CANVAS_EDIT_HANDLERS: {
     const inScopeIds = new Set(inScope.map((node) => node.id))
     const members = new Set(op.nodes)
     refuseRegionMembers(ctx, index, op.op, group.id, members, inScope, inScopeIds)
+    refuseLockedEdgeLoss(ctx, index, op.op, members, op.edges, inScope)
 
     // A group this batch placed at the cursor, still holding nothing,
     // goes around its members where they sit: their bounds plus the

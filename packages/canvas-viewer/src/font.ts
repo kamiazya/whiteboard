@@ -22,22 +22,24 @@
  * family name; "the face is loaded" holds only once the loader has resolved
  * 'loaded'.
  *
- * mcp-server independently vendors the same face (byte-identical) under its
- * own `EXPORT_FONT_FAMILY` constant — the two packages cannot import each
- * other (see architecture-map.md), so this is a deliberate, documented
+ * mcp-server independently vendors the same Regular face (byte-identical)
+ * under its own `EXPORT_FONT_FAMILY` constant — the two packages cannot import
+ * each other (see architecture-map.md), so this is a deliberate, documented
  * duplication: both sides must name the same font family ("Roboto") for
- * browser and Node export metrics to agree. A future font swap on either
- * side without updating the other silently desyncs metrics rather than
- * failing loudly.
+ * browser and Node export metrics to agree. mcp-server also vendors Bold,
+ * Italic and BoldItalic; this package does not, so emphasis runs are measured
+ * from a synthesised face and differ from the export (see font-loading.ts).
+ * `roboto-copies-identical.test.ts` holds the copies equal and
+ * `font-family-literals-agree.test.ts` holds the three family literals equal,
+ * so a swap on one side fails there rather than silently desyncing metrics.
  *
- * This value MUST stay in sync with canvas-render's own
- * `SPATIAL_THEME_FONT_FAMILY` (the family name every spatial-theme label
- * run declares). It is a plain string literal rather than a re-export on
- * purpose: this constant is imported (via widget/font-assets.ts) from
- * `vite.widget.config.ts`, which Node's plain config-loading ESM resolver
- * reads directly — pulling in `@kamiazya/whiteboard-canvas-render`'s
- * package export map there fails, since that package ships TS source with
- * `.js`-suffixed relative imports meant for a bundler/type-checker, not
- * Node's native loader.
+ * The value MUST stay equal to canvas-render's own `SPATIAL_THEME_FONT_FAMILY`
+ * (the family name every spatial-theme label run declares). It is a plain
+ * string literal rather than a re-export on purpose: this constant is imported
+ * (via widget/font-assets.ts) from `vite.widget.config.ts`, which Node's plain
+ * config-loading ESM resolver reads directly — pulling in
+ * `@kamiazya/whiteboard-canvas-render`'s package export map there fails, since
+ * that package ships TS source with `.js`-suffixed relative imports meant for
+ * a bundler/type-checker, not Node's native loader.
  */
 export const VIEWER_FONT_FAMILY = 'Roboto'

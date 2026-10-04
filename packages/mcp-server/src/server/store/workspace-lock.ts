@@ -18,11 +18,12 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 const queues = new Map<string, Promise<void>>()
 
 // Reentrancy tracking. A single logical write transaction can legitimately
-// nest lock acquisitions for the SAME workspace — e.g. the HEAD-switch
-// route holds the lock across its whole read-modify-write, and the
-// checkoutTo hook it awaits in the middle calls saveDocument(), which also
-// takes this lock. Since only one holder can ever be active per workspace
-// at a time, a nested acquisition can only be the current holder's own
+// nest lock acquisitions for the SAME workspace — e.g. the file-GC pass holds
+// the barrier across its whole collect + unlink and catches the workspace
+// record up inside it (which takes the lock to import), and
+// CacheCoherentDocumentIndex holds it around a `super.*` mutator whose
+// workspace-plane write takes it again. Since only one holder can ever be
+// active per workspace at a time, a nested acquisition can only be the current holder's own
 // continuation re-entering (queueing again would await its own completion
 // and deadlock forever). AsyncLocalStorage propagates through awaits along
 // the exact call chain that acquired the lock, so it distinguishes true

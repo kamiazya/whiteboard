@@ -31,7 +31,7 @@ vi.mock('../../lib/fold-workspace.js', { spy: true })
 
 claimIsolatedWhiteboardDb('promote-fold-failure')
 
-const DAEMON = { baseUrl: 'http://127.0.0.1:3099', token: 'tok-1' }
+const DAEMON = { baseUrl: 'http://127.0.0.1:3099' }
 
 /** Only the workspace listing — the scenario never reaches the transfer. */
 const listOnlyStub = (async (input: RequestInfo | URL) => {

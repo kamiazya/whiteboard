@@ -91,4 +91,40 @@ describe('KeyedSerializer', () => {
 
     expect(serializer.pendingKeys).toBe(0)
   })
+
+  it('still waits for the operation queued behind one that just finished', async () => {
+    const serializer = new KeyedSerializer()
+    const events: string[] = []
+    const gateA = deferred()
+    const gateB = deferred()
+
+    const a = serializer.run('k', async () => {
+      events.push('a:start')
+      await gateA.promise
+      events.push('a:end')
+    })
+    const b = serializer.run('k', async () => {
+      events.push('b:start')
+      await gateB.promise
+      events.push('b:end')
+    })
+
+    gateA.resolve()
+    await a
+    // The shipped property submits everything synchronously; only a submitter
+    // arriving after an earlier operation has cleaned up depends on that
+    // operation leaving the newer tail alone.
+    await Promise.resolve()
+    const c = serializer.run('k', async () => {
+      events.push('c:start')
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toEqual(['a:start', 'a:end', 'b:start'])
+
+    gateB.resolve()
+    await Promise.all([b, c])
+    expect(events).toEqual(['a:start', 'a:end', 'b:start', 'b:end', 'c:start'])
+    expect(serializer.pendingKeys).toBe(0)
+  })
 })

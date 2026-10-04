@@ -30,17 +30,16 @@ import {
   refuseMalformedHandle,
   workspaceIdFromHandle,
 } from '../../workspace-handle.js'
+import { readJsonBody } from '../read-json-body.js'
 import {
   corruptStored,
   firstOwned,
   hasDescendants,
-  jsonBody,
   moveIntoSelf,
   notFoundAs,
   pathTakenAs,
   refusedBy,
   segmentTaken,
-  titleOr,
   titleRefusal,
   workspaceNotFound,
 } from './_shared.js'
@@ -223,11 +222,12 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // reason: creating a workspace IS the port call, and a use case here would
   // forward its arguments and add a name.
   app.post('/api/workspaces', async (c) => {
-    const parsed = createWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) {
-      return c.json(titleRefusal(parsed.error, 'displayName is required'), 400)
-    }
-    const { displayName } = parsed.data
+    const body = await readJsonBody(c, createWorkspaceRequestSchema, {
+      voice: 'problem',
+      refuseShape: (error) => titleRefusal(error, 'displayName is required'),
+    })
+    if ('refusal' in body) return body.refusal
+    const { displayName } = body.data
     // Decided before anything is created: a workspace nobody can be the
     // first member of is one nobody could open.
     const creator = await creatorOf(c, options.firstMember)
@@ -257,10 +257,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     const handle = c.req.param('workspaceId')
     const malformed = refuseMalformedHandle(c, handle)
     if (malformed !== null) return malformed
-    const parsed = renameWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) {
-      return c.json(titleRefusal(parsed.error, 'segment or displayName must be valid'), 400)
-    }
+    const parsed = await readJsonBody(c, renameWorkspaceRequestSchema, {
+      voice: 'problem',
+      refuseShape: (error) => titleRefusal(error, 'segment or displayName must be valid'),
+    })
+    if ('refusal' in parsed) return parsed.refusal
 
     try {
       const deps = options.serverDeps
@@ -364,8 +365,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     'put',
     ['path'],
     async (c, workspaceId, path) => {
-      const body = await jsonBody(c, renameDocumentPathRequestSchema, titleOr('path is required'))
-      if ('refusal' in body) return c.json(body.refusal, 400)
+      const body = await readJsonBody(c, renameDocumentPathRequestSchema, {
+        voice: 'problem',
+        refuseShape: (error) => titleRefusal(error, 'path is required'),
+      })
+      if ('refusal' in body) return body.refusal
       const newPath = body.data.path
       const invalidDocumentPath = refusedBy(() => validateDocumentPath(newPath))
       if (invalidDocumentPath) {

@@ -149,6 +149,7 @@ const PORTABLE_ROUTES_IN_MCP_SERVER: Readonly<Record<string, PortableRoute>> = {
   'auth.ts': { role: 'middleware', blockedBy: [BUFFER_IN_TIMING, CRYPTO_IN_TIMING, HANDLE, LOG] },
   'body-limit.ts': { role: 'helper', blockedBy: [] },
   'document-output-path-error.ts': { role: 'helper', blockedBy: [] },
+  'read-json-body.ts': { role: 'helper', blockedBy: [] },
   'document/live-doc.ts': { role: 'router', blockedBy: [HANDLE] },
   'document/path-route.ts': { role: 'helper', blockedBy: [HANDLE] },
   'document/restore.ts': { role: 'router', blockedBy: [HANDLE, OS_IN_SHARED] },
@@ -184,7 +185,7 @@ const CUT_SEAMS: Readonly<Record<string, string>> = {
  * it is lowered, so the number keeps saying where the lift stands. The same
  * shape as `ADAPTERS_REACHING_MECHANICS_CEILING`.
  */
-const PORTABLE_ROUTES_CEILING = 13
+const PORTABLE_ROUTES_CEILING = 14
 
 /**
  * What the closure says, pinned by equality for the same reason: a file
@@ -196,7 +197,7 @@ const PORTABLE_ROUTES_CEILING = 13
  * - `liftableRouters`: the routers among those. This is the number ADR-0052's
  *   decision is about.
  */
-const CLOSURE_COUNTS = { cleanFiles: 2, liftableFiles: 5, liftableRouters: 2 } as const
+const CLOSURE_COUNTS = { cleanFiles: 3, liftableFiles: 6, liftableRouters: 2 } as const
 
 function ledgerDrift(
   portable: readonly string[],

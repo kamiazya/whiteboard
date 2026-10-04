@@ -26,7 +26,6 @@ type CreateDaemonBackend = (
 
 export interface DaemonDocumentBackendOptions {
   readonly daemonBaseUrl: string
-  readonly token: string | undefined
   readonly daemonFetch: typeof globalThis.fetch
   readonly createBackend?: CreateDaemonBackend
   /** The controller's resolved selection; either half null means no connection. */
@@ -50,7 +49,6 @@ interface DaemonConnection {
   readonly path: string
   readonly daemonBaseUrl: string
   readonly daemonFetch: typeof globalThis.fetch
-  readonly token: string | undefined
   readonly contentDocumentId: string
 }
 
@@ -59,7 +57,6 @@ function connectDaemonDocument({
   path,
   daemonBaseUrl,
   daemonFetch,
-  token,
   contentDocumentId,
 }: DaemonConnection): { backend: DocumentBackend; contentDocumentId: string } {
   // Every keeper syncs over SSE (ADR-0050): a hosted page cannot open ws://
@@ -67,7 +64,7 @@ function connectDaemonDocument({
   // the bridge carries, and server mode serves no socket. Null where
   // SharedWorker is unavailable; SseBackend then opens its own stream, which
   // is correct but not shared across tabs.
-  const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
+  const shared = createSharedSseStreamSource(daemonBaseUrl) ?? undefined
   return {
     backend: new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared),
     contentDocumentId: contentDocumentId,
@@ -76,7 +73,6 @@ function connectDaemonDocument({
 
 export function useDaemonDocumentBackend({
   daemonBaseUrl,
-  token,
   daemonFetch,
   createBackend,
   workspaceId,
@@ -137,10 +133,9 @@ export function useDaemonDocumentBackend({
       path,
       daemonBaseUrl,
       daemonFetch,
-      token,
       contentDocumentId: workspaceSyncDocumentId,
     })
-  }, [workspaceId, path, loading, daemonFetch, daemonBaseUrl, token, workspaceSyncDocumentId])
+  }, [workspaceId, path, loading, daemonFetch, daemonBaseUrl, workspaceSyncDocumentId])
   const backend = backendState?.backend ?? null
 
   // A rejected session belongs to one backend identity — switching to a new

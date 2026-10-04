@@ -7,18 +7,17 @@ import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 interface Connection {
   readonly daemonFetch: typeof globalThis.fetch
   readonly daemonBaseUrl: string
-  readonly token: string | undefined
   /** What a parent substitutes for the stream the page would open itself. */
   readonly streamSource?: SseStreamSource
 }
 
 /** The stream to follow through, and how to let go of it: only a hub opened here is closed here. */
-function openStream({ daemonFetch, daemonBaseUrl, token, streamSource }: Connection): {
+function openStream({ daemonFetch, daemonBaseUrl, streamSource }: Connection): {
   readonly source: SseStreamSource
   readonly close: () => void
 } {
   if (streamSource !== undefined) return { source: streamSource, close: () => {} }
-  const shared = createSharedSseStreamSource(daemonBaseUrl, token)
+  const shared = createSharedSseStreamSource(daemonBaseUrl)
   if (shared !== null) return { source: shared, close: () => {} }
   const hub = new SseStreamHub({ fetch: daemonFetch, baseUrl: daemonBaseUrl })
   return { source: hub, close: () => hub.close() }
@@ -38,11 +37,11 @@ export function useFollowWorkspaceWrites(
   workspaceId: string | null,
   reload: (workspaceId: string, isStale: () => boolean) => Promise<void>,
 ): void {
-  const { daemonFetch, daemonBaseUrl, token, streamSource } = connection
+  const { daemonFetch, daemonBaseUrl, streamSource } = connection
   useEffect(() => {
     if (workspaceId === null) return
     let stale = false
-    const { source, close } = openStream({ daemonFetch, daemonBaseUrl, token, streamSource })
+    const { source, close } = openStream({ daemonFetch, daemonBaseUrl, streamSource })
     const stop = followWorkspaceWrites(source, workspaceId, () => {
       void reload(workspaceId, () => stale)
     })
@@ -51,5 +50,5 @@ export function useFollowWorkspaceWrites(
       stop()
       close()
     }
-  }, [workspaceId, reload, daemonFetch, daemonBaseUrl, token, streamSource])
+  }, [workspaceId, reload, daemonFetch, daemonBaseUrl, streamSource])
 }

@@ -61,10 +61,11 @@ export async function loadDocument(
   doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
   const { canvas, skipped } = readSpatialCanvasWithSkipped(doc)
   if (skipped > 0) {
-    // Not an error: a client newer than this daemon may have written a field
-    // it does not know. The save that follows leaves those records alone, and
-    // this is how an operator learns the daemon is the older side.
-    log.warning('canvas holds records this build cannot read; they are left as stored', {
+    // Not an error: the save that follows leaves those records alone. The
+    // cause is not knowable here — a field a newer client wrote and a record
+    // an older writer stored past a limit fail the same schema — so this
+    // states the fact and leaves the diagnosis to whoever reads the record.
+    log.warning('canvas holds records that failed validation; they are left as stored', {
       workspaceId,
       documentId,
       skipped,

@@ -6,6 +6,7 @@
 // move their viewport", "how many pages have this document open" — so a
 // caller names what it means and never which transport carries it.
 import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { documentSyncKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type {
   AgentActivityMessage,
   ServerTextMessage,
@@ -85,7 +86,7 @@ export function sendViewportRequest(
     requestId,
     ...omitUndefined(params),
   } satisfies ServerTextMessage)
-  cacheViewportRequest(`${workspaceId}/${path}`, raw)
+  cacheViewportRequest(documentSyncKey(workspaceId, path), raw)
   // Only to ready pages: a pre-ready page cannot apply the viewport yet and
   // is sent the cached request when it signals `client_ready`, so sending it
   // now as well would deliver it twice.

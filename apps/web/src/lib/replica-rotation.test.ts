@@ -92,7 +92,7 @@ function openTab(
 ): typeof globalThis.fetch {
   forgetAllForTests()
   const fetch = daemonAt(current, record, workspaceId, options)
-  connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch })
+  connectReplicaKeeper({ baseUrl: BASE, fetch })
   return fetch
 }
 

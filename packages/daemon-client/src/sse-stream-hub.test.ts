@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   canvasSnapshotUrl,
+  documentSyncKey,
   documentUpdateUrl,
   parseSseEvent,
   SseStreamHub,
@@ -450,32 +451,6 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
-  it('reopens the stream when resumed with a credential the daemon accepts again', async () => {
-    // A rotated token arrives at the worker as a re-init; the hub it
-    // keeps per origin has to try again, or the tab stays "Sync off" after
-    // the person has done the one thing that fixes it.
-    const fake = createFake()
-    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
-    const states: boolean[] = []
-    hub.subscribe('w/a', {
-      onUpdate: () => {},
-      onMessage: () => {},
-      onConnectionChange: (c) => states.push(c),
-    })
-    await vi.waitFor(() => expect(states).toContain(true))
-    fake.refuse({ stream: 403 })
-    fake.endStream()
-    await vi.waitFor(() => expect(fake.streamOpens()).toBe(2))
-    await flush()
-
-    fake.refuse({})
-    hub.resume()
-
-    await vi.waitFor(() => expect(states.at(-1)).toBe(true))
-    expect(fake.streamOpens()).toBe(3)
-    hub.close()
-  })
-
   it('stays closed even if something subscribes afterwards', async () => {
     // Distinct from the case above, which holds because close() drops the
     // listeners: this pins that a closed hub does not quietly revive.
@@ -513,6 +488,18 @@ describe('doc-key URL mapping', () => {
   })
 })
 
+describe('documentSyncKey', () => {
+  it('joins the handle and the path on one slash, keeping the path whole', () => {
+    expect(documentSyncKey('ws-1', 'nested/path')).toBe('ws-1/nested/path')
+  })
+
+  it('is read back by the two parsers as a per-document key', () => {
+    const key = documentSyncKey('ws-1', 'a')
+    expect(workspaceHandleOfSyncKey(key)).toBe('ws-1')
+    expect(workspaceIdOfSyncKey(key)).toBeNull()
+  })
+})
+
 describe('workspaceHandleOfSyncKey', () => {
   it('reads the workspace id straight off a workspace-scope key', () => {
     expect(workspaceHandleOfSyncKey('workspace:ws-1')).toBe('ws-1')
@@ -526,6 +513,11 @@ describe('workspaceHandleOfSyncKey', () => {
     expect(workspaceHandleOfSyncKey('workspace:')).toBeNull()
     expect(workspaceHandleOfSyncKey('no-slash-here')).toBeNull()
     expect(workspaceHandleOfSyncKey('/leading-slash')).toBeNull()
+  })
+
+  it('refuses a handle with no path behind it, and builds no snapshot URL for it', () => {
+    expect(workspaceHandleOfSyncKey('ws-1/')).toBeNull()
+    expect(canvasSnapshotUrl('http://d', 'ws-1/')).toBeNull()
   })
 })
 

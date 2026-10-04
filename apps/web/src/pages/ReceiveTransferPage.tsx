@@ -10,9 +10,9 @@ import {
  * address.
  *
  * Why a whole page rather than a fetch the sender makes: the hosted app's
- * `connect-src` names `'self'` and loopback only, so it cannot POST to an
- * arbitrary keeper, and enumerating every self-hosted address someone might
- * run is not a list anyone can keep. A window at the DESTINATION's origin is
+ * `connect-src` names `'self'` and the font catalogue only, so it cannot
+ * POST to an arbitrary keeper, and enumerating every self-hosted address
+ * someone might run is not a list anyone can keep. A window at the DESTINATION's origin is
  * under no such rule, and three properties follow from that rather than
  * being bolted on: the request carries the session of the person signed in
  * HERE (a server-mode keeper's host-only cookie, ADR-0047), so the keeper

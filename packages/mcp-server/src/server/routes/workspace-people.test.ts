@@ -189,4 +189,20 @@ describe('workspace people', () => {
       invitation: { workspaceId: 'ws-1', invitedBy: ids.ada },
     })
   })
+
+  it.each([
+    ['add a person', 'POST', '/people'],
+    ['change a role', 'PATCH', '/people/someone'],
+  ])('refuses a body that is not JSON when asked to %s', async (_what, method, path) => {
+    const res = await app.request(`/api/workspaces/ws-1${path}`, {
+      method,
+      headers: { authorization: 'Bearer ada', 'content-type': 'application/json' },
+      body: '{not json',
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: 'invalid_body',
+      message: 'the request body is not valid JSON',
+    })
+  })
 })

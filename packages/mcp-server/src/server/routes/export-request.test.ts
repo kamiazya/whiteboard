@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import { unknownStyleRefusal } from '@kamiazya/whiteboard-server-core'
+import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { exportRequestSchema } from '../../shared/api-contracts/export.js'
@@ -10,7 +11,7 @@ import { exportSvgRequestSchema } from '../../shared/api-contracts/export-svg.js
 import {
   defaultExportPath,
   documentMissingBody,
-  parseExportBody,
+  readExportBody,
   resolveRequestedOutputPath,
 } from './export-request.js'
 
@@ -18,29 +19,45 @@ const schema = z
   .object({ scale: z.number().min(1).optional(), style: spatialRenderStyleSchema.optional() })
   .strict()
 
-// The body read is reached only through `parseExportBody`, so the cases that
-// are about the JSON and the schema go through it with a style-free body.
-describe('parseExportBody: the optional JSON body', () => {
-  it('reads an empty body as the schema defaults, since every export option has one', () => {
-    expect(parseExportBody('', schema)).toEqual({ body: {} })
+// The body is read from a real request, so the cases that are about the
+// JSON and the schema go through a mounted route with a style-free body.
+async function readFrom(requestSchema: z.ZodType<{ style?: string }>, rawText: string) {
+  const app = new Hono()
+  app.post('/', async (c) => {
+    const read = await readExportBody(c, requestSchema)
+    return 'refusal' in read ? read.refusal : c.json({ body: read.data })
+  })
+  const res = await app.request('/', { method: 'POST', body: rawText })
+  return { status: res.status, json: (await res.json()) as unknown }
+}
+
+describe('readExportBody: the optional JSON body', () => {
+  it('reads an empty body as the schema defaults, since every export option has one', async () => {
+    expect(await readFrom(schema, '')).toEqual({ status: 200, json: { body: {} } })
   })
 
-  it('refuses a body that is present and not JSON before the schema sees it', () => {
-    const result = parseExportBody('{not json', schema)
-    expect(result).toEqual({ error: { error: 'invalid_request', message: 'malformed JSON' } })
+  it('refuses a body that is present and not JSON before the schema sees it', async () => {
+    expect(await readFrom(schema, '{not json')).toEqual({
+      status: 400,
+      json: { error: 'invalid_body', message: 'the request body is not valid JSON' },
+    })
   })
 
-  it('refuses a body the schema rejects, naming the stray key', () => {
-    expect(parseExportBody('{"zzz":1}', schema)).toEqual({
-      error: expect.objectContaining({
+  it('refuses a body the schema rejects, naming the stray key', async () => {
+    expect(await readFrom(schema, '{"zzz":1}')).toEqual({
+      status: 400,
+      json: expect.objectContaining({
         error: 'invalid_request',
         message: expect.stringContaining('zzz'),
       }),
     })
   })
 
-  it('answers the parsed body when it fits', () => {
-    expect(parseExportBody('{"scale":2}', schema)).toEqual({ body: { scale: 2 } })
+  it('answers the parsed body when it fits', async () => {
+    expect(await readFrom(schema, '{"scale":2}')).toEqual({
+      status: 200,
+      json: { body: { scale: 2 } },
+    })
   })
 })
 
@@ -102,45 +119,49 @@ describe('the shared bodies', () => {
 describe.each([
   ['png', exportRequestSchema],
   ['svg', exportSvgRequestSchema],
-] as const)('parseExportBody (%s)', (_format, requestSchema) => {
+] as const)('readExportBody (%s)', (_format, requestSchema) => {
   it.each([
     'clean',
     'document',
     'visual.sketch',
     'visual.neon',
-  ])('lets style %s through', (style) => {
-    expect(parseExportBody(JSON.stringify({ style }), requestSchema)).toEqual({ body: { style } })
-  })
-
-  it('lets an empty body through', () => {
-    expect(parseExportBody('', requestSchema)).toEqual({ body: {} })
-  })
-
-  it('refuses a style naming no registered theme, with every registered id', () => {
-    const parsed = parseExportBody(JSON.stringify({ style: 'visual.nope' }), requestSchema)
-    expect(parsed).toMatchObject({
-      error: {
-        error: 'invalid_request',
-        message: expect.stringContaining('"visual.nope"'),
-      },
-    })
-    expect(parsed).toMatchObject({
-      error: { message: expect.stringContaining('visual.sketch, visual.neon') },
+  ])('lets style %s through', async (style) => {
+    expect(await readFrom(requestSchema, JSON.stringify({ style }))).toEqual({
+      status: 200,
+      json: { body: { style } },
     })
   })
 
-  it('refuses with the same text wb_scene_render does', () => {
+  it('lets an empty body through', async () => {
+    expect(await readFrom(requestSchema, '')).toEqual({ status: 200, json: { body: {} } })
+  })
+
+  it('refuses a style naming no registered theme, with every registered id', async () => {
+    const parsed = await readFrom(requestSchema, JSON.stringify({ style: 'visual.nope' }))
+    expect(parsed.status).toBe(400)
+    expect(parsed.json).toMatchObject({
+      error: 'invalid_request',
+      message: expect.stringContaining('"visual.nope"'),
+    })
+    expect(parsed.json).toMatchObject({
+      message: expect.stringContaining('visual.sketch, visual.neon'),
+    })
+  })
+
+  it('refuses with the same text wb_scene_render does', async () => {
     const style = 'visual.nope'
     const refusal = unknownStyleRefusal(style)
     expect(refusal).toBeDefined()
-    expect(parseExportBody(JSON.stringify({ style }), requestSchema)).toEqual({
-      error: { error: 'invalid_request', message: refusal },
+    expect(await readFrom(requestSchema, JSON.stringify({ style }))).toEqual({
+      status: 400,
+      json: { error: 'invalid_request', message: refusal },
     })
   })
 
-  it('keeps the body check first: malformed JSON is still malformed JSON', () => {
-    expect(parseExportBody('{nope', requestSchema)).toEqual({
-      error: { error: 'invalid_request', message: 'malformed JSON' },
+  it('keeps the body check first: a body that is not JSON is refused as such', async () => {
+    expect(await readFrom(requestSchema, '{nope')).toEqual({
+      status: 400,
+      json: { error: 'invalid_body', message: 'the request body is not valid JSON' },
     })
   })
 })

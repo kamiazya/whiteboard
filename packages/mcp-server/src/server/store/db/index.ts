@@ -1,9 +1,9 @@
 import { mkdir } from 'node:fs/promises'
-// @libsql/client is not imported directly anywhere in src — LibsqlDialect
-// pulls it in transitively — and the direct `^0.17.3` in package.json does
-// NOT by itself decide which one that is: @libsql/kysely-libsql@0.4.1 asks for
+// The libSQL dialect (busy-retry.ts wraps it) pulls @libsql/client in
+// transitively — and the direct `^0.17.3` in package.json does NOT by itself
+// decide which one that is: @libsql/kysely-libsql@0.4.1 asks for
 // ^0.8.0, so without an override pnpm resolves BOTH 0.17.3 and 0.8.1, and the
-// dialect below would run on 0.8.1 — which drags libsql@0.3.19 and its native
+// dialect would run on 0.8.1 — which drags libsql@0.3.19 and its native
 // bindings.
 //
 // That is not academic. 0.3.19's musl prebuild fails to load on current
@@ -16,10 +16,10 @@ import { mkdir } from 'node:fs/promises'
 //
 // `one-libsql-stack.test.ts` keeps it that way; the direct pin stays because
 // it is what the override's range is written against.
-import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
 import { getDataDir } from '../../config.js'
 import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
+import { busyRetryingDialect } from './busy-retry.js'
 import { databaseIsInsideDataDir, resolveDatabaseLocation } from './location.js'
 import { writeDatabaseLocationRecord } from './location-record.js'
 import type { Database, DatabaseSchema } from './schema.js'
@@ -63,9 +63,9 @@ async function buildDb(dataDir: string): Promise<Database> {
   // Never throws: a directory that cannot hold this file costs a hint, not a
   // startup.
   await writeDatabaseLocationRecord(dataDir, databaseIsInsideDataDir(dataDir))
-  const db = new Kysely<DatabaseSchema>({
-    dialect: new LibsqlDialect(location),
-  })
+  // The stdio agent and the daemon share this file; a busy write is waited out
+  // asynchronously by the dialect (busy-retry.ts), never by SQLite's busy_timeout.
+  const db = new Kysely<DatabaseSchema>({ dialect: busyRetryingDialect(location) })
   // WAL, so readers and writers stop blocking each other.
   //
   // Under SQLite's default rollback journal, a read transaction's SHARED lock

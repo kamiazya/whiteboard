@@ -28,7 +28,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
@@ -52,10 +52,8 @@ function isSliceOffPrefix(node: ts.Expression): boolean {
 }
 
 /** An expression that yields a `…/` template, however it is parenthesised or guarded. */
-function yieldsSlashTemplate(node: ts.Expression): boolean {
-  if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node)) {
-    return yieldsSlashTemplate(node.expression)
-  }
+function yieldsSlashTemplate(expression: ts.Expression): boolean {
+  const node = unwrapExpression(expression)
   if (ts.isConditionalExpression(node)) {
     return yieldsSlashTemplate(node.whenTrue) || yieldsSlashTemplate(node.whenFalse)
   }
@@ -166,6 +164,14 @@ const FIXTURES: readonly { readonly source: string; readonly spellings: number }
     spellings: 1,
   },
   { source: 'const prefix = `@{folder}/`\nconst rest = path.slice(prefix.length)', spellings: 1 },
+  {
+    source: 'const prefix = `@{folder}/` satisfies string\nconst rest = path.slice(prefix.length)',
+    spellings: 1,
+  },
+  {
+    source: 'const prefix = (cond ? `@{folder}/` : base)!\nconst rest = path.slice(prefix.length)',
+    spellings: 1,
+  },
   {
     source: "const prefix = folder === '' ? '' : `@{folder}/`\nreturn `@{prefix}@{name}`",
     spellings: 0,

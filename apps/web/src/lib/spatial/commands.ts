@@ -37,6 +37,7 @@ import {
   isSelfLoop,
   type LineEnd,
   type LineJumps,
+  MAX_BENDS,
   nodeFile,
   nodeText,
   nodeUrl,
@@ -824,6 +825,10 @@ function setLineBends(
   id: string,
   bends: readonly { readonly x: number; readonly y: number }[],
 ): SpatialCanvas {
+  // Refused rather than truncated: a record over the model's cap fails
+  // validation on read, and a truncated list would store a path the person
+  // never drew.
+  if (bends.length > MAX_BENDS) return canvas
   return updateLine(canvas, id, (line) => {
     const { bends: _previous, ...rest } = line
     return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
@@ -1008,6 +1013,8 @@ function setEdgeBends(
   id: string,
   bends: readonly { readonly x: number; readonly y: number }[],
 ): SpatialCanvas {
+  // Refused like `setLineBends`.
+  if (bends.length > MAX_BENDS) return canvas
   return updateEdge(canvas, id, (edge) => {
     const { bends: _previous, ...rest } = edge
     return bends.length === 0 ? rest : { ...rest, bends: [...bends] }

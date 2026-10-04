@@ -90,7 +90,6 @@ describe('ExtensionConnectOption', () => {
         connect={async () => ({
           status: 'connected',
           daemonBaseUrl: BRIDGE_DAEMON_BASE_URL,
-          token: '',
         })}
         reopen={reopen}
       />,

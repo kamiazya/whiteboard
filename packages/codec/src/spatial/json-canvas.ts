@@ -7,6 +7,7 @@ import {
   extensionFacetsSchema,
   findDuplicateId,
   integerSchema,
+  MAX_BENDS,
   nodeIdSchema,
   nonnegativeIntegerSchema,
   storedTagsSchema,
@@ -151,6 +152,7 @@ export const edgeExtensionSchema = z
     bends: z
       .array(z.object({ x: z.number().int(), y: z.number().int() }))
       .min(1)
+      .max(MAX_BENDS)
       .optional()
       .catch(undefined),
   })

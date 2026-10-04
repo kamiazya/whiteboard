@@ -24,6 +24,7 @@ import { createUserSettingsStore, STORAGE_KEY } from './user-settings-store.js'
 
 const DB_NAME = 'whiteboard-replica-store'
 const DAEMON = 'http://127.0.0.1:3099'
+const OTHER_DAEMON = 'http://127.0.0.1:3100'
 
 // A distinct workspace id per test: `markReplica`'s in-memory mark is module
 // state with no test-seam reset (it never needs one in production — a tab
@@ -117,7 +118,7 @@ describe('replica-store', () => {
   it('markReplica seals the FIRST pull even before the registry entry exists', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
     markReplica(workspaceId, DAEMON)
 
     const store = openDocumentStore(DB_NAME)
@@ -136,7 +137,7 @@ describe('replica-store', () => {
   it('store-dump guard: no raw key bytes or their base64url text land in storage', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -160,7 +161,7 @@ describe('replica-store', () => {
   it('withholds (not_a_member): save rejects and nothing is written', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: refusalFetch('not_a_member') })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: refusalFetch('not_a_member') })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -175,7 +176,7 @@ describe('replica-store', () => {
   it('a disconnect withholds a previously-held key instead of continuing to answer it', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -204,7 +205,7 @@ describe('replica-store', () => {
       keyCalls += 1
       return offlineKeyFetch()(input)
     }) as typeof fetch
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: countingFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: countingFetch })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -218,8 +219,8 @@ describe('replica-store', () => {
     localStorage.removeItem(STORAGE_KEY)
   })
 
-  it('a reconnect to the same daemon with a different token forgets the previous key rather than continuing to answer under it', async () => {
-    // `connectReplicaKeeper`'s own docstring: a token rotation must forget
+  it('a reconnect through another daemon forgets the previous daemon key rather than continuing to answer under it', async () => {
+    // `connectReplicaKeeper`'s own docstring: a change of daemon must forget
     // whatever key the PREVIOUS connection held. A fetch double that mints a
     // DIFFERENT workspace key each call is the differential signal — if the
     // stale key kept answering, the old ciphertext would still open; if it
@@ -241,7 +242,7 @@ describe('replica-store', () => {
       throw new Error(`unexpected fetch ${url}`)
     }) as typeof fetch
 
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok-1', fetch: rotatingKeyFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: rotatingKeyFetch })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -253,8 +254,9 @@ describe('replica-store', () => {
     expect(loaded?.chunks.map((c) => new TextDecoder().decode(c.bytes))).toEqual([marker])
     expect(keyCalls).toBe(1)
 
-    // A token rotation on the SAME daemon — must forget the first key.
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok-2', fetch: rotatingKeyFetch })
+    // Moving to another daemon and back — must forget the first key.
+    connectReplicaKeeper({ baseUrl: OTHER_DAEMON, fetch: rotatingKeyFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: rotatingKeyFetch })
 
     await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(
       StoredDocumentUnreadableError,
@@ -266,7 +268,7 @@ describe('replica-store', () => {
     const workspaceId = freshWorkspaceId()
     expect(replicaKeyStatus(DAEMON, workspaceId)).toBeUndefined()
 
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: refusalFetch('not_a_member') })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: refusalFetch('not_a_member') })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }

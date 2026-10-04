@@ -76,9 +76,7 @@ afterEach(() => {
 describe('DaemonIndexPage tree view', () => {
   it('shows folders as tree branches and nothing else', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
 
     // The tree itself, not the panel around it: the panel now renders while
     // its list is still loading (it holds the layout instead of collapsing
@@ -95,9 +93,7 @@ describe('DaemonIndexPage tree view', () => {
 
   it('lists a folder’s contents in the middle pane and previews from there', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
 
     // At the root the middle pane shows the top level only — `notes` is
     // there as a folder, its child is one level down and is not.
@@ -148,9 +144,7 @@ describe('DaemonIndexPage tree view', () => {
   // trade that for cards you can actually see.
   it('switches between one and two columns', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
     fireEvent.click(screen.getByRole('button', { name: 'One column' }))
@@ -172,9 +166,7 @@ describe('DaemonIndexPage tree view', () => {
   // two modes are two ways into one browser rather than two browsers.
   it('previews from the one-column tree too', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
     fireEvent.click(screen.getByRole('button', { name: 'One column' }))
 
@@ -191,9 +183,7 @@ describe('DaemonIndexPage tree view', () => {
   // screen says which document the preview belongs to.
   it('drops the preview when navigating to another folder', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
 
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
@@ -232,9 +222,7 @@ describe('DaemonIndexPage tree view', () => {
       },
     })
 
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -268,9 +256,7 @@ describe('DaemonIndexPage tree view', () => {
         jsonResponse({ title: 'Path "archive/design/x" already exists' }, 409),
     })
 
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -315,9 +301,7 @@ describe('DaemonIndexPage tree view', () => {
       },
     })
 
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     const contents = await screen.findByTestId('folder-contents')
 
     // At the root it lands at the root.
@@ -351,9 +335,7 @@ describe('DaemonIndexPage tree view', () => {
       },
     })
 
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -403,9 +385,7 @@ describe('DaemonIndexPage tree view', () => {
       },
     })
 
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
     await pickNewDocumentKind('markdown')
@@ -438,9 +418,7 @@ describe('DaemonIndexPage tree view', () => {
       },
     })
 
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
     await pickNewDocumentKind('spatial')
@@ -480,7 +458,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage
         daemonBaseUrl={DAEMON_BASE_URL}
-        token="secret"
         onOpenDocument={(workspaceId, path) => opened.push([workspaceId, path])}
       />,
     )
@@ -514,9 +491,7 @@ describe('DaemonIndexPage tree view', () => {
   // including ones they have never opened.
   it('finds a document from a folder it is not standing in', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     const contents = await screen.findByTestId('folder-contents')
     // Standing at the root, where `notes/design` is NOT listed.
     expect(contents.textContent).not.toContain('design')
@@ -535,9 +510,7 @@ describe('DaemonIndexPage tree view', () => {
 
   it('previews a result, and goes back to the folder when the search is cleared', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
     const box = screen.getByRole('searchbox', { name: 'Search documents' })
@@ -559,9 +532,7 @@ describe('DaemonIndexPage tree view', () => {
   // from another folder, so clearing the query has to put that right.
   it('drops a result from elsewhere when the search is cleared', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
     const box = screen.getByRole('searchbox', { name: 'Search documents' })
@@ -582,9 +553,7 @@ describe('DaemonIndexPage tree view', () => {
   // elsewhere, and dropping it would lose a selection for no reason.
   it('keeps a result that is in the folder already open', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -606,9 +575,7 @@ describe('DaemonIndexPage tree view', () => {
 
   it('says nothing matches rather than showing an empty pane', async () => {
     installFetchMock()
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
     await screen.findByTestId('folder-contents')
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
@@ -619,9 +586,7 @@ describe('DaemonIndexPage tree view', () => {
 
   it('still shows the failure alert when the list fails for a non-404 reason', async () => {
     installFetchMock({ status: 500, body: { error: 'boom' } })
-    render(
-      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-    )
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('Failed to load documents for this workspace.')

@@ -73,7 +73,7 @@ describe.each(ROUTES)('$format export refusal order on a missing document', (rou
   it('tells the caller its body is malformed before it says the document is missing', async () => {
     const res = await post('{not json')
     expect(res.status).toBe(400)
-    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_body' })
   })
 
   it('tells the caller its style names no registered theme, and which do, before it says the document is missing', async () => {

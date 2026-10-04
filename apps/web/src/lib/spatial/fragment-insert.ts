@@ -78,8 +78,8 @@ export function buildFragmentInsertCommand(
       {
         ...edge,
         id: reminted.mintId(),
-        from: { ...edge.from, kind: 'node' as const, node: from ?? fromId },
-        to: { ...edge.to, kind: 'node' as const, node: to ?? toId },
+        from: { ...edge.from, node: from ?? fromId },
+        to: { ...edge.to, node: to ?? toId },
       },
     ]
   })

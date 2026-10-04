@@ -1,5 +1,5 @@
 import ts from '@typescript/typescript6'
-import { parseSource } from './ast-helpers.js'
+import { isTypeOnlyWrapper, parseSource } from './ast-helpers.js'
 import { classifyPath } from './source-scan.js'
 
 export interface MeasuredFunction {
@@ -12,13 +12,7 @@ export interface MeasuredFunction {
 /** Looks through the wrappers a call may carry on its way to the variable it initialises. */
 function outermostWrapper(node: ts.Node): ts.Node {
   let current = node
-  while (
-    ts.isParenthesizedExpression(current.parent) ||
-    ts.isAsExpression(current.parent) ||
-    ts.isSatisfiesExpression(current.parent) ||
-    ts.isNonNullExpression(current.parent)
-  )
-    current = current.parent
+  while (isTypeOnlyWrapper(current.parent)) current = current.parent
   return current
 }
 

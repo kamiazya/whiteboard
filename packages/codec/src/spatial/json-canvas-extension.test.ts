@@ -1,5 +1,7 @@
+import { MAX_BENDS, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { jsonCanvasDocumentSchema, jsonCanvasNodeSchema, xWhiteboardSchema } from './json-canvas.js'
+import { parseSpatial } from './parse.js'
 
 const baseGeometry = { id: 'n1', x: 0, y: 0, width: 100, height: 100 }
 
@@ -215,6 +217,39 @@ describe("an edge's x-whiteboard", () => {
   it('refuses an embed, dropping the extension and keeping the edge', () => {
     const edge = edgeWith({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V9' })
     expect(edge).toEqual({ id: 'e1', fromNode: 'a', toNode: 'b' })
+  })
+
+  // The model refuses an edge over `MAX_BENDS` and a reader that refuses it
+  // drops the edge, so the wire schema holds the same line: an over-long list
+  // is a malformed field, and costs the bends — the route is computed again —
+  // never the edge and never a canvas the model then rejects.
+  describe('bends', () => {
+    const bends = (count: number) => Array.from({ length: count }, (_, i) => ({ x: i, y: -i }))
+
+    it('keeps a list at the cap', () => {
+      const edge = edgeWith({ bends: bends(MAX_BENDS) })
+      expect(edge?.['x-whiteboard']?.bends).toHaveLength(MAX_BENDS)
+    })
+
+    it('drops a list over the cap, keeping the edge', () => {
+      const edge = edgeWith({ bends: bends(MAX_BENDS + 1) })
+      expect(edge).toEqual({ id: 'e1', fromNode: 'a', toNode: 'b', 'x-whiteboard': {} })
+    })
+
+    it('never lifts a canvas the model refuses', () => {
+      const text = JSON.stringify({
+        nodes: [
+          { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+          { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+        ],
+        edges: [
+          { id: 'e1', fromNode: 'a', toNode: 'b', 'x-whiteboard': { bends: bends(MAX_BENDS + 1) } },
+        ],
+      })
+      const parsed = parseSpatial(text)
+      expect(parsed.ok).toBe(true)
+      if (parsed.ok) expect(spatialCanvasSchema.safeParse(parsed.value).success).toBe(true)
+    })
   })
 
   it('a malformed facet key costs the bucket, never the edge', () => {

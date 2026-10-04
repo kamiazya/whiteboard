@@ -76,7 +76,7 @@ async function save(docRef: DocRef): Promise<void> {
 describe('openDocumentStore routing', () => {
   beforeEach(async () => {
     await clearNamedDb(DB_NAME)
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch })
   })
 
   afterEach(async () => {

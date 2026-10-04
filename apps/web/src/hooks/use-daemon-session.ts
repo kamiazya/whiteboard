@@ -18,7 +18,7 @@ import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
  */
 export function useReplicaKeeper(daemon: ConnectedDaemon | undefined): void {
   useEffect(() => {
-    const connected = daemon === undefined ? null : { baseUrl: daemon.baseUrl, token: daemon.token }
+    const connected = daemon === undefined ? null : { baseUrl: daemon.baseUrl }
     let cancelled = false
     import('../lib/replica-store.js').then(({ connectReplicaKeeper }) => {
       if (!cancelled) connectReplicaKeeper(connected)
@@ -26,19 +26,18 @@ export function useReplicaKeeper(daemon: ConnectedDaemon | undefined): void {
     return () => {
       cancelled = true
     }
-  }, [daemon?.baseUrl, daemon?.token])
+  }, [daemon?.baseUrl])
 }
 
 /**
- * The daemon the shell chrome talks to, memoised on the two SCALARS rather
+ * The daemon the shell chrome talks to, memoised on its base URL rather
  * than on the resolved object — that object is rebuilt every render, and the
  * workspace switcher reads its list in an effect keyed on this source, so a
  * fresh object each render is a fetch each render.
  */
 export function useDaemonShellTarget(
-  shell: { baseUrl: string; token: string | undefined } | undefined,
-): { baseUrl: string; token: string | undefined } | undefined {
+  shell: ConnectedDaemon | undefined,
+): ConnectedDaemon | undefined {
   const baseUrl = shell?.baseUrl
-  const token = shell?.token
-  return useMemo(() => (baseUrl === undefined ? undefined : { baseUrl, token }), [baseUrl, token])
+  return useMemo(() => (baseUrl === undefined ? undefined : { baseUrl }), [baseUrl])
 }

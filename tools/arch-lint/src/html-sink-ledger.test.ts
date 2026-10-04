@@ -17,7 +17,12 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { htmlSinks, type SinkEntry, sinkLedgerViolations } from './html-sink-scan.js'
+import {
+  htmlSinks,
+  mayHoldHtmlSink,
+  type SinkEntry,
+  sinkLedgerViolations,
+} from './html-sink-scan.js'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
@@ -49,13 +54,7 @@ for (const root of ROOTS) {
     if (isExcludedPath(path) || !isShippedPath(path)) continue
     const source = readFileSync(path, 'utf8')
     scanned.push(path)
-    // Every spelling this scan reads contains one of these, so a file without
-    // one is not parsed.
-    if (
-      !/innerhtml|outerhtml|insertadjacenthtml|sethtmlunsafe|createcontextualfragment/i.test(source)
-    ) {
-      continue
-    }
+    if (!mayHoldHtmlSink(source)) continue
     const sinks = htmlSinks(path, source)
     if (sinks.length > 0) found.set(relativeToRepo(path), sinks)
   }
@@ -90,6 +89,80 @@ describe('markup sinks are classified', () => {
     for (const { source, sinks } of cases) {
       expect(htmlSinks('fixture.tsx', source), source).toEqual(sinks)
     }
+  })
+
+  it('recognises the spellings that reach a sink by another route', () => {
+    const cases: readonly { source: string; sinks: string[] }[] = [
+      { source: 'frame.srcdoc = svg', sinks: ['srcdoc ='] },
+      { source: "frame['srcdoc'] = svg", sinks: ['srcdoc ='] },
+      { source: "frame.setAttribute('srcdoc', svg)", sinks: ['setAttribute(srcdoc)'] },
+      { source: "document.write('<p>')", sinks: ['document.write()'] },
+      { source: 'document.writeln(svg)', sinks: ['document.writeln()'] },
+      { source: 'frame.contentDocument.write(svg)', sinks: ['document.write()'] },
+      { source: 'node.ownerDocument?.write(svg)', sinks: ['document.write()'] },
+      { source: 'Object.assign(host, { innerHTML: svg })', sinks: ['Object.assign(innerHTML)'] },
+      { source: 'Object.assign(host, { innerHTML })', sinks: ['Object.assign(innerHTML)'] },
+      {
+        source: 'Object.assign(host, ({ innerHTML: svg }) as Props)',
+        sinks: ['Object.assign(innerHTML)'],
+      },
+      { source: 'Object.assign({ innerHTML: svg }, host)', sinks: [] },
+      { source: '(document as Document).write(svg)', sinks: ['document.write()'] },
+      {
+        source: "Object.assign(host, base, { 'outerHTML': svg })",
+        sinks: ['Object.assign(outerHTML)'],
+      },
+      { source: 'Object.assign(frame, { srcdoc: svg })', sinks: ['Object.assign(srcdoc)'] },
+      { source: "Reflect.set(host, 'innerHTML', svg)", sinks: ['Reflect.set(innerHTML)'] },
+      { source: "host['insertAdjacentHTML']('beforeend', svg)", sinks: ['insertAdjacentHTML()'] },
+      { source: "host?.['setHTMLUnsafe'](svg)", sinks: ['setHTMLUnsafe()'] },
+      { source: '(host.insertAdjacentHTML as Fn)(pos, svg)', sinks: ['insertAdjacentHTML()'] },
+      {
+        source: "h('div', { ['dangerouslySetInnerHTML']: { __html: svg } })",
+        sinks: ['dangerouslySetInnerHTML'],
+      },
+      { source: 'h({ [`dangerouslySetInnerHTML`]: html })', sinks: ['dangerouslySetInnerHTML'] },
+      // Reads, other attributes, other writers and other objects are not markup parses.
+      { source: 'const doc = frame.srcdoc', sinks: [] },
+      { source: "frame.setAttribute('title', svg)", sinks: [] },
+      { source: 'stream.write(chunk)', sinks: [] },
+      { source: 'Object.assign(host, { textContent: svg })', sinks: [] },
+      { source: "Reflect.set(host, 'textContent', svg)", sinks: [] },
+      { source: "host['classList']('x')", sinks: [] },
+      { source: 'h({ [key]: { __html: svg } })', sinks: [] },
+    ]
+    for (const { source, sinks } of cases) {
+      expect(htmlSinks('fixture.tsx', source), source).toEqual(sinks)
+    }
+  })
+
+  it('reads a file as a possible sink whenever it spells one of the scan names, whatever the casing', () => {
+    for (const source of [
+      'frame.srcdoc = x',
+      'document.write(x)',
+      'doc.contentDocument.writeln(x)',
+      'host.innerHTML = x',
+      '<div dangerouslySetInnerHTML={x} />',
+      "host['insertAdjacentHTML'](a, x)",
+      'range.createContextualFragment(x)',
+      'host.setHTMLUnsafe(x)',
+      "Reflect.set(host, 'outerHTML', x)",
+    ]) {
+      expect(mayHoldHtmlSink(source), source).toBe(true)
+    }
+    expect(mayHoldHtmlSink('stream.write(chunk)')).toBe(false)
+    expect(mayHoldHtmlSink('const a = 1')).toBe(false)
+  })
+
+  it('reports a file that gains a second KIND of sink, not only a different count of one', () => {
+    const ledger = { 'a.ts': { sinks: { 'innerHTML =': 1 }, reason: 'x' } }
+    expect(
+      sinkLedgerViolations(new Map([['a.ts', ['innerHTML =', 'insertAdjacentHTML()']]]), ledger),
+    ).toEqual([
+      'a.ts: ledger says {"innerHTML =":1}, source has {"innerHTML =":1,"insertAdjacentHTML()":1}',
+    ])
+    expect(sinkLedgerViolations(new Map([['a.ts', ['outerHTML =']]]), ledger)).toHaveLength(1)
+    expect(sinkLedgerViolations(new Map([['a.ts', ['innerHTML =']]]), ledger)).toEqual([])
   })
 
   it('reports a sink planted outside the ledger, a miscount, and a stale entry', () => {

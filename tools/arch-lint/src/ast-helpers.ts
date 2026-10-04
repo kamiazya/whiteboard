@@ -5,6 +5,29 @@ export function scriptKindOf(fileName: string): ts.ScriptKind {
   return /\.[tj]sx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
 }
 
+/** A wrapper that changes an expression's type and not its value. */
+export type TypeOnlyWrapper =
+  | ts.ParenthesizedExpression
+  | ts.AsExpression
+  | ts.SatisfiesExpression
+  | ts.NonNullExpression
+  | ts.TypeAssertion
+
+/**
+ * Whether `node` is one of the wrappers `unwrapExpression` looks through.
+ * Exposed for a walk UP from a node, which cannot use the downward helper and
+ * must not keep its own list of the five.
+ */
+export function isTypeOnlyWrapper(node: ts.Node): node is TypeOnlyWrapper {
+  return (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isTypeAssertionExpression(node)
+  )
+}
+
 /**
  * An expression with the wrappers that change its type and not its value looked
  * through: parentheses, `as`, `satisfies`, `<T>x` and `x!`. A guard that
@@ -13,15 +36,7 @@ export function scriptKindOf(fileName: string): ts.ScriptKind {
  */
 export function unwrapExpression(node: ts.Expression): ts.Expression {
   let current = node
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isNonNullExpression(current) ||
-    ts.isTypeAssertionExpression(current)
-  ) {
-    current = current.expression
-  }
+  while (isTypeOnlyWrapper(current)) current = current.expression
   return current
 }
 

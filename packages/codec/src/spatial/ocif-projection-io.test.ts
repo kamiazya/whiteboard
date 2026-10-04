@@ -102,6 +102,23 @@ describe('a document becomes OCIF and comes back', () => {
       ?.data?.find((d) => d.type === '@ocif/group')
     expect(group?.members).toEqual(['inside'])
   })
+
+  it('lists several members in the order the document holds them, frame excluded', () => {
+    const projected = toOcif({
+      nodes: [
+        textNode({ id: 'b', text: 'b', x: 10, y: 10, width: 10, height: 10 }),
+        groupNode({ id: 'g', x: 0, y: 0, width: 100, height: 100 }),
+        textNode({ id: 'out', text: 'o', x: 500, y: 0, width: 10, height: 10 }),
+        textNode({ id: 'a', text: 'a', x: 40, y: 40, width: 10, height: 10 }),
+        textNode({ id: 'c', text: 'c', x: 70, y: 70, width: 10, height: 10 }),
+      ],
+      edges: [],
+    })
+    const group = projected.nodes
+      ?.find((n) => n.id === 'g')
+      ?.data?.find((d) => d.type === '@ocif/group')
+    expect(group?.members).toEqual(['b', 'a', 'c'])
+  })
 })
 
 describe('parseOcif reads foreign OCIF text', () => {

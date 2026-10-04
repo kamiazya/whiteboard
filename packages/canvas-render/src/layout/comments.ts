@@ -16,7 +16,7 @@
  */
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import { commentCornerOf, isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
@@ -79,7 +79,7 @@ export function commentAnchor(
 ): { readonly x: number; readonly y: number } {
   if (comment.targetNodeId !== undefined) {
     const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
-    if (target !== undefined) return { x: target.x + target.width, y: target.y }
+    if (target !== undefined) return commentCornerOf(target)
   }
   if (comment.targetEdgeId !== undefined) {
     const path = edgePathOf?.(comment.targetEdgeId)
@@ -265,7 +265,7 @@ export function composeComments(
     // that box was when it was last projected, and the nodes move.
     const region = options.regionsByThread.get(comment.id)
     return region !== undefined
-      ? { x: region.rect.x + region.rect.width, y: region.rect.y }
+      ? commentCornerOf(region.rect)
       : commentAnchor(comment, canvas, edgePathOf)
   }
   const obstacles = bubbleObstacles(canvas, options, visible, anchorOf)

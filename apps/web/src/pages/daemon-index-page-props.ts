@@ -2,7 +2,6 @@ import type { SseStreamSource } from '@kamiazya/whiteboard-daemon-client/sse-str
 
 export interface DaemonIndexPageProps {
   daemonBaseUrl: string
-  token?: string
   /**
    * The workspace the ADDRESS names, in either of ADR-0019's resolvable
    * layers. Absent when the address names none — `/`, or a workspace-level

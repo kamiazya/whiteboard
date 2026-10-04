@@ -86,7 +86,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 
 function createHarness(): SseStreamSourceHarness {
-  const source = createSharedSseStreamSource(BASE, 'contract-token')
+  const source = createSharedSseStreamSource(BASE)
   if (!source) throw new Error('SharedWorker unavailable')
 
   return {

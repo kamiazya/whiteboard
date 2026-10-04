@@ -230,12 +230,6 @@ interface PortState {
 
 const hubs = new Map<string, SseStreamHub>()
 const ports = new Map<MessagePort, PortState>()
-/**
- * Latest credential per origin. A hub outlives the `init` that created it,
- * while its session token can be rotated under it — so the token is read at
- * request time rather than captured when the hub is built.
- */
-const tokens = new Map<string, string | undefined>()
 
 /**
  * The replica version the daemon is known to have taken, per origin+document.
@@ -347,13 +341,7 @@ function tellWriteState(baseUrl: string, doc: string, landed: boolean): void {
 function hubFor(baseUrl: string): SseStreamHub {
   const existing = hubs.get(baseUrl)
   if (existing) return existing
-  // The daemon credential is attached by the app's single fetch seam, not
-  // here — a second place building the header is exactly what
-  // daemon-auth-seam.test.ts exists to prevent.
-  const hub = new SseStreamHub({
-    fetch: createDaemonFetch(baseUrl, () => tokens.get(baseUrl)),
-    baseUrl,
-  })
+  const hub = new SseStreamHub({ fetch: createDaemonFetch(baseUrl), baseUrl })
   hubs.set(baseUrl, hub)
   return hub
 }
@@ -425,9 +413,9 @@ type WorkerRequest = ReturnType<typeof sseWorkerRequestSchema.parse>
 type RequestOf<Kind extends WorkerRequest['type']> = Extract<WorkerRequest, { type: Kind }>
 
 /**
- * A re-init is also how a rotated token arrives, so an existing port keeps its
- * subscription handles: replacing them would strand the claims it already
- * holds with nothing left able to release them.
+ * A re-init from a port already on this origin keeps its subscription handles:
+ * replacing them would strand the claims it already holds with nothing left
+ * able to release them.
  *
  * Re-pointing a port at a DIFFERENT origin is the other case, and the old
  * record's claims have to be released before it is dropped: the handles live
@@ -436,15 +424,8 @@ type RequestOf<Kind extends WorkerRequest['type']> = Extract<WorkerRequest, { ty
  * forever, for a port that has moved on.
  */
 function handleInit(port: MessagePort, msg: RequestOf<'init'>): void {
-  const rotated = tokens.has(msg.baseUrl) && tokens.get(msg.baseUrl) !== msg.token
-  tokens.set(msg.baseUrl, msg.token)
   const existing = ports.get(port)
-  if (existing?.baseUrl === msg.baseUrl) {
-    // A hub halted by a refused credential tries the rotated one; with
-    // nothing refused this is a no-op.
-    if (rotated) hubFor(msg.baseUrl).resume()
-    return
-  }
+  if (existing?.baseUrl === msg.baseUrl) return
   if (existing) {
     for (const [doc, off] of existing.subscriptions) {
       off()

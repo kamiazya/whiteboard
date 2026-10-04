@@ -1,5 +1,5 @@
 import ts from '@typescript/typescript6'
-import { scriptKindOf } from './ast-helpers.js'
+import { scriptKindOf, unwrapExpression } from './ast-helpers.js'
 import { createExportResolver, type ModuleExports } from './module-exports-resolve.js'
 import { isShippedPath } from './source-scan.js'
 
@@ -257,10 +257,9 @@ function staticFacts(source: ts.SourceFile): StaticFacts {
 }
 
 /** An `import(...)` call, or `vi.importActual(...)`, looked through `await` and parentheses. */
-function dynamicImportCall(node: ts.Node): ts.CallExpression | undefined {
-  let inner = node
-  while (ts.isAwaitExpression(inner) || ts.isParenthesizedExpression(inner))
-    inner = inner.expression
+function dynamicImportCall(node: ts.Expression): ts.CallExpression | undefined {
+  let inner = unwrapExpression(node)
+  while (ts.isAwaitExpression(inner)) inner = unwrapExpression(inner.expression)
   if (!ts.isCallExpression(inner)) return undefined
   const callee = inner.expression
   if (callee.kind === ts.SyntaxKind.ImportKeyword) return inner

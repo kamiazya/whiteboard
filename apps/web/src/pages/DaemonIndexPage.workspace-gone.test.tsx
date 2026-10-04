@@ -47,9 +47,7 @@ afterEach(() => {
 // the page reports the failure rather than spinning or pretending.
 it('reports the failure when the list still names a workspace whose documents 404', async () => {
   stubDaemon({ documents: () => jsonResponse({ error: 'Workspace not found: "default".' }, 404) })
-  render(
-    <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-  )
+  render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
 
   const alert = await screen.findByRole('alert')
   expect(alert.textContent).toContain('This workspace is not on the daemon any more.')
@@ -72,9 +70,7 @@ it('says the workspace is gone when a create answers 404, not the tool advice', 
         404,
       ),
   })
-  render(
-    <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
-  )
+  render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
   fireEvent.click(await screen.findByRole('button', { name: 'Create a canvas' }))
 
   const alert = await screen.findByRole('alert')

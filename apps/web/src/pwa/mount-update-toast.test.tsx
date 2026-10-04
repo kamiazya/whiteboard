@@ -14,14 +14,14 @@ describe('mountUpdateToast', () => {
 
   it('mounts the toast into a dedicated portal and reloads via the provided callback', async () => {
     const { mountUpdateToast } = await import('./mount-update-toast.js')
-    const updateServiceWorker = vi.fn()
+    const applyUpdate = vi.fn()
 
-    mountUpdateToast(updateServiceWorker)
+    mountUpdateToast(applyUpdate)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Reload' }))
 
-    expect(updateServiceWorker).toHaveBeenCalledTimes(1)
-    expect(updateServiceWorker).toHaveBeenCalledWith(true)
+    expect(applyUpdate).toHaveBeenCalledTimes(1)
+    expect(applyUpdate).toHaveBeenCalledWith()
   })
 
   // Putting it off leaves a chip rather than nothing: an update nobody can
@@ -42,23 +42,23 @@ describe('mountUpdateToast', () => {
 
   it('reuses the existing root when onNeedRefresh fires again before dismiss', async () => {
     const { mountUpdateToast } = await import('./mount-update-toast.js')
-    const firstUpdateServiceWorker = vi.fn()
-    const secondUpdateServiceWorker = vi.fn()
+    const firstApplyUpdate = vi.fn()
+    const secondApplyUpdate = vi.fn()
 
-    mountUpdateToast(firstUpdateServiceWorker)
+    mountUpdateToast(firstApplyUpdate)
     await screen.findByRole('button', { name: 'Reload' })
 
     // A second SW update notification arrives before the user dismisses or
     // reloads. Re-mounting must not throw (React's createRoot() called
     // twice on the same container warns and can corrupt the fiber tree) and
     // must still render exactly one toast wired to the latest callback.
-    expect(() => mountUpdateToast(secondUpdateServiceWorker)).not.toThrow()
+    expect(() => mountUpdateToast(secondApplyUpdate)).not.toThrow()
     const reloadButtons = await screen.findAllByRole('button', { name: 'Reload' })
     expect(reloadButtons).toHaveLength(1)
 
     fireEvent.click(reloadButtons[0] as HTMLElement)
-    expect(firstUpdateServiceWorker).not.toHaveBeenCalled()
-    expect(secondUpdateServiceWorker).toHaveBeenCalledTimes(1)
-    expect(secondUpdateServiceWorker).toHaveBeenCalledWith(true)
+    expect(firstApplyUpdate).not.toHaveBeenCalled()
+    expect(secondApplyUpdate).toHaveBeenCalledTimes(1)
+    expect(secondApplyUpdate).toHaveBeenCalledWith()
   })
 })

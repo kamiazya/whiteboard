@@ -257,8 +257,8 @@ function ConnectionsSection({ daemon, onDisconnected, workspaceId }: Connections
   // return so hook order stays unconditional across the connected/
   // disconnected branches; null-safe inside since `daemon` may be absent.
   const daemonFetch = useMemo(
-    () => (daemon ? createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined) : undefined),
-    [daemon?.baseUrl, daemon?.token],
+    () => (daemon ? createDaemonFetch(daemon.baseUrl) : undefined),
+    [daemon?.baseUrl],
   )
   if (!daemon) {
     return (
@@ -335,8 +335,8 @@ function FontsSection({ daemon }: { daemon?: ConnectedDaemon }) {
   // return, keyed on the primitive fields so an unrelated re-render does not
   // hand FontsCard's fetch-keyed effect a new identity to re-fire on.
   const daemonFetch = useMemo(
-    () => (daemon ? createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined) : undefined),
-    [daemon?.baseUrl, daemon?.token],
+    () => (daemon ? createDaemonFetch(daemon.baseUrl) : undefined),
+    [daemon?.baseUrl],
   )
   if (!daemon) {
     return (
@@ -527,14 +527,13 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
 
   const [daemonStorageBytes, setDaemonStorageBytes] = useState<number | null>(null)
   const daemonBaseUrl = daemon?.baseUrl
-  const daemonToken = daemon?.token
   useEffect(() => {
     if (daemonBaseUrl === undefined) {
       setDaemonStorageBytes(null)
       return
     }
     let cancelled = false
-    const daemonFetch = createDaemonFetch(daemonBaseUrl, daemonToken ?? undefined)
+    const daemonFetch = createDaemonFetch(daemonBaseUrl)
     void (async () => {
       try {
         const res = await daemonFetch('/api/runtime/storage')
@@ -548,7 +547,7 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
     return () => {
       cancelled = true
     }
-  }, [daemonBaseUrl, daemonToken])
+  }, [daemonBaseUrl])
 
   const persistStep: PersistStepState = !persistedKnown
     ? 'unknown'

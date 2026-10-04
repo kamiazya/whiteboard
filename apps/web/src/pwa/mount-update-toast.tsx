@@ -4,9 +4,10 @@ import { UpdateToast } from './UpdateToast.js'
 // Module-level, not component state: a dismissed update stays dismissed for
 // the rest of this page load even if the SW fires onNeedRefresh again
 // (e.g. a second background update). Reset only happens on a fresh page
-// load (fresh module evaluation), matching the "reload swaps versions"
-// update strategy — a user who dismissed keeps the old version until they
-// reload by some other means.
+// load (fresh module evaluation). Dismissing only stops the toast from
+// reopening: the update itself is still taken by the idle auto-apply while
+// the tab is hidden, and stays reachable from the settings page's App-version
+// row and the collapsed chip.
 let dismissedThisPageLoad = false
 
 // Tracks the root already mounted for this page load so a repeat
@@ -19,7 +20,9 @@ let activeRoot: Root | null = null
 
 const PORTAL_ID = 'pwa-update-toast-portal'
 
-export function mountUpdateToast(updateServiceWorker: (reloadPage?: boolean) => void): void {
+// `applyUpdate` is the recovery-wrapped applier (apply-update.ts): it requests
+// the swap and never rejects, so the toast has nothing to report on failure.
+export function mountUpdateToast(applyUpdate: () => void): void {
   if (dismissedThisPageLoad) return
 
   let container = document.getElementById(PORTAL_ID)
@@ -33,7 +36,7 @@ export function mountUpdateToast(updateServiceWorker: (reloadPage?: boolean) => 
   activeRoot = root
   root.render(
     <UpdateToast
-      onReload={() => updateServiceWorker(true)}
+      onReload={() => applyUpdate()}
       // The toast collapses itself to a persistent chip rather than going
       // away, so the root stays mounted — unmounting here would remove the
       // very reminder the collapse exists to keep. This only records that the

@@ -300,28 +300,3 @@ export const invalidBodyRefusal = (
   error: 'invalid_body',
   message: refusalReason(error, fallback),
 })
-
-/** `refusalReason` read off the parse error, for `jsonBody`'s title hook. */
-export const titleOr = (fallback: string) => (error: z.ZodError) => refusalReason(error, fallback)
-
-/**
- * A request body parsed under `schema`, or the 400 that refuses it.
- *
- * Two refusals, not one: a body that is not JSON at all and a body that is
- * JSON of the wrong shape are different mistakes, and a caller can only act
- * on the difference if the route says which.
- */
-export async function jsonBody<T, E>(
-  c: { req: { json: () => Promise<unknown> } },
-  schema: { safeParse: (value: unknown) => { success: boolean; data?: T; error?: E } },
-  // A function where the title is read off the parse error, which is how a
-  // route says WHICH field it refused rather than only that it did.
-  shapeTitle: string | ((error: E) => string),
-): Promise<{ data: T } | { refusal: ApiErrorBody }> {
-  const raw = await c.req.json().catch(() => null)
-  if (raw === null) return { refusal: { title: 'JSON body required' } }
-  const parsed = schema.safeParse(raw)
-  if (parsed.success && parsed.data !== undefined) return { data: parsed.data }
-  const title = typeof shapeTitle === 'string' ? shapeTitle : shapeTitle(parsed.error as E)
-  return { refusal: { title } }
-}

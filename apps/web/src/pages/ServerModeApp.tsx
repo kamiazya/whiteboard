@@ -166,15 +166,12 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
 }
 
 // The daemon shell's own workspace seam, pointed at this keeper's origin: the
-// session cookie authenticates, so there is no token, and a create is the one
-// call the switcher menu makes. Only the keeper's half is used here; the
+// session cookie authenticates, and a create is the one call the switcher menu
+// makes. Only the keeper's half is used here; the
 // browser's is built beside it and never touched.
 function useKeeperWorkspaces() {
   const navigate = useNavigate()
-  const daemonShellTarget = useMemo(
-    () => ({ baseUrl: window.location.origin, token: undefined }),
-    [],
-  )
+  const daemonShellTarget = useMemo(() => ({ baseUrl: window.location.origin }), [])
   const setDaemonRoute = useCallback(
     (route: WorkspaceRoute) => navigate(workspaceRoutePath(route)),
     [navigate],

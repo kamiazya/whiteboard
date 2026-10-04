@@ -105,7 +105,7 @@ function noopReconnect(): Promise<void> {
  * actually withheld from anything.
  */
 async function seedReplica(): Promise<void> {
-  connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+  connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
   markReplica(DAEMON_WS, DAEMON)
   const record = new LoroDoc()
   createWorkspaceDocumentAtPath(record, {
@@ -439,7 +439,7 @@ describe('ReplicaReadPage states', () => {
       }),
     )
     forgetAllForTests()
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: rotatedKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: rotatedKeyFetch() })
 
     render(
       <ReplicaReadPage
@@ -464,7 +464,7 @@ describe('ReplicaReadPage states', () => {
     forgetAllForTests()
 
     const onReconnect = vi.fn(async () => {
-      connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+      connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
     })
     render(
       <ReplicaReadPage
@@ -492,7 +492,6 @@ describe('ReplicaReadPage states', () => {
       const leaseExpiresAt = new Date(now + 60_000).toISOString()
       connectReplicaKeeper({
         baseUrl: DAEMON,
-        token: 'tok',
         fetch: (async (input: Request | string | URL) => {
           const url = input instanceof Request ? input.url : String(input)
           if (url.endsWith('/replica-key')) {
@@ -544,7 +543,7 @@ describe('ReplicaReadPage states', () => {
     await seedReplica()
     connectReplicaKeeper(null)
     forgetAllForTests()
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: refusalKeyFetch('not_a_member') })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: refusalKeyFetch('not_a_member') })
 
     render(
       <ReplicaReadPage
@@ -589,7 +588,6 @@ describe('ReplicaReadPage states', () => {
     forgetAllForTests()
     connectReplicaKeeper({
       baseUrl: DAEMON,
-      token: 'tok',
       fetch: refusalKeyFetch('requires_person_session'),
     })
 
@@ -605,7 +603,7 @@ describe('ReplicaReadPage states', () => {
   })
 
   it('needs-connection: Retry connection calls onReconnect', async () => {
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
     markReplica(DAEMON_WS, DAEMON)
     const onReconnect = vi.fn(async () => {})
 
@@ -662,7 +660,7 @@ describe('ReplicaReadPage states', () => {
   })
 
   it('locked and needs-connection are announced in the live region, not left silent', async () => {
-    connectReplicaKeeper({ baseUrl: DAEMON, token: 'tok', fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
     markReplica(DAEMON_WS, DAEMON)
     render(
       <ReplicaReadPage

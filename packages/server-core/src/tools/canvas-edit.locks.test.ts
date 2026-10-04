@@ -75,11 +75,11 @@ function opNames(): string[] {
   return canvasEditInputSchema.shape.ops.element.options.map((option) => option.shape.op.value)
 }
 
-async function toolOverLockableBoard() {
+async function toolOverLockableBoard(board: SpatialCanvas = BOARD) {
   const store = new FakeDocumentStore()
   await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeDocumentKind(doc, 'spatial')
-    writeSpatialCanvas(doc, BOARD)
+    writeSpatialCanvas(doc, board)
   })
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
   return createCanvasEditTool(
@@ -110,5 +110,72 @@ describe('wb_canvas_edit locks', () => {
       opIndex: 1,
       message: expect.stringMatching(/locked/),
     })
+  })
+})
+
+// `e` joins `a` and `c`, both inside `g`; `f` joins `a` and `b`, which is outside.
+const LINKED_BOARD: SpatialCanvas = {
+  nodes: [
+    groupNode({ id: 'g', x: 0, y: 0, width: 500, height: 500, label: 'Phase' }),
+    textNode({ id: 'a', x: 20, y: 20, width: 80, height: 40, text: 'A' }),
+    textNode({ id: 'c', x: 200, y: 20, width: 80, height: 40, text: 'C' }),
+    textNode({ id: 'b', x: 700, y: 0, width: 80, height: 40, text: 'B' }),
+  ],
+  edges: [
+    { id: 'e', from: { node: 'a' }, to: { node: 'c' } },
+    { id: 'f', from: { node: 'a' }, to: { node: 'b' } },
+  ],
+}
+
+const lockEdge = (id: string): Op => ({ op: 'edge.lock', id, locked: true })
+
+async function run(ops: Op[], board: SpatialCanvas = LINKED_BOARD) {
+  const tool = await toolOverLockableBoard(board)
+  return tool.execute({
+    workspaceId: WORKSPACE_ID,
+    documentId: DOCUMENT_ID,
+    mode: 'apply',
+    ops,
+  })
+}
+
+describe('wb_canvas_edit locked edges survive an unlocked endpoint', () => {
+  test('node.remove refuses to delete a locked edge with its unlocked endpoint', async () => {
+    await expect(run([lockEdge('f'), { op: 'node.remove', id: 'b' }])).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 1,
+      message: expect.stringMatching(/edge "f" is locked.*node "b"/),
+    })
+  })
+
+  test('node.remove still takes an unlocked edge with its endpoint', async () => {
+    const result = await run([lockEdge('e'), { op: 'node.remove', id: 'b' }])
+    expect(result.touched.edges).toContain('f')
+  })
+
+  test('region.set refuses to strand a locked edge by dropping an unlisted member', async () => {
+    await expect(
+      run([lockEdge('f'), { op: 'region.set', within: 'g', nodes: ['c'] }]),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 1,
+      message: expect.stringMatching(/edge "f" is locked.*node "a"/),
+    })
+  })
+
+  test('region.set refuses to delete a locked edge among members by leaving it unlisted', async () => {
+    await expect(
+      run([lockEdge('e'), { op: 'region.set', within: 'g', nodes: ['a', 'c'], edges: [] }]),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 1,
+      message: expect.stringMatching(/edge "e" is locked/),
+    })
+  })
+
+  test('region.set keeps a locked edge among members when the edges are not restated', async () => {
+    await expect(
+      run([lockEdge('e'), { op: 'region.set', within: 'g', nodes: ['a', 'c'] }]),
+    ).resolves.toBeDefined()
   })
 })

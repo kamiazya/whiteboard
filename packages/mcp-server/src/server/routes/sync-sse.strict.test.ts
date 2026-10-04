@@ -51,3 +51,17 @@ describe('a strict sync request refuses with the key it did not recognise', () =
     expect(apiErrorReason(await res.json())).toContain('zzz')
   })
 })
+
+describe('a sync request whose body is not JSON', () => {
+  it.each(['subscribe', 'message'] as const)('is refused as such by %s', async (route) => {
+    const res = await createSyncSseRouter({
+      workspaceDocuments: { onUpdated: () => () => {} },
+    }).request(`/api/sync/${route}`, { method: 'POST', body: '{not json' })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({
+      error: 'invalid_body',
+      message: 'the request body is not valid JSON',
+    })
+  })
+})

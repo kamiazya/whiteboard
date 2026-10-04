@@ -53,10 +53,6 @@ export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
   workspaceId?: string
   path?: string
-  // The daemon credential for this session, fed to createDaemonFetch's
-  // Authorization header. Empty or absent for a daemon reached through the
-  // extension (ADR-0050): the native host supplies the daemon's own.
-  token?: string
   // Injectable so tests can avoid real SSE networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
@@ -66,7 +62,7 @@ export interface DaemonDocumentPageProps {
   onNavigateBack?: () => void
   // Served by a server-mode keeper from its own origin (ADR-0047): it serves
   // SSE only and has no replica routes, and its data is not this browser's to
-  // keep — the session cookie authenticates, so there is no token either.
+  // keep — the session cookie authenticates the connection.
   serverMode?: boolean
 }
 
@@ -82,24 +78,23 @@ function useDaemonDocument(
     daemonBaseUrl,
     workspaceId,
     path,
-    token,
     createBackend,
     onNavigateBack,
     serverMode = false,
   }: DaemonDocumentPageProps,
   events: DocumentKeeperEvents,
 ): DocumentKeeperAnswer {
-  // Stable across the page's lifetime: daemonBaseUrl/token come from the
+  // Stable across the page's lifetime: daemonBaseUrl comes from the
   // connection App mounts this page for, so this never needs to change once
   // mounted.
-  const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl), [daemonBaseUrl])
   // The History column's backend: relative routes, resolved against the
   // daemon's base URL by `daemonFetch`.
   const versionsBackend = useMemo(() => createDaemonVersionsBackend(daemonFetch), [daemonFetch])
 
   // The sync stream and every route resolve against the daemon's own origin,
-  // never the page's — a hosted web app connected to a loopback daemon must not
-  // open the stream against its own page origin.
+  // never the page's — a hosted web app connected to a daemon must not open the
+  // stream against its own page origin.
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
   // ADR-0023's replica reconciliation, both directions, at the moment this
@@ -150,7 +145,6 @@ function useDaemonDocument(
   const [creating, setCreating] = useState(false)
   const { backend, contentDocumentId, authError, reportAuthError } = useDaemonDocumentBackend({
     daemonBaseUrl,
-    token,
     daemonFetch,
     createBackend,
     workspaceId: controller.workspaceId,

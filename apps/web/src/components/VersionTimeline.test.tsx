@@ -717,7 +717,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
     cleanup()
   })
 
-  it('resolves the versions request against the daemon origin with an Authorization header', async () => {
+  it('resolves the versions request against the daemon origin and carries no Authorization header', async () => {
     const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -727,7 +727,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', underlyingFetch)
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
@@ -749,7 +749,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
     )
     const init = versionsCall?.[1]
     const headers = new Headers(init?.headers)
-    expect(headers.get('Authorization')).toBe('Bearer test-token')
+    expect(headers.get('Authorization')).toBeNull()
   })
 
   it('POSTs restore through the provided daemon fetch', async () => {
@@ -767,7 +767,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', underlyingFetch)
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
@@ -813,7 +813,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       return Promise.resolve(jsonResponse({}))
     })
     vi.stubGlobal('fetch', underlyingFetch)
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL)
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>

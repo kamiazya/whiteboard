@@ -292,6 +292,23 @@ export interface CommentTargetNode {
   readonly height: number
 }
 
+/**
+ * Where a comment on a box pins: the box's top-right corner, so the pin sits
+ * outside the content it is about. The ONE definition — the projection, the
+ * renderer's pin, the editor's compose bubble and the agent tool's default
+ * anchor all stand a comment here, and a copy that drifted would open a draft
+ * in one place and settle it in another. Unrounded, like the node's own
+ * geometry; a writer storing the point rounds it (a stored comment's anchor is
+ * an integer).
+ */
+export function commentCornerOf(box: {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+}): { readonly x: number; readonly y: number } {
+  return { x: box.x + box.width, y: box.y }
+}
+
 /** Where a thread's projected comment stands, per anchor arm; see `canvasCommentFromThread`. */
 function commentPlace(
   anchor: AnnotationAnchor,
@@ -307,7 +324,7 @@ function commentPlace(
   if (anchor.kind === 'document') return undefined
   if (anchor.kind === 'spatial') {
     const rect = spatialAnchorRect(anchor, nodeById)
-    if (rect !== undefined) return { x: rect.x + rect.width, y: rect.y }
+    if (rect !== undefined) return commentCornerOf(rect)
     return {
       x: anchor.x,
       y: anchor.y,
@@ -316,9 +333,7 @@ function commentPlace(
     }
   }
   const node = anchor.nodeId === undefined ? undefined : nodeById?.(anchor.nodeId)
-  return node === undefined
-    ? undefined
-    : { x: node.x + node.width, y: node.y, targetNodeId: node.id }
+  return node === undefined ? undefined : { ...commentCornerOf(node), targetNodeId: node.id }
 }
 
 /**

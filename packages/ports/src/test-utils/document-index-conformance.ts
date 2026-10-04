@@ -577,7 +577,7 @@ function describeListWorkspaces(makeIndex: MakeIndex, withIndex: WithIndex): voi
     // SAME layers, so an implementation that overwrites is indistinguishable
     // from one that leaves the row alone. A BARE re-create is what separates
     // them, and it is the shape an "ensure it exists" caller has — apps/web's
-    // `ensureLocalWorkspace` passes `{ workspaceId }` alone.
+    // `ensureBrowserWorkspace` passes `{ workspaceId }` alone.
     //
     // Seeded through `renameWorkspace` rather than `createWorkspace` because
     // that one is REQUIRED to echo its layers back, so the precondition below

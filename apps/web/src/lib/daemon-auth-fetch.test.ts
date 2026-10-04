@@ -1,8 +1,7 @@
 /**
- * Where the daemon's bearer goes. The credential is attached to a request
- * only when its resolved URL has the daemon's EXACT origin — scheme, host and
- * port — because another port or scheme on the same host is a different
- * process that may have claimed it.
+ * What the daemon-addressed fetch does to a request: it resolves the address
+ * and nothing else. The page holds no daemon credential, so no header is added
+ * whichever origin the request resolves to.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
@@ -10,9 +9,9 @@ import { createDaemonFetch } from './daemon-auth-fetch.js'
 
 const DAEMON = 'http://127.0.0.1:3099'
 
-function setup(token: string | (() => string | undefined) | null = 'secret') {
+function setup() {
   const network = vi.fn<typeof fetch>().mockImplementation(async () => jsonResponse({}))
-  const daemonFetch = createDaemonFetch(DAEMON, token ?? undefined, network)
+  const daemonFetch = createDaemonFetch(DAEMON, network)
   const lastCall = () => {
     const [url, init] = network.mock.lastCall ?? []
     return { url: String(url), init, auth: new Headers(init?.headers).get('Authorization') }
@@ -20,59 +19,30 @@ function setup(token: string | (() => string | undefined) | null = 'secret') {
   return { daemonFetch, lastCall }
 }
 
-describe('the daemon bearer destination', () => {
-  it('attaches the bearer to the daemon origin', async () => {
-    const { daemonFetch, lastCall } = setup()
-    await daemonFetch(`${DAEMON}/api/x`)
-    expect(lastCall().auth).toBe('Bearer secret')
-  })
-
-  it('resolves a relative path against the daemon and attaches the bearer', async () => {
+describe('the daemon-addressed fetch', () => {
+  it('resolves a relative path against the daemon', async () => {
     const { daemonFetch, lastCall } = setup()
     await daemonFetch('/api/x')
-    expect(lastCall()).toMatchObject({ url: `${DAEMON}/api/x`, auth: 'Bearer secret' })
-  })
-
-  it('reads a rotated token on each call when the credential is a function', async () => {
-    let current: string | undefined = 'first'
-    const { daemonFetch, lastCall } = setup(() => current)
-    await daemonFetch('/api/x')
-    expect(lastCall().auth).toBe('Bearer first')
-    current = 'second'
-    await daemonFetch('/api/x')
-    expect(lastCall().auth).toBe('Bearer second')
-  })
-
-  it('sends no Authorization header when there is no token', async () => {
-    const { daemonFetch, lastCall } = setup(null)
-    await daemonFetch('/api/x')
-    expect(lastCall().auth).toBeNull()
+    expect(lastCall().url).toBe(`${DAEMON}/api/x`)
   })
 
   it.each([
+    ['the daemon origin', `${DAEMON}/api/x`],
     ['another port on the same host', 'http://127.0.0.1:8080/x'],
-    ['another scheme on the same host', 'https://127.0.0.1:3099/x'],
-    ['the same port on another host', 'http://localhost:3099/x'],
     ['an external host', 'https://example.com/x'],
-  ])('does not attach the bearer to %s', async (_label, url) => {
+  ])('sends %s untouched and adds no Authorization header', async (_label, url) => {
     const { daemonFetch, lastCall } = setup()
     await daemonFetch(url)
     expect(lastCall()).toMatchObject({ url, auth: null })
   })
 
-  it('does not attach the bearer to a Request object that points at another origin', async () => {
-    const { daemonFetch, lastCall } = setup()
-    await daemonFetch(new Request('http://127.0.0.1:8080/x'))
-    expect(lastCall()).toMatchObject({ url: 'http://127.0.0.1:8080/x', auth: null })
-  })
-
-  it('attaches the bearer to a Request object at the daemon origin and keeps its method and headers', async () => {
+  it('adds no Authorization header to a Request object and keeps its method and headers', async () => {
     const { daemonFetch, lastCall } = setup()
     await daemonFetch(
       new Request(`${DAEMON}/api/x`, { method: 'DELETE', headers: { 'x-trace': 'abc' } }),
     )
     const { init, auth } = lastCall()
-    expect(auth).toBe('Bearer secret')
+    expect(auth).toBeNull()
     expect(init?.method).toBe('DELETE')
     expect(new Headers(init?.headers).get('x-trace')).toBe('abc')
   })

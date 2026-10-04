@@ -25,6 +25,8 @@ import { setupServer } from 'msw/node'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const BASE = 'http://127.0.0.1:3099'
+/** An origin whose stream the daemon always refuses, so no other test's traffic meets that answer. */
+const REFUSING_BASE = 'http://127.0.0.1:3098'
 
 /**
  * Never reset between tests. Ids have to stay unique for the LIFETIME of the
@@ -34,7 +36,6 @@ const BASE = 'http://127.0.0.1:3099'
  */
 let streamSeq = 0
 let subscribeBodies: string[] = []
-let subscribeAuth: (string | null)[] = []
 let messageBodies: string[] = []
 let updateWrites: {
   workspaceId: string
@@ -54,13 +55,7 @@ let updateWrites: {
 const pushByStream = new Map<string, (frame: string) => void>()
 
 const server = setupServer(
-  http.get(`${BASE}/api/sync/stream`, ({ request }) => {
-    // The one credential the daemon no longer accepts. Matched by header so
-    // a leftover worker's reconnects, which carry their own tokens, are
-    // answered a stream as before.
-    if (request.headers.get('Authorization') === 'Bearer revoked') {
-      return HttpResponse.json({ title: 'unauthorized' }, { status: 401 })
-    }
+  http.get(`${BASE}/api/sync/stream`, () => {
     streamSeq += 1
     // The daemon mints the id and announces it on the stream; a client cannot
     // choose one, which is what keeps it from naming another client's stream.
@@ -79,8 +74,10 @@ const server = setupServer(
       headers: { 'Content-Type': 'text/event-stream' },
     })
   }),
+  http.get(`${REFUSING_BASE}/api/sync/stream`, () =>
+    HttpResponse.json({ title: 'unauthorized' }, { status: 401 }),
+  ),
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
-    subscribeAuth.push(request.headers.get('Authorization'))
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
@@ -113,7 +110,6 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 beforeEach(() => {
   subscribeBodies = []
-  subscribeAuth = []
   messageBodies = []
   updateWrites = []
   // pushByStream is NOT cleared: the replica port's stream is opened once and
@@ -176,7 +172,7 @@ function connect(): MessagePort {
 let replicaPort: MessagePort
 beforeAll(async () => {
   replicaPort = connect()
-  replicaPort.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+  replicaPort.postMessage({ type: 'init', baseUrl: BASE })
   // Awaited until the replica ANSWERS, not merely created: what poisons a
   // worker's loro is another worker's loro-crdt evaluation racing this one's
   // still-loading import. A snapshot reply proves the import settled while
@@ -219,12 +215,6 @@ const until = (predicate: () => boolean) =>
 const subscribeIndexFor = (doc: string) =>
   subscribeBodies.findIndex((b) => b.includes(`"subscribe":["${doc}"]`))
 
-/** The Authorization header of the subscribe that first announced `doc`. */
-const authFor = (doc: string): string | null | undefined => {
-  const i = subscribeIndexFor(doc)
-  return i === -1 ? undefined : subscribeAuth[i]
-}
-
 /**
  * The stream the worker announced `doc` on. Every assertion in this file goes
  * through a document the test itself minted, because that is the only handle
@@ -260,7 +250,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     // origin is the budget, and a stream per canvas would spend it on sync.
     const port = connect()
     const docs = [nextDoc(), nextDoc(), nextDoc()]
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    port.postMessage({ type: 'init', baseUrl: BASE })
     for (const doc of docs) port.postMessage({ type: 'subscribe', doc })
     await until(() => docs.every((doc) => streamIdFor(doc) !== undefined))
 
@@ -318,7 +308,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     // be dropped and viewport requests would never arrive.
     const port = connect()
     const doc = nextDoc()
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    port.postMessage({ type: 'init', baseUrl: BASE })
     port.postMessage({ type: 'subscribe', doc })
     await until(() => streamIdFor(doc) !== undefined)
 
@@ -328,27 +318,6 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     const body = JSON.parse(messageBodies.find((b) => b.includes(doc)) as string)
     expect(body.streamId).toBe(streamIdFor(doc))
     expect(body.message).toEqual({ type: 'client_ready' })
-  })
-
-  it('follows a rotated token instead of holding the one it started with', async () => {
-    // A session token is refreshed while tabs stay open. The hub is
-    // cached per origin, so a credential captured when it was built would leave
-    // every tab in the profile talking to the daemon with a dead token.
-    const port = connect()
-    const first = nextDoc()
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 'old' })
-    port.postMessage({ type: 'subscribe', doc: first })
-    // Matched by document rather than by count: opening the stream re-announces
-    // the subscriptions, so a count would be satisfied by that echo instead.
-    await until(() => authFor(first) !== undefined)
-    expect(authFor(first)).toBe('Bearer old')
-
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 'new' })
-    const second = nextDoc()
-    port.postMessage({ type: 'subscribe', doc: second })
-
-    await until(() => authFor(second) !== undefined)
-    expect(authFor(second)).toBe('Bearer new')
   })
 
   it('tells a tab the daemon refused its credential, under the document it asked for', async () => {
@@ -362,23 +331,23 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
       const data = e.data as { type?: string; doc?: string }
       if (data.type === 'auth-refused' && data.doc !== undefined) refused.push(data.doc)
     })
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 'revoked' })
+    port.postMessage({ type: 'init', baseUrl: REFUSING_BASE })
     port.postMessage({ type: 'subscribe', doc })
 
     await until(() => refused.includes(doc))
   })
 
   it('keeps a port’s subscriptions across a re-init', async () => {
-    // Re-init is how a rotated token arrives, not a fresh connection — losing
-    // the port's subscription handles there would strand them: nothing could
+    // A repeated init is not a fresh connection — losing the port's
+    // subscription handles there would strand them: nothing could
     // release them and the worker would keep routing documents nobody watches.
     const port = connect()
     const doc = nextDoc()
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 'old' })
+    port.postMessage({ type: 'init', baseUrl: BASE })
     port.postMessage({ type: 'subscribe', doc })
     await until(() => subscribeIndexFor(doc) !== -1)
 
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 'new' })
+    port.postMessage({ type: 'init', baseUrl: BASE })
     port.postMessage({ type: 'unsubscribe', doc })
 
     await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
@@ -409,7 +378,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     // The leftover worker, opening its stream after ours.
     const neighbour = connect()
     const neighbourDoc = nextDoc()
-    neighbour.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    neighbour.postMessage({ type: 'init', baseUrl: BASE })
     neighbour.postMessage({ type: 'subscribe', doc: neighbourDoc })
     await until(() => streamIdFor(neighbourDoc) !== undefined)
     expect(streamIdFor(doc)).not.toBe(streamIdFor(neighbourDoc))
@@ -426,7 +395,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
   it('takes a document back off the stream once it is unsubscribed', async () => {
     const port = connect()
     const doc = nextDoc()
-    port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+    port.postMessage({ type: 'init', baseUrl: BASE })
     port.postMessage({ type: 'subscribe', doc })
     await until(() => subscribeIndexFor(doc) !== -1)
     expect(subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`))).toBe(false)
@@ -503,12 +472,10 @@ describe('authority replica', () => {
     // The document key is `${workspaceId}/${path}`, so the worker addressing
     // the route correctly is the whole reason it can own this write at all.
     expect(`${write.workspaceId}/${write.path}`).toBe(doc)
-    // The credential travels with the write. `daemon-auth-seam.test.ts` scans
-    // the source to prove no OTHER place assembles this header; only an actual
-    // request proves the one place that should, does — and an unauthenticated
-    // write is silently dropped by the daemon, which looks exactly like a tab
-    // whose edits never persist.
-    expect(write.auth).toBe('Bearer t')
+    // The worker holds no daemon credential, so the write carries none.
+    // `daemon-auth-seam.test.ts` scans the source for a header being set; only
+    // an actual request proves none reaches the wire.
+    expect(write.auth).toBeNull()
     const received = new LoroDoc()
     received.import(write.body)
     expect(received.getMap('m').get('from-tab')).toBe('written-through')

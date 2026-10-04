@@ -95,14 +95,13 @@ function listingRows(entries: readonly WorkspaceDocumentEntry[]): DocumentRow[] 
 
 export function DaemonIndexPage({
   daemonBaseUrl,
-  token,
   workspace,
   onWorkspaceResolved,
   onOpenDocument,
   serverMode = false,
   streamSource,
 }: DaemonIndexPageProps) {
-  const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl), [daemonBaseUrl])
 
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   // Whether the workspace LIST has settled, which `workspaces.length === 0`
@@ -479,7 +478,7 @@ export function DaemonIndexPage({
 
   // Whoever else writes to this workspace — an agent, the CLI, another tab.
   useFollowWorkspaceWrites(
-    { daemonFetch, daemonBaseUrl, token, streamSource },
+    { daemonFetch, daemonBaseUrl, streamSource },
     selectedWorkspace,
     loadWorkspace,
   )

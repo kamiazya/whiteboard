@@ -152,8 +152,8 @@ They are named so a clean result is not read as covering them.
 - **A computed specifier.** `import(\`node:${name}\`)`, `import(name)` and
   `createRequire(...)('x')` name no module statically; only a string or a
   template with NO substitution is read (`collectModuleSpecifiers`).
-- **`import.meta.glob`.** A glob's pattern carries a path no specifier scan
-  sees. (`new URL('<literal>', import.meta.url)` IS read, as a value edge.)
+- **A computed or non-relative `import.meta.glob` pattern.** A relative
+  literal one IS read as a value edge, like `new URL('<literal>', import.meta.url)`.
 - **The DOM list is a deny-list of thirteen names.** `location` and `Image` are
   left out on purpose: the scan matches identifiers without scope analysis, and
   `daemon-client`'s `WindowLike` declares a `location` property. A read of
@@ -219,8 +219,9 @@ at all fails as dangling — a `?raw` or `?url` query would otherwise hide it fr
 Measured when written: 3087 files, 8558 relative edges, 97 resolving to no
 TypeScript file, 89 of them from tests that sit outside the cycle graph.
 
-Named blind spot: `import.meta.glob`. A `new URL('<literal>', import.meta.url)`
-is read like an import; two tests reading another workspace that way are `ESCAPES`.
+A `new URL('<literal>', import.meta.url)` or relative `import.meta.glob` is read
+like an import, a glob rooted at its static prefix; tests reading another
+workspace that way are `ESCAPES`.
 
 ## `source-direction-check.test.ts`: source imports against the map
 
@@ -720,13 +721,15 @@ every one-place guard calls it. `source-scan.test.ts` holds it on planted
 cases, never on an oracle built from the code it judges.
 
 `ast-helpers.ts` is the one place `scriptKindOf`, `unwrapExpression` and
-`parseSource` live (`ast-helpers-one-place.test.ts`). `scanner.ts` reads
+`parseSource` live (`ast-helpers-one-place.test.ts`, which also fails a
+hand-written wrapper loop). `scanner.ts` reads
 `new URL('<literal>', import.meta.url)` as a value edge, so a worker built from
 a file binds like an import. `inline-comparator-ban.test.ts` keeps string
 orderings on `compareCodeUnit`; this tool and facet-engine restate it once,
 since neither may import model. `v1-refusals-cover-errors.test.ts` holds every
 error class in ports, model and server-core to a `REFUSALS` row or a reasoned
-`EXEMPT` entry.
+`EXEMPT` entry. `docs-tool-names.test.ts` holds every `wb_*` / `canvas_*` token
+in `docs/**` (minus ADRs), `skills/` and `README.md` to `registeredTools()`.
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 

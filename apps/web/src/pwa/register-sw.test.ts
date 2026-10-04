@@ -13,11 +13,13 @@ describe('setupSwRegistration', () => {
     originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker')
   })
 
+  // biome-ignore lint/plugin: the toast's root is module-level by design (mount-update-toast.tsx); a test that resets modules retires it, and a portal left rooted is what a fresh instance would root twice
   afterEach(() => {
     if (originalServiceWorker) {
       Object.defineProperty(navigator, 'serviceWorker', originalServiceWorker)
     }
     vi.restoreAllMocks()
+    document.body.innerHTML = ''
   })
 
   it('defers registration to the load event while the document is still loading', async () => {
@@ -332,6 +334,51 @@ describe('setupSwRegistration', () => {
     }
   })
 
+  // A later deploy supersedes a waiting worker and fires onNeedRefresh again.
+  // Applying asks the registration for whatever is waiting at that moment, so
+  // one idle listener already covers the newest worker; a second one would
+  // request the swap twice when the tab hides, and a request that lands in the
+  // swap window can lose it (see apply-update.ts).
+  it('requests the swap once when the tab hides after a repeated onNeedRefresh', async () => {
+    vi.resetModules()
+    vi.doMock('./reload-fresh.js', () => ({ reloadFresh: vi.fn() }))
+    const { setupSwRegistration: setup } = await import('./register-sw.js')
+    const { SW_IDLE_SETTLE_MS } = await import('./sw-idle-apply.js')
+    const { resetSwStatusForTests } = await import('./sw-status-store.js')
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const updateServiceWorker = vi.fn().mockResolvedValue(undefined)
+    const registerSW = vi.fn().mockReturnValue(updateServiceWorker)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+    try {
+      setup({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister: vi.fn().mockResolvedValue({ registerSW }),
+      })
+      await vi.waitFor(() => expect(registerSW).toHaveBeenCalled())
+      const { onNeedRefresh } = registerSW.mock.calls[0][0]
+      onNeedRefresh()
+      onNeedRefresh()
+      await vi.dynamicImportSettled()
+
+      vi.useFakeTimers()
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(SW_IDLE_SETTLE_MS)
+
+      expect(updateServiceWorker).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+      visibility.mockRestore()
+      document.body.innerHTML = ''
+      vi.doUnmock('./reload-fresh.js')
+      resetSwStatusForTests()
+    }
+  })
+
   // The browser can leave an accepted update waiting for minutes (see
   // apply-update.ts); what the user sees is a Reload button that does nothing.
   it('reloads without the worker when an accepted update never takes over', async () => {
@@ -372,5 +419,86 @@ describe('setupSwRegistration', () => {
       vi.doUnmock('./sw-idle-apply.js')
       resetSwStatusForTests()
     }
+  })
+})
+
+// The toast and the hidden-tab auto-apply are the two places an accepted update
+// starts; the stubs above hand back nothing, so these read what each was given.
+describe('register-sw: what an offered update is wired to', () => {
+  afterEach(() => {
+    vi.doUnmock('./reload-fresh.js')
+    vi.doUnmock('./mount-update-toast.js')
+    vi.doUnmock('./sw-idle-apply.js')
+    vi.doUnmock('./apply-update.js')
+    vi.resetModules()
+  })
+
+  async function offered(options: { recoveryModuleFails?: boolean; applyFails?: boolean } = {}) {
+    vi.resetModules()
+    const mountUpdateToast = vi.fn()
+    const startSwIdleAutoApply = vi.fn()
+    // The swap deadline an applied update arms must not reload this runner.
+    vi.doMock('./reload-fresh.js', () => ({ reloadFresh: vi.fn() }))
+    vi.doMock('./mount-update-toast.js', () => ({ mountUpdateToast }))
+    vi.doMock('./sw-idle-apply.js', () => ({ startSwIdleAutoApply }))
+    if (options.recoveryModuleFails) {
+      vi.doMock('./apply-update.js', () => {
+        throw new Error('chunk lost')
+      })
+    }
+    const { setupSwRegistration } = await import('./register-sw.js')
+    const { resetSwStatusForTests } = await import('./sw-status-store.js')
+    resetSwStatusForTests()
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const updateServiceWorker = vi.fn()
+    if (options.applyFails) updateServiceWorker.mockRejectedValue(new Error('no waiting worker'))
+    else updateServiceWorker.mockResolvedValue(undefined)
+    const registerSW = vi.fn().mockReturnValue(updateServiceWorker)
+    setupSwRegistration({
+      isProd: true,
+      hasServiceWorker: true,
+      isDaemonServed: false,
+      importRegister: vi.fn().mockResolvedValue({ registerSW }),
+    })
+    await vi.waitFor(() => expect(registerSW).toHaveBeenCalled())
+    registerSW.mock.calls[0][0].onNeedRefresh()
+    await vi.waitFor(() => expect(mountUpdateToast).toHaveBeenCalled())
+    await vi.waitFor(() => expect(startSwIdleAutoApply).toHaveBeenCalled())
+    const { getSwStatus } = await import('./sw-status-store.js')
+    return { mountUpdateToast, startSwIdleAutoApply, updateServiceWorker, getSwStatus, registerSW }
+  }
+
+  it('hands the toast an action that asks the waiting worker to take over', async () => {
+    const { mountUpdateToast, updateServiceWorker } = await offered()
+    expect(mountUpdateToast).toHaveBeenCalledTimes(1)
+    mountUpdateToast.mock.calls[0][0]()
+    await vi.waitFor(() => expect(updateServiceWorker).toHaveBeenCalledWith(true))
+  })
+
+  it('starts the hidden-tab auto-apply with an action that asks the worker to take over', async () => {
+    const { startSwIdleAutoApply, updateServiceWorker } = await offered()
+    expect(startSwIdleAutoApply).toHaveBeenCalledTimes(1)
+    startSwIdleAutoApply.mock.calls[0][0].apply()
+    await vi.waitFor(() => expect(updateServiceWorker).toHaveBeenCalledWith(true))
+  })
+
+  it('still asks the worker when the recovery module cannot be loaded', async () => {
+    const { mountUpdateToast, updateServiceWorker } = await offered({ recoveryModuleFails: true })
+    await expectLoggedFailure('failed to load the update recovery module')
+    mountUpdateToast.mock.calls[0][0]()
+    await vi.waitFor(() => expect(updateServiceWorker).toHaveBeenCalledWith(true))
+  })
+
+  it('reports a refused takeover from the toast action instead of leaving a rejection', async () => {
+    const { mountUpdateToast, updateServiceWorker } = await offered({ applyFails: true })
+    mountUpdateToast.mock.calls[0][0]()
+    await vi.waitFor(() => expect(updateServiceWorker).toHaveBeenCalledWith(true))
+    await expectLoggedFailure('applying the waiting service worker failed')
+  })
+
+  it('offers no manual update check when the worker registered nothing to check', async () => {
+    const { registerSW, getSwStatus } = await offered()
+    registerSW.mock.calls[0][0].onRegisteredSW('/sw.js', undefined)
+    expect(getSwStatus().supported).toBe(false)
   })
 })

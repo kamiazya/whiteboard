@@ -238,7 +238,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
-  it('rejects a whitespace-only body with 400 invalid_request instead of throwing', async () => {
+  it('rejects a whitespace-only body with 400 invalid_body instead of throwing', async () => {
     const app = makeApp()
     const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
       method: 'POST',
@@ -246,7 +246,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
       body: '   ',
     })
     expect(res.status).toBe(400)
-    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_body' })
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 

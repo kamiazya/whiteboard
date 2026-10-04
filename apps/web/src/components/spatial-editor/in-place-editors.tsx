@@ -1,3 +1,4 @@
+import { commentCornerOf } from '@kamiazya/whiteboard-model'
 import type { ComponentProps } from 'react'
 import { CommentComposeOverlay } from './comment-compose-overlay.js'
 import type { EditorGesture } from './editor-gesture.js'
@@ -105,7 +106,7 @@ function BodyEditor(props: InPlaceEditorsProps) {
       threads={props.threads}
       onRequestComment={(anchor) => {
         props.setCompose({
-          point: { x: node.x + node.width, y: node.y },
+          point: commentCornerOf(node),
           targetNodeId: node.id,
           threadAnchor: { ...anchor, nodeId: node.id },
         })

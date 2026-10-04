@@ -18,7 +18,7 @@ import { jsonResponse } from '../test-utils/json-response.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { pushReplicaEdits } from './replica-push.js'
-import { connectReplicaKeeper } from './replica-store.js'
+import { connectReplicaKeeper, forgetDaemonKeys } from './replica-store.js'
 
 claimIsolatedWhiteboardDb('replica-push')
 
@@ -36,7 +36,8 @@ afterEach(() => {
  * The daemon: snapshot GET serves `record`; update POST imports into it;
  * `/replica-key` seals the pull `cacheDaemonWorkspace` writes — connected as
  * a side effect of building this double, since every caller here builds one
- * before driving the flow.
+ * before driving the flow. Each double starts a session of its own, so a key
+ * a previous double's session left held (or refused) is dropped first.
  */
 function daemonStub(record: LoroDoc): { fetch: typeof globalThis.fetch; posts: () => number } {
   let posts = 0
@@ -59,7 +60,8 @@ function daemonStub(record: LoroDoc): { fetch: typeof globalThis.fetch; posts: (
     }
     throw new Error(`unexpected fetch: ${url}`)
   }) as typeof globalThis.fetch
-  connectReplicaKeeper({ baseUrl: BASE, token: 'tok', fetch: fetchImpl })
+  forgetDaemonKeys(BASE)
+  connectReplicaKeeper({ baseUrl: BASE, fetch: fetchImpl })
   return { fetch: fetchImpl, posts: () => posts }
 }
 
@@ -207,12 +209,11 @@ describe('pushReplicaEdits', () => {
   it('a withheld session key surfaces as kind: withheld, distinct from a refused POST', async () => {
     const daemon = daemonStub(daemonRecord())
     const { docs, syncedFrontier } = await pulledReplica(daemon)
-    // Reconnect to the same daemon with a different token whose key fetch
-    // refuses — simulating the session lapsing between the pull and the
-    // push, which forgets the previously-held key (replica-store.ts).
+    // The session lapses between the pull and the push: the previously-held
+    // key is forgotten and the next key fetch refuses.
+    forgetDaemonKeys(BASE)
     connectReplicaKeeper({
       baseUrl: BASE,
-      token: 'tok-2',
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.endsWith('/replica-key') && init?.method === 'POST') {
@@ -249,9 +250,9 @@ describe('pushReplicaEdits', () => {
       replica!.commit()
       await docs.save(DAEMON_WS, replica!)
 
+      forgetDaemonKeys(BASE)
       connectReplicaKeeper({
         baseUrl: BASE,
-        token: 'tok-2',
         fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
           const url = typeof input === 'string' ? input : input.toString()
           if (url.endsWith('/replica-key') && init?.method === 'POST') {

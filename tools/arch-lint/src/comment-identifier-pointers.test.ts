@@ -57,14 +57,15 @@ const looksLikeOwnSymbol = (name: string): boolean =>
 const SELF = 'tools/arch-lint/src/comment-identifier-pointers.test.ts'
 
 /**
- * Comment sources: product code and tests, not migrations. The guard's own
+ * Comment sources: product code, tests and the shared `test-utils` helpers
+ * (a conformance suite's comments name the production helper its case was
+ * written for), not migrations. The guard's own
  * file is out: its comments name the stale pointers it was written about, as
  * its own fixtures.
  */
 const isCommentSource = (path: string): boolean =>
   /^(?:packages|apps|tools)\/[^/]+\/src\/.*\.tsx?$/.test(path) &&
   path !== SELF &&
-  !path.includes('/test-utils/') &&
   !path.includes('/migrations/')
 
 /** Prose the dev workflow reads: the always-on and path-scoped rules, and every skill. */

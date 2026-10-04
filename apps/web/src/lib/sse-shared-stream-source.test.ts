@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe('a shared worker that fails to load', () => {
   it('tells its listeners they are disconnected instead of going quiet', () => {
-    const source = createSharedSseStreamSource('http://daemon.test', 't')
+    const source = createSharedSseStreamSource('http://daemon.test')
     expect(source).not.toBeNull()
     const onConnectionChange = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
@@ -53,16 +53,16 @@ describe('a shared worker that fails to load', () => {
   })
 
   it('is evicted, so the next caller gets a fresh worker rather than the dead one', () => {
-    createSharedSseStreamSource('http://daemon.test', 't')
+    createSharedSseStreamSource('http://daemon.test')
     expect(FakeSharedWorker.instances).toHaveLength(1)
 
     // Without eviction this returns the cached source built on the dead
     // worker, and the hole outlives the failure for the whole session.
-    createSharedSseStreamSource('http://daemon.test', 't')
+    createSharedSseStreamSource('http://daemon.test')
     expect(FakeSharedWorker.instances).toHaveLength(1)
 
     FakeSharedWorker.instances[0]?.fail()
-    createSharedSseStreamSource('http://daemon.test', 't')
+    createSharedSseStreamSource('http://daemon.test')
     expect(FakeSharedWorker.instances).toHaveLength(2)
   })
 })
@@ -71,7 +71,7 @@ describe("the worker's word on a document's writes", () => {
   // A tab's push returns before the keeper answers, so this event is the only
   // way a page learns its edit did not land — and that it later did.
   it('reaches the listener for that document, and no other', () => {
-    const source = createSharedSseStreamSource('http://write-state.test', 't')
+    const source = createSharedSseStreamSource('http://write-state.test')
     const mine = vi.fn()
     const other = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteState: mine })
@@ -89,7 +89,7 @@ describe("the worker's word on a document's writes", () => {
 
 describe("the worker's word that the daemon refused the session", () => {
   it('reaches the listener for that document, and no other', () => {
-    const source = createSharedSseStreamSource('http://auth-refused.test', 't')
+    const source = createSharedSseStreamSource('http://auth-refused.test')
     const mine = vi.fn()
     const other = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: mine })
@@ -108,7 +108,7 @@ describe("the worker's word that the daemon refused the session", () => {
 // daemon through the extension — the page holds that stream itself.
 describe('a daemon reached through the extension', () => {
   it('gets no shared worker, so the page opens its own stream', () => {
-    expect(createSharedSseStreamSource(BRIDGE_DAEMON_BASE_URL, undefined)).toBeNull()
+    expect(createSharedSseStreamSource(BRIDGE_DAEMON_BASE_URL)).toBeNull()
     expect(FakeSharedWorker.instances).toHaveLength(0)
   })
 })

@@ -46,7 +46,6 @@ export type OperatorInfo = z.infer<typeof operatorInfoSchema>
  * added there is stated by callers too, unless someone takes it away here.
  */
 export const requestOperatorSchema = operatorInfoSchema.omit({ actor: true }).strict()
-export type RequestOperator = z.infer<typeof requestOperatorSchema>
 
 const BASE64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 

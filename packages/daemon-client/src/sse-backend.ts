@@ -17,7 +17,7 @@
 import { apiFetch } from './api-client.js'
 import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
-import { SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
+import { documentSyncKey, SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
 import { parseServerTextMessage } from './sync-frame-text.js'
 
 export interface SseTransport {
@@ -55,7 +55,7 @@ export class SseBackend implements DocumentBackend {
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.transport = transport
     this.streamSource = streamSource
-    this.docKey = `${workspaceId}/${path}`
+    this.docKey = documentSyncKey(workspaceId, path)
     this.binaryKey = workspaceDocKey(workspaceId)
   }
 

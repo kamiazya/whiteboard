@@ -7,6 +7,7 @@ import {
 import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyWorkspaceDocumentUpdate,
+  errorBody,
   type OperatorInfo,
   promoteWorkspace,
   type ServerDeps,
@@ -18,6 +19,7 @@ import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
+import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
 import { defaultHumanDisplayName } from './_shared.js'
 
 // The same record, base64url-inflated by 4/3 inside a JSON body, rounded up to
@@ -80,28 +82,13 @@ async function admittedWorkspace(
   return { workspaceId, deps }
 }
 
-/**
- * The wire shape as the promotion itself wants it: the snapshot decoded, and
- * whether the browser sent an attestation beside it.
- */
-function promoteRequestFrom(json: unknown):
-  | { snapshot: Uint8Array; attested: boolean }
-  | {
-      error: { error: string; message: string }
-    } {
-  const parsed = promoteWorkspaceRequestSchema.safeParse(json)
-  if (!parsed.success) {
-    return {
-      error: {
-        error: 'invalid_body',
-        message: 'snapshot must be base64url and attestation, if present, a WebAuthn assertion',
-      },
-    }
-  }
-  return {
-    snapshot: new Uint8Array(Buffer.from(parsed.data.snapshot, 'base64url')),
-    attested: parsed.data.attestation !== undefined,
-  }
+const PROMOTE_BODY: ReadJsonBodyOptions = {
+  voice: 'code',
+  refuseShape: () =>
+    errorBody(
+      'invalid_body',
+      'snapshot must be base64url and attestation, if present, a WebAuthn assertion',
+    ),
 }
 
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
@@ -169,18 +156,12 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal
       const { workspaceId, deps } = admitted
-      let json: unknown
-      try {
-        json = await c.req.json()
-      } catch {
-        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
-      }
-      const request = promoteRequestFrom(json)
-      if ('error' in request) return c.json(request.error, 400)
-      if (request.attested) {
+      const body = await readJsonBody(c, promoteWorkspaceRequestSchema, PROMOTE_BODY)
+      if ('refusal' in body) return body.refusal
+      if (body.data.attestation !== undefined) {
         return c.json({ error: 'attestation_rejected', message: 'unknownCredential' }, 403)
       }
-      const { snapshot } = request
+      const snapshot = new Uint8Array(Buffer.from(body.data.snapshot, 'base64url'))
 
       // The device that wrote the row (ADR-0035 decision 2), as every other
       // human row this daemon writes.

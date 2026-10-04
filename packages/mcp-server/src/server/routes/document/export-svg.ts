@@ -14,7 +14,7 @@ import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import {
   defaultExportPath,
   documentMissingBody,
-  parseExportBody,
+  readExportBody,
   resolveRequestedOutputPath,
 } from '../export-request.js'
 import { onDocumentAction } from './path-route.js'
@@ -50,9 +50,9 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
     'post',
     'export-svg',
     async (c, workspaceId, path) => {
-      const parsedBody = parseExportBody(await c.req.text(), exportSvgRequestSchema)
-      if ('error' in parsedBody) return c.json(parsedBody.error, 400)
-      const body: ExportSvgRequest = parsedBody.body
+      const parsedBody = await readExportBody(c, exportSvgRequestSchema)
+      if ('refusal' in parsedBody) return parsedBody.refusal
+      const body: ExportSvgRequest = parsedBody.data
 
       const exportsDir = options.scope.layout.exportsDir(workspaceId)
       const resolved = await resolveRequestedOutputPath(body, workspaceId, exportsDir)

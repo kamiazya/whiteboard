@@ -1,3 +1,4 @@
+import { canvasLineSchema, MAX_BENDS, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import {
@@ -88,10 +89,61 @@ describe('freehandLine', () => {
     expect((line?.bends?.length ?? 0) + 2).toBeLessThanOrEqual(FREEHAND_MAX_POINTS)
   })
 
+  // The stored line is read back through `canvasLineSchema`, and a reader
+  // that refuses it skips the stroke from every surface at once — reload,
+  // daemon snapshot, render, export — so the bound that matters is the
+  // model's, not a number the editor picked for itself.
+  it('writes a line the model accepts, however long the pointer was down', () => {
+    const long = Array.from({ length: 4000 }, (_, i) => at(i, Math.sin(i / 3) * 40))
+    const line = freehandLine('ink-1', long, 1)
+    expect(line?.bends?.length).toBe(MAX_BENDS)
+    expect(canvasLineSchema.safeParse(line).success).toBe(true)
+    expect(spatialCanvasSchema.safeParse({ nodes: [], edges: [], lines: [line] }).success).toBe(
+      true,
+    )
+  })
+
+  it('holds a stroke to the bends the model allows, ends excluded', () => {
+    expect(FREEHAND_MAX_POINTS).toBe(MAX_BENDS + 2)
+  })
+
   it('keeps the shape recognisable while it bounds it', () => {
     // The bound must not be met by throwing the drawing away: a sine still
     // has to come back with its turns in it.
     const long = Array.from({ length: 4000 }, (_, i) => at(i, Math.sin(i / 3) * 40))
     expect(freehandLine('ink-1', long, 1)?.bends?.length ?? 0).toBeGreaterThan(20)
+  })
+
+  // Measured at the model's cap on a 4000-sample, 20-cycle sine of amplitude
+  // 100: the worst sample sits ~13px from the stored path, against ~1.4px
+  // with the 256 points the editor used to keep. The stroke still reads as
+  // the wave it was, which is what the bound is allowed to cost.
+  it('keeps a long gentle stroke within a fifth of its amplitude at the cap', () => {
+    const wave = Array.from({ length: 4000 }, (_, i) => at(i, Math.sin(i / 40) * 100))
+    const line = freehandLine('ink-1', wave, 1)
+    // The stroke's ends are the first and last samples, exactly.
+    const path = [wave[0] as Point, ...(line?.bends ?? []), wave[wave.length - 1] as Point]
+    let worst = 0
+    for (const sample of wave) {
+      let nearest = Number.POSITIVE_INFINITY
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1] as Point
+        const b = path[i] as Point
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((sample.x - a.x) * (b.x - a.x) + (sample.y - a.y) * (b.y - a.y)) /
+              ((b.x - a.x) ** 2 + (b.y - a.y) ** 2),
+          ),
+        )
+        nearest = Math.min(
+          nearest,
+          Math.hypot(sample.x - (a.x + t * (b.x - a.x)), sample.y - (a.y + t * (b.y - a.y))),
+        )
+      }
+      worst = Math.max(worst, nearest)
+    }
+    expect(worst).toBeLessThan(20)
   })
 })

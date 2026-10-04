@@ -129,7 +129,7 @@ describe('every refusal literal a route writes is in the api error contract', ()
     // Both halves, and the TOTAL rather than the literal subset: as call
     // sites move to `errorBody` the literals dwindle, so a floor on them
     // alone would one day be a scan of nothing reporting perfect compliance.
-    expect(REFUSALS.length).toBeGreaterThan(80)
+    expect(REFUSALS.length).toBeGreaterThan(60)
     expect(new Set(REFUSALS.map((r) => r.file)).size).toBeGreaterThan(5)
     // And the constructor is really being used, so the two checks below are
     // not the whole story about what a route answers.

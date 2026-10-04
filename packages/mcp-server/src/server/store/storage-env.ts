@@ -146,7 +146,12 @@ interface SettingRefusal {
 }
 type BackupScheduleParse = { ok: true; value: BackupSchedule } | SettingRefusal
 
-const DEFAULT_CRON = '0 3 * * *'
+/**
+ * Three in the morning, when nobody is editing. The one place the schedule an
+ * unset `WHITEBOARD_BACKUP_CRON` means is written down: the parser, the
+ * scheduler's own fallback and the status report all read it from here.
+ */
+export const DEFAULT_BACKUP_CRON = '0 3 * * *'
 
 const NEVER_FIRES = 'describes a time that can never occur, so no backup would ever run'
 
@@ -176,7 +181,7 @@ function refusedScheduleIssues(expression: string, explicitTimezone: string | nu
   if (explicitTimezone === null || probeCron(expression, null) === 'refused') {
     issues.push({ variable: BACKUP_CRON_ENV, reason: 'must be a 5- or 6-field cron expression' })
   }
-  if (explicitTimezone !== null && probeCron(DEFAULT_CRON, explicitTimezone) === 'refused') {
+  if (explicitTimezone !== null && probeCron(DEFAULT_BACKUP_CRON, explicitTimezone) === 'refused') {
     issues.push({ variable: BACKUP_TZ_ENV, reason: 'must be a real IANA timezone' })
   }
   if (issues.length > 0) return issues
@@ -189,7 +194,7 @@ function refusedScheduleIssues(expression: string, explicitTimezone: string | nu
 }
 
 export function parseBackupSchedule(env: NodeJS.ProcessEnv = process.env): BackupScheduleParse {
-  const expression = env[BACKUP_CRON_ENV]?.trim() || DEFAULT_CRON
+  const expression = env[BACKUP_CRON_ENV]?.trim() || DEFAULT_BACKUP_CRON
   const explicitTimezone = env[BACKUP_TZ_ENV]?.trim() || null
   const timezone = explicitTimezone ?? systemTimezone()
 

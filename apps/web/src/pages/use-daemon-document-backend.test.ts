@@ -28,7 +28,6 @@ function summary(path: string, id: string): DocumentSummary {
 function options(over: Partial<Parameters<typeof useDaemonDocumentBackend>[0]> = {}) {
   return {
     daemonBaseUrl: DAEMON_BASE_URL,
-    token: 'tok',
     daemonFetch: fetchFn,
     workspaceId: 'ws-1',
     path: 'board',

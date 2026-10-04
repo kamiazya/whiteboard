@@ -1,6 +1,12 @@
+import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
-import { isReservedUiPath, setBaselineSecurityHeaders, toInlineScriptJson } from './app-helpers.js'
+import {
+  answerNotFound,
+  isReservedUiPath,
+  setBaselineSecurityHeaders,
+  toInlineScriptJson,
+} from './app-helpers.js'
 
 describe('toInlineScriptJson', () => {
   it('escapes </script> so an inlined value cannot terminate the surrounding <script> tag', () => {
@@ -93,5 +99,36 @@ describe('setBaselineSecurityHeaders', () => {
     const headers = new Headers({ 'X-Frame-Options': 'SAMEORIGIN' })
     setBaselineSecurityHeaders(headers)
     expect(headers.get('X-Frame-Options')).toBe('DENY')
+  })
+})
+
+describe('answerNotFound', () => {
+  const app = new Hono()
+  app.notFound(answerNotFound)
+
+  it('answers the bare /api in the JSON refusal family too', async () => {
+    const res = await app.request('/api')
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Content-Type') ?? '').toContain('application/json')
+    expect(await res.json()).toMatchObject({ error: 'not_found' })
+  })
+
+  it('names the method and the path it did not route', async () => {
+    const res = await app.request('/api/nope', { method: 'POST' })
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({
+      error: 'not_found',
+      message: 'No route answers POST /api/nope',
+    })
+  })
+
+  it('keeps the plain answer for a path that merely starts with the letters', async () => {
+    const res = await app.request('/apiary')
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Content-Type') ?? '').not.toContain('application/json')
+    expect(await res.text()).toBe('404 Not Found')
   })
 })

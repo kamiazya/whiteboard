@@ -128,6 +128,22 @@ describe('versions API', () => {
     expect(body.version.label).toBe('before refactor')
   })
 
+  it('saves a manual version from an empty POST /versions body', async () => {
+    const app = createDocumentRouter(
+      testDocumentRouterOptions({
+        serverDeps,
+        autoVersionQuietMs: 60_000,
+      }),
+    )
+    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { version: { auto: boolean; label?: string } }
+    expect(body.version.auto).toBe(false)
+    expect(body.version.label).toBeUndefined()
+  })
+
   it('POST /versions persists an explicit operator', async () => {
     const app = createDocumentRouter(
       testDocumentRouterOptions({

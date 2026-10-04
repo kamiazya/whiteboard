@@ -106,7 +106,7 @@ beforeAll(() => {
   port = worker.port
   port.start()
   port.onmessage = (e: MessageEvent) => events.push(e.data as (typeof events)[number])
-  port.postMessage({ type: 'init', baseUrl: BASE, token: 't' })
+  port.postMessage({ type: 'init', baseUrl: BASE })
 })
 
 /** What the worker told this port, in order. */

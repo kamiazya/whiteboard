@@ -72,7 +72,7 @@ describe('DaemonDocumentPage served by a server-mode keeper', () => {
   // The control: the same page for a local daemon still reconciles its replica,
   // so the case above is about serverMode and not about the fixture.
   it('still reconciles the replica of a paired daemon', async () => {
-    rtlRender(<DaemonDocumentPage daemonBaseUrl="http://127.0.0.1:3099" token="t" />, {
+    rtlRender(<DaemonDocumentPage daemonBaseUrl="http://127.0.0.1:3099" />, {
       wrapper: Wrapper,
     })
     await waitFor(() => expect(replicaRefresh.scheduleReplicaRefresh).toHaveBeenCalled())

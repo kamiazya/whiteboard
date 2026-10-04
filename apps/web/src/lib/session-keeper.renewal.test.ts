@@ -34,31 +34,29 @@ describe('renewalPending', () => {
   })
 })
 
-// ADR-0050: the page holds no daemon token. A connection through the
-// extension carries an empty one, and a configured daemon carries none.
+// ADR-0050: the page holds no daemon credential, so a resolved daemon is its
+// address and nothing more.
 describe('the daemon a session talks to', () => {
-  const connection = { daemonBaseUrl: 'https://daemon.whiteboard.invalid', token: '' }
+  const connection = { daemonBaseUrl: 'https://daemon.whiteboard.invalid' }
 
   it('is the reconnected one, over any configured daemon', () => {
     const effectiveState = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' } as const
     expect(shellDaemon({ forcedBrowser: false, connection, effectiveState })).toEqual({
       baseUrl: 'https://daemon.whiteboard.invalid',
-      token: '',
     })
     expect(
       settingsDaemon({ forcedBrowser: false, connection, providerState: effectiveState }),
-    ).toEqual({ baseUrl: 'https://daemon.whiteboard.invalid', token: '' })
+    ).toEqual({ baseUrl: 'https://daemon.whiteboard.invalid' })
   })
 
-  it('carries no token for a configured daemon', () => {
+  it('is the address alone for a configured daemon', () => {
     const state = { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' } as const
     expect(shellDaemon({ forcedBrowser: false, connection: null, effectiveState: state })).toEqual({
       baseUrl: 'http://127.0.0.1:3099',
-      token: undefined,
     })
     expect(
       settingsDaemon({ forcedBrowser: false, connection: null, providerState: state }),
-    ).toEqual({ baseUrl: 'http://127.0.0.1:3099', token: null })
+    ).toEqual({ baseUrl: 'http://127.0.0.1:3099' })
   })
 
   it('is none once the person chose the browser', () => {

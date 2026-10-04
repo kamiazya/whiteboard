@@ -124,8 +124,18 @@ describe('fixed-duration sleeps in test files and the helpers they call', () => 
     expect(countFixedSleeps('await new Promise((r) => setTimeout(r, 1200))')).toBe(1)
     expect(countFixedSleeps('await new Promise(r => setTimeout(r, 5))')).toBe(1)
     expect(countFixedSleeps('await new Promise((resolve) => setTimeout(resolve, 0))')).toBe(0)
+    expect(countFixedSleeps('await new Promise((r) => setTimeout(r, (50)))')).toBe(1)
     expect(countFixedSleeps('await vi.waitFor(() => expect(x).toBe(1))')).toBe(0)
     expect(countFixedSleeps('setTimeout(tick, 100)')).toBe(0)
+  })
+
+  it('counts a duration through a type-only wrapper, which changes the type and not the wait', () => {
+    expect(countFixedSleeps('await new Promise((r) => setTimeout(r, 50 as number))')).toBe(1)
+    expect(countFixedSleeps('await new Promise((r) => setTimeout(r, 50 satisfies number))')).toBe(1)
+    expect(countFixedSleeps('await new Promise((r) => setTimeout(r, PAUSE_MS!))')).toBe(1)
+    expect(
+      countFixedSleeps('use((ms: number) => new Promise((r) => setTimeout(r, ms as number)))'),
+    ).toBe(0)
   })
 
   it('counts a constant-offset delay, a local sleep helper and a timers/promises call', () => {

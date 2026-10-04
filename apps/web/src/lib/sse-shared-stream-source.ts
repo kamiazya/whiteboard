@@ -62,23 +62,14 @@ function deliverToListeners(
   for (const l of set) l.onMessage(evt.raw)
 }
 
-export function createSharedSseStreamSource(
-  baseUrl: string,
-  token: string | undefined,
-): SseStreamSource | null {
+export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | null {
   if (typeof SharedWorker === 'undefined') return null
   // A worker has no `chrome.runtime`, so it cannot reach a daemon through the
   // extension (ADR-0050); the page opens that stream itself.
   if (isBridgeDaemon(baseUrl)) return null
 
   const cached = sources.get(baseUrl)
-  if (cached) {
-    // The source is cached per origin but the daemon's token can be rotated
-    // under it, so a caller arriving with a fresher credential hands it on rather
-    // than silently reusing the one the worker was told about first.
-    postWorkerRequest(cached.port, { type: 'init', baseUrl, token })
-    return cached.source
-  }
+  if (cached) return cached.source
 
   let worker: SharedWorker
   try {
@@ -140,7 +131,7 @@ export function createSharedSseStreamSource(
     if (set) deliverToListeners(set, evt)
   }
   port.start()
-  postWorkerRequest(port, { type: 'init', baseUrl, token })
+  postWorkerRequest(port, { type: 'init', baseUrl })
 
   const source: SseStreamSource = {
     subscribe(doc, listener) {

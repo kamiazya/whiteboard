@@ -1,14 +1,17 @@
 // The canonical export font: vendored static TTFs (four faces) used by
 // createExportTextMeasurer (measure-text.ts) and, later, the headless SVG
-// export renderer. canvas-viewer vendors a byte-identical copy of this same
-// file and loads it as a real webfont (its own font-loading.ts, wired in at
-// apps/web's bootstrap) under the matching VIEWER_FONT_FAMILY, so Node and
-// browser export output agree on metrics. Within this package the family
-// name and asset path are each declared exactly once, here; canvas-viewer
-// necessarily declares its own copy, because the two packages cannot import
-// each other (see architecture-map.md), so the cross-package agreement rests
-// on the two constants naming the same family rather than on a shared
-// declaration.
+// export renderer. canvas-viewer vendors a byte-identical copy of the Regular
+// face only and loads it as a real webfont (its own font-loading.ts, wired in
+// at apps/web's bootstrap) under the matching VIEWER_FONT_FAMILY, so Node and
+// browser output agree on regular text. Bold and italic runs do not agree: the
+// browser synthesises them from Regular where this package measures and paints
+// the real faces (ledgered in canvas-viewer's measure-text conformance test).
+// Within this package the family name and asset path are each declared exactly
+// once, here; canvas-viewer necessarily declares its own copy, because the two
+// packages cannot import each other (see architecture-map.md), so the
+// cross-package agreement rests on the constants naming the same family
+// (`font-family-literals-agree.test.ts`) and the Regular files staying equal
+// (`roboto-copies-identical.test.ts`) rather than on a shared declaration.
 //
 // The Roboto faces are vendored under assets/fonts/Roboto (Apache-2.0,
 // see assets/fonts/Roboto/LICENSE.txt) as static (non-variable) files:

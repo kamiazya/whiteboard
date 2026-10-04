@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { DeleteDocumentsDialog } from './DeleteDocumentsDialog.js'
 
@@ -58,5 +58,47 @@ describe('the delete confirmation with a count', () => {
     )
 
     expect(screen.getByRole('heading').textContent).toBe('Delete "Roadmap"?')
+  })
+})
+
+describe('the delete confirmation while the delete is in flight', () => {
+  function renderDialog(busy: boolean) {
+    const onCancel = vi.fn()
+    const onConfirm = vi.fn()
+    render(
+      <DeleteDocumentsDialog
+        pending={{ displayName: 'Plan', kind: 'markdown' }}
+        busy={busy}
+        error={null}
+        action="delete-document-browser"
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+      />,
+    )
+    return { onCancel, onConfirm }
+  }
+
+  it('ignores Escape and disables both buttons when busy', () => {
+    const { onCancel } = renderDialog(true)
+
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
+
+    expect(onCancel).not.toHaveBeenCalled()
+    expect((screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+  })
+
+  it('cancels on Escape and confirms from Delete when idle', () => {
+    const { onCancel, onConfirm } = renderDialog(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
+
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+    expect(onCancel).toHaveBeenCalledTimes(1)
   })
 })

@@ -2,40 +2,22 @@ import { join } from 'node:path'
 import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   type ApiErrorBody,
+  errorBody,
   invalidRequestBody,
   unknownStyleRefusal,
 } from '@kamiazya/whiteboard-server-core'
+import type { Context } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { nanoid } from 'nanoid'
 import type { z } from 'zod'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { toDocumentOutputPathErrorBody } from './document-output-path-error.js'
+import { readJsonBody } from './read-json-body.js'
 
 // What every export format asks of a request before it renders, in the one
 // order they all answer in: the body, then the output path, then whether the
 // document exists. A caller is told its request is wrong before it is told
 // the document is missing, the way the other document routes answer.
-
-/**
- * An empty body is a valid export request — every option has a default — so
- * only a body that is PRESENT and unreadable refuses.
- */
-function parseOptionalJsonBody<S extends z.ZodType>(
-  rawText: string,
-  schema: S,
-): { body: z.infer<S> } | { error: ApiErrorBody } {
-  let json: unknown = {}
-  if (rawText.length > 0) {
-    try {
-      json = JSON.parse(rawText)
-    } catch {
-      return { error: { error: 'invalid_request', message: 'malformed JSON' } }
-    }
-  }
-  const parsed = schema.safeParse(json)
-  if (!parsed.success) return { error: invalidRequestBody(parsed.error) }
-  return { body: parsed.data }
-}
 
 /**
  * `undefined` means the caller named no path, which is not a refusal — the
@@ -86,22 +68,27 @@ export function defaultExportPath(exportsDir: string, path: string, extension: s
 }
 
 /**
- * `parseOptionalJsonBody`, and a `style` that names a theme nothing registered
- * is refused as part of the same body check.
+ * An export's JSON body, which may be empty — every export option has a
+ * default — so only a body that is PRESENT and unreadable refuses. A `style`
+ * that names a theme nothing registered is refused as part of the same check.
  *
  * Such an id draws the clean look, so an export answered 200 for a typo and a
  * caller could not tell it had not got the theme it asked for. The text is
  * `wb_scene_render`'s, because both call server-core's `unknownStyleRefusal`.
  * It is a request-body check, so it answers before the output path and the
- * document lookup, in the order `export-request.ts` fixes.
+ * document lookup, in the order this file's header fixes.
  */
-export function parseExportBody<S extends z.ZodType<{ style?: SpatialRenderStyle }>>(
-  rawText: string,
+export async function readExportBody<S extends z.ZodType<{ style?: SpatialRenderStyle }>>(
+  c: Context,
   schema: S,
-): { body: z.infer<S> } | { error: ApiErrorBody } {
-  const parsed = parseOptionalJsonBody(rawText, schema)
-  if ('error' in parsed) return parsed
-  const refusal = unknownStyleRefusal(parsed.body.style)
-  if (refusal === undefined) return parsed
-  return { error: { error: 'invalid_request', message: refusal } }
+): Promise<{ data: z.infer<S> } | { refusal: Response }> {
+  const read = await readJsonBody(c, schema, {
+    voice: 'code',
+    optional: true,
+    refuseShape: invalidRequestBody,
+  })
+  if ('refusal' in read) return read
+  const refusal = unknownStyleRefusal(read.data.style)
+  if (refusal === undefined) return read
+  return { refusal: c.json(errorBody('invalid_request', refusal), 400) }
 }

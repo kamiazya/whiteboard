@@ -47,7 +47,7 @@ it('loads as a module shared worker and answers a subscribe', async () => {
     // Pointed at a port nothing listens on: the stream fails to open and the
     // worker reports it, which is a real answer from a running worker and
     // needs no server to stand up.
-    worker.port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+    worker.port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
     worker.port.postMessage({ type: 'subscribe', doc: 'w/browser-probe' })
     setTimeout(() => resolve({ kind: 'silent' }), 8000)
   })
@@ -73,6 +73,26 @@ const openPort = (name: string) => {
   return worker.port
 }
 
+/**
+ * Resolves once everything `port` sent before it has been handled. One port's
+ * messages arrive in order, but two ports' are not ordered against each other:
+ * a push from one can be handled before another's subscribe, and the fan-out
+ * then has nobody to reach. A snapshot-request is answered on the replica
+ * queue, after all of this port's earlier messages.
+ */
+const handled = (port: MessagePort, doc: string) =>
+  new Promise<void>((resolve, reject) => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type !== 'snapshot' || data.doc !== doc) return
+      port.removeEventListener('message', onMessage)
+      resolve()
+    }
+    port.addEventListener('message', onMessage)
+    port.postMessage({ type: 'snapshot-request', doc })
+    setTimeout(() => reject(new Error(`no snapshot came back for ${doc}`)), 10_000)
+  })
+
 it('carries one port push to another port of the same worker', async () => {
   // Two constructions, one worker — the property the polyfill cannot express,
   // and the whole basis for a replica that several tabs share.
@@ -82,9 +102,10 @@ it('carries one port push to another port of the same worker', async () => {
   const doc = `w/fanout-${Date.now()}`
 
   for (const port of [a, b]) {
-    port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+    port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
     port.postMessage({ type: 'subscribe', doc })
   }
+  await handled(b, doc)
 
   const echoedToSender = vi.fn()
   a.addEventListener('message', (e: MessageEvent) => {
@@ -122,9 +143,9 @@ it('keeps two daemon origins that share a document id apart', async () => {
   const b = openPort(NAME)
   const doc = `w/origins-${Date.now()}`
 
-  a.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  a.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
   a.postMessage({ type: 'subscribe', doc })
-  b.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:2', token: 't' })
+  b.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:2' })
   b.postMessage({ type: 'subscribe', doc })
 
   const leaked = vi.fn()
@@ -136,16 +157,15 @@ it('keeps two daemon origins that share a document id apart', async () => {
   tab.getMap('m').set('k', 'origin-a-only')
   tab.commit()
   a.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
+  // Ordered rather than raced: the push is in the replica before b asks, so a
+  // shared replica would have to show the leak, not merely be able to.
+  await handled(a, doc)
 
   const snapshot = await new Promise<string>((resolve, reject) => {
     b.addEventListener('message', (e: MessageEvent) => {
       const data = e.data as { type?: string; snapshot?: string }
       if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
     })
-    // Ordering is guaranteed rather than raced: replica work runs on one
-    // queue, so this snapshot is answered strictly after the push above. A
-    // shared replica would therefore have to show the leak, not merely be
-    // able to.
     b.postMessage({ type: 'snapshot-request', doc })
     setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
   })
@@ -164,7 +184,7 @@ it('answers a document nobody has opened with an empty snapshot, not an error', 
   // only one a real browser cannot run.
   const port = openPort('whiteboard-sse-empty-snapshot-test')
   const doc = `w/empty-${Date.now()}`
-  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
 
   const snapshot = await new Promise<string>((resolve, reject) => {
     port.addEventListener('message', (e: MessageEvent) => {
@@ -188,7 +208,7 @@ it('hands a later tab a snapshot that already contains an earlier push', async (
   const NAME = 'whiteboard-sse-snapshot-test'
   const port = openPort(NAME)
   const doc = `w/snapshot-${Date.now()}`
-  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
   port.postMessage({ type: 'subscribe', doc })
 
   const tab = new LoroDoc()
@@ -224,9 +244,9 @@ it('leaves a port that subscribed to a different document alone', async () => {
   const doc = `w/scoped-${stamp}`
   const other = `w/other-${stamp}`
 
-  pushing.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  pushing.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
   pushing.postMessage({ type: 'subscribe', doc })
-  elsewhere.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 't' })
+  elsewhere.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
   elsewhere.postMessage({ type: 'subscribe', doc: other })
 
   const leaked = vi.fn()
@@ -238,9 +258,9 @@ it('leaves a port that subscribed to a different document alone', async () => {
   tab.getMap('m').set('k', 'scoped')
   tab.commit()
   pushing.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
+  // Ordered rather than raced, the same way the origin case above is.
+  await handled(pushing, doc)
 
-  // Ordered rather than raced, the same way the origin case above is: replica
-  // work runs on one queue, so this answer is strictly after the push.
   await new Promise<string>((resolve, reject) => {
     elsewhere.addEventListener('message', (e: MessageEvent) => {
       const data = e.data as { type?: string; snapshot?: string }
@@ -252,8 +272,8 @@ it('leaves a port that subscribed to a different document alone', async () => {
   expect(leaked).not.toHaveBeenCalled()
 }, 30_000)
 
-it('keeps a port subscribed across a re-init that only rotates the token', async () => {
-  // Re-init is how a rotated token arrives. Replacing the port's record would
+it('keeps a port subscribed across a repeated init for the same origin', async () => {
+  // Replacing the port's record on a repeated init would
   // strand the subscription handles it already holds — the document stays
   // subscribed on the daemon with nothing able to release it, and this port
   // stops receiving. Asserted as still-receiving, which is the half a user
@@ -264,11 +284,12 @@ it('keeps a port subscribed across a re-init that only rotates the token', async
   const doc = `w/reinit-${Date.now()}`
 
   for (const port of [pushing, rotating]) {
-    port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 'first' })
+    port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
     port.postMessage({ type: 'subscribe', doc })
   }
-  // The same origin, a new token, and deliberately no second subscribe.
-  rotating.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1', token: 'rotated' })
+  // The same origin again, and deliberately no second subscribe.
+  rotating.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
+  await handled(rotating, doc)
 
   const arrived = new Promise<string>((resolve, reject) => {
     rotating.addEventListener('message', (e: MessageEvent) => {
@@ -279,11 +300,11 @@ it('keeps a port subscribed across a re-init that only rotates the token', async
   })
 
   const tab = new LoroDoc()
-  tab.getMap('m').set('k', 'after-rotation')
+  tab.getMap('m').set('k', 'after-reinit')
   tab.commit()
   pushing.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
 
   const forked = new LoroDoc()
   forked.import(decode(await arrived))
-  expect(forked.getMap('m').get('k')).toBe('after-rotation')
+  expect(forked.getMap('m').get('k')).toBe('after-reinit')
 }, 30_000)
