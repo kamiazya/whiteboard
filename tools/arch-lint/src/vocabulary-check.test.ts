@@ -215,6 +215,29 @@ const BANNED = [
       '.claude/rules/vocabulary.md',
     ],
   },
+  // The same keeper-axis `local`, in the word order the pattern above cannot
+  // see: `local` ahead of what it modifies (a files source, a document
+  // summary, a store double) rather than after `browser`. The browser-kept
+  // workspace's counterpart of `daemon-files-source.ts` is
+  // `browser-files-source.ts`; claiming only the names that were retired
+  // keeps `localStorage`, `locale` and the network sense of `local` out of it.
+  {
+    pattern:
+      /(?:ensure|list|load|create)[-_]?local[-_]?(?:files[-_]?source|workspace|documents?)|local[-_]?(?:files[-_]?source|document[-_]?summary|store[-_]?(?:double|fixture))/i,
+    word: 'local files source / local document summary / LocalStoreDouble (for the browser keeper)',
+    instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
+    dirs: [
+      'apps/web/src',
+      'apps/web/scripts',
+      ...WEB_ROOT_TS_FILES,
+      'docs',
+      '.github',
+      '.claude',
+      'README.md',
+      'apps/web/DESIGN.md',
+    ],
+    exempt: [],
+  },
   // The WebSocket transport is retired (ADR-0050). Case-sensitive on purpose:
   // lowercase `ws` is a workspace-id abbreviation all over the tree and
   // `/ws` a reserved path, while the transport was only ever written
