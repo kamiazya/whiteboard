@@ -159,8 +159,8 @@ export interface DocListener {
    * the stream itself, or on a push for this document. Not a dropped
    * connection: the hub stops reconnecting, because retrying a refused
    * credential is the same answer every backoff step while the page reads
-   * the silence as "reconnecting". The one way out is a new credential,
-   * which arrives as `resume()`.
+   * the silence as "reconnecting". The one way out is a fresh page or
+   * worker, since the page holds no credential of its own to renew.
    */
   onAuthRefused?: () => void
 }
@@ -279,7 +279,7 @@ export class SseStreamHub implements SseStreamSource {
   private streamId: string | null = null
   private started = false
   private closed = false
-  /** Set by a 401/403; the reconnect loop halts on it until `resume()`. */
+  /** Set by a 401/403; the reconnect loop halts on it for this hub's life. */
   private authRefused = false
   /**
    * Documents the daemon refused to follow on the stream that is open — a
@@ -372,18 +372,6 @@ export class SseStreamHub implements SseStreamSource {
     // the only place that refusal is visible.
     if (isAuthRefusal(res.status)) this.announceAuthRefused([this.docs.get(doc)])
     if (!res.ok) throw new Error(`update refused: ${res.status}`)
-  }
-
-  /**
-   * Try the daemon again after a refusal, with whatever credential the
-   * injected `fetch` now carries. A rotated token reaches the worker
-   * as a re-init; the hub it keeps per origin has to try again, or every tab
-   * stays "Sync off" after the person has done the one thing that fixes it.
-   */
-  resume(): void {
-    if (!this.authRefused) return
-    this.authRefused = false
-    void this.start()
   }
 
   /**
