@@ -147,7 +147,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // that draws it.
   'apps/web/src/components/settings/SetupJourney.tsx#SetupJourney': 81,
   'apps/web/src/components/shell/ShellMark.tsx#ShellMark': 80,
-  'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 339,
+  'apps/web/src/components/shell/WorkspaceMenu.tsx#WorkspaceMenu': 212,
   'apps/web/src/components/spatial-editor/BoxTargetOverlay.tsx#BoxTargetOverlay': 95,
   // The six-level nested ternary choosing a menu is two named halves, which
   // costs the doc comments that say what each claims. The functions that split

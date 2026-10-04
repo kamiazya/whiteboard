@@ -9,11 +9,14 @@
 import { authSignOutUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useShellWorkspaceRows } from '../../hooks/use-shell-workspace-rows.js'
 import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
 import { notKeepingAnnouncement } from '../../lib/connection-state.js'
 import { listMemberWorkspaces, type MemberWorkspace } from '../../lib/member-workspaces.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
+import type { KeeperWorkspaces } from '../../lib/workspace-switcher-source.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
+import { WorkspaceIdentityFields } from '../shell/WorkspaceIdentityFields.js'
 import { Button } from '../ui/button.js'
 
 type Fetch = typeof globalThis.fetch
@@ -100,6 +103,36 @@ function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
   )
 }
 
+/**
+ * The open workspace's name and address, edited where the other shells edit
+ * them. The keeper is the authority on who may rename: a refusal is shown as
+ * it was said, and nothing about the row changes until the keeper answers.
+ *
+ * The fields are always in the document and the disclosure only hides them,
+ * so a rename in flight is not torn down by closing it. Absent until the
+ * list has said which row the address names, and for a keeper with no rename.
+ */
+function WorkspaceRenameDisclosure({ workspaces }: { workspaces: KeeperWorkspaces }) {
+  const pathname = useLocation().pathname
+  const { handleInAddress, activeRow, applyRename } = useShellWorkspaceRows(workspaces, pathname)
+  if (activeRow === undefined || workspaces.source.rename === undefined) return null
+  return (
+    <details className="relative min-w-0">
+      <summary className="cursor-pointer rounded-md border px-2 py-1 text-foreground">
+        Rename
+      </summary>
+      <WorkspaceIdentityFields
+        className="absolute left-0 top-full z-50 mt-1 flex w-64 flex-col gap-1 rounded-md border bg-background p-2 shadow-md"
+        active={activeRow}
+        current={handleInAddress}
+        rename={workspaces.source.rename}
+        onRenamed={applyRename}
+        onSwitch={workspaces.onSwitch}
+      />
+    </details>
+  )
+}
+
 /** The open workspace's people: who is in it, and for an owner, who may be. */
 function WorkspacePeopleLink() {
   const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
@@ -114,7 +147,16 @@ function WorkspacePeopleLink() {
   )
 }
 
-export function ServerModeShell({ displayName, fetchFn }: { displayName: string; fetchFn: Fetch }) {
+export function ServerModeShell({
+  displayName,
+  fetchFn,
+  workspaces,
+}: {
+  displayName: string
+  fetchFn: Fetch
+  /** The keeper's workspace seam; without it the shell offers no rename. */
+  workspaces?: KeeperWorkspaces | undefined
+}) {
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
   const announcement = notKeepingAnnouncement(connection?.state ?? null)
@@ -124,6 +166,7 @@ export function ServerModeShell({ displayName, fetchFn }: { displayName: string;
         All workspaces
       </Link>
       <WorkspacePicker fetchFn={fetchFn} />
+      {workspaces !== undefined && <WorkspaceRenameDisclosure workspaces={workspaces} />}
       <WorkspacePeopleLink />
       <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text
