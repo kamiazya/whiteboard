@@ -15,11 +15,17 @@ afterEach(cleanup)
 
 const BODY = 'The plan is to ship on Thursday.'
 
-function proposalOf(exact: string, text: string, assumed = exact): readonly Proposal[] {
+function proposalOf(
+  exact: string,
+  text: string,
+  assumed = exact,
+  author?: string,
+): readonly Proposal[] {
   const start = BODY.indexOf(exact)
   return [
     {
       id: 'p1',
+      ...(author === undefined ? {} : { author }),
       changes: [
         {
           id: 'c1',
@@ -74,6 +80,27 @@ describe('a proposed passage in the body', () => {
     // The card closes on a decision: it was asking a question that now has
     // an answer, and leaving it open invites the same press twice.
     expect(queryByTestId('passage-proposal-card')).toBeNull()
+  })
+
+  it('names who proposed the passage on its card', async () => {
+    const { container, getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value={BODY}
+        onChange={vi.fn()}
+        proposals={proposalOf('Thursday', 'Friday', 'Thursday', 'claude-code/1.0')}
+        onDecidePassage={vi.fn()}
+      />,
+    )
+
+    const marker = await vi.waitFor(() => {
+      const found = container.querySelector<HTMLElement>('.cm-proposal-gutter-marker')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    await userEvent.click(marker)
+
+    expect(getByTestId('passage-proposal-card').textContent).toContain('by claude-code/1.0')
   })
 
   it('says so when the words changed after the proposal was written', async () => {

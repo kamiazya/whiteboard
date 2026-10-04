@@ -46,6 +46,7 @@ import { CircleCheck, CircleX, ListChecks, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { cn } from '../../lib/utils.js'
+import { ProposalAuthor } from '../proposals/ProposalAuthor.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
 /** Screen px kept between the card and the root's edge once slid inside. */
@@ -154,20 +155,7 @@ export function ProposalCard({
                   ) : null}
                 </span>
                 {perChange && separable ? (
-                  <span className="flex shrink-0 items-center gap-1">
-                    <DecideButton
-                      label={`Dismiss: ${described}`}
-                      onSelect={() => onDecide('dismissed', [change])}
-                    >
-                      <CircleX className="size-5" />
-                    </DecideButton>
-                    <DecideButton
-                      label={`Adopt: ${described}`}
-                      onSelect={() => onDecide('adopted', [change])}
-                    >
-                      <CircleCheck className="size-5" />
-                    </DecideButton>
-                  </span>
+                  <ChangeVerbs described={described} change={change} onDecide={onDecide} />
                 ) : null}
               </li>
             )
@@ -177,6 +165,7 @@ export function ProposalCard({
           <X className="size-3.5" />
         </CardAction>
       </div>
+      <ProposalAuthor author={proposal.author} className="text-xs opacity-70" />
       {/*
         Icon-only, per DESIGN.md's "object-action surfaces are icon-first":
         the name is carried by `aria-label` and a `title` tooltip, and no
@@ -229,6 +218,31 @@ export function ProposalCard({
         </DecideButton>
       </div>
     </div>
+  )
+}
+
+/** One change's own Dismiss / Adopt pair, shown once the card is expanded. */
+function ChangeVerbs({
+  described,
+  change,
+  onDecide,
+}: {
+  readonly described: string
+  readonly change: ProposedChange
+  readonly onDecide: ProposalCardProps['onDecide']
+}) {
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      <DecideButton
+        label={`Dismiss: ${described}`}
+        onSelect={() => onDecide('dismissed', [change])}
+      >
+        <CircleX className="size-5" />
+      </DecideButton>
+      <DecideButton label={`Adopt: ${described}`} onSelect={() => onDecide('adopted', [change])}>
+        <CircleCheck className="size-5" />
+      </DecideButton>
+    </span>
   )
 }
 

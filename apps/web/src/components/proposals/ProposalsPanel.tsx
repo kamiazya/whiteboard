@@ -17,6 +17,7 @@
 
 import type { Proposal, ProposedChange } from '@kamiazya/whiteboard-model'
 import { openChangeCount, openProposals } from '../../lib/open-proposals.js'
+import { ProposalAuthor } from './ProposalAuthor.js'
 
 /**
  * What each verb is called to a person. A closed record over the union, so a
@@ -102,12 +103,10 @@ function Row({
             {verb}
           </span>
         ))}
-      {/* The name alone would read as a verb or a node beside the lines above;
-          `okfActor` carries no human-vs-agent kind to badge, so the word "by"
-          is all the row can honestly add. */}
-      {proposal.author === undefined ? null : (
-        <span className="text-muted-foreground truncate text-[11px]">by {proposal.author}</span>
-      )}
+      <ProposalAuthor
+        author={proposal.author}
+        className="text-muted-foreground truncate text-[11px]"
+      />
     </>
   )
   const shape = 'flex min-w-0 flex-col gap-0.5 rounded px-2 py-1.5 text-left'
