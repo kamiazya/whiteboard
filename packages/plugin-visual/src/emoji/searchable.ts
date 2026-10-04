@@ -64,7 +64,7 @@ function terms(): Map<string, string> {
 /**
  * Every emoji a run of text shows, matched as GRAPHEMES.
  *
- * 730 of the 1914 rows are more than one code point — flags, keycaps, ZWJ
+ * 730 of the ~1.9k rows are more than one code point — flags, keycaps, ZWJ
  * families — and scanning code points would match a base character and
  * answer with the wrong thing entirely. A grapheme cluster is what a
  * fully-qualified sequence already is, so the segmenter does the

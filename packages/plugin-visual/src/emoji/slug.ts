@@ -10,7 +10,7 @@
  *
  * It is deliberately not GitHub's set. GitHub spells 👍 `:+1:` and `:thumbsup:`,
  * which is a second vendored table with its own coverage story and its own
- * drift; CLDR's names cover all 1914 rows, come with the data, and need no
+ * drift; CLDR's names cover every row, come with the data, and need no
  * curation. What is lost is muscle memory for a handful of shortcodes, and
  * the search finds those by name anyway.
  *

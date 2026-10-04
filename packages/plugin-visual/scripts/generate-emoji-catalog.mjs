@@ -33,7 +33,7 @@ const SOURCE = 'https://unicode.org/Public/emoji/latest/emoji-test.txt'
 /**
  * CLDR's Japanese annotations, in two files: the base set, and the DERIVED
  * set that covers the sequences (a ZWJ family, a flag) the base one does
- * not. Both are needed — measured, the two together cover all 1914 rows and
+ * not. Both are needed — measured, the two together cover every row and
  * the base alone does not.
  */
 const CLDR_TAG = 'release-48'

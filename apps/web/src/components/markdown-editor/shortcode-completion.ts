@@ -32,7 +32,7 @@ import { searchIconShortcodes } from '@kamiazya/whiteboard-plugin-visual/icons/s
  * At least two characters after the colon. The character class is exactly
  * what the two shortcode vocabularies can produce between them — `_` is the
  * emoji half's, `-` the icon half's — so anything it matches is a name that
- * could exist, and a lone `:` does not open a list of 1914 rows.
+ * could exist, and a lone `:` does not open a list of ~1.9k rows.
  *
  * The hyphen is load-bearing rather than tidy. Without it the popup did not
  * merely omit icons: `:icon-` matched NOTHING, so the list a person already
@@ -81,7 +81,7 @@ function applyShortcode(shortcode: string) {
 }
 
 /**
- * SECTIONS, not `boost`, are what put the six icons above the 1914 emoji —
+ * SECTIONS, not `boost`, are what put the six icons above the ~1.9k emoji —
  * and the difference is not a preference, it is the only thing that works.
  *
  * Measured in a real browser: with `boost` alone the icon row was BUILT and

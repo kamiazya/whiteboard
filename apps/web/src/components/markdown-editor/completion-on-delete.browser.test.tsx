@@ -201,7 +201,7 @@ describe('deleting back into a name offers the list again', () => {
    * behaviour — restarting an open query is invisible on screen and costs a
    * source call each time. Measured at the time of writing: 2 with the guard
    * against 5 without, over the same four backspaces, each call a scan of
-   * the 1914-row emoji index.
+   * the ~1.9k-row emoji index.
    */
   it('does not re-run a source while its list is already open', async () => {
     const asked = { calls: 0 }
@@ -219,7 +219,7 @@ describe('deleting back into a name offers the list again', () => {
     }
 
     // The open, and nothing since. Without the guard each backspace restarts
-    // the query and this reads 4 — every one of them a scan of the 1914-row
+    // the query and this reads 4 — every one of them a scan of the ~1.9k-row
     // emoji index in the real source this stands in for.
     expect(asked.calls).toBe(1)
   })

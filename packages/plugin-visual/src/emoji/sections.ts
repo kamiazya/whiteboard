@@ -53,7 +53,7 @@ const CATEGORIES: Readonly<Record<string, { readonly glyph: string; readonly ja:
 
 /**
  * Built once and remembered: a picker mounts every time the inspector shows
- * a node, and rebuilding 1914 option objects each time is work whose answer
+ * a node, and rebuilding ~1.9k option objects each time is work whose answer
  * cannot have changed — the tables are frozen constants.
  */
 let built: readonly FacetPickerCatalogSection[] | undefined
