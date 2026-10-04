@@ -69,6 +69,34 @@ describe('serializeOkf', () => {
   })
 })
 
+describe('OkfNotYamlSafeError', () => {
+  // The message is what a caller logs or relays, and the name is how it is told from a serialiser defect.
+  function thrownBy(): OkfNotYamlSafeError {
+    try {
+      serializeOkf({
+        frontmatter: {
+          type: 'note',
+          facets: { 'x.y/v1': { bad: Number.NaN, worse: Number.POSITIVE_INFINITY } },
+        },
+        body: '',
+      })
+    } catch (error) {
+      return error as OkfNotYamlSafeError
+    }
+    throw new Error('serializeOkf did not throw')
+  }
+
+  it('names every offending key path in its message, joined by "; "', () => {
+    const { message } = thrownBy()
+    expect(message).toContain('facets.x.y/v1.bad: NaN is not yaml-safe')
+    expect(message).toMatch(/facets\.x\.y\/v1\.bad: [^;]+; facets\.x\.y\/v1\.worse: /)
+  })
+
+  it('carries its own name, so a caller reading err.name can tell it from a serialiser defect', () => {
+    expect(thrownBy().name).toBe('OkfNotYamlSafeError')
+  })
+})
+
 describe('a preserved root key that YAML parses into something the store cannot hold', () => {
   const frontmatterOf = (line: string) => `---\ntype: note\n${line}\n---\nbody`
   const refusalPaths = (text: string): unknown => {
