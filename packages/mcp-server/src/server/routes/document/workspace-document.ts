@@ -7,6 +7,7 @@ import {
 import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyWorkspaceDocumentUpdate,
+  DocumentEngineTrapError,
   errorBody,
   type OperatorInfo,
   promoteWorkspace,
@@ -82,6 +83,17 @@ async function admittedWorkspace(
   return { workspaceId, deps }
 }
 
+/**
+ * The CRDT engine aborted on this write. The operation has already dropped the
+ * instance it poisoned, so the next request is served; what the caller is told
+ * is that the engine failed, in the code `/api/v1` answers it with, and not
+ * that its bytes were malformed.
+ */
+function answerEngineTrap(c: Context, err: unknown): Response {
+  if (!(err instanceof DocumentEngineTrapError)) throw err
+  return c.json(errorBody('document_engine_trap', err.message), 500)
+}
+
 const PROMOTE_BODY: ReadJsonBodyOptions = {
   voice: 'code',
   maxBytes: WORKSPACE_DOC_PROMOTE_LIMIT_BYTES,
@@ -113,7 +125,12 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       const { workspaceId, deps } = admitted
       const bytes = new Uint8Array(await c.req.arrayBuffer())
 
-      const result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })
+      let result: Awaited<ReturnType<typeof applyWorkspaceDocumentUpdate>>
+      try {
+        result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })
+      } catch (err) {
+        return answerEngineTrap(c, err)
+      }
       if (result === 'malformed-update') {
         return c.json({ title: 'Malformed workspace-document update' }, 400)
       }
@@ -171,11 +188,12 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         displayName: defaultHumanDisplayName(),
         ...(options.daemonActor === undefined ? {} : { actor: options.daemonActor }),
       }
-      const result = await promoteWorkspace(deps, {
-        workspaceId,
-        snapshot,
-        operator,
-      })
+      let result: Awaited<ReturnType<typeof promoteWorkspace>>
+      try {
+        result = await promoteWorkspace(deps, { workspaceId, snapshot, operator })
+      } catch (err) {
+        return answerEngineTrap(c, err)
+      }
       if (result.kind === 'malformed-snapshot') {
         return c.json({ title: 'Malformed workspace record snapshot' }, 400)
       }

@@ -1,4 +1,5 @@
 import {
+  isEngineTrap,
   readSpatialCanvasWithSkipped,
   reconcileSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -37,45 +38,40 @@ export class SnapshotNotFoundError extends Error {
 }
 
 /**
- * Whether a throw is the CRDT engine's WASM aborting, as opposed to it
- * refusing an input.
+ * Thrown when the CRDT engine aborts while a document is being loaded, saved,
+ * or handed a client's update. Nothing from the write was stored. The
+ * in-memory copy the engine was working on is unusable from then on — each
+ * later call on it traps again — so repeating the same call is not a retry.
  *
- * Loro compiles its Rust panics to a `RuntimeError: unreachable` and, from the
- * panic on, leaves the `LoroDoc` that was inside the call holding a lock it
- * never released: every later call on THAT instance answers a "Locking order
- * violation" trap of its own, while a fresh instance works. Matched by name and
- * message rather than `instanceof WebAssembly.RuntimeError`, which a trap
- * raised in another realm (a worker, a test sandbox) does not satisfy.
- */
-export function isEngineTrap(err: unknown): boolean {
-  return (
-    err instanceof Error && err.name === 'RuntimeError' && err.message.startsWith('unreachable')
-  )
-}
-
-/**
- * Thrown when the CRDT engine aborts while a document is being loaded or
- * saved. Nothing from the write was stored. The in-memory copy the engine was
- * working on is unusable from then on — a daemon that caches one keeps handing
- * it out, and each later call on it traps again — so repeating the same call
- * is not a retry. Deleting the document is the way out that needs no restart.
+ * `subject` names what the engine was working on in words a caller can act
+ * on: a document, a document's path, or a whole workspace record.
  *
  * It lives beside the loader that raises it, for the reason
  * `SnapshotNotFoundError` does.
  */
 export class DocumentEngineTrapError extends Error {
   constructor(
-    public readonly documentId: string,
-    public readonly doing: 'loading' | 'saving',
+    public readonly subject: string,
+    public readonly doing: 'loading' | 'saving' | 'importing an update into',
     cause: unknown,
   ) {
     super(
-      `The CRDT engine aborted while ${doing} document ${documentId}; nothing from this write was stored. ` +
-        'A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.',
+      `The CRDT engine aborted while ${doing} ${subject}; nothing from this write was stored. ` +
+        `A very large document is the usual trigger. ${DOCUMENT_ENGINE_TRAP_ADVICE[doing]}`,
       { cause },
     )
     this.name = 'DocumentEngineTrapError'
   }
+}
+
+const STUCK_UNTIL_RESTART =
+  'If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.'
+
+const DOCUMENT_ENGINE_TRAP_ADVICE: Readonly<Record<DocumentEngineTrapError['doing'], string>> = {
+  loading: STUCK_UNTIL_RESTART,
+  saving: STUCK_UNTIL_RESTART,
+  'importing an update into':
+    'The in-memory copy was dropped and the next request reloads what was stored; sending the same update again aborts the same way.',
 }
 
 /**
@@ -102,7 +98,38 @@ async function withEngineTrapReported<T>(
       doing,
       err: messageOf(err),
     })
-    throw new DocumentEngineTrapError(documentId, doing, err)
+    throw new DocumentEngineTrapError(`document ${documentId}`, doing, err)
+  }
+}
+
+/**
+ * Imports a client's update into a CACHED document, telling an engine trap
+ * apart from bytes the engine refuses.
+ *
+ * A refusal leaves the instance as it was, so it is rethrown untouched and the
+ * caller answers it as the client's mistake. A trap poisons the instance for
+ * every later call, so `evict` drops whatever cache holds it before the
+ * `DocumentEngineTrapError` is raised — the next request then rebuilds from
+ * storage instead of the daemon serving a dead copy until it restarts. Every
+ * sync write that imports into a cached document goes through here, so none
+ * can recover from a trap differently from the others.
+ */
+export function importEvictingOnEngineTrap(
+  doc: LoroDoc,
+  update: Uint8Array,
+  trapped: { readonly subject: string; readonly fields: Record<string, unknown>; evict(): void },
+): void {
+  try {
+    doc.import(update)
+  } catch (err) {
+    if (!isEngineTrap(err)) throw err
+    trapped.evict()
+    log.error('the CRDT engine trapped importing an update; the cached copy was dropped', {
+      ...trapped.fields,
+      updateBytes: update.byteLength,
+      err: messageOf(err),
+    })
+    throw new DocumentEngineTrapError(trapped.subject, 'importing an update into', err)
   }
 }
 

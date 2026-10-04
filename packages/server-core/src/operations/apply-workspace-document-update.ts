@@ -1,3 +1,4 @@
+import { DocumentEngineTrapError, importEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -14,9 +15,15 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * write half of the workspace-document sync surface.
  *
  * `'malformed-update'` is a real answer, not a crash: a client can send
- * garbage bytes, and a throwing import must reach the surface as a 400
- * rather than a 500 — and must mutate nothing durable (no save, no
- * eviction; the in-memory import either applied atomically or threw).
+ * garbage bytes, and an import the engine refuses must reach the surface as a
+ * 400 rather than a 500 — and must mutate nothing durable (no save, no
+ * eviction; a refused import leaves the cached doc as it was).
+ *
+ * An engine TRAP is not a refusal and is never answered as one: the trapped
+ * import may have half-applied, and the instance traps on every later call,
+ * so the cached record and every projection derived from it are dropped and
+ * `DocumentEngineTrapError` is thrown. The next request reloads what was
+ * stored instead of the whole workspace answering 500 until a restart.
  *
  * THE OPERATION HOLDS THE LOCK — `liveDocuments.withWriteLock`, because the
  * workspace write lock is one lock however many seams touch the workspace.
@@ -34,8 +41,16 @@ export async function applyWorkspaceDocumentUpdate(
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
     try {
-      doc.import(update)
+      importEvictingOnEngineTrap(doc, update, {
+        subject: `the workspace record of ${workspaceId}`,
+        fields: { workspaceId },
+        evict() {
+          deps.workspaceDocuments.evict(workspaceId)
+          deps.workspaceDocuments.evictProjections(workspaceId)
+        },
+      })
     } catch (err: unknown) {
+      if (err instanceof DocumentEngineTrapError) throw err
       log.warning('workspace-document update rejected: malformed Loro import data', {
         workspaceId,
         updateBytes: update.byteLength,

@@ -22,6 +22,7 @@ export {
   writeTrustFacets,
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
+export { isEngineTrap } from './engine-trap.js'
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,

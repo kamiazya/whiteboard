@@ -1,4 +1,5 @@
 import type { LoroDoc } from 'loro-crdt'
+import { importEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 
 export interface ApplyDocumentUpdateInput {
@@ -25,6 +26,11 @@ export interface ApplyDocumentUpdateInput {
  * here means a second surface cannot forget it — same reasoning as
  * `restoreVersion`.
  *
+ * An engine trap in the import drops the cached doc and answers
+ * `DocumentEngineTrapError`: the instance traps on every later call, so
+ * keeping it would leave the document unreadable until a restart. Bytes the
+ * engine refuses are rethrown as they were, with the cached doc kept.
+ *
  * Returns the live cached doc instance (not a copy), so a caller can feed
  * follow-up work — the HTTP route's auto-version trigger — without a second
  * read racing other writers.
@@ -37,7 +43,11 @@ export async function applyDocumentUpdate(
   const { workspaceId, path, update } = input
   return live.withWriteLock(workspaceId, async () => {
     const doc = await live.get(workspaceId, path)
-    doc.import(update)
+    importEvictingOnEngineTrap(doc, update, {
+      subject: `the document at ${path}`,
+      fields: { workspaceId, path },
+      evict: () => live.evict(workspaceId, path),
+    })
     try {
       await live.save(workspaceId, path, doc, { overwrite: true })
     } catch (err) {

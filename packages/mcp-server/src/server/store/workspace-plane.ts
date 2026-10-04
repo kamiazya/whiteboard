@@ -11,6 +11,7 @@
  * (versions and the fold still key off it).
  */
 import {
+  isEngineTrap,
   resolveWorkspaceDocumentById,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -36,7 +37,6 @@ import {
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
-import { isEngineTrap } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { evictDoc } from './doc-cache.js'
 import { getDoc, openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'

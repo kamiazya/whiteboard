@@ -1,5 +1,6 @@
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
+import { DocumentEngineTrapError, importEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
@@ -43,6 +44,11 @@ export type PromoteWorkspaceResult =
  * document has once merged — a checkpoint records the state a person moved
  * the document INTO, which for a document the target already held is the
  * merge of both, exactly as the History panel will show it.
+ *
+ * An engine trap — on the incoming record or in the merge — is thrown as
+ * `DocumentEngineTrapError`, never answered as a malformed snapshot: the
+ * bytes may be well-formed, and the merge has already dropped the target's
+ * poisoned record so the workspace keeps serving.
  */
 export async function promoteWorkspace(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions'>,
@@ -50,8 +56,14 @@ export async function promoteWorkspace(
 ): Promise<PromoteWorkspaceResult> {
   const incoming = new LoroDoc()
   try {
-    incoming.import(input.snapshot)
-  } catch {
+    importEvictingOnEngineTrap(incoming, input.snapshot, {
+      subject: 'the promoted workspace record',
+      fields: { workspaceId: input.workspaceId },
+      // A throwaway instance: no cache holds it, so there is nothing to drop.
+      evict() {},
+    })
+  } catch (err) {
+    if (err instanceof DocumentEngineTrapError) throw err
     return { kind: 'malformed-snapshot' }
   }
   const promoted = readWorkspaceDocuments(incoming).map((entry) => entry.documentId)

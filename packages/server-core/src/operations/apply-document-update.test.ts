@@ -1,7 +1,9 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DocumentEngineTrapError } from '../document-io.js'
+import { setLogSink } from '../log.js'
 import type { LiveDocuments } from '../server-deps.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
@@ -82,6 +84,19 @@ function fakeLive(initial?: LoroDoc) {
   }
 }
 
+/** What loro-crdt's WASM throws when a Rust panic aborts a call. */
+function engineTrap(): Error {
+  return Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
+}
+
+const records: { level: string; msg: string; data?: Record<string, unknown> }[] = []
+
+afterEach(() => {
+  records.length = 0
+  setLogSink(() => {})
+  vi.restoreAllMocks()
+})
+
 describe('applyDocumentUpdate', () => {
   it('imports the update into the live doc, saves with overwrite, and returns the SAME instance', async () => {
     const existing = new LoroDoc()
@@ -130,5 +145,43 @@ describe('applyDocumentUpdate', () => {
         lockDepth: 1,
       })
     }
+  })
+
+  it('an engine trap in the import drops the poisoned doc and answers a typed error', async () => {
+    // The trapped instance is the cached one: kept, every later read and
+    // write of the document traps on it until the daemon restarts.
+    const poisoned = new LoroDoc()
+    vi.spyOn(poisoned, 'import').mockImplementation(() => {
+      throw engineTrap()
+    })
+    const fake = fakeLive(poisoned)
+    setLogSink((record) => records.push(record))
+
+    const failure = await applyDocumentUpdate(
+      { liveDocuments: fake.live },
+      { workspaceId: WS, path: PATH, update: updateBytes(['n1']) },
+    ).catch((err: unknown) => err)
+
+    expect(failure).toBeInstanceOf(DocumentEngineTrapError)
+    expect(fake.evicted).toEqual([PATH])
+    expect(fake.calls.map((c) => c.method)).not.toContain('save')
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        level: 'error',
+        data: expect.objectContaining({ workspaceId: WS, path: PATH }),
+      }),
+    )
+  })
+
+  it('an import the engine refuses keeps the cached doc and rethrows as it was', async () => {
+    const live = new LoroDoc()
+    const fake = fakeLive(live)
+    await expect(
+      applyDocumentUpdate(
+        { liveDocuments: fake.live },
+        { workspaceId: WS, path: PATH, update: new Uint8Array([1, 2, 3, 4]) },
+      ),
+    ).rejects.not.toBeInstanceOf(DocumentEngineTrapError)
+    expect(fake.evicted).toEqual([])
   })
 })

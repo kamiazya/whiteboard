@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   documentContainers,
+  isEngineTrap,
   readSpatialCanvas,
   readTrashEntries,
   resolveWorkspaceDocumentById,
@@ -19,7 +20,6 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
-import { isEngineTrap } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
