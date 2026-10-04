@@ -128,15 +128,11 @@ const byAccess =
 const publicRoute = (): RouteScopeDecision => ({ kind: 'public' })
 
 const API_ROUTE_RULES: readonly RouteScopeRule[] = [
-  // Deliberate, documented carve-out: an unauthenticated liveness probe used
-  // by daemon-discovery and the mixed-content preflight (ADR-0002). Every
+  // The one public route: a liveness probe that identifies the responder
+  // (instanceId, advertised public key) and carries no secret or document
+  // data, so it must answer a caller that holds no credential yet. Every
   // other /api/runtime/* path requires a scope below.
   { name: 'runtime/ping', claims: exactly('/api/runtime/ping'), decide: publicRoute },
-
-  // Same carve-out class as ping: the identity challenge (POST-only) must be
-  // answerable before a caller holds any credential — it is how a caller
-  // decides whether a responder is trustworthy at all. Rate-limited in the
-  // router.
 
   // File routes: reading/writing a document's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory
