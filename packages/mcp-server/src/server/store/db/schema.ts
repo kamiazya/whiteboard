@@ -28,7 +28,6 @@ interface VersionsTable {
   // frontiers point into.
   documentId: string
   workspaceId: string
-  branchName: string
   auto: Bool
   label: string | null
   // '' is a real value here: no operator at all. See version-store's

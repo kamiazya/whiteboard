@@ -11,7 +11,6 @@ function storeSpy() {
     createdAt: '2026-01-01T00:00:00.000Z',
     elementCount: 0,
     auto: false,
-    branchName: 'main',
     ...(opts as object),
   }))
   return { store: { save } as unknown as VersionStore, save }

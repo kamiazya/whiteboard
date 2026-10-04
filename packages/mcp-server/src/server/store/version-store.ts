@@ -103,11 +103,6 @@ export interface VersionStore {
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
-// The `branchName` column outlived the branch (ADR-0029): every version is on
-// this one lane, so the store writes and publishes the constant and nothing
-// reads the stored value. Drop the column, then this, together.
-const VERSION_BRANCH = 'main'
-
 interface VersionRow {
   id: string
   documentId: string
@@ -154,7 +149,6 @@ function rowToEntry(row: VersionRow): VersionEntry {
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: row.auto === 1,
-    branchName: VERSION_BRANCH,
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
@@ -212,7 +206,6 @@ function versionRow({
     id,
     documentId,
     workspaceId,
-    branchName: VERSION_BRANCH,
     auto: opts.auto ? 1 : 0,
     label: opts.label ?? null,
     operatorKind: operator?.kind ?? '',
@@ -256,7 +249,6 @@ function savedVersion({
     createdAt: new Date(createdAt).toISOString(),
     elementCount,
     auto: opts.auto,
-    branchName: VERSION_BRANCH,
     ...(opts.label !== undefined ? { label: opts.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),

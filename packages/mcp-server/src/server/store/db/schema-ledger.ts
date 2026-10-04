@@ -50,7 +50,6 @@ export const LEDGER: Ledger = {
     id: text,
     documentId: text,
     workspaceId: text,
-    branchName: text,
     auto: integer,
     label: textOrNull,
     operatorKind: text,

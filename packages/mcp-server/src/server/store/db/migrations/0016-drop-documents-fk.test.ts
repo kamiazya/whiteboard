@@ -55,7 +55,8 @@ async function seedDocument(db: Handle['db']): Promise<void> {
  * pre-0016 database has to spell the name as it stood there — the
  * post-0016 case below is migrated to head and gets the current one.
  * One helper with the column as a parameter, so neither caller can
- * quietly drift onto the other's name.
+ * quietly drift onto the other's name. `branchName` is stage-bound the same
+ * way: 0041 dropped it, so only the pre-0025 stage seeds one.
  */
 async function seedVersion(
   db: Handle['db'],
@@ -67,7 +68,7 @@ async function seedVersion(
       id: 'v-a',
       documentId: DOC_A,
       workspaceId: 'ws-1',
-      branchName: 'main',
+      ...(operatorColumn === 'operatorPeerId' ? { branchName: 'main' } : {}),
       auto: 1,
       label: null,
       operatorKind: 'system',

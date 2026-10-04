@@ -82,7 +82,6 @@ describe('createAutoVersionTrigger', () => {
       createdAt: '2026-04-23T00:00:00.000Z',
       elementCount: 0,
       auto: true,
-      branchName: 'main',
     }
     const save = vi
       .fn()

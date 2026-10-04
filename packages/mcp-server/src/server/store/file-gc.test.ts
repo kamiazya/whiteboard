@@ -261,7 +261,6 @@ describe('purgeDanglingFiles', () => {
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
-          branchName: 'main',
         },
       ],
       load: async () => {
@@ -448,7 +447,6 @@ describe('purgeDanglingFiles', () => {
           createdAt: '2026-04-25T00:00:00.000Z',
           elementCount: 1,
           auto: false,
-          branchName: 'main',
         },
       ],
       load: async () => null,
