@@ -31,8 +31,7 @@ export function useKeyedSvg(
   const sourceRef = useRef(source)
 
   // Layout-effect timing: the patch lands before paint, in the same frame
-  // as the React commit that carried the new render — the innerHTML swap
-  // this replaces had the same timing.
+  // as the React commit that carried the new render.
   useLayoutEffect(() => {
     const container = containerRef.current
     if (container === null) return
