@@ -1,6 +1,7 @@
 import { type ApiErrorBody, errorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import type { z } from 'zod'
+import { JSON_BODY_LIMIT_BYTES, readTextWithin } from './body-limit.js'
 
 /**
  * Which of the two error families a route answers in (`apiErrorBodySchema`):
@@ -26,6 +27,12 @@ export interface ReadJsonBodyOptions {
    * refusal. A body that is present is still held to being JSON.
    */
   optional?: boolean
+  /**
+   * The most the body may carry, answered 413 `payload_too_large` beyond it.
+   * Defaults to `JSON_BODY_LIMIT_BYTES`, which is sized for fields, not
+   * content: a route that takes a snapshot or stored content names its own.
+   */
+  maxBytes?: number
 }
 
 /**
@@ -41,7 +48,9 @@ export async function readJsonBody<S extends z.ZodType>(
   schema: S,
   options: ReadJsonBodyOptions,
 ): Promise<{ data: z.infer<S> } | { refusal: Response }> {
-  const text = await c.req.text()
+  const read = await readTextWithin(c, options.maxBytes ?? JSON_BODY_LIMIT_BYTES, 'Request body')
+  if ('refusal' in read) return read
+  const { text } = read
   let json: unknown = {}
   if (!(options.optional === true && text.length === 0)) {
     try {

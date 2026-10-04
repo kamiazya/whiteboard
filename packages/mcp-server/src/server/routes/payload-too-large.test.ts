@@ -120,3 +120,20 @@ describe('an oversized request body', () => {
     })
   }
 })
+
+describe('a content route given more than a field-sized body', () => {
+  // The default ceiling on a JSON body is sized for names and labels. Workspace
+  // promotion carries a whole workspace record inside JSON, so it names its own
+  // — and a route that forgot to would refuse every real promotion at a megabyte.
+  it('reads a 2 MiB promotion body instead of refusing it as too large', async () => {
+    const res = await createDocumentRouter(testDocumentRouterOptions({ serverDeps })).request(
+      '/api/w/s1/workspace-document/promote',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot: 'A'.repeat(2 * MIB) }),
+      },
+    )
+    expect(res.status).not.toBe(413)
+  })
+})

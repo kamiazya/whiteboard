@@ -131,3 +131,80 @@ describe('readJsonBody: an optional body', () => {
     expect(json).toEqual({ error: 'invalid_body', message: expect.stringContaining('shape: ') })
   })
 })
+
+describe('readJsonBody: the size ceiling', () => {
+  const MIB = 1024 * 1024
+  const lenient = z.object({ pad: z.string() }).strict()
+
+  function appCapped(maxBytes?: number) {
+    const app = new Hono()
+    app.post('/', async (c) => {
+      const read = await readJsonBody(c, lenient, {
+        voice: 'code',
+        refuseShape: () => ({ error: 'invalid_body', message: 'shape' }),
+        ...(maxBytes === undefined ? {} : { maxBytes }),
+      })
+      return 'refusal' in read ? read.refusal : c.json({ read: read.data.pad.length })
+    })
+    return app
+  }
+
+  const bodyOf = (padding: number) => JSON.stringify({ pad: 'x'.repeat(padding) })
+
+  it('refuses a body past a megabyte by default, in the daemon refusal voice', async () => {
+    const res = await appCapped().request('/', { method: 'POST', body: bodyOf(MIB) })
+
+    expect(res.status).toBe(413)
+    expect(apiErrorBodySchema.parse(await res.json())).toEqual({
+      error: 'payload_too_large',
+      message: `Request body exceeds ${MIB} bytes limit.`,
+    })
+  })
+
+  it('reads a body just inside the default', async () => {
+    const padding = MIB - bodyOf(0).length
+
+    const res = await appCapped().request('/', { method: 'POST', body: bodyOf(padding) })
+
+    expect(await res.json()).toEqual({ read: padding })
+  })
+
+  it('refuses on the declared length without reading the body', async () => {
+    const res = await appCapped(10).request('/', {
+      method: 'POST',
+      headers: { 'content-length': '11' },
+      body: bodyOf(0),
+    })
+
+    expect(res.status).toBe(413)
+  })
+
+  it('stops a chunked body that declares no length at the ceiling', async () => {
+    let pulled = 0
+    const chunk = new TextEncoder().encode('x'.repeat(1024))
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1
+        if (pulled > 200) controller.close()
+        else controller.enqueue(chunk)
+      },
+    })
+
+    const res = await appCapped(4096).request('/', {
+      method: 'POST',
+      body,
+      // @ts-expect-error: `duplex` is required by the fetch spec for a stream body and absent from the DOM lib types
+      duplex: 'half',
+    })
+
+    expect(res.status).toBe(413)
+    // The reader gave up past the ceiling instead of draining the whole body.
+    expect(pulled).toBeLessThan(20)
+  })
+
+  it('takes the ceiling a route names over the default', async () => {
+    const res = await appCapped(2 * MIB).request('/', { method: 'POST', body: bodyOf(MIB) })
+
+    expect(res.status).toBe(200)
+  })
+})

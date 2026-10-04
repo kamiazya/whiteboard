@@ -15,6 +15,7 @@ import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
+import { limitV1WriteBody } from './routes/body-limit.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
@@ -334,6 +335,7 @@ export function createApp(options: AppOptions) {
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
   // paths; the /api/* auth middlewares registered above already cover it.
+  app.use('/api/v1/*', limitV1WriteBody())
   app.route('/', createDocumentServer(options.serverDeps).app)
 
   const admit = membership.admit
