@@ -41,6 +41,15 @@ const WORKSPACES_DIRNAME = 'workspaces'
 export const BLOBS_DIRNAME = 'blobs'
 export const FILES_DIRNAME = 'files'
 
+/**
+ * The database's file name. It lives here and not beside the code that opens
+ * it (`store/db/location.ts`) because the tenant directory classifies and
+ * measures the data directory by this name, and the order is tenant < store:
+ * a tenant module importing the store's own constant closes a directory loop.
+ * The `-wal` and `-shm` sidecars share this prefix.
+ */
+export const DB_FILENAME = 'whiteboard.db'
+
 declare const tenantDir: unique symbol
 
 /**

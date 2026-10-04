@@ -46,6 +46,7 @@ import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { collectRelativeImportEdges } from './cycle-check.js'
+import { directoryLoops, resolvedImportEdges, spellLoop } from './directory-loops.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { collectModuleSpecifiers } from './scanner.js'
 import { isShippedPath } from './source-scan.js'
@@ -112,6 +113,23 @@ function upwardEdges(sources: Sources): string[] {
   return edges.sort()
 }
 
+/**
+ * The directory a module belongs to, two levels deep: `lib/spatial` is not
+ * `lib`, and `components/annotations` is not `components`. A root module (the
+ * composition) and anything outside the graph is no directory's.
+ */
+function directoryOf(key: string): string | undefined {
+  if (isOutsideTheGraph(key)) return undefined
+  const parts = key.split('/')
+  return parts.length === 1 ? undefined : parts.slice(0, Math.min(2, parts.length - 1)).join('/')
+}
+
+/** Every directory loop in the shipped graph, with the file imports that close it. */
+function webDirectoryLoops(sources: Sources) {
+  const files = [...sources].map(([path, text]) => ({ path, text }))
+  return directoryLoops(resolvedImportEdges(files), directoryOf)
+}
+
 /** Whether a module names React, by import or by `import()`. */
 function namesReact(key: string, source: string): boolean {
   const file = ts.createSourceFile(key, source, ts.ScriptTarget.Latest, true)
@@ -143,6 +161,21 @@ function reactInLib(sources: Sources): string[] {
 const UPWARD_EDGES: readonly string[] = []
 
 const UPWARD_EDGES_CEILING = 0
+
+/**
+ * Every loop among the app's directories, and how many file imports close it.
+ * The layer order cannot see them: `lib/` and `lib/spatial/` are both lib, and
+ * the components directories are one layer. A loop is what stops one of its
+ * directories being lifted without the others, so the number may only fall —
+ * a new loop, a loop that gains a directory and a loop that gains an import all
+ * fail, and so does one that shrank without its count following. Break a loop
+ * by moving what one side wants down to a module the other already imports,
+ * then lower the count (or delete the entry when the loop is gone).
+ */
+const DIRECTORY_LOOPS: Readonly<Record<string, number>> = {
+  'lib,lib/spatial': 12,
+  'components,components/annotations,components/document-editor,components/markdown-editor,components/spatial-editor,components/workspace-files,components/workspace-top-bar': 37,
+}
 
 describe('apps/web layer order', () => {
   const sources = readWebSources()
@@ -194,6 +227,93 @@ describe('apps/web layer order', () => {
 
   it('holds the allowlist at its declared ceiling', () => {
     expect(UPWARD_EDGES.length).toBe(UPWARD_EDGES_CEILING)
+  })
+})
+
+describe('apps/web directory loops', () => {
+  const sources = readWebSources()
+  const actual = Object.fromEntries(
+    webDirectoryLoops(sources).map((loop) => [spellLoop(loop), loop.edges]),
+  )
+
+  it('reaches the directory graph', () => {
+    // A directory scan that resolved nothing reports no loop, which reads as clean.
+    expect(
+      resolvedImportEdges([...sources].map(([path, text]) => ({ path, text }))).filter(
+        ({ from, to }) => directoryOf(from) !== directoryOf(to),
+      ).length,
+    ).toBeGreaterThan(500)
+    expect(Object.keys(actual).length, 'the loops the ledger names were not found').toBeGreaterThan(
+      0,
+    )
+  })
+
+  it('has no loop outside the ledger', () => {
+    expect(
+      Object.keys(actual).filter((loop) => DIRECTORY_LOOPS[loop] === undefined),
+      'a directory loop that is not ledgered — move what one directory needs down instead of adding to it',
+    ).toEqual([])
+  })
+
+  it('names only loops that still exist', () => {
+    expect(
+      Object.keys(DIRECTORY_LOOPS).filter((loop) => actual[loop] === undefined),
+      'a ledgered loop is gone — delete its entry',
+    ).toEqual([])
+  })
+
+  it('holds each loop at exactly its ledgered edge count', () => {
+    const drift = Object.entries(DIRECTORY_LOOPS).flatMap(([loop, edges]) =>
+      actual[loop] === undefined || actual[loop] === edges
+        ? []
+        : [`${loop}: ${edges} -> ${actual[loop]}`],
+    )
+    expect(
+      drift,
+      'a loop gained an import (growth) or lost one (lower the ledger so the headroom is not left)',
+    ).toEqual([])
+  })
+})
+
+describe('what the directory loop scan reads, on fixture trees', () => {
+  const loopsOf = (files: Record<string, string>): Record<string, number> =>
+    Object.fromEntries(
+      webDirectoryLoops(new Map(Object.entries(files))).map((l) => [spellLoop(l), l.edges]),
+    )
+
+  it('counts the distinct imports that close a loop between a directory and its subdirectory', () => {
+    expect(
+      loopsOf({
+        'lib/a.ts': "import '../lib/spatial/b.js'\nimport './c.js'\n",
+        'lib/c.ts': "import './spatial/d.js'\n",
+        'lib/spatial/b.ts': "import type { T } from '../a.js'\nimport '../a.js'\n",
+        'lib/spatial/d.ts': 'export const d = 1\n',
+      }),
+    ).toEqual({ 'lib,lib/spatial': 3 })
+  })
+
+  it('does not call a root module, a test or a one-way import a loop', () => {
+    expect(
+      loopsOf({
+        'App.tsx': "import './lib/a.js'\n",
+        'lib/a.ts': "import '../App.js'\nimport './spatial/b.js'\n",
+        'lib/spatial/b.ts': "import '../a.test.js'\n",
+        'lib/a.test.ts': "import './spatial/b.js'\n",
+      }),
+    ).toEqual({})
+  })
+
+  it('reports two independent loops separately', () => {
+    expect(
+      Object.keys(
+        loopsOf({
+          'lib/a.ts': "import './spatial/b.js'\n",
+          'lib/spatial/b.ts': "import '../a.js'\n",
+          'components/x/A.tsx': "import '../y/B.js'\n",
+          'components/y/B.tsx': "import '../x/A.js'\n",
+        }),
+      ).sort(),
+    ).toEqual(['components/x,components/y', 'lib,lib/spatial'])
   })
 })
 

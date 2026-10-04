@@ -35,10 +35,14 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { collectRelativeImportEdges } from './cycle-check.js'
+import {
+  directoryLoops,
+  type ImportEdge,
+  resolvedImportEdges,
+  type SourceFile,
+} from './directory-loops.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { isShippedPath } from './source-scan.js'
-import { resolveRelativeSource } from './value-import-closure.js'
 
 const SRC = join(REPO_ROOT, 'packages/server-core/src')
 
@@ -86,37 +90,12 @@ function layerOf(path: string): Layer | undefined {
   return DIRECTORY_LAYERS[parts[0] as string]
 }
 
-/** The directory name for a file under one, the file name for a root file. */
-const unitOf = (path: string): string => (path.includes('/') ? path.split('/')[0] : path) as string
-
-interface SourceFile {
-  /** Relative to `src/`, `/`-separated. */
-  readonly path: string
-  readonly text: string
-}
-
-interface Edge {
-  readonly from: string
-  readonly to: string
-  readonly typeOnly: boolean
-}
-
-function edgesOf(files: readonly SourceFile[]): readonly Edge[] {
-  const known = new Set(files.map(({ path }) => path))
-  return files.flatMap(({ path, text }) =>
-    collectRelativeImportEdges(path, text).flatMap(({ specifier, typeOnly }) => {
-      const target = resolveRelativeSource(path, specifier, (candidate) => known.has(candidate))
-      return target === null ? [] : [{ from: path, to: target, typeOnly }]
-    }),
-  )
-}
-
-const spell = ({ from, to, typeOnly }: Edge): string =>
+const spell = ({ from, to, typeOnly }: ImportEdge): string =>
   `${from} -> ${to}${typeOnly ? ' (type)' : ''}`
 
 /** Every import that reaches a layer above the importer's own. */
 function upwardEdges(files: readonly SourceFile[]): string[] {
-  const upward = edgesOf(files).filter((edge) => {
+  const upward = resolvedImportEdges(files).filter((edge) => {
     const from = layerOf(edge.from)
     const to = layerOf(edge.to)
     return from !== undefined && to !== undefined && rank(to) > rank(from)
@@ -125,30 +104,10 @@ function upwardEdges(files: readonly SourceFile[]): string[] {
 }
 
 /** Directory loops, each as the sorted names that form it. Root files are not directories. */
-function directoryCycles(files: readonly SourceFile[]): string[][] {
-  const graph = new Map<string, Set<string>>()
-  for (const { from, to } of edgesOf(files)) {
-    if (!from.includes('/') || !to.includes('/')) continue
-    const [a, b] = [unitOf(from), unitOf(to)]
-    if (!graph.has(a)) graph.set(a, new Set())
-    if (!graph.has(b)) graph.set(b, new Set())
-    if (a !== b) graph.get(a)?.add(b)
-  }
-  const reaches = (start: string, goal: string, seen = new Set<string>()): boolean =>
-    [...(graph.get(start) ?? [])].some((next) => {
-      if (next === goal) return true
-      if (seen.has(next)) return false
-      seen.add(next)
-      return reaches(next, goal, seen)
-    })
-  const looping = [...graph.keys()].filter((unit) => reaches(unit, unit))
-  const components = new Map<string, string[]>()
-  for (const unit of looping) {
-    const members = looping.filter((other) => reaches(unit, other) && reaches(other, unit)).sort()
-    components.set(members.join(','), members)
-  }
-  return [...components.values()]
-}
+const directoryCycles = (files: readonly SourceFile[]): string[][] =>
+  directoryLoops(resolvedImportEdges(files), (path) =>
+    path.includes('/') ? path.split('/')[0] : undefined,
+  ).map(({ members }) => [...members])
 
 const FILES: readonly SourceFile[] = walk(SRC, {
   include: (full) => /\.tsx?$/.test(full),
@@ -262,7 +221,7 @@ describe('server-core layer order', () => {
         `no production module is filed under ${layer}`,
       ).toBeGreaterThan(0)
     }
-    expect(edgesOf(FILES).length, 'no import resolved').toBeGreaterThan(100)
+    expect(resolvedImportEdges(FILES).length, 'no import resolved').toBeGreaterThan(100)
   })
 
   it('files every production module in a layer', () => {

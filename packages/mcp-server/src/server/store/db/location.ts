@@ -2,8 +2,9 @@ import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isLoopbackHost } from '../../../shared/loopback-host.js'
+import { DB_FILENAME } from '../../tenant/data-layout.js'
 
-export const DB_FILENAME = 'whiteboard.db'
+export { DB_FILENAME }
 export const DB_URL_ENV = 'WHITEBOARD_DATABASE_URL'
 export const DB_URL_AUTH_TOKEN_ENV = 'WHITEBOARD_DATABASE_AUTH_TOKEN'
 
