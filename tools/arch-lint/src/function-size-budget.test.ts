@@ -603,7 +603,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.
   'packages/server-core/src/create-server.ts#createServer': 223,
-  'packages/server-core/src/operations/restore-version.ts#restoreToTarget': 61,
   'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
   // The tool bodies left `execute` for module functions when the write
   // lock became the operation's own: `execute` takes the lock and calls
@@ -619,7 +618,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 135,
   'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 75,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
-  'packages/server-core/src/tools/version-restore.ts#createVersionRestoreTool': 64,
   // The one exported chunk-size constant is 18 characters longer than the local
   // `MAX_CHUNK_BYTES` it replaced, so the call sites that used to fit on one line
   // wrap. Absorbed here rather than shortened away, because the name's length is

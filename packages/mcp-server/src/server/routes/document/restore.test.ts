@@ -659,7 +659,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     expect(listBody.documents.find((c) => c.path === 'canvas-new')?.kind).toBe('markdown')
   })
 
-  it('restoring a markdown-kind canvas onto an existing spatial-kind target syncs the target kind to match the restored content', async () => {
+  it('restoring a markdown-kind document onto an existing spatial-kind target with overwrite answers 409 document_kind_mismatch and leaves the target spatial', async () => {
     const app = createRouter()
 
     await createTestDocument(serverDeps, {
@@ -697,13 +697,14 @@ describe('overwrite restore reconciles instead of replacing', () => {
         body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
       },
     )
-    expect(restoreRes.status).toBe(200)
+    expect(restoreRes.status).toBe(409)
+    expect(await restoreRes.json()).toMatchObject({ error: 'document_kind_mismatch' })
 
     const listRes = await app.request('/api/workspaces/session1/documents')
     const listBody = (await listRes.json()) as {
       documents: { path: string; kind: string }[]
     }
-    expect(listBody.documents.find((c) => c.path === 'canvas-b')?.kind).toBe('markdown')
+    expect(listBody.documents.find((c) => c.path === 'canvas-b')?.kind).toBe('spatial')
   })
 
   it('restoring into an existing target path WITHOUT overwrite returns 409 output_exists', async () => {

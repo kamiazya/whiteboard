@@ -18,6 +18,7 @@ import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
+import { DocumentKindMismatchError } from './errors.js'
 import { createVersionListTool } from './version-list.js'
 import {
   createVersionRestoreTool,
@@ -331,6 +332,35 @@ describe('wb_version_restore', () => {
     // Reconciled onto the SAME instance a client may hold, not swapped.
     expect(live.docs.get('notes/other')).toBe(occupant)
     expect(textOf(occupant)).toBe('original')
+  })
+
+  test('refuses an overwrite onto a document of the other kind, naming the target and leaving it as it was', async () => {
+    const { deps, versions, live } = await setup()
+    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+      auto: false,
+      label: 'checkpoint',
+    })
+    const occupant = textDoc('occupant')
+    live.docs.set('notes/other', occupant)
+    live.kinds.set(PATH, 'markdown')
+    live.kinds.set('notes/other', 'spatial')
+
+    const refusal = await createVersionRestoreTool(deps)
+      .execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        versionId: saved.id,
+        targetPath: 'notes/other',
+        overwrite: true,
+      })
+      .catch((error: unknown) => error)
+
+    expect(refusal).toBeInstanceOf(DocumentKindMismatchError)
+    expect((refusal as Error).message).toMatch(
+      /Document notes\/other is a spatial document\..*single text node/,
+    )
+    expect(textOf(occupant)).toBe('occupant')
+    expect(live.kinds.get('notes/other')).toBe('spatial')
   })
 
   test('refuses a subtree rollback from a version that is not workspace-scoped', async () => {
