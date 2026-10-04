@@ -252,6 +252,27 @@ describe('a change that cannot alter whether the image builds', () => {
     expect(inertChange('package.json', '{not json', '{"a":1}')).toBe(false)
   })
 
+  it('is NOT inert for a file added on one side, even when it parses to the other side', () => {
+    // `JSON.parse(null)` is `null`, so an absent side read as text would
+    // compare equal to an added file whose whole content is `null`.
+    expect(inertChange('package.json', null, 'null')).toBe(false)
+    expect(inertChange('package.json', 'null', null)).toBe(false)
+  })
+
+  it('is NOT inert when the document itself changes shape, with no key to blame', () => {
+    // The release-please manifest is the one file whose keys need not say
+    // `version`, so it is where a root-level difference could pass for one.
+    expect(inertChange('.release-please-manifest.json', '{".":"0.0.19"}', '"0.1.0"')).toBe(false)
+  })
+
+  it('is NOT inert when a script NAMED version changes', () => {
+    // The trail ends in `version` but runs through `scripts`, which decides
+    // what the build runs: one build-deciding key anywhere on it is enough.
+    const before = '{"version":"1.0.0","scripts":{"version":"changeset version"}}'
+    const after = '{"version":"1.0.0","scripts":{"version":"rm -rf dist"}}'
+    expect(inertChange('package.json', before, after)).toBe(false)
+  })
+
   it('lets the whole measured release diff skip the build', () => {
     const releaseDiff = [
       'package.json',
