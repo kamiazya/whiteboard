@@ -115,7 +115,7 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
 }
 
 /** Enough of a `BlobStore` for the evacuation a delete performs. */
-function inMemoryBlobStore(): BlobStore {
+function inMemoryBlobStore(): BlobStore & { size: () => number } {
   const blobs = new Map<string, Uint8Array>()
   const key = blobRefKey
   let next = 0
@@ -138,6 +138,7 @@ function inMemoryBlobStore(): BlobStore {
     async delete({ ref }) {
       blobs.delete(key(ref))
     },
+    size: () => blobs.size,
   }
 }
 
@@ -165,8 +166,10 @@ describe('LoroWorkspaceDocumentIndex pins', () => {
 describe('LoroWorkspaceDocumentIndex trash', () => {
   describeDocumentTrashConformance(async () => {
     const docs = inMemoryWorkspaceDocs()
+    const blobs = inMemoryBlobStore()
     return {
-      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
+      index: new LoroWorkspaceDocumentIndex(docs, blobs, docs),
+      evacuatedBlobCount: async () => blobs.size(),
       dispose: async () => {},
     }
   })

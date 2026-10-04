@@ -6,6 +6,13 @@ type TrashingIndex = DocumentIndex & DocumentTrash
 
 type MakeTrashingIndex = () => Promise<{
   index: TrashingIndex
+  /**
+   * How many evacuated documents the index's blob store still holds. REQUIRED
+   * and not optional: a seam an implementation may omit is skipped by exactly
+   * the implementation whose destruction promise needs checking. The suite
+   * only ever trashes documents, so every blob counted is an evacuation.
+   */
+  evacuatedBlobCount: () => Promise<number>
   dispose: () => Promise<void>
 }>
 
@@ -13,7 +20,9 @@ const WS = 'ws-trash-conformance'
 // A well-formed id the trash never held.
 const ABSENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-type WithIndex = (body: (index: TrashingIndex) => Promise<void>) => Promise<void>
+type WithIndex = (
+  body: (index: TrashingIndex, evacuatedBlobCount: () => Promise<number>) => Promise<void>,
+) => Promise<void>
 
 /** Creates a document and deletes it, answering the id the trash will hold. */
 async function trashed(index: TrashingIndex, path: string, workspaceId = WS): Promise<string> {
@@ -33,11 +42,11 @@ const trashIds = async (index: TrashingIndex, workspaceId = WS) =>
  */
 export function describeDocumentTrashConformance(makeIndex: MakeTrashingIndex): void {
   const withIndex: WithIndex = async (body) => {
-    const { index, dispose } = await makeIndex()
+    const { index, evacuatedBlobCount, dispose } = await makeIndex()
     try {
       await index.createWorkspace({ workspaceId: WS })
       await index.createWorkspace({ workspaceId: 'ws-other' })
-      await body(index)
+      await body(index, evacuatedBlobCount)
     } finally {
       await dispose()
     }
@@ -56,8 +65,55 @@ export function describeDocumentTrashConformance(makeIndex: MakeTrashingIndex): 
       })
     })
 
+    describeEvacuatedBytes(withIndex)
     describePurgeEffect(withIndex)
     describePurgeRefusals(withIndex)
+  })
+}
+
+/**
+ * The destruction promise is about BYTES, not rows: a delete-restore-delete
+ * cycle evacuates different bytes each time (a restored document is a new
+ * tree node), so a restore that kept the old blob would leave one readable
+ * export per cycle behind an empty Trash.
+ */
+function describeEvacuatedBytes(withIndex: WithIndex): void {
+  it('holds one evacuation per trashed document and none once it is restored', async () => {
+    await withIndex(async (index, evacuatedBlobCount) => {
+      const documentId = await trashed(index, 'a')
+      await expect(evacuatedBlobCount()).resolves.toBe(1)
+
+      await index.restoreDocument({ workspaceId: WS, documentId })
+
+      await expect(evacuatedBlobCount()).resolves.toBe(0)
+    })
+  })
+
+  it('leaves no evacuated bytes after delete, restore, delete, purge', async () => {
+    await withIndex(async (index, evacuatedBlobCount) => {
+      const documentId = await trashed(index, 'a')
+      await index.restoreDocument({ workspaceId: WS, documentId })
+      await index.deleteDocument({ workspaceId: WS, path: 'a' })
+      await expect(evacuatedBlobCount()).resolves.toBe(1)
+
+      await index.purgeTrashEntry({ workspaceId: WS, documentId })
+
+      await expect(evacuatedBlobCount()).resolves.toBe(0)
+    })
+  })
+
+  it('keeps the evacuation of a document that stays in the trash', async () => {
+    await withIndex(async (index, evacuatedBlobCount) => {
+      const kept = await trashed(index, 'a')
+      const restored = await trashed(index, 'b')
+
+      await index.restoreDocument({ workspaceId: WS, documentId: restored })
+
+      await expect(evacuatedBlobCount()).resolves.toBe(1)
+      await expect(
+        index.restoreDocument({ workspaceId: WS, documentId: kept }),
+      ).resolves.not.toBeNull()
+    })
   })
 }
 

@@ -39,6 +39,7 @@ import {
   chunkSnapshot,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   isStoredDocumentUnreadableError,
+  KeyedSerializer,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
@@ -132,7 +133,7 @@ export class LoroStore {
    * the daemon's, across processes — and the browser's real cross-tab story
    * is a `SharedWorker`, not a lock in each page.
    */
-  readonly #writes = new Map<string, Promise<unknown>>()
+  readonly #writes = new KeyedSerializer()
 
   /**
    * Which database to talk to. Production never passes it; a browser test
@@ -153,15 +154,7 @@ export class LoroStore {
   }
 
   #serialise<T>(documentId: string, body: () => Promise<T>): Promise<T> {
-    const previous = this.#writes.get(documentId) ?? Promise.resolve()
-    // `.then` on a settled-or-not predecessor, and `.catch` so one failed
-    // write does not poison every later one for the same document.
-    const next = previous.then(body, body)
-    this.#writes.set(
-      documentId,
-      next.catch(() => {}),
-    )
-    return next
+    return this.#writes.run(documentId, body)
   }
 
   /**
