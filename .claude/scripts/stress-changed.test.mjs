@@ -139,6 +139,54 @@ test('a base that does not resolve is an error, never an empty list', () => {
   assert.deepEqual(shim.calls(), [])
 })
 
+test('a dirty tracked test and an untracked test are planned, each labelled with where it came from', () => {
+  const repo = featureRepo()
+  const shim = pnpmShim()
+  writeFileSync(join(repo, 'a.test.ts'), 'edited, not committed\n')
+  writeFileSync(join(repo, 'new.test.ts'), 'brand new\n')
+  writeFileSync(join(repo, 'new-source.ts'), 'not a test\n')
+  const result = run(repo, ['--base=feature', '--dry-run'], { shim })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /^plan files: 2$/m)
+  assert.match(result.stdout, /^plan file: a\.test\.ts \(modified\)$/m)
+  assert.match(result.stdout, /^plan file: new\.test\.ts \(untracked\)$/m)
+  assert.doesNotMatch(result.stdout, /new-source/)
+})
+
+test('a file both committed and dirty is listed once with both sources', () => {
+  const repo = featureRepo()
+  writeFileSync(join(repo, 'a.test.ts'), 'edited again\n')
+  const result = run(repo, ['--base=main', '--dry-run'])
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /^plan files: 2$/m)
+  assert.match(result.stdout, /^plan file: a\.test\.ts \(committed, modified\)$/m)
+  assert.match(result.stdout, /^plan file: b\.browser\.test\.tsx \(committed\)$/m)
+})
+
+test('a run stresses the uncommitted tests, which is the state red-first work leaves', () => {
+  const repo = featureRepo()
+  const shim = pnpmShim()
+  writeFileSync(join(repo, 'new.test.ts'), 'brand new\n')
+  const result = run(repo, ['--base=feature', '--only=node'], { shim })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(shim.calls().length, 6)
+  assert.ok(shim.calls().every((call) => call.endsWith(' new.test.ts')))
+})
+
+test('--committed-only restores the committed-diff-only list', () => {
+  const repo = featureRepo()
+  const shim = pnpmShim()
+  writeFileSync(join(repo, 'new.test.ts'), 'brand new\n')
+  const result = run(repo, ['--base=feature', '--committed-only'], { shim })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /nothing to stress/)
+  assert.deepEqual(shim.calls(), [])
+})
+
 test('--help prints usage and exits 0; an unknown option or a bad --only value exits 2; nothing runs', () => {
   const repo = featureRepo()
   for (const args of [['--help'], ['--bogus'], ['--dryrun'], ['--only=jsdom'], ['--base='], ['extra']]) {

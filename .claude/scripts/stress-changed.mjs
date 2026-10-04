@@ -2,7 +2,7 @@
 // The local counterpart of CI's `stress-changed-tests` job: re-run every test file this branch
 // touched the way the job does, so a repeat-sensitive test is red here instead of on the PR.
 //
-//   node .claude/scripts/stress-changed.mjs [--base=<ref>] [--only=node|browser] [--dry-run]
+//   node .claude/scripts/stress-changed.mjs [--base=<ref>] [--only=node|browser] [--committed-only] [--dry-run]
 //
 // For each of the job's two legs (the browser projects, then everything else) it runs the changed
 // files FRESH_RUNS times, one vitest process each, and then once more with `--repeats=REPEATS` in a
@@ -10,8 +10,11 @@
 // catches state a test leaves behind for its own next repetition. Stops at the first failure and
 // exits 1, as the job's `bash -e` loop does.
 //
-// The file list is `git diff --name-only <base>...HEAD` over CHANGED_TEST_PATHSPEC, and the
-// commands are the job's own minus its `--shard`. `tools/arch-lint/src/stress-changed-parity.test.ts`
+// The file list is `git diff --name-only <base>...HEAD` over CHANGED_TEST_PATHSPEC, plus the
+// working tree's own changes (`git diff --name-only HEAD` and `git ls-files --others
+// --exclude-standard`) because red-first work leaves its tests uncommitted and a committed-only
+// list would answer "nothing to stress" about exactly them; `--committed-only` is the job's view.
+// Each file is printed with where it came from. The commands are the job's own minus its `--shard`. `tools/arch-lint/src/stress-changed-parity.test.ts`
 // reads ci.yml and fails when any of those drift. `--dry-run` prints that plan (`plan ...` lines)
 // without running anything; the base is not fetched, so `origin/main` is whatever was last fetched.
 //
@@ -40,9 +43,10 @@ const LEGS = [
 ]
 const FILES_PLACEHOLDER = '<files>'
 const USAGE = [
-  'usage: stress-changed.mjs [--base=<ref>] [--only=node|browser] [--dry-run]',
-  `  re-runs the test files changed against <ref> (default origin/main, not fetched): ${FRESH_RUNS} fresh`,
-  `  processes, then one with --repeats=${REPEATS}, per leg - the same as CI's stress-changed-tests job.`,
+  'usage: stress-changed.mjs [--base=<ref>] [--only=node|browser] [--committed-only] [--dry-run]',
+  `  re-runs the test files changed against <ref> (default origin/main, not fetched) and in the working`,
+  `  tree (modified or untracked): ${FRESH_RUNS} fresh processes, then one with --repeats=${REPEATS}, per leg -`,
+  "  the same as CI's stress-changed-tests job. --committed-only drops the working tree's files.",
   '  --dry-run prints the plan and runs nothing.',
 ].join('\n')
 
@@ -69,7 +73,7 @@ function main() {
     if (valued) options[valued[1]] = valued[2]
     else rest.push(arg)
   }
-  const { flags } = parseScriptArgs({ argv: rest, flags: ['--dry-run'], usage: USAGE })
+  const { flags } = parseScriptArgs({ argv: rest, flags: ['--dry-run', '--committed-only'], usage: USAGE })
   const refuse = (reason) => {
     process.stderr.write(`${reason}\n${USAGE}\n`)
     process.exit(2)
@@ -83,21 +87,40 @@ function main() {
 
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim()
   const diffArgs = ['diff', '--name-only', `${base}...HEAD`, '--', ...CHANGED_TEST_PATHSPEC]
-  let listed
+  const workingTreeArgs = [
+    ['diff', '--name-only', 'HEAD', '--', ...CHANGED_TEST_PATHSPEC],
+    ['ls-files', '--others', '--exclude-standard', '--', ...CHANGED_TEST_PATHSPEC],
+  ]
+  const list = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\n')
+  const sources = new Map()
+  const note = (file, source) => {
+    if (file !== '') sources.set(file, [...(sources.get(file) ?? []), source])
+  }
   try {
-    listed = execFileSync('git', diffArgs, { cwd: root, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] })
+    for (const file of list(diffArgs)) note(file, 'committed')
   } catch (error) {
     // An unresolvable base is an error, never "no files changed": an empty list stresses nothing
     // and reads as success.
     process.stderr.write(`cannot list changed test files against ${base}: ${String(error.stderr ?? error.message).trim()}\n`)
     process.exit(1)
   }
+  if (!flags.has('--committed-only')) {
+    try {
+      for (const file of list(workingTreeArgs[0])) note(file, 'modified')
+      for (const file of list(workingTreeArgs[1])) note(file, 'untracked')
+    } catch (error) {
+      process.stderr.write(`cannot list working-tree test files: ${String(error.stderr ?? error.message).trim()}\n`)
+      process.exit(1)
+    }
+  }
   // A file the diff DELETED has nothing to run.
-  const files = listed.split('\n').filter((file) => file !== '' && existsSync(join(root, file)))
+  const files = [...sources.keys()].filter((file) => existsSync(join(root, file))).sort()
 
   console.log(`plan base: ${base}`)
   console.log(`plan collect: ${commandLine(['git', ...diffArgs])}`)
+  if (!flags.has('--committed-only')) for (const args of workingTreeArgs) console.log(`plan collect: ${commandLine(['git', ...args])}`)
   console.log(`plan files: ${files.length}`)
+  for (const file of files) console.log(`plan file: ${file} (${sources.get(file).join(', ')})`)
   console.log(`plan fresh-runs: ${FRESH_RUNS}`)
   for (const leg of legs) {
     console.log(`plan ${leg.name} fresh: ${commandLine(['pnpm', ...vitestArgs(leg.project, { repeats: false }, [FILES_PLACEHOLDER])])}`)
@@ -105,7 +128,7 @@ function main() {
   }
   if (flags.has('--dry-run')) return
   if (files.length === 0) {
-    console.log(`no changed test files against ${base} - nothing to stress`)
+    console.log(`no changed test files against ${base}${flags.has('--committed-only') ? '' : ' or in the working tree'} - nothing to stress`)
     return
   }
 
