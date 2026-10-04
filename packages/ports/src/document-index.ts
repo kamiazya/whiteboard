@@ -86,8 +86,7 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
  * PERSISTS and SERVES them: the `workspaces` table carries a `segment`
  * column with a unique index (a collision throws
  * `WorkspaceSegmentTakenError`, below), and `workspaceSummarySchema` serves
- * both fields through the published `@kamiazya/whiteboard-mcp/api-contracts`
- * subpath.
+ * both fields through daemon-client's `api-contracts/document`.
  *
  * No `canonicalId` field: ADR-0019's canonical layer already IS
  * `workspaceId`. Its schema tightens from `workspaceIdSchema` to the
