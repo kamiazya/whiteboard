@@ -248,21 +248,27 @@ describe('headless-renderer', () => {
     expect(third.svg).toBe(first.svg)
   })
 
-  it('increasing padding does not shrink the resulting viewBox', async () => {
+  it('each extra pixel of padding adds a pixel on every side', async () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const canvas = rectCanvas()
-    const small = await renderSpatialCanvasToSvg(canvas, { padding: 0 })
-    const large = await renderSpatialCanvasToSvg(canvas, { padding: 50 })
     const extractViewBox = (svg: string) => {
       const match = svg.match(/viewBox="([^"]+)"/)
       if (!match) throw new Error('expected a viewBox attribute')
       const [, , w, h] = match[1].split(' ').map(Number)
       return { w, h }
     }
-    const smallBox = extractViewBox(small.svg)
-    const largeBox = extractViewBox(large.svg)
-    expect(largeBox.w).toBeGreaterThanOrEqual(smallBox.w)
-    expect(largeBox.h).toBeGreaterThanOrEqual(smallBox.h)
+    const none = extractViewBox((await renderSpatialCanvasToSvg(canvas, { padding: 0 })).svg)
+    const fifty = extractViewBox((await renderSpatialCanvasToSvg(canvas, { padding: 50 })).svg)
+    expect(fifty.w - none.w).toBe(100)
+    expect(fifty.h - none.h).toBe(100)
+  })
+
+  it('an export that names no padding is drawn with 10px around the content', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const canvas = rectCanvas()
+    const byDefault = await renderSpatialCanvasToSvg(canvas)
+    const explicit = await renderSpatialCanvasToSvg(canvas, { padding: 10 })
+    expect(byDefault.svg).toBe(explicit.svg)
   })
 
   it('shares one underlying build across concurrent first calls', async () => {
