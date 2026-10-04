@@ -488,8 +488,8 @@ describe('what the tool table costs to read', () => {
         // `$ref` is dearer than one inlined copy, so a tool holding the
         // record once pays for the dedup the repeat-heavy tools collect. The
         // table-wide figure is what the registration is judged on (-1,408
-        // wire, -16 visible); this row is where it is paid.
-        wireBytes: 19948,
+        // wire, -16 visible); this row is where it is paid. +174: facetsRaw described.
+        wireBytes: 20122,
         descriptionWords: 102,
         parameters: 4,
         undescribed: 3,
@@ -718,7 +718,8 @@ describe('what the tool table costs to read', () => {
         visibleBytes: 1547,
         // +23 wire: `destructiveHint: true` stated — its `subtree` mode deletes the
         // documents created since the version. Client-side only; visible bytes unmoved.
-        wireBytes: 2222,
+        // +182: the output's documentId is the written document's ULID, schema'd as one.
+        wireBytes: 2404,
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
@@ -1003,7 +1004,8 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183, the same bytes as visible; then +47, the two
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
       // Then +1,585, the same rows' visible bytes plus their output fields.
-      wireBytes: 131614,
+      // Then +356, wb_document_get's and wb_version_restore's rows.
+      wireBytes: 131970,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.
