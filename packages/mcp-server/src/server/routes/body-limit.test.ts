@@ -60,7 +60,8 @@ describe('limitBody and the request a later handler recognises', () => {
     app.post('/x', limitBody(100, 'Upload'), async (c) =>
       c.json({ same: c.req.raw === before, text: await c.req.text() }),
     )
-    const headers = declared === undefined ? {} : { 'content-length': String(declared) }
+    const headers: Record<string, string> =
+      declared === undefined ? {} : { 'content-length': String(declared) }
 
     const res = await app.request('/x', { method: 'POST', body: 'okay', headers })
 
