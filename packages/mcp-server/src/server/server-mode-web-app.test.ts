@@ -98,9 +98,14 @@ describe('mountServerModeWebApp', () => {
   })
 
   // A keeper run from source, with no web build, still answers a browser.
-  it('answers with the placeholder when the image carries no build', async () => {
+  it('answers with a placeholder that says the build carries no web app and where it comes from', async () => {
     const res = await app().request('/')
     expect(res.status).toBe(200)
-    expect(await res.text()).toContain('server mode')
+    const html = await res.text()
+    expect(html).toContain('carries no web app')
+    expect(html).toContain('apps/web')
+    expect(html).toContain('/api')
+    expect(html).toContain('/mcp')
+    expect(html).not.toContain('does not serve')
   })
 })

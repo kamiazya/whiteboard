@@ -4,7 +4,7 @@ import { createServer as createDocumentServer } from '@kamiazya/whiteboard-serve
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
+import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
@@ -271,6 +271,7 @@ export function createApp(options: AppOptions) {
   }
 
   const app = new Hono()
+  app.notFound(answerNotFound)
 
   // The config is judged before any other option is read, so a caller with
   // an invalid server-mode config is refused for that and nothing else.

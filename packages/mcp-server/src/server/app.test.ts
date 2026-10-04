@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core/api-errors'
 import {
   Client,
   LATEST_PROTOCOL_VERSION,
@@ -621,6 +622,30 @@ describe('createApp daemon mutation auth', () => {
       expect(bodyA.pid).toBeUndefined()
       expect(bodyA.instanceId).not.toBe(bodyB.instanceId)
     })
+  })
+
+  // A caller of /api parses the body of every refusal; Hono's own 404 is
+  // plain text, so an address or method nothing answers has to be turned
+  // into the same JSON shape every route refuses in.
+  it.each([
+    ['GET', '/api/nope'],
+    ['GET', '/api/v1/nope'],
+    ['POST', '/api/runtime/ping'],
+    ['DELETE', '/api/workspaces'],
+  ])('answers %s %s, which nothing routes, as a JSON not_found', async (method, path) => {
+    const app = createApp(createRuntimeOptions('secret'))
+    const res = await app.request(path, { method, headers: { Authorization: 'Bearer secret' } })
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Content-Type') ?? '').toContain('application/json')
+    const body: unknown = await res.json()
+    expect(apiErrorBodySchema.safeParse(body).success).toBe(true)
+    expect(body).toMatchObject({ error: 'not_found' })
+  })
+
+  it('keeps the plain 404 for a path outside /api, which a browser may be asking for', async () => {
+    const res = await createApp(createRuntimeOptions('secret')).request('/nope')
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Content-Type') ?? '').not.toContain('application/json')
   })
 
   // ADR-0050 decision 3: the hosted app reaches the daemon through the

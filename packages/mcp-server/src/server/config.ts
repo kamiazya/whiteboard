@@ -17,8 +17,8 @@ export { getDataDir, resetDataDirForTests, resolveDataDir, setDataDirForTests, W
 // middleware). It must not live in the shared layer, which daemon and CLI
 // files also import.
 //
-// The apps/web production build, copied here by its postbuild script.
-// Served as the canonical UI in local-daemon mode (ADR 0001, R3). Server-mode
-// serves a minimal inline placeholder instead (see app.ts) — it has no
-// token/session-acquisition flow apps/web's provider model can use.
+// The apps/web production build, copied here by its build script. Server mode
+// serves it from its own origin (ADR-0047), marked as a server keeper, and
+// falls back to a placeholder page only when the directory holds no build
+// (server-mode-web-app.ts). The local daemon serves no UI at all (ADR-0050).
 export const DIST_WEB_APP_DIR = resolve(WHITEBOARD_ROOT, 'dist/web-app')
