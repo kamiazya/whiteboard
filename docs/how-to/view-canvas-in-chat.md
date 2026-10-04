@@ -19,6 +19,10 @@ no need to switch to a browser tab to see what the agent drew.
   `canvas_view({ workspaceId, documentId, style: 'document' })` draws the theme the canvas names (or a theme id previews
   one) — the same `style` `wb_scene_render` takes, see [choose-a-theme](choose-a-theme.md).
   A theme's **paper** is drawn too, so the board does not sit on the chat's own background.
+- The board's **colour by intent**: when the workspace's `tags` document declares colours for
+  tag values (see [organize-with-tags](organize-with-tags.md)), the boxes and edges they colour are
+  sent already coloured, so the view shows the same colours and legend as `wb_scene_render` and the
+  web app. The server reads the library, since the widget has no store to read it from.
 - Its **file references resolved**: a node pointing at a markdown document in the
   same workspace shows that document's prose, and every reference is labelled with
   its readable name rather than its raw id. The widget has no store of its own, so

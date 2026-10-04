@@ -192,7 +192,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The component itself: a `forwardRef` function expression, the largest
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1632,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1641,
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 89,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 53,

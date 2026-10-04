@@ -558,7 +558,7 @@ function DocumentPageBody({
       {model.slots.replaceEditor ?? (
         <RestoreLock restoring={sync.restoreInProgress} label={sync.restoreLabel}>
           {preview ? (
-            <VersionPreview past={preview.past} theme={resolvedTheme} />
+            <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}

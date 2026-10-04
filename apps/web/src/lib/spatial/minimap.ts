@@ -7,9 +7,13 @@
  * into minimap space.
  */
 
-import type { SpatialPalette, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type SpatialPalette,
+  type SpatialPresetKey,
+  withDeclaredColours,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
+import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveNodeSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import type { NodeBox } from './geometry.js'
 
@@ -131,7 +135,10 @@ export function unprojectPoint(
  * Node boxes for the minimap overview, with each authored colour resolved to
  * the accent the scene already uses for it. A preset key resolves through
  * the given palette; a hex passes through; an unstyled node carries no
- * colour and the overview falls back to its muted default.
+ * colour and the overview falls back to its muted default. A node whose tag
+ * the workspace's library colours is drawn in that colour — the board's own
+ * colour by intent, which the layout applies to the canvas and the overview
+ * reads from the nodes.
  *
  * Looks up each box's node by id via a `Map` built once, rather than
  * `nodes.find` per box (O(n) per lookup, O(n^2) over the whole canvas) —
@@ -143,8 +150,10 @@ export function buildMinimapNodes(
   nodes: SpatialCanvas['nodes'],
   boxes: readonly NodeBox[],
   palette: SpatialPalette,
+  tagLibrary?: TagLibrary,
 ): readonly (MinimapBox & { readonly color?: string; readonly symbol?: VisualSymbolFacet })[] {
-  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const drawn = withDeclaredColours({ nodes: [...nodes], edges: [] }, tagLibrary).nodes
+  const byId = new Map(drawn.map((node) => [node.id, node]))
   const colorOf = (id: string): string | undefined => {
     const color = byId.get(id)?.color
     if (color === undefined) return undefined

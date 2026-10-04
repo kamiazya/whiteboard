@@ -2,6 +2,7 @@
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import {
@@ -151,6 +152,42 @@ describe('buildMinimapNodes', () => {
     expect(buildMinimapNodes(n, boxes, SPATIAL_LIGHT_PALETTE)).toEqual([
       { x: 0, y: 0, width: 100, height: 50, color: SPATIAL_LIGHT_PALETTE.presets['3'].stroke },
     ])
+  })
+
+  describe('with the workspace tag library', () => {
+    const library: TagLibrary = {
+      health: { values: { ok: { color: '4' }, failing: { color: '1' } } },
+    }
+    const tagged = nodes([
+      textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a', tags: ['health:ok'] }),
+      textNode({
+        id: 'b',
+        x: 20,
+        y: 0,
+        width: 10,
+        height: 10,
+        text: 'b',
+        tags: ['health:failing'],
+        color: '#00ff00',
+      }),
+      textNode({ id: 'c', x: 40, y: 0, width: 10, height: 10, text: 'c', tags: ['plain'] }),
+    ])
+    const boxes = indexNodeBoxes({ nodes: tagged, edges: [] })
+
+    it('draws a tagged node in the colour the library declares, as the board does', () => {
+      const colours = buildMinimapNodes(tagged, boxes, SPATIAL_LIGHT_PALETTE, library).map(
+        (entry) => entry.color,
+      )
+      // An authored colour wins over the declared one, and a tag the library
+      // does not colour leaves the node on the overview's muted default.
+      expect(colours).toEqual([SPATIAL_LIGHT_PALETTE.presets['4'].stroke, '#00ff00', undefined])
+    })
+
+    it('draws the same nodes by their own colour alone when no library is given', () => {
+      expect(
+        buildMinimapNodes(tagged, boxes, SPATIAL_LIGHT_PALETTE).map((entry) => entry.color),
+      ).toEqual([undefined, '#00ff00', undefined])
+    })
   })
 
   it('leaves an unstyled node with no color', () => {

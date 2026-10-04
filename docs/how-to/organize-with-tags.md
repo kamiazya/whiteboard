@@ -93,10 +93,11 @@ What the library changes:
   uses, on notes, boards, boxes and edges alike.
 - **Colour by intent.** A box or an edge that carries a value with a
   declared colour, and has no colour of its own, is drawn in that colour —
-  on the board, in an SVG or PNG export, and by `wb_scene_render` — so the
-  legend lists the key because the library said so rather than because
-  someone coloured every box by hand. A colour set on the box itself always
-  wins, and a box carrying two declared colours under two keys gets
+  on the board, in the minimap, in a past version's preview, in an SVG or
+  PNG export, by `wb_scene_render`, and in the inline view `canvas_view`
+  shows in chat — so the legend lists the key because the library said so
+  rather than because someone coloured every box by hand. A colour set on the
+  box itself always wins, and a box carrying two declared colours under two keys gets
   neither. The board reads the library when it opens; after editing the
   `tags` document, reopen the board to see the change.
 - **The declaration is discoverable.** `wb_facet_list` with a

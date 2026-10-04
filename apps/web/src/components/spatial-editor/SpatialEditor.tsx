@@ -555,7 +555,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       selectionMembers,
       selectionBox,
       minimapNodes,
-    } = useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    } = useSceneProjection({
+      scene,
+      bounds,
+      boxes,
+      canvas,
+      theme,
+      selectedId,
+      extraIds,
+      tagLibrary,
+    })
     /**
      * What the last committed stroke left behind, for the next press to be
      * judged against. A ref rather than state: nothing renders from it, and
