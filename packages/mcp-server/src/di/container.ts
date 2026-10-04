@@ -8,10 +8,10 @@ import {
   type BlobStore,
   type DocumentIndex,
   type DocumentStore,
+  hasDocumentTrash,
   TOKENS,
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import type { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { Container, type ContainerModule } from 'inversify'
 import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
@@ -75,10 +75,7 @@ export function resolveServerDeps(
   const blobStore: BlobStore = container.get(TOKENS.BlobStore)
   const documentIndex: DocumentIndex = container.get(TOKENS.DocumentIndex)
   const scope = storeScopeOf(container)
-  const trashCapable =
-    'listTrash' in documentIndex && 'restoreDocument' in documentIndex
-      ? (documentIndex as DocumentIndex & LoroWorkspaceDocumentIndex)
-      : null
+  const trashCapable = hasDocumentTrash(documentIndex) ? documentIndex : null
   return {
     documentStore,
     blobStore,
@@ -89,7 +86,7 @@ export function resolveServerDeps(
     // asset table on every write.
     facetRegistry: createFacetRegistry(bundledPlugins),
     // The trash seam, present exactly when the bound index is the tree-backed
-    // one (listTrash/restoreDocument are its capability, not the port's).
+    // one (`DocumentTrash` is its capability, not the port's).
     // Structural rather than instanceof: the binding is this composition
     // root's own choice, and vitest's module-graph split makes instanceof
     // lie across realms (see ports' isWorkspaceNotFoundError).
@@ -105,6 +102,8 @@ export function resolveServerDeps(
               })),
             restore: (input: { workspaceId: string; documentId: string }) =>
               trashCapable.restoreDocument(input),
+            purge: (input: { workspaceId: string; documentId: string }) =>
+              trashCapable.purgeTrashEntry(input),
           },
         }),
     // The real font metrics, so every tool that lays a scene out measures

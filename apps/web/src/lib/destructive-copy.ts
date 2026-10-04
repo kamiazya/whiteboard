@@ -38,6 +38,7 @@ export type DestructiveActionId =
   | 'remove-member'
   | 'delete-person'
   | 'delete-replica-copy'
+  | 'purge-trash-entry'
 
 /**
  * Built from the noun for the thing being destroyed, so a note reads "The
@@ -100,4 +101,12 @@ export const DESTRUCTIVE_COPY = {
   // workspace's own name.
   'delete-replica-copy': (name) =>
     `This device's copy of ${name} is removed. Anything in it that has not reached the daemon yet is lost; the daemon keeps the workspace, so a copy can be pulled again.`,
+
+  // The one confirmation with no way back: the document leaves the Trash and
+  // the bytes the Trash kept for it are destroyed, so a restore is no longer
+  // possible. Says "cannot be undone" outright, which the other delete
+  // sentences must not (they move to the Trash). The subject is the
+  // document's path, as the Trash row shows it.
+  'purge-trash-entry': (name) =>
+    `Delete "${name}" permanently? It leaves the Trash and cannot be restored. This cannot be undone.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>

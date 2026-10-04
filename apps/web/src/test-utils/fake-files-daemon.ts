@@ -127,6 +127,13 @@ function restore(state: State, documentId: string): Response {
   return jsonResponse({ restored: { documentId: gone.id, path: gone.path } })
 }
 
+function purge(state: State, documentId: string): Response {
+  const gone = state.trash.find((row) => row.id === documentId)
+  if (gone === undefined) return notFound()
+  state.trash = state.trash.filter((row) => row !== gone)
+  return jsonResponse({ purged: { documentId: gone.id } })
+}
+
 const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = [
   {
     method: 'GET',
@@ -215,6 +222,11 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
     method: 'POST',
     pattern: /\/trash\/([^/]+)\/restore$/,
     handle: (state, match) => restore(state, match[1] ?? ''),
+  },
+  {
+    method: 'DELETE',
+    pattern: /\/trash\/([^/]+)$/,
+    handle: (state, match) => purge(state, match[1] ?? ''),
   },
 ]
 

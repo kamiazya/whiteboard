@@ -100,6 +100,12 @@ export interface WorkspaceFilesSource {
   /** Bring one evacuated document back under the SAME documentId. */
   restoreFromTrash?(documentId: string): Promise<void>
   /**
+   * Destroy one trashed document for good. Rejects when the trash holds no
+   * such entry — the daemon answers 404, the browser keeper's index answers
+   * `false` — so the two keepers fail alike and the section can say so.
+   */
+  purgeFromTrash?(documentId: string): Promise<void>
+  /**
    * The workspace's tag vocabulary in use, counted by what carries it
    * (ADR-0040 decision 5) — what the filter strip groups and counts. Both
    * keepers answer it; OPTIONAL only so a test double need not, in which

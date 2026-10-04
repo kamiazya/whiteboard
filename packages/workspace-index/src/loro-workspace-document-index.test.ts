@@ -18,6 +18,7 @@ import {
 import {
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
+  describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -137,6 +138,16 @@ describe('LoroWorkspaceDocumentIndex', () => {
 
 describe('LoroWorkspaceDocumentIndex pins', () => {
   describeDocumentPinsConformance(async () => {
+    const docs = inMemoryWorkspaceDocs()
+    return {
+      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
+      dispose: async () => {},
+    }
+  })
+})
+
+describe('LoroWorkspaceDocumentIndex trash', () => {
+  describeDocumentTrashConformance(async () => {
     const docs = inMemoryWorkspaceDocs()
     return {
       index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),

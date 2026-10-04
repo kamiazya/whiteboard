@@ -16,8 +16,8 @@ import { PeekDialog } from './PeekDialog.js'
 import { RecentLane } from './RecentLane.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SelectionBar } from './SelectionBar.js'
+import { SourceTrashSection } from './SourceTrashSection.js'
 import { TagStrip } from './TagStrip.js'
-import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { useDeviceMemory } from './use-device-memory.js'
@@ -780,21 +780,18 @@ export function WorkspaceFilesPanel({
           mounted it keeps showing that workspace's rows under the new
           address until its own read answers — measured with a trash read
           that never answers, which is the window this closes. */}
-      {documents !== null &&
-        source.listTrash !== undefined &&
-        source.restoreFromTrash !== undefined && (
-          <TrashSection
-            listTrash={source.listTrash.bind(source)}
-            restoreFromTrash={source.restoreFromTrash.bind(source)}
-            revision={revision}
-            onRestored={() => {
-              // A restore that landed but whose refresh failed leaves the list
-              // stale, not the restore undone — same rule as every other write
-              // here, so the trash section never invents its own error shape.
-              void readList().then(setDocuments, () => undefined)
-            }}
-          />
-        )}
+      {documents !== null && (
+        <SourceTrashSection
+          source={source}
+          revision={revision}
+          onRestored={() => {
+            // A restore that landed but whose refresh failed leaves the list
+            // stale, not the restore undone — same rule as every other write
+            // here, so the trash section never invents its own error shape.
+            void readList().then(setDocuments, () => undefined)
+          }}
+        />
+      )}
       <PeekDialog
         document={peek}
         loadRender={loadRender}

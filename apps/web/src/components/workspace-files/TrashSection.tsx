@@ -1,5 +1,6 @@
 /**
- * What deletes evacuated, restorable in place.
+ * What deletes evacuated, restorable in place — or destroyed for good, after
+ * a confirmation, when the source can.
  *
  * Rendered only when there is something in it: an empty trash is silence,
  * not an empty box — the section exists for the moment someone deleted a
@@ -9,11 +10,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { WorkspaceCapacityReachedError } from '../../lib/browser-keeper-capacity.js'
 import type { TrashRow } from '../../lib/files-source.js'
-import { formatRelative } from './format-relative.js'
+import { TrashRowItem } from './TrashRowItem.js'
 
 export interface TrashSectionProps {
   listTrash: () => Promise<readonly TrashRow[]>
   restoreFromTrash: (documentId: string) => Promise<void>
+  /**
+   * Destroy one entry for good. Optional like the rest of the trash seam: a
+   * source that cannot omits the action rather than offering it.
+   */
+  purgeFromTrash?: ((documentId: string) => Promise<void>) | undefined
   /** The document list above holds a restored document now — re-read it. */
   onRestored: () => void
   /** External writes (a delete just landed) — re-read the trash. */
@@ -31,6 +37,7 @@ function restoreFailureMessage(err: unknown): string {
 export function TrashSection({
   listTrash,
   restoreFromTrash,
+  purgeFromTrash,
   onRestored,
   revision,
 }: TrashSectionProps) {
@@ -89,22 +96,14 @@ export function TrashSection({
       )}
       <ul className="flex flex-col gap-1 pt-1">
         {rows.map((row) => (
-          <li key={row.documentId} className="flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate" title={row.path}>
-              {row.path}
-              <span className="text-muted-foreground pl-2 text-xs">
-                deleted {formatRelative(new Date(row.deletedAt).toISOString())}
-              </span>
-            </span>
-            <button
-              type="button"
-              disabled={busy === row.documentId}
-              onClick={() => void restore(row.documentId)}
-              className="text-muted-foreground hover:text-foreground shrink-0 rounded border px-2 py-0.5 text-xs"
-            >
-              Restore
-            </button>
-          </li>
+          <TrashRowItem
+            key={row.documentId}
+            row={row}
+            busy={busy === row.documentId}
+            onRestore={() => void restore(row.documentId)}
+            purge={purgeFromTrash}
+            onPurgeSettled={reload}
+          />
         ))}
       </ul>
     </details>

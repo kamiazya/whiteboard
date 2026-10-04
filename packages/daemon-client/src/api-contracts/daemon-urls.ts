@@ -85,6 +85,11 @@ export function trashApiUrl(workspaceId: string): string {
   return `${workspaceApiUrl(workspaceId)}/trash`
 }
 
+/** One trash entry; DELETE destroys it permanently. */
+export function trashEntryApiUrl(workspaceId: string, documentId: string): string {
+  return `${trashApiUrl(workspaceId)}/${enc(documentId)}`
+}
+
 export function trashRestoreApiUrl(workspaceId: string, documentId: string): string {
   return `${trashApiUrl(workspaceId)}/${enc(documentId)}/restore`
 }

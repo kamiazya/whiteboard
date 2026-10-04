@@ -8,6 +8,7 @@ import {
   getWorkspaceNames,
   listDocuments,
   listTrash,
+  purgeTrashEntry,
   renameDocumentPath,
   restoreFromTrash,
   searchWorkspaceDocuments,
@@ -16,6 +17,7 @@ import {
 } from './daemon-api-client.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
+  type DocumentSearchHit,
   type LoadedMarkdown,
   type TrashRow,
   type WorkspaceFilesSource,
@@ -142,6 +144,26 @@ export interface DaemonFilesSource extends WorkspaceFilesSource {
   }>
 }
 
+/**
+ * The daemon's search hit as the seam's result: optional fields are carried
+ * only when present, so a hit never reads as one with an `undefined` rank.
+ */
+function searchResultOf(
+  hit: Awaited<ReturnType<typeof searchWorkspaceDocuments>>['results'][number],
+): DocumentSearchHit {
+  return {
+    document: {
+      documentId: hit.documentId,
+      path: hit.path,
+      ...(hit.name === undefined ? {} : { name: hit.name }),
+      ...(hit.kind === undefined ? {} : { kind: hit.kind }),
+    },
+    contexts: hit.contexts,
+    ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
+    ...(hit.semanticRank === undefined ? {} : { semanticRank: hit.semanticRank }),
+  }
+}
+
 export function createDaemonFilesSource(
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
@@ -195,17 +217,7 @@ export function createDaemonFilesSource(
         query,
         limit,
       )
-      return res.results.map((hit) => ({
-        document: {
-          documentId: hit.documentId,
-          path: hit.path,
-          ...(hit.name === undefined ? {} : { name: hit.name }),
-          ...(hit.kind === undefined ? {} : { kind: hit.kind }),
-        },
-        contexts: hit.contexts,
-        ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
-        ...(hit.semanticRank === undefined ? {} : { semanticRank: hit.semanticRank }),
-      }))
+      return res.results.map(searchResultOf)
     },
 
     setDocumentName: (entry, name) =>
@@ -234,5 +246,8 @@ export function createDaemonFilesSource(
 
     restoreFromTrash: (documentId: string) =>
       afterWrite(restoreFromTrash(daemonFetch, daemonBaseUrl, workspaceId, documentId), true),
+
+    purgeFromTrash: (documentId: string) =>
+      afterWrite(purgeTrashEntry(daemonFetch, daemonBaseUrl, workspaceId, documentId), true),
   }
 }

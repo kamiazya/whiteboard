@@ -34,6 +34,8 @@ import {
   listFontsResponseSchema,
   listTrashResponseSchema,
   listWorkspacesResponseSchema,
+  type PurgeTrashEntryResponse,
+  purgeTrashEntryResponseSchema,
   type RenameDocumentPathRequest,
   type RenameDocumentPathResponse,
   type RenameWorkspaceRequest,
@@ -44,6 +46,7 @@ import {
   type setNameRequestSchema,
   type setPinnedRequestSchema,
   trashApiUrl,
+  trashEntryApiUrl,
   trashRestoreApiUrl,
   type UpdateDocumentResponse,
   updateDocumentResponseSchema,
@@ -321,6 +324,20 @@ export function restoreFromTrash(
     `${daemonBaseUrl}${trashRestoreApiUrl(workspaceId, documentId)}`,
     restoreTrashResponseSchema,
     { method: 'POST' },
+  )
+}
+
+export function purgeTrashEntry(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  documentId: string,
+): Promise<PurgeTrashEntryResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${trashEntryApiUrl(workspaceId, documentId)}`,
+    purgeTrashEntryResponseSchema,
+    { method: 'DELETE' },
   )
 }
 

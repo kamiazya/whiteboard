@@ -209,8 +209,10 @@ async function collectFromRecord(
 
 /**
  * What a deleted document still points at. Delete evacuates a document into
- * the trash, which keeps no retention, and a restore brings it back under the
- * same id: a file only a trashed document names is not dangling.
+ * the trash, which expires nothing on its own, and a restore brings it back
+ * under the same id: a file only a trashed document names is not dangling.
+ * A permanent delete removes the trash row, which is what ends that claim —
+ * the next pass finds no entry to read.
  *
  * A trash row whose bytes are gone is stepped over — restore answers "nothing
  * restorable" for it, so there is nothing for its images to be kept for. Bytes

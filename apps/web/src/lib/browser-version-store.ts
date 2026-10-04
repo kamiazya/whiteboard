@@ -310,3 +310,27 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),
   })
 }
+
+/**
+ * Removes every saved version of one document — what a permanent delete from
+ * the Trash owes the history that was kept so a restore could rejoin it.
+ *
+ * A function over the database rather than a method of the store: it needs no
+ * placement (the document is gone, so nothing resolves its path) and no
+ * workspace record, only the `[workspaceId, documentId]` the rows are keyed by.
+ */
+export async function deleteVersionRowsOfDocument(
+  workspaceId: string,
+  documentId: string,
+  dbName?: string,
+): Promise<void> {
+  await inTransaction(dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
+    const store = tx.objectStore(VERSIONS_STORE)
+    const ids = await request(
+      store
+        .index(VERSIONS_BY_DOCUMENT_INDEX)
+        .getAllKeys(IDBKeyRange.only([workspaceId, documentId])),
+    )
+    for (const id of ids) await request(store.delete(id))
+  })
+}

@@ -527,7 +527,9 @@ volume has the correct ownership if you pre-populate it.
 ### Reclaiming unreferenced uploads
 
 Once a day the server deletes uploaded images that no live document, trashed
-document or saved version points at any more. Two settings govern it, both in
+document or saved version points at any more. A document deleted permanently
+from the Trash stops counting, so the images only it used go with the next
+pass; while it sits in the Trash, its images are kept. Two settings govern it, both in
 [Configuration](../reference/configuration.md):
 `WHITEBOARD_FILE_GC_INTERVAL_MS` (how often, `0` to switch it off) and
 `WHITEBOARD_FILE_GC_GRACE_MS` (how old an unreferenced file must be — this is

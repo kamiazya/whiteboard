@@ -159,6 +159,11 @@ export const restoreTrashResponseSchema = z.object({
   }),
 })
 
+// DELETE /api/workspaces/:workspaceId/trash/:documentId — what was destroyed.
+export const purgeTrashEntryResponseSchema = z.object({
+  purged: z.object({ documentId: z.string().min(1) }),
+})
+
 export const deleteDocumentResponseSchema = z.object({
   ok: z.literal(true),
 })
@@ -332,6 +337,7 @@ export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema
 export type TrashEntrySummary = z.infer<typeof trashEntrySummarySchema>
 export type ListTrashResponse = z.infer<typeof listTrashResponseSchema>
 export type RestoreTrashResponse = z.infer<typeof restoreTrashResponseSchema>
+export type PurgeTrashEntryResponse = z.infer<typeof purgeTrashEntryResponseSchema>
 export type RenameDocumentPathRequest = z.infer<typeof renameDocumentPathRequestSchema>
 export type RenameDocumentPathResponse = z.infer<typeof renameDocumentPathResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>

@@ -18,7 +18,7 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { type BlobStore, blobRefKey } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
@@ -235,5 +235,81 @@ describe('restoring a document', () => {
     expect((await index.listTrash({ workspaceId: WS })).map((entry) => entry.documentId)).toEqual([
       documentId,
     ])
+  })
+})
+
+describe('purging a trashed document', () => {
+  let blobs: ReturnType<typeof inMemoryBlobStore>
+  let docs: ReturnType<typeof inMemoryWorkspaceDocs>
+  let index: LoroWorkspaceDocumentIndex
+
+  beforeEach(async () => {
+    blobs = inMemoryBlobStore()
+    docs = inMemoryWorkspaceDocs()
+    index = new LoroWorkspaceDocumentIndex(docs, blobs, {
+      listWorkspaces: async () => [],
+      renameWorkspace: notRenamed,
+    })
+    await index.createWorkspace({ workspaceId: WS })
+  })
+
+  async function createAndDelete(path: string): Promise<string> {
+    const { documentId } = await index.createDocument({ workspaceId: WS, path, kind: 'markdown' })
+    await index.deleteDocument({ workspaceId: WS, path })
+    return documentId
+  }
+
+  it('destroys the evacuated bytes, not only the row that points at them', async () => {
+    const documentId = await createAndDelete('design')
+    const [row] = await index.listTrash({ workspaceId: WS })
+    if (row === undefined) throw new Error('expected a trash row')
+    expect(blobs.size()).toBe(1)
+
+    await index.purgeTrashEntry({ workspaceId: WS, documentId })
+
+    expect(blobs.size()).toBe(0)
+    expect(await blobs.has({ ref: row.blob })).toEqual({ exists: false })
+  })
+
+  it('keeps the bytes another trash row still names', async () => {
+    const documentId = await createAndDelete('design')
+    const other = await createAndDelete('notes')
+    const [row] = (await index.listTrash({ workspaceId: WS })).filter(
+      (entry) => entry.documentId === documentId,
+    )
+    if (row === undefined) throw new Error('expected a trash row')
+    // A second row naming the same blob, as a replica's copy of one document would.
+    recordTrashEntry(docs.peek(WS), { ...row, documentId: other })
+
+    await index.purgeTrashEntry({ workspaceId: WS, documentId })
+
+    expect(await blobs.has({ ref: row.blob })).toEqual({ exists: true })
+  })
+
+  it('removes a row whose bytes are already gone, the one way to clear it', async () => {
+    const documentId = await createAndDelete('design')
+    const [row] = await index.listTrash({ workspaceId: WS })
+    if (row === undefined) throw new Error('expected a trash row')
+    await blobs.delete({ ref: row.blob })
+
+    expect(await index.purgeTrashEntry({ workspaceId: WS, documentId })).toBe(true)
+
+    expect(await index.listTrash({ workspaceId: WS })).toEqual([])
+  })
+
+  it('keeps the row, so a retry can finish, when destroying the bytes fails', async () => {
+    const documentId = await createAndDelete('design')
+    const failing = vi.spyOn(blobs, 'delete').mockRejectedValueOnce(new Error('disk gone'))
+
+    await expect(index.purgeTrashEntry({ workspaceId: WS, documentId })).rejects.toThrow(
+      'disk gone',
+    )
+    expect((await index.listTrash({ workspaceId: WS })).map((e) => e.documentId)).toEqual([
+      documentId,
+    ])
+
+    failing.mockRestore()
+    expect(await index.purgeTrashEntry({ workspaceId: WS, documentId })).toBe(true)
+    expect(blobs.size()).toBe(0)
   })
 })

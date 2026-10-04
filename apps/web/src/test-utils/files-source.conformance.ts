@@ -330,6 +330,28 @@ function trashContract(factory: FilesSourceFactory): void {
       const source = await factory(trashed)
       await expect(source.restoreFromTrash?.('never-existed')).rejects.toThrow()
     })
+
+    it('purges a trashed document for good: off the trash, and not restorable', async () => {
+      const source = await factory(trashed)
+      const [row] = (await source.listTrash?.()) ?? []
+
+      await source.purgeFromTrash?.(row?.documentId ?? '')
+
+      expect(await source.listTrash?.()).toEqual([])
+      await expect(source.restoreFromTrash?.(row?.documentId ?? '')).rejects.toThrow()
+      expect((await source.listDocuments()).map((entry) => entry.path)).not.toContain('old/plan')
+    })
+
+    it('refuses to purge a document that is not in the trash, and keeps a live one', async () => {
+      const source = await factory({ ...trashed, documents: [{ path: 'live', kind: 'markdown' }] })
+      const live = (await source.listDocuments()).find((entry) => entry.path === 'live')
+
+      await expect(source.purgeFromTrash?.('never-existed')).rejects.toThrow()
+      await expect(source.purgeFromTrash?.(live?.documentId ?? '')).rejects.toThrow()
+
+      expect((await source.listDocuments()).map((entry) => entry.path)).toContain('live')
+      expect(await source.listTrash?.()).toHaveLength(1)
+    })
   })
 }
 

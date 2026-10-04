@@ -180,11 +180,13 @@ describe('BrowserIndexPage', () => {
     const indexWithTrash = store.index as typeof store.index & {
       listTrash?: () => Promise<{ documentId: string; path: string; deletedAt: number }[]>
       restoreDocument?: (input: unknown) => Promise<null>
+      purgeTrashEntry?: (input: unknown) => Promise<boolean>
     }
     indexWithTrash.listTrash = async () => [
       { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'gone', deletedAt: 1_700_000 },
     ]
     indexWithTrash.restoreDocument = async () => null
+    indexWithTrash.purgeTrashEntry = async () => false
     renderPage(store)
 
     await screen.findByTestId('trash-section')
@@ -196,9 +198,11 @@ describe('BrowserIndexPage', () => {
     const indexWithTrash = store.index as typeof store.index & {
       listTrash?: () => Promise<{ documentId: string; path: string; deletedAt: number }[]>
       restoreDocument?: (input: unknown) => Promise<null>
+      purgeTrashEntry?: (input: unknown) => Promise<boolean>
     }
     indexWithTrash.listTrash = async () => []
     indexWithTrash.restoreDocument = async () => null
+    indexWithTrash.purgeTrashEntry = async () => false
     renderPage(store)
 
     await screen.findByText('What will you make first?')

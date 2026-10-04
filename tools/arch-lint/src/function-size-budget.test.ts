@@ -538,7 +538,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // workspace record rather than a loop over documents.
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 54,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 76,
-  'packages/mcp-server/src/server/routes/document/trash.ts#createTrashRouter': 68,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 99,
   'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 105,
   // The workspace list filters rows the caller is not admitted to (ADR-0041).

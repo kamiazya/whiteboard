@@ -22,7 +22,9 @@ import {
 } from '@kamiazya/whiteboard-plugin-visual'
 import {
   type DocumentIndex,
+  type DocumentTrash,
   hasDocumentPins,
+  hasDocumentTrash,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
@@ -201,9 +203,9 @@ function pinMembers(index: DocumentIndex): Pick<WorkspaceFilesSource, 'setPinned
  */
 function trashMembers(
   index: DocumentIndex,
-): Pick<WorkspaceFilesSource, 'listTrash' | 'restoreFromTrash'> {
-  if (!('listTrash' in index && 'restoreDocument' in index)) return {}
-  const folding = index as FoldingBrowserIndex
+): Pick<WorkspaceFilesSource, 'listTrash' | 'restoreFromTrash' | 'purgeFromTrash'> {
+  if (!hasDocumentTrash(index)) return {}
+  const folding: DocumentTrash = index
   return {
     async listTrash() {
       const rows = await folding.listTrash({ workspaceId: getBrowserWorkspaceId() })
@@ -225,6 +227,15 @@ function trashMembers(
       if (restored === null) {
         throw new Error(`Nothing restorable for "${documentId}"`)
       }
+    },
+    async purgeFromTrash(documentId) {
+      // false means the trash held no such entry; rejecting is what the
+      // daemon's 404 does, so both keepers fail alike.
+      const purged = await folding.purgeTrashEntry({
+        workspaceId: getBrowserWorkspaceId(),
+        documentId,
+      })
+      if (!purged) throw new Error(`Nothing in the trash for "${documentId}"`)
     },
   }
 }

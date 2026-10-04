@@ -24,6 +24,7 @@ import {
   type DocumentEntry,
   type DocumentIndex,
   type DocumentPins,
+  type DocumentTrash,
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
@@ -41,6 +42,7 @@ import {
   type KeeperCapacity,
   WorkspaceCapacityReachedError,
 } from './browser-keeper-capacity.js'
+import { deleteVersionRowsOfDocument } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -53,7 +55,7 @@ import {
 
 const log = getAppLogger('folding-browser-index')
 
-export class FoldingBrowserIndex implements DocumentIndex, DocumentPins {
+export class FoldingBrowserIndex implements DocumentIndex, DocumentPins, DocumentTrash {
   private readonly inner: LoroWorkspaceDocumentIndex
   private readonly legacy: IdbDocumentIndex
   private folded: Promise<void> | null = null
@@ -258,6 +260,21 @@ export class FoldingBrowserIndex implements DocumentIndex, DocumentPins {
     const restored = await this.inner.restoreDocument(input)
     if (restored !== null) announceDocumentRestored(input.workspaceId, restored.path)
     return restored
+  }
+
+  /**
+   * Destroy one trashed document for good, saved versions included: they were
+   * kept so a restore could rejoin them, and after a purge nothing can.
+   */
+  async purgeTrashEntry(
+    input: Parameters<LoroWorkspaceDocumentIndex['purgeTrashEntry']>[0],
+  ): ReturnType<LoroWorkspaceDocumentIndex['purgeTrashEntry']> {
+    await this.ensureFolded()
+    const purged = await this.inner.purgeTrashEntry(input)
+    if (purged) {
+      await deleteVersionRowsOfDocument(input.workspaceId, input.documentId, this.dbName)
+    }
+    return purged
   }
 
   async deleteDocument(input: DeleteDocumentInput): Promise<void> {
