@@ -320,9 +320,6 @@ function daemonReachingModules(): string[] {
   return (
     Object.entries(sources)
       .filter(([path]) => !path.includes('.test.'))
-      // Never imported at runtime: it re-exports types and one fetch to prove
-      // they resolve, and says so in its own header. Nothing about a keeper.
-      .filter(([path]) => !path.endsWith('/_type-probe.ts'))
       // A fake daemon answers for the daemon in a test; it is not a module the
       // app ships, so it has no keeper to be compared with.
       .filter(([path]) => !path.startsWith('/src/test-utils/'))

@@ -81,7 +81,6 @@ const ROOT_MODULES: Record<string, Layer> = {
   'boot.ts': 'app',
   'boot-splash.ts': 'app',
   'main.tsx': 'app',
-  '_type-probe.ts': 'app',
 }
 
 /** Tests, their support and doc snapshots are setup for tests, not part of the app's graph. */
