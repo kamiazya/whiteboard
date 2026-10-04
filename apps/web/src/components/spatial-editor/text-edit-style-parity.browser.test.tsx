@@ -14,28 +14,19 @@ import { registerFontBytes } from '@kamiazya/whiteboard-canvas-viewer/font-loadi
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditor } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 const node = textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello world' })
 const start: SpatialCanvas = { nodes: [node], edges: [] }
 
-function Host({ initial = start }: { initial?: SpatialCanvas }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
-
 it('the edit overlay box styling equals the rendered chrome (shared theme producers)', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
@@ -71,7 +62,8 @@ it('the edit overlay is typed in the theme family once its face is held, like th
     ...start,
     facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
   }
-  const { container } = render(<Host initial={sketched} />)
+  const { Host } = makeEditorHost({ initial: sketched })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   const editor = await vi.waitFor(() => {

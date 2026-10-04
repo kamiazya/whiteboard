@@ -8,11 +8,10 @@ import { placeCommentBubble } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -32,15 +31,6 @@ const start: SpatialCanvas = {
   ],
 }
 
-function Host({ canvas: initial }: { canvas: SpatialCanvas }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
-
 async function waitForContent(container: HTMLElement, text: string) {
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(text),
@@ -54,7 +44,8 @@ function composeOrigin(): { x: number; y: number } {
 }
 
 it('"Comment here" beside a node opens the draft in a free quadrant, not over the node', async () => {
-  const { container } = render(<Host canvas={{ ...start, comments: [] }} />)
+  const { Host } = makeEditorHost({ initial: { ...start, comments: [] } })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForContent(container, 'covered')
   const r = root.getBoundingClientRect()
@@ -81,7 +72,8 @@ it('"Comment here" beside a node opens the draft in a free quadrant, not over th
 // the card, so nothing opens a draft over a drawn bubble any more.
 
 it('the drag preview starts exactly on the drawn chrome, so pressing a pin does not jump the bubble', async () => {
-  const { container } = render(<Host canvas={start} />)
+  const { Host } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForContent(container, 'about this spot')
   const drawn = (

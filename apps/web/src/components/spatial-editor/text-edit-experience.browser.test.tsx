@@ -8,32 +8,17 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditor, nodeEditorContent, nodeEditorText } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello world' })],
   edges: [],
-}
-
-function Host({ theme = 'light' as const }: { theme?: 'light' | 'dark' }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme={theme}
-      />
-    </div>
-  )
 }
 
 async function openEditor(container: HTMLElement): Promise<HTMLElement> {
@@ -45,6 +30,7 @@ async function openEditor(container: HTMLElement): Promise<HTMLElement> {
 }
 
 it('the SCENE hides the committed text; the transparent editor keeps the typography', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const editor = await openEditor(container)
   const style = getComputedStyle(editor)
@@ -64,6 +50,7 @@ it('the SCENE hides the committed text; the transparent editor keeps the typogra
 })
 
 it('opens with the caret at the end of the existing text', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   await openEditor(container)
 
@@ -75,7 +62,8 @@ it('opens with the caret at the end of the existing text', async () => {
 })
 
 it('stays transparent in dark mode and types in the dark text fill', async () => {
-  const { container } = render(<Host theme="dark" />)
+  const { Host } = makeEditorHost({ initial: start, editorProps: { theme: 'dark' } })
+  const { container } = render(<Host />)
   const editor = await openEditor(container)
   const style = getComputedStyle(editor)
 
