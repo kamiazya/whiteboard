@@ -68,7 +68,7 @@ export interface BackupRestoreOptions {
 // Used by CLI callers to fail-closed before passing paths to the helper, so
 // an ancestor symlink (e.g. `<safe>/link → /outside`) cannot redirect writes
 // to locations outside the operator's intended storage zone.
-export async function hasAncestorSymlink(p: string): Promise<boolean> {
+async function hasAncestorSymlink(p: string): Promise<boolean> {
   let current = resolve(p)
   while (true) {
     const parent = dirname(current)
