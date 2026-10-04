@@ -63,7 +63,9 @@ Server to client:
 - `restore_complete`: the restore finished.
 - `viewport_request`: an agent asked the page to move its viewport; carries the
   request id and what to frame, or where to pan and zoom. It is withheld from a page until that
-  page has sent `client_ready` for the document, and replayed once it has.
+  page has sent `client_ready` for the document, and replayed once it has. The daemon keeps the
+  latest request per document even when no page was ready to take it, so the first page to open
+  afterwards inherits it; a request older than 30 seconds is no longer replayed.
 - `agent_activity`: what an agent just did to this document, once per applied
   edit batch, for a human watching. It is never replayed.
 

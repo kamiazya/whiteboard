@@ -85,7 +85,10 @@ describe('createCanvasClientNotifier', () => {
     })
   })
 
-  it('reports not-delivered, and sends nothing, when no client is ready', async () => {
+  it('reports not-delivered when no client is ready, while still handing the request to the audience to hold', async () => {
+    // `sendViewportRequest` sends to ready pages only and records the request
+    // for the first page to become ready; the replay itself is held by
+    // `canvas-client-notifier.replay.test.ts` against the real registry.
     getReadyClientCount.mockReturnValue(0)
     const notifier = createCanvasClientNotifier(makeIndex())
 
@@ -95,7 +98,7 @@ describe('createCanvasClientNotifier', () => {
     })
 
     expect(delivered).toBe(false)
-    expect(sendViewportRequest).not.toHaveBeenCalled()
+    expect(sendViewportRequest).toHaveBeenCalledTimes(1)
   })
 
   it('reports not-delivered rather than throwing when the transport fails', async () => {

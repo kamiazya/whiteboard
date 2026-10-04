@@ -111,14 +111,14 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
       try {
         const path = await pathOf(request.workspaceId, request.documentId)
         if (path === null) return false
-        // Only READY clients can apply a viewport, and `sendViewportRequest`
-        // caches the last one for replay on `client_ready` — so a pre-ready
-        // tab still gets it, and reporting `false` here would be a lie about
-        // a message that will land. Report on ready clients, which is what
-        // "someone is watching right now" means.
-        if (getReadyClientCount(request.workspaceId, path) === 0) return false
+        // `sendViewportRequest` records the request for replay on `client_ready`
+        // and sends it only to pages that already are ready, so it runs even
+        // with none: the first page to open inherits the request. What is
+        // REPORTED is narrower — only a READY client can apply a viewport, and
+        // "someone is watching right now" is what `delivered` means.
+        const watching = getReadyClientCount(request.workspaceId, path) > 0
         sendViewportRequest(request.workspaceId, path, nanoid(), viewportPayload(request))
-        return true
+        return watching
       } catch (err) {
         log.warning(
           { workspaceId: request.workspaceId, documentId: request.documentId, err },
