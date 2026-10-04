@@ -41,8 +41,8 @@ describe('createDaemonIdentity', () => {
     'refuses to start on an identity it cannot READ, rather than replacing it',
     () => {
       // Replacing is what `tryLoad` answered for ANY read error, and a
-      // replaced identity is indistinguishable, to every paired client that
-      // pinned it, from someone else answering on this port.
+      // replaced identity is indistinguishable, to every client that pinned
+      // it, from someone else answering on this port.
       createDaemonIdentity({ dataDir: dir })
       const file = join(dir, 'daemon-identity.json')
       const before = readFileSync(file, 'utf8')
@@ -161,7 +161,7 @@ describe('createDaemonIdentity refuses a leaked identity file', () => {
 
         expect(() => createDaemonIdentity({ dataDir })).toThrow(/group or other/i)
         // Regenerating would change the daemon's did:key and break every
-        // existing pairing, so refusing has to be what happens.
+        // client's pin on it, so refusing has to be what happens.
         chmodSync(filepath, 0o600)
         expect(createDaemonIdentity({ dataDir }).did).toBe(before)
       } finally {

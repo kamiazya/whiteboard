@@ -16,7 +16,7 @@
  *
  * Scoped to the transfer path on purpose. `daemonBaseUrl` appears 964 times
  * across 127 files, and almost all of them — connections, settings, replica
- * keys, passkeys, pairing — really are about a daemon and are left alone.
+ * keys, passkeys — really are about a daemon and are left alone.
  * `vocabulary.md`: fix what your change touches, never widen a diff to
  * sweep a package you had no reason to open.
  */

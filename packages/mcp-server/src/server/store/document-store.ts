@@ -348,7 +348,7 @@ export async function getDoc(
  *
  * Exists so read surfaces can tell "empty" from "never heard of it". Nothing
  * mints workspace ids ahead of use any more, but ids OUTLIVE the daemon that
- * minted them — a browser keeps its paired workspace id in localStorage, and
+ * minted them — a browser keeps its daemon workspace id in localStorage, and
  * a rebuilt data dir does not know it. Answering such an id with empty lists
  * and lazily-created empty docs reads exactly like the user's data being
  * gone, when the truth is "not here".

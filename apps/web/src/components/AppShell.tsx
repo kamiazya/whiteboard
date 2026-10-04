@@ -117,7 +117,7 @@ export interface AppShellProps {
   /**
    * The keeper's half of the workspace switcher — where its workspaces come
    * from and what a switch means for it. Absent on a branch that has no
-   * workspace to name (the invalid-config and pairing-error screens), and the
+   * workspace to name (the invalid-config, not-found and connecting screens), and the
    * shell then states no subject rather than an empty one.
    *
    * Passed in rather than built here: the two keepers read their registries

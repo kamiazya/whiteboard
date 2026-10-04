@@ -34,12 +34,8 @@ type Why =
  */
 const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Why }>> = {
   'apps/web/src/App.test.tsx': {
-    count: 6,
+    count: 2,
     why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/components/AppShell.tsx': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
   },
   'apps/web/src/components/connection/ConnectionStatus.test.tsx': {
     count: 1,
@@ -66,23 +62,11 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     why: 'ordinary English',
   },
   'apps/web/src/components/tags/TagChipsEditor.tsx': { count: 2, why: 'ordinary English' },
-  'apps/web/src/hooks/use-daemon-reconnect.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'apps/web/src/hooks/use-daemon-reconnect.ts': {
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
   },
-  'apps/web/src/hooks/use-workspace-address-sync.ts': {
-    count: 3,
-    why: 'describes the flow as live; to rewrite',
-  },
   'apps/web/src/hooks/useDocumentSync.ts': { count: 1, why: 'ordinary English' },
-  'apps/web/src/hooks/useFavicon.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'apps/web/src/lib/app-routes.test.ts': {
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
@@ -93,43 +77,11 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
   'apps/web/src/lib/document-outline.ts': { count: 2, why: 'ordinary English' },
   'apps/web/src/lib/document-sync-session.test.ts': { count: 1, why: 'ordinary English' },
   'apps/web/src/lib/document-sync-session.ts': { count: 1, why: 'ordinary English' },
-  'apps/web/src/lib/extension-connection.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
   'apps/web/src/lib/extension-connection.ts': {
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
   },
-  'apps/web/src/lib/promote-workspace.keeper-agnostic.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'apps/web/src/lib/render-preview.ts': { count: 1, why: 'ordinary English' },
-  'apps/web/src/lib/replica-unlock.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/lib/replica-wrapped-key-store.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/lib/sse-shared-stream-source.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/lib/sse-shared-worker-protocol.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/lib/sse-shared-worker.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/lib/sse-shared-worker.ts': {
-    count: 2,
-    why: 'describes the flow as live; to rewrite',
-  },
   'apps/web/src/lib/user-settings-store.property.test.ts': {
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
@@ -142,54 +94,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     count: 2,
     why: 'says the flow is gone, or what a migration drops',
   },
-  'apps/web/src/pages/DaemonDocumentPage.server-mode.test.tsx': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/DaemonDocumentPage.test.tsx': {
-    count: 2,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/DaemonDocumentPage.tsx': {
-    count: 2,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/DaemonIndexPage.test.tsx': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/pages/ServerModeWorkspace.tsx': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/SettingsPage.test.tsx': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/daemon-index-page-props.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/use-daemon-document-backend.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/use-daemon-document-controller.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pages/use-daemon-document-controller.ts': {
-    count: 3,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'apps/web/src/pwa/register-sw.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'apps/web/src/pwa/register-sw.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'packages/canvas-render/src/layout/edges/edge-anchors.ts': { count: 1, why: 'ordinary English' },
   'packages/canvas-render/src/layout/edges/grid-route.ts': { count: 1, why: 'ordinary English' },
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': { count: 2, why: 'ordinary English' },
@@ -198,32 +102,12 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     why: 'ordinary English',
   },
   'packages/canvas-render/src/svg/vnode.ts': { count: 1, why: 'ordinary English' },
-  'packages/daemon-client/src/sse-stream-hub.test.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'packages/daemon-client/src/sse-stream-hub.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
   'packages/daemon-client/src/sync-frames.ts': { count: 1, why: 'ordinary English' },
   'packages/loro-adapter/src/workspace-tree.convergence.property.test.ts': {
     count: 1,
     why: 'ordinary English',
   },
-  'packages/mcp-server/src/server/backup-restore.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'packages/mcp-server/src/server/backup-restore.ts': { count: 1, why: 'ordinary English' },
-  'packages/mcp-server/src/server/backup-secret-surface.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
-  'packages/mcp-server/src/server/log.test.ts': {
-    count: 1,
-    why: 'says the flow is gone, or what a migration drops',
-  },
   'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': {
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
@@ -248,19 +132,7 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     count: 1,
     why: 'describes the flow as live; to rewrite',
   },
-  'packages/mcp-server/src/server/security/daemon-identity.test.ts': {
-    count: 2,
-    why: 'describes the flow as live; to rewrite',
-  },
-  'packages/mcp-server/src/server/store/document-store.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
   'packages/mcp-server/src/server/store/version-store.ts': { count: 1, why: 'ordinary English' },
-  'packages/mcp-server/src/shared/diagnostics/support-bundle.ts': {
-    count: 1,
-    why: 'describes the flow as live; to rewrite',
-  },
   'packages/ports/src/document-store.ts': { count: 1, why: 'ordinary English' },
   'packages/search/src/snippet.ts': { count: 1, why: 'ordinary English' },
   'packages/server-core/src/search/eval.test.ts': { count: 1, why: 'ordinary English' },

@@ -1549,7 +1549,7 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('tab')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Storage' })).toBeNull()
 
-    // The operational surfaces (storage, pairing) live on their own route,
+    // The operational surfaces (storage, connections) live on their own route,
     // reached through the App-mounted shell's gear — the page itself owns no
     // settings affordance at all (AppShell ownership rule in DESIGN.md).
     expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()

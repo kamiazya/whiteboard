@@ -5,7 +5,7 @@
  *
  * Kept apart from `DaemonDocumentPage` along the seam its closures draw:
  * everything here
- * reads the pairing payload and the controller's resolved (workspace, path,
+ * reads the connection's props and the controller's resolved (workspace, path,
  * documents) and nothing else, and nothing outside reads its parts
  * separately — `contentDocumentId` travels with the backend because they
  * only make sense together, and `authError` resets on a new backend.

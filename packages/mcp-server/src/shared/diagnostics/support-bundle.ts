@@ -40,7 +40,7 @@ function assertIsoTimestamp(value: string, label: string): string {
 //   - canvas plaintext (Excalidraw scene / elements / files / rawPayload)
 //   - migration bundle payload
 //   - raw MCP tool input / output
-//   - tokens (daemon token / PAT / cookie / session / pairing material)
+//   - tokens (daemon token / PAT / cookie / session material)
 //   - absolute local paths (the `dataDir` etc. become `[REDACTED_PATH]`
 //     via the redactor; structural fields like `pid`/`status`
 //     pass the allow-list)

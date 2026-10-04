@@ -155,9 +155,9 @@ describe('DaemonDocumentPage', () => {
 
   it('renders a workspace-not-found list failure as an error, never as an empty workspace', async () => {
     // The daemon now answers 404 for a workspace it has never registered —
-    // the reachable case being a stale pairing, since a browser keeps its
-    // paired workspace id in localStorage and ids outlive the install that
-    // minted them. Rendering that as "This workspace has no documents yet"
+    // the reachable case being a stale remembered workspace, since a browser
+    // keeps its daemon workspace id in localStorage and ids outlive the
+    // install that minted them. Rendering that as "This workspace has no documents yet"
     // plus a Create button reads as the user's data being GONE, and invites
     // them to start over inside a workspace that never existed here. The
     // error screen, with the daemon's own title, is the honest rendering.

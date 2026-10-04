@@ -36,7 +36,7 @@ describe('saveWrappedKey / loadWrappedKey', () => {
   it('normalises a trailing slash, so one daemon is one daemon', () => {
     saveWrappedKey(`${DAEMON}/`, 'ws-1', BLOB)
 
-    // The pairing store already keys this way; two spellings of one daemon
+    // Every other per-daemon store keys this way; two spellings of one daemon
     // would leave a blob nobody looks for.
     expect(loadWrappedKey(DAEMON, 'ws-1')).toEqual(BLOB)
   })

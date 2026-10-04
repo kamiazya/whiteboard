@@ -6,7 +6,7 @@ export interface DaemonIndexPageProps {
   /**
    * The workspace the ADDRESS names, in either of ADR-0019's resolvable
    * layers. Absent when the address names none — `/`, or a workspace-level
-   * pairing link without one — and the page then falls back to the daemon's
+   * link without one — and the page then falls back to the daemon's
    * first-listed workspace and reports what it settled on.
    *
    * Not `initialWorkspaceId` any more, and the rename is the change: this

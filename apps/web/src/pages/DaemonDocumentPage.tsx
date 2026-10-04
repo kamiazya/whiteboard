@@ -89,15 +89,16 @@ function useDaemonDocument(
   }: DaemonDocumentPageProps,
   events: DocumentKeeperEvents,
 ): DocumentKeeperAnswer {
-  // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
-  // pairing payload, so this never needs to change once mounted.
+  // Stable across the page's lifetime: daemonBaseUrl/token come from the
+  // connection App mounts this page for, so this never needs to change once
+  // mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
   // The History column's backend: relative routes, resolved against the
   // daemon's base URL by `daemonFetch`.
   const versionsBackend = useMemo(() => createDaemonVersionsBackend(daemonFetch), [daemonFetch])
 
   // The sync stream and every route resolve against the daemon's own origin,
-  // never the page's — a hosted web app paired to a loopback daemon must not
+  // never the page's — a hosted web app connected to a loopback daemon must not
   // open the stream against its own page origin.
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 

@@ -1,7 +1,8 @@
 /**
  * ADR-0050: a daemon reached through the whiteboard extension needs no
- * pairing — the extension, its native host and the owner-only socket are the
- * whole trust chain — so connecting is asking whether the daemon answers.
+ * consent step or token — the extension, its native host and the owner-only
+ * socket are the whole trust chain — so connecting is asking whether the
+ * daemon answers.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'

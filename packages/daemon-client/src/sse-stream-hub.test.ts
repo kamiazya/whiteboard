@@ -449,7 +449,7 @@ describe('SseStreamHub', () => {
   })
 
   it('reopens the stream when resumed with a credential the daemon accepts again', async () => {
-    // A rotated pairing token arrives at the worker as a re-init; the hub it
+    // A rotated token arrives at the worker as a re-init; the hub it
     // keeps per origin has to try again, or the tab stays "Sync off" after
     // the person has done the one thing that fixes it.
     const fake = createFake()

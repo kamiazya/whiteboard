@@ -331,7 +331,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
   })
 
   it('follows a rotated token instead of holding the one it started with', async () => {
-    // A pairing session token is refreshed while tabs stay open. The hub is
+    // A session token is refreshed while tabs stay open. The hub is
     // cached per origin, so a credential captured when it was built would leave
     // every tab in the profile talking to the daemon with a dead token.
     const port = connect()

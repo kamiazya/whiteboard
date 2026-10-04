@@ -110,7 +110,7 @@ describe('redaction', () => {
   })
 
   // Every field name below is a real secret/PII carrier found in this
-  // codebase (bootstrap/pairing token, daemon bearer token, OAuth access
+  // codebase (bootstrap token, daemon bearer token, OAuth access
   // token, Authorization header, cookie) or a common credential name a
   // careless call site could introduce (password, secret, apiKey).
   const secretFields: Record<string, string> = {

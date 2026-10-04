@@ -1,9 +1,8 @@
 // @vitest-environment node
 /**
  * ADR-0050: a cold load reconnects only to a daemon reached through the
- * extension. A remembered loopback address — written by the pairing flow this
- * app no longer has — is not reached at all, so nothing asks the network
- * whether something answers on that port.
+ * extension. A remembered loopback address is not reached at all, so nothing
+ * asks the network whether something answers on that port.
  */
 import { describe, expect, it } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from '../lib/bridge-address.js'
