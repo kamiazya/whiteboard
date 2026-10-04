@@ -4,9 +4,10 @@
  *
  * WHY A WINDOW AND NOT A FETCH. A browser transfers directly to a SaaS or a
  * self-hosted keeper with no daemon hop (user decision, 2026-09-22), and the
- * hosted app's `connect-src` names `'self'` and loopback only — an arbitrary
- * https destination cannot be fetched from this origin, and enumerating every
- * self-hosted address a person might run is not a list anyone can keep. A
+ * hosted app's `connect-src` names `'self'` and the font catalogue only — an
+ * arbitrary https destination cannot be fetched from this origin, and
+ * enumerating every self-hosted address a person might run is not a list
+ * anyone can keep. A
  * window at the DESTINATION's origin is subject to no such rule: what it
  * fetches, it fetches same-origin.
  *
