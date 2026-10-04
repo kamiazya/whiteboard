@@ -278,6 +278,18 @@ describe('collectModuleSpecifiers: a URL resolved against import.meta.url', () =
     expect(specifiersOf("new URL('worker.ts', import.meta.url)")).toEqual([['./worker.ts', false]])
   })
 
+  it('reads only `new URL`, not another constructor handed the same arguments', () => {
+    expect(
+      specifiersOf(
+        [
+          "new Request('./x.ts', import.meta.url)",
+          "new Foo('./y.ts', import.meta.url)",
+          "new self.URL('./z.ts', import.meta.url)",
+        ].join('\n'),
+      ),
+    ).toEqual([])
+  })
+
   it('leaves a URL with another base, a scheme, a root path or a computed name alone', () => {
     expect(
       specifiersOf(
@@ -291,5 +303,56 @@ describe('collectModuleSpecifiers: a URL resolved against import.meta.url', () =
         ].join('\n'),
       ),
     ).toEqual([])
+  })
+})
+
+describe('collectModuleSpecifiers: import.meta.glob patterns', () => {
+  const specifiersOf = (text: string) =>
+    collectModuleSpecifiers(
+      ts.createSourceFile('fixture.ts', text, ts.ScriptTarget.Latest, true),
+    ).map(({ specifier, typeOnly }) => [specifier, typeOnly])
+
+  it('reads a relative pattern, or each one of a list, as a value edge', () => {
+    expect(specifiersOf("const m = import.meta.glob('./icons/*.svg')")).toEqual([
+      ['./icons/*.svg', false],
+    ])
+    expect(specifiersOf("import.meta.glob(['./a/*.ts', `../b/**/*.ts`], { eager: true })")).toEqual(
+      [
+        ['./a/*.ts', false],
+        ['../b/**/*.ts', false],
+      ],
+    )
+    expect(specifiersOf("import.meta.glob(['./a/*.ts'] as const)")).toEqual([['./a/*.ts', false]])
+    expect(specifiersOf("import.meta.glob([('./a/*.ts' as string)])")).toEqual([
+      ['./a/*.ts', false],
+    ])
+  })
+
+  it('reports the line of the call', () => {
+    const file = ts.createSourceFile(
+      'fixture.ts',
+      "const a = 1\nconst m = import.meta.glob('./x/*.ts')",
+      ts.ScriptTarget.Latest,
+      true,
+    )
+    expect(collectModuleSpecifiers(file).map(({ line }) => line)).toEqual([2])
+  })
+
+  it('leaves a negation, a root or alias pattern, a computed one and another receiver alone', () => {
+    expect(
+      specifiersOf(
+        [
+          "import.meta.glob(['./a/*.ts', '!./a/skip.ts'])",
+          'import.meta.glob()',
+          "import.meta.glob('/src/x/*.ts')",
+          "import.meta.glob('@/x/*.ts')",
+          'import.meta.glob(pattern)',
+          "import.meta.glob([base, './y/' + name])",
+          "meta.glob('./z/*.ts')",
+          "import.meta.env.glob('./w/*.ts')",
+          "import.meta.url('./v/*.ts')",
+        ].join('\n'),
+      ),
+    ).toEqual([['./a/*.ts', false]])
   })
 })

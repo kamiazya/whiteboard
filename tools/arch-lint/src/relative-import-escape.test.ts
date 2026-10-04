@@ -51,6 +51,8 @@ const ESCAPES: Readonly<Record<string, string>> = {
     'a contract test that reads the server-core source tree, which holds the producers of the enums it checks against the contracts',
   'apps/web/src/vitest-project-name.test.ts -> package.json':
     'asserts the root manifest and the web vitest project agree on a project name, so it has to read the root `package.json`',
+  'apps/web/src/test-utils/coverage-ledger.ts -> {apps,packages,tools}/**/*.test.{ts,tsx}':
+    'a test helper whose `import.meta.glob` lists every test file in the repo by name, to hold a coverage ledger to the tests that exist; nothing is loaded, so no module is coupled',
   'tools/arch-lint/src/browser-launch-options.test.ts -> vitest.browser.launch-options.js':
     'arch-lint polices the root vitest browser config, so it imports the module it is policing',
   'tools/arch-lint/src/vitest-projects.test.ts -> vitest.browser.shared.js':
@@ -109,18 +111,31 @@ const FILES: readonly { readonly path: string; readonly workspace: string }[] = 
 
 const FILE_SET: ReadonlySet<string> = new Set(FILES.map(({ path }) => path))
 
+function edgesOf(path: string, workspace: string, source: string): RelativeEdge[] {
+  return collectRelativeImportEdges(path, source).map(({ specifier }) => ({
+    from: path,
+    workspace,
+    specifier,
+    target: posix
+      .normalize(posix.join(posix.dirname(path), specifier.replace(/\?.*$/, '')))
+      .replace(/\/$/, ''),
+  }))
+}
+
 const EDGES: readonly RelativeEdge[] = FILES.flatMap(({ path, workspace }) =>
-  collectRelativeImportEdges(path, readFileSync(join(REPO_ROOT, path), 'utf8')).map(
-    ({ specifier }) => ({
-      from: path,
-      workspace,
-      specifier,
-      target: posix
-        .normalize(posix.join(posix.dirname(path), specifier.replace(/\?.*$/, '')))
-        .replace(/\/$/, ''),
-    }),
-  ),
+  edgesOf(path, workspace, readFileSync(join(REPO_ROOT, path), 'utf8')),
 )
+
+/**
+ * The directory a glob pattern is rooted at: what precedes the first segment
+ * holding a glob character. A pattern names files this walk cannot list, but
+ * its root either exists or the pattern matches nothing at all.
+ */
+function staticPrefix(target: string): string {
+  const segments = target.split('/')
+  const firstGlob = segments.findIndex((segment) => /[*?[\]{}()!]/.test(segment))
+  return firstGlob === -1 ? target : segments.slice(0, firstGlob).join('/')
+}
 
 const insideWorkspace = ({ workspace, target }: RelativeEdge): boolean =>
   target === workspace || target.startsWith(`${workspace}/`)
@@ -161,6 +176,30 @@ describe('a relative import never leaves its workspace', () => {
     )
   })
 
+  it('reads an import.meta.glob pattern as an edge, so one leaving its workspace is caught', () => {
+    const planted = (source: string) =>
+      edgesOf('packages/model/src/x.ts', 'packages/model', source).map((edge) => [
+        edge.target,
+        insideWorkspace(edge),
+      ])
+    expect(planted("const m = import.meta.glob('../../codec/src/**/*.ts')")).toEqual([
+      ['packages/codec/src/**/*.ts', false],
+    ])
+    expect(
+      planted("const m = import.meta.glob(['./sub/*.ts', '../../../apps/web/src/*.ts'])"),
+    ).toEqual([
+      ['packages/model/src/sub/*.ts', true],
+      ['apps/web/src/*.ts', false],
+    ])
+  })
+
+  it('roots a glob at the directory before its first pattern segment', () => {
+    expect(staticPrefix('packages/model/src/icons/*.svg')).toBe('packages/model/src/icons')
+    expect(staticPrefix('packages/model/src/**/x.ts')).toBe('packages/model/src')
+    expect(staticPrefix('packages/model/src/{a,b}/x.ts')).toBe('packages/model/src')
+    expect(staticPrefix('packages/model/src/x.ts')).toBe('packages/model/src/x.ts')
+  })
+
   it('has no shipped file that imports outside its workspace', () => {
     expect(
       escaping.filter(({ from }) => isShipped(from)).map(edgeKey),
@@ -192,7 +231,9 @@ describe('the relative edges no resolver can follow are a known set', () => {
     // Anything dropped must at least be a real file (an asset): a dangling path
     // is a broken import that a `?raw` or `?url` query would hide from `tsc`.
     const onDisk = (target: string): boolean =>
-      [target, ...sourceCandidates(target)].some((path) => existsSync(join(REPO_ROOT, path)))
+      [staticPrefix(target), ...sourceCandidates(target)].some((path) =>
+        existsSync(join(REPO_ROOT, path)),
+      )
     const dangling = dropped
       .filter(({ target }) => !onDisk(target))
       .map(({ from, specifier }) => `${from} -> ${specifier}`)

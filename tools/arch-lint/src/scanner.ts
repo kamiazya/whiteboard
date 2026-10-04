@@ -1,5 +1,6 @@
 import { builtinModules } from 'node:module'
 import ts from '@typescript/typescript6'
+import { unwrapExpression } from './ast-helpers.js'
 
 export type BoundaryViolationKind =
   | 'node-builtin-import'
@@ -144,12 +145,14 @@ function importTypeSpecifier(node: ts.ImportTypeNode): string | undefined {
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
 
+const isImportMeta = (node: ts.Expression): boolean =>
+  ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword
+
 const isImportMetaUrl = (node: ts.Expression | undefined): boolean =>
   node !== undefined &&
   ts.isPropertyAccessExpression(node) &&
   node.name.text === 'url' &&
-  ts.isMetaProperty(node.expression) &&
-  node.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+  isImportMeta(node.expression)
 
 /**
  * The file `new URL('./x.ts', import.meta.url)` names, as the relative
@@ -178,6 +181,27 @@ function importMetaUrlSpecifier(node: ts.NewExpression): string | undefined {
 function evaluatedSpecifier(node: ts.Node): string | undefined {
   if (ts.isCallExpression(node)) return callSpecifier(node)
   return ts.isNewExpression(node) ? importMetaUrlSpecifier(node) : undefined
+}
+
+/**
+ * The relative patterns of `import.meta.glob('./dir/*.ts')` or of a list of
+ * them. Vite expands each into an import of every file it matches, so the call
+ * binds this file to that directory as an `import` of it would, and a pattern
+ * leaving the workspace reaches the same boundaries. A negation (`!`), a
+ * root-relative or aliased pattern, and one that is not a literal name no
+ * directory this scan can place and are not read.
+ */
+function globSpecifiers(node: ts.Node): string[] {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return []
+  if (node.expression.name.text !== 'glob' || !isImportMeta(node.expression.expression)) return []
+  const first = node.arguments[0]
+  if (first === undefined) return []
+  const argument = unwrapExpression(first)
+  const patterns = ts.isArrayLiteralExpression(argument) ? argument.elements : [argument]
+  return patterns
+    .map((pattern) => staticStringText(unwrapExpression(pattern)))
+    .filter((text): text is string => text !== undefined)
+    .filter((text) => text.startsWith('./') || text.startsWith('../'))
 }
 
 interface NodeSpecifier {
@@ -239,8 +263,9 @@ function referenceDirectiveSpecifiers(sourceFile: ts.SourceFile): ModuleSpecifie
 /**
  * Every place a module specifier can appear in source text: a static
  * `import`/`export ... from`, a dynamic `import(...)` call, a `require(...)`
- * call, an `import x = require(...)`, an `import('x')` type, or a
- * `/// <reference path|types>` directive. Missing any one of these would let a
+ * call, an `import x = require(...)`, an `import('x')` type, a
+ * `new URL('./x', import.meta.url)`, an `import.meta.glob('./x/*')` pattern,
+ * or a `/// <reference path|types>` directive. Missing any one of these would let a
  * banned import back in through a form the AST walk never visits. A specifier
  * written as a template literal with no substitution is read like a string;
  * one WITH a substitution names no module statically and is a named blind
@@ -251,9 +276,13 @@ export function collectModuleSpecifiers(sourceFile: ts.SourceFile): ModuleSpecif
 
   function visit(node: ts.Node): void {
     const found = specifierOfNode(node)
-    if (found !== undefined) {
+    const named: NodeSpecifier[] = [
+      ...(found === undefined ? [] : [found]),
+      ...globSpecifiers(node).map((specifier) => ({ specifier, typeOnly: false })),
+    ]
+    if (named.length > 0) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-      specifiers.push({ ...found, line: line + 1 })
+      for (const reference of named) specifiers.push({ ...reference, line: line + 1 })
     }
     ts.forEachChild(node, visit)
   }
