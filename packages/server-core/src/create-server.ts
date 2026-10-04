@@ -11,7 +11,7 @@ import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody, issueText } from './api-errors.js'
-import { SnapshotNotFoundError } from './document-io.js'
+import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
 import { factsCacheFor } from './references/content-source.js'
 import { vectorCacheFor } from './search/document-vector-cache.js'
 import { SEARCH_QUERY_KEYS, searchInputFromQuery, searchWireName } from './search-query.js'
@@ -462,6 +462,10 @@ const REFUSALS: readonly Refusal[] = [
   // A document created and indexed but never written has no stored bytes —
   // a read miss, and not a workspace-level one.
   refusalOf(SnapshotNotFoundError, 'document_not_found', 404),
+  // The CRDT engine aborted while loading or saving a document, usually on a
+  // very large body. A server fault the caller cannot fix by rewording, but
+  // the document is named and a repeat is not a retry.
+  refusalOf(DocumentEngineTrapError, 'document_engine_trap', 500),
   // The route reads one format; a document in the other is a conflict with
   // what it is, which only reading it by its own kind resolves.
   refusalOf(DocumentKindMismatchError, 'document_kind_mismatch', 409),
