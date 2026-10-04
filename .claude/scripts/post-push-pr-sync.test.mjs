@@ -123,7 +123,8 @@ test('a push on a branch with an open PR prompts a title check', () => {
   assert.match(out, /PR title: "feat\(x\): the title"/)
   assert.match(out, /- "second change"/)
   assert.match(out, /- "first change"/)
-  assert.match(out, /gh pr edit 77/)
+  // The REST form, which a web session can run: `gh pr edit` is GraphQL-backed there.
+  assert.match(out, /gh api -X PATCH repos\/\{owner\}\/\{repo\}\/pulls\/77 -f title=/)
   assert.match(
     calls,
     /^api repos\/\{owner\}\/\{repo\}\/pulls\?head=\{owner\}:\{branch\}&state=open/m,

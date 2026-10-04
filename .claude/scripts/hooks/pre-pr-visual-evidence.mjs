@@ -1,6 +1,7 @@
-// PreToolUse(Bash) hook: before `gh pr create`, when the diff changes a
-// surface a human looks at, require the body to carry a figure OR to say why
-// there is none.
+// PreToolUse(Bash) hook: before a PR is created — `gh pr create`, or the REST
+// `gh api -X POST …/pulls` a web session uses (hook-command-lib.mjs) — when
+// the diff changes a surface a human looks at, require the body to carry a
+// figure OR to say why there is none.
 //
 // AGENTS.md has asked for visual evidence in prose since the rule was
 // written, and the practice hollowed out anyway — the observed shape is a
@@ -17,14 +18,17 @@
 // decision instead of an omission, the same way the design schema's `none:`
 // and `foundation:` sentinels do.
 //
-// Fail-open everywhere it cannot see clearly: a body it cannot read, a repo
-// it cannot diff, any command that is not `gh pr create`. A hook that blocks
-// what it cannot inspect is a hook people learn to bypass.
+// Fail-open everywhere it cannot see clearly: a repo it cannot diff, any
+// command that creates no PR, and a `gh pr create` whose body it cannot read
+// (an editor, `--fill`, stdin). A hook that blocks what it cannot inspect is a
+// hook people learn to bypass. The one exception is a REST create whose body
+// arrives where this hook cannot read it — on stdin from another command, or
+// from a file that is not there: a web session has no other gate behind it, so
+// on a diff that needs a figure that blocks, naming the forms it can read.
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 
-import { runsGh } from '../hook-command-lib.mjs'
+import { prActionFromHookInput } from '../hook-command-lib.mjs'
 
 /**
  * Paths whose diff a human can SEE the result of. Deliberately narrow: an
@@ -93,10 +97,10 @@ try {
   process.exit(0)
 }
 
-const command = input?.tool_input?.command ?? ''
 // Matched at a command position by the shared reader: the bare text would block
 // `printf 'gh pr create …'`, which creates no PR.
-if (!runsGh(command, 'pr create')) process.exit(0)
+const create = prActionFromHookInput(input, { action: 'create' })
+if (create === null) process.exit(0)
 
 /** Whether `gh image` (a third-party extension, not part of gh) is installed. */
 function hasGhImage(cwd) {
@@ -108,32 +112,14 @@ function hasGhImage(cwd) {
   }
 }
 
-/** Reads --body '<text>' / --body="<text>" / --body-file <path>. */
-function readBody(cmd, cwd) {
-  const file = cmd.match(/--body-file[= ]("([^"]*)"|'([^']*)'|[^\s'"]+)/)
-  if (file) {
-    const path = file[2] ?? file[3] ?? file[1]
-    try {
-      return readFileSync(resolve(cwd, path), 'utf8')
-    } catch {
-      return null
-    }
-  }
-  const quoted = cmd.match(/--body[= ]("((?:[^"\\]|\\.)*)"|'([^']*)')/)
-  if (quoted) return quoted[2] !== undefined ? quoted[2].replace(/\\(.)/g, '$1') : quoted[3]
-  const bare = cmd.match(/--body[= ]([^\s'"]+)/)
-  return bare ? bare[1] : null
-}
-
 try {
-  const cdMatch = command.match(/(?:^|&&|;)\s*cd\s+([^\s'";&|]+)/)
-  const where = cdMatch ? cdMatch[1] : process.cwd()
+  const where = create.cd ?? process.cwd()
   const git = (args) => execFileSync('git', args, { cwd: where, encoding: 'utf8' }).trim()
 
-  const body = readBody(command, where)
-  // A body arriving by stdin, an editor, or --fill is not readable here.
+  const { body } = create
+  // A `gh pr create` body arriving by stdin, an editor, or --fill is not readable here.
   if (body === null) process.exit(0)
-  if (HAS_FIGURE.test(body) || statesNoFigure(body)) process.exit(0)
+  if ('text' in body && (HAS_FIGURE.test(body.text) || statesNoFigure(body.text))) process.exit(0)
 
   const changed = git(['diff', '--name-only', 'origin/main...HEAD'])
     .split('\n')
@@ -141,6 +127,17 @@ try {
     .filter((file) => !NOT_A_SURFACE.test(file))
     .filter((file) => VISUAL_PATHS.some((re) => re.test(file)))
   if (changed.length === 0) process.exit(0)
+  const files = `${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}`
+
+  if ('unreadable' in body) {
+    console.error(
+      `[pre-pr-visual-evidence] this diff changes ${changed.length} file(s) a human looks at ` +
+        `(${files}), and this hook could not read the body of ${create.via} (${body.unreadable}). ` +
+        `Pass the body where it can be read, then re-run: -f body='<text>', -F body=@<file>, ` +
+        `--input <file.json>, or -F body=@- fed by a heredoc in the same command.`,
+    )
+    process.exit(2)
+  }
 
   const NO_FIGURE =
     `  • If a picture is genuinely the wrong evidence — or cannot be uploaded from here — say so in one line:\n` +
@@ -164,7 +161,7 @@ try {
       HOW_TO_MAKE_ONE
   console.error(
     `[pre-pr-visual-evidence] this diff changes ${changed.length} file(s) a human looks at ` +
-      `(${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ', …' : ''}), and the PR body ` +
+      `(${files}), and the PR body ` +
       `carries no figure.\n${remedy}`,
   )
   process.exit(2)

@@ -46,6 +46,14 @@ export function describeComment(comment) {
 }
 
 /**
+ * Both shapes a merge arrives in, named in each block: a web session cannot
+ * run the GraphQL-backed `gh pr merge` at all, so naming only that form tells
+ * it to re-run a command that answers HTTP 403.
+ */
+const MERGE_FORMS =
+  '`gh pr merge`, or over REST `gh api -X PUT repos/{owner}/{repo}/pulls/<n>/merge`'
+
+/**
  * @param pr          the PR number, for the message
  * @param review      comments from `pulls/<n>/comments` (inline, on a line)
  * @param issue       comments from `issues/<n>/comments` (top-level)
@@ -75,7 +83,7 @@ export function gateMerge({ pr, review, issue, alreadySeen }) {
   }
   lines.push(
     '',
-    'Triage each one against the real code, then re-run the same `gh pr merge` command — this head is now recorded as shown and will not be blocked again.',
+    `Triage each one against the real code, then re-run the same merge (${MERGE_FORMS}) — this head is now recorded as shown and will not be blocked again.`,
   )
   return { block: true, message: lines.join('\n') }
 }
@@ -100,7 +108,7 @@ export function gateUnreadable({ pr, reason, alreadySeen }) {
     message: [
       `[pre-merge-show-comments] could not read ${which}'s review comments (${reason || 'no reason given'}); the merge is NOT cleared by this gate.`,
       'Read them another way first — `gh api repos/{owner}/{repo}/pulls/<n>/comments` over REST (the GraphQL-backed `gh pr view` fails in some sessions) or the PR page —',
-      'then re-run the same `gh pr merge` command; this PR is now recorded as reported and will not be blocked again.',
+      `then re-run the same merge (${MERGE_FORMS}); this PR is now recorded as reported and will not be blocked again.`,
     ].join('\n'),
   }
 }

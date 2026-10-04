@@ -155,3 +155,18 @@ test('a few lanes are the normal working shape and earn no notice', () => {
 
   assert.doesNotMatch(runHook(work, merge), /worktrees under/)
 })
+
+test('the REST merge a web session makes syncs main exactly as gh pr merge does', () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'merged.txt', 'merged\n', 'squash of the merged PR')
+  const command = 'gh api -X PUT repos/{owner}/{repo}/pulls/12/merge -f merge_method=squash'
+  assert.match(runHook(work, { tool_input: { command } }), /local main synced: .* squash/)
+})
+
+test('a REST read of the merge endpoint is not a merge', () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'next.txt', 'next\n', 'next')
+  const command = 'gh api repos/{owner}/{repo}/pulls/12/merge'
+  assert.equal(runHook(work, { tool_input: { command } }), '')
+  assert.equal(git(work, ['log', '--oneline', '-1']).includes('next'), false)
+})

@@ -92,9 +92,10 @@ Repeat until the plan is drained:
    `gh api --paginate repos/{owner}/{repo}/commits/$sha/check-runs --jq '.check_runs[] | "\(.name) \(.status) \(.conclusion)"'`.
    `mergeStateStatus: BLOCKED` with a passing `verify` is just branch-protection awaiting the
    merge action — fine to merge. A failing `verify` is not.
-2. **Merge** (squash, keep the `chore(deps):` title for release-please):
+2. **Merge** (squash, keep the `chore(deps):` title for release-please) over REST, since the
+   GraphQL-backed `gh pr merge` answers HTTP 403 in a web session:
    ```bash
-   gh pr merge <n> --squash
+   gh api -X PUT repos/{owner}/{repo}/pulls/<n>/merge -f merge_method=squash
    ```
    Do **not** use `--auto` (errors when repo auto-merge is off; only consider it for a pending CI
    after confirming with the human).

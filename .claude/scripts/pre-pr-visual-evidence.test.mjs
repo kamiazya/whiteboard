@@ -237,3 +237,56 @@ test('with the extension present, the remedy is the upload instruction as before
   assert.match(stderr, /upload it with `gh image tmp\/screenshots\/figure\.png`/)
   assert.doesNotMatch(stderr, /not installed/)
 })
+
+// The REST call a web session makes instead of the GraphQL-backed
+// `gh pr create`, carrying its body in the forms `gh api` accepts.
+const restCreate = (rest) =>
+  `gh api -X POST repos/{owner}/{repo}/pulls -f head=feat -f base=main ${rest}`
+
+test('a REST create blocks a UI diff with no figure exactly as gh pr create does', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const { status, stderr } = runHook(work, restCreate("-f title=x -f body='## What'"))
+  assert.equal(status, 2)
+  assert.match(stderr, /apps\/web\/src\/components\/Thing\.tsx/)
+  // A create that sends no body makes a PR with an empty one, which carries no figure either.
+  assert.equal(runHook(work, restCreate('-f title=x')).status, 2)
+})
+
+test('a REST create passes with a figure or a stated reason, from a field, a file or a heredoc', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  writeFileSync(join(work, 'body.md'), '## Visual repro\n\n![f.png](https://example.invalid/f.png)')
+  writeFileSync(
+    join(work, 'pr.json'),
+    JSON.stringify({ head: 'feat', body: 'Visual evidence: none — n/a' }),
+  )
+  for (const command of [
+    restCreate("-f body='Visual evidence: none — renames a prop.'"),
+    restCreate('-F body=@body.md'),
+    'gh api -X POST repos/{owner}/{repo}/pulls --input pr.json',
+    `${restCreate('-F body=@-')} <<'EOF'\nVisual evidence: none — a hook, output pasted.\nEOF`,
+  ]) {
+    assert.equal(runHook(work, command).status, 0, command)
+  }
+})
+
+test('a REST body this hook cannot read blocks a UI diff and says how to pass it', () => {
+  // Unlike `gh pr create --fill`, a REST create in a web session has no other
+  // gate behind it, so an unreadable body is not a pass.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const { status, stderr } = runHook(work, `cat body.md | ${restCreate('-F body=@-')}`)
+  assert.equal(status, 2)
+  assert.match(stderr, /could not read/)
+  assert.match(stderr, /-F body=@<file>/)
+  assert.match(stderr, /--input <file\.json>/)
+})
+
+test('an unreadable REST body on a diff no human looks at passes', () => {
+  const work = makeRepoPair('packages/server-core/src/routes/thing.ts')
+  assert.equal(runHook(work, `cat body.md | ${restCreate('-F body=@-')}`).status, 0)
+})
+
+test('a REST edit or read of a PR is not a creation', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, 'gh api -X PATCH repos/{owner}/{repo}/pulls/3 -f body=x').status, 0)
+  assert.equal(runHook(work, 'gh api repos/{owner}/{repo}/pulls').status, 0)
+})

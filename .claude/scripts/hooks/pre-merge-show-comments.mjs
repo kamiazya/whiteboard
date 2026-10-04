@@ -1,5 +1,7 @@
-// PreToolUse(Bash) hook: before `gh pr merge`, put the PR's inline review
-// comments in front of the session ONCE, and block that first attempt.
+// PreToolUse(Bash) hook: before a merge — `gh pr merge`, or the REST
+// `gh api -X PUT …/pulls/<n>/merge` a web session uses (hook-command-lib.mjs)
+// — put the PR's inline review comments in front of the session ONCE, and
+// block that first attempt.
 //
 // Why a block and not a warning: the failure this exists for is a merge
 // decided before the comments were read, and it happened twice in one session
@@ -24,7 +26,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-import { prNumberFromMerge, runsGh } from '../hook-command-lib.mjs'
+import { prActionFromHookInput } from '../hook-command-lib.mjs'
 import { gateMerge, gateUnreadable } from '../pre-merge-comments-lib.mjs'
 
 let input
@@ -34,11 +36,10 @@ try {
   process.exit(0)
 }
 
-const command = input?.tool_input?.command ?? ''
-if (!runsGh(command, 'pr merge')) process.exit(0)
+const merge = prActionFromHookInput(input, { action: 'merge' })
+if (merge === null) process.exit(0)
 
-const cdMatch = command.match(/(?:^|&&|;)\s*cd\s+([^\s'";&|]+)/)
-const where = cdMatch ? cdMatch[1] : process.cwd()
+const where = merge.cd ?? process.cwd()
 const run = (file, args) =>
   execFileSync(file, args, {
     encoding: 'utf8',
@@ -46,7 +47,10 @@ const run = (file, args) =>
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim()
 
-/** `gh api` placeholders ({owner}, {repo}, {branch}) resolve from the local remote — no GraphQL. */
+/**
+ * `gh api` placeholders ({owner}, {repo}, {branch}) resolve from the local
+ * remote — no GraphQL. A REST merge that names its repository is read there.
+ */
 const api = (endpoint, ...flags) => run('gh', ['api', endpoint, ...flags])
 
 /** `--jq` prints one object per line (NDJSON), so a paginated answer stays parseable. */
@@ -61,7 +65,8 @@ function whyItFailed(err) {
   return text.split('\n')[0].slice(0, 200)
 }
 
-let pr = prNumberFromMerge(command)
+const repo = `repos/${merge.repo}`
+let pr = merge.pr
 let markerDir
 try {
   markerDir = join(
@@ -77,22 +82,19 @@ function decide() {
   try {
     if (pr === null) {
       const found = Number(
-        api('repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open', '--jq', '.[0].number'),
+        api(`${repo}/pulls?head={owner}:{branch}&state=open`, '--jq', '.[0].number'),
       )
       if (!Number.isInteger(found) || found <= 0)
         throw new Error('no open PR is attached to the current branch')
       pr = found
     }
-    const head = api(`repos/{owner}/{repo}/pulls/${pr}`, '--jq', '.head.sha')
+    const head = api(`${repo}/pulls/${pr}`, '--jq', '.head.sha')
     if (!head) throw new Error('the PR answered with no head commit')
     const review = lines(
-      `repos/{owner}/{repo}/pulls/${pr}/comments`,
+      `${repo}/pulls/${pr}/comments`,
       '.[]|{author:.user.login,path:.path,line:(.line//.original_line),body:.body}',
     )
-    const issue = lines(
-      `repos/{owner}/{repo}/issues/${pr}/comments`,
-      '.[]|{author:.user.login,body:.body}',
-    )
+    const issue = lines(`${repo}/issues/${pr}/comments`, '.[]|{author:.user.login,body:.body}')
     const marker = join(markerDir, `${pr}-${head}`)
     const verdict = gateMerge({ pr, review, issue, alreadySeen: existsSync(marker) })
     return { ...verdict, marker }

@@ -78,7 +78,7 @@ esac
   return { dir, log }
 }
 
-function runHook({ repo, command, env = {} }) {
+function runHook({ repo, command, input = { tool_input: { command } }, env = {} }) {
   const gh = makeGhStub()
   const result = spawnSync('node', [hook], {
     cwd: repo,
@@ -90,7 +90,7 @@ function runHook({ repo, command, env = {} }) {
       GH_STUB_PR_FOR_BRANCH: '',
       ...env,
     }),
-    input: JSON.stringify({ tool_input: { command } }),
+    input: JSON.stringify(input),
     encoding: 'utf-8',
   })
   let calls = ''
@@ -162,4 +162,60 @@ test('a command that only mentions a merge is not looked at', () => {
   })
   assert.equal(result.status, 0)
   assert.equal(result.calls, '')
+})
+
+// The REST call a web session makes instead of the GraphQL-backed `gh pr merge`.
+const restMerge = (pr, repo = '{owner}/{repo}') =>
+  `gh api -X PUT repos/${repo}/pulls/${pr}/merge -f merge_method=squash`
+
+test('the REST merge blocks the first attempt exactly as gh pr merge does', () => {
+  const repo = makeRepo()
+  const env = { GH_STUB_REVIEW: review }
+  const first = runHook({ repo, command: restMerge(41), env })
+  assert.equal(first.status, 2)
+  assert.match(first.stderr, /PR #41 has 1 inline review comment/)
+  assert.match(first.stderr, /This cast hides a null\./)
+  assert.match(first.calls, /pulls\/41\/comments/)
+  // The second attempt goes through, whichever form makes it.
+  assert.equal(runHook({ repo, command: 'gh pr merge 41 --squash', env }).status, 0)
+})
+
+test('the block names both forms of the merge to re-run', () => {
+  const first = runHook({
+    repo: makeRepo(),
+    command: restMerge(7),
+    env: { GH_STUB_REVIEW: review },
+  })
+  assert.match(first.stderr, /gh pr merge/)
+  assert.match(first.stderr, /gh api -X PUT repos\/\{owner\}\/\{repo\}\/pulls\/<n>\/merge/)
+  const unreadable = runHook({
+    repo: makeRepo(),
+    command: restMerge(7),
+    env: { GH_STUB_FAIL: '1' },
+  })
+  assert.equal(unreadable.status, 2)
+  assert.match(unreadable.stderr, /gh api -X PUT repos\/\{owner\}\/\{repo\}\/pulls\/<n>\/merge/)
+})
+
+test('the comments are read from the repository the REST merge names', () => {
+  const result = runHook({
+    repo: makeRepo(),
+    command: restMerge(9, 'kamiazya/whiteboard'),
+    env: { GH_STUB_REVIEW: review },
+  })
+  assert.equal(result.status, 2)
+  assert.match(result.calls, /repos\/kamiazya\/whiteboard\/pulls\/9\/comments/)
+})
+
+test('a GitHub MCP merge, once routed here, gets the same judgement', () => {
+  const result = runHook({
+    repo: makeRepo(),
+    input: {
+      tool_name: 'mcp__github__merge_pull_request',
+      tool_input: { owner: 'kamiazya', repo: 'whiteboard', pullNumber: 13 },
+    },
+    env: { GH_STUB_REVIEW: review },
+  })
+  assert.equal(result.status, 2)
+  assert.match(result.stderr, /PR #13 has 1 inline review comment/)
 })
