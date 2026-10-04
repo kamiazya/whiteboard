@@ -4,8 +4,9 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
+import { setLogSink } from './log.js'
 import { FakeDocumentStore, seedDoc } from './test-utils/fake-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
@@ -44,6 +45,41 @@ describe('document-io', () => {
     expect(canvas.nodes).toEqual([
       textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
     ])
+  })
+
+  // What the loader knows is that a stored record failed validation, not why:
+  // a newer client's field and a record an older writer stored over a limit
+  // look identical here, so the warning must not pick one for the operator.
+  describe('a stored record that fails validation', () => {
+    afterEach(() => setLogSink(() => {}))
+
+    test('is warned about without guessing the cause', async () => {
+      const records: { level: string; msg: string; data?: Record<string, unknown> }[] = []
+      setLogSink((record) => records.push(record))
+      const documentStore = new FakeDocumentStore()
+      await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
+        writeSpatialCanvas(doc, {
+          nodes: [],
+          edges: [],
+          lines: [
+            {
+              id: 'ink-1',
+              from: { kind: 'point', point: { x: 0, y: 0 }, end: 'none' },
+              to: { kind: 'point', point: { x: 9, y: 9 }, end: 'none' },
+              bends: Array.from({ length: 65 }, (_, i) => ({ x: i, y: i })),
+            },
+          ],
+        })
+      })
+
+      const { canvas } = await loadDocument(canvasDeps(documentStore), WORKSPACE_ID, DOCUMENT_ID)
+
+      expect(canvas.lines ?? []).toEqual([])
+      const warning = records.find((record) => record.level === 'warning')
+      expect(warning?.data).toMatchObject({ documentId: DOCUMENT_ID, skipped: 1 })
+      expect(warning?.msg).toMatch(/failed validation/)
+      expect(warning?.msg).not.toMatch(/newer|this build/)
+    })
   })
 
   test('save then load round trip preserves nodes untouched by the patch', async () => {
