@@ -153,10 +153,13 @@ addenda of
   "This workspace"): the browser's workspace record merges into the chosen
   daemon workspace, so every `documentId`, the full edit history, and
   referenced images carry over, and a path both sides hold is surfaced as
-  shadowed rather than renamed. The browser's own copy remains — the two
-  copies do not sync on their own, and continuing from the daemon is a
-  reload the user takes. There is no per-document copy: it would re-create
-  each document under a new identity.
+  shadowed rather than renamed. Once every document and image is verified
+  on the daemon, the old browser record is deleted and the browser keeps a
+  cached replica of the daemon workspace instead (read-only when the daemon
+  is unreachable); continuing from the daemon is a reload the user takes.
+  If anything could not be verified, the browser copy is kept unchanged and
+  the result says so — the two copies do not sync on their own. There is no
+  per-document copy: it would re-create each document under a new identity.
 
 The identity decision itself — `(workspaceId, path)` as the canonical
 user-facing identity — is still
