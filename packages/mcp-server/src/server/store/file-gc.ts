@@ -367,8 +367,8 @@ export async function purgeDanglingFiles(
     // cheaper — there is no listing or reference collect worth starting while
     // a backup reads the tree — but it widens the gap between deciding to run
     // and holding the lock, and a concurrent route writes into that gap.
-    // Measured: hoisting this above the lock broke the PUT /head
-    // serialisation case with a half-written tipFrontiers.
+    // Measured: hoisting this above the lock let a concurrent write land a
+    // half-written record between the decision and the barrier.
     //
     // A backup captures the rows as a snapshot and the uploads as a directory
     // copy, and those are two moments. Unlinking between them removes a file
