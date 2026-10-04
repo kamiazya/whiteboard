@@ -18,6 +18,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -190,12 +191,14 @@ describe('createLocalFilesSource', () => {
     const doc = new Loro()
     doc.getList('elements').push({ id: 'a' })
     doc.commit()
-    const store = new LoroStore()
-    await store.save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    const snapshot = doc.export({ mode: 'snapshot' })
     const before = doc.version()
     doc.getList('elements').push({ id: 'b' })
     doc.commit()
-    await store.appendDelta(entry.documentId, doc.export({ mode: 'update', from: before }))
+    await seedSyncDocument(entry.documentId, {
+      snapshot,
+      deltas: [doc.export({ mode: 'update', from: before })],
+    })
 
     const bytes = await source.loadSpatialSnapshot({ ...entry, kind: 'spatial' })
     const fresh = new Loro()

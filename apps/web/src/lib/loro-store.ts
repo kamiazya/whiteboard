@@ -24,7 +24,7 @@ function readFailure(
  * The browser's Loro persistence, as a thin layer over the `DocumentStore`
  * port.
  *
- * It is not a pass-through, and the three things it adds are the three the
+ * It is not a pass-through, and the two things it adds are the two the
  * port deliberately does not have:
  *
  * - **Chunking.** `maxChunkBytes` is the caller's, so this file names the
@@ -32,10 +32,6 @@ function readFailure(
  * - **Deep validation.** The port stores bytes; only a CRDT runtime can say
  *   whether they import. `LoroLoadResult`'s `corrupt-*` arms are that answer,
  *   and they stay here rather than in a contract that has no Loro.
- * - **Compaction.** Deciding a log is worth folding needs to replay it, which
- *   again needs the runtime. The port supplies the one operation that makes
- *   the result safe to store (`saveCompactedSnapshot`); choosing to call it is
- *   this file's.
  */
 
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
@@ -44,7 +40,6 @@ import {
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   isStoredDocumentUnreadableError,
   reassembleSnapshot,
-  shouldCompact,
 } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
@@ -103,22 +98,6 @@ function isValidLoroBytes(bytes: Uint8Array): boolean {
 }
 
 /**
- * Replay a record into one snapshot. Returns null when any byte refuses to
- * import — an unfoldable log is left exactly as it was, because losing edits
- * to save space is not a trade this is allowed to make.
- */
-function foldDeltas(snapshot: Uint8Array, deltas: readonly Uint8Array[]): Uint8Array | null {
-  try {
-    const doc = new Loro()
-    doc.import(snapshot)
-    for (const delta of deltas) doc.import(delta)
-    return doc.export({ mode: 'snapshot' })
-  } catch {
-    return null
-  }
-}
-
-/**
  * Record when a document's content was last written — the browser listing's
  * `updatedAt` source. Standalone because more than one writer stamps it: this
  * store's own save paths, and the workspace-document write path, which does
@@ -142,14 +121,12 @@ export class LoroStore {
   readonly #store: DocumentStore
 
   /**
-   * Serialises this instance's read-modify-write sequences per document.
+   * Serialises this instance's operations per document.
    *
-   * `appendDelta` reads the log, decides whether to fold it, and writes — and
-   * that spans more than one port call, so a single IndexedDB transaction no
-   * longer covers it. The daemon has the same shape and answers it the same
-   * way (`withWorkspaceWriteLock`): the lock is what stops two overlapping
-   * appends from both deciding to compact and the second's fold discarding
-   * the first's update.
+   * `load` reads the snapshot and then the log, and that spans more than one
+   * port call, so a single IndexedDB transaction does not cover it. The daemon
+   * has the same shape and answers it the same way (`withWorkspaceWriteLock`):
+   * the lock is what stops a write landing between the two reads.
    *
    * ponytail: per-instance, so it does not reach across tabs. Neither does
    * the daemon's, across processes — and the browser's real cross-tab story
@@ -163,16 +140,10 @@ export class LoroStore {
    * share an origin, and therefore one `whiteboard` database.
    *
    * `store` is the same kind of seam and exists for one reason a database
-   * name cannot serve: `appendDelta`'s compaction is fenced against another
-   * TAB folding first, and that arrangement cannot be reached by racing two
-   * instances. Measured on the daemon side, whose fold has the same shape —
-   * under microtask lockstep the second writer's read lands after the first
-   * writer's write, so its fold already contains the other's ops and
-   * disabling the fence changed nothing. Reaching the refusal needs a
-   * competing fold placed deliberately inside the window between this
-   * store's read and its write, which a wrapper around the port can do and
-   * nothing outside it can. Production passes nothing and gets the
-   * sealed-aware store `openDocumentStore` always builds.
+   * name cannot serve: a read that FAILS rather than finds nothing (a blocked
+   * transaction) cannot be produced by seeding a database, and a wrapper
+   * around the port can. Production passes nothing and gets the sealed-aware
+   * store `openDocumentStore` always builds.
    */
   constructor(
     private readonly dbName?: string,
@@ -206,11 +177,10 @@ export class LoroStore {
   /**
    * Serialised against this instance's writes, not just against each other.
    *
-   * The read is two port calls — the snapshot, then the log — and a
-   * compaction landing between them would hand back a PRE-compaction snapshot
-   * with a POST-compaction (emptied) log: a document missing every edit the
-   * fold had just absorbed. Nothing re-reads afterwards, so that stale answer
-   * is what the editor would open.
+   * The read is two port calls — the snapshot, then the log — and a write
+   * landing between them would pair a snapshot with a log from a different
+   * generation of the record: a document missing edits. Nothing re-reads
+   * afterwards, so that stale answer is what the editor would open.
    */
   async load(documentId: string): Promise<LoroLoadResult> {
     return this.#serialise(documentId, () => this.#loadInner(documentId))
@@ -272,88 +242,6 @@ export class LoroStore {
         // first real reader would have to unpick.
         frontier: EMPTY_FRONTIER,
       })
-      await this.#touch(documentId)
-    })
-  }
-
-  /**
-   * Append an incremental Loro update to a document's delta log, folding the
-   * log back into the snapshot once it is worth it.
-   *
-   * A no-op when the document has no snapshot yet: a log with no base is
-   * storage nothing can load, and the caller's contract is that a snapshot is
-   * saved first.
-   */
-  async appendDelta(documentId: string, delta: Uint8Array): Promise<void> {
-    return this.#serialise(documentId, async () => {
-      const docRef = refOf(documentId)
-      // The MANIFEST, not the snapshot. All this branch needs to know is
-      // whether there is a base to append to, and pulling the base to find
-      // out is what made appending cost as much as the document was big:
-      // measured at 9 / 23 / 85 ms against snapshots of 0.5 / 2 / 8 MB, for
-      // an operation that writes 88 bytes.
-      const header = await this.#store.readSnapshotManifest({ docRef })
-      if (header === null) return
-
-      const existing = (await this.#store.loadDeltas({ docRef, afterSeq: null })).updates
-      const deltas = [...existing, delta]
-
-      // Folding HERE rather than on read: this is the one place that already
-      // knows the whole log, and a fresh open never pays for a log someone
-      // else's session grew. Measured at the budget, the fold costs about
-      // 10ms of synchronous replay and happens once per 64KB written.
-      //
-      // The snapshot is loaded INSIDE this branch for the same reason the
-      // check above reads only the manifest: the fold is the one caller that
-      // genuinely needs the bytes, and it runs once per 64KB rather than once
-      // per edit.
-      const compacting = shouldCompact(deltas)
-      const stored = compacting ? await this.#store.loadSnapshot({ docRef }) : null
-      // The base was there a moment ago and is not now — another tab deleted
-      // the document between the two reads. Same answer as the check above:
-      // no base, so there is nothing to append to. Without this the append
-      // branch below would rebuild a delta log for a document that no longer
-      // has a snapshot, which is the one state that guard exists to prevent.
-      if (compacting && stored === null) return
-      const folded =
-        stored === null
-          ? null
-          : foldDeltas(reassembleSnapshot(stored.manifest, stored.chunks), deltas)
-
-      if (folded === null) {
-        await this.#store.appendDeltas({
-          docRef,
-          // Copied so the DTO's narrow `Uint8Array<ArrayBuffer>` is satisfied
-          // without a cast; see `idb-document-store`'s note on the variance.
-          deltaBatch: { updates: [new Uint8Array(delta)], newFrontier: EMPTY_FRONTIER },
-        })
-      } else {
-        const { manifest, chunks } = chunkSnapshot(folded, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
-        // One operation, not save-then-clear: the port has it precisely so
-        // this cannot drop an append that lands between the two halves.
-        const written = await this.#store.saveCompactedSnapshot({
-          docRef,
-          manifest,
-          chunks,
-          frontier: EMPTY_FRONTIER,
-          // ADR-0020. `#serialise` orders folds within THIS tab; the fence is
-          // what covers a second tab on the same IndexedDB. A refusal means
-          // another tab folded first, so the delta goes to the log instead —
-          // losing the race costs a fold, never an edit.
-          expectedGeneration: header.generation,
-          // What the fold consumed: the log AS READ. The new delta is folded
-          // in too but was never written, so it is not part of the count —
-          // and anything appended since this read is neither superseded nor
-          // in the snapshot, which is exactly what the count protects.
-          supersededDeltaCount: existing.length,
-        })
-        if (!written.ok) {
-          await this.#store.appendDeltas({
-            docRef,
-            deltaBatch: { updates: [new Uint8Array(delta)], newFrontier: EMPTY_FRONTIER },
-          })
-        }
-      }
       await this.#touch(documentId)
     })
   }

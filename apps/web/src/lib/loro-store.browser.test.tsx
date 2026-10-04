@@ -122,7 +122,7 @@ describe('LoroStore (real IndexedDB)', () => {
     }
   })
 
-  it('save then load with deltas returns all deltas in order', async () => {
+  it('load returns a stored snapshot with all its deltas in order', async () => {
     const store = new LoroStore()
     const doc = new Loro()
     doc.getList('elements').push({ id: 'a' })
@@ -134,9 +134,7 @@ describe('LoroStore (real IndexedDB)', () => {
     doc.getList('elements').push({ id: 'c' })
     const delta2 = doc.export({ mode: 'update', from: v1 })
 
-    await store.save('canvas-1', snapshot)
-    await store.appendDelta('canvas-1', delta1)
-    await store.appendDelta('canvas-1', delta2)
+    await seedSyncDocument('canvas-1', { snapshot, deltas: [delta1, delta2] })
 
     const result = await store.load('canvas-1')
     expect(result.kind).toBe('ok')
@@ -196,25 +194,6 @@ describe('LoroStore (real IndexedDB)', () => {
     const store = new LoroStore(undefined, blockedDeltaStore())
     const result = await store.load('blocked-delta-canvas')
     expect(result.kind).toBe('read-unavailable')
-  })
-
-  it('appendDelta before any save is a no-op (no snapshot yet)', async () => {
-    const store = new LoroStore()
-    const delta = new Uint8Array([1, 2, 3])
-    // Should resolve without throwing — snapshot must exist first
-    await expect(store.appendDelta('canvas-99', delta)).resolves.toBeUndefined()
-    // load still returns not-found: no record was created
-    const result = await store.load('canvas-99')
-    expect(result.kind).toBe('not-found')
-  })
-
-  it('appendDelta with a corrupt existing record throws so the caller can surface storage-failure', async () => {
-    await seedSyncDocument('corrupt-canvas', { raw: { v: 99, garbage: true } })
-
-    const store = new LoroStore()
-    const delta = new Uint8Array([1, 2, 3])
-    // Corrupt record must not silently swallow the delta — must throw
-    await expect(store.appendDelta('corrupt-canvas', delta)).rejects.toThrow()
   })
 })
 
