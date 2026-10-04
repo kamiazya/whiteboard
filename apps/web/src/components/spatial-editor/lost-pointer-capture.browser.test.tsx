@@ -17,34 +17,16 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 const start: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello world' })],
   edges: [],
-}
-
-function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next, command) => {
-          onCommand?.(command.kind)
-          setCanvas(next)
-        }}
-        theme="light"
-      />
-    </div>
-  )
 }
 
 /**
@@ -70,8 +52,8 @@ function touchTap(root: HTMLElement, x: number, y: number, pointerId = 1): void 
 }
 
 it('keeps the node a double-TAP just created when the touch capture is handed back', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
 
   touchTap(root, 600, 450)
@@ -79,8 +61,8 @@ it('keeps the node a double-TAP just created when the touch capture is handed ba
   touchTap(root, 600, 450)
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 
-  expect(commands.filter((kind) => kind === 'create-node')).toHaveLength(1)
-  expect(commands).not.toContain('delete-node')
+  expect(latest.kinds.filter((kind) => kind === 'create-node')).toHaveLength(1)
+  expect(latest.kinds).not.toContain('delete-node')
   expect(nodeEditorContent(container)).not.toBeNull()
 })
 
@@ -91,8 +73,8 @@ it('recovers a capture lost while its own finger is still down, mid-pinch', asyn
   // interaction, the pinch bookkeeping is left holding the finger that is
   // STILL down, and the next touch to inherit its id is silently deadened —
   // no selection, no double-tap, nothing.
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   const rect = root.getBoundingClientRect()
   const p = (type: string, id: number, x: number, y: number) =>
@@ -129,7 +111,7 @@ it('recovers a capture lost while its own finger is still down, mid-pinch', asyn
     await settle()
   }
 
-  expect(commands).toContain('create-node')
+  expect(latest.kinds).toContain('create-node')
   expect(nodeEditorContent(container)).not.toBeNull()
 })
 
@@ -138,8 +120,8 @@ it('recovers a capture lost mid-resize, which never went through the root press'
   // entirely, so a down-set fed only from that handler would not know their
   // pointer exists — and the recovery this guard performs would be skipped
   // for exactly the gestures that hold a node hostage.
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
 
   touchTap(root, 200, 150)
@@ -171,7 +153,7 @@ it('recovers a capture lost mid-resize, which never went through the root press'
     new PointerEvent('pointerup', { bubbles: true, pointerId: 7, ...at(120, 120) }),
   )
   await new Promise((resolve) => setTimeout(resolve, 20))
-  expect(commands).not.toContain('resize-node')
+  expect(latest.kinds).not.toContain('resize-node')
 })
 
 it('still discards the new node on a real pointercancel', async () => {
@@ -179,8 +161,8 @@ it('still discards the new node on a real pointercancel', async () => {
   // hold an edit has nothing to revert TO, so a genuine cancellation takes
   // the node with it. Only `lostpointercapture` is being reclassified —
   // `pointercancel` still means what it says.
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
 
   touchTap(root, 600, 450)
@@ -193,5 +175,5 @@ it('still discards the new node on a real pointercancel', async () => {
   )
   await new Promise((resolve) => setTimeout(resolve, 0))
 
-  expect(commands).toContain('delete-node')
+  expect(latest.kinds).toContain('delete-node')
 })

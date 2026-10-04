@@ -8,14 +8,13 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -24,24 +23,8 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next, command) => {
-          onCommand?.(command.kind)
-          setCanvas(next)
-        }}
-        theme="light"
-      />
-    </div>
-  )
-}
-
 it('right-clicking a text node opens its action menu; Edit text opens the editor', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
 
@@ -53,54 +36,36 @@ it('right-clicking a text node opens its action menu; Edit text opens the editor
 })
 
 it('Delete from the menu removes the node and its edges', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 
   await userEvent.click(page.getByRole('menuitem', { name: 'Delete' }))
 
-  expect(commands).toContain('delete-node')
+  expect(latest.kinds).toContain('delete-node')
   await vi.waitFor(() =>
     expect(container.querySelectorAll('svg rect[fill="#ffffff"]').length).toBe(0),
   )
 })
 
 it('right-clicking empty space offers creation at that point', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   rightClick(rootOf(container), 600, 450)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 
   await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
 
-  expect(commands).toContain('create-node')
+  expect(latest.kinds).toContain('create-node')
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 })
 
 it('empty space offers the full creation set, anchored at the click point', async () => {
-  const { Host, latest } = (() => {
-    const l: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-    function H() {
-      const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-      l.canvas = canvas
-      return (
-        <div style={{ width: 800, height: 600 }}>
-          <SpatialEditor
-            defaultTool="select"
-            canvas={canvas}
-            onChange={(next, command) => {
-              l.commands.push(command.kind)
-              setCanvas(next)
-            }}
-            theme="light"
-            fileRefOptions={[{ file: 'c1', label: 'Other canvas' }]}
-          />
-        </div>
-      )
-    }
-    return { Host: H, latest: l }
-  })()
+  const { Host, latest } = makeEditorHost({
+    initial: start,
+    editorProps: { fileRefOptions: [{ file: 'c1', label: 'Other canvas' }] },
+  })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 600, 450)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
@@ -128,15 +93,15 @@ it('empty space offers the full creation set, anchored at the click point', asyn
 })
 
 it('Escape closes the menu without acting', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 
   await userEvent.keyboard('{Escape}')
 
   await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
-  expect(commands).toHaveLength(0)
+  expect(latest.kinds).toHaveLength(0)
 })
 
 // --- Edge context menu: the object under the pointer gets ITS actions ---
@@ -156,31 +121,9 @@ const edgeStart: SpatialCanvas = {
   ],
 }
 
-function makeEdgeHost() {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: edgeStart, commands: [] }
-  function EdgeHost() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(edgeStart)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { EdgeHost, latest }
-}
-
 it('right-clicking an edge offers Edit label and Delete, not node creation', async () => {
-  const { EdgeHost, latest } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host, latest } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
@@ -198,8 +141,8 @@ it('right-clicking an edge offers Edit label and Delete, not node creation', asy
 })
 
 it('the edge menu keeps the shared band order: properties, then verbs, Delete last', async () => {
-  const { EdgeHost } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
@@ -234,8 +177,8 @@ function clickOption(container: HTMLElement, groupName: string, optionName: stri
 }
 
 it('the arrow option row marks the spec default and applies a new direction in one tap', async () => {
-  const { EdgeHost, latest } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host, latest } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
@@ -251,7 +194,7 @@ it('the arrow option row marks the spec default and applies a new direction in o
   await vi.waitFor(() => expect(latest.canvas.edges[0].from.end).toBe('arrow'))
   // toEnd 'arrow' is the spec default — canonical form omits the field.
   expect(latest.canvas.edges[0]).not.toHaveProperty('toEnd')
-  expect(latest.commands).toContain('set-edge-ends')
+  expect(latest.kinds).toContain('set-edge-ends')
 
   // Property picks keep the menu OPEN (several adjustments = one visit) and
   // the rendered scene now draws both arrowheads.
@@ -264,8 +207,8 @@ it('the arrow option row marks the spec default and applies a new direction in o
 })
 
 it('the side option rows pin an endpoint directly, without cycling', async () => {
-  const { EdgeHost, latest } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host, latest } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
@@ -274,7 +217,7 @@ it('the side option rows pin an endpoint directly, without cycling', async () =>
   // Direct pick inside the "From side" group — one tap to any side.
   clickOption(container, 'From side', 'Bottom')
   await vi.waitFor(() => expect(endSide(latest.canvas.edges[0].from)).toBe('bottom'))
-  expect(latest.commands).toContain('set-edge-side')
+  expect(latest.kinds).toContain('set-edge-side')
 
   // Menu is still open — pin the other endpoint in the same visit.
   clickOption(container, 'To side', 'Top')
@@ -286,8 +229,8 @@ it('the side option rows pin an endpoint directly, without cycling', async () =>
 })
 
 it('Delete from the edge menu removes the edge and leaves the nodes', async () => {
-  const { EdgeHost, latest } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host, latest } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
@@ -296,13 +239,13 @@ it('Delete from the edge menu removes the edge and leaves the nodes', async () =
   await userEvent.click(page.getByRole('menuitem', { name: 'Delete' }))
 
   await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(0))
-  expect(latest.commands).toContain('delete-edge')
+  expect(latest.kinds).toContain('delete-edge')
   expect(latest.canvas.nodes).toHaveLength(2)
 })
 
 it('context-menu targeting keeps node and edge selection mutually exclusive', async () => {
-  const { EdgeHost, latest } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host, latest } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   // Select the edge first (click its line), then right-click a NODE: the
   // edge selection must clear, or a later Delete removes the edge the user
@@ -335,6 +278,7 @@ it('context-menu targeting keeps node and edge selection mutually exclusive', as
 })
 
 it('a menu opened near the right/bottom edge is nudged back inside the editor', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   rightClick(rootOf(container), 795, 590)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
@@ -352,31 +296,9 @@ it('a menu opened near the right/bottom edge is nudged back inside the editor', 
 
 // --- Color row: presets are one-tap picks on both node and edge menus ---
 
-function makeNodeHost() {
-  const latest: { canvas: SpatialCanvas; commands: string[] } = { canvas: start, commands: [] }
-  function NodeHost() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next, command) => {
-            latest.commands.push(command.kind)
-            setCanvas(next)
-          }}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  return { NodeHost, latest }
-}
-
 it('the node Color row applies a preset in one tap and Default removes it', async () => {
-  const { NodeHost, latest } = makeNodeHost()
-  const { container } = render(<NodeHost />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   rightClick(rootOf(container), 200, 150)
   await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
 
@@ -396,7 +318,7 @@ it('the node Color row applies a preset in one tap and Default removes it', asyn
 
   clickOption(container, 'Color', 'Red')
   await vi.waitFor(() => expect(latest.canvas.nodes[0].color).toBe('1'))
-  expect(latest.commands).toContain('set-node-color')
+  expect(latest.kinds).toContain('set-node-color')
 
   // Property picks keep the menu open, and the scene re-renders with the
   // preset accent: the node's chrome rect now carries the palette stroke.
@@ -415,8 +337,8 @@ it('the node Color row applies a preset in one tap and Default removes it', asyn
 })
 
 it('the edge Color row recolors the stroke via the palette preset', async () => {
-  const { EdgeHost, latest } = makeEdgeHost()
-  const { container } = render(<EdgeHost />)
+  const { Host, latest } = makeEditorHost({ initial: edgeStart })
+  const { container } = render(<Host />)
 
   const mid = edgeMidpoint(container)
   rightClick(rootOf(container), mid.x, mid.y)
@@ -424,7 +346,7 @@ it('the edge Color row recolors the stroke via the palette preset', async () => 
 
   clickOption(container, 'Color', 'Purple')
   await vi.waitFor(() => expect(latest.canvas.edges[0].color).toBe('6'))
-  expect(latest.commands).toContain('set-edge-color')
+  expect(latest.kinds).toContain('set-edge-color')
 
   const accent = SPATIAL_LIGHT_PALETTE.presets['6']
   await vi.waitFor(() =>
@@ -460,22 +382,8 @@ it('the Color row from a multi-selection recolors every member and the edges bet
       },
     ],
   }
-  const latest: { canvas: SpatialCanvas } = { canvas: areaStart }
-  function AreaHost() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(areaStart)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
-  const { container } = render(<AreaHost />)
+  const { Host, latest } = makeEditorHost({ initial: areaStart })
+  const { container } = render(<Host />)
   const root = rootOf(container)
 
   // Select a + b (c stays out), then right-click member a.

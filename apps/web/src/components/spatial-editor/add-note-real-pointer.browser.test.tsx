@@ -6,48 +6,29 @@
 // A synthetic MouseEvent('click') skips pointerdown entirely and cannot see
 // this, which is why the older test missed it: only a real pointer sequence
 // (userEvent) exercises the capture path.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-function Host({ onCommand }: { onCommand: (kind: string) => void }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>({ nodes: [], edges: [] })
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next, command) => {
-          onCommand(command.kind)
-          setCanvas(next)
-        }}
-        theme="light"
-      />
-    </div>
-  )
-}
-
 it('a real pointer click on "Note" creates a node and opens its editor', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
   await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
 
-  expect(commands).toEqual(['create-node'])
+  expect(latest.kinds).toEqual(['create-node'])
   expect(container.querySelectorAll('svg rect').length).toBeGreaterThan(0)
   expect(container.querySelectorAll('[data-testid="text-node-editor"]').length).toBe(1)
 })
 
 it('committing the new note untouched keeps a visible empty node, not a blank canvas', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
 
   await userEvent.click(page.getByRole('button', { name: 'Add' }))
   await userEvent.click(page.getByRole('menuitem', { name: 'Note' }))
@@ -60,7 +41,7 @@ it('committing the new note untouched keeps a visible empty node, not a blank ca
     position: { x: 770, y: 570 },
   })
 
-  expect(commands[0]).toBe('create-node')
+  expect(latest.kinds[0]).toBe('create-node')
   expect(container.querySelectorAll('[data-testid="text-node-editor"]').length).toBe(0)
   expect(container.querySelectorAll('svg rect').length).toBeGreaterThan(0)
 })

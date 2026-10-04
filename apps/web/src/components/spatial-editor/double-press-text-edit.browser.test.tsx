@@ -10,12 +10,11 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { fillNodeEditor, nodeEditorContent, nodeEditorText } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -24,24 +23,8 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next, command) => {
-          onCommand?.(command.kind)
-          setCanvas(next)
-        }}
-        theme="light"
-      />
-    </div>
-  )
-}
-
 it('a real double-click on a text node opens its editor with the existing text', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 150 } })
 
@@ -50,6 +33,7 @@ it('a real double-click on a text node opens its editor with the existing text',
 })
 
 it('a real double-click on an already-selected node still opens the editor', async () => {
+  const { Host } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.click(root, { position: { x: 200, y: 150 } })
@@ -60,17 +44,17 @@ it('a real double-click on an already-selected node still opens the editor', asy
 })
 
 it('a real double-click on empty space creates exactly one node and opens it', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 600, y: 450 } })
 
-  expect(commands.filter((kind) => kind === 'create-node')).toHaveLength(1)
+  expect(latest.kinds.filter((kind) => kind === 'create-node')).toHaveLength(1)
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 })
 
 it('typing into the opened editor and committing persists the text', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
@@ -79,6 +63,6 @@ it('typing into the opened editor and committing persists the text', async () =>
   // Click far outside the node to blur-commit.
   await userEvent.click(root, { position: { x: 700, y: 500 } })
 
-  expect(commands).toContain('set-text')
+  expect(latest.kinds).toContain('set-text')
   expect(nodeEditorContent(container)).toBeNull()
 })

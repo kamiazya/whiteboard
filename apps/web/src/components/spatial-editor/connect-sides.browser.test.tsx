@@ -5,11 +5,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -21,25 +20,9 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-function Host({ onCommand }: { onCommand: (kind: string) => void }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next, command) => {
-          onCommand(command.kind)
-          setCanvas(next)
-        }}
-        theme="light"
-      />
-    </div>
-  )
-}
-
 it('renders a connect handle on every side of the selection', async () => {
-  const { container } = render(<Host onCommand={() => {}} />)
+  const { Host } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   await userEvent.click(rootOf(container), {
     position: { x: 380, y: 290 },
   })
@@ -50,8 +33,8 @@ it('renders a connect handle on every side of the selection', async () => {
 })
 
 it('dragging from the LEFT handle onto another node creates an edge', async () => {
-  const commands: string[] = []
-  const { container } = render(<Host onCommand={(kind) => commands.push(kind)} />)
+  const { Host, latest } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
 
   // Select node "a", then drag from its west handle to node "b".
@@ -79,5 +62,5 @@ it('dragging from the LEFT handle onto another node creates an edge', async () =
     }),
   )
 
-  expect(commands).toContain('connect-nodes')
+  expect(latest.kinds).toContain('connect-nodes')
 })
