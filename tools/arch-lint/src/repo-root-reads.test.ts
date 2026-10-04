@@ -94,6 +94,8 @@ const STAYS_IN_PACKAGE: Readonly<Record<string, string>> = {
     "property tests through the packages' fast-check prelude; this project takes no dependency on a package",
   'packages/mcp-server/src/server/release/publish-production-policy.test.ts':
     "property tests through the packages' fast-check prelude; this project takes no dependency on a package",
+  'packages/mcp-server/src/server/release/pwa-denylist-served.test.ts':
+    "holds apps/web's service-worker denylist against the daemon's own isReservedUiPath, which this project cannot import",
   'packages/mcp-server/src/server/release/release-gate-matrix.test.ts':
     "property tests through the packages' fast-check prelude; this project takes no dependency on a package",
   'packages/mcp-server/src/server/release/release-supply-chain-policy.test.ts':
