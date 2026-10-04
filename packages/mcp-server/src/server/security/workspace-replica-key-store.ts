@@ -75,9 +75,7 @@ export interface WorkspaceReplicaKeyStore {
   /** Mints on first call for a workspace, otherwise answers the same bytes
    *  every time — never a fresh key per call. */
   keyFor(workspaceId: string): Promise<WorkspaceReplicaKey>
-  /** The workspace's own override, or null when unset (falls back to the
-   *  process default via `effectiveTier`). */
-  tierFor(workspaceId: string): Promise<ReplicaTier | null>
+  /** The workspace's own override, or the process default when it has none. */
   effectiveTier(workspaceId: string): Promise<ReplicaTier>
   /** Sets or clears (`null`) the workspace's own override. This is a
    *  security-posture write, so callers gate it at `runtime:admin`
@@ -142,7 +140,6 @@ export function createWorkspaceReplicaKeyStore(
         .executeTakeFirstOrThrow()
       return withKeyId(cloneBytes(row.key), cloneBytes(row.salt))
     },
-    tierFor,
     async effectiveTier(workspaceId) {
       return (await tierFor(workspaceId)) ?? defaultTier
     },

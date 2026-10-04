@@ -51,10 +51,7 @@ const STORE_DIRS: readonly string[] = [
 ]
 
 /** `Interface.method` to why production never calls it. Empty is the goal. */
-const LEDGER: Readonly<Record<string, string>> = {
-  'WorkspaceReplicaKeyStore.tierFor':
-    'the raw stored tier, null when never chosen, which effectiveTier folds into the default; production reads only effectiveTier, and the store tests observe the stored choice through this. Drop it from the interface and read the column in those tests when next touched',
-}
+const LEDGER: Readonly<Record<string, string>> = {}
 
 /** `Class.method` to why nothing in the source calls it. Only hooks a runtime or protocol invokes by name. */
 const CLASS_METHOD_LEDGER: Readonly<Record<string, string>> = {

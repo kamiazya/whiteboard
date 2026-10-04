@@ -117,34 +117,34 @@ describe('keyFor', () => {
   })
 })
 
-describe('tierFor / effectiveTier', () => {
-  it('is null when unset', async () => {
-    await insertWorkspace('ws-1')
-    expect(await store.tierFor('ws-1')).toBeNull()
+/** The raw column, which `effectiveTier` folds into the process default. */
+async function storedTier(id: string): Promise<string | null | undefined> {
+  const row = await handle.db
+    .selectFrom('workspaces')
+    .select('replicaTier')
+    .where('id', '=', id)
+    .executeTakeFirst()
+  return row?.replicaTier
+}
+
+describe('effectiveTier', () => {
+  it('falls back to the constructor default for a workspace row that does not exist at all', async () => {
+    expect(await store.effectiveTier('no-such-workspace')).toBe('offline')
   })
 
-  it('answers the stored value when set', async () => {
-    await insertWorkspace('ws-1', 'bounded')
-    expect(await store.tierFor('ws-1')).toBe('bounded')
-  })
-
-  it('is null for a workspace row that does not exist at all', async () => {
-    expect(await store.tierFor('no-such-workspace')).toBeNull()
-  })
-
-  it('effectiveTier falls back to the constructor default when unset', async () => {
+  it('falls back to the constructor default when unset', async () => {
     await insertWorkspace('ws-1')
     expect(await store.effectiveTier('ws-1')).toBe('offline')
   })
 
-  it('effectiveTier prefers the per-workspace override over the default', async () => {
+  it('prefers the per-workspace override over the default', async () => {
     await insertWorkspace('ws-1', 'no-offline')
     expect(await store.effectiveTier('ws-1')).toBe('no-offline')
   })
 
   it('throws on a stored tier value that is not one of the declared enum members', async () => {
     await insertWorkspace('ws-1', 'quantum-offline')
-    await expect(store.tierFor('ws-1')).rejects.toThrow()
+    await expect(store.effectiveTier('ws-1')).rejects.toThrow()
   })
 })
 
@@ -153,31 +153,31 @@ describe('setTier', () => {
     'no-offline',
     'offline',
     'bounded',
-  ] as const)('round-trips %s through tierFor and effectiveTier', async (tier) => {
+  ] as const)('round-trips %s through the column and effectiveTier', async (tier) => {
     await insertWorkspace('ws-1')
     expect(await store.setTier('ws-1', tier)).toBe(true)
-    expect(await store.tierFor('ws-1')).toBe(tier)
+    expect(await storedTier('ws-1')).toBe(tier)
     expect(await store.effectiveTier('ws-1')).toBe(tier)
   })
 
   it('clearing back to null falls back to the constructor default', async () => {
     await insertWorkspace('ws-1', 'no-offline')
     expect(await store.setTier('ws-1', null)).toBe(true)
-    expect(await store.tierFor('ws-1')).toBeNull()
+    expect(await storedTier('ws-1')).toBeNull()
     expect(await store.effectiveTier('ws-1')).toBe('offline')
   })
 
   it('rejects a value outside the declared enum and leaves the column unchanged', async () => {
     await insertWorkspace('ws-1', 'offline')
     // @ts-expect-error — exercising the runtime guard against a caller that
-    // bypasses the type system, the same hazard `tierFor` guards on read.
+    // bypasses the type system, the same hazard `effectiveTier` guards on read.
     await expect(store.setTier('ws-1', 'session')).rejects.toThrow()
-    expect(await store.tierFor('ws-1')).toBe('offline')
+    expect(await storedTier('ws-1')).toBe('offline')
   })
 
   it('answers false for a workspace with no registry row, and creates none', async () => {
     expect(await store.setTier('no-such-workspace', 'offline')).toBe(false)
-    expect(await store.tierFor('no-such-workspace')).toBeNull()
+    expect(await storedTier('no-such-workspace')).toBeUndefined()
   })
 
   it('is idempotent and touches no other column', async () => {
@@ -265,7 +265,7 @@ describe('rotateKey', () => {
   it('leaves workspaces.replicaTier and every other workspace column untouched', async () => {
     await insertWorkspace('ws-1', 'bounded')
     await store.rotateKey('ws-1')
-    expect(await store.tierFor('ws-1')).toBe('bounded')
+    expect(await store.effectiveTier('ws-1')).toBe('bounded')
   })
 
   // THE test that matters: bytes sealed under the pre-rotation pair must be

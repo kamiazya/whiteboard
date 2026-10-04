@@ -168,6 +168,6 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
     await seedWorkspaceRow(fixture)
     await fixture.keys.setTier(WS, 'bounded')
     await rotate(fixture.app, WS, { Authorization: `Bearer ${DAEMON_TOKEN}` })
-    expect(await fixture.keys.tierFor(WS)).toBe('bounded')
+    expect(await fixture.keys.effectiveTier(WS)).toBe('bounded')
   })
 })

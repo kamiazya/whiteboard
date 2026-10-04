@@ -45,8 +45,6 @@ export interface ResolvedGrant {
   readonly kind: GrantKind
   /** What the holder may do. `anonymous` and `daemon-token` carry the full set. */
   readonly scopes: readonly AuthScope[]
-  /** Who the credential names, where it names anyone. */
-  readonly subject?: string
   /** Who an authenticator vouched for, when the credential names a PERSON —
    *  server mode's signed-in person. */
   readonly person?: AuthenticatorBinding

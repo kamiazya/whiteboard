@@ -25,11 +25,6 @@ describe('seedFromId', () => {
     const seeds = new Set(Array.from({ length: 1000 }, (_, i) => seedFromId(`node-${i}`)))
     expect(seeds.size).toBe(1000)
   })
-
-  it('a salt derives an independent stream identity from the same id', () => {
-    expect(seedFromId('n1', 'outline')).not.toBe(seedFromId('n1', 'fill'))
-    expect(seedFromId('n1', 'outline')).toBe(seedFromId('n1', 'outline'))
-  })
 })
 
 const createStyleRandom = (id: string) => styleRandomFromSeed(seedFromId(id))
