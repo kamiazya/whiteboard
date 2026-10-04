@@ -182,9 +182,10 @@ context → orphaned), so a proposal rides the mechanism that exists.
 This gives prose the same granularity a canvas has, and it is what makes
 per-change adoption meaningful on a note.
 
-**Where it stands.** `applyBodyChange` and `bodyChangeConflicts` (model,
-beside their canvas twins) answer what adopting a passage MEANS and whether
-the passage still reads what the proposal assumed. They take the resolved
+**Where it stands.** `applyPassages` and `bodyChangeConflicts` (model,
+beside their canvas twins) answer what adopting a batch of passages MEANS —
+refusing passages that have come to overlap — and whether each passage still
+reads what the proposal assumed. They take the resolved
 range rather than resolving it: a body is a CRDT, and where a passage now
 sits is answered first by the Loro mark that followed the characters, which
 `model` cannot see and must not guess at — the surface has already resolved
