@@ -100,7 +100,6 @@ async function defaultRunDoctor(opts: {
     kind: 'ok' as const,
     json: true as const,
     dryRun: false,
-    trustedProxy: undefined,
     externalUrl: undefined,
     allowedOrigins: undefined,
     authStrategy: undefined,

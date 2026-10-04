@@ -228,7 +228,6 @@ function checkExposure(config: ServerModeConfig): Check {
     bindHost: config.host,
     externalUrl: config.externalUrl,
     allowedOrigins: [...config.allowedOrigins],
-    trustedProxy: config.trustedProxy,
   })
   if (plan.ok) {
     return { id: 'server.exposure', status: 'ok', summary: 'Server exposure plan is valid' }

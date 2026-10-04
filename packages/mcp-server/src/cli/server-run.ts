@@ -144,7 +144,6 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     bindHost: parsed.config.host,
     externalUrl: parsed.config.externalUrl,
     allowedOrigins: [...parsed.config.allowedOrigins],
-    trustedProxy: parsed.config.trustedProxy,
   })
   if (!plan.ok) {
     return { kind: 'plan-error', code: plan.code }

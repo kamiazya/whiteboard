@@ -28,7 +28,6 @@ export const ENV_KEYS = {
   ALLOWED_ORIGINS: 'WHITEBOARD_SERVER_ALLOWED_ORIGINS',
   HOST: 'WHITEBOARD_SERVER_HOST',
   PORT: 'WHITEBOARD_SERVER_PORT',
-  TRUSTED_PROXY: 'WHITEBOARD_SERVER_TRUSTED_PROXY',
   JWT_CLOCK_SKEW_SECONDS: 'WHITEBOARD_SERVER_JWT_CLOCK_SKEW_SECONDS',
   JWT_SCOPE_CLAIM: 'WHITEBOARD_SERVER_JWT_SCOPE_CLAIM',
   JWT_ALLOW_UNTYPED_ACCESS_TOKENS: 'WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS',
@@ -62,8 +61,6 @@ interface ServerModeEnvConfig {
   host: string
   /** Bind port. 1–65535. Default: 3099. */
   port: number
-  /** Whether to trust reverse-proxy headers. Default: false. */
-  trustedProxy: boolean
   /** Override data directory. Undefined uses the default resolver. */
   dataDir: string | undefined
 }
@@ -82,7 +79,6 @@ type ServerModeEnvConfigFailureCode =
   | 'server_mode_env.allowed_origins_wildcard_forbidden'
   | 'server_mode_env.allowed_origins_invalid_wildcard'
   | 'server_mode_env.port_out_of_range'
-  | 'server_mode_env.trusted_proxy_invalid'
   | 'server_mode_env.jwt_clock_skew_invalid'
   | 'server_mode_env.jwt_scope_claim_invalid'
   | 'server_mode_env.jwt_allow_untyped_access_tokens_invalid'
@@ -237,19 +233,14 @@ function parseRequiredAuth(
   return { ok: true, jwtIssuer, jwtAudience, jwksUri }
 }
 
-/** The transport knobs: a port and whether a proxy in front is trusted. */
-function parseTransportTuning(
+/** The bind port: absent defaults, present-but-out-of-range refuses. */
+function parsePortTuning(
   env: NodeJS.ProcessEnv,
-): { ok: true; port: number; trustedProxy: boolean } | ServerModeEnvConfigResult {
+): { ok: true; port: number } | ServerModeEnvConfigResult {
   const portRaw = env[ENV_KEYS.PORT]
   const port = portRaw === undefined ? 3099 : parsePort(portRaw)
   if (port === null) return fail('server_mode_env.port_out_of_range', ENV_KEYS.PORT)
-
-  const trustedProxy = optionalBoolean(env, ENV_KEYS.TRUSTED_PROXY, false)
-  if (trustedProxy === null) {
-    return fail('server_mode_env.trusted_proxy_invalid', ENV_KEYS.TRUSTED_PROXY)
-  }
-  return { ok: true, port, trustedProxy }
+  return { ok: true, port }
 }
 
 /** The JWT knobs that have a default: present-but-invalid refuses, absent does not. */
@@ -303,7 +294,7 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
     if (originsFailure !== null) return fail(originsFailure, ENV_KEYS.ALLOWED_ORIGINS)
   }
 
-  const transport = parseTransportTuning(env)
+  const transport = parsePortTuning(env)
   if (!('port' in transport)) return transport
 
   const jwt = parseJwtTuning(env)
@@ -323,7 +314,6 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
       jwtAllowUntypedAccessTokens: jwt.jwtAllowUntypedAccessTokens,
       host: optional(env, ENV_KEYS.HOST) ?? '0.0.0.0',
       port: transport.port,
-      trustedProxy: transport.trustedProxy,
       dataDir: optional(env, ENV_KEYS.DATA_DIR),
     },
   }

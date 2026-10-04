@@ -46,12 +46,6 @@ describe('resolveServerModeExposure — local-daemon loopback policy', () => {
     if (!d.ok) expect(d.code).toBe('local_daemon.non_loopback_forbidden')
   })
 
-  it('success carries trustedProxy: false — local daemon never trusts proxy headers', () => {
-    const d = resolveServerModeExposure({ mode: 'local-daemon', bindHost: '127.0.0.1' })
-    expect(d.ok).toBe(true)
-    if (d.ok) expect(d.trustedProxy).toBe(false)
-  })
-
   it('success allowedOrigins contains only loopback http origins', () => {
     const d = resolveServerModeExposure({ mode: 'local-daemon', bindHost: '127.0.0.1' })
     expect(d.ok).toBe(true)
@@ -225,27 +219,6 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     })
     expect(d.ok).toBe(true)
     if (d.ok) expect(d.publicBaseUrl).toBe('https://example.com:8443')
-  })
-
-  it('trustedProxy: true is reflected in success decision', () => {
-    const d = resolveServerModeExposure({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: 'https://example.com',
-      trustedProxy: true,
-    })
-    expect(d.ok).toBe(true)
-    if (d.ok) expect(d.trustedProxy).toBe(true)
-  })
-
-  it('trustedProxy defaults to false when not provided', () => {
-    const d = resolveServerModeExposure({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: 'https://example.com',
-    })
-    expect(d.ok).toBe(true)
-    if (d.ok) expect(d.trustedProxy).toBe(false)
   })
 
   it('empty allowedOrigins is valid — no browser clients, still ok', () => {

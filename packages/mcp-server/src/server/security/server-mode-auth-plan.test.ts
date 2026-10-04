@@ -20,14 +20,13 @@ const AUTH_SCOPE_VOCABULARY = new Set([
 // ── Local-daemon ─────────────────────────────────────────────────────────────
 
 describe('planServerModeAuth — local-daemon', () => {
-  it('loopback bindHost → ok local-loopback, routeAuthPlan null, trustedProxy false', () => {
+  it('loopback bindHost → ok local-loopback, routeAuthPlan null', () => {
     const result = planServerModeAuth({ mode: 'local-daemon', bindHost: '127.0.0.1' })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.kind).toBe('local-loopback')
     expect(result.routeAuthPlan).toBeNull()
-    expect(result.trustedProxy).toBe(false)
     expect(result.pnaHeader).toBe('loopback')
   })
 
@@ -37,7 +36,6 @@ describe('planServerModeAuth — local-daemon', () => {
       bindHost: '0.0.0.0',
       externalUrl: 'https://app.example.com',
       allowedOrigins: ['https://app.example.com'],
-      trustedProxy: true,
     })
 
     expect(result.ok).toBe(false)
@@ -304,20 +302,6 @@ describe('planServerModeAuth — server-mode plan content', () => {
     if (result.ok) expect(result.publicBaseUrl).toBe('https://myapp.example.com')
   })
 
-  it('trustedProxy defaults to false', () => {
-    const result = makeServerPlan({ trustedProxy: undefined })
-
-    expect(result.ok).toBe(true)
-    if (result.ok) expect(result.trustedProxy).toBe(false)
-  })
-
-  it('trustedProxy true is preserved in plan', () => {
-    const result = makeServerPlan({ trustedProxy: true })
-
-    expect(result.ok).toBe(true)
-    if (result.ok) expect(result.trustedProxy).toBe(true)
-  })
-
   it('server-mode plan output has no dataDir, bindHost, or internal token fields', () => {
     const result = makeServerPlan()
 
@@ -334,7 +318,6 @@ describe('planServerModeAuth — server-mode plan content', () => {
         'pnaHeader',
         'publicBaseUrl',
         'routeAuthPlan',
-        'trustedProxy',
       ])
     }
   })

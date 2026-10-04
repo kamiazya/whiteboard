@@ -25,12 +25,11 @@ describe('parseServerRunArgs — happy path', () => {
     expect(result.jwksUri).toBe('https://auth.example.com/.well-known/jwks.json')
   })
 
-  it('defaults: dryRun=false, trustedProxy=undefined, all overrides undefined', () => {
+  it('defaults: dryRun=false, all overrides undefined', () => {
     const result = parseServerRunArgs(['--json'])
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
     expect(result.dryRun).toBe(false)
-    expect(result.trustedProxy).toBeUndefined()
     expect(result.externalUrl).toBeUndefined()
     expect(result.allowedOrigins).toBeUndefined()
     expect(result.authStrategy).toBeUndefined()
@@ -42,13 +41,6 @@ describe('parseServerRunArgs — happy path', () => {
     expect(result.host).toBeUndefined()
     expect(result.port).toBeUndefined()
     expect(result.dataDir).toBeUndefined()
-  })
-
-  it('parses --trusted-proxy as boolean true', () => {
-    const result = parseServerRunArgs(['--json', '--trusted-proxy'])
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') return
-    expect(result.trustedProxy).toBe(true)
   })
 
   it('parses all optional flags', () => {
@@ -66,7 +58,6 @@ describe('parseServerRunArgs — happy path', () => {
       '--host=0.0.0.0',
       '--port=8080',
       '--data-dir=/var/lib/whiteboard',
-      '--trusted-proxy',
     ])
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -76,7 +67,6 @@ describe('parseServerRunArgs — happy path', () => {
     expect(result.host).toBe('0.0.0.0')
     expect(result.port).toBe('8080')
     expect(result.dataDir).toBe('/var/lib/whiteboard')
-    expect(result.trustedProxy).toBe(true)
   })
 })
 
@@ -98,8 +88,8 @@ describe('parseServerRunArgs — usage errors', () => {
     expect(result.kind).toBe('usage-error')
   })
 
-  it('duplicate --trusted-proxy → usage-error', () => {
-    const result = parseServerRunArgs(['--json', '--trusted-proxy', '--trusted-proxy'])
+  it('--trusted-proxy is no flag: nothing reads a forwarded client address', () => {
+    const result = parseServerRunArgs(['--json', '--trusted-proxy'])
     expect(result.kind).toBe('usage-error')
   })
 
@@ -214,14 +204,13 @@ describe('mergeCliFlagsIntoEnv', () => {
       '--port=8080',
       '--data-dir=/tmp/wb',
     ]
-    const parsed = parseServerRunArgs(['--json', '--trusted-proxy', ...values])
+    const parsed = parseServerRunArgs(['--json', ...values])
     if (parsed.kind !== 'ok') throw new Error(parsed.message)
     const env = mergeCliFlagsIntoEnv({}, parsed)
-    // One env entry per value flag, plus the boolean — so a flag added to
-    // the parser and not to the merge shows up here as a missing key.
-    expect(Object.keys(env)).toHaveLength(values.length + 1)
+    // One env entry per value flag — so a flag added to the parser and not
+    // to the merge shows up here as a missing key.
+    expect(Object.keys(env)).toHaveLength(values.length)
     expect(env.WHITEBOARD_SERVER_PORT).toBe('8080')
-    expect(env.WHITEBOARD_SERVER_TRUSTED_PROXY).toBe('true')
   })
 
   it('leaves the base env alone and writes nothing for an absent flag', () => {

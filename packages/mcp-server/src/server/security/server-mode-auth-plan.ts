@@ -64,7 +64,6 @@ export type ServerModeAuthPlanDecision =
       readonly kind: 'local-loopback'
       readonly publicBaseUrl: string
       readonly allowedOrigins: readonly string[]
-      readonly trustedProxy: false
       readonly pnaHeader: 'loopback'
       readonly routeAuthPlan: null
     }
@@ -74,7 +73,6 @@ export type ServerModeAuthPlanDecision =
       readonly publicBaseUrl: string
       // URL.origin-normalized: scheme+host+port, default ports stripped.
       readonly allowedOrigins: readonly string[]
-      readonly trustedProxy: boolean
       readonly pnaHeader: 'disabled'
       readonly routeAuthPlan: readonly RouteGroupAuthPlan[]
     }
@@ -113,7 +111,6 @@ export function planServerModeAuth(input: ServerModeExposureInput): ServerModeAu
       kind: 'local-loopback',
       publicBaseUrl: exposure.publicBaseUrl,
       allowedOrigins: exposure.allowedOrigins,
-      trustedProxy: false,
       pnaHeader: 'loopback',
       routeAuthPlan: null,
     }
@@ -131,7 +128,6 @@ export function planServerModeAuth(input: ServerModeExposureInput): ServerModeAu
     kind: 'server-mode',
     publicBaseUrl: exposure.publicBaseUrl,
     allowedOrigins: normalizedOrigins,
-    trustedProxy: exposure.trustedProxy,
     pnaHeader: 'disabled',
     routeAuthPlan: SERVER_MODE_ROUTE_AUTH_PLAN.map(({ group, requiredScopes }) => ({
       group,

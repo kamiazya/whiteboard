@@ -130,18 +130,6 @@ function parseOld(env: NodeJS.ProcessEnv): ServerModeEnvConfigResult {
     port = parsed
   }
 
-  // --- Optional: trustedProxy ---
-
-  const trustedProxyRaw = env[ENV_KEYS.TRUSTED_PROXY]
-  let trustedProxy = false
-  if (trustedProxyRaw !== undefined && trustedProxyRaw.trim() !== '') {
-    const v = trustedProxyRaw.trim()
-    if (v !== 'true' && v !== 'false') {
-      return fail('server_mode_env.trusted_proxy_invalid', ENV_KEYS.TRUSTED_PROXY)
-    }
-    trustedProxy = v === 'true'
-  }
-
   // --- Optional: jwtClockSkewSeconds ---
 
   const clockSkewRaw = env[ENV_KEYS.JWT_CLOCK_SKEW_SECONDS]
@@ -204,7 +192,6 @@ function parseOld(env: NodeJS.ProcessEnv): ServerModeEnvConfigResult {
       jwtAllowUntypedAccessTokens,
       host,
       port,
-      trustedProxy,
       dataDir,
     },
   }
@@ -239,7 +226,6 @@ const VALUES: Record<string, readonly (string | undefined)[]> = {
   ],
   [ENV_KEYS.HOST]: [undefined, '', '   ', '127.0.0.1'],
   [ENV_KEYS.PORT]: [undefined, '', '0', '1', '3099', '65535', '65536', '-1', 'abc', '80.5'],
-  [ENV_KEYS.TRUSTED_PROXY]: [undefined, '', '  ', 'true', 'false', ' true ', 'TRUE', 'yes'],
   [ENV_KEYS.JWT_CLOCK_SKEW_SECONDS]: [
     undefined,
     '',
@@ -321,7 +307,7 @@ describe('the env parser answers exactly what it answered before the split', () 
  * COMBINATIONS, which a one-field-at-a-time sweep cannot reach.
  */
 describe('the value table reaches every refusal the parser can answer', () => {
-  it('produces all 17 failure codes when walked field by field', () => {
+  it('produces all 16 failure codes when walked field by field', () => {
     const codes = new Set<string>()
     let ok = 0
     for (const [key, values] of Object.entries(VALUES)) {
@@ -335,7 +321,7 @@ describe('the value table reaches every refusal the parser can answer', () => {
       }
     }
 
-    expect(codes.size, `reached: ${[...codes].sort().join(', ')}`).toBe(17)
+    expect(codes.size, `reached: ${[...codes].sort().join(', ')}`).toBe(16)
     expect(ok).toBeGreaterThan(0)
   })
 })

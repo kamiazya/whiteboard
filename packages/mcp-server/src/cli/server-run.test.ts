@@ -25,7 +25,6 @@ function dryRunFlags(
     kind: 'ok',
     json: true,
     dryRun: true,
-    trustedProxy: undefined,
     externalUrl: undefined,
     allowedOrigins: undefined,
     authStrategy: undefined,
@@ -93,15 +92,6 @@ describe('runServerRun — dry-run success', () => {
     expect(outcome.kind).toBe('dry-run-ok')
     if (outcome.kind !== 'dry-run-ok') return
     expect(outcome.result.allowedOrigins).toEqual(['https://whiteboard.example.com'])
-  })
-
-  it('--trusted-proxy flag merges into env', async () => {
-    const outcome = await runServerRun({
-      flags: dryRunFlags({ trustedProxy: true }),
-      env: VALID_ENV,
-    })
-    // trustedProxy affects the plan but not the dry-run result shape directly
-    expect(outcome.kind).toBe('dry-run-ok')
   })
 })
 

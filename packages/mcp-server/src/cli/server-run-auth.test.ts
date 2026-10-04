@@ -196,7 +196,6 @@ describe('runServerRun — jwtAllowUntypedAccessTokens wiring', () => {
       kind: 'ok',
       json: true,
       dryRun: false,
-      trustedProxy: undefined,
       externalUrl: undefined,
       allowedOrigins: undefined,
       authStrategy: undefined,

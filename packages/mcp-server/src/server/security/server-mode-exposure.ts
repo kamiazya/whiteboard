@@ -7,7 +7,6 @@
 // Local-daemon policy (invariant, not negotiable):
 //   - Any non-loopback bindHost → rejected, regardless of externalUrl.
 //   - publicBaseUrl is always an http loopback origin.
-//   - trustedProxy is always false — local daemon never reads proxy headers.
 //   - allowedOrigins is the fixed loopback http origin set.
 //
 // Server-mode policy (for future wiring):
@@ -20,8 +19,6 @@
 //   - allowedOrigins must be exact https:// origins or leftmost-label
 //     wildcard subdomain patterns (https://*.example.com); bare '*' is
 //     forbidden (see origin-pattern.ts for the full matching contract).
-//   - trustedProxy is an explicit opt-in (default false). Proxy header reading
-//     in actual routes is a future concern; this flag is the policy record.
 //
 // Failure codes are stable string identifiers. Problem Details / HTTP route
 // wiring is a future concern; the codes are stable so callers can switch on
@@ -59,7 +56,6 @@ export interface ServerModeExposureInput {
   bindHost: string
   externalUrl?: string
   allowedOrigins?: readonly string[]
-  trustedProxy?: boolean
 }
 
 export type ServerModeExposureDecision =
@@ -68,14 +64,12 @@ export type ServerModeExposureDecision =
       kind: 'local-loopback'
       publicBaseUrl: string
       allowedOrigins: readonly string[]
-      trustedProxy: false
     }
   | {
       ok: true
       kind: 'server-mode'
       publicBaseUrl: string
       allowedOrigins: readonly string[]
-      trustedProxy: boolean
     }
   | { ok: false; code: ServerModeExposureFailureCode }
 
@@ -102,7 +96,6 @@ function localDaemonExposure(input: ServerModeExposureInput): ServerModeExposure
     // left unchanged.
     publicBaseUrl: `http://${bracketIpv6(input.bindHost)}`,
     allowedOrigins: LOCAL_DAEMON_ALLOWED_ORIGINS,
-    trustedProxy: false,
   }
 }
 
@@ -172,6 +165,5 @@ function serverModeExposure(input: ServerModeExposureInput): ServerModeExposureD
     // slash — consistent with the Origin header format browsers send.
     publicBaseUrl: external.origin,
     allowedOrigins: normalizedOrigins,
-    trustedProxy: input.trustedProxy ?? false,
   }
 }

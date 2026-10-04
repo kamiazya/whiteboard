@@ -27,13 +27,12 @@ describe('parseServerModeEnvConfig — valid config', () => {
     expect(result.config.jwksUri).toBe('https://auth.example.com/.well-known/jwks.json')
   })
 
-  it('defaults: host=0.0.0.0, port=3099, trustedProxy=false, clockSkew=60, scopeClaim=scope', () => {
+  it('defaults: host=0.0.0.0, port=3099, clockSkew=60, scopeClaim=scope', () => {
     const result = parseServerModeEnvConfig(VALID_ENV)
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.config.host).toBe('0.0.0.0')
     expect(result.config.port).toBe(3099)
-    expect(result.config.trustedProxy).toBe(false)
     expect(result.config.jwtClockSkewSeconds).toBe(60)
     expect(result.config.jwtScopeClaim).toBe('scope')
     expect(result.config.dataDir).toBeUndefined()
@@ -117,24 +116,14 @@ describe('parseServerModeEnvConfig — valid config', () => {
     expect(result.config.port).toBe(8080)
   })
 
-  it('parses trustedProxy=true', () => {
+  it('ignores a proxy-trust variable: no access decision reads a forwarded client address', () => {
     const result = parseServerModeEnvConfig({
       ...VALID_ENV,
-      WHITEBOARD_SERVER_TRUSTED_PROXY: 'true',
+      WHITEBOARD_SERVER_TRUSTED_PROXY: 'yes',
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.config.trustedProxy).toBe(true)
-  })
-
-  it('trustedProxy with surrounding whitespace is trimmed and accepted', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_TRUSTED_PROXY: '  true  ',
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.config.trustedProxy).toBe(true)
+    expect(result.config).not.toHaveProperty('trustedProxy')
   })
 
   it('parses jwtScopeClaim=scp', () => {
@@ -407,16 +396,6 @@ describe('parseServerModeEnvConfig — type / enum validation', () => {
     expect(result.code).toBe(`server_mode_env.${code}`)
   })
 
-  it('trustedProxy="yes" → trusted_proxy_invalid', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_TRUSTED_PROXY: 'yes',
-    })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.code).toBe('server_mode_env.trusted_proxy_invalid')
-  })
-
   it('negative clockSkew → jwt_clock_skew_invalid', () => {
     const result = parseServerModeEnvConfig({
       ...VALID_ENV,
@@ -547,11 +526,6 @@ describe('parseServerModeEnvConfig — failure field contract', () => {
     ],
     [{ WHITEBOARD_SERVER_PORT: '99999' }, 'server_mode_env.port_out_of_range', ENV_KEYS.PORT],
     [
-      { WHITEBOARD_SERVER_TRUSTED_PROXY: 'yes' },
-      'server_mode_env.trusted_proxy_invalid',
-      ENV_KEYS.TRUSTED_PROXY,
-    ],
-    [
       { WHITEBOARD_SERVER_JWT_CLOCK_SKEW_SECONDS: '-5' },
       'server_mode_env.jwt_clock_skew_invalid',
       ENV_KEYS.JWT_CLOCK_SKEW_SECONDS,
@@ -614,7 +588,6 @@ describe('ENV_KEYS contract', () => {
     expect(ENV_KEYS.ALLOWED_ORIGINS).toBe('WHITEBOARD_SERVER_ALLOWED_ORIGINS')
     expect(ENV_KEYS.HOST).toBe('WHITEBOARD_SERVER_HOST')
     expect(ENV_KEYS.PORT).toBe('WHITEBOARD_SERVER_PORT')
-    expect(ENV_KEYS.TRUSTED_PROXY).toBe('WHITEBOARD_SERVER_TRUSTED_PROXY')
     expect(ENV_KEYS.JWT_CLOCK_SKEW_SECONDS).toBe('WHITEBOARD_SERVER_JWT_CLOCK_SKEW_SECONDS')
     expect(ENV_KEYS.JWT_SCOPE_CLAIM).toBe('WHITEBOARD_SERVER_JWT_SCOPE_CLAIM')
     expect(ENV_KEYS.DATA_DIR).toBe('WHITEBOARD_DATA_DIR')
@@ -755,26 +728,6 @@ describe('parseServerModeEnvConfig — deterministic contract anchors', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.config.allowedOrigins).toEqual(['https://whiteboard.example.com'])
-  })
-
-  it('parses trustedProxy=false explicitly as false', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_TRUSTED_PROXY: 'false',
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.config.trustedProxy).toBe(false)
-  })
-
-  it('whitespace-only TRUSTED_PROXY defaults to false', () => {
-    const result = parseServerModeEnvConfig({
-      ...VALID_ENV,
-      WHITEBOARD_SERVER_TRUSTED_PROXY: '   ',
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.config.trustedProxy).toBe(false)
   })
 
   it('explicitly setting JWT_SCOPE_CLAIM=scope is accepted', () => {

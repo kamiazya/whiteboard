@@ -8,7 +8,7 @@
 // Keys read through a constant other than `ENV_KEYS` are not seen here; the
 // scan is a floor, and `docs/reference/configuration.md` remains where those
 // are listed.
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { repoRoot } from '../shared/test-utils/repo-root.js'
@@ -24,20 +24,55 @@ const NOT_FOR_OPERATORS: Readonly<Record<string, string>> = {
   WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: 'sizes the e2e smoke harness own request timeout',
 }
 
+// Named in the current docs without appearing in this repo's source: the
+// operator sets them, a dependency reads them. Checked from the other side: an
+// entry the source now names, or the docs no longer mention, fails.
+const NOT_READ_BY_SOURCE: Readonly<Record<string, string>> = {
+  OTEL_EXPORTER_OTLP_HEADERS: 'the OpenTelemetry exporter reads it, as the docs say',
+  OTEL_EXPORTER_OTLP_TIMEOUT: 'the OpenTelemetry exporter reads it, as the docs say',
+}
+
+const NAME_PATTERN = /\b((?:WHITEBOARD|MCP|OTEL)_[A-Z0-9_]*[A-Z0-9])\b/g
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) return entry.name === '__fixtures__' ? [] : sourceFiles(path)
-    return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : []
+    return /\.(?:[mc]?[jt]sx?)$/.test(entry.name) && !/\.test\.[mc]?[jt]sx?$/.test(entry.name)
+      ? [path]
+      : []
   })
 }
 
+// An ADR is history, so it may name a variable the code stopped reading.
 function markdownFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name)
-    if (entry.isDirectory()) return markdownFiles(path)
+    if (entry.isDirectory()) return entry.name === 'adr' ? [] : markdownFiles(path)
     return entry.name.endsWith('.md') ? [path] : []
   })
+}
+
+/**
+ * Every `WHITEBOARD_*` / `MCP_*` / `OTEL_*` name a package or app spells in its
+ * source or its scripts (the dev daemon and the smokes read some).
+ */
+function namesInSource(): Set<string> {
+  const roots = ['packages', 'apps'].flatMap((group) =>
+    readdirSync(join(REPO_ROOT, group), { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory()
+        ? ['src', 'scripts']
+            .map((dir) => join(REPO_ROOT, group, entry.name, dir))
+            .filter((dir) => existsSync(dir))
+        : [],
+    ),
+  )
+  const names = new Set<string>()
+  for (const root of roots)
+    for (const file of sourceFiles(root))
+      for (const match of readFileSync(file, 'utf8').matchAll(NAME_PATTERN))
+        names.add(match[1] as string)
+  return names
 }
 
 function keysReadFromEnv(): Set<string> {
@@ -82,6 +117,24 @@ describe('environment variables the server reads are documented', () => {
   it('documents every key an operator can set', () => {
     const missing = [...keys].filter((key) => !(key in NOT_FOR_OPERATORS) && !isDocumented(key))
     expect(missing.sort()).toEqual([])
+  })
+
+  it('documents no variable the source does not name', () => {
+    const named = namesInSource()
+    expect(named.size).toBeGreaterThan(keys.size)
+    const documented = new Set(
+      [...documentation.matchAll(NAME_PATTERN)].map((match) => match[1] as string),
+    )
+    const unread = [...documented].filter((key) => !named.has(key) && !(key in NOT_READ_BY_SOURCE))
+    expect(unread.sort()).toEqual([])
+  })
+
+  it('keeps the not-read list to names the docs still carry and the source still omits', () => {
+    const named = namesInSource()
+    for (const key of Object.keys(NOT_READ_BY_SOURCE)) {
+      expect(named.has(key), `${key} is named by the source now`).toBe(false)
+      expect(isDocumented(key), `${key} is no longer documented`).toBe(true)
+    }
   })
 
   it('keeps the not-for-operators list to keys the source still reads and the docs still omit', () => {
