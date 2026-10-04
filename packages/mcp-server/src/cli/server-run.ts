@@ -1,7 +1,7 @@
 // `whiteboard server run --json` business logic.
 //
 // Merges CLI flags on top of env vars, validates with parseServerModeEnvConfig
-// + planServerModeAuth, then either emits a dry-run summary or starts the
+// + resolveServerModeExposure, then either emits a dry-run summary or starts the
 // server. The JWKS key resolver and JWT validator are wired here; callers
 // inject `startServer` for tests (the production default is startServerModeHttp).
 //
@@ -18,11 +18,11 @@ import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.
 import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
-import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
 import {
   parseServerModeEnvConfig,
   type ServerModeEnvConfigResult,
 } from '../server/security/server-mode-env-config.js'
+import { resolveServerModeExposure } from '../server/security/server-mode-exposure.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   deleteServerModeRecord,
@@ -139,14 +139,12 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     }
   }
 
-  const plan = planServerModeAuth({
-    mode: 'server-mode',
-    bindHost: parsed.config.host,
+  const exposure = resolveServerModeExposure({
     externalUrl: parsed.config.externalUrl,
     allowedOrigins: [...parsed.config.allowedOrigins],
   })
-  if (!plan.ok) {
-    return { kind: 'plan-error', code: plan.code }
+  if (!exposure.ok) {
+    return { kind: 'plan-error', code: exposure.code }
   }
 
   const signIn = signInConfigFrom(env)
@@ -161,8 +159,8 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
         schemaVersion: OPERATOR_JSON_SCHEMA_VERSION,
         ok: true,
         dryRun: true,
-        publicBaseUrl: plan.publicBaseUrl,
-        allowedOrigins: [...plan.allowedOrigins],
+        publicBaseUrl: exposure.publicBaseUrl,
+        allowedOrigins: [...exposure.allowedOrigins],
         authStrategy: parsed.config.authStrategy,
       },
     }
@@ -187,8 +185,8 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     running = await startFn({
       host: parsed.config.host,
       port: parsed.config.port,
-      publicBaseUrl: plan.publicBaseUrl,
-      allowedOrigins: [...plan.allowedOrigins],
+      publicBaseUrl: exposure.publicBaseUrl,
+      allowedOrigins: [...exposure.allowedOrigins],
       authStrategy,
       signInProviders: signIn.providers,
       configuredAdministrators: signIn.administrators,
@@ -206,7 +204,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
       pid: process.pid,
       host: running.host,
       port: running.port,
-      publicBaseUrl: plan.publicBaseUrl,
+      publicBaseUrl: exposure.publicBaseUrl,
       authStrategy: parsed.config.authStrategy,
       startedAt: running.startedAt,
       instanceId: running.instanceId,
@@ -239,7 +237,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
       pid: process.pid,
       host: running.host,
       port: running.port,
-      publicBaseUrl: plan.publicBaseUrl,
+      publicBaseUrl: exposure.publicBaseUrl,
       authStrategy: parsed.config.authStrategy,
       startedAt: running.startedAt,
     },

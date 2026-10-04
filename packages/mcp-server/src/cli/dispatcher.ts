@@ -452,7 +452,7 @@ async function dispatchServerRun(rest: readonly string[]): Promise<number> {
     process.stderr.write(`${parsed.message}\n`)
     return 64
   }
-  // Dynamic import keeps server-mode dependencies (planServerModeAuth chain)
+  // Dynamic import keeps server-mode dependencies (server-mode exposure chain)
   // out of the read-only command path.
   const { runServerRun } = await import('./server-run.js')
   const outcome = await runServerRun({ flags: parsed, env: process.env })

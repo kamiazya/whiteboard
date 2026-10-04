@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Smoke: server-mode auth/exposure contract at dist-artifact level.
 //
-// Imports createApp and planServerModeAuth from the built dist artifacts
+// Imports createApp and resolveServerModeExposure from the built dist artifacts
 // (not TypeScript source) to verify the server-mode composition survives
 // the build pipeline. Exercises the Hono app in-process via app.request()
 // so no real TCP port is needed.
@@ -62,13 +62,17 @@ const tempDirs = createTempDirs()
 const dataDir = tempDirs.make('whiteboard-server-mode-smoke-')
 process.env.WHITEBOARD_DATA_DIR = dataDir
 
-const [{ createApp }, { planServerModeAuth }, { bootSelfHostDeps }, { openServerModePeople }] =
-  await Promise.all([
-    import(`${DIST_SERVER}/app.js`),
-    import(`${DIST_SERVER}/security/server-mode-auth-plan.js`),
-    import(`${DIST_SERVER}/../di/boot-self-host-deps.js`),
-    import(`${DIST_SERVER}/server-mode-people.js`),
-  ])
+const [
+  { createApp },
+  { resolveServerModeExposure },
+  { bootSelfHostDeps },
+  { openServerModePeople },
+] = await Promise.all([
+  import(`${DIST_SERVER}/app.js`),
+  import(`${DIST_SERVER}/security/server-mode-exposure.js`),
+  import(`${DIST_SERVER}/../di/boot-self-host-deps.js`),
+  import(`${DIST_SERVER}/server-mode-people.js`),
+])
 // Booted once, the way a root boots: the deps and the data layout the routes
 // serve come from the same call, over the same directory — and the people
 // (members, sessions, roles) from the same factory the root builds them with.
@@ -214,27 +218,26 @@ try {
 
   // --- Scenario 2: origin normalization ---
   {
-    const plan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
+    const exposure = resolveServerModeExposure({
       externalUrl: 'https://example.com:443',
       allowedOrigins: ['https://example.com:443'],
     })
-    if (!plan.ok) fail('2: expected valid plan for :443 URL', { plan: JSON.stringify(plan) })
-    if (plan.publicBaseUrl !== 'https://example.com') {
+    if (!exposure.ok)
+      fail('2: expected valid exposure for :443 URL', { exposure: JSON.stringify(exposure) })
+    if (exposure.publicBaseUrl !== 'https://example.com') {
       fail('2: publicBaseUrl not normalized (expected https://example.com)', {
-        got: plan.publicBaseUrl,
+        got: exposure.publicBaseUrl,
       })
     }
-    if (!plan.allowedOrigins.includes('https://example.com')) {
-      fail('2: allowedOrigins not normalized', { got: JSON.stringify(plan.allowedOrigins) })
+    if (!exposure.allowedOrigins.includes('https://example.com')) {
+      fail('2: allowedOrigins not normalized', { got: JSON.stringify(exposure.allowedOrigins) })
     }
   }
   console.log('[server-mode-smoke] scenario 2 (origin normalization): PASS')
 
   // --- Scenario 2b: origin normalization wired through app composition ---
   // Guards against a regression where buildServerModeApp passes raw
-  // options.allowedOrigins instead of plan.allowedOrigins to the MCP origin
+  // options.allowedOrigins instead of exposure.allowedOrigins to the MCP origin
   // middleware. The app receives the :443 form; the normalized origin
   // (https://norm-check.example.com) must pass the gate and reach the auth
   // layer (→ 401), not be rejected as a disallowed origin (→ 403).
@@ -255,7 +258,7 @@ try {
     if (res.status === 403) {
       fail(
         '2b: normalized origin was rejected by MCP gate — suggests raw options.allowedOrigins ' +
-          'was used instead of plan.allowedOrigins in buildServerModeApp',
+          'was used instead of exposure.allowedOrigins in buildServerModeApp',
         { status: res.status },
       )
     }
@@ -267,17 +270,16 @@ try {
 
   // --- Scenario 3: config canary non-leak ---
   {
-    const plan = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
+    const exposure = resolveServerModeExposure({
       externalUrl:
         'https://canary-user:canary-pass@canary-internal.example.com/path?tok=canary-xyz',
     })
-    if (plan.ok) fail('3: expected plan to reject credential URL')
-    const asText = JSON.stringify(plan)
-    if (asText.includes('canary-pass')) fail('3: password leaked in plan result', { asText })
-    if (asText.includes('canary-internal')) fail('3: hostname leaked in plan result', { asText })
-    if (asText.includes('canary-xyz')) fail('3: token leaked in plan result', { asText })
+    if (exposure.ok) fail('3: expected exposure to reject credential URL')
+    const asText = JSON.stringify(exposure)
+    if (asText.includes('canary-pass')) fail('3: password leaked in exposure result', { asText })
+    if (asText.includes('canary-internal'))
+      fail('3: hostname leaked in exposure result', { asText })
+    if (asText.includes('canary-xyz')) fail('3: token leaked in exposure result', { asText })
   }
   console.log('[server-mode-smoke] scenario 3 (config canary non-leak): PASS')
 

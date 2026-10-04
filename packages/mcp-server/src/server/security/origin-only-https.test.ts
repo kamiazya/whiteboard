@@ -22,8 +22,7 @@ const SAMPLES: readonly string[] = [
   'https://example.com#frag',
 ]
 
-const externalAccepts = (url: string): boolean =>
-  resolveServerModeExposure({ mode: 'server-mode', bindHost: '0.0.0.0', externalUrl: url }).ok
+const externalAccepts = (url: string): boolean => resolveServerModeExposure({ externalUrl: url }).ok
 
 describe('origin-only https predicate', () => {
   it.each(SAMPLES)('the external URL check agrees with validateOriginEntry on %j', (sample) => {
@@ -38,8 +37,6 @@ describe('origin-only https predicate', () => {
 
   it('publishes the validator-normalised origin as the base URL', () => {
     const decision = resolveServerModeExposure({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
       externalUrl: 'https://Example.COM:443/',
     })
     expect(decision.ok && decision.publicBaseUrl).toBe('https://example.com')

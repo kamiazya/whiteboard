@@ -13,8 +13,8 @@
 
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
 import { parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
+import { resolveServerModeExposure } from '../server/security/server-mode-exposure.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   getServerModeRecordPath,
@@ -223,20 +223,18 @@ function skippedBelowConfig(summary: string): Check[] {
 type ServerModeConfig = Extract<ReturnType<typeof parseServerModeEnvConfig>, { ok: true }>['config']
 
 function checkExposure(config: ServerModeConfig): Check {
-  const plan = planServerModeAuth({
-    mode: 'server-mode',
-    bindHost: config.host,
+  const exposure = resolveServerModeExposure({
     externalUrl: config.externalUrl,
     allowedOrigins: [...config.allowedOrigins],
   })
-  if (plan.ok) {
+  if (exposure.ok) {
     return { id: 'server.exposure', status: 'ok', summary: 'Server exposure plan is valid' }
   }
   return {
     id: 'server.exposure',
     status: 'error',
     summary: 'Server exposure plan is invalid',
-    detail: `Exposure error: code=${plan.code}`,
+    detail: `Exposure error: code=${exposure.code}`,
     remediation:
       'Check WHITEBOARD_SERVER_EXTERNAL_URL and WHITEBOARD_SERVER_ALLOWED_ORIGINS. Wildcards and non-HTTPS origins are not allowed.',
   }

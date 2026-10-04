@@ -18,7 +18,7 @@ export default defineConfig({
     // It runs only on the release path, so its precondition check had never
     // been reached.
     'server/server-mode-backup-restore': 'src/server/server-mode-backup-restore.ts',
-    'server/security/server-mode-auth-plan': 'src/server/security/server-mode-auth-plan.ts',
+    'server/security/server-mode-exposure': 'src/server/security/server-mode-exposure.ts',
     // The boot sequence the packaged server-mode smoke builds its apps with:
     // `createApp` requires `serverDeps` and a `dataLayout` (no router composes
     // its own, and none reads the process's data directory), and this is the

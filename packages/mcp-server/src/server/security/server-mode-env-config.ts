@@ -2,7 +2,7 @@
 //
 // Reads WHITEBOARD_SERVER_* env vars and returns a typed result.
 // URL-level validation (HTTPS, origin-only, no credentials) for externalUrl
-// and allowedOrigins is intentionally left to planServerModeAuth downstream;
+// and allowedOrigins is intentionally left to resolveServerModeExposure downstream;
 // this layer validates only field presence, numeric types, and enum values.
 //
 // Non-leak contract: no failure result field contains raw env var values,
@@ -37,7 +37,7 @@ export const ENV_KEYS = {
 type ServerModeAuthStrategy = 'oauth-jwt'
 
 interface ServerModeEnvConfig {
-  /** Presence-validated; HTTPS/origin-only enforcement is downstream in planServerModeAuth. */
+  /** Presence-validated; HTTPS/origin-only enforcement is downstream in resolveServerModeExposure. */
   externalUrl: string
   /** Raw trimmed/split list from env. Wildcard rejected here; URL validation is downstream. */
   allowedOrigins: readonly string[]
