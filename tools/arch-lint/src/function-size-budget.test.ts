@@ -661,7 +661,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 80,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
-  'packages/workspace-index/src/loro-workspace-document-index.test.ts#inMemoryWorkspaceDocs': 58,
 }
 
 function ledgerFor(isTest: boolean): Record<string, number> {

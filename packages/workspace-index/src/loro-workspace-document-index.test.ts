@@ -25,6 +25,30 @@ import { describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
+/** The registry half of a rename: segment uniqueness across `workspaceIds`, then the new identity. */
+function renameIdentity(
+  identities: Map<string, WorkspaceEntry>,
+  workspaceIds: readonly string[],
+  { workspaceId, segment, displayName }: RenameWorkspaceInput,
+): WorkspaceEntry {
+  const rows = workspaceIds.map(
+    (id) => identities.get(id) ?? ({ workspaceId: id } satisfies WorkspaceEntry),
+  )
+  if (
+    segment !== undefined &&
+    rows.some((row) => row.segment === segment && row.workspaceId !== workspaceId)
+  ) {
+    throw new WorkspaceSegmentTakenError(segment)
+  }
+  const renamed: WorkspaceEntry = {
+    ...(identities.get(workspaceId) ?? { workspaceId }),
+    ...(segment === undefined ? {} : { segment }),
+    ...(displayName === undefined ? {} : { displayName }),
+  }
+  identities.set(workspaceId, renamed)
+  return renamed
+}
+
 /**
  * Workspace documents in memory, kept the way a real store keeps them: only
  * what `save` exported survives, and every `open` is a restart that imports it
@@ -82,25 +106,9 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
       identities.set(entry.workspaceId, entry)
       await docs.save(entry.workspaceId, await docs.create(entry.workspaceId))
     },
-    async renameWorkspace({ workspaceId, segment, displayName }) {
-      if (!stored.has(workspaceId)) throw new WorkspaceNotFoundError(workspaceId)
-      const rows = [...stored.keys()].map(
-        (id) => identities.get(id) ?? ({ workspaceId: id } satisfies WorkspaceEntry),
-      )
-      if (
-        segment !== undefined &&
-        rows.some((row) => row.segment === segment && row.workspaceId !== workspaceId)
-      ) {
-        throw new WorkspaceSegmentTakenError(segment)
-      }
-      const current = identities.get(workspaceId) ?? { workspaceId }
-      const renamed: WorkspaceEntry = {
-        ...current,
-        ...(segment === undefined ? {} : { segment }),
-        ...(displayName === undefined ? {} : { displayName }),
-      }
-      identities.set(workspaceId, renamed)
-      return renamed
+    async renameWorkspace(input) {
+      if (!stored.has(input.workspaceId)) throw new WorkspaceNotFoundError(input.workspaceId)
+      return renameIdentity(identities, [...stored.keys()], input)
     },
   }
   return docs
