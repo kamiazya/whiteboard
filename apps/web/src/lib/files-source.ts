@@ -22,9 +22,8 @@ export interface LoadedMarkdown {
 /**
  * Everything `WorkspaceFilesPanel` asks of the world, as one seam.
  *
- * The panel used to call the daemon's client functions directly, which made
- * the three-pane browser daemon-only — the single obstacle the
- * one-browser-both-modes ticket names. These operations are the panel's
+ * The panel does not call the daemon's client functions directly, which would
+ * make the three-pane browser daemon-only. These operations are the panel's
  * whole data surface, measured from its imports rather than assumed: list,
  * create, rename, pin, and the two content reads its thumbnails and preview
  * need.

@@ -12,7 +12,7 @@ import { z } from 'zod'
  * field or the row and the content drift out of sync. `.strict()` is what
  * enforces that rather than a comment asking nicely.
  *
- * Nothing parses a stored row with it any more — the row is assembled from the
+ * Nothing parses a stored row with it — the row is assembled from the
  * workspace's document index (`local-document-summary.ts`) — so it is the
  * single definition `DocumentSnapshot` is derived from, and its test pins the
  * shape.

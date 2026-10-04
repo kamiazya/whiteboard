@@ -122,8 +122,8 @@ function listTarballEntries(tarballPath: string): string[] {
  *  2. The user who opted in is TOLD what is missing. Running the shipped
  *     fetch command with the runtime absent must name the install step, not
  *     fail obscurely — and the command must be in dist at all, which is the
- *     defect this whole check exists for: it used to live only in scripts/,
- *     which is never published.
+ *     defect this whole check exists for: a command living only in scripts/
+ *     is never published.
  */
 function assertSemanticSearchOptIn(options: {
   installDir: string

@@ -185,8 +185,8 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   } = inputs
 
   /**
-   * A press an overlay took. The one rejection that used to leave no trace
-   * at all — a dead zone made of chrome reads as nothing having happened —
+   * A press an overlay took. The one rejection that would otherwise leave no
+   * trace at all — a dead zone made of chrome reads as nothing having happened —
    * so the recorder names what took it.
    */
   const rejectedByOverlay = (e: React.PointerEvent<HTMLDivElement>): boolean => {
@@ -219,9 +219,9 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   /**
    * Shift-click builds a multi-selection instead of starting a gesture.
    *
-   * What it MEANS per kind is `element-pick.ts`'s: the two arms used to be
-   * written where each was first needed, which is how ink came to fall
-   * through the node arm entirely. A kind it answers `none` for falls
+   * What it MEANS per kind is `element-pick.ts`'s: the two arms written
+   * where each was first needed is how ink came to fall through the node arm
+   * entirely. A kind it answers `none` for falls
    * through to the replacing paths below, carrying its reason.
    */
   const claimShiftPress = (
@@ -348,7 +348,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     // Navigation answers for its own state. Everything it owns — which finger
     // is down, whether two of them are driving the viewport, whether this
     // press continues a gather — lives in one value in `navigation.ts` rather
-    // than in the refs this used to read.
+    // than in refs scattered through this handler.
     const navigation = runNavigation(
       root,
       {
@@ -390,10 +390,10 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     const screenPoint = clientPointToRootLocal(e, root)
     const point = screenToCanvas(screenPoint, viewport)
     // WHICH KIND the press lands on, decided in one place for every kind the
-    // model holds (`element-pick.ts`). It used to be three hit-tests two
-    // hundred lines apart, so the priority between them was a property of
-    // where each had been written — and a kind nobody had written was simply
-    // never tested for.
+    // model holds (`element-pick.ts`). Three hit-tests two hundred lines
+    // apart would make the priority between them a property of where each had
+    // been written — and a kind nobody had written would simply never be
+    // tested for.
     const pick = pickContentAt(pressProbes(pickInputs), point)
     const { hitId, hitPathId, pressKey } = describePress(pick)
 
@@ -607,7 +607,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (root === null) return
     // The machine's own cancel arm emits the long-press clear, the capture
     // release and the gesture cancel, in that order — the three things
-    // this handler used to do by hand across four refs.
+    // a handler would otherwise do by hand across four refs.
     runNavigation(
       root,
       {

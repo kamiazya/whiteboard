@@ -156,8 +156,8 @@ export function NewDocumentMenu({
           }}
           // Closed only once the create SUCCEEDS. A refusal — a path
           // collision, most often — is the one a person can fix, and closing
-          // on submit threw away the name and path they had typed and left
-          // the reason behind a dialog that no longer existed. A host that
+          // on submit would throw away the name and path they had typed and
+          // leave the reason behind a dialog that no longer exists. A host that
           // answers synchronously still closes immediately.
           onSubmit={(kind, options) => {
             void Promise.resolve(onCreate(kind, options)).then(

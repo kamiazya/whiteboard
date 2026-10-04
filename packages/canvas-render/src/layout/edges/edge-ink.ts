@@ -39,9 +39,9 @@ export function quantize(n: number): number {
  * sits on, and a rect's two borders on each.
  *
  * Every ink term below is one measurement stated once and run for both
- * orientations, and each used to re-derive all six from a `horizontal`
- * boolean at the point of use — inside loops that are quadratic in the
- * segment count, so the same six were recomputed per comparison.
+ * orientations, rather than re-derived from a `horizontal` boolean at the
+ * point of use — inside loops that are quadratic in the segment count, the
+ * same six would be recomputed per comparison.
  */
 interface SegmentAxis {
   /** The coordinate that VARIES along the segment. */

@@ -1111,8 +1111,8 @@ function setEdgeSide(
   side: EdgeSide | undefined,
 ): SpatialCanvas {
   return updateEdge(canvas, id, (edge) => {
-    // An EDGE's end always names a node since ADR-0038 decision 2, so the
-    // narrowing the free arm used to need is gone. Pinning a side on a LINE
+    // An EDGE's end always names a node since ADR-0038 decision 2, so no
+    // narrowing for a free arm is needed. Pinning a side on a LINE
     // is its own command when the editor grows one.
     const { side: _removed, ...rest } = edge[endpoint]
     return { ...edge, [endpoint]: side === undefined ? rest : { ...rest, side } }

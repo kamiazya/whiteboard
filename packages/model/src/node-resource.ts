@@ -9,8 +9,8 @@
  * `kind: 'text'` beside them would be a second place the same fact lives —
  * the drift this package exists to prevent, one level down.
  *
- * The exhaustiveness that the node-kind union used to give is NOT given up
- * with it. It moves here: `RESOURCE_KINDS` is the closed set, `ResourceKind`
+ * The exhaustiveness the node-kind union gave is NOT given up. It lives
+ * here: `RESOURCE_KINDS` is the closed set, `ResourceKind`
  * is `keyof` it, so a `switch (resourceKind(r))` still narrows to `never` and
  * a table written `satisfies Record<ResourceKind, …>` still fails to compile
  * when the set grows. What changes is that the set is declared in one place

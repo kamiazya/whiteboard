@@ -61,9 +61,9 @@ const STORED_EXTENSION_FIELDS = { embed: true, facets: true, tags: true } as con
 /**
  * The model's own `facets` field, reached directly.
  *
- * The tool used to publish it as `x-whiteboard: { kind: "facets", ... }` —
- * JSON Canvas 1.0's extension key. That key made sense while the model WAS
- * the format. ADR-0037 ended that: a published input naming a foreign
+ * It is not published as `x-whiteboard: { kind: "facets", ... }`, JSON Canvas
+ * 1.0's extension key, which made sense while the model WAS the format.
+ * ADR-0037 ended that: a published input naming a foreign
  * format's extension key, when the model has none anywhere, tells a model
  * reading `tools/list` something untrue about the thing it is writing.
  *
@@ -254,8 +254,8 @@ const draftKeysBelongInside = (
 /**
  * One step of a batch. The verbs are the ones the retired single-purpose
  * tools carried, so nothing an agent could do before is missing here — plus
- * `node.remove` / `edge.remove`, which had no tool at all: the only way to
- * delete anything used to be a whole-document replace.
+ * `node.remove` / `edge.remove`, which had no tool at all: without them the
+ * only way to delete anything is a whole-document replace.
  */
 /**
  * Where one id goes, a SELECTOR may go instead: every node inside a group,
@@ -490,10 +490,10 @@ const canvasOpSchema = z.discriminatedUnion('op', [
    * "This group contains exactly these." The ONE declarative op, and so the
    * only one that deletes something it was not told about.
    *
-   * It names MEMBERS by id and nothing else. The shape used to carry a full
-   * node declaration per member — the node union a second time, a third of
-   * this tool's bytes — and the lane showed what a model did with that:
-   * wrote x/y/width/height for every box, the ones already there included.
+   * It names MEMBERS by id and nothing else. A full node declaration per
+   * member would be the node union a second time, a third of this tool's
+   * bytes — and a model given one writes x/y/width/height for every box, the
+   * ones already there included.
    * Creating a member is `node.add` with `within`.
    *
    * Scope is STRICT containment in `within`'s stored box. That rule is what

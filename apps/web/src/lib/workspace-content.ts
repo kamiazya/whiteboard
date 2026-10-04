@@ -1,8 +1,8 @@
 /**
- * Where browser-kept document CONTENT is read from and seeded to, now that
- * the workspace document is the source of truth.
+ * Where browser-kept document CONTENT is read from and seeded to, the
+ * workspace document being the source of truth.
  *
- * Every reader that used to load a per-document Loro record goes through
+ * Every reader of a document's content goes through
  * `loadDocumentContent`: the workspace document's tree node answers first
  * (that is where the editor persists), and the legacy per-document record
  * stays as the fallback for a document nothing has folded yet — including
@@ -42,15 +42,15 @@ class DocumentContentUnreadableError extends Error {
  * here, so what "current" means — tree first, legacy record after — is
  * decided once.
  *
- * A read that did not COMPLETE is a different answer and now propagates as
- * `DocumentContentUnreadableError`. It used to be folded into "no content"
- * twice over — a thrown read was caught here and reported as `not-found`,
- * and the store's own `read-unavailable`, which exists to say "the read
- * failed and this says nothing about the document", fell into the same
- * `!== 'ok'` branch. Every caller above reads that as "this document has no
- * content", and the prefetch caches it as terminal, so ONE transient
- * IndexedDB failure blanked a body's embed for the life of the page — with
- * nothing logged, because the catch was silent.
+ * A read that did not COMPLETE is a different answer and propagates as
+ * `DocumentContentUnreadableError`, rather than being folded into "no
+ * content" — a thrown read caught here and reported as `not-found`, or the
+ * store's own `read-unavailable`, which exists to say "the read failed and
+ * this says nothing about the document", falling into the same `!== 'ok'`
+ * branch. Every caller above reads that as "this document has no content",
+ * and the prefetch caches it as terminal, so ONE transient IndexedDB failure
+ * would blank a body's embed for the life of the page — with nothing logged,
+ * because the catch would be silent.
  *
  * `corrupt-snapshot` / `corrupt-delta` / `unsupported-version` stay `null`:
  * those are verdicts on the stored bytes, so asking again cannot change the

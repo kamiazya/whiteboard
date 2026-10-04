@@ -62,10 +62,10 @@ export function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: 
 
 /**
  * Refuses a text node whose named height cannot hold its text at its width,
- * naming the height it needs. A named height used to be kept however small
- * — "no height" and "a small height" are different inputs — until the lane
- * read what a model does with that: it names its neighbours' size to match
- * them and the sentence is cut where nothing it can see says so. Growing
+ * naming the height it needs. A named height is not kept however small
+ * — "no height" and "a small height" are different inputs — because a model
+ * names its neighbours' size to match them and the sentence is cut where
+ * nothing it can see says so. Growing
  * the box silently would put it into whatever sits below, so the number
  * goes back to the caller instead.
  */

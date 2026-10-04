@@ -65,7 +65,7 @@ export const serverBackupResultSchema = z.object({
    * reported as a success.
    *
    * `ok` remains, and remains true here: the operation did what it is
-   * responsible for. What it no longer claims is COMPLETENESS, which is what
+   * responsible for. What it does not claim is COMPLETENESS, which is what
    * `stores` is for.
    */
   stores: z.object({
@@ -98,9 +98,10 @@ export interface BackupPassOptions {
  * directory down before answering false.
  *
  * Every step cleans up the SAME way for the same reason — a pass that died
- * partway used to leave a directory whose name says backup and whose contents
- * are a fragment, and three readers took it at its name. Sharing the cleanup
- * is what stops a later step being added without one.
+ * partway would leave a directory whose name says backup and whose contents
+ * are a fragment (the comment in `performBackup` below names the readers that
+ * would take it at its name). Sharing the cleanup is what stops a later step
+ * being added without one.
  */
 async function stagedStep(
   staging: string,
@@ -137,13 +138,13 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     doMirror = mirrorBlobsIntoBackup,
   } = options
 
-  // A running server is no longer a refusal (ADR-0021 decision 3). "A backup
+  // A running server is not a refusal (ADR-0021 decision 3). "A backup
   // requiring downtime is one an operator takes rarely or never, and the
   // interval between backups is the data they lose."
   //
-  // Two things had to be true first, and both are. The rows are captured
+  // Two things make that safe. The rows are captured
   // through the database (`VACUUM INTO`) rather than by reading its bytes out
-  // from under a writer, and every write into the data directory now lands
+  // from under a writer, and every write into the data directory lands
   // atomically, so a copy cannot pick up a half-written blob or upload. The
   // third — that nothing DELETES while the copy runs — is the marker below.
   //
@@ -217,12 +218,12 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // near end: a snapshot is not offered until the mirror has passed it).
     //
     // "Offered" is concrete here — it is appearing under a backup name. A
-    // pass that died partway used to leave a directory whose name says backup
-    // and whose contents are a fragment, and three readers took it at its
-    // name: retention counted it and pushed a real backup out of the window,
-    // the mirror's collector found it manifest-less and stopped collecting
-    // for good, and restore read the missing manifest as "taken before the
-    // mirror" and restored a data directory with no rows and no blobs in it,
+    // pass that died partway would leave a directory whose name says backup
+    // and whose contents are a fragment, and three readers would take it at
+    // its name: retention would count it and push a real backup out of the
+    // window, the mirror's collector would find it manifest-less and stop
+    // collecting for good, and restore would read the missing manifest as
+    // "taken before the mirror" and restore a data directory with no rows and no blobs in it,
     // reporting success.
     //
     // Same move the mirror already makes for one blob, for the same reason:

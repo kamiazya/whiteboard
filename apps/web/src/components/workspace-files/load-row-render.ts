@@ -24,7 +24,7 @@
  * throws is a broken screen.
  *
  * Every answer goes through the render broker (ADR-0027), which is why the
- * preview pane beside a row no longer redraws what the row just drew: both
+ * preview pane beside a row does not redraw what the row just drew: both
  * ask for the same key, and the second one joins the first rather than
  * starting a second render.
  */

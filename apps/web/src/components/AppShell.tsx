@@ -144,7 +144,7 @@ export interface AppShellProps {
  *
  * The mark is the row's SUBJECT and its one state carrier. Left of the
  * spacer is "what you are working in"; right of it is the app and its own
- * state. There is no connection chip any more — a workspace's keeper and its
+ * state. There is no connection chip — a workspace's keeper and its
  * session are things about the workspace, so they belong on the thing that
  * names it rather than on a second widget at the other end of the row.
  */

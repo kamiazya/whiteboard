@@ -3,24 +3,20 @@
  * its silhouettes, how it reads the facets that select them, and where it
  * wants a node's text.
  *
- * This used to live inside `canvas-render`, which meant the renderer knew a
+ * It lives here, not in `canvas-render`, so the renderer knows nothing of a
  * plugin's business — what its silhouettes are and which facet selects one.
  *
- * It contributes no `decorations`. It did: `visual.symbol` was drawn as a
- * badge on the node itself, removed once the surfaces the symbol was
- * designed for existed (the tab's favicon, the file row, the canvas
- * overview), where a node is too small to read and a mark is the only thing
- * that can say which one it is. On the node at full size the badge repeated
- * what the node already showed. The contribution POINT stays — it is how a
+ * It contributes no `decorations`: `visual.symbol` is not drawn as a badge on
+ * the node itself. The surfaces the symbol is for (the tab's favicon, the
+ * file row, the canvas overview) are where a node is too small to read and a
+ * mark is the only thing that can say which one it is. On the node at full
+ * size a badge would repeat what the node already shows. The contribution POINT stays — it is how a
  * plugin marks a node, and `contributed-decoration.test.ts` exercises it —
  * with no bundled implementation today.
  *
  * The contract comes from `@kamiazya/whiteboard-scene`, which sits BELOW
- * both this package and the renderer. It used to come from the renderer
- * itself, type-only, because a runtime import back would have closed a
- * package cycle — a property no manifest could see and only a hand-written
- * guard could check. With the contract in its own package there is no cycle
- * to hold open, and no guard to keep honest.
+ * both this package and the renderer, so there is no package cycle to hold
+ * open and no guard to keep honest.
  */
 import type { BoundingBox, RenderContribution, ShapeContribution } from '@kamiazya/whiteboard-scene'
 import {

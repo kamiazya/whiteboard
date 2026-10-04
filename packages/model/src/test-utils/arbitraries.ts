@@ -4,12 +4,12 @@
  * Each arbitrary below is `arbitraryForSchema` over the schema it stands
  * for, so a field added to the schema tomorrow — an edge's `label`, a
  * group's `background`, the canvas-level `facets` bucket — is drawn by
- * every property without anyone extending a hand-written mirror. This file
- * used to BE that mirror, and it had drifted: the node generator knew no
- * `subpath`, no `label`, no `versionRef`; the edge generator knew no side,
- * end or label; the canvas generator drew comments and nothing else at the
- * canvas level, so every round-trip property over a canvas was blind to
- * `edgeRouting` and to the canvas's own facets.
+ * every property without anyone extending a hand-written mirror. A mirror
+ * drifts: a node generator that knew no `subpath`, no `label`, no
+ * `versionRef`; an edge generator that knew no side, end or label; a canvas
+ * generator that drew comments and nothing else at the canvas level would
+ * leave every round-trip property over a canvas blind to `edgeRouting` and to
+ * the canvas's own facets.
  *
  * What stays hand-written is what a schema cannot say: the correlations
  * (an edge's endpoints name nodes that exist, ids are unique across a
@@ -400,8 +400,8 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
     // evenly, which is not what a board looks like — most ink someone drew
     // between boxes still lands on a box — so a roll keeps the drawn arm only
     // when it is already a point, leaving roughly one end in five free. A
-    // looser share than the edges used to carry, because a line is where the
-    // free end now LIVES: a generator that almost never drew one would leave
+    // looser share than edges carry, because a line is where the free end
+    // LIVES: a generator that almost never drew one would leave
     // the arm this split exists for barely exercised.
     //
     // Measured, and by something that RUNS: `arbitraries.test.ts` counts the

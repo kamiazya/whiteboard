@@ -65,10 +65,9 @@ const CLEARANCE_Q = (EDGE_JUMP_RADIUS_PX + 1) * COST_QUANTUM
  * The narrow phase on ALREADY-QUANTIZED integer coordinates — pure integer
  * arithmetic from here on, so a second implementation of it (a WGSL
  * kernel, a worker) can be held to bit-identical output. Quantizing first,
- * rather than only for the collinear branch, is what makes that true: the
- * crossing test used to run on raw floats, and two endpoints a
- * sub-quantum apart could count as a crossing here while scoring equal
- * everywhere else. `t`/`u` stay exact because every comparison is done on
+ * rather than only for the collinear branch, is what makes that true: a
+ * crossing test on raw floats would let two endpoints a sub-quantum apart
+ * count as a crossing here while scoring equal everywhere else. `t`/`u` stay exact because every comparison is done on
  * the cross-multiplied integers, never on the quotient.
  */
 export function scoreQuantizedSegmentPair(

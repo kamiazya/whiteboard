@@ -60,8 +60,7 @@ export class InMemoryLoroStore implements LoroStoreLike {
 }
 
 /**
- * The same three pieces, behind the write methods the bespoke store used to
- * offer, so a test that seeds imperatively keeps its shape.
+ * The same three pieces, behind imperative write methods, so a test that seeds imperatively keeps its shape.
  *
  * This is a TEST DOUBLE, not a shim on the way back: production has no such
  * object, and the methods here exist only because a fixture reads better as

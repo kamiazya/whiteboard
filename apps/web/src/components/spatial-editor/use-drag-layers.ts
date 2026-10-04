@@ -225,7 +225,7 @@ export function useDragLayers({
    * first live frame and every later frame re-places the cached metrics,
    * keeping pointermoves free of text measurement.
    * ponytail: the backdrop render here is ~21ms at 45 nodes (the anchor
-   * pass, formerly ~7x that, now arrives with the committed scene); if
+   * pass arrives with the committed scene); if
    * start jank reappears on much larger documents, the next rung is
    * reusing the committed scene graph for the backdrop instead of
    * re-rendering — drop the carried node runs, truncate at the first

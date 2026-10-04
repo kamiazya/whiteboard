@@ -150,18 +150,18 @@ export async function wbDocumentCreate(
 
   // Parsed BEFORE anything exists, so a refusal leaves nothing behind. The
   // body is applied by delegating to `wb_document_set` once the document
-  // exists, so a malformed one used to fail there — leaving an empty
+  // exists, so a malformed one would fail there — leaving an empty
   // document squatting the requested path while the caller held an error
   // saying the create had not happened, and the retry then collided with
   // the ghost.
   //
-  // It used to run AFTER the workspace bootstrap, "so a missing workspace
-  // still reports itself first". That order cannot survive the mint below:
-  // bootstrapping first would leave a freshly minted workspace behind every
-  // refused body, and the caller's retry would mint a SECOND one. What the
-  // old order bought was the error a caller gets when their request is
-  // wrong in BOTH ways at once, which no test pins and which is the less
-  // useful of the two — a malformed body has to be fixed either way.
+  // It runs BEFORE the workspace bootstrap too, though the other order would
+  // report a missing workspace first: bootstrapping first would leave a
+  // freshly minted workspace behind every refused body, and the caller's
+  // retry would mint a SECOND one. What that order would buy is the error a
+  // caller gets when their request is wrong in BOTH ways at once, which no
+  // test pins and which is the less useful of the two — a malformed body has
+  // to be fixed either way.
   //
   // A bare body is an input, not a mistake: a caller sending prose means a
   // note, and refusing it for a block they never wrote costs a round trip
@@ -234,10 +234,10 @@ export async function wbDocumentCreate(
     }),
   )
 
-  // Persist the document, not only its placement. Creation used to write the
-  // placement alone and leave the document to be conjured on first write,
-  // which is why nothing could say what a document was: there was no
-  // document yet to ask. The kind is written once, at birth.
+  // Persist the document, not only its placement. A placement alone leaves
+  // the document to be conjured on first write, and nothing could then say
+  // what a document is: there is no document yet to ask. The kind is written
+  // once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
   await saveDocumentSnapshot(deps, workspaceId, entry.documentId, doc)

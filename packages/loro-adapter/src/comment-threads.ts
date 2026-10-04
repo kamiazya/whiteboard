@@ -59,10 +59,9 @@ function assertFiniteAnchor(thread: CommentThread): void {
  * `openMergeableMap` and not `setContainer`: the latter REPLACES the
  * container, discarding whatever a peer put in it.
  *
- * Creating one is still the only path allowed to open a thread container at
- * all, even though `openMergeableMap` now makes two replicas opening one key
- * converge rather than hide one another. The reason is no longer convergence
- * but INTENT: a reply to a thread this replica does not hold is a reply to
+ * Creating one is the only path allowed to open a thread container at all,
+ * though `openMergeableMap` makes two replicas opening one key converge
+ * rather than hide one another. The reason is INTENT, not convergence: a reply to a thread this replica does not hold is a reply to
  * something that was never created here, and materialising an anchorless,
  * statusless thread around it would turn a lost import into a half-formed
  * conversation. `writeThreadMessage` returns without writing instead.

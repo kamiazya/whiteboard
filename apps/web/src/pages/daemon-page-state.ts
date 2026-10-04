@@ -1,8 +1,8 @@
 // Page-state derivation for `DaemonDocumentPage` — the daemon half of the
 // shared machine in document-page-state.ts, mirroring browser-page-state.ts.
 //
-// The cascade used to live as an inline JSX ternary chain, where its order
-// carried invariants nothing stated:
+// The cascade is a pure function rather than an inline JSX ternary chain,
+// because its order carries invariants a ternary does not state:
 //
 //   - `loading` beats everything, `loadError` included: mid-resolve, no
 //     other field is trustworthy yet (the controller sets loadError and

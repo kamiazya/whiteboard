@@ -122,9 +122,8 @@ async function readListing(
 }
 
 /**
- * `WorkspaceFilesSource` over the daemon's HTTP API — the client calls
- * `WorkspaceFilesPanel` used to make itself, moved behind the seam so the
- * panel stops being daemon-only.
+ * `WorkspaceFilesSource` over the daemon's HTTP API — the client calls sit
+ * behind the seam so `WorkspaceFilesPanel` is not daemon-only.
  *
  * It is also the index SCREEN's one reader of the list and the trash: the
  * page reads through it (`refresh`) and the panel, its chips and the trash

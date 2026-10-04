@@ -97,7 +97,7 @@ export async function setDocumentDisplayName(
   const trimmed = name.trim()
   const documentId = await requireDocumentAtPath(workspaceId, path, scope)
   // The workspace record is the only home this write has: the rows are
-  // no longer maintained, so a failure here surfaces to the caller. Under
+  // not maintained, so a failure here surfaces to the caller. Under
   // the workspace write lock like every other read-modify-write of the
   // record — the open and the save must see no concurrent tree write.
   await withWorkspaceWriteLock(workspaceId, async () => {
@@ -125,7 +125,7 @@ export async function setDocumentPinned(
   validateDocumentPath(path)
   const documentId = await requireDocumentAtPath(workspaceId, path, scope)
   // The workspace record's pinned list is the only home this write has: the
-  // rows are no longer maintained, so a failure surfaces. The index takes the
+  // rows are not maintained, so a failure surfaces. The index takes the
   // workspace write lock itself, as every other mutator of the record does.
   await (await workspaceTreeIndex(scope)).setDocumentPinned({ workspaceId, documentId, pinned })
   return loadWorkspaceNames(workspaceId, scope)

@@ -257,7 +257,7 @@ function useDaemonDocument(
 
   // The open document's kind, from the documents list summary (default
   // 'spatial'). It picks which editor DocumentEditorSurface mounts — the
-  // page itself no longer chooses an editor.
+  // page itself does not choose an editor.
   const documentKind: DocumentKind =
     controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
 
@@ -332,7 +332,7 @@ function useDaemonDocument(
       if (loaded === undefined) return undefined
       // No name. A document's name is the workspace's (ADR-0009 decision 2)
       // and the daemon summary carries no display name, so there is none to
-      // label the embed with — the facets deliberately no longer hold one.
+      // label the embed with — the facets deliberately hold none.
       // The summary DOES carry the kind, which decides what the target is.
       return loadedReferenceOf(loaded, controller.documents, target, documentId)
     },

@@ -538,7 +538,7 @@ export async function runServerDoctor(
 
   const identity = await checkIdentity(record, seams.isPidAlive, seams.verifyIdentity)
   // Read from the check itself rather than looking `server.identity` up in
-  // the array being built, which is what the two runtime checks used to do.
+  // the array being built.
   const identityOk = identity.status === 'ok'
   checks.push(
     identity,

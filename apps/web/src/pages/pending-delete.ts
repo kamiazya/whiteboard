@@ -1,9 +1,8 @@
 /**
  * What a document list's delete confirmation is asking about, and the two
  * answers both keepers give after a partial delete — declared once, because
- * the browser and the daemon index pages each had a copy and the copies had
- * already diverged (a lone survivor the daemon's list no longer held was
- * offered as `Delete "1 documents"?`).
+ * two copies, one per index page, diverge (a lone survivor the daemon's list
+ * no longer held was offered as `Delete "1 documents"?`).
  *
  * What DELETING means stays with each keeper (one DELETE and a refetch
  * against the daemon; an index call plus a pointer check in the browser).

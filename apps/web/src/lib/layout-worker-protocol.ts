@@ -12,10 +12,10 @@
  * agree by construction; `layout-worker-parity.browser.test.tsx` asserts it
  * anyway.
  *
- * It used to be narrower — only labels and dangling marks crossed, and a
- * canvas whose host resolved reference CONTENT fell back to main-thread
- * layout — which left every text-node embed a placeholder in the worker
- * and, for parity, on the main thread too.
+ * A narrower bundle — only labels and dangling marks — would send a canvas
+ * whose host resolves reference CONTENT back to main-thread layout, and leave
+ * every text-node embed a placeholder in the worker and, for parity, on the
+ * main thread too.
  *
  * Markdown text crosses as part of the canvas and the WORKER parses it, so
  * parse and layout leave the main thread together. The old blocker was never
@@ -271,9 +271,9 @@ export type OutlineRequest = OutlineSubject & {
  * Rectangles in the document's own coordinates, COLOURED by the worker for
  * both kinds.
  *
- * The colour is not decoration here. A scene block has none of its own, so
- * the markdown side used to leave it absent and each consumer defaulted it
- * (or, in the tree row's case, did not) — two producers of one type that
+ * The colour is not decoration here. A scene block has none of its own, so a
+ * markdown side that left it absent would have each consumer default it
+ * (or, in the tree row's case, not) — two producers of one type that
  * differ, which is how a later consumer with no such default gets a surprise.
  * Resolving it once, on the side that produces the rects, is what makes the
  * two kinds interchangeable to every surface.

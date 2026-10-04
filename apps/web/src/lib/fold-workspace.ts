@@ -10,8 +10,8 @@
  *
  * The work list is DERIVED, not marked: a document is pending exactly when
  * the index has a row for it and the workspace tree does not. That is what
- * makes a crash safe — a document folded before the crash is simply not work
- * anymore — and it also picks up documents created after this build shipped
+ * makes a crash safe — a document folded before the crash is simply not on the
+ * work list — and it also picks up documents created after this build shipped
  * but before their write path moved to the tree, at the next startup.
  */
 import {

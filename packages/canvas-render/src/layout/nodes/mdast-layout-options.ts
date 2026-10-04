@@ -107,10 +107,10 @@ export interface MdastLayoutOptions {
    * The fill every body run is painted with — the theme's per-mode text
    * colour, supplied by the caller exactly as `fontFamily` is.
    *
-   * Body runs used to carry NO fill and inherit one from whatever ancestor
-   * the host set, which put the most-read colour on the canvas outside the
-   * one appearance producer and outside the contrast tests that guard the
-   * rest of it. Muted runs still modulate it with `fillOpacity` rather than
+   * A body run carries a fill rather than inheriting one from whatever
+   * ancestor the host sets, which would put the most-read colour on the canvas
+   * outside the one appearance producer and outside the contrast tests that
+   * guard the rest of it. Muted runs still modulate it with `fillOpacity` rather than
    * naming a second colour, so "muted" tracks the mode for free.
    *
    * Absent, runs carry no fill and inherit, as before — the SVG is then only

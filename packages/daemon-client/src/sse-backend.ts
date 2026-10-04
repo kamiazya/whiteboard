@@ -73,7 +73,7 @@ export class SseBackend implements DocumentBackend {
     // that started reading before seeding would apply deltas to an empty doc.
     // Through the source, not a direct fetch, for the same reason push is:
     // which authority answers is the implementations' difference. The hub
-    // asks the daemon (the same GET this method used to make itself); the
+    // asks the daemon; the
     // worker-backed source asks the worker's replica, so a second tab opens
     // without a daemon round trip and off this thread.
     try {
@@ -94,7 +94,7 @@ export class SseBackend implements DocumentBackend {
     const source = this.resolveSource()
     this.unsubscribe = source.subscribe(this.binaryKey, this.binaryListener(handlers))
     // Text messages stay per document — and ONLY text: no binary frame
-    // travels on a per-document key any more.
+    // travels on a per-document key.
     this.unsubscribeText = source.subscribe(this.docKey, {
       onUpdate: () => {},
       onMessage: (raw) => this.dispatchText(raw, handlers),

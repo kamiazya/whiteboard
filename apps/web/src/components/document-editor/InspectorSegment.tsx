@@ -72,10 +72,10 @@ const GLYPHS = {
  * the opener is holding its place for tomorrow rather than reporting a
  * zero), so the split is named once here.
  *
- * It used to be spelled twice — `kind === 'comments' || kind === 'proposals'`
- * in the name and a bare `kind !== 'comments'` in the badge — and the two
- * disagreed the moment `proposals` arrived: a screen reader heard
- * "Proposals" while the eye saw a `0`.
+ * Spelled twice — `kind === 'comments' || kind === 'proposals'` in the name
+ * and a bare `kind !== 'comments'` in the badge — the two would disagree the
+ * moment `proposals` arrived: a screen reader would hear "Proposals" while
+ * the eye saw a `0`.
  */
 function countIsBacklog(kind: InspectorKind): boolean {
   return kind === 'comments' || kind === 'proposals'
@@ -97,9 +97,8 @@ export function InspectorSegment({ open, onToggle, tabs }: InspectorSegmentProps
       data-testid="inspector-segment"
       // Grouped by PROXIMITY, with nothing drawn around it.
       //
-      // The outline this used to carry, plus its padding, made the group
-      // 50px on a coarse pointer against a 48px row: it crossed the row's
-      // top edge and landed on the header's bottom rule, two lines a pixel
+      // An outline, plus its padding, would make the group 50px on a coarse
+      // pointer against a 48px row: it would cross the row's top edge and land on the header's bottom rule, two lines a pixel
       // apart. `inspector-segment-fit.browser.test.tsx` computes that
       // footprint from the fine render, since no test can produce a coarse
       // one.

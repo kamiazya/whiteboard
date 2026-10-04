@@ -48,11 +48,11 @@ export interface RenderCanvasOptions {
  * The height a text node needs for its laid-out body, in canvas px.
  *
  * `naturalNodeContentSize` is canvas-render's own answer to "how big must
- * this box be", so this is padding arithmetic and nothing else. It used to
- * lay the node out at height 1 and read the scene's bottom edge, which
- * worked only because a box that small cannot bound anything — layout could
- * not tell this probe apart from a node someone really made 1px tall, so
- * the escape hatch it needed stayed open for every tiny node as well.
+ * this box be", so this is padding arithmetic and nothing else. Laying the
+ * node out at height 1 and reading the scene's bottom edge would work only
+ * because a box that small cannot bound anything — layout could not tell
+ * that probe apart from a node someone really made 1px tall, so the escape
+ * hatch it needed would stay open for every tiny node as well.
  */
 export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasOptions): number {
   const content = naturalNodeContentSize(node, {

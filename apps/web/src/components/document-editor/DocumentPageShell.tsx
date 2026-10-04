@@ -37,7 +37,7 @@ import {
  * Nothing here goes fullscreen: the shell fullscreens the whole document
  * (`hooks/use-fullscreen.ts`), so this element needs no ref to be promoted
  * through and no ground of its own — a `<main>` promoted to the top layer
- * alone used to composite over black, and carried `bg-background` for it.
+ * alone would composite over black, and carries `bg-background` for it.
  */
 export function DocumentPageShell({
   srTitle,

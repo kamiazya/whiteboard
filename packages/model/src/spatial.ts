@@ -29,11 +29,11 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * What a node, an edge or the canvas may attach beyond its own fields: a
  * namespaced, versioned, schema'd payload bucket ([ADR-0013](../../../docs/contributing/adr/0013-facet-system.md)).
  *
- * It is an ordinary field of the model at each of the three sites. It used to
- * ride inside the JSON Canvas extension key, which is where it still travels
- * on the WIRE — packing it back there is `codec`'s projection, and
+ * It is an ordinary field of the model at each of the three sites. It rides
+ * inside the JSON Canvas extension key only on the WIRE — packing it there is
+ * `codec`'s projection, and
  * [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md) is why
- * the model no longer spells the format's key itself.
+ * the model does not spell the format's key itself.
  */
 const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
 

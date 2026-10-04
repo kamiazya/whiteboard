@@ -1,7 +1,7 @@
 // Page-state derivation for `BrowserDocumentPage`.
 //
 // `useBrowserDocumentController` carries several flat fields that
-// the page used to chain into an `if` cascade (degraded-load /
+// a page would otherwise chain into an `if` cascade (degraded-load /
 // loading / editing). The invariant between fields is not obvious
 // from the JSX alone:
 //

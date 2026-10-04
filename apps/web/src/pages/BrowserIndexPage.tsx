@@ -445,7 +445,7 @@ export function BrowserIndexPage({
   }, [index, clock, filesSource, setSnapshots, setTrashCount, setFilesRevision])
 
   // The index deletes by PATH, and the list already addresses rows that way,
-  // so the request carries the path rather than the id it used to need.
+  // so the request carries the path.
   const { requestDelete, dialog: deleteDialog } = useDeleteDocuments({
     keeper: 'browser',
     // The pointer is resolved BEFORE the delete, because afterwards there is
@@ -499,7 +499,7 @@ export function BrowserIndexPage({
         // duplicating an address.
         // The editor's create path, not a second one beside it: numbering,
         // the content seed, and the rollback on a failed seed are all things
-        // this page used to do differently or not at all.
+        // a second create path would do differently or not at all.
         const created = await createSeededDocument(index, loro, clock, undefined, kind)
         // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.

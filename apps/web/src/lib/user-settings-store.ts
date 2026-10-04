@@ -232,10 +232,10 @@ export const userSettingsSchema = z
 
 /**
  * What `load` reads the live payload with: the same schema, deriving only
- * what a reader does about a key it has not heard of. A tab on an older build
- * beside a newer one used to read the newer payload as unreadable and write
- * defaults back, erasing the daemon URL, the replica registry and the
- * promotion record to lose one field it could not name.
+ * what a reader does about a key it has not heard of. A strict read would let
+ * a tab on an older build beside a newer one read the newer payload as
+ * unreadable and write defaults back, erasing the daemon URL, the replica
+ * registry and the promotion record to lose one field it could not name.
  */
 const readSchema = tolerantAnswer(userSettingsSchema)
 

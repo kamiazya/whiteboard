@@ -20,10 +20,8 @@ import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from './workspac
  * has no last-edited time to report. It is also what lets a switch onto a
  * never-edited document find something to load.
  *
- * Three of the five create paths used to skip it (first boot, startFresh, and
- * the list page) while `createDocument` did it and said why. Routing them all
- * through here is what makes that inconsistency unrepresentable rather than
- * merely fixed.
+ * Every create path routes through here, so one that skips it is
+ * unrepresentable rather than merely avoided.
  *
  * The index row is rolled back if the content write fails, so a failed create
  * never leaves a document with nothing behind it.

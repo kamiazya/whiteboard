@@ -100,7 +100,7 @@ function cornerBoxes(box: Box, sizeCanvas: number): readonly ResizeHandle[] {
 /**
  * The four VISIBLE corner markers, in canvas space, sized by
  * `HANDLE_SIZE_PX / zoom` so they stay a constant on-screen size. Edge
- * midpoints no longer carry a marker: the whole edge is grabbable through
+ * midpoints carry no marker: the whole edge is grabbable through
  * `edgeBandBoxes`, which is what let the touch-size hit areas of
  * `cornerHitBoxes` grow without colliding with a mid-edge neighbour.
  */

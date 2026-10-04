@@ -27,8 +27,8 @@ export interface RowAction {
 
 export interface CategoryDescriptor {
   // Keyed by the wire contract's own category union, so a row for something
-  // the daemon cannot report does not compile. It used to be `string`, and a
-  // `libraries` row survived the deletion of its server half by rendering a
+  // the daemon cannot report does not compile. As `string`, a `libraries`
+  // row would survive the deletion of its server half by rendering a
   // permanent 0 B — a value indistinguishable from "nothing stored yet".
   key: StorageCategory
   label: string

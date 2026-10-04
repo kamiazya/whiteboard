@@ -91,14 +91,10 @@ function NoWorkspacesYet({ onRetryWorkspaces }: { onRetryWorkspaces: () => void 
     //
     // Creation is offered by the SWITCHER, not here — one carrier, the
     // same one every other page uses. This state points at it rather
-    // than growing a second create control beside it.
-    //
-    // It used to say the write was someone else's, and that was true
-    // while every create path addressed a (workspace, path) pair this
-    // page could not name. `POST /api/workspaces` retired that: the
-    // daemon mints the id and derives the address from a display name,
-    // so the client no longer has to guess an identifier the daemon
-    // would agree with.
+    // than growing a second create control beside it. The write is the
+    // daemon's own: `POST /api/workspaces` mints the id and derives the
+    // address from a display name, so the client does not have to guess an
+    // identifier the daemon would agree with.
     <div className="flex flex-col items-start gap-3">
       <div>
         <p className="text-sm font-medium">This daemon has no workspaces.</p>

@@ -57,9 +57,9 @@ export interface SourcePaneApi {
   /**
    * Runs any editing command against the live view — the seam the catalog
    * drives, so a new verb is a new command rather than a new API method.
-   * `wrapSelection` used to sit beside it, taking delimiters instead of a
-   * command; every caller now reads its delimiters from
-   * `MARKDOWN_EDITOR_VERBS` and arrives here as an ordinary command.
+   * There is no `wrapSelection` taking delimiters instead of a command:
+   * every caller reads its delimiters from `MARKDOWN_EDITOR_VERBS` and
+   * arrives here as an ordinary command.
    */
   run: (command: StateCommand) => void
   /** Heading level of the line the caret sits on; 0 for body text. */

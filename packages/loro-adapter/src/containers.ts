@@ -33,7 +33,7 @@ export interface DocumentContainers {
 
 /**
  * The comment plane as it was BEFORE threads (ADR-0024): one flat entry per
- * comment. Nothing writes here any more — `migrateCanvasCommentsToThreads`
+ * comment. Nothing writes here — `migrateCanvasCommentsToThreads`
  * empties it and `readSpatialCanvas` reads it only as a fallback for a
  * document no writer has touched since. Retire the key once nothing needs
  * that fallback.

@@ -119,10 +119,10 @@ export function errorBody(code: string, message?: string): ApiErrorBody {
 /**
  * A schema validation failure as this contract's reason.
  *
- * The routes used to answer `{ error: 'invalid input', issues }`, putting the
- * only description of what was wrong in a field the contract does not admit
- * — so `apiErrorReason` discarded the whole body and every caller showed a
- * generic banner. The issues say the same thing in the slot a reader reads.
+ * The issues go in the slot a reader reads. A body of `{ error: 'invalid
+ * input', issues }` would put the only description of what was wrong in a
+ * field the contract does not admit, so `apiErrorReason` would discard the
+ * whole body and every caller would show a generic banner.
  */
 export function invalidRequestBody(error: z.ZodError): ApiErrorBody {
   return errorBody('invalid_request', error.issues.map(issueText).join('; '))

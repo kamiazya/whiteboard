@@ -1,6 +1,6 @@
 /**
- * What a document-page test needs that every one of them used to write by
- * hand: a Router and a sized parent around the page, the daemon client and
+ * What a document-page test needs that every one of them would otherwise
+ * write by hand: a Router and a sized parent around the page, the daemon client and
  * the replica schedulers answered by doubles, a stand-in for the SSE stream,
  * and the kebab menu opened.
  *

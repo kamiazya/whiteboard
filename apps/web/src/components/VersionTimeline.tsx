@@ -180,14 +180,13 @@ function versionTime(iso: string): string {
 /**
  * A version's title, from the content side.
  *
- * The label if a person gave it one; otherwise WHEN. Every unlabelled
- * version used to be titled "Auto-save", which made three consecutive
- * checkpoints read as three identical rows and named the mechanism rather
- * than the thing. What tells them apart is the time, so the time is the
- * title.
+ * The label if a person gave it one; otherwise WHEN. Titling every unlabelled
+ * version "Auto-save" would make three consecutive checkpoints read as three
+ * identical rows and name the mechanism rather than the thing. What tells
+ * them apart is the time, so the time is the title.
  *
  * A label existing is also what says a person marked this deliberately —
- * which is why there is no "manual" badge any more, and no third vocabulary
+ * which is why there is no "manual" badge, and no third vocabulary
  * saying it again.
  */
 function versionTitle(version: Pick<VersionEntry, 'label' | 'createdAt'>): string {
@@ -285,9 +284,9 @@ export default function VersionTimeline({
       setStale(false)
     } catch (err) {
       if (seq !== fetchSeqRef.current) return
-      // A failed read used to be logged and nothing else, so the panel kept
-      // showing the rows it happened to have — with no way to tell them from
-      // a current list. The rows stay (they are still the last true answer)
+      // A failed read is not only logged: the panel would keep showing the
+      // rows it happened to have, with no way to tell them from a current
+      // list. The rows stay (they are still the last true answer)
       // and stop claiming to be up to date.
       setStale(true)
       if (reportVersionsFailure(err, { workspaceId, path })) setVersions([])
@@ -317,10 +316,9 @@ export default function VersionTimeline({
     refresh()
   }, [refresh])
 
-  // Polling for new auto-versions. It used to refetch branches on the same
-  // tick, because HEAD could move under the list from another peer; there is
-  // no HEAD any more (ADR-0029) and a version row is a point in this
-  // document's past whoever wrote it.
+  // Polling for new auto-versions. Only versions are refetched: there is no
+  // HEAD (ADR-0029) that could move under the list from another peer, and a
+  // version row is a point in this document's past whoever wrote it.
   useEffect(() => {
     const h = setInterval(() => {
       refresh()
@@ -445,12 +443,11 @@ export default function VersionTimeline({
     })
   }, [previewing, previewPast, isRestoring, restoreError, closePreview, restorePreviewed])
 
-  // Every row, in one column. Lanes were the branch surface's view of this
-  // list — a dot coloured by variation, a ring for the lane you were not on,
-  // an arc where a restore met the trunk. ADR-0029 retires that surface, and
-  // what History answers on its own needs no lane: what this used to be, and
-  // can I go back. The `restored from X` line survives it, carrying the one
-  // fact the arc drew that the rows cannot state on their own.
+  // Every row, in one column, with no lanes. ADR-0029 retires the branch
+  // surface, and what History answers on its own needs no lane: what this
+  // used to be, and can I go back. The `restored from X` line carries the one
+  // fact an arc where a restore met the trunk would draw that the rows cannot
+  // state on their own.
   const versionsById = useMemo(() => new Map(versions.map((v) => [v.id, v])), [versions])
 
   return (

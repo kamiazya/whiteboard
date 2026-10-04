@@ -240,11 +240,10 @@ function decorations(element: {
 
 /**
  * An EDGE is a relation, so it is always an `@ocif/edge` — `start` and `end`
- * are node ids, which is what that extension requires and what an edge now is.
+ * are node ids, which is what that extension requires and what an edge is.
  *
- * This function used to ask whether both ends named a node before it could
- * say what the element became, and that question was the conflation
- * ADR-0038 decision 2 removed. The branch is gone: the two concepts are two
+ * Asking whether both ends name a node before saying what the element becomes
+ * is the conflation ADR-0038 decision 2 removed: the two concepts are two
  * functions, the way OCIF has two extensions.
  */
 function projectEdge(edge: CanvasEdge): OcifNode {

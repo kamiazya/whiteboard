@@ -88,8 +88,8 @@ export async function clearNamedDb(dbName: string): Promise<void> {
  *
  * Sized on the measurement below — the tail re-created the database inside
  * 100ms — plus a margin, and paid only where there is a tail to wait for.
- * Every call used to pay it: the whole browser project went from 171-177s to
- * 222s, which is 46 seconds spent watching databases that were never coming
+ * Paid on every call instead, the whole browser project went from 171-177s
+ * to 222s — 46 seconds spent watching databases that were never coming
  * back.
  */
 const SETTLE_QUIET_MS = 150

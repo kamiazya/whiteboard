@@ -11,8 +11,8 @@ import { readSpatialCanvas, writeSpatialCanvasInto } from './loro-bridge.js'
 import { spliceText } from './minimal-change.js'
 
 /**
- * The stored id of the single text node a markdown document's body USED to
- * live in on the daemon side. Nothing writes it any more — `wb_document_set`
+ * The stored id of the single text node a markdown document's body lives in
+ * on older daemon documents. Nothing writes it — `wb_document_set`
  * writes the text container — but stored documents still hold one, so it is
  * how a reader finds such a body and how that tool recognises a document it
  * could itself have written.
@@ -54,10 +54,9 @@ export function readMarkdownBody(doc: DocumentContainers): string {
  *
  * Asks the content seam what a node HOLDS rather than narrowing on the
  * stored discriminant, so it says the same thing before and after ADR-0038
- * decision 3 dissolves that union. It used to answer a
- * `SpatialNode`, which is a type derived from the
- * union itself — and the only thing the caller wanted from that narrowing
- * was `.text`, which `nodeText` gives without it.
+ * decision 3 dissolves that union. It answers a `SpatialNode` rather than a
+ * narrowed type derived from the union itself — the only thing the caller
+ * wants from that narrowing is `.text`, which `nodeText` gives without it.
  */
 function findMarkdownBodyNode(nodes: SpatialCanvas['nodes']): SpatialNode | undefined {
   const byId = nodes.find((node) => node.id === MARKDOWN_BODY_NODE_ID)

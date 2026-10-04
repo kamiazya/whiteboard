@@ -25,11 +25,11 @@ async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<str
   return new Promise((resolve, reject) => {
     // Its own store, not the content record's envelope.
     //
-    // It used to be a field on the Loro envelope, which meant the listing
-    // parsed a whole snapshot record to read one string — and pulled the
-    // envelope schema's module along with it. Now that content lives behind
-    // the `DocumentStore` port, which has no notion of wall-clock time at
-    // all, the timestamp has its own store and this read touches nothing else.
+    // A field on the Loro envelope would mean the listing parses a whole
+    // snapshot record to read one string — and pulls the envelope schema's
+    // module along with it. Content lives behind the `DocumentStore` port,
+    // which has no notion of wall-clock time at all, so the timestamp has its
+    // own store and this read touches nothing else.
     //
     // The consequence, stated rather than hidden: a document whose content
     // will not load still contributes the timestamp its last writer stamped,

@@ -15,10 +15,10 @@ import { z } from 'zod'
  *
  * OPTIONAL, because a keeper with no identity to give must be able to say
  * nothing. Saying nothing is the honest answer and an invented one is not:
- * the field previously held whatever each call site had lying around — a
+ * a call site left to fill the field offers whatever it has lying around — a
  * Loro peer id (fresh on every load of the same document), a per-process
- * nanoid, or the literal `browser` — and nothing read it, so nothing
- * noticed.
+ * nanoid, or the literal `browser` — and nothing reads it, so nothing
+ * would notice.
  */
 export const operatorInfoSchema = z.object({
   kind: z.enum(['ai', 'human', 'system']),

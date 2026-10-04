@@ -19,10 +19,10 @@
  * A leaf with no imports, because both sides of the sync transport read it:
  * `sync-audience.ts` writes it when a request goes out and `routes/sync-sse.ts`
  * replays it when a stream declares readiness, and sync-audience already
- * imports sync-streams for the fan-out. It used to reach sync-sse through a
- * mutable function slot patched at module load to dodge that cycle — a
- * composition that imported the transport without the audience module
- * silently replayed nothing.
+ * imports sync-streams for the fan-out. Being a leaf, neither needs a mutable
+ * function slot patched at module load to dodge that cycle — a slot a
+ * composition that imported the transport without the audience module would
+ * leave silently replaying nothing.
  */
 /**
  * How long a recorded request stays replayable. Long enough for a person to

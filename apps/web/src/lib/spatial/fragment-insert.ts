@@ -22,8 +22,7 @@ export function buildFragmentInsertCommand(
   createId: () => string,
   anchor?: Point,
 ): EditorCommand | undefined {
-  // Ink alone is a fragment: a copied stroke used to answer here exactly as
-  // an empty clipboard does.
+  // Ink alone is a fragment, not an empty clipboard.
   if (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) return undefined
   const existingIds = new Set([
     ...canvas.nodes.map((node) => node.id),

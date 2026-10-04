@@ -122,7 +122,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
       // definite order instead of interleaving their diff-writes. Safe
       // to acquire while the tool surface's document lock is held:
       // the lock is re-entrant per async chain and nothing nests the
-      // two the other way around anymore.
+      // two the other way around.
       const wrote = await withWorkspaceWriteLock(workspaceId, async () => {
         const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, this.scope)
         if (workspaceDoc === null) return false

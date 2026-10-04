@@ -128,10 +128,9 @@ export function useDaemonDocumentBackend({
     const injected = createBackendRef.current?.(workspaceId, path, daemonFetch)
     if (injected) return { backend: injected, contentDocumentId: undefined }
     // Nothing is at this path (a stale URL — the document was deleted or
-    // never existed): no connection. The per-document contract used to catch
-    // this with a lazily created empty doc, which silently minted a blank
-    // canvas at the old path on the first edit; creating a document is an
-    // explicit act now (see the not-found state below).
+    // never existed): no connection. A lazily created empty doc here would
+    // silently mint a blank canvas at the old path on the first edit;
+    // creating a document is an explicit act (see the not-found state below).
     if (workspaceSyncDocumentId === undefined) return null
     return connectDaemonDocument({
       workspaceId,

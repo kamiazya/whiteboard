@@ -3,7 +3,7 @@ import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 
 export interface WorkspaceFilesPanelProps {
   /**
-   * Where the documents live. The panel itself no longer knows which mode it
+   * Where the documents live. The panel itself does not know which mode it
    * is in — the daemon and the browser store each supply one of these,
    * which is what lets one browser serve both.
    */
@@ -58,8 +58,8 @@ export interface WorkspaceFilesPanelProps {
    * The page performs duplicate and delete on the browser's behalf, and a
    * delete finishes later still, in a confirmation dialog the panel does not
    * own — so neither can be awaited here. Without this the deleted document
-   * stayed on screen with a live Delete bound to a path that no longer
-   * existed, and a duplicate never appeared at all.
+   * would stay on screen with a live Delete bound to a path that no longer
+   * exists, and a duplicate would never appear at all.
    */
   revision?: unknown
 }

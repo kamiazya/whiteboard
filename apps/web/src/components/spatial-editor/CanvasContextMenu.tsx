@@ -79,7 +79,7 @@ export interface CanvasContextMenuProps {
  *
  * The same id may name an edge or a LINE: the hit-test hands both out the
  * same way, because the scene routes them through one pass, so the menu is
- * where the two part company — and it used to look in one collection only.
+ * where the two part company, and it looks in both collections.
  * A COMMENT is its own subject: it is not content, so none of the node, edge
  * or canvas verbs apply to it.
  */

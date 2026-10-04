@@ -30,8 +30,8 @@ export function sessionHealthOf(
 
 /**
  * Two axes, not one enum: WHO KEEPS the workspace, and whether that keeper
- * is keeping. They used to share one four-value union, which made `browser`
- * and `reconnecting` alternatives of each other and so could not say
+ * is keeping. One four-value union would make `browser` and `reconnecting`
+ * alternatives of each other, unable to say
  * "daemon-kept, but the daemon is unreachable while the browser holds the
  * live replica" — the resting state promotion (a browser workspace merged
  * into a daemon) leaves behind.

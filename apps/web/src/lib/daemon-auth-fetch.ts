@@ -1,12 +1,12 @@
 /**
  * The daemon's Authorization seam, deliberately in a module of its own.
  *
- * It used to sit in daemon-api-client.ts beside that file's response schemas,
- * which made the seam a whole module rather than a function: a SharedWorker
- * importing it pulled the schema graph in and stalled its module load, leaving
- * the worker unable to attach the credential without duplicating the header —
- * exactly what daemon-auth-seam.test.ts forbids. Keeping it small lets every
- * context share the one implementation.
+ * It does not sit in daemon-api-client.ts beside that file's response schemas,
+ * which would make the seam a whole module rather than a function: a
+ * SharedWorker importing it would pull the schema graph in and stall its
+ * module load, leaving the worker unable to attach the credential without
+ * duplicating the header — exactly what daemon-auth-seam.test.ts forbids.
+ * Keeping it small lets every context share the one implementation.
  */
 import { isBridgeDaemon } from './bridge-address.js'
 import { bridgeFetch } from './bridge-loader.js'

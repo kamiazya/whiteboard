@@ -217,10 +217,9 @@ function placeDocumentInTree({
 /**
  * Called after every successful `saveDocument`.
  *
- * A plain notification, not a compaction hook. This module used to name the
- * subscriber it happened to have — the auto-compact debouncer — which is how
- * the store came to know about compaction at all. It does not need to: what it
- * has to say is "this document changed", and who cares is not its business.
+ * A plain notification, not a compaction hook: the store does not name a
+ * subscriber such as the auto-compact debouncer, which is how it would come to
+ * know about compaction at all. What it has to say is "this document changed", and who cares is not its business.
  *
  * A subscriber that throws is logged and swallowed. A save that already
  * succeeded must not be reported as failed because a listener misbehaved.
@@ -260,7 +259,7 @@ export async function saveDocument(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const db = await scope.db()
     // The workspace REGISTRY row is still real (workspaceExists answers from
-    // it); the documents rows are not written here anymore — the tree is the
+    // it); the documents rows are not written here — the tree is the
     // whole record of what exists.
     await upsertWorkspaceRow(db, workspaceId)
     const workspaceDoc = await getWorkspaceDoc(workspaceId, scope)
@@ -334,10 +333,9 @@ export async function getDoc(
   // diffs against the live workspace doc), and what another process writes
   // reaches it only through the record. So the record is asked first —
   // reading it through is what evicts the projections a foreign write
-  // outdated — and the cache then serves what is left. The legacy
-  // per-document delta replay that used to run here died with the legacy
-  // plane — replaying that other oplog into a projection resurrected
-  // pre-fold state over current content.
+  // outdated — and the cache then serves what is left. No per-document
+  // delta replay runs here: replaying a legacy oplog into a projection would
+  // resurrect pre-fold state over current content.
   validateWorkspaceId(workspaceId)
   await openWorkspaceDocIfStored(workspaceId, scope)
   return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path, scope), scope)
@@ -347,7 +345,7 @@ export async function getDoc(
  * Whether this daemon has ever registered the workspace.
  *
  * Exists so read surfaces can tell "empty" from "never heard of it". Nothing
- * mints workspace ids ahead of use any more, but ids OUTLIVE the daemon that
+ * mints workspace ids ahead of use, but ids OUTLIVE the daemon that
  * minted them — a browser keeps its daemon workspace id in localStorage, and
  * a rebuilt data dir does not know it. Answering such an id with empty lists
  * and lazily-created empty docs reads exactly like the user's data being
@@ -432,8 +430,8 @@ export async function deleteDocument(
   if (documentId === null) return false
 
   // The same bracket wbDocumentDelete runs in (server-core's
-  // document-crud.ts) — deliberately, because the two used to be separate
-  // implementations and only one of them cleaned up. The bracket takes the
+  // document-crud.ts) — deliberately, so no delete path can skip the
+  // cleanup. The bracket takes the
   // workspace write lock and deletes the versions rows after the document
   // goes (migration 0016 dropped the cascade).
   return createDocumentTeardown(scope).around({ workspaceId, documentId, path }, async () => {
@@ -491,9 +489,9 @@ export async function getDocumentKind(
  * that answer 'no-gain'.
  *
  * The cut is the earliest workspace-scoped version frontier, full stop.
- * Branch tips used to hold it back — ADR-0029 retired the branch, so there is
- * no second pin and no checkout to protect. Measured on a one-tip fixture
- * before they went: the folded record was ~75% larger with the pin.
+ * ADR-0029 retired the branch, so there is no second pin and no checkout to
+ * protect (a branch tip holding the cut back made the folded record ~75%
+ * larger on a one-tip fixture).
  *
  * The result is the daemon's published shape (`compactWorkspaceResultSchema`
  * in daemon-client), typed from the schema so the route that answers with it

@@ -16,9 +16,9 @@ export type ReferenceExtra = Partial<ResolvedReference>
 /**
  * The reference bundle as DATA, so it can cross a `postMessage`.
  *
- * A seam is a function and a function cannot be posted, which is why the
- * layout worker used to draw every text-node embed as a placeholder while
- * the main thread beside it could have drawn the note. The bundle is a pure
+ * A seam is a function and a function cannot be posted, which would leave the
+ * layout worker drawing every text-node embed as a placeholder while the main
+ * thread beside it could draw the note. The bundle is a pure
  * function of what was loaded plus three finite tables, so the tables are
  * what cross: the alias each written target resolved to, the title of each
  * id the graph can name, and the extras a surface attached per reference.

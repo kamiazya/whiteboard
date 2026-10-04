@@ -10,7 +10,7 @@ import type { UserSettingsStore } from '../lib/user-settings-store.js'
  * ADR-0050: a local daemon is reached through the extension and nothing else,
  * so only a daemon remembered at the bridge's address is asked. A loopback
  * address a settings record still holds is left alone — reconnecting to it
- * would be the loopback path this app no longer takes, and the person
+ * would be the loopback path this app does not take, and the person
  * reconnects through the extension instead.
  */
 export function storedDaemonForReconnect(gate: {

@@ -89,10 +89,9 @@ interface VersionRow {
   auto: number
   label: string | null
   // '' means the row records no operator at all. It has to be spelled on
-  // the KIND now that the actor is optional: the actor's emptiness used to
-  // carry both meanings ("nobody saved this" and "we do not know who"), and
-  // those separated the moment a keeper without an identity could legally
-  // name a kind and no actor.
+  // the KIND because the actor is optional: an empty actor would carry both
+  // meanings ("nobody saved this" and "we do not know who"), and a keeper
+  // without an identity can legally name a kind and no actor.
   operatorKind: '' | 'ai' | 'human' | 'system'
   operatorActor: string
   operatorDisplayName: string | null

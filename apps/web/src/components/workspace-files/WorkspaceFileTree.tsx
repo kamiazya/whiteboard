@@ -17,7 +17,7 @@ export interface WorkspaceFileTreeProps {
   /**
    * Right-click or touch long-press on a document row — the object-action
    * menu hook. Without it the one-column view has NO route to
-   * rename/delete/pin on touch: the preview pane that used to carry those
+   * rename/delete/pin on touch: the preview pane that carries those
    * verbs does not render when a tap opens.
    */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void

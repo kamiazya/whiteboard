@@ -3,9 +3,8 @@
  * contributes to drawing a canvas, and the geometry vocabulary those
  * contributions speak.
  *
- * It lives BELOW both, and that is the whole point. It used to live inside
- * the renderer, which made a plugin importing it close a package cycle —
- * held open only by the import being type-only, a property no manifest can
+ * It lives BELOW both, and that is the whole point. Inside the renderer, a
+ * plugin importing it would close a package cycle — held open only by the import being type-only, a property no manifest can
  * see and only a hand-written guard could check. A contract is not the
  * renderer's private type; it belongs where both sides can reach it without
  * reaching for each other.

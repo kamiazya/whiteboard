@@ -12,8 +12,8 @@ import type { NodeInEditor } from './use-node-in-editor.js'
 /**
  * The spatial editor pane, assembled once for both document pages.
  *
- * The editor takes ~23 props, and each page used to spell the assembly out
- * itself — 19 of them shared, 14 with byte-identical expressions. That is
+ * The editor takes ~23 props, and each page spelling the assembly out
+ * itself — 19 of them shared, 14 with byte-identical expressions — is
  * the arrangement that shipped the file-seam defect: a prop added to one
  * call site and not the other diverges silently, because each page's tests
  * only exercise its own mode. Here a new prop is added in one place or it

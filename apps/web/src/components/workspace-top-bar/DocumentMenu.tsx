@@ -44,22 +44,21 @@ interface DocumentMenuProps {
 /**
  * The ONE action menu for the open document.
  *
- * There used to be two, a header apart: a pencil owning rename/copy/export
- * and this kebab owning export/duplicate/delete. Export sat in both, and
+ * There is one, not a pair a header apart — a pencil owning rename/copy/export
+ * beside a kebab owning export/duplicate/delete would put export in both, and
  * because only the daemon page wired an export handler, the same pencil icon
- * opened a different menu depending on the backend. ADR-0006 puts per-object
- * actions on the object, and the open document is one object.
+ * would open a different menu depending on the backend. ADR-0006 puts
+ * per-object actions on the object, and the open document is one object.
  *
  * Its bands follow ADR-0006's order: the verbs, then whatever the page
  * contributes, ending in its destructive entry.
  *
- * The properties band that used to lead it is gone, and with it the whole
- * apparatus that opened one: `Display…` hung a popover off this trigger,
- * which had to be opened on the MENU'S CLOSE (a menu returns focus to its
- * trigger, and a popover open at that moment reads it as an interaction
- * outside itself and dismisses) and given the kebab back by hand on
- * dismissal. A canvas's display settings are now a panel in the page's one
- * inspector slot — `lib/inspector.ts` — where the sheet brings its own way
+ * There is no properties band, and so none of the apparatus that opens one: a
+ * `Display…` entry hanging a popover off this trigger would have to be opened
+ * on the MENU'S CLOSE (a menu returns focus to its trigger, and a popover
+ * open at that moment reads it as an interaction outside itself and
+ * dismisses) and given the kebab back by hand on dismissal. A canvas's
+ * display settings are a panel in the page's one inspector slot — `lib/inspector.ts` — where the sheet brings its own way
  * out and no two panels can be open at once.
  *
  * Rename is deliberately absent: naming happens in place on the title field
@@ -69,9 +68,9 @@ interface DocumentMenuProps {
  *
  * So is "Copy link". Handing out a link is a promise about who can reach the
  * document, and the keeper decides that: one kept in this browser is
- * reachable from no other browser at all. The link this menu used to copy was
- * built from the document's PATH, so renaming it also broke every link
- * already handed out. Sharing returns when it is designed against the keeper
+ * reachable from no other browser at all. A link built from the document's
+ * PATH would also break on a rename, for every link already handed out.
+ * Sharing returns when it is designed against the keeper
  * that has to honour it.
  */
 export function DocumentMenu({ onExport, onBookmark, triggerRef, children }: DocumentMenuProps) {

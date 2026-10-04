@@ -2,10 +2,10 @@
  * A document's shape, whichever kind it is — the one input every small
  * rendition of it takes: the favicon, a tree row's icon, a list card.
  *
- * SUBSCRIBED, not derived. It used to be a `useMemo` in the page's render
- * path, so every edit computed an outline that the next edit threw away 150ms
- * later, on the thread answering the person doing the editing. Now the
- * document's own change notification triggers it, the worker computes it at
+ * SUBSCRIBED, not derived: a `useMemo` in the page's render path would
+ * compute, on every edit, an outline the next edit throws away 150ms later,
+ * on the thread answering the person doing the editing. The document's own
+ * change notification triggers it instead, the worker computes it at
  * IDLE priority — nobody waits on a tab icon — and the page holds the last
  * answer until a better one arrives.
  *

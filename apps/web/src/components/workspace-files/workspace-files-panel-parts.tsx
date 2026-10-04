@@ -395,8 +395,8 @@ export function columnViewOf(
  * column goes: the breadcrumb already walks the same hierarchy, and three
  * columns in a phone's width leaves none of them readable.
  *
- * What a press DOES is `openTarget` — four answers that a chain of
- * ternaries used to state in the middle of a prop.
+ * What a press DOES is `openTarget` — four answers, stated as a function
+ * rather than a chain of ternaries in the middle of a prop.
  */
 export function BrowseTwoColumns({
   documents,

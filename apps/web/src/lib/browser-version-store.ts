@@ -54,7 +54,7 @@ const versionRowSchema = z
      *
      * REQUIRED, unlike `auto`, which is optional exactly because a row
      * written before it had to keep parsing. That reasoning
-     * does not apply here: no row written before this one exists any more —
+     * does not apply here: no row written before this one exists —
      * IndexedDB v19 emptied the store, because a past checkpoint's content is
      * reachable only by checking the record out at its own frontier and so
      * none could be backfilled. Requiring it is what keeps the read a single

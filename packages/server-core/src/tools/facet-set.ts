@@ -304,11 +304,11 @@ async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetS
  * envelope, or the document's frontmatter.
  *
  * One answer, read by both the write (`setOne`) and its dry run
- * (`tagSetsAfter`). They used to derive it separately — the same
+ * (`tagSetsAfter`). The dry run decides what the batch REFUSES while the
+ * write decides what it stores, so two derivations (the same
  * `input.target === 'canvas' || kind === 'spatial'` written twice, with the
- * element check written twice above it — and the dry run decides what the
- * batch REFUSES while the write decides what it stores. Two copies of that
- * decision is a sync obligation nothing enforces, which is the objection this
+ * element check written twice above it) would be a sync obligation nothing
+ * enforces, which is the objection this
  * file already records against the node/edge branches it merged earlier.
  *
  * It answers the site alone. What a MISMATCH costs differs by caller and
@@ -661,9 +661,9 @@ function tagSetsAfter(doc: LoroDoc, input: FacetSetInput, documentId: string): T
 
 /**
  * The dry run for an element write. One function per SITE, mirroring the
- * writers: the two used to derive the site separately and each carried its own
- * three-way branch, so a change to what a write REACHES had to be made twice
- * or the refusal pass would refuse a different set than the write produced.
+ * writers, so a change to what a write REACHES is made once: two separately
+ * derived three-way branches would let the refusal pass refuse a different set
+ * than the write produces.
  */
 function tagSetsAtElement(
   canvas: SpatialCanvas,

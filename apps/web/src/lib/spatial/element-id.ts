@@ -1,6 +1,6 @@
 // The one generator of ids for the elements a person draws: nodes, edges,
 // lines and comment threads. Pure, so it lives beside the other spatial
-// mechanics rather than inside the gesture reducer that used to hold it.
+// mechanics rather than inside the gesture reducer.
 import { bytesToHex } from '@kamiazya/whiteboard-model'
 
 /**

@@ -221,9 +221,9 @@ function GeneralSection({
 }
 
 // Each card here owns its own fetch/error/loading state, which is the right
-// shape now that the page mounts this section once: one instance, one read,
+// shape since the page mounts this section once: one instance, one read,
 // and a mutation lands on the list the person is looking at. See
-// SettingsPage's doc comment for what mounting it twice used to cost.
+// SettingsPage's doc comment for what mounting it twice would cost.
 type ConnectionsProps = {
   daemon?: ConnectedDaemon
   onDisconnected?: () => void
@@ -436,12 +436,12 @@ const SECTION_TITLE: Record<SettingsSection, string> = {
  * means a resize never remounts what is on screen. What varies between the
  * two layouts is CHROME: a section list and a back-to-settings row below
  * `sm`, a sidebar at and above it. The section's CONTENT is mounted exactly
- * once, and that is load-bearing rather than tidiness. It used to be mounted
- * once per layout, which gave every stateful card two instances: two fetches
- * on arrival, two independent lists, and a mutation that reached only the one
- * the person clicked — so the hidden copy kept offering a row the daemon no
- * longer had, and became the visible one the moment the viewport crossed
- * `sm`. `SettingsPage.test.tsx`'s "the active section is mounted once" block
+ * once, and that is load-bearing rather than tidiness. Mounted once per
+ * layout, every stateful card would have two instances: two fetches on
+ * arrival, two independent lists, and a mutation that reached only the one
+ * the person clicked — so the hidden copy would keep offering a row the
+ * daemon no longer had, and become the visible one the moment the viewport
+ * crossed `sm`. `SettingsPage.test.tsx`'s "the active section is mounted once" block
  * holds the invariant.
  */
 export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPageProps) {

@@ -6,10 +6,10 @@
  * end carries an arrowhead, what its label says — and a stroke has none of
  * that. What is left is what a person actually wants from a scribble.
  *
- * It exists at all because Delete used to be reachable only from the
- * keyboard: the menu resolved its target out of `canvas.edges`, where a line
- * is not, so a press on ink opened the empty-canvas menu. On a phone that
- * left no way to remove a stroke at all.
+ * It exists because without it Delete is reachable only from the keyboard:
+ * the menu resolves its target out of `canvas.edges`, where a line is not, so
+ * a press on ink would open the empty-canvas menu — and on a phone that would
+ * leave no way to remove a stroke at all.
  */
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor, CanvasLine } from '@kamiazya/whiteboard-model'

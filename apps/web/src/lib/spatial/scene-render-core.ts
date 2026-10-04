@@ -7,10 +7,9 @@
  * there is still exactly one composition of `layoutSpatialCanvas` +
  * `sceneBounds` + `renderSceneToSvg`.
  *
- * It used to take a `parseBody` too, so that a static codec import stayed out
- * of the worker chunk. canvas-render now DEFAULTS to codec's parser, and the
- * worker imported codec directly anyway, so the option was one more copy of
- * the same line rather than a boundary.
+ * It takes no `parseBody`: canvas-render DEFAULTS to codec's parser, and the
+ * worker imports codec directly anyway, so the option would be one more copy
+ * of the same line rather than a boundary.
  */
 
 import type {

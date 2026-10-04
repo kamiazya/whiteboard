@@ -209,8 +209,8 @@ export function withoutRepeats(path: readonly Point[]): Point[] {
 }
 
 /** Axis-aligned bounds of a point set — the broad-phase box the search and
- * the router both prune with. One definition; the two call sites used to
- * carry byte-identical copies (`boundsOf`, `boxOf`). */
+ * the router both prune with. One definition, so the two call sites do
+ * not carry byte-identical copies (`boundsOf`, `boxOf`). */
 export function boundingBoxOf(points: readonly Point[]): Rect {
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY

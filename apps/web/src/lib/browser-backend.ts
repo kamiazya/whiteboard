@@ -167,11 +167,11 @@ export class BrowserBackend implements DocumentBackend {
     // whatever else happened in between, and two things can happen:
     //
     // - `disconnect()` nulls `workspaceDoc` synchronously, so a write still
-    //   on the queue used to find nothing to land on and return — dropping
+    //   on the queue would find nothing to land on and return — dropping
     //   the edit the person had just made. A workspace switch unmounts the
     //   session at exactly that moment.
     // - The active workspace is re-pointed by the address, so reading
-    //   `getBrowserWorkspaceId()` late filed these bytes under the workspace
+    //   `getBrowserWorkspaceId()` late would file these bytes under the workspace
     //   being switched TO. Losing an edit is bad; putting it in another
     //   workspace is worse.
     const workspaceDoc = this.workspaceDoc

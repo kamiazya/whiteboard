@@ -192,10 +192,10 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) 
  * The node context menu's entire facet surface: one doorway, and nothing
  * that edits a facet.
  *
- * Quick bands used to live here. An action menu's entries run once and
- * close it; a facet is state you look at and adjust several times in a row,
- * so it belongs on the inspector — and the menu was growing a row per
- * domain, with a stored value one tap from Delete.
+ * No quick bands live here. An action menu's entries run once and close it;
+ * a facet is state you look at and adjust several times in a row, so it
+ * belongs on the inspector — and a menu growing a row per domain would put a
+ * stored value one tap from Delete.
  *
  * No doorway at all when nothing targets a node: an inspector with nothing
  * in it is a dead end, not an empty state.

@@ -37,8 +37,8 @@ import { z } from 'zod'
  * node variant without an embed. `.strict()`, so a broken embed on a node
  * fails this arm too rather than being silently stripped down to its facets.
  *
- * The EDGE site used to share it and no longer does: since ADR-0037 slice 4
- * an edge also carries its bends, so it has a declaration of its own.
+ * The EDGE site does not share it: an edge also carries its bends
+ * (ADR-0037), so it has a declaration of its own.
  */
 const facetsOnlyExtensionSchema = z
   .object({

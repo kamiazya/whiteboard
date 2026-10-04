@@ -24,7 +24,7 @@ const log = getLogger('canvas-client-notifier')
 /**
  * The request minus its routing keys, typed as the wire's params rather than
  * a `Record<string, unknown>` the compiler could not compare — the shape a
- * field dropped on the way to the browser used to hide in. `sendViewportRequest`
+ * field dropped on the way to the browser would hide in. `sendViewportRequest`
  * strips any `undefined` a direct caller of the port left in.
  */
 function viewportPayload(request: ViewportRequest): ViewportRequestParams {

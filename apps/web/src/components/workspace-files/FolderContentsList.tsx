@@ -217,8 +217,8 @@ function DocumentCard({
             </span>
           )}
           {entry.pinOrder !== undefined && (
-            /* The pin used to exist only as a sort position — state a
-                 reader could not see on the object it belongs to. */
+            /* The pin is on the row, not only a sort position — state a
+                 reader could not otherwise see on its object. */
             <Pin
               role="img"
               aria-label="Pinned"

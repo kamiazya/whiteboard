@@ -171,7 +171,7 @@ export async function withBackupMarker<T>(
   // unref'd: keeping a marker warm must never hold a process open.
   // The in-flight write is HELD: `clearInterval` cancels the next tick, not
   // the one already running, so a refresh that started just before the body
-  // returned used to land after the `rm` below and recreate the marker.
+  // returned would land after the `rm` below and recreate the marker.
   let inFlight: Promise<void> = Promise.resolve()
   const refresh = setInterval(() => {
     inFlight = inFlight.then(write)

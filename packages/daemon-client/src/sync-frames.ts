@@ -2,10 +2,10 @@ import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-server-core/vi
 import { z } from 'zod'
 import { operatorInfoAnswerSchema, versionEntryAnswerSchema } from './api-contracts/document.js'
 
-// One schema for a version wherever it travels: the REST listing and this
-// broadcast used to carry sibling copies of the same shape, and a field
-// added server-side reached whichever one somebody remembered — the wire
-// silently dropped it from the other. The server's own VersionEntry type is
+// One schema for a version wherever it travels: sibling copies of the same
+// shape on the REST listing and this broadcast would let a field added
+// server-side reach whichever one somebody remembered — the wire silently
+// dropping it from the other. The server's own VersionEntry type is
 // z.infer of `versionEntrySchema`, which this extends only in how a browser
 // reads an operator kind it has no word for, so producing a version and
 // publishing it cannot disagree.

@@ -9,11 +9,10 @@ export interface DaemonIndexPageProps {
    * link without one — and the page then falls back to the daemon's
    * first-listed workspace and reports what it settled on.
    *
-   * Not `initialWorkspaceId` any more, and the rename is the change: this
-   * page used to OWN the choice through a select of its own, so the prop was
-   * read once at mount. The one switcher is the shell's, and it moves the
-   * address — so the prop changes under a mounted page, and the page follows
-   * it.
+   * Not an `initialWorkspaceId`: the page does not OWN the choice through a
+   * select of its own, so the prop is not read once at mount. The one
+   * switcher is the shell's, and it moves the address — so the prop changes
+   * under a mounted page, and the page follows it.
    */
   workspace?: string
   /**

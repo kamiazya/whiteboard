@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 /**
- * ⌘/Ctrl+S asks for a bookmark; it no longer takes one.
+ * ⌘/Ctrl+S asks for a bookmark; it does not take one.
  *
  * Under automatic checkpoints there is nothing to "save" — the state is
  * already held. What the chord means now is "mark this point", and a mark

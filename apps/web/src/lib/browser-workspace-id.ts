@@ -10,10 +10,9 @@
  * boot chain — see `boot.ts`), and every later read is this cheap
  * synchronous accessor.
  *
- * It used to mean "the ONLY one", and enforced it: a registry holding more
- * than one row was rejected outright, so a second browser workspace did not
- * degrade the app, it stopped it booting. What decides which one is active is
- * the ADDRESS (ADR-0019), which is why the resolver takes a handle — the
+ * It does not mean "the ONLY one": a registry may hold more than one row, and
+ * what decides which one is active is the ADDRESS (ADR-0019), which is why
+ * the resolver takes a handle — the
  * accessor stays a singleton because the alternative is the ripple its own
  * rationale above rejects, and because a workspace switch settles the
  * outgoing workspace's writes before the incoming one mounts.

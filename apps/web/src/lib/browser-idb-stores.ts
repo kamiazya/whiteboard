@@ -83,11 +83,11 @@ const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
  * A store this database holds, as data: its name, the options it is created
  * with, and the indexes that belong to it.
  *
- * The opener used to spell each one as its own `if (!contains(name)) create`,
- * eleven of them in a row. The guard was repeated eleven times and the schema
- * was not readable anywhere — you recovered it by reading control flow. As a
- * list it is a declaration, the guard lives once in the loop that applies it,
- * and a new store is an entry rather than another branch.
+ * Declared as a list rather than a run of `if (!contains(name)) create`
+ * branches, which would repeat the guard once per store and leave the schema
+ * readable only as control flow. As a list it is a declaration, the guard
+ * lives once in the loop that applies it, and a new store is an entry rather
+ * than another branch.
  */
 export type StoreSpec = {
   readonly name: string

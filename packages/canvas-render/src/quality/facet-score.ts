@@ -107,10 +107,10 @@ export interface FacetScore {
    * yellow for a step, cyan for a decision and green for a terminal, which
    * reads well to a person, scored `excess 3`.
    *
-   * The concern behind that reading survives here rather than being dropped:
+   * The concern behind that reading is kept here rather than dropped:
    * the colour carries a distinction the DOCUMENT does not record, so no
    * machine, later reader or export can recover that cyan meant "decision".
-   * What changed is only that it is no longer indistinguishable from a real
+   * What the split changes is only that it is distinguishable from a real
    * mismatch — and `channels` says which channel it was, which a count
    * cannot.
    */

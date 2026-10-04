@@ -136,9 +136,9 @@ export function markThreadPassages(
     // does not have and `mark` answers that with a throw from inside the CRDT
     // — `Index out of bound. The given pos is 20, but the length is 19` —
     // naming neither the thread nor the document, which every caller here has
-    // behind a catch that logs and carries on. Two sources, both real: the
-    // resolver's stored-offsets shortcut used to answer an `end` past the
-    // body, and `document-sync-session`'s create-thread path passes
+    // behind a catch that logs and carries on. Two sources: the
+    // resolver's stored-offsets shortcut, which can answer an `end` past the
+    // body, and `document-sync-session`'s create-thread path, which passes
     // `thread.anchor` straight through with no resolution at all.
     //
     // Clamped rather than skipped: a passage whose tail was deleted still HAS

@@ -17,7 +17,7 @@ import type { Client } from '@modelcontextprotocol/client'
  *       an errand that stays inside one document is already cheap.
  *   B — many SUBJECTS in one call. `wb_document_get`, `wb_facet_set` and
  *       `wb_version_save` all take `documentIds`, so an errand that touches
- *       N documents no longer costs N calls. What still takes exactly one
+ *       N documents costs one call, not N. What still takes exactly one
  *       `documentId` is the per-document CONTENT verbs — `wb_canvas_edit`,
  *       `wb_body_edit`, `wb_thread_edit` — where each document's payload is
  *       its own and there is nothing to share.
@@ -285,7 +285,7 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
   {
     // Axis B, reads. `wb_document_list` answers with METADATA only — id,
     // path, name, kind, updatedAt, shadowed — so the content of five
-    // documents genuinely needs a second call; it no longer needs five.
+    // documents genuinely needs a second call; it does not need five.
     name: 'read every document in a workspace of 5',
     seedDocuments: 5,
     run: async (context) => {

@@ -401,9 +401,8 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   const s = new CanvasEditSession(canvas, doc, measure)
 
   // One handler per verb, keyed by the schema (canvas-edit-handlers.ts).
-  // It was a 16-case switch inline here, and the shape is what changed:
-  // a verb added to the schema and not to the table no longer compiles,
-  // where the switch simply fell through and reported a batch applied
+  // A verb added to the schema and not to the table does not compile, where
+  // an inline switch would simply fall through and report a batch applied
   // having ignored the op.
   const ctx: CanvasEditContext = { s, facetRegistry }
   input.ops.forEach((op, index) => {

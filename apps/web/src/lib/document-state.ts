@@ -5,11 +5,11 @@
  * The same function the workspace listing uses for `contentDigest`, applied
  * to a document whose containers are roots of its own Loro document — an
  * editor session's, or a browser-kept markdown document's. That is the whole
- * point: a list row and the open document's own icon used to name the same
- * content two ways (a content digest and the state frontier), so nothing
- * drawn for one was ever shared with the other. Measured before unifying:
- * once empty containers are normalised away, a tree node, a projection and a
- * fresh document digest identically for the same content.
+ * point: a list row and the open document's own icon name the same content
+ * one way rather than two (a content digest and the state frontier), or
+ * nothing drawn for one is shared with the other. Once empty containers are
+ * normalised away, a tree node, a projection and a fresh document digest
+ * identically for the same content.
  *
  * A digest of the document's LIVE state — `toJSON()`, which reflects an edit
  * the moment it is written, committed or not (measured: it moves at the

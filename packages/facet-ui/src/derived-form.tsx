@@ -369,9 +369,9 @@ function CatalogRow({
  * A PICKER is the whole form: one control, whole payloads, and the
  * facet's absence as an ordinary option rather than a button beside it.
  *
- * That last part is why there is no Clear here. The derived form used to
- * offer one whenever anything was stored, and the theme row ended up
- * with two ways to say "no theme" — a `Default` segment and a `Clear`
+ * That last part is why there is no Clear here. The derived form would
+ * otherwise offer one whenever anything was stored, and the theme row would
+ * end up with two ways to say "no theme" — a `Default` segment and a `Clear`
  * whose visible text named nothing it would clear. One control, one way.
  */
 function PickerFacet({
@@ -482,7 +482,7 @@ export function DerivedFacetForm({
 }: DerivedFacetFormProps) {
   // Asked of the REGISTRY rather than derived here: a caller computing the
   // form itself is a caller that can compute it differently, and this is
-  // no longer the only caller — the vessel that draws a facet whose
+  // not the only caller — the vessel that draws a facet whose
   // effective value only it can resolve asks the same question.
   const form: FacetForm = registry.facetForm(facetKey)
   // The draft follows the STORED payload: a Clear (or any write from

@@ -74,7 +74,7 @@ export function useSceneProjection({
   // The committed surface's keyed projection, derived from the scene the
   // worker (or sync path) delivered — ~3ms of stringify against the
   // 66-125ms layout, so the worker protocol stays plain-data. The patch
-  // container below consumes it; the plain `svg` string is no longer
+  // container below consumes it; the plain `svg` string is not
   // read here.
   const keyed = useMemo(() => renderedCanvasKeyed({ scene, bounds }), [scene, bounds])
   // Routed edge paths in canvas coordinates, for edge hit-testing and the

@@ -1,10 +1,10 @@
 import { mkdir } from 'node:fs/promises'
 // @libsql/client is not imported directly anywhere in src — LibsqlDialect
 // pulls it in transitively — and the direct `^0.17.3` in package.json does
-// NOT by itself decide which one that is. It used to say it did, and the
-// lockfile disagreed: @libsql/kysely-libsql@0.4.1 (still the latest) asks for
-// ^0.8.0, so pnpm resolved BOTH 0.17.3 and 0.8.1, and the dialect below ran on
-// 0.8.1 — which drags libsql@0.3.19 and its native bindings.
+// NOT by itself decide which one that is: @libsql/kysely-libsql@0.4.1 asks for
+// ^0.8.0, so without an override pnpm resolves BOTH 0.17.3 and 0.8.1, and the
+// dialect below would run on 0.8.1 — which drags libsql@0.3.19 and its native
+// bindings.
 //
 // That is not academic. 0.3.19's musl prebuild fails to load on current
 // Alpine (`fcntl64: symbol not found`), so the server image built and could
