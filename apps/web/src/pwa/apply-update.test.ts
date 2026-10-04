@@ -74,3 +74,39 @@ describe('createUpdateApplier', () => {
     await expectLoggedFailure('did not take over')
   })
 })
+
+// The suite above advances by the exported SWAP_DEADLINE_MS, so the value is
+// free to drift; the recovery exists because the browser's own ceiling is five
+// minutes, so a deadline anywhere near that is no recovery at all.
+describe('createUpdateApplier with its default deadline', () => {
+  it('recovers a lost swap within ten seconds, not before', async () => {
+    const recover = vi.fn()
+    await createUpdateApplier({ apply: () => Promise.resolve(), recover })()
+
+    await vi.advanceTimersByTimeAsync(9_999)
+    expect(recover).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(recover).toHaveBeenCalledTimes(1)
+    await expectLoggedFailure('did not take over')
+  })
+})
+
+// A failed apply disarms its deadline, and the next apply has to arm a fresh
+// one: otherwise a swap the browser then loses is never recovered.
+describe('createUpdateApplier: an apply after a failed one', () => {
+  it('arms its own deadline, so a swap the browser then loses is still recovered', async () => {
+    const recover = vi.fn()
+    const apply = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('no waiting worker'))
+      .mockResolvedValue(undefined)
+    const applyUpdate = createUpdateApplier({ apply, recover })
+
+    await expect(applyUpdate()).rejects.toThrow('no waiting worker')
+    await applyUpdate()
+    await vi.advanceTimersByTimeAsync(SWAP_DEADLINE_MS)
+
+    expect(recover).toHaveBeenCalledTimes(1)
+    await expectLoggedFailure('did not take over')
+  })
+})
