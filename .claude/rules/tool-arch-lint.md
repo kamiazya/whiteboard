@@ -152,9 +152,8 @@ They are named so a clean result is not read as covering them.
 - **A computed specifier.** `import(\`node:${name}\`)`, `import(name)` and
   `createRequire(...)('x')` name no module statically; only a string or a
   template with NO substitution is read (`collectModuleSpecifiers`).
-- **`import.meta.glob` and path-built reads.** A glob's pattern and a
-  `new URL('../x', import.meta.url)` carry a path no specifier scan sees; the
-  relative-import escape guard reads import specifiers only.
+- **`import.meta.glob`.** A glob's pattern carries a path no specifier scan
+  sees. (`new URL('<literal>', import.meta.url)` IS read, as a value edge.)
 - **The DOM list is a deny-list of thirteen names.** `location` and `Image` are
   left out on purpose: the scan matches identifiers without scope analysis, and
   `daemon-client`'s `WindowLike` declares a `location` property. A read of
@@ -220,8 +219,8 @@ at all fails as dangling — a `?raw` or `?url` query would otherwise hide it fr
 Measured when written: 3087 files, 8558 relative edges, 97 resolving to no
 TypeScript file, 89 of them from tests that sit outside the cycle graph.
 
-Named blind spot: only import specifiers are read. `import.meta.glob` and a
-`new URL('../x', import.meta.url)` carry paths this does not see.
+Named blind spot: `import.meta.glob`. A `new URL('<literal>', import.meta.url)`
+is read like an import; two tests reading another workspace that way are `ESCAPES`.
 
 ## `source-direction-check.test.ts`: source imports against the map
 
