@@ -220,28 +220,39 @@ Mutation: without the pointer wait, the stronger final assertion failed 4 of 6.
 ### skip-waiting-ignored-on-the-runner
 
 **The PWA update-lifecycle smoke (`verify`) timed out at "the page to reload
-onto a controller" on the runner's Chrome stable and passed locally.** It was
-the HARNESS, not the app: Playwright's locator click on the update toast's
-Reload. Reproduced with Chrome 154 by pinning the smoke and two busy loops to
-one core (3 of 8, 3 of 8, 3 of 6). In a failing run the waiting worker
-receives the `SKIP_WAITING`, its own `skipWaiting()` stays pending with no
-request in flight on either side, and stopping the OLD worker over DevTools
-activates the new one at once; left alone, Chrome activates it after 300 s,
-its lame-duck ceiling — the old worker never reports itself idle.
+onto a controller": the waiting worker was asked to skip waiting and stayed
+`installed`, and the dump showed the old worker `activated` with nothing in
+flight on either side.** It is not the Playwright locator click and not the
+runner's CPU; both were earlier, wrong, diagnoses. Chrome activates the waiting
+worker by first STOPPING the old one. A request from a page that worker still
+controls, arriving between StopWorker and OnStopped, restarts it
+(OnStopped {Restart:true} after a StartWorkerRequested with purpose
+"Fetch Subresource"), and the activation waiting on the stop is dropped: no
+SetStatus redundant follows, and the new worker waits for Chrome's 300 s
+lame-duck timer. A second SKIP_WAITING does not clear it; unregistering does,
+and so does stopping the old worker over DevTools.
 
-Ruled out one variable at a time, each eight starved rounds and 0 failures:
-a raw-DevTools driver doing the same steps, then that driver with Playwright's
-exact launch switches, its service-worker attachment, page network
-instrumentation, its page auto-attach, a DevTools mouse-event click, a 3 s
-settle after each load, and a message to the old worker while the new one
-waits. Inside the Playwright smoke, replacing only the locator click with a
-DOM `click()` on the same button took it to 0 of 16; disabling Playwright's
-service-worker network inspection did not (3 of 8). So the smoke clicks
-Reload through the DOM, which runs the same handler a person's click does —
-0 of 10 starved after the change.
+The smoke provoked it because the page was still booting: `networkidle`
+returns after 1.3 s while the route's lazy chunks are requested until about
+3.5 s (loro's WASM initialises in a quiet gap longer than the half second it
+waits for). Measured on Chrome 154, one core plus two busy loops: the locator
+click failed 6/8; the DOM-click "fix" passed 0/32 on the base smoke only
+because it moved the click's timing, and recurred on CI; with the page settled
+first (first screen drawn, no request for a second), 0/48 across the
+locator-click variant and the final 40-round run. Deterministic proof,
+unstarved and with no Playwright click: one page `fetch` 5 to 15 ms after
+SKIP_WAITING fails 8/8, none fails 0/6, +40 ms fails 0/4.
 
-A timeout at that step still prints which document holds the page, every
-worker's state, what the page posted to a worker, what is in flight, the
-browser's view of every worker version, and what stopping the old worker
-does. "Activates once the old one is stopped" is this shape again; "never
-posted" is the toast's.
+The app is fixed too, since a real page can issue that request:
+`createUpdateApplier` (`pwa/apply-update.ts`) arms a 10 s deadline when an
+update is accepted and falls back to `reloadFresh()` if the page is still alive
+when it fires, because a swap that lands reloads the page and takes the timer
+with it. The smoke's last scenario accepts an update under a 100 ms burst of
+fetches and asserts the page ends on the new worker.
+
+How to see it again: record a browser-level `Tracing` session with the
+`ServiceWorker` category (`browser.newBrowserCDPSession()`, `Tracing.start`)
+and look for a StartWorkerRequested trace event between StopWorker and OnStopped (Chrome trace event names, not code here). A
+step that times out waiting for the page to stop requesting names the in-flight
+request; a request left from a dead document is cleared on main-frame
+navigation.
