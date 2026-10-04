@@ -361,6 +361,14 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
         'export const d = (factory?: typeof sweep) => (factory ?? sweep)("x")',
       ].join('\n'),
     )
+    // An assertion around the callee does not make it a reference: the call is still judged.
+    writeFileSync(
+      join(fixture, 'server', 'routes', 'asserted.ts'),
+      [
+        "import { getThing } from '../store/things.js'",
+        'export const g = () => (getThing as typeof getThing)("x")',
+      ].join('\n'),
+    )
     writeFileSync(
       join(fixture, 'server', 'routes', 'explicit.ts'),
       [
@@ -463,6 +471,7 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
       expect(findAdapterScopeDefaults(fixture)).toEqual([
         'app.ts -> ThingStore',
         'export/headless.ts -> getThing',
+        'routes/asserted.ts -> getThing',
         'routes/builds.ts -> storeScope',
         'routes/explicit.ts -> lookup',
         'routes/explicit.ts -> purge',

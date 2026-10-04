@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { afterEach, describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { isExcludedPath, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
 import {
   classifyPath,
@@ -193,8 +194,7 @@ describe('stripCommentsAndStrings — what the parser knows and a char scan does
  * rather than a `name(` pattern, which loses `useRef<() => void>(…)`.
  */
 function callNames(path: string, source: string): Map<string, number> {
-  const kind = path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, kind)
+  const file = parseSource(path, source)
   const calls = new Map<string, number>()
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {

@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { scriptKindOf } from './ast-helpers.js'
 import { createExportResolver, type ModuleExports } from './module-exports-resolve.js'
 import { isShippedPath } from './source-scan.js'
 
@@ -62,10 +63,9 @@ function isExemptDefiner(path: string): boolean {
   )
 }
 
-function scriptKind(path: string): ts.ScriptKind {
-  if (path.endsWith('.tsx')) return ts.ScriptKind.TSX
-  if (path.endsWith('.ts')) return ts.ScriptKind.TS
-  return ts.ScriptKind.JS
+/** A script that is not TypeScript is parsed as plain JavaScript, where `<T>x` is not an assertion. */
+function scriptKindOrJs(path: string): ts.ScriptKind {
+  return path.endsWith('.ts') || path.endsWith('.tsx') ? scriptKindOf(path) : ts.ScriptKind.JS
 }
 
 function isFunctionValue(node: ts.Expression | undefined): boolean {
@@ -519,7 +519,13 @@ function readFiles(files: readonly ScannedFile[]): ReadFiles {
   }
   for (const { path, text } of files) {
     // No parent pointers: nothing here walks upward, and they are most of the cost of a parse.
-    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, false, scriptKind(path))
+    const source = ts.createSourceFile(
+      path,
+      text,
+      ts.ScriptTarget.Latest,
+      false,
+      scriptKindOrJs(path),
+    )
     const facts = staticFacts(source)
     read.modules.set(path, facts.exports)
     if (!isTestFile(path)) {

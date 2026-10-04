@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
+import { unwrapExpression } from './ast-helpers.js'
 import { walk } from './scan-roots.js'
 
 /**
@@ -184,15 +185,9 @@ function storeImports(source: ts.SourceFile): Map<string, string> {
   return locals
 }
 
-function unwrap(expression: ts.Expression): ts.Expression {
-  let e = expression
-  while (ts.isParenthesizedExpression(e) || ts.isNonNullExpression(e)) e = e.expression
-  return e
-}
-
 /** The identifiers a callee expression may resolve to: `a`, `(a ?? b)`, `x ? a : b`. */
 function calleeIdentifiers(expression: ts.Expression): ts.Identifier[] {
-  const e = unwrap(expression)
+  const e = unwrapExpression(expression)
   if (ts.isIdentifier(e)) return [e]
   if (ts.isBinaryExpression(e)) {
     return [...calleeIdentifiers(e.left), ...calleeIdentifiers(e.right)]
@@ -204,7 +199,7 @@ function calleeIdentifiers(expression: ts.Expression): ts.Identifier[] {
 }
 
 function carriesScope(argument: ts.Expression): boolean | 'unknown' {
-  const e = unwrap(argument)
+  const e = unwrapExpression(argument)
   if (!ts.isObjectLiteralExpression(e)) return 'unknown'
   return e.properties.some(
     (p) =>

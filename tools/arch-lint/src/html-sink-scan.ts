@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 
 /** Calls that parse a string as markup into the live document. */
 const PARSING_CALLS: ReadonlySet<string> = new Set([
@@ -9,10 +10,6 @@ const PARSING_CALLS: ReadonlySet<string> = new Set([
 
 /** Properties whose assignment parses a string as markup. */
 const MARKUP_PROPERTIES: ReadonlySet<string> = new Set(['innerHTML', 'outerHTML'])
-
-function scriptKind(fileName: string): ts.ScriptKind {
-  return fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-}
 
 const isAssignment = (kind: ts.SyntaxKind): boolean =>
   kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment
@@ -68,13 +65,7 @@ function sinkAt(node: ts.Node): string | undefined {
  * of the occurrences of the word are prose explaining one — is not counted.
  */
 export function htmlSinks(fileName: string, source: string): string[] {
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(fileName),
-  )
+  const file = parseSource(fileName, source)
   const found: string[] = []
   const visit = (node: ts.Node): void => {
     const sink = sinkAt(node)

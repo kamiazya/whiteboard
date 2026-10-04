@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
@@ -53,13 +54,7 @@ const RETIRED_USER_WORDS = [
 const CODE_TOKEN = /^[a-z0-9][a-z0-9_./:@#-]*$/
 
 function proseLiterals(fileName: string, source: string): string[] {
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    fileName.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  )
+  const file = parseSource(fileName, source)
   const found: string[] = []
   const visit = (node: ts.Node): void => {
     if (

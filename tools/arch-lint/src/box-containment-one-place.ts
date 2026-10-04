@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { unwrapExpression } from './ast-helpers.js'
 
 /**
  * Where a conjunction spells out "this box lies inside that one": two or more
@@ -15,26 +16,22 @@ const COMPARISONS = new Set([
 ])
 const EXTENTS = new Set(['width', 'height', 'w', 'h'])
 
-function unwrap(node: ts.Expression): ts.Expression {
-  return ts.isParenthesizedExpression(node) ? unwrap(node.expression) : node
-}
-
 const isAxisAccess = (node: ts.Expression): boolean =>
   ts.isPropertyAccessExpression(node) && /^[xy]$/.test(node.name.text)
 
 function isFarEdge(node: ts.Expression): boolean {
-  const expr = unwrap(node)
+  const expr = unwrapExpression(node)
   return (
     ts.isBinaryExpression(expr) &&
     expr.operatorToken.kind === ts.SyntaxKind.PlusToken &&
-    isAxisAccess(unwrap(expr.left)) &&
-    ts.isPropertyAccessExpression(unwrap(expr.right)) &&
-    EXTENTS.has((unwrap(expr.right) as ts.PropertyAccessExpression).name.text)
+    isAxisAccess(unwrapExpression(expr.left)) &&
+    ts.isPropertyAccessExpression(unwrapExpression(expr.right)) &&
+    EXTENTS.has((unwrapExpression(expr.right) as ts.PropertyAccessExpression).name.text)
   )
 }
 
 function conjuncts(node: ts.Expression, out: ts.Expression[] = []): ts.Expression[] {
-  const expr = unwrap(node)
+  const expr = unwrapExpression(node)
   if (
     ts.isBinaryExpression(expr) &&
     expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
@@ -57,7 +54,11 @@ function spellsContainment(chain: ts.BinaryExpression): boolean {
   for (const part of conjuncts(chain)) {
     if (!ts.isBinaryExpression(part) || !COMPARISONS.has(part.operatorToken.kind)) continue
     if (isFarEdge(part.left) && isFarEdge(part.right)) far += 1
-    else if (isAxisAccess(unwrap(part.left)) && isAxisAccess(unwrap(part.right))) near += 1
+    else if (
+      isAxisAccess(unwrapExpression(part.left)) &&
+      isAxisAccess(unwrapExpression(part.right))
+    )
+      near += 1
   }
   return near >= 2 && far >= 2
 }
