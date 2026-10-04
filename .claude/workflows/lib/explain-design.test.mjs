@@ -3,13 +3,14 @@
 // inline needs the other half: WHICH checkpoint is missing, one at a time, so a design can be
 // brought up to the same bar incrementally instead of being re-submitted blind.
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { explainDesignShape } from './explain-design.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 import { isValidDesignShape } from './design-schema.mjs'
 
 const complete = {
@@ -94,27 +95,45 @@ import { shouldHandBackForLiveVerification } from './explain-design.mjs'
 // subagent's toolset". The developer agent's tools are Read/Edit/Write/Bash/Glob/Grep; it
 // structurally cannot do AGENTS.md step 3. Learning that AFTER implementing costs the whole run.
 test('a design needing live verification hands back before implementing', () => {
-  const r = shouldHandBackForLiveVerification({ manualVerification: 'drag a node and watch the edge re-route', dogfood: false })
+  const r = shouldHandBackForLiveVerification({
+    manualVerification: 'drag a node and watch the edge re-route',
+    dogfood: false,
+  })
   assert.equal(r.handBack, true)
   assert.match(r.recommendation, /main session/i)
 })
 
 test('the none: sentinel does not hand back', () => {
-  assert.equal(shouldHandBackForLiveVerification({ manualVerification: 'none: pure server-side helper', dogfood: false }).handBack, false)
+  assert.equal(
+    shouldHandBackForLiveVerification({
+      manualVerification: 'none: pure server-side helper',
+      dogfood: false,
+    }).handBack,
+    false,
+  )
 })
 
 // Absent means the design never answered, which must preserve the existing behaviour rather than
 // stopping every run that predates the field.
 test('an absent answer does not hand back', () => {
   for (const v of [undefined, null, '', '   ']) {
-    assert.equal(shouldHandBackForLiveVerification({ manualVerification: v, dogfood: false }).handBack, false)
+    assert.equal(
+      shouldHandBackForLiveVerification({ manualVerification: v, dogfood: false }).handBack,
+      false,
+    )
   }
 })
 
 // dogfood:true means the caller already arranged a browser lane against a running app, so the
 // verification the design asks for has somewhere to happen inside the run.
 test('an explicit dogfood lane suppresses the handback', () => {
-  assert.equal(shouldHandBackForLiveVerification({ manualVerification: 'click the toolbar button', dogfood: true }).handBack, false)
+  assert.equal(
+    shouldHandBackForLiveVerification({
+      manualVerification: 'click the toolbar button',
+      dogfood: true,
+    }).handBack,
+    false,
+  )
 })
 
 // The workflow keeps a mirrored inline copy (no module resolution in the sandbox); this is what

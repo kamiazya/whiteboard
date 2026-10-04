@@ -50,10 +50,16 @@ else process.exit(1)
 test('reports a failed publish job and a scheduled lane with no later success, once', async (t) => {
   if (process.platform === 'win32') return t.skip('the stand-in gh is an executable script')
   const bin = mkdtempSync(join(tmpdir(), 'flake-watch-gh-'))
-  const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' }).trim()
+  const commonDir = execFileSync(
+    'git',
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { cwd: ROOT, encoding: 'utf8' },
+  ).trim()
   t.after(() => {
     rmSync(bin, { recursive: true, force: true })
-    rmSync(join(commonDir, 'flake-watch', `${FAILED_RELEASE}.v1-jobs-failure.json`), { force: true })
+    rmSync(join(commonDir, 'flake-watch', `${FAILED_RELEASE}.v1-jobs-failure.json`), {
+      force: true,
+    })
   })
   writeFileSync(join(bin, 'gh'), FAKE_GH)
   chmodSync(join(bin, 'gh'), 0o755)

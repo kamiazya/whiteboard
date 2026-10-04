@@ -30,11 +30,16 @@ const workflowDir = path.join(__dirname, '..')
 // type is in scope automatically.
 const WORKFLOWS = readdirSync(workflowDir)
   .filter((f) => f.endsWith('.workflow.mjs'))
-  .filter((f) => readFileSync(path.join(workflowDir, f), 'utf8').includes("agentType: 'codex:codex-rescue'"))
+  .filter((f) =>
+    readFileSync(path.join(workflowDir, f), 'utf8').includes("agentType: 'codex:codex-rescue'"),
+  )
   .sort()
 
 test('the codex-using workflows are discovered', () => {
-  assert.ok(WORKFLOWS.length >= 4, `expected every codex-using workflow, found ${WORKFLOWS.join(', ')}`)
+  assert.ok(
+    WORKFLOWS.length >= 4,
+    `expected every codex-using workflow, found ${WORKFLOWS.join(', ')}`,
+  )
 })
 
 function extractOptionalLane(file) {
@@ -70,11 +75,7 @@ for (const file of WORKFLOWS) {
       source.includes("agentType: 'codex:codex-rescue'"),
       `${file} no longer references the codex agent type — delete this guard and its test together`,
     )
-    assert.match(
-      source,
-      /optionalLane\(/,
-      `${file} declares optionalLane but never applies it`,
-    )
+    assert.match(source, /optionalLane\(/, `${file} declares optionalLane but never applies it`)
     // dev-loop calls it directly at the plan gate; review wraps the shared lane runner that the
     // codex lane flows through. Either way an unwrapped bare `agent(` for the codex lane would
     // reintroduce the abort, so assert the guard sits on the call path rather than counting sites.

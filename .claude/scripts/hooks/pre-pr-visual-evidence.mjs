@@ -46,7 +46,8 @@ const VISUAL_PATHS = [
  * configuration under it was reported as "a file a human looks at" and asked
  * for a figure of itself.
  */
-const NOT_A_SURFACE = /\.(test|bench|spec|docs-snapshot)\.[cm]?[jt]sx?$|(^|\/)(test-utils|__fixtures__|__mocks__)\//
+const NOT_A_SURFACE =
+  /\.(test|bench|spec|docs-snapshot)\.[cm]?[jt]sx?$|(^|\/)(test-utils|__fixtures__|__mocks__)\//
 
 /**
  * A figure: a markdown image or HTML img whose source is a URL, or a bare

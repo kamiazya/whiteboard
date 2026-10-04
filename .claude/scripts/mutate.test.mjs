@@ -41,7 +41,15 @@ test('exits 3 and names the needle when the substitution matches nothing', () =>
 test('the command sees the mutated file, and the exit code comes from it', () => {
   withFixture((file) => {
     const assertMutated = `const s=require('node:fs').readFileSync(${JSON.stringify(file)},'utf8');process.exit(s.includes('the mutation')&&!s.includes('the exact line')?7:1)`
-    const run = mutate([file, 'the exact line', 'the mutation', '--', process.execPath, '-e', assertMutated])
+    const run = mutate([
+      file,
+      'the exact line',
+      'the mutation',
+      '--',
+      process.execPath,
+      '-e',
+      assertMutated,
+    ])
     assert.equal(run.status, 7, `command did not see the mutation\n${run.stderr}`)
     assert.match(run.stderr, /1 occurrence\(s\) replaced/)
   })
@@ -49,7 +57,15 @@ test('the command sees the mutated file, and the exit code comes from it', () =>
 
 test('restores the file even when the command fails', () => {
   withFixture((file) => {
-    const run = mutate([file, 'the exact line', 'the mutation', '--', process.execPath, '-e', 'process.exit(1)'])
+    const run = mutate([
+      file,
+      'the exact line',
+      'the mutation',
+      '--',
+      process.execPath,
+      '-e',
+      'process.exit(1)',
+    ])
     assert.equal(run.status, 1)
     assert.equal(readFileSync(file, 'utf8'), ORIGINAL)
   })
@@ -136,7 +152,9 @@ for (const [signal, exitCode] of signalCases) {
       helper.stderr.on('data', (chunk) => {
         stderr += chunk
       })
-      const closed = new Promise((resolve) => helper.on('close', (code, sig) => resolve({ code, sig })))
+      const closed = new Promise((resolve) =>
+        helper.on('close', (code, sig) => resolve({ code, sig })),
+      )
 
       // Signalling before the mutation lands would test nothing, so wait for
       // the mutated file AND the command to be running.
@@ -160,7 +178,11 @@ for (const [signal, exitCode] of signalCases) {
       // heartbeat has to stop.
       const last = readFileSync(beatFile, 'utf8')
       await sleep(300)
-      assert.equal(readFileSync(beatFile, 'utf8'), last, 'the command is still running after the helper exited')
+      assert.equal(
+        readFileSync(beatFile, 'utf8'),
+        last,
+        'the command is still running after the helper exited',
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

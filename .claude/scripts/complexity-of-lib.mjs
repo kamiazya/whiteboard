@@ -98,16 +98,15 @@ export function compare(baseRows, headRows) {
  */
 export function formatTable(rows, threshold, near = 3) {
   const floor = threshold - near
-  const isNewOrGone = (r) => 'base' in r && (r.base === null || r.score === null || r.from !== undefined)
+  const isNewOrGone = (r) =>
+    'base' in r && (r.base === null || r.score === null || r.from !== undefined)
   const worth = rows.filter(
     (r) =>
       (r.score ?? 0) >= floor || (r.base ?? 0) >= floor || (r.delta ?? 0) !== 0 || isNewOrGone(r),
   )
   worth.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.file.localeCompare(b.file))
   const hasBase = rows.some((r) => 'base' in r)
-  const lines = [
-    hasBase ? 'score  base  delta  function' : 'score  function',
-  ]
+  const lines = [hasBase ? 'score  base  delta  function' : 'score  function']
   for (const r of worth) {
     const flag = (r.score ?? 0) > threshold ? '!' : (r.score ?? 0) >= threshold - near ? '~' : ' '
     const score = r.score === null ? '   -' : String(r.score).padStart(4)
@@ -118,7 +117,11 @@ export function formatTable(rows, threshold, near = 3) {
     }
     const base = r.base === null ? '   new' : String(r.base).padStart(6)
     const delta =
-      r.delta === null ? (r.score === null ? '  gone' : '      ') : `${r.delta > 0 ? '+' : ''}${r.delta}`.padStart(6)
+      r.delta === null
+        ? r.score === null
+          ? '  gone'
+          : '      '
+        : `${r.delta > 0 ? '+' : ''}${r.delta}`.padStart(6)
     lines.push(`${flag}${score}${base} ${delta}  ${where}`)
   }
   lines.push('', `! over the ${threshold} threshold   ~ within ${near} of it`)

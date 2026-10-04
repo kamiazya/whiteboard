@@ -22,7 +22,9 @@ const AUDIT_LOG_PATH = '.claude/audit-log.jsonl'
 export function countUnrecordedWaves(lastAt, git) {
   const since = `--since=${lastAt}`
   const lines = (text) => text.split('\n').filter((line) => line !== '')
-  const waves = lines(git(['log', since, '--regexp-ignore-case', '--grep=audit wave', '--format=%H']))
+  const waves = lines(
+    git(['log', since, '--regexp-ignore-case', '--grep=audit wave', '--format=%H']),
+  )
   const recorded = new Set(lines(git(['log', since, '--format=%H', '--', AUDIT_LOG_PATH])))
   return waves.filter((hash) => !recorded.has(hash)).length
 }

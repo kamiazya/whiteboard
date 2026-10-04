@@ -50,7 +50,10 @@ const USAGE = [
   '  --dry-run prints the plan and runs nothing.',
 ].join('\n')
 
-const shellQuote = (token) => (token === FILES_PLACEHOLDER || /^[A-Za-z0-9_./=:@%+-]+$/.test(token) ? token : `'${token.replaceAll("'", "'\\''")}'`)
+const shellQuote = (token) =>
+  token === FILES_PLACEHOLDER || /^[A-Za-z0-9_./=:@%+-]+$/.test(token)
+    ? token
+    : `'${token.replaceAll("'", "'\\''")}'`
 const commandLine = (words) => words.map(shellQuote).join(' ')
 
 const vitestArgs = (project, { repeats }, files) => [
@@ -73,7 +76,11 @@ function main() {
     if (valued) options[valued[1]] = valued[2]
     else rest.push(arg)
   }
-  const { flags } = parseScriptArgs({ argv: rest, flags: ['--dry-run', '--committed-only'], usage: USAGE })
+  const { flags } = parseScriptArgs({
+    argv: rest,
+    flags: ['--dry-run', '--committed-only'],
+    usage: USAGE,
+  })
   const refuse = (reason) => {
     process.stderr.write(`${reason}\n${USAGE}\n`)
     process.exit(2)
@@ -91,7 +98,12 @@ function main() {
     ['diff', '--name-only', 'HEAD', '--', ...CHANGED_TEST_PATHSPEC],
     ['ls-files', '--others', '--exclude-standard', '--', ...CHANGED_TEST_PATHSPEC],
   ]
-  const list = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\n')
+  const list = (args) =>
+    execFileSync('git', args, {
+      cwd: root,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).split('\n')
   const sources = new Map()
   const note = (file, source) => {
     if (file !== '') sources.set(file, [...(sources.get(file) ?? []), source])
@@ -101,7 +113,9 @@ function main() {
   } catch (error) {
     // An unresolvable base is an error, never "no files changed": an empty list stresses nothing
     // and reads as success.
-    process.stderr.write(`cannot list changed test files against ${base}: ${String(error.stderr ?? error.message).trim()}\n`)
+    process.stderr.write(
+      `cannot list changed test files against ${base}: ${String(error.stderr ?? error.message).trim()}\n`,
+    )
     process.exit(1)
   }
   if (!flags.has('--committed-only')) {
@@ -109,7 +123,9 @@ function main() {
       for (const file of list(workingTreeArgs[0])) note(file, 'modified')
       for (const file of list(workingTreeArgs[1])) note(file, 'untracked')
     } catch (error) {
-      process.stderr.write(`cannot list working-tree test files: ${String(error.stderr ?? error.message).trim()}\n`)
+      process.stderr.write(
+        `cannot list working-tree test files: ${String(error.stderr ?? error.message).trim()}\n`,
+      )
       process.exit(1)
     }
   }
@@ -118,17 +134,25 @@ function main() {
 
   console.log(`plan base: ${base}`)
   console.log(`plan collect: ${commandLine(['git', ...diffArgs])}`)
-  if (!flags.has('--committed-only')) for (const args of workingTreeArgs) console.log(`plan collect: ${commandLine(['git', ...args])}`)
+  if (!flags.has('--committed-only'))
+    for (const args of workingTreeArgs)
+      console.log(`plan collect: ${commandLine(['git', ...args])}`)
   console.log(`plan files: ${files.length}`)
   for (const file of files) console.log(`plan file: ${file} (${sources.get(file).join(', ')})`)
   console.log(`plan fresh-runs: ${FRESH_RUNS}`)
   for (const leg of legs) {
-    console.log(`plan ${leg.name} fresh: ${commandLine(['pnpm', ...vitestArgs(leg.project, { repeats: false }, [FILES_PLACEHOLDER])])}`)
-    console.log(`plan ${leg.name} repeats: ${commandLine(['pnpm', ...vitestArgs(leg.project, { repeats: true }, [FILES_PLACEHOLDER])])}`)
+    console.log(
+      `plan ${leg.name} fresh: ${commandLine(['pnpm', ...vitestArgs(leg.project, { repeats: false }, [FILES_PLACEHOLDER])])}`,
+    )
+    console.log(
+      `plan ${leg.name} repeats: ${commandLine(['pnpm', ...vitestArgs(leg.project, { repeats: true }, [FILES_PLACEHOLDER])])}`,
+    )
   }
   if (flags.has('--dry-run')) return
   if (files.length === 0) {
-    console.log(`no changed test files against ${base}${flags.has('--committed-only') ? '' : ' or in the working tree'} - nothing to stress`)
+    console.log(
+      `no changed test files against ${base}${flags.has('--committed-only') ? '' : ' or in the working tree'} - nothing to stress`,
+    )
     return
   }
 
@@ -137,15 +161,23 @@ function main() {
     console.log(`=== ${label} ===`)
     const result = spawnSync(pnpm, args, { cwd: root, stdio: 'inherit' })
     if (result.status !== 0) {
-      console.error(`stress-changed: FAILED at ${label}${result.error ? ` (${result.error.message})` : ''}`)
+      console.error(
+        `stress-changed: FAILED at ${label}${result.error ? ` (${result.error.message})` : ''}`,
+      )
       process.exit(1)
     }
   }
   for (const leg of legs) {
     for (let i = 1; i <= FRESH_RUNS; i++) {
-      run(`stress run ${i}/${FRESH_RUNS} (${leg.name})`, vitestArgs(leg.project, { repeats: false }, files))
+      run(
+        `stress run ${i}/${FRESH_RUNS} (${leg.name})`,
+        vitestArgs(leg.project, { repeats: false }, files),
+      )
     }
-    run(`in-process repeats x${REPEATS} (${leg.name})`, vitestArgs(leg.project, { repeats: true }, files))
+    run(
+      `in-process repeats x${REPEATS} (${leg.name})`,
+      vitestArgs(leg.project, { repeats: true }, files),
+    )
   }
   console.log('stress-changed: all runs passed')
 }

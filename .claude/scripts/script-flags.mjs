@@ -20,7 +20,11 @@ export function parseScriptArgs({
   usage,
   flags = [],
   maxPositionals = 0,
-  io: { stdout = (text) => process.stdout.write(text), stderr = (text) => process.stderr.write(text), exit = (code) => process.exit(code) } = {},
+  io: {
+    stdout = (text) => process.stdout.write(text),
+    stderr = (text) => process.stderr.write(text),
+    exit = (code) => process.exit(code),
+  } = {},
 }) {
   if (argv.some((arg) => arg === '--help' || arg === '-h')) {
     stdout(`${usage}\n`)

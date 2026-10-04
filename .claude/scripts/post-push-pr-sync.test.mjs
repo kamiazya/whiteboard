@@ -36,7 +36,13 @@ function scratch(prefix) {
  */
 function gitEnv(extra = {}) {
   const env = { ...process.env, ...extra }
-  for (const key of Object.keys(env)) if (/^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(key)) delete env[key]
+  for (const key of Object.keys(env))
+    if (
+      /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(
+        key,
+      )
+    )
+      delete env[key]
   return env
 }
 
@@ -72,7 +78,10 @@ function makeGhStub() {
 
 function runHook({ cwd, command, pr, ghFails = false }) {
   const gh = makeGhStub()
-  const env = gitEnv({ PATH: `${gh.dir}:${process.env.PATH}`, GH_STUB_JSON: JSON.stringify(pr ? [pr] : []) })
+  const env = gitEnv({
+    PATH: `${gh.dir}:${process.env.PATH}`,
+    GH_STUB_JSON: JSON.stringify(pr ? [pr] : []),
+  })
   if (ghFails) env.GH_STUB_FAIL = '1'
   const stdout = execFileSync('node', [scriptPath], {
     cwd,
@@ -115,7 +124,10 @@ test('a push on a branch with an open PR prompts a title check', () => {
   assert.match(out, /- "second change"/)
   assert.match(out, /- "first change"/)
   assert.match(out, /gh pr edit 77/)
-  assert.match(calls, /^api repos\/\{owner\}\/\{repo\}\/pulls\?head=\{owner\}:\{branch\}&state=open/m)
+  assert.match(
+    calls,
+    /^api repos\/\{owner\}\/\{repo\}\/pulls\?head=\{owner\}:\{branch\}&state=open/m,
+  )
   assert.doesNotMatch(calls, /pr view/)
 })
 
@@ -135,7 +147,11 @@ test('a lookup that fails says it could not look, rather than reading as no PR',
 
 test('a commit message that mentions a push is not a push', () => {
   const repo = makeRepo('feat', ['one'])
-  const { out, calls } = runHook({ cwd: repo, command: "git commit -m 'git push later'", pr: openPr })
+  const { out, calls } = runHook({
+    cwd: repo,
+    command: "git commit -m 'git push later'",
+    pr: openPr,
+  })
   assert.equal(out, '')
   assert.equal(calls, '')
 })

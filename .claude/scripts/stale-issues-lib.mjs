@@ -24,7 +24,9 @@ export function resourceOf(source) {
 
 /** OKF §6.2: a path-valued field may be an absolute URL, which git cannot judge. */
 export function isCheckableResource(resource) {
-  return typeof resource === 'string' && resource !== '' && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resource)
+  return (
+    typeof resource === 'string' && resource !== '' && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resource)
+  )
 }
 
 /**

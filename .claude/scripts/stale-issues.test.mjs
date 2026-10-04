@@ -77,7 +77,9 @@ test('a daemon that accepts the connection and never answers ends the check insi
   // Above the script's own bound and below the hook timeout it runs under; a script that has no
   // bound is killed here, so the test fails instead of hanging.
   const killer = setTimeout(() => child.kill('SIGKILL'), 12_000)
-  const [code, signal] = await new Promise((closed) => child.once('close', (c, s) => closed([c, s])))
+  const [code, signal] = await new Promise((closed) =>
+    child.once('close', (c, s) => closed([c, s])),
+  )
   clearTimeout(killer)
 
   assert.equal(signal, null, 'the check must end on its own')

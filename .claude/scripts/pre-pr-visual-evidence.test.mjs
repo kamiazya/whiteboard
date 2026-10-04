@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Regression coverage for hooks/pre-pr-visual-evidence.mjs.
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 //
@@ -6,13 +7,13 @@
 // looks at and the PR body neither carries a figure nor says why there is
 // none. Builds a throwaway "origin" + working repo pair per test.
 
+import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { after, test } from 'node:test'
-import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'pre-pr-visual-evidence.mjs')
@@ -212,7 +213,11 @@ function envWithGh({ hasImageExtension }) {
 
 test('with no gh image extension, the remedy leads with the stated-reason escape and names the install', () => {
   const work = makeRepoPair('apps/web/src/components/Thing.tsx')
-  const { status, stderr } = runHook(work, bodyArg('## What\n\nprose'), envWithGh({ hasImageExtension: false }))
+  const { status, stderr } = runHook(
+    work,
+    bodyArg('## What\n\nprose'),
+    envWithGh({ hasImageExtension: false }),
+  )
   assert.equal(status, 2)
   assert.match(stderr, /gh image.*not installed/)
   assert.match(stderr, /gh extension install drogers0\/gh-image/)
@@ -224,7 +229,11 @@ test('with no gh image extension, the remedy leads with the stated-reason escape
 
 test('with the extension present, the remedy is the upload instruction as before', () => {
   const work = makeRepoPair('apps/web/src/components/Thing.tsx')
-  const { stderr } = runHook(work, bodyArg('## What\n\nprose'), envWithGh({ hasImageExtension: true }))
+  const { stderr } = runHook(
+    work,
+    bodyArg('## What\n\nprose'),
+    envWithGh({ hasImageExtension: true }),
+  )
   assert.match(stderr, /upload it with `gh image tmp\/screenshots\/figure\.png`/)
   assert.doesNotMatch(stderr, /not installed/)
 })

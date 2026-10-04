@@ -39,10 +39,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
  */
 function findMainCheckout() {
   try {
-    const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-      cwd: __dirname,
-      encoding: 'utf-8',
-    }).trim()
+    const commonDir = execFileSync(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      {
+        cwd: __dirname,
+        encoding: 'utf-8',
+      },
+    ).trim()
     return dirname(commonDir)
   } catch {
     return resolve(__dirname, '../..')
@@ -133,7 +137,9 @@ for (const entry of entries) {
   }
 
   if (noUniqueCommits && !includeFresh) {
-    console.log(`keep ${entry.name}: no unique commits ahead of origin/main (fresh/stale-base lane; use --include-fresh to remove)`)
+    console.log(
+      `keep ${entry.name}: no unique commits ahead of origin/main (fresh/stale-base lane; use --include-fresh to remove)`,
+    )
     kept++
     continue
   }

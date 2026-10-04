@@ -164,7 +164,8 @@ export function clusterFailures(window) {
     for (const [id, path] of keyed) {
       const entry = byId.get(id) ?? { id, path, runIds: [], latest: '' }
       entry.runIds.push(run.runId)
-      if (entry.latest === '' || instantIsAfter(run.createdAt, entry.latest)) entry.latest = run.createdAt
+      if (entry.latest === '' || instantIsAfter(run.createdAt, entry.latest))
+        entry.latest = run.createdAt
       byId.set(id, entry)
     }
   }
@@ -287,7 +288,12 @@ function unattributedLegLines(unattributedRuns) {
  * @param inspect     `(path, sinceIso) => status`, whether the file moved since
  * @param passedAfter `(iso) => boolean`, whether a main run created after `iso` passed
  */
-export function formatReport({ recurrences, singles, unattributedRuns }, windowDays, inspect, passedAfter) {
+export function formatReport(
+  { recurrences, singles, unattributedRuns },
+  windowDays,
+  inspect,
+  passedAfter,
+) {
   const inspected = recurrences.map((entry) => ({ entry, status: inspectEntry(entry, inspect) }))
   const retired = new Map()
   for (const { entry, status } of inspected) {
@@ -388,12 +394,17 @@ export function unhealedPublishJobs(runs) {
 export function unhealedWorkflowRuns(runs) {
   let lastSuccessAt = null
   for (const run of runs) {
-    if (run.conclusion === 'success' && (lastSuccessAt === null || instantIsAfter(run.createdAt, lastSuccessAt))) {
+    if (
+      run.conclusion === 'success' &&
+      (lastSuccessAt === null || instantIsAfter(run.createdAt, lastSuccessAt))
+    ) {
       lastSuccessAt = run.createdAt
     }
   }
   const failed = runs.filter(
-    (run) => FAILED_CONCLUSIONS.has(run.conclusion) && (lastSuccessAt === null || instantIsAfter(run.createdAt, lastSuccessAt)),
+    (run) =>
+      FAILED_CONCLUSIONS.has(run.conclusion) &&
+      (lastSuccessAt === null || instantIsAfter(run.createdAt, lastSuccessAt)),
   )
   if (failed.length === 0) return null
   const newest = failed.reduce((a, b) => (instantIsAfter(b.createdAt, a.createdAt) ? b : a))
@@ -407,14 +418,20 @@ export function unhealedWorkflowRuns(runs) {
 /** One block, or '' when nothing is unhealed — the caller prints nothing for ''. */
 export function formatUnhealedReport({ publishJobs, workflows }) {
   if (publishJobs.length === 0 && workflows.length === 0) return ''
-  const lines = ['[flake-watch] failures on main that no later success has retired (not test failures):', '']
+  const lines = [
+    '[flake-watch] failures on main that no later success has retired (not test failures):',
+    '',
+  ]
   for (const entry of publishJobs) {
     lines.push(
       `  release: ${entry.job} ${entry.conclusion} on ${entry.createdAt.slice(0, 10)} (run ${entry.runId}), and no later run of that job succeeded — the artifact it publishes may be missing.`,
     )
   }
   for (const entry of workflows) {
-    const since = entry.lastSuccessAt === null ? 'no success on record' : `last success ${entry.lastSuccessAt.slice(0, 10)}`
+    const since =
+      entry.lastSuccessAt === null
+        ? 'no success on record'
+        : `last success ${entry.lastSuccessAt.slice(0, 10)}`
     lines.push(
       `  ${entry.workflow}: ${entry.count} run(s) failed or were cancelled since (newest ${entry.newest.conclusion} ${entry.newest.createdAt.slice(0, 10)}, run ${entry.newest.runId}); ${since}.`,
     )

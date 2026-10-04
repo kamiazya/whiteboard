@@ -84,11 +84,10 @@ function mainCheckoutRoot(root) {
 function inspectorFor(root) {
   return (path, sinceIso) => {
     if (!existsSync(join(root, path))) return 'missing'
-    const out = execFileSync(
-      'git',
-      ['log', '--format=%cI', `--since=${sinceIso}`, '--', path],
-      { cwd: root, encoding: 'utf-8' },
-    ).trim()
+    const out = execFileSync('git', ['log', '--format=%cI', `--since=${sinceIso}`, '--', path], {
+      cwd: root,
+      encoding: 'utf-8',
+    }).trim()
     return out === '' ? 'unchanged' : 'changed'
   }
 }
@@ -117,7 +116,12 @@ async function main() {
       try {
         const record = readDaemonRecord(dataDir)
         if (record === null) throw new Error('the dev daemon is not running (no daemon.json)')
-        return await requestDaemon(record, { method: 'POST', path: '/mcp', timeoutMs: REQUEST_TIMEOUT_MS, ...body })
+        return await requestDaemon(record, {
+          method: 'POST',
+          path: '/mcp',
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          ...body,
+        })
       } catch (error) {
         if (attempt >= 2 || /^no answer within/.test(error.message)) throw error
         await new Promise((done) => setTimeout(done, 500))

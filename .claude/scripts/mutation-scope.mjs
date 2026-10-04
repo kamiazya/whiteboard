@@ -49,7 +49,9 @@ async function main(argv) {
   const targetsPath = arg('targets')
   const prefix = arg('prefix')
   if (targetsPath === undefined || prefix === undefined) {
-    process.stderr.write('usage: mutation-scope.mjs --targets <path> --prefix <path> [--changed-from <file>]\n')
+    process.stderr.write(
+      'usage: mutation-scope.mjs --targets <path> --prefix <path> [--changed-from <file>]\n',
+    )
     process.exit(2)
   }
   const changedFrom = arg('changed-from')

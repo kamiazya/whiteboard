@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Regression coverage for wire-worktree-mcp-lib.mjs's pure planning logic:
 // registration/argv construction, existing-config classification, the settings.json
 // write-guard, and the stale-registration sweep. No real ~/.claude.json or
@@ -8,22 +9,22 @@
 //
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 
-import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
-  buildDesiredConfig,
+  assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,
+  buildDesiredConfig,
   buildReRegisterCommand,
   classifyExistingConfig,
   planStaleSweep,
-  verifyPostWrite,
-  assertNotTrackedSettingsPath,
-  resolveMainCheckoutRoot,
   removeStaleEntriesFromConfig,
+  resolveMainCheckoutRoot,
   stdioProxyRootOf,
+  verifyPostWrite,
 } from './wire-worktree-mcp-lib.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -45,7 +46,10 @@ test('buildDesiredConfig defaults to the tracked entry\'s own name ("whiteboard"
 })
 
 test('buildDesiredConfig refuses to build a config for the main checkout', () => {
-  assert.throws(() => buildDesiredConfig({ repoRoot: '/repo', isMainCheckout: true }), /main checkout/i)
+  assert.throws(
+    () => buildDesiredConfig({ repoRoot: '/repo', isMainCheckout: true }),
+    /main checkout/i,
+  )
 })
 
 test('buildClaudeMcpAddArgs produces the argv for a stdio `claude mcp add`: the server command line follows `--`', () => {
@@ -92,7 +96,11 @@ test('classifyExistingConfig: never treats a differing entry as identical', () =
 
 test('classifyExistingConfig: a conflicting registration never echoes its URL, headers or env values', () => {
   const secrets = [
-    { type: 'http', url: 'http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret', headers: { Authorization: 'Bearer super-secret' } },
+    {
+      type: 'http',
+      url: 'http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret',
+      headers: { Authorization: 'Bearer super-secret' },
+    },
     { ...IDENTICAL, env: { WHITEBOARD_TOKEN: 'super-secret' } },
   ]
   for (const existing of secrets) {
@@ -146,7 +154,9 @@ test('planStaleSweep: removes registrations whose worktree directory no longer e
   ]
   const liveWorktreePaths = ['/repo/.claude/worktrees/alive']
   const actions = planStaleSweep(registered, liveWorktreePaths)
-  assert.deepEqual(actions, [{ action: 'remove', name: 'whiteboard-wt', path: '/repo/.claude/worktrees/gone' }])
+  assert.deepEqual(actions, [
+    { action: 'remove', name: 'whiteboard-wt', path: '/repo/.claude/worktrees/gone' },
+  ])
 })
 
 test('planStaleSweep: empty registry yields zero actions', () => {
@@ -191,7 +201,10 @@ test('removeStaleEntriesFromConfig: removes only the targeted project/server key
   const config = {
     projects: {
       '/repo/.claude/worktrees/gone': {
-        mcpServers: { whiteboard: { type: 'http', url: 'http://127.0.0.1:3100/mcp' }, other: { type: 'http', url: 'x' } },
+        mcpServers: {
+          whiteboard: { type: 'http', url: 'http://127.0.0.1:3100/mcp' },
+          other: { type: 'http', url: 'x' },
+        },
       },
       '/repo/.claude/worktrees/alive': {
         mcpServers: { whiteboard: { type: 'http', url: 'http://127.0.0.1:3200/mcp' } },
@@ -199,16 +212,26 @@ test('removeStaleEntriesFromConfig: removes only the targeted project/server key
     },
     someOtherTopLevelKey: 'untouched',
   }
-  const result = removeStaleEntriesFromConfig(config, [{ action: 'remove', name: 'whiteboard', path: '/repo/.claude/worktrees/gone' }])
+  const result = removeStaleEntriesFromConfig(config, [
+    { action: 'remove', name: 'whiteboard', path: '/repo/.claude/worktrees/gone' },
+  ])
 
   assert.equal(result.projects['/repo/.claude/worktrees/gone'].mcpServers.whiteboard, undefined)
-  assert.deepEqual(result.projects['/repo/.claude/worktrees/gone'].mcpServers.other, { type: 'http', url: 'x' })
-  assert.deepEqual(result.projects['/repo/.claude/worktrees/alive'], config.projects['/repo/.claude/worktrees/alive'])
+  assert.deepEqual(result.projects['/repo/.claude/worktrees/gone'].mcpServers.other, {
+    type: 'http',
+    url: 'x',
+  })
+  assert.deepEqual(
+    result.projects['/repo/.claude/worktrees/alive'],
+    config.projects['/repo/.claude/worktrees/alive'],
+  )
   assert.equal(result.someOtherTopLevelKey, 'untouched')
 })
 
 test('removeStaleEntriesFromConfig: does not mutate the original config object', () => {
-  const config = { projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } } }
+  const config = {
+    projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } },
+  }
   const snapshot = JSON.parse(JSON.stringify(config))
   removeStaleEntriesFromConfig(config, [{ action: 'remove', name: 'whiteboard', path: '/repo/wt' }])
   assert.deepEqual(config, snapshot)
@@ -224,7 +247,9 @@ test('removeStaleEntriesFromConfig: no-ops when the targeted project or server k
 })
 
 test('removeStaleEntriesFromConfig: empty actions list returns an equivalent config', () => {
-  const config = { projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } } }
+  const config = {
+    projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } },
+  }
   assert.deepEqual(removeStaleEntriesFromConfig(config, []), config)
 })
 
@@ -240,7 +265,11 @@ test('docs-lock: the manual fallback `claude mcp add` command in development.md 
     .join(' ')
   const docsFragment = match[1]
 
-  assert.equal(docsFragment, expectedFragment, 'docs fallback command argv order must match buildClaudeMcpAddArgs')
+  assert.equal(
+    docsFragment,
+    expectedFragment,
+    'docs fallback command argv order must match buildClaudeMcpAddArgs',
+  )
 })
 
 // --- linked-worktree project-key collision ---
@@ -255,7 +284,12 @@ import { resolvesToAnotherProjectEntry } from './wire-worktree-mcp-lib.mjs'
 test('a linked worktree whose main checkout already holds the entry is reported, not retried', () => {
   const config = { projects: { '/repo': { mcpServers: { whiteboard: { type: 'http' } } } } }
   assert.equal(
-    resolvesToAnotherProjectEntry({ config, repoRoot: '/repo/.claude/worktrees/x', mainRoot: '/repo', name: 'whiteboard' }),
+    resolvesToAnotherProjectEntry({
+      config,
+      repoRoot: '/repo/.claude/worktrees/x',
+      mainRoot: '/repo',
+      name: 'whiteboard',
+    }),
     true,
   )
 })
@@ -263,7 +297,12 @@ test('a linked worktree whose main checkout already holds the entry is reported,
 test('the main checkout itself is never treated as a collision', () => {
   const config = { projects: { '/repo': { mcpServers: { whiteboard: {} } } } }
   assert.equal(
-    resolvesToAnotherProjectEntry({ config, repoRoot: '/repo', mainRoot: '/repo', name: 'whiteboard' }),
+    resolvesToAnotherProjectEntry({
+      config,
+      repoRoot: '/repo',
+      mainRoot: '/repo',
+      name: 'whiteboard',
+    }),
     false,
   )
 })
@@ -271,7 +310,12 @@ test('the main checkout itself is never treated as a collision', () => {
 test('a worktree is not a collision when the main checkout has no such entry', () => {
   const config = { projects: { '/repo': { mcpServers: {} } } }
   assert.equal(
-    resolvesToAnotherProjectEntry({ config, repoRoot: '/repo/.claude/worktrees/x', mainRoot: '/repo', name: 'whiteboard' }),
+    resolvesToAnotherProjectEntry({
+      config,
+      repoRoot: '/repo/.claude/worktrees/x',
+      mainRoot: '/repo',
+      name: 'whiteboard',
+    }),
     false,
   )
 })
@@ -279,7 +323,12 @@ test('a worktree is not a collision when the main checkout has no such entry', (
 test('a missing or malformed config is not a collision', () => {
   for (const config of [null, undefined, {}, { projects: null }]) {
     assert.equal(
-      resolvesToAnotherProjectEntry({ config, repoRoot: '/repo/wt', mainRoot: '/repo', name: 'whiteboard' }),
+      resolvesToAnotherProjectEntry({
+        config,
+        repoRoot: '/repo/wt',
+        mainRoot: '/repo',
+        name: 'whiteboard',
+      }),
       false,
     )
   }
@@ -287,16 +336,36 @@ test('a missing or malformed config is not a collision', () => {
 
 test('stdioProxyRootOf: names the checkout a stdio-proxy registration was written for, and nothing else', () => {
   assert.equal(stdioProxyRootOf(IDENTICAL), resolve('/repo/wt-a'))
-  assert.equal(stdioProxyRootOf({ type: 'stdio', command: 'npx', args: ['@kamiazya/whiteboard-mcp@latest'] }), null)
+  assert.equal(
+    stdioProxyRootOf({ type: 'stdio', command: 'npx', args: ['@kamiazya/whiteboard-mcp@latest'] }),
+    null,
+  )
   assert.equal(stdioProxyRootOf({ type: 'http', url: 'http://127.0.0.1:1/mcp' }), null)
-  assert.equal(stdioProxyRootOf({ type: 'stdio', command: 'node', args: ['/repo/other.mjs'] }), null)
+  assert.equal(
+    stdioProxyRootOf({ type: 'stdio', command: 'node', args: ['/repo/other.mjs'] }),
+    null,
+  )
   assert.equal(stdioProxyRootOf(undefined), null)
 })
 
 test('planStaleSweep + removeStaleEntriesFromConfig: an entry stored under another project key is removed from that key', () => {
-  const config = { projects: { '/repo': { mcpServers: { whiteboard: { type: 'stdio' }, keep: { type: 'http' } } } } }
-  const actions = planStaleSweep([{ name: 'whiteboard', path: '/repo/.claude/worktrees/gone', projectKey: '/repo' }], ['/repo'])
-  assert.deepEqual(actions, [{ action: 'remove', name: 'whiteboard', path: '/repo/.claude/worktrees/gone', projectKey: '/repo' }])
+  const config = {
+    projects: {
+      '/repo': { mcpServers: { whiteboard: { type: 'stdio' }, keep: { type: 'http' } } },
+    },
+  }
+  const actions = planStaleSweep(
+    [{ name: 'whiteboard', path: '/repo/.claude/worktrees/gone', projectKey: '/repo' }],
+    ['/repo'],
+  )
+  assert.deepEqual(actions, [
+    {
+      action: 'remove',
+      name: 'whiteboard',
+      path: '/repo/.claude/worktrees/gone',
+      projectKey: '/repo',
+    },
+  ])
   const result = removeStaleEntriesFromConfig(config, actions)
   assert.equal(result.projects['/repo'].mcpServers.whiteboard, undefined)
   assert.deepEqual(result.projects['/repo'].mcpServers.keep, { type: 'http' })

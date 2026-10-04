@@ -21,7 +21,7 @@
 // parse the hook's own input, or to find a place to record the block, exits 0
 // silently.
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 import { prNumberFromMerge, runsGh } from '../hook-command-lib.mjs'
@@ -39,7 +39,12 @@ if (!runsGh(command, 'pr merge')) process.exit(0)
 
 const cdMatch = command.match(/(?:^|&&|;)\s*cd\s+([^\s'";&|]+)/)
 const where = cdMatch ? cdMatch[1] : process.cwd()
-const run = (file, args) => execFileSync(file, args, { encoding: 'utf8', cwd: where, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const run = (file, args) =>
+  execFileSync(file, args, {
+    encoding: 'utf8',
+    cwd: where,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
 
 /** `gh api` placeholders ({owner}, {repo}, {branch}) resolve from the local remote — no GraphQL. */
 const api = (endpoint, ...flags) => run('gh', ['api', endpoint, ...flags])
@@ -59,7 +64,10 @@ function whyItFailed(err) {
 let pr = prNumberFromMerge(command)
 let markerDir
 try {
-  markerDir = join(resolve(where, run('git', ['rev-parse', '--git-common-dir'])), 'pr-merge-comments-shown')
+  markerDir = join(
+    resolve(where, run('git', ['rev-parse', '--git-common-dir'])),
+    'pr-merge-comments-shown',
+  )
 } catch {
   process.exit(0)
 }
@@ -68,20 +76,32 @@ try {
 function decide() {
   try {
     if (pr === null) {
-      const found = Number(api('repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open', '--jq', '.[0].number'))
-      if (!Number.isInteger(found) || found <= 0) throw new Error('no open PR is attached to the current branch')
+      const found = Number(
+        api('repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open', '--jq', '.[0].number'),
+      )
+      if (!Number.isInteger(found) || found <= 0)
+        throw new Error('no open PR is attached to the current branch')
       pr = found
     }
     const head = api(`repos/{owner}/{repo}/pulls/${pr}`, '--jq', '.head.sha')
     if (!head) throw new Error('the PR answered with no head commit')
-    const review = lines(`repos/{owner}/{repo}/pulls/${pr}/comments`, '.[]|{author:.user.login,path:.path,line:(.line//.original_line),body:.body}')
-    const issue = lines(`repos/{owner}/{repo}/issues/${pr}/comments`, '.[]|{author:.user.login,body:.body}')
+    const review = lines(
+      `repos/{owner}/{repo}/pulls/${pr}/comments`,
+      '.[]|{author:.user.login,path:.path,line:(.line//.original_line),body:.body}',
+    )
+    const issue = lines(
+      `repos/{owner}/{repo}/issues/${pr}/comments`,
+      '.[]|{author:.user.login,body:.body}',
+    )
     const marker = join(markerDir, `${pr}-${head}`)
     const verdict = gateMerge({ pr, review, issue, alreadySeen: existsSync(marker) })
     return { ...verdict, marker }
   } catch (err) {
     const marker = join(markerDir, `${pr ?? 'unknown'}-unreadable`)
-    return { ...gateUnreadable({ pr, reason: whyItFailed(err), alreadySeen: existsSync(marker) }), marker }
+    return {
+      ...gateUnreadable({ pr, reason: whyItFailed(err), alreadySeen: existsSync(marker) }),
+      marker,
+    }
   }
 }
 

@@ -7,9 +7,9 @@
 // section calls out for schema/runtime drift elsewhere in the repo).
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import path from 'node:path'
 import {
   DESIGN_SCHEMA,
   isValidDesignShape as sharedIsValidDesignShape,
@@ -22,8 +22,13 @@ const workflowPath = path.join(__dirname, '..', 'dev-loop.workflow.mjs')
 const source = readFileSync(workflowPath, 'utf8')
 
 function extractInlineDesignSchema() {
-  const match = source.match(/\nconst DESIGN_SCHEMA = (\{[\s\S]*?\n\})\n\nconst PLAN_VERDICT_SCHEMA/)
-  assert.ok(match, 'could not locate the inline `const DESIGN_SCHEMA = {...}` literal in dev-loop.workflow.mjs')
+  const match = source.match(
+    /\nconst DESIGN_SCHEMA = (\{[\s\S]*?\n\})\n\nconst PLAN_VERDICT_SCHEMA/,
+  )
+  assert.ok(
+    match,
+    'could not locate the inline `const DESIGN_SCHEMA = {...}` literal in dev-loop.workflow.mjs',
+  )
   // Evaluating a plain object literal extracted from our own source, not untrusted input
   return new Function(`return (${match[1]})`)()
 }
@@ -42,7 +47,10 @@ function extractIsValidDesignShape() {
 
 function extractShouldGenerateDesign() {
   const match = source.match(/\nfunction shouldGenerateDesign\(\{[\s\S]*?\n\}\n/)
-  assert.ok(match, 'could not locate `function shouldGenerateDesign({...}) {...}` in dev-loop.workflow.mjs')
+  assert.ok(
+    match,
+    'could not locate `function shouldGenerateDesign({...}) {...}` in dev-loop.workflow.mjs',
+  )
   // Evaluating a plain function declaration extracted from our own source, not untrusted input
   return new Function(`${match[0]}\nreturn shouldGenerateDesign`)()
 }
@@ -90,11 +98,21 @@ test('isValidDesignShape rejects a designDoc with no `benefit` claim, and one th
     blastRadius: ['none: new leaf module, no existing callers'],
     userReach: ['rendered by CanvasList, reachable from /w/:ws'],
   }
-  for (const design of [base, { ...base, benefit: 'makes the list feel faster' }, { ...base, benefit: 'relocation:' }]) {
+  for (const design of [
+    base,
+    { ...base, benefit: 'makes the list feel faster' },
+    { ...base, benefit: 'relocation:' },
+  ]) {
     assert.equal(isValidDesignShape(design), false, JSON.stringify(design))
     assert.equal(sharedIsValidDesignShape(design), false, JSON.stringify(design))
   }
-  assert.equal(isValidDesignShape({ ...base, benefit: 'relocation: decode leaves the main thread; clone of the bytes unmeasurable' }), true)
+  assert.equal(
+    isValidDesignShape({
+      ...base,
+      benefit: 'relocation: decode leaves the main thread; clone of the bytes unmeasurable',
+    }),
+    true,
+  )
 })
 
 test('isValidDesignShape rejects a designDoc missing the required `userReach` field', () => {
@@ -167,7 +185,7 @@ test('isValidDesignShape rejects a non-object and a null designDoc', () => {
   assert.equal(isValidDesignShape('not an object'), false)
 })
 
-test('isValidDesignShape rejects a whitespace-only `properties` entry, matching DESIGN_SCHEMA\'s `\\S` pattern', () => {
+test("isValidDesignShape rejects a whitespace-only `properties` entry, matching DESIGN_SCHEMA's `\\S` pattern", () => {
   const isValidDesignShape = extractIsValidDesignShape()
   const designWithBlankProperty = {
     completionCriteria: ['does the thing'],
@@ -215,7 +233,11 @@ test('the duplicated inline isValidDesignShape agrees with the single-sourced de
     null,
   ]
   for (const design of cases) {
-    assert.equal(isValidDesignShape(design), sharedIsValidDesignShape(design), `mismatch for ${JSON.stringify(design)}`)
+    assert.equal(
+      isValidDesignShape(design),
+      sharedIsValidDesignShape(design),
+      `mismatch for ${JSON.stringify(design)}`,
+    )
   }
 })
 
@@ -234,8 +256,16 @@ test('isValidDesignShape rejects values forbidden by DESIGN_SCHEMA even when the
     { ...base, testScenarios: { ...base.testScenarios, unknownNested: 'nope' } },
   ]
   for (const design of cases) {
-    assert.equal(isValidDesignShape(design), false, `expected inline validator to reject ${JSON.stringify(design)}`)
-    assert.equal(sharedIsValidDesignShape(design), false, `expected shared validator to reject ${JSON.stringify(design)}`)
+    assert.equal(
+      isValidDesignShape(design),
+      false,
+      `expected inline validator to reject ${JSON.stringify(design)}`,
+    )
+    assert.equal(
+      sharedIsValidDesignShape(design),
+      false,
+      `expected shared validator to reject ${JSON.stringify(design)}`,
+    )
   }
 })
 

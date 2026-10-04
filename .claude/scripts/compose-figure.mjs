@@ -23,10 +23,9 @@
 //     [--before-label "…"] [--after-label "…"] [--ring x1,y1,x2,y2]
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { mkdtempSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 const BEFORE_COLOUR = '#c0392b'
 const AFTER_COLOUR = '#1e8449'
@@ -47,7 +46,9 @@ const beforePath = arg('before')
 const afterPath = arg('after')
 const outPath = arg('out')
 if (!beforePath || !afterPath || !outPath) {
-  fail('usage: --before <png> --after <png> --out <png> [--before-label …] [--after-label …] [--ring x1,y1,x2,y2]')
+  fail(
+    'usage: --before <png> --after <png> --out <png> [--before-label …] [--after-label …] [--ring x1,y1,x2,y2]',
+  )
 }
 
 /**

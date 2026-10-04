@@ -10,7 +10,7 @@
 //
 // Remove when done: git worktree remove --force .claude/worktrees/<name>
 import { execFileSync, spawnSync } from 'node:child_process'
-import { cpSync as nodeCpSync, existsSync, realpathSync } from 'node:fs'
+import { existsSync, cpSync as nodeCpSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseScriptArgs } from './script-flags.mjs'
@@ -28,7 +28,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
  *
  * @param {{ scriptPath: string, wtPath: string, spawn?: typeof spawnSync, log?: (msg: string) => void }} args
  */
-export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg) => console.warn(msg) }) {
+export function runWireStep({
+  scriptPath,
+  wtPath,
+  spawn = spawnSync,
+  log = (msg) => console.warn(msg),
+}) {
   const fallback = `Wire manually: node .claude/scripts/wire-worktree-mcp.mjs ${wtPath}`
   try {
     const result = spawn('node', [scriptPath, wtPath], { stdio: 'inherit' })
@@ -79,7 +84,13 @@ export function seedsThisPath(src) {
   return !/(^|[\\/])web-app([\\/]|$)/.test(src)
 }
 
-export function seedBuiltDist({ mainRoot, worktreeRoot, existsSync: exists = existsSync, cpSync = nodeCpSync, log = (msg) => console.warn(msg) }) {
+export function seedBuiltDist({
+  mainRoot,
+  worktreeRoot,
+  existsSync: exists = existsSync,
+  cpSync = nodeCpSync,
+  log = (msg) => console.warn(msg),
+}) {
   const from = `${mainRoot}/packages/mcp-server/dist`
   if (!exists(from)) return false
   try {
@@ -89,7 +100,9 @@ export function seedBuiltDist({ mainRoot, worktreeRoot, existsSync: exists = exi
     })
     return true
   } catch (err) {
-    log(`[new-worktree] could not seed the built dist (${err.message}) — pnpm will warn about the unlinkable \`whiteboard\` bin; harmless.`)
+    log(
+      `[new-worktree] could not seed the built dist (${err.message}) — pnpm will warn about the unlinkable \`whiteboard\` bin; harmless.`,
+    )
     return false
   }
 }
@@ -103,7 +116,8 @@ function isRunAsScript() {
   }
 }
 
-const USAGE = 'usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: freshly fetched origin/main)'
+const USAGE =
+  'usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: freshly fetched origin/main)'
 
 function main() {
   // Both positionals stay positional, but an option-shaped one is refused: it would otherwise
@@ -127,7 +141,9 @@ function main() {
 
   // Resolve the MAIN checkout root even when invoked from inside a linked
   // worktree (whose --show-toplevel would nest the new worktree under it).
-  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim()
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+    encoding: 'utf8',
+  }).trim()
   const repoRoot = resolve(process.cwd(), commonDir, '..')
   const wtPath = resolve(repoRoot, '.claude/worktrees', name)
   if (existsSync(wtPath)) {
@@ -144,7 +160,7 @@ function main() {
   console.log(`\nready worktree: ${wtPath}`)
   console.log(`  branch: ${name} (from ${base})`)
   console.log(`  launch a dev-loop with cwd="${wtPath}" (tests run isolated here).`)
-  console.log('  dev daemon: pnpm mcp:http:dev here listens on this worktree\'s own socket')
+  console.log("  dev daemon: pnpm mcp:http:dev here listens on this worktree's own socket")
 
   runWireStep({ scriptPath: resolve(__dirname, 'wire-worktree-mcp.mjs'), wtPath })
 

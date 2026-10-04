@@ -8,8 +8,8 @@
 // otherwise outside `.claude/workflows/`.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { test } from 'node:test'
 import path from 'node:path'
+import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const workflowsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')

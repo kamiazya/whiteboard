@@ -1,15 +1,16 @@
 #!/usr/bin/env node
+
 // Regression coverage for new-worktree.mjs's wire step.
 //
 // Run with: pnpm test:scripts (also wired into the CI "check" job).
 
+import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
-import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 import { runWireStep } from './new-worktree.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -26,7 +27,10 @@ test('runWireStep: worktree setup completes (does not throw) even when the wire 
 
   assert.equal(result.success, false)
   assert.ok(logs.some((line) => /wire.*fail|failed to wire/i.test(line)))
-  assert.ok(logs.some((line) => /wire-worktree-mcp\.mjs/.test(line)), 'must point at the manual wiring fallback')
+  assert.ok(
+    logs.some((line) => /wire-worktree-mcp\.mjs/.test(line)),
+    'must point at the manual wiring fallback',
+  )
 })
 
 test('runWireStep: worktree setup completes (does not throw) even when spawning the wire script itself throws (e.g. node missing)', () => {
@@ -132,13 +136,36 @@ test('--help, an unknown option and a missing name print usage and create no wor
   const scratch = mkdtempSync(join(tmpdir(), 'new-worktree-flags-'))
   try {
     execFileSync('git', ['init', '--quiet', scratch])
-    for (const args of [['--help'], ['--bogus'], ['--dry-run'], ['foo', '--bogus'], ['foo', 'main', 'extra'], []]) {
-      const result = spawnSync('node', [scriptPath, ...args], { cwd: scratch, encoding: 'utf-8', timeout: 20_000 })
+    for (const args of [
+      ['--help'],
+      ['--bogus'],
+      ['--dry-run'],
+      ['foo', '--bogus'],
+      ['foo', 'main', 'extra'],
+      [],
+    ]) {
+      const result = spawnSync('node', [scriptPath, ...args], {
+        cwd: scratch,
+        encoding: 'utf-8',
+        timeout: 20_000,
+      })
       const label = JSON.stringify(args)
-      assert.equal(result.status, args[0] === '--help' ? 0 : 2, `${label}: ${result.stdout}${result.stderr}`)
+      assert.equal(
+        result.status,
+        args[0] === '--help' ? 0 : 2,
+        `${label}: ${result.stdout}${result.stderr}`,
+      )
       assert.match(`${result.stdout}${result.stderr}`, /usage: .*new-worktree/, label)
-      assert.equal(existsSync(join(scratch, '.claude', 'worktrees')), false, `${label} created a worktree directory`)
-      assert.equal(execFileSync('git', ['branch', '--list'], { cwd: scratch, encoding: 'utf-8' }).trim(), '', `${label} created a branch`)
+      assert.equal(
+        existsSync(join(scratch, '.claude', 'worktrees')),
+        false,
+        `${label} created a worktree directory`,
+      )
+      assert.equal(
+        execFileSync('git', ['branch', '--list'], { cwd: scratch, encoding: 'utf-8' }).trim(),
+        '',
+        `${label} created a branch`,
+      )
     }
   } finally {
     rmSync(scratch, { recursive: true, force: true })

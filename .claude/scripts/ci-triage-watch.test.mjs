@@ -18,7 +18,9 @@ const skill = readFileSync(
   resolve(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'ci-triage', 'SKILL.md'),
   'utf-8',
 )
-const [allChecksLoop, gateLoop] = [...skill.matchAll(/```bash\n(PR=<PR>[\s\S]*?)```/g)].map((m) => m[1])
+const [allChecksLoop, gateLoop] = [...skill.matchAll(/```bash\n(PR=<PR>[\s\S]*?)```/g)].map(
+  (m) => m[1],
+)
 
 const scratchDirs = []
 after(() => {
@@ -80,7 +82,11 @@ test('a GitHub that cannot be read ends as UNKNOWN, not as a settled PR', () => 
 })
 
 test('an empty check-run list is waiting, and the loop ends only once runs settle', () => {
-  const { status, stdout, calls } = runLoop(allChecksLoop, ['', 'verify\tin_progress\t\n', 'verify\tcompleted\tsuccess\nci-gate\tcompleted\tfailure\n'])
+  const { status, stdout, calls } = runLoop(allChecksLoop, [
+    '',
+    'verify\tin_progress\t\n',
+    'verify\tcompleted\tsuccess\nci-gate\tcompleted\tfailure\n',
+  ])
   assert.equal(status, 0)
   assert.ok(calls >= 3, `settled after ${calls} reads, before the runs had finished`)
   assert.match(stdout, /verify: success/)

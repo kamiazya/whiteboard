@@ -137,11 +137,16 @@ function isStringArray(v) {
 export function isValidDesignShape(d) {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return false
   if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
-  if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
+  if (
+    !Array.isArray(d.completionCriteria) ||
+    !d.completionCriteria.every((c) => typeof c === 'string')
+  )
+    return false
   if (typeof d.scope !== 'string') return false
   if (d.contractChanges !== undefined && typeof d.contractChanges !== 'string') return false
   if (!d.testScenarios || typeof d.testScenarios !== 'object') return false
-  if (!Object.keys(d.testScenarios).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
+  if (!Object.keys(d.testScenarios).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k)))
+    return false
   if (!isStringArray(d.testScenarios.unit)) return false
   if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
   if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false

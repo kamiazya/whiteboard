@@ -65,7 +65,9 @@ test('two anonymous functions are never joined to each other', () => {
 
 test('a function that left a file reads as gone, not as missing', () => {
   const rows = compare([{ file: 'a.ts', name: 'old', line: 1, score: 18 }], [])
-  assert.deepEqual(rows, [{ file: 'a.ts', name: 'old', line: 1, score: null, base: 18, delta: null }])
+  assert.deepEqual(rows, [
+    { file: 'a.ts', name: 'old', line: 1, score: null, base: 18, delta: null },
+  ])
   assert.match(formatTable(rows, 15), /gone/)
 })
 
@@ -111,7 +113,11 @@ test('against a base, a new function shows however low it scores, so moved compl
 test('without --base, the first file is still a file', () => {
   // The index of an absent `--base` is -1, so "skip the argument after it"
   // skipped index 0: a single file answered "no files".
-  assert.deepEqual(argsFrom(['a.ts', 'b.ts']), { base: null, changed: false, files: ['a.ts', 'b.ts'] })
+  assert.deepEqual(argsFrom(['a.ts', 'b.ts']), {
+    base: null,
+    changed: false,
+    files: ['a.ts', 'b.ts'],
+  })
   assert.deepEqual(argsFrom(['--base', 'origin/main', 'a.ts']), {
     base: 'origin/main',
     changed: false,
@@ -132,9 +138,20 @@ test('a function that moved to another file compares against itself, and says wh
     [{ file: 'theme.ts', name: 'resolvePalette', line: 58, score: 6 }],
   )
   assert.deepEqual(rows, [
-    { file: 'theme.ts', name: 'resolvePalette', line: 58, score: 6, base: 6, delta: 0, from: 'big.ts' },
+    {
+      file: 'theme.ts',
+      name: 'resolvePalette',
+      line: 58,
+      score: 6,
+      base: 6,
+      delta: 0,
+      from: 'big.ts',
+    },
   ])
-  assert.match(formatTable(rows, 15), /6\s+6\s+0\s+theme\.ts:58\s+resolvePalette\s+\(from big\.ts\)/)
+  assert.match(
+    formatTable(rows, 15),
+    /6\s+6\s+0\s+theme\.ts:58\s+resolvePalette\s+\(from big\.ts\)/,
+  )
 })
 
 test('a name in several files is not guessed at: it stays new and gone', () => {

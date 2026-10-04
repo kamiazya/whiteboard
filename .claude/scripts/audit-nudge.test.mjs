@@ -11,7 +11,8 @@ const NOW = Date.parse('2026-09-05T00:00:00Z')
 const DAY = 86_400_000
 
 test('parses jsonl entries and ignores blank lines', () => {
-  const log = '{"kind":"audit-triage","at":"2026-08-30T10:00:00Z"}\n\n{"kind":"dogfood-triage","at":"2026-09-01T10:00:00Z"}\n'
+  const log =
+    '{"kind":"audit-triage","at":"2026-08-30T10:00:00Z"}\n\n{"kind":"dogfood-triage","at":"2026-09-01T10:00:00Z"}\n'
   assert.deepEqual(parseAuditLog(log), [
     { kind: 'audit-triage', at: '2026-08-30T10:00:00Z' },
     { kind: 'dogfood-triage', at: '2026-09-01T10:00:00Z' },
@@ -73,5 +74,8 @@ test('a wave commit that itself touched the ledger counts as recorded', () => {
 })
 
 test('no wave commits since the last audit counts zero', () => {
-  assert.equal(countUnrecordedWaves('2026-09-01T00:00:00Z', () => ''), 0)
+  assert.equal(
+    countUnrecordedWaves('2026-09-01T00:00:00Z', () => ''),
+    0,
+  )
 })

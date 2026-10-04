@@ -67,10 +67,7 @@ test('the table is capped, and says how many it left out', () => {
 test('a replacement cannot break out of its table cell', () => {
   // Arbitrary source lands in a markdown table: a newline would end the row
   // and a backtick would end the code span, so both are neutralized.
-  const body = renderComment(
-    report([mutant('Survived', { replacement: 'a\n|b|\n`c`' })]),
-    MARKER,
-  )
+  const body = renderComment(report([mutant('Survived', { replacement: 'a\n|b|\n`c`' })]), MARKER)
   const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
   // Five UNESCAPED pipes: the four column separators plus the closing one.
   assert.equal(row.replaceAll('\\|', '').split('|').length - 1, 5)
@@ -142,10 +139,7 @@ test('the mutant key names the ORIGINAL expression, not the line it sat on', () 
   // A line number identifies a mutant only until something is inserted above
   // it, at which point every entry goes stale at once and the whole list comes
   // back as new survivors.
-  assert.equal(
-    mutantKey(SOURCE, gt('Survived', 1, 11, 16)),
-    'EqualityOperator: a > b -> a >= b',
-  )
+  assert.equal(mutantKey(SOURCE, gt('Survived', 1, 11, 16)), 'EqualityOperator: a > b -> a >= b')
 })
 
 test('a recorded equivalent is counted, not listed', () => {

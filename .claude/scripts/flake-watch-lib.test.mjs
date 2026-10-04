@@ -171,12 +171,16 @@ test('an entry whose file has MOVED since its newest failure is marked, not acte
     {
       runId: '34689951606',
       createdAt: '2026-09-12T11:01:24Z',
-      titles: ['[web-browser (chromium)] src/x/wiki-link-completion.browser.test.tsx > a real touch tap'],
+      titles: [
+        '[web-browser (chromium)] src/x/wiki-link-completion.browser.test.tsx > a real touch tap',
+      ],
     },
     {
       runId: '34731509463',
       createdAt: '2026-09-13T01:50:05Z',
-      titles: ['[web-browser (chromium)] src/x/wiki-link-completion.browser.test.tsx > a real touch tap'],
+      titles: [
+        '[web-browser (chromium)] src/x/wiki-link-completion.browser.test.tsx > a real touch tap',
+      ],
     },
   ]
   const inspect = (path, sinceIso) => {
@@ -281,10 +285,14 @@ test('an unhandled error asks git about the file it NAMES, which is not a test f
     ],
   })
   let asked = null
-  const report = formatReport(clusterFailures([run('1', '2026-09-20T00:00:00Z'), run('2', '2026-09-22T00:00:00Z')]), 14, (path) => {
-    asked = path
-    return { state: 'unchanged' }
-  })
+  const report = formatReport(
+    clusterFailures([run('1', '2026-09-20T00:00:00Z'), run('2', '2026-09-22T00:00:00Z')]),
+    14,
+    (path) => {
+      asked = path
+      return { state: 'unchanged' }
+    },
+  )
 
   assert.equal(asked, 'apps/web/src/lib/replica-unlock.ts')
   assert.match(report, /nothing has touched this file since/)
@@ -320,7 +328,10 @@ test('a run whose annotations name a TEST is keyed by the test, unhandled errors
   ])
 
   assert.deepEqual(recurrences, [])
-  assert.deepEqual(singles.map((entry) => entry.id), ['[p] src/a.test.ts'])
+  assert.deepEqual(
+    singles.map((entry) => entry.id),
+    ['[p] src/a.test.ts'],
+  )
 })
 
 test('a window that supplies bare titles still clusters, cache shape or no cache shape', () => {
@@ -370,9 +381,11 @@ test('an unattributed run is reported by the LEG it failed, and never as a recur
     clusterFailures([
       { runId: 'a', createdAt: '2026-09-01T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
       { runId: 'b', createdAt: '2026-09-02T00:00:00Z', titles: ['[p] src/a.test.ts > x'] },
-      ...[legRun('1', '2026-09-20T00:00:00Z', 'test-unit (2)'),
-          legRun('2', '2026-09-21T00:00:00Z', 'test-unit (2)'),
-          legRun('3', '2026-09-22T00:00:00Z', 'test-jsdom (1)')],
+      ...[
+        legRun('1', '2026-09-20T00:00:00Z', 'test-unit (2)'),
+        legRun('2', '2026-09-21T00:00:00Z', 'test-unit (2)'),
+        legRun('3', '2026-09-22T00:00:00Z', 'test-jsdom (1)'),
+      ],
     ]),
     14,
   )
@@ -390,7 +403,10 @@ test('a leg is read off an annotation with an EMPTY title, which is the only kin
     failedLegFrom({ title: '', path: '.github', message: '[ci-gate] test-unit (2): failure' }),
     'test-unit (2)',
   )
-  assert.equal(failedLegFrom({ title: '', path: '.github', message: 'Process completed with exit code 1.' }), null)
+  assert.equal(
+    failedLegFrom({ title: '', path: '.github', message: 'Process completed with exit code 1.' }),
+    null,
+  )
   assert.equal(failedLegFrom({}), null)
 })
 
@@ -443,7 +459,12 @@ test('an entry whose file changed after its last failure, and whose next main ru
 
 test('a changed file with no passing main run after the change stays listed', () => {
   const clusters = clusterFailures(settledWindow('src/fixed.test.ts', 'src/open.test.ts'))
-  const report = formatReport(clusters, 14, () => changedAt('2026-09-22T00:00:00Z'), () => false)
+  const report = formatReport(
+    clusters,
+    14,
+    () => changedAt('2026-09-22T00:00:00Z'),
+    () => false,
+  )
   assert.match(report, /src\/fixed\.test\.ts/)
   assert.match(report, /verify the flake still reproduces/)
   assert.doesNotMatch(report, /omitted/)
@@ -452,13 +473,20 @@ test('a changed file with no passing main run after the change stays listed', ()
 test('a later main pass does not retire a file nothing has touched', () => {
   // A flake that fails one run in ten passes the next run by chance.
   const clusters = clusterFailures(settledWindow('src/a.test.ts', 'src/b.test.ts'))
-  const report = formatReport(clusters, 14, () => ({ state: 'unchanged' }), () => true)
+  const report = formatReport(
+    clusters,
+    14,
+    () => ({ state: 'unchanged' }),
+    () => true,
+  )
   assert.match(report, /src\/a\.test\.ts/)
   assert.match(report, /nothing has touched this file since/)
 })
 
 test('a later commit that names the file retires its entry without waiting for a pass', () => {
-  const clusters = clusterFailures(settledWindow('src/pages/Thing.browser.test.tsx', 'src/open.test.ts'))
+  const clusters = clusterFailures(
+    settledWindow('src/pages/Thing.browser.test.tsx', 'src/open.test.ts'),
+  )
   const inspect = (path) =>
     path === 'src/pages/Thing.browser.test.tsx'
       ? changedAt('2026-09-22T00:00:00Z', {
@@ -475,7 +503,15 @@ test('a later commit that names the file retires its entry without waiting for a
 
 test('when every recurrence is retired the report is silent', () => {
   const clusters = clusterFailures(settledWindow('src/a.test.ts', 'src/b.test.ts'))
-  assert.equal(formatReport(clusters, 14, () => changedAt('2026-09-22T00:00:00Z'), () => true), '')
+  assert.equal(
+    formatReport(
+      clusters,
+      14,
+      () => changedAt('2026-09-22T00:00:00Z'),
+      () => true,
+    ),
+    '',
+  )
 })
 
 test('a passed-after check that throws leaves the report as it was', () => {
@@ -509,13 +545,19 @@ test('a run created 11319 s after a +09:00 commit counts as created after it', (
   const passed = [{ createdAt: '2026-10-02T17:06:09Z' }]
   assert.equal(runPassedAfter(passed, '2026-10-02T22:57:30+09:00'), true)
   // And a run before the commit's instant does not, whatever the text says.
-  assert.equal(runPassedAfter([{ createdAt: '2026-10-02T13:00:00Z' }], '2026-10-02T22:57:30+09:00'), false)
+  assert.equal(
+    runPassedAfter([{ createdAt: '2026-10-02T13:00:00Z' }], '2026-10-02T22:57:30+09:00'),
+    false,
+  )
 })
 
 test('a +09:00 commit made hours before the failure is not counted as landing after it', () => {
   // 2026-10-02T10:00+09:00 is 01:00Z, before the 03:00Z failure, yet its text
   // sorts after "2026-10-02T03:00:00Z".
-  const log = ['2026-10-02T10:00:00+09:00\tfix: earlier', '2026-10-02T14:00:00+09:00\tfix: later'].join('\n')
+  const log = [
+    '2026-10-02T10:00:00+09:00\tfix: earlier',
+    '2026-10-02T14:00:00+09:00\tfix: later',
+  ].join('\n')
   assert.deepEqual(commitsLandedAfter(log, '2026-10-02T03:00:00Z'), [
     ['2026-10-02T14:00:00+09:00', 'fix: later'],
   ])
@@ -523,7 +565,9 @@ test('a +09:00 commit made hours before the failure is not counted as landing af
 
 test('commitsLandedAfter ignores blank lines and keeps a subject containing a tab', () => {
   const log = '\n2026-10-03T00:00:00Z\tfix: a\tb\n\n'
-  assert.deepEqual(commitsLandedAfter(log, '2026-10-02T00:00:00Z'), [['2026-10-03T00:00:00Z', 'fix: a\tb']])
+  assert.deepEqual(commitsLandedAfter(log, '2026-10-02T00:00:00Z'), [
+    ['2026-10-03T00:00:00Z', 'fix: a\tb'],
+  ])
 })
 
 import { flakeCacheDir } from './flake-watch-lib.mjs'
@@ -552,9 +596,27 @@ import {
 // every attempt, and the next push to main ran the workflow again with both jobs skipped and the
 // RUN concluding success. A run-level "last success" reads that as healed.
 const RELEASE_RUNS = [
-  { runId: '2', createdAt: '2026-09-27T13:24:23Z', conclusion: 'success', event: 'push', title: 'chore: unpin release-as now that 0.0.20 is out (#1954)' },
-  { runId: '1', createdAt: '2026-09-27T12:58:29Z', conclusion: 'failure', event: 'push', title: 'chore: release main (#258)' },
-  { runId: '0', createdAt: '2026-09-27T11:57:04Z', conclusion: 'success', event: 'push', title: 'chore: release the next version as 0.0.20 (#1948)' },
+  {
+    runId: '2',
+    createdAt: '2026-09-27T13:24:23Z',
+    conclusion: 'success',
+    event: 'push',
+    title: 'chore: unpin release-as now that 0.0.20 is out (#1954)',
+  },
+  {
+    runId: '1',
+    createdAt: '2026-09-27T12:58:29Z',
+    conclusion: 'failure',
+    event: 'push',
+    title: 'chore: release main (#258)',
+  },
+  {
+    runId: '0',
+    createdAt: '2026-09-27T11:57:04Z',
+    conclusion: 'success',
+    event: 'push',
+    title: 'chore: release the next version as 0.0.20 (#1948)',
+  },
 ]
 
 test('inspectPublishJobs selects the runs that could have published or failed, and skips an ordinary push', () => {
@@ -562,33 +624,75 @@ test('inspectPublishJobs selects the runs that could have published or failed, a
     RELEASE_RUNS.filter(inspectPublishJobs).map((run) => run.runId),
     ['1', '0'],
   )
-  assert.equal(inspectPublishJobs({ conclusion: 'success', event: 'workflow_dispatch', title: 'release' }), true)
-  assert.equal(inspectPublishJobs({ conclusion: 'success', event: 'push', title: 'fix: a thing' }), false)
-  assert.equal(inspectPublishJobs({ conclusion: 'failure', event: 'push', title: 'fix: a thing' }), true)
+  assert.equal(
+    inspectPublishJobs({ conclusion: 'success', event: 'workflow_dispatch', title: 'release' }),
+    true,
+  )
+  assert.equal(
+    inspectPublishJobs({ conclusion: 'success', event: 'push', title: 'fix: a thing' }),
+    false,
+  )
+  assert.equal(
+    inspectPublishJobs({ conclusion: 'failure', event: 'push', title: 'fix: a thing' }),
+    true,
+  )
 })
 
 test('unhealedPublishJobs reports a publish job whose newest real run failed, even after later runs skipped it', () => {
   const withJobs = [
-    { ...RELEASE_RUNS[1], jobs: [{ name: 'docker-publish-sign', conclusion: 'failure' }, { name: 'publish-mcp', conclusion: 'success' }] },
-    { ...RELEASE_RUNS[0], jobs: [{ name: 'docker-publish-sign', conclusion: 'skipped' }, { name: 'publish-mcp', conclusion: 'skipped' }] },
+    {
+      ...RELEASE_RUNS[1],
+      jobs: [
+        { name: 'docker-publish-sign', conclusion: 'failure' },
+        { name: 'publish-mcp', conclusion: 'success' },
+      ],
+    },
+    {
+      ...RELEASE_RUNS[0],
+      jobs: [
+        { name: 'docker-publish-sign', conclusion: 'skipped' },
+        { name: 'publish-mcp', conclusion: 'skipped' },
+      ],
+    },
   ]
   assert.deepEqual(unhealedPublishJobs(withJobs), [
-    { job: 'docker-publish-sign', runId: '1', createdAt: '2026-09-27T12:58:29Z', conclusion: 'failure' },
+    {
+      job: 'docker-publish-sign',
+      runId: '1',
+      createdAt: '2026-09-27T12:58:29Z',
+      conclusion: 'failure',
+    },
   ])
 })
 
 test('unhealedPublishJobs is empty once a later run of that job succeeded', () => {
   const withJobs = [
-    { runId: '9', createdAt: '2026-09-28T00:00:00Z', jobs: [{ name: 'docker-publish-sign', conclusion: 'success' }] },
-    { runId: '1', createdAt: '2026-09-27T12:58:29Z', jobs: [{ name: 'docker-publish-sign', conclusion: 'failure' }] },
+    {
+      runId: '9',
+      createdAt: '2026-09-28T00:00:00Z',
+      jobs: [{ name: 'docker-publish-sign', conclusion: 'success' }],
+    },
+    {
+      runId: '1',
+      createdAt: '2026-09-27T12:58:29Z',
+      jobs: [{ name: 'docker-publish-sign', conclusion: 'failure' }],
+    },
   ]
   assert.deepEqual(unhealedPublishJobs(withJobs), [])
 })
 
 test('unhealedPublishJobs orders by instant, not by the order the runs arrive in', () => {
   const withJobs = [
-    { runId: '1', createdAt: '2026-09-27T12:58:29Z', jobs: [{ name: 'publish-mcp', conclusion: 'failure' }] },
-    { runId: '9', createdAt: '2026-09-28T00:00:00Z', jobs: [{ name: 'publish-mcp', conclusion: 'success' }] },
+    {
+      runId: '1',
+      createdAt: '2026-09-27T12:58:29Z',
+      jobs: [{ name: 'publish-mcp', conclusion: 'failure' }],
+    },
+    {
+      runId: '9',
+      createdAt: '2026-09-28T00:00:00Z',
+      jobs: [{ name: 'publish-mcp', conclusion: 'success' }],
+    },
   ]
   assert.deepEqual(unhealedPublishJobs(withJobs), [])
 })
@@ -610,13 +714,24 @@ test('unhealedWorkflowRuns reports a scheduled workflow with no success newer th
 })
 
 test('unhealedWorkflowRuns reports nothing once a success follows the failure, and ignores a run still in progress', () => {
-  const healed = [{ runId: 'a2', createdAt: '2026-10-02T02:23:00Z', conclusion: 'success' }, { runId: 'a1', createdAt: '2026-10-01T09:07:15Z', conclusion: 'failure' }]
+  const healed = [
+    { runId: 'a2', createdAt: '2026-10-02T02:23:00Z', conclusion: 'success' },
+    { runId: 'a1', createdAt: '2026-10-01T09:07:15Z', conclusion: 'failure' },
+  ]
   assert.equal(unhealedWorkflowRuns(healed), null)
-  assert.equal(unhealedWorkflowRuns([{ runId: 'p', createdAt: '2026-10-03T00:00:00Z', conclusion: '' }, ...healed]), null)
+  assert.equal(
+    unhealedWorkflowRuns([
+      { runId: 'p', createdAt: '2026-10-03T00:00:00Z', conclusion: '' },
+      ...healed,
+    ]),
+    null,
+  )
 })
 
 test('unhealedWorkflowRuns reports a failure with no success on record at all', () => {
-  const result = unhealedWorkflowRuns([{ runId: 'f', createdAt: '2026-10-01T09:07:15Z', conclusion: 'failure' }])
+  const result = unhealedWorkflowRuns([
+    { runId: 'f', createdAt: '2026-10-01T09:07:15Z', conclusion: 'failure' },
+  ])
   assert.equal(result.count, 1)
   assert.equal(result.lastSuccessAt, null)
 })
@@ -624,7 +739,14 @@ test('unhealedWorkflowRuns reports a failure with no success on record at all', 
 test('formatUnhealedReport is silent when nothing is unhealed and names each finding otherwise', () => {
   assert.equal(formatUnhealedReport({ publishJobs: [], workflows: [] }), '')
   const report = formatUnhealedReport({
-    publishJobs: [{ job: 'docker-publish-sign', runId: '1', createdAt: '2026-09-27T12:58:29Z', conclusion: 'failure' }],
+    publishJobs: [
+      {
+        job: 'docker-publish-sign',
+        runId: '1',
+        createdAt: '2026-09-27T12:58:29Z',
+        conclusion: 'failure',
+      },
+    ],
     workflows: [{ workflow: 'Mutation', ...unhealedWorkflowRuns(MUTATION_RUNS) }],
   })
   assert.match(report, /docker-publish-sign.*failure.*2026-09-27.*run 1/s)

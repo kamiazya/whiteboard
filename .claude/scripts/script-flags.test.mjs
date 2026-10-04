@@ -22,7 +22,13 @@ function run(argv, options = {}) {
     },
   }
   try {
-    const parsed = parseScriptArgs({ argv, usage: 'usage: x [--go]', flags: ['--go'], ...options, io })
+    const parsed = parseScriptArgs({
+      argv,
+      usage: 'usage: x [--go]',
+      flags: ['--go'],
+      ...options,
+      io,
+    })
     return { parsed, out, err }
   } catch (error) {
     if (!(error instanceof Exited)) throw error

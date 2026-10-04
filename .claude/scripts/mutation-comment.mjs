@@ -34,7 +34,10 @@ export function originalSource(source, location) {
   ].join(' ')
 }
 
-const flatten = (text) => String(text ?? '').replace(/\s+/g, ' ').trim()
+const flatten = (text) =>
+  String(text ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
 
 /** The key `KNOWN_EQUIVALENT` records a settled survivor under. */
 export function mutantKey(source, mutant) {

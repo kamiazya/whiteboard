@@ -34,7 +34,8 @@ function featureRepo() {
   git(dir, 'commit', '--quiet', '-m', 'base')
   git(dir, 'checkout', '--quiet', '-b', 'feature')
   mkdirSync(join(dir, '.claude'), { recursive: true })
-  for (const file of ['a.test.ts', 'b.browser.test.tsx', 'c.ts', '.claude/x.test.ts']) writeFileSync(join(dir, file), `${file}\n`)
+  for (const file of ['a.test.ts', 'b.browser.test.tsx', 'c.ts', '.claude/x.test.ts'])
+    writeFileSync(join(dir, file), `${file}\n`)
   git(dir, 'rm', '--quiet', 'gone.test.ts')
   git(dir, 'add', '.')
   git(dir, 'commit', '--quiet', '-m', 'feature')
@@ -65,7 +66,11 @@ function run(cwd, args, { shim, failOn } = {}) {
   return spawnSync('node', [scriptPath, ...args], {
     cwd,
     encoding: 'utf-8',
-    env: { ...process.env, PATH: `${shim?.dir ?? ''}:${process.env.PATH}`, FAKE_PNPM_FAIL_ON: String(failOn ?? 0) },
+    env: {
+      ...process.env,
+      PATH: `${shim?.dir ?? ''}:${process.env.PATH}`,
+      FAKE_PNPM_FAIL_ON: String(failOn ?? 0),
+    },
   })
 }
 
@@ -93,9 +98,15 @@ test('a run executes five fresh processes then one --repeats=3 process per leg, 
     [6, '!*-browser'],
   ]) {
     for (let i = 0; i < 5; i++) {
-      assert.equal(calls[offset + i], `exec vitest run --project ${project} --fsModuleCache --passWithNoTests ${files}`)
+      assert.equal(
+        calls[offset + i],
+        `exec vitest run --project ${project} --fsModuleCache --passWithNoTests ${files}`,
+      )
     }
-    assert.equal(calls[offset + 5], `exec vitest run --project ${project} --repeats=3 --fsModuleCache --passWithNoTests ${files}`)
+    assert.equal(
+      calls[offset + 5],
+      `exec vitest run --project ${project} --repeats=3 --fsModuleCache --passWithNoTests ${files}`,
+    )
   }
 })
 
@@ -116,7 +127,7 @@ test('--only runs a single leg', () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal(shim.calls().length, 6)
-  assert.ok(shim.calls().every((call) => call.includes("--project !*-browser")))
+  assert.ok(shim.calls().every((call) => call.includes('--project !*-browser')))
 })
 
 test('no changed test files is success without running anything', () => {
@@ -189,11 +200,22 @@ test('--committed-only restores the committed-diff-only list', () => {
 
 test('--help prints usage and exits 0; an unknown option or a bad --only value exits 2; nothing runs', () => {
   const repo = featureRepo()
-  for (const args of [['--help'], ['--bogus'], ['--dryrun'], ['--only=jsdom'], ['--base='], ['extra']]) {
+  for (const args of [
+    ['--help'],
+    ['--bogus'],
+    ['--dryrun'],
+    ['--only=jsdom'],
+    ['--base='],
+    ['extra'],
+  ]) {
     const shim = pnpmShim()
     const result = run(repo, args, { shim })
     const label = JSON.stringify(args)
-    assert.equal(result.status, args[0] === '--help' ? 0 : 2, `${label}: ${result.stdout}${result.stderr}`)
+    assert.equal(
+      result.status,
+      args[0] === '--help' ? 0 : 2,
+      `${label}: ${result.stdout}${result.stderr}`,
+    )
     assert.match(`${result.stdout}${result.stderr}`, /usage: stress-changed/, label)
     assert.deepEqual(shim.calls(), [], label)
   }

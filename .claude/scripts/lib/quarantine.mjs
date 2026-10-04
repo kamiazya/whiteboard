@@ -63,7 +63,9 @@ export function judgeQuarantine(markers, nowMs) {
       continue
     }
     if (q.issue === '') {
-      problems.push(`${q.file}:${q.line} QUARANTINE names no issue — park it with a ticket or fix it`)
+      problems.push(
+        `${q.file}:${q.line} QUARANTINE names no issue — park it with a ticket or fix it`,
+      )
     }
     const ageDays = (nowMs - Date.parse(q.date)) / 86_400_000
     if (ageDays > QUARANTINE_MAX_AGE_DAYS) {
@@ -87,7 +89,8 @@ export function scanRepoQuarantine(repoRoot = join(import.meta.dirname, '../../.
   let scannedFiles = 0
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.')) continue
+      if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.'))
+        continue
       const path = join(dir, entry.name)
       if (entry.isDirectory()) walk(path)
       else if (TEST_FILE.test(entry.name)) {

@@ -25,7 +25,9 @@ const PROXY_SEGMENTS = ['packages', 'mcp-server', 'scripts', 'dev', 'mcp-http-st
  */
 export function buildDesiredConfig({ repoRoot, isMainCheckout = false, name = 'whiteboard' }) {
   if (isMainCheckout) {
-    throw new Error('refusing to build a wiring config for the main checkout — it is registered once by hand (see .claude/settings.json)')
+    throw new Error(
+      'refusing to build a wiring config for the main checkout — it is registered once by hand (see .claude/settings.json)',
+    )
   }
   return {
     name,
@@ -57,7 +59,13 @@ export function buildReRegisterCommand(checkoutRoot) {
  * @param {unknown} entry
  */
 export function stdioProxyRootOf(entry) {
-  if (!isPlainObject(entry) || entry.type !== 'stdio' || !Array.isArray(entry.args) || entry.args.length !== 1) return null
+  if (
+    !isPlainObject(entry) ||
+    entry.type !== 'stdio' ||
+    !Array.isArray(entry.args) ||
+    entry.args.length !== 1
+  )
+    return null
   const script = resolve(String(entry.args[0]))
   const suffix = join(...PROXY_SEGMENTS)
   return script.endsWith(sep + suffix) ? script.slice(0, script.length - suffix.length - 1) : null
@@ -70,7 +78,18 @@ export function stdioProxyRootOf(entry) {
  * @param {{ name: string, command: string, args: string[] }} desired
  */
 export function buildClaudeMcpAddArgs(desired) {
-  return ['mcp', 'add', '--scope', 'local', '--transport', 'stdio', desired.name, '--', desired.command, ...desired.args]
+  return [
+    'mcp',
+    'add',
+    '--scope',
+    'local',
+    '--transport',
+    'stdio',
+    desired.name,
+    '--',
+    desired.command,
+    ...desired.args,
+  ]
 }
 
 function isPlainObject(value) {
@@ -92,10 +111,16 @@ export function classifyExistingConfig(existing, desired) {
     return { outcome: 'absent' }
   }
   if (!isPlainObject(existing)) {
-    return { outcome: 'conflict', reason: `existing registration has an unrecognized shape: ${JSON.stringify(existing)}` }
+    return {
+      outcome: 'conflict',
+      reason: `existing registration has an unrecognized shape: ${JSON.stringify(existing)}`,
+    }
   }
   if (existing.type !== 'stdio') {
-    return { outcome: 'conflict', reason: `existing registration uses transport ${JSON.stringify(existing.type)}, expected 'stdio'` }
+    return {
+      outcome: 'conflict',
+      reason: `existing registration uses transport ${JSON.stringify(existing.type)}, expected 'stdio'`,
+    }
   }
   const desiredLine = [desired.command, ...desired.args]
   const existingLine = Array.isArray(existing.args) ? [existing.command, ...existing.args] : null
@@ -107,12 +132,20 @@ export function classifyExistingConfig(existing, desired) {
   }
   // An `env` block could carry anything, including a secret, so none of it
   // is reported.
-  if (existing.env !== undefined && (!isPlainObject(existing.env) || Object.keys(existing.env).length > 0)) {
+  if (
+    existing.env !== undefined &&
+    (!isPlainObject(existing.env) || Object.keys(existing.env).length > 0)
+  ) {
     return { outcome: 'conflict', reason: 'existing registration sets environment variables' }
   }
-  const extraKeys = Object.keys(existing).filter((key) => !['type', 'command', 'args', 'env'].includes(key))
+  const extraKeys = Object.keys(existing).filter(
+    (key) => !['type', 'command', 'args', 'env'].includes(key),
+  )
   if (extraKeys.length > 0) {
-    return { outcome: 'conflict', reason: `existing registration has unexpected extra fields: ${extraKeys.join(', ')}` }
+    return {
+      outcome: 'conflict',
+      reason: `existing registration has unexpected extra fields: ${extraKeys.join(', ')}`,
+    }
   }
   return { outcome: 'identical' }
 }
@@ -131,7 +164,10 @@ export function verifyPostWrite(effective, desired) {
   if (classification.outcome === 'identical') {
     return { outcome: 'wired' }
   }
-  return { outcome: 'post-write-mismatch', reason: classification.reason ?? 'post-write config does not match desired state' }
+  return {
+    outcome: 'post-write-mismatch',
+    reason: classification.reason ?? 'post-write config does not match desired state',
+  }
 }
 
 /**
@@ -167,7 +203,12 @@ export function planStaleSweep(registered, liveWorktreePaths) {
   const live = new Set(liveWorktreePaths)
   return registered
     .filter((entry) => !live.has(entry.path))
-    .map((entry) => ({ action: 'remove', name: entry.name, path: entry.path, ...(entry.projectKey === undefined ? {} : { projectKey: entry.projectKey }) }))
+    .map((entry) => ({
+      action: 'remove',
+      name: entry.name,
+      path: entry.path,
+      ...(entry.projectKey === undefined ? {} : { projectKey: entry.projectKey }),
+    }))
 }
 
 /**
@@ -190,7 +231,9 @@ export function resolveMainCheckoutRoot({ worktreeListPorcelain, gitCommonDir } 
   if (worktreeListPorcelain !== undefined) {
     const match = worktreeListPorcelain.match(/^worktree (.+)$/m)
     if (!match) {
-      throw new Error('could not find a `worktree <path>` entry in `git worktree list --porcelain` output')
+      throw new Error(
+        'could not find a `worktree <path>` entry in `git worktree list --porcelain` output',
+      )
     }
     return resolve(match[1])
   }
