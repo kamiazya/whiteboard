@@ -392,15 +392,11 @@ the table alone.
    `theme/font-family.ts`'s
    `SPATIAL_THEME_FONT_FAMILY` ('Roboto') is now what every
    `resolveLabel()` declares. `VIEWER_FONT_FAMILY` (canvas-viewer) and
-   `EXPORT_FONT_FAMILY` (mcp-server) still each carry their own literal
-   `'Roboto'` string rather than importing this constant — canvas-viewer's
-   `font.ts` is reached from `vite.widget.config.ts`, which Node's plain
-   config-loading ESM resolver reads directly, and pulling in
-   `@kamiazya/whiteboard-canvas-render`'s package export map there fails
-   (that package ships TS source with `.js`-suffixed relative imports meant
-   for a bundler/type-checker, not Node's native loader). All three
-   constants naming the same string remains a deliberate, documented
-   duplication rather than a shared import.
+   `EXPORT_FONT_FAMILY` (mcp-server) each carry their own `'Roboto'`
+   literal: canvas-viewer's `font.ts` is read by `vite.widget.config.ts`
+   under Node's native loader, which cannot resolve this package's TS-source
+   exports. The duplication is held equal by
+   `tools/arch-lint/src/font-family-literals-agree.test.ts`.
 
 9. **`ImageSceneNode` and the resolved `image`** (J5b): the scene
    graph's one raster/vector image node — `bbox` is the FRAME (aspect always
@@ -996,6 +992,10 @@ plugin adding a silhouette adds it to its own rather than widening
   such.
 - `src/test-utils/fake-measure.ts` is the shared deterministic measurer for
   layout tests (`./test-utils`) — never a real font/platform text API.
+- `test-utils/measure-text-conformance.ts` is what the Node and browser
+  measurers owe each other (unkerned, unhinted advances), run by each side's
+  `measure-text.conformance` test. The viewer vendors Regular only (+0.8 s
+  first paint measured for the rest) and ledgers its synthesised emphasis.
 - `layout/spatial-canvas.test.ts`: the union of both former per-consumer
   suites (chrome shape, content placement, degenerate inputs, degradation
   reporting via `onDegrade`, document-order emission, appearance-independent
