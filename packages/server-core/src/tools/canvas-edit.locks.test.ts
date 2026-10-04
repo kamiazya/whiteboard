@@ -144,7 +144,9 @@ describe('wb_canvas_edit locked edges survive an unlocked endpoint', () => {
     await expect(run([lockEdge('f'), { op: 'node.remove', id: 'b' }])).rejects.toMatchObject({
       name: 'CanvasEditError',
       opIndex: 1,
-      message: expect.stringMatching(/edge "f" is locked.*node "b"/),
+      message: expect.stringContaining(
+        'edge "f" is locked and would be deleted with node "b"; unlock it with an edge.lock op first',
+      ),
     })
   })
 
@@ -159,7 +161,9 @@ describe('wb_canvas_edit locked edges survive an unlocked endpoint', () => {
     ).rejects.toMatchObject({
       name: 'CanvasEditError',
       opIndex: 1,
-      message: expect.stringMatching(/edge "f" is locked.*node "a"/),
+      message: expect.stringContaining(
+        'edge "f" is locked and would be stranded when region.set drops node "a"; unlock it with an edge.lock op first',
+      ),
     })
   })
 
@@ -169,7 +173,9 @@ describe('wb_canvas_edit locked edges survive an unlocked endpoint', () => {
     ).rejects.toMatchObject({
       name: 'CanvasEditError',
       opIndex: 1,
-      message: expect.stringMatching(/edge "e" is locked/),
+      message: expect.stringContaining(
+        'edge "e" is locked and would be deleted by region.set leaving it out of edges; unlock it with an edge.lock op first',
+      ),
     })
   })
 

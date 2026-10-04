@@ -149,7 +149,7 @@ describe('wb_canvas_edit — region.set', () => {
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
-    await tool.execute({
+    const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
@@ -160,6 +160,8 @@ describe('wb_canvas_edit — region.set', () => {
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
+    // A side-effect deletion is still a change the caller is told about.
+    expect(result.touched.edges).toEqual(['internal'])
   })
 
   test('with `edges` given, keeps exactly those among the members', async () => {
@@ -191,7 +193,7 @@ describe('wb_canvas_edit — region.set', () => {
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
-    await tool.execute({
+    const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
@@ -200,6 +202,7 @@ describe('wb_canvas_edit — region.set', () => {
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((e) => e.id).sort()).toEqual(['keep', 'leaving'])
+    expect(result.touched.edges).toEqual(['drop'])
   })
 
   test('refuses when a locked node is inside the region', async () => {
