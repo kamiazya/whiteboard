@@ -112,17 +112,25 @@ export async function startBootSequence({
   // wins this race by orders of magnitude, and awaiting it is what guarantees
   // no consumer reads the accessor unresolved. Dropping the await to fix the
   // hang would trade a rare stall for a routine race.
-  await Promise.race([
-    resolveWorkspaceId().catch((cause: unknown) => {
-      log.warn('browser workspace id resolution failed; rendering degraded', cause)
-    }),
-    new Promise<void>((resolve) => {
-      setTimeout(() => {
-        log.warn('browser workspace id resolution did not settle; rendering degraded')
-        resolve()
-      }, WORKSPACE_ID_RESOLVE_TIMEOUT_MS)
-    }),
-  ])
+  //
+  // The bound's timer is cleared when the race ends: left armed it fires after
+  // a healthy boot too, and reports a stall that never happened.
+  let boundTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      resolveWorkspaceId().catch((cause: unknown) => {
+        log.warn('browser workspace id resolution failed; rendering degraded', cause)
+      }),
+      new Promise<void>((resolve) => {
+        boundTimer = setTimeout(() => {
+          log.warn('browser workspace id resolution did not settle; rendering degraded')
+          resolve()
+        }, WORKSPACE_ID_RESOLVE_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    clearTimeout(boundTimer)
+  }
   // Paces the index.html splash: the app is ready at this point, but the
   // splash stays up until its draw animation lands plus a beat, and fades out
   // before React's first commit replaces it.
