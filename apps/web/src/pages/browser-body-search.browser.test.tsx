@@ -2,11 +2,12 @@ import { writeDocumentKind, writeMarkdownBody } from '@kamiazya/whiteboard-loro-
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
@@ -15,6 +16,9 @@ import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 claimIsolatedWhiteboardDb('browser-body-search-page')
 
+// A repeat reruns the body, not the file's setup: without a reset the second
+// pass finds `untitled` already in the claimed database and the keeper refuses.
+beforeEach(clearWhiteboardDb)
 afterEach(cleanup)
 
 describe('searching from the page', () => {
