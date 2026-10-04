@@ -25,13 +25,22 @@ describe('the prepack gates', () => {
 
   // A package root with no dist/ at all, under a directory whose name needs
   // URL-encoding, holding copies of the scripts so each resolves that root.
+  // It sits at the checkout's depth, beside the tools/checks helper a script
+  // imports by a relative path that climbs out of the package.
   function packageWithSpaceInPath(): string {
     root = mkdtempSync(join(tmpdir(), 'prepack gates-'))
-    mkdirSync(join(root, 'scripts'))
+    const packageRoot = join(root, 'packages', 'mcp-server')
+    mkdirSync(join(packageRoot, 'scripts'), { recursive: true })
     for (const file of [...GATES.map((gate) => gate.script), ...SIBLINGS]) {
-      copyFileSync(join(import.meta.dirname, file), join(root, 'scripts', file))
+      copyFileSync(join(import.meta.dirname, file), join(packageRoot, 'scripts', file))
     }
-    return root
+    const checks = join(root, 'tools', 'checks', 'src')
+    mkdirSync(checks, { recursive: true })
+    copyFileSync(
+      join(import.meta.dirname, '../../../tools/checks/src/is-run-as-script.mjs'),
+      join(checks, 'is-run-as-script.mjs'),
+    )
+    return packageRoot
   }
 
   it.each(GATES)('$script fails when dist is missing, wherever the checkout lives', (gate) => {
