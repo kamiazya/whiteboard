@@ -58,11 +58,8 @@ the browser's system fallback fonts — visually different but readable.
 
 ## Dev/prod export gap
 
-This section previously documented a gap specific to
-`@excalidraw/excalidraw`'s dev/prod export-condition builds. The viewer no
-longer depends on Excalidraw at all (it renders canvas-render's SVG output
-directly), so that specific gap no longer applies. The general lesson still
-holds for any future dependency with a real dev/prod behavioral split:
-`smoke:widget` runs against the actual production widget build, not a
-jsdom/dev-condition test, specifically so a prod-only behavioral difference
-cannot hide behind a passing unit-test suite.
+A dependency can behave differently under its development and production
+export conditions, and a jsdom or dev-condition unit test only ever sees one
+of them. `smoke:widget` therefore runs against the actual production widget
+build, so a prod-only behavioral difference cannot hide behind a passing
+unit-test suite.
