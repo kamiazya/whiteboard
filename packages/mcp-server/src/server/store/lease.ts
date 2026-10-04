@@ -44,12 +44,14 @@ export interface LeaseRequest {
  * test cannot tell an atomic statement from one the event loop happened to
  * serialise: six separate Node processes, one shared `file:` database, all
  * released on a wall-clock barrier, seven rounds — exactly one GRANTED every
- * round. The losers split between a clean refusal and `SQLITE_BUSY`, which
- * the caller treats as "cannot establish leadership" and stands down on, so
- * both readings are safe. A shared file is not a supported multi-instance
- * arrangement anyway (ADR-0020 sends those to a libSQL server, whose own
- * serialisation removes the BUSY half); it is simply the harshest thing
- * available to test the statement against.
+ * round. The losers split between a clean refusal and `SQLITE_BUSY`; the
+ * database handle now waits out a busy write itself (`db/busy-retry.ts`), so
+ * the BUSY half reaches here only as a `DatabaseBusyError` once that wait is
+ * spent, which the caller treats as "cannot establish leadership" and stands
+ * down on, so both readings are safe. A shared file is not a supported
+ * multi-instance arrangement anyway (ADR-0020 sends those to a libSQL server,
+ * whose own serialisation removes the BUSY half); it is simply the harshest
+ * thing available to test the statement against.
  */
 export async function acquireLease(db: Database, request: LeaseRequest): Promise<boolean> {
   const { name, holder, ttlMs, nowMs } = request

@@ -10,7 +10,6 @@
 
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, type QueryExecutorProvider, SqliteDialect, sql } from 'kysely'
 import { type MigrationProvider, Migrator } from 'kysely/migration'
 // libsql ships a native better-sqlite3-shaped binding next to @libsql/client.
@@ -19,6 +18,7 @@ import { type MigrationProvider, Migrator } from 'kysely/migration'
 // open a fresh empty in-memory DB. The native Database keeps a single handle
 // for the lifetime of the instance, which is what `:memory:` needs.
 import LibsqlNativeDatabase from 'libsql'
+import { busyRetryingDialect } from './busy-retry.js'
 import { DB_FILENAME, getDb, injectCachedDb, removeCachedDb, runDbDisposeHooks } from './index.js'
 import { migrations } from './migrations/index.js'
 import { runMigrations } from './migrator.js'
@@ -64,7 +64,7 @@ function openIsolated(dataDir: string, memory: boolean): Database {
   return memory
     ? new Kysely<DatabaseSchema>({ dialect: nativeSqliteDialect(':memory:') })
     : new Kysely<DatabaseSchema>({
-        dialect: new LibsqlDialect({ url: `file:${join(dataDir, DB_FILENAME)}` }),
+        dialect: busyRetryingDialect({ url: `file:${join(dataDir, DB_FILENAME)}` }),
       })
 }
 
