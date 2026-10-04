@@ -56,7 +56,7 @@ export function loadDocsCorpus(repoRoot: string): DocsCorpusDocument[] {
   // directory `guide/` beside a file `guide.md` comes out in the opposite
   // order, which would also quietly falsify the "sorted" invariant the
   // test asserts.
-  files.sort((a, b) => (relativePath(root, a) < relativePath(root, b) ? -1 : 1))
+  files.sort((a, b) => compareCodeUnit(relativePath(root, a), relativePath(root, b)))
   return files.map((file) => {
     const body = readFileSync(file, 'utf8')
     const path = relativePath(root, file)

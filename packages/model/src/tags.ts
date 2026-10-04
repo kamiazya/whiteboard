@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { compareCodeUnit } from './compare.js'
 
 /**
  * Half of a scoped tag: the facet-name grammar
@@ -121,5 +122,5 @@ export function tagsInUse(
     }
   }
   // Code-unit order, not locale order: the same answer on every machine.
-  return [...rows.values()].sort((a, b) => (a.tag < b.tag ? -1 : a.tag > b.tag ? 1 : 0))
+  return [...rows.values()].sort((a, b) => compareCodeUnit(a.tag, b.tag))
 }

@@ -1,5 +1,6 @@
 import { readProposals, writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  compareCodeUnit,
   edgePatchFieldsSchema,
   linePatchFieldsSchema,
   mintProposalId,
@@ -277,7 +278,7 @@ function proposedChangesFromDiff(before: SpatialCanvas, after: SpatialCanvas): P
       patched: (lineId, patch, assumed) => ({ op: 'line.patch', lineId, patch, assumed }),
       removed: (line) => ({ op: 'line.remove', lineId: line.id, assumed: line }),
     }),
-  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  ].sort((a, b) => compareCodeUnit(a.id, b.id))
 }
 
 /**

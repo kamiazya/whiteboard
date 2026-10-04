@@ -6,6 +6,8 @@
  * computation (`server-core-layer-order`, `mcp-server-layer-order`,
  * `web-layer-order`) rather than each carrying a copy that can drift.
  */
+
+import { compareCodeUnit } from './code-unit-order.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { resolveRelativeSource } from './value-import-closure.js'
 
@@ -15,14 +17,14 @@ export interface SourceFile {
   readonly text: string
 }
 
-export interface ImportEdge {
+export interface ResolvedImportEdge {
   readonly from: string
   readonly to: string
   readonly typeOnly: boolean
 }
 
 /** Every relative import between `files` that resolves to one of them, type-only edges included. */
-export function resolvedImportEdges(files: readonly SourceFile[]): readonly ImportEdge[] {
+export function resolvedImportEdges(files: readonly SourceFile[]): readonly ResolvedImportEdge[] {
   const known = new Set(files.map(({ path }) => path))
   return files.flatMap(({ path, text }) =>
     collectRelativeImportEdges(path, text).flatMap(({ specifier, typeOnly }) => {
@@ -49,7 +51,7 @@ export interface DirectoryLoop {
  * for a file that is not one (a root file, or a directory outside the scan).
  */
 export function directoryLoops(
-  edges: readonly Pick<ImportEdge, 'from' | 'to'>[],
+  edges: readonly Pick<ResolvedImportEdge, 'from' | 'to'>[],
   unitOf: (path: string) => string | undefined,
 ): DirectoryLoop[] {
   const graph = new Map<string, Set<string>>()
@@ -77,7 +79,7 @@ export function directoryLoops(
     components.set(members.join(','), members)
   }
   return [...components.entries()]
-    .sort(([left], [right]) => compareKeys(left, right))
+    .sort(([left], [right]) => compareCodeUnit(left, right))
     .map(([, members]) => ({
       members,
       edges: new Set(
@@ -86,11 +88,6 @@ export function directoryLoops(
           .map((c) => c.key),
       ).size,
     }))
-}
-
-const compareKeys = (left: string, right: string): number => {
-  if (left < right) return -1
-  return left > right ? 1 : 0
 }
 
 /** A loop spelled the way a ledger and a failure message name it. */

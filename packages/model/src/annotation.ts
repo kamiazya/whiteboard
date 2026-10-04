@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { compareCodeUnit } from './compare.js'
 import { nodeIdSchema } from './ids.js'
 import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import type { CanvasComment } from './spatial.js'
@@ -248,9 +249,7 @@ export type CommentThread = z.infer<typeof commentThreadSchema>
 export function compareMessages(a: CommentMessage, b: CommentMessage): number {
   const at = a.createdAt ?? ''
   const bt = b.createdAt ?? ''
-  if (at !== bt) return at < bt ? -1 : 1
-  if (a.id !== b.id) return a.id < b.id ? -1 : 1
-  return 0
+  return compareCodeUnit(at, bt) || compareCodeUnit(a.id, b.id)
 }
 
 /**

@@ -14,6 +14,7 @@
 
 import { posix } from 'node:path'
 import ts from '@typescript/typescript6'
+import { compareCodeUnit } from './code-unit-order.js'
 import { collectModuleSpecifiers } from './scanner.js'
 import {
   isRelativeSpecifier,
@@ -190,5 +191,5 @@ export function findImportCycles(graph: ReadonlyMap<string, readonly string[]>):
     if (!indices.has(node)) strongConnect(node)
   }
 
-  return result.sort((a, b) => ((a[0] as string) < (b[0] as string) ? -1 : 1))
+  return result.sort((a, b) => compareCodeUnit(a[0] as string, b[0] as string))
 }

@@ -26,6 +26,7 @@
 import {
   type CanvasColor,
   canvasColorSchema,
+  compareCodeUnit,
   type ExtensionFacets,
   parseScopedTag,
   TAG_IDENTIFIER_PATTERN,
@@ -120,7 +121,7 @@ export function readTagLibrary(facets: ExtensionFacets | undefined): TagLibrary 
   if (!parsed.success) return {}
   return Object.fromEntries(
     Object.entries(parsed.data.keys)
-      .sort(([left], [right]) => (left < right ? -1 : 1))
+      .sort(([left], [right]) => compareCodeUnit(left, right))
       .map(([key, declaration]) => [
         key,
         declaration.values === undefined
@@ -129,7 +130,7 @@ export function readTagLibrary(facets: ExtensionFacets | undefined): TagLibrary 
               ...declaration,
               values: Object.fromEntries(
                 Object.entries(declaration.values).sort(([left], [right]) =>
-                  left < right ? -1 : 1,
+                  compareCodeUnit(left, right),
                 ),
               ),
             },

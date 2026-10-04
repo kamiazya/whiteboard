@@ -1,4 +1,5 @@
 import {
+  compareCodeUnit,
   type Proposal,
   type ProposedChangeStatus,
   proposalSchema,
@@ -120,5 +121,5 @@ export function readProposals(doc: DocumentContainers): Proposal[] {
 }
 
 function byId(a: { readonly id: string }, b: { readonly id: string }): number {
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  return compareCodeUnit(a.id, b.id)
 }

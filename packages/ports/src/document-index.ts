@@ -1,4 +1,5 @@
 import {
+  compareCodeUnit,
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
@@ -220,7 +221,7 @@ export function compareDocumentPaths(left: string, right: string): number {
   for (let i = 0; i < Math.min(a.length, b.length); i++) {
     const segmentA = a[i] as string
     const segmentB = b[i] as string
-    if (segmentA !== segmentB) return segmentA < segmentB ? -1 : 1
+    if (segmentA !== segmentB) return compareCodeUnit(segmentA, segmentB)
   }
   return a.length - b.length
 }
