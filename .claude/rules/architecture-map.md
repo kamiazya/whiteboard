@@ -158,5 +158,3 @@ root forgot never failed (the web preview drew a canvas behind `![[path]]` while
 module; the data form (`ReferenceWire`) for the layout worker and the rest are
 `package-canvas-render.md`.
 
-
-The LoroDoc<->model bridge originally scoped for `codec` is DEFERRED to `crdt` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.
