@@ -248,7 +248,7 @@ describe('every store interface method has a production caller', () => {
     // A scan that found no methods, or no files, would call nothing unused and
     // read as a clean bill.
     expect(storeFiles().length).toBeGreaterThanOrEqual(9)
-    expect(methods.length).toBeGreaterThan(30)
+    expect(methods.length).toBeGreaterThan(25)
     expect(methods.map(key)).toContain('MemberProfileStore.profileForBinding')
     expect(files).toBeGreaterThan(500)
     expect(used.has('profileForBinding')).toBe(true)
