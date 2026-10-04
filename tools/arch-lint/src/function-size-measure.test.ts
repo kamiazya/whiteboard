@@ -64,6 +64,21 @@ describe('measureSource names every shape a function takes in this repo', () => 
     })
   })
 
+  it('looks up through every type-only wrapper to the variable a callback call initialises', () => {
+    const sources = [
+      `const Parenthesised = (memo(() => {\n${body(10)}\n}))`,
+      `const Satisfied = memo(() => {\n${body(10)}\n}) satisfies Foo`,
+      `const Asserted = <Foo>memo(() => {\n${body(10)}\n})`,
+      `const Bang = memo(() => {\n${body(10)}\n})!`,
+    ]
+    expect(Object.keys(linesByKey(sources.join('\n'), 'fixture.ts')).sort()).toEqual([
+      'fixture.ts#Asserted',
+      'fixture.ts#Bang',
+      'fixture.ts#Parenthesised',
+      'fixture.ts#Satisfied',
+    ])
+  })
+
   it('leaves a callback inside a function counted toward that function, not named', () => {
     const measured = linesByKey(
       `function Component() {\n  const onTap = useCallback(() => {\n${body(60)}\n  }, [])\n}`,

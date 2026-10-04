@@ -540,9 +540,12 @@ describe('what counts as an export only a test uses, on fixture files', () => {
   })
 
   it('counts every way a test can bind a name from another module', () => {
-    const body = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((n) => `export const ${n} = 1`).join('\n')
+    const body = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
+      .map((n) => `export const ${n} = 1`)
+      .join('\n')
     // Joined, so this fixture is not itself a literal dynamic import in a test file.
-    const dynamic = ['await ', "import('./lib.js')"].join('')
+    const importCall = ['import', "('./lib.js')"].join('')
+    const dynamic = `await ${importCall}`
     const test = [
       "import { a as renamed } from './lib.js'",
       "export { b } from './lib.js'",
@@ -552,16 +555,19 @@ describe('what counts as an export only a test uses, on fixture files', () => {
       `const mod = ${dynamic}`,
       'mod.e',
       `const direct = (${dynamic}).f`,
+      `const cast = ((${dynamic}) as Lib).h`,
+      `const wrapped = await (${importCall} as Promise<Lib>)`,
+      'wrapped.i',
       "type T = typeof import('./lib.js').g",
     ].join('\n')
     expect(
       found({
-        [lib]: `${body}\nexport const own = [a, b, c, d, e, f, g]\n`,
+        [lib]: `${body}\nexport const own = [a, b, c, d, e, f, g, h, i]\n`,
         'packages/a/src/lib.test.ts': test,
       })
         .map((key) => key.split('#')[1])
         .sort(),
-    ).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g'])
+    ).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'])
   })
 
   describe('class', () => {

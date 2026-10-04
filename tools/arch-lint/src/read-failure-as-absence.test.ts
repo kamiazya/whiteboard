@@ -137,6 +137,11 @@ describe('findReadFailuresAsAbsence — which answers read as "nothing here"', (
     ['an empty object', 'return {}', '{}'],
     ['a missing-ish kind', "return { kind: 'missing' }", "{ kind: 'missing' }"],
     ['a parenthesised null', 'return (null)', 'null'],
+    ['a null cast with as', 'return null as Foo', 'null'],
+    ['a null with satisfies', 'return null satisfies Foo', 'null'],
+    ['a null cast with angle brackets', 'return <Foo>null', 'null'],
+    ['a non-null-asserted undefined', 'return undefined!', 'undefined'],
+    ['an empty array under nested wrappers', 'return ((<Foo>[]) as Foo)', '[]'],
     ['nothing at all', '', 'nothing'],
   ])('flags a handler answering %s', (_name, catchBody, answer) => {
     const sites = foundIn(tryReadFile(catchBody))

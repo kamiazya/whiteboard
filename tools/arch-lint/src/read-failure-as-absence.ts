@@ -19,6 +19,7 @@
  * that cries wolf is a scan people delete.
  */
 import ts from '@typescript/typescript6'
+import { unwrapExpression } from './ast-helpers.js'
 
 export interface AbsenceSite {
   /** `path#enclosingFunction`, stable across edits that only move lines. */
@@ -58,9 +59,8 @@ const ABSENCES: readonly ((e: ts.Expression) => string | null)[] = [
 ]
 
 function absenceOf(expr: ts.Expression | undefined): string | null {
-  let e = expr
-  while (e !== undefined && ts.isParenthesizedExpression(e)) e = e.expression
-  if (e === undefined) return 'undefined'
+  if (expr === undefined) return 'undefined'
+  const e = unwrapExpression(expr)
   for (const absence of ABSENCES) {
     const answer = absence(e)
     if (answer !== null) return answer

@@ -26,6 +26,7 @@
  * and balanced parentheses are not a regular language.
  */
 import ts from '@typescript/typescript6'
+import { unwrapExpression } from './ast-helpers.js'
 
 interface PromiseSleep {
   readonly node: ts.NewExpression
@@ -49,10 +50,10 @@ function isParameterOfEnclosingFunction(node: ts.Identifier): boolean {
 }
 
 /** Literals and constants combined arithmetically: what a test author wrote as a duration. */
-function isFixedDuration(node: ts.Expression): boolean {
+function isFixedDuration(expression: ts.Expression): boolean {
+  const node = unwrapExpression(expression)
   if (ts.isNumericLiteral(node)) return true
   if (ts.isIdentifier(node)) return !isParameterOfEnclosingFunction(node)
-  if (ts.isParenthesizedExpression(node)) return isFixedDuration(node.expression)
   if (ts.isBinaryExpression(node)) {
     return isFixedDuration(node.left) && isFixedDuration(node.right)
   }
