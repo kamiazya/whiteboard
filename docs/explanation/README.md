@@ -7,11 +7,11 @@ following step by step.
 Explanation pages:
 
 - **[architecture](architecture.md)** — components, data flow, MCP tool surface, and design boundaries.
-- **[domain-model](domain-model.md)** — what a canvas is in each runtime mode, how canvases are identified, and the daemon's current two-store split.
+- **[domain-model](domain-model.md)** — what a document is in each runtime mode, how documents are identified, and why the daemon keeps one store.
 - **[security-model](security-model.md)** — the three runtimes (browser, local daemon, server mode), their separate trust boundaries, HTTP protections, and file-system safety.
 
 Planned:
 
-- **The local daemon** — how the loopback daemon is discovered and why.
+- **The local daemon** — how a page discovers the daemon through the extension and why the daemon listens on no network port.
 
 ← Back to [documentation home](../)

@@ -34,8 +34,8 @@ This documentation follows the [Diátaxis](https://diataxis.fr/) framework:
 Whiteboard has three runtimes (see [Explanation](explanation/) for detail):
 
 - **Browser** — the zero-install hosted browser app; your data stays in the browser.
-- **Local daemon** — a server you run on your own machine (loopback only) for MCP/agent work.
-- **Server mode** — the server run for a team beyond loopback, behind OAuth/JWT and your own TLS.
+- **Local daemon** — a server you run on your own machine for MCP/agent work. It listens on an owner-only local socket and no network port; the hosted app reaches it through the browser extension.
+- **Server mode** — the server run for a team over the network, behind OAuth/JWT and your own TLS.
 
 ---
 

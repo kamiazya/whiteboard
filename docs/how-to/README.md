@@ -14,8 +14,9 @@ Guides:
   through the MCP tool, CJK included.
 - **[organize-with-tags](organize-with-tags.md)** — tag documents and filter the document
   browser by tag.
-- **[connect-to-local-daemon](connect-to-local-daemon.md)** — detect a local daemon from the web
-  app and copy canvases kept in your browser onto it.
+- **[connect-to-local-daemon](connect-to-local-daemon.md)** — install the `whiteboard` command,
+  start the daemon, connect the web app to it through the browser extension, and move a whole
+  workspace kept in your browser onto it.
 - **[install-fonts-for-export](install-fonts-for-export.md)** — stop exports rendering Japanese,
   Chinese, Korean and other scripts as empty boxes.
 - **[report-a-gesture-problem](report-a-gesture-problem.md)** — copy the built-in pointer-event
@@ -28,9 +29,9 @@ Guides:
   view inline in an MCP Apps-compatible AI chat client, with comments pinned back through
   `wb_canvas_edit`.
 
-Planned guides:
-
-- **Configure an MCP client** — point Claude Code or Codex at Whiteboard.
-- **Run the local daemon** — start the loopback daemon for agent workflows.
+Pointing an MCP client (Claude Code, Codex, Gemini CLI) at Whiteboard is the
+[Quick install](../../README.md#quick-install) in the repository README, and starting the daemon is
+a step of [connect-to-local-daemon](connect-to-local-daemon.md#set-it-up); neither has a page of
+its own yet.
 
 ← Back to [documentation home](../)

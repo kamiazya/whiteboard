@@ -22,8 +22,9 @@ before you type a colon, the values under that key after it. A tag with a colon 
 (`Health:OK`) is refused with the rule; correct it and finish again.
 
 The same rule holds when an agent writes a document's whole markdown body:
-`wb_document_set` and `wb_document_create` refuse a frontmatter tag such as
-`Health:OK` or `a:b:c` with the rule, and write nothing. Plain tags
+`wb_workspace_edit`'s `document.set` and `document.create` ops (and
+`POST /api/v1/workspaces/:workspaceId/documents`) refuse a frontmatter tag such
+as `Health:OK` or `a:b:c` with the rule, and write nothing. Plain tags
 (`Machine Learning`, `v1.2`) pass. A document that already carries such a tag
 — imported from another tool, say — still opens and keeps it; it is replaced
 only through a write that no longer carries it.

@@ -3,11 +3,13 @@
  * prose a reader learns the product from.
  *
  * ADR-0050 retired the WebSocket (the live transport is SSE, reached through
- * the browser extension) and the pairing flow (the extension is how a page
- * reaches a daemon, with nothing to pair). Prose kept describing both —
- * "HTTP / WS" on the architecture diagram and in the README alt text, "a
- * WebSocket session" in the domain model, "every paired browser must pair
- * again" in the backup guide — because nothing reads prose against the code.
+ * the browser extension), the pairing flow (the extension is how a page
+ * reaches a daemon, with nothing to pair) and the loopback port (the daemon
+ * listens on an owner-only socket and no network port at all). Prose kept
+ * describing all three — "HTTP / WS" on the architecture diagram and in the
+ * README alt text, "a WebSocket session" in the domain model, "every paired
+ * browser must pair again" in the backup guide, "the loopback daemon" on the
+ * docs index pages — because nothing reads prose against the code.
  * Same family as `vocabulary-check.test.ts`, and for the same reason it is a
  * word list rather than a reader: only phrases with no legitimate present
  * meaning belong here.
@@ -36,6 +38,7 @@ const RETIRED = [
     name: 'pairing',
     pattern: /\bpairing\b|\bpaired\s+(?:browser|origin|device)s?\b|\bpair\s+again\b/i,
   },
+  { name: 'loopback daemon', pattern: /\bloopback\s+(?:daemon|only)\b/i },
 ] as const
 
 /**
@@ -50,6 +53,8 @@ const SUBJECT_IS_THE_ABSENCE: Readonly<Record<string, string>> = {
     '"reconnects by pinging the daemon through the extension, with no pairing grant to renew"',
   'docs/contributing/testing.md#pairing':
     'says what the read-plane smoke used to check and that ADR-0050 retired it',
+  'docs/how-to/self-host-with-docker.md#loopback daemon':
+    'server mode, not the daemon: the provided Compose file publishes the container port on the host loopback only',
 }
 
 const surface = trackedFiles(REPO_ROOT).filter(SURFACE)
@@ -81,7 +86,7 @@ describe('prose does not describe the retired transport or the pairing flow', ()
     expect(Object.keys(SUBJECT_IS_THE_ABSENCE).filter((entry) => !found.includes(entry))).toEqual(
       [],
     )
-    expect(Object.keys(SUBJECT_IS_THE_ABSENCE)).toHaveLength(3)
+    expect(Object.keys(SUBJECT_IS_THE_ABSENCE)).toHaveLength(4)
   })
 
   it.each([
@@ -89,6 +94,8 @@ describe('prose does not describe the retired transport or the pairing flow', ()
     ['an alt text', 'via HTTP/WS.'],
     ['a domain-model sentence', 'the WebSocket session all read'],
     ['an operator note', 'every paired browser must pair again'],
+    ['an index bullet', 'start the loopback daemon for agent workflows'],
+    ['a runtimes line', 'a server you run on your own machine (loopback only)'],
   ])('matches the phrase it exists for: %s', (_where, phrase) => {
     expect(RETIRED.some(({ pattern }) => pattern.test(phrase))).toBe(true)
   })
