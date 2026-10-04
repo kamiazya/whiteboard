@@ -46,39 +46,19 @@ import type {
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import { type Attestation, attestationSchema } from '@kamiazya/whiteboard-server-core'
+import {
+  type Attestation,
+  attestationSchema,
+  type VersionHistory,
+} from '@kamiazya/whiteboard-server-core'
 
 export type { OperatorInfo, VersionEntry }
 
-export interface VersionStore {
-  save(
-    workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-    opts: {
-      auto: boolean
-      label?: string
-      operator?: OperatorInfo
-      /** The version this point was produced by restoring; see `versionEntrySchema`. */
-      restoredFrom?: string
-      /** The person's evidence, when the operation asked for it; see `versionEntrySchema`. */
-      attestation?: Attestation
-    },
-  ): Promise<VersionEntry>
-  // Returns an independent past-state doc: the stored workspace record
-  // checked out at the version's frontiers, projected back to a standalone
-  // per-document doc. Null only for a missing version.
-  load(workspaceId: string, id: string): Promise<LoroDoc | null>
-  /**
-   * The whole WORKSPACE document checked out at this version — the input a
-   * subtree rollback walks. Null only for a missing version.
-   */
-  loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
+// What the keeper adds to the `VersionHistory` seam server-core owns: save,
+// load, loadWorkspaceAt and list are that seam's, documented there.
+export interface VersionStore extends VersionHistory {
+  // `list` answers a mutable array, which narrows the seam's readonly one.
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
-  // `path` is the document the caller is asking ABOUT, and both refuse a
-  // version another document owns — the refusal `loadPast` and restore
-  // already make, for the same reason: an id alone must not reach a history
-  // that is not this document's.
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
