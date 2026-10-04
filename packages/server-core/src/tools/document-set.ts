@@ -18,7 +18,9 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
+  EXTENSION_FACET_KEY_PATTERN,
   type ExtensionFacets,
+  markdownInputSchema,
   okfActorSchema,
   tagWriteSchema,
   workspaceIdSchema,
@@ -55,7 +57,7 @@ export const documentSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    markdown: z.string(),
+    markdown: markdownInputSchema,
     /**
      * Who is producing this content, in OKF's actor convention (§7):
      * `<producer>/<version>` for an agent or tool, `human:<id>` for a
@@ -123,6 +125,9 @@ export const OKF_YAML_SAFE_STAGE = 'frontmatter-yaml-safe'
 /** The stage a write is refused at when a frontmatter tag breaks ADR-0040's write grammar. */
 const OKF_TAGS_STAGE = 'frontmatter-tags'
 
+/** The stage a write is refused at when a facet key sits at the frontmatter root. */
+const OKF_ROOT_FACET_STAGE = 'frontmatter-facets'
+
 const writableTagsSchema = z.array(tagWriteSchema)
 
 export class OkfParseError extends Error {
@@ -167,6 +172,21 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
       OKF_YAML_SAFE_STAGE,
       'frontmatter contains a value YAML cannot represent',
       error.issues,
+    )
+  }
+  // A facet-spelled key at the root is preserved as an unknown key and read by
+  // nothing: no plugin looks there, so the registry never validates it and the
+  // facet it names has no effect, while the same payload under `facets:` is
+  // checked. Refusing it says where the key belongs instead of storing a
+  // silent no-op that a later `wb_facet_set` then writes a second copy of.
+  const rootFacetKeys = Object.keys(parsed.value.frontmatter.facetsRaw ?? {}).filter((key) =>
+    EXTENSION_FACET_KEY_PATTERN.test(key),
+  )
+  if (rootFacetKeys.length > 0) {
+    throw new OkfParseError(
+      OKF_ROOT_FACET_STAGE,
+      `${rootFacetKeys.map((key) => `"${key}"`).join(', ')} at the root of the frontmatter ` +
+        'look like facet keys, which are only read under `facets:` — move them there',
     )
   }
   const tags = writableTagsSchema.safeParse(parsed.value.frontmatter.tags ?? [])

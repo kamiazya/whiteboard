@@ -1,6 +1,7 @@
 import {
   documentIdSchema,
   documentPathSchema,
+  markdownInputSchema,
   messageOf,
   okfActorSchema,
   workspaceIdSchema,
@@ -69,15 +70,14 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
         .describe(
           'Display name, free text (`path` places the document). A frontmatter `title` is the same name: omit it or match it.',
         ),
-      markdown: z
-        .string()
+      markdown: markdownInputSchema
         .optional()
         // +61 visible bytes, and the BEHAVIOUR is what removes the retry —
         // a bare body now works whether or not this says so. The sentence
         // buys predictability: a caller who cares what `type` it gets
         // should not have to find out by reading the document back.
         .describe(
-          'The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Omit to create it empty.',
+          'The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Facets go under `facets:`, never at the root of the `---` block. Omit to create it empty.',
         ),
     })
     .strict(),
@@ -104,7 +104,11 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
 const workspaceOpSchema = z.discriminatedUnion('op', [
   documentCreateOpSchema,
   z
-    .object({ op: z.literal('document.set'), documentId: documentIdSchema, markdown: z.string() })
+    .object({
+      op: z.literal('document.set'),
+      documentId: documentIdSchema,
+      markdown: markdownInputSchema,
+    })
     .strict(),
   z
     .object({
