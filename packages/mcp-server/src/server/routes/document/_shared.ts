@@ -191,6 +191,13 @@ export function refuseUnknownWorkspace(deps: Pick<ServerDeps, 'documentIndex'>):
   }
 }
 
+/** The document path a write names: an update's (POST) or an upload's (PUT). */
+function writtenPathOf(method: string, tail: string[]): string | null {
+  if (method === 'POST') return documentPathForAction(tail, 'update')
+  if (method === 'PUT') return documentPathForFile(tail)?.path ?? null
+  return null
+}
+
 /**
  * Refuses a write to a document that is in the trash and has no live
  * successor, on the two page-facing write routes (an update, a file upload).
@@ -212,12 +219,7 @@ export function refuseTrashedDocument(
   return async (c, next) => {
     const parsed = parseDocumentApiPath(c.req.path)
     if (parsed === null) return next()
-    const path =
-      c.req.method === 'POST'
-        ? documentPathForAction(parsed.tail, 'update')
-        : c.req.method === 'PUT'
-          ? (documentPathForFile(parsed.tail)?.path ?? null)
-          : null
+    const path = writtenPathOf(c.req.method, parsed.tail)
     const index = deps.documentIndex
     if (
       path === null ||
