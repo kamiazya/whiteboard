@@ -290,6 +290,22 @@ function markdownPaneProps({
   }
 }
 
+/**
+ * The agent-touch sets a keeper supplied, each omitted when absent — the
+ * editor's props are optional without `undefined`, so a bare pass-through
+ * would not type-check.
+ */
+function agentTouchProps(spatial: DocumentPageModel['spatial']) {
+  const { agentTouchedNodeIds, agentTouchedEdgeIds, agentTouchedLineIds, agentTouchedCommentIds } =
+    spatial
+  return {
+    ...(agentTouchedNodeIds === undefined ? {} : { agentTouchedNodeIds }),
+    ...(agentTouchedEdgeIds === undefined ? {} : { agentTouchedEdgeIds }),
+    ...(agentTouchedLineIds === undefined ? {} : { agentTouchedLineIds }),
+    ...(agentTouchedCommentIds === undefined ? {} : { agentTouchedCommentIds }),
+  }
+}
+
 function DocumentPageBody({
   model,
   versionRefreshSignal,
@@ -579,12 +595,7 @@ function DocumentPageBody({
                   editorKey={documentKey}
                   canvasLoaded={sync.loaded}
                   editorRef={attachSpatialHandle}
-                  {...(model.spatial.agentTouchedNodeIds === undefined
-                    ? {}
-                    : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}
-                  {...(model.spatial.agentTouchedEdgeIds === undefined
-                    ? {}
-                    : { agentTouchedEdgeIds: model.spatial.agentTouchedEdgeIds })}
+                  {...agentTouchProps(model.spatial)}
                   canvas={sync.canvas}
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}

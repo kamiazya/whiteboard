@@ -39,11 +39,20 @@ const restoreCompleteMessageSchema = z.object({
  */
 export const agentActivityMessageSchema = z.object({
   type: z.literal('agent_activity'),
+  // The daemon's own stamp (a per-process actor), not the identity of the
+  // agent that called the tool, so nothing a person reads is named from it.
   operator: operatorInfoAnswerSchema,
-  /** What to highlight. Ids only — the change itself arrives as a Loro update. */
+  /**
+   * What to highlight. Ids only — the change itself arrives as a Loro update.
+   * `lines` and `comments` are optional: a daemon that predates them still
+   * parses on a newer page (which reads them as none), and a page that
+   * predates them drops them as unknown keys.
+   */
   touched: z.object({
     nodes: z.array(z.string()),
     edges: z.array(z.string()),
+    lines: z.array(z.string()).optional(),
+    comments: z.array(z.string()).optional(),
   }),
   /** One short line for a toast, e.g. "added 5, tidied the layout". */
   summary: z.string(),

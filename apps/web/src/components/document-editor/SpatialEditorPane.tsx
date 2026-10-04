@@ -39,6 +39,8 @@ export type SpatialEditorPassedThrough = Pick<
   | 'onToggleEdgeLock'
   | 'agentTouchedNodeIds'
   | 'agentTouchedEdgeIds'
+  | 'agentTouchedLineIds'
+  | 'agentTouchedCommentIds'
   | 'threads'
   | 'proposals'
   | 'tagLibrary'

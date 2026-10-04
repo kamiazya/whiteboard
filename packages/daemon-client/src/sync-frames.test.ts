@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { parseServerTextMessage } from './sync-frame-text.js'
-import { versionCreatedMessageSchema } from './sync-frames.js'
+import { agentActivityMessageSchema, versionCreatedMessageSchema } from './sync-frames.js'
 
 const VALID_VERSION_CREATED = {
   type: 'version_created' as const,
@@ -70,5 +70,31 @@ describe('parseServerTextMessage', () => {
     const warn = vi.fn()
     expect(parseServerTextMessage('{', warn)).toBeNull()
     expect(warn).toHaveBeenCalledWith(expect.any(String), 'malformed JSON', '{')
+  })
+})
+
+describe('agentActivityMessageSchema', () => {
+  const OPERATOR = { kind: 'ai', actor: 'process:agent-1' } as const
+  const FRAME = {
+    type: 'agent_activity' as const,
+    operator: OPERATOR,
+    touched: { nodes: ['n'], edges: ['e'], lines: ['l'], comments: ['c'] },
+    summary: 'added 4',
+  }
+
+  it('carries touched lines and comments through parse', () => {
+    expect(agentActivityMessageSchema.parse(FRAME).touched).toEqual(FRAME.touched)
+  })
+
+  it('still parses a frame from a daemon that names no lines or comments', () => {
+    const { lines: _l, comments: _c, ...older } = FRAME.touched
+    const parsed = agentActivityMessageSchema.safeParse({ ...FRAME, touched: older })
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.touched.lines).toBeUndefined()
+  })
+
+  it('reaches a page through the one text-frame parser', () => {
+    const parsed = parseServerTextMessage(JSON.stringify(FRAME), vi.fn())
+    expect(parsed).toMatchObject({ type: 'agent_activity', touched: FRAME.touched })
   })
 })

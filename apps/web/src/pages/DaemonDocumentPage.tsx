@@ -3,7 +3,7 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { useAgentActivity } from '../hooks/use-agent-activity.js'
+import { agentTouchedProps, useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
@@ -498,8 +498,7 @@ function useDaemonDocument(
     topBar: daemonTopBarSlot(canvas, onNavigateBack),
     spatial: {
       editorRef: spatialEditorRef,
-      agentTouchedNodeIds: agentActivity.touchedNodeIds,
-      agentTouchedEdgeIds: agentActivity.touchedEdgeIds,
+      ...agentTouchedProps(agentActivity),
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
     ...(tagVocabulary === undefined ? {} : { tags: tagVocabulary }),

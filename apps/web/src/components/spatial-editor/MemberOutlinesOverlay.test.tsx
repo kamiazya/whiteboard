@@ -73,4 +73,16 @@ describe('MemberOutlinesOverlay', () => {
     expect(drawnEdgeIds(container)).toEqual(['inside'])
     expect(container.querySelectorAll('rect')).toHaveLength(0)
   })
+
+  it('outlines a named route that is no edge at all, such as a stroke', () => {
+    const { container } = render(
+      <MemberOutlinesOverlay
+        selectionMembers={[]}
+        edgePaths={[...edgePaths, { id: 'stroke', path: edgePaths[0]?.path ?? [] }]}
+        outlinedEdgeIds={new Set(['stroke'])}
+        zoom={1}
+      />,
+    )
+    expect(drawnEdgeIds(container)).toEqual(['stroke'])
+  })
 })

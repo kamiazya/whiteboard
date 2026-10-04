@@ -31,7 +31,12 @@ export interface SceneTextMeasurer {
 export interface AgentActivity {
   readonly workspaceId: string
   readonly documentId: string
-  readonly touched: { readonly nodes: readonly string[]; readonly edges: readonly string[] }
+  readonly touched: {
+    readonly nodes: readonly string[]
+    readonly edges: readonly string[]
+    readonly lines: readonly string[]
+    readonly comments: readonly string[]
+  }
   /** One short human-readable line, e.g. "added 5 nodes". */
   readonly summary: string
 }

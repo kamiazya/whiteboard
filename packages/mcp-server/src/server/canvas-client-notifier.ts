@@ -32,6 +32,16 @@ function viewportPayload(request: ViewportRequest): ViewportRequestParams {
   return params
 }
 
+// The frame's arrays are mutable and the port's are readonly, so each is copied.
+function touchedForFrame(touched: AgentActivity['touched']) {
+  return {
+    nodes: [...touched.nodes],
+    edges: [...touched.edges],
+    lines: [...touched.lines],
+    comments: [...touched.comments],
+  }
+}
+
 /**
  * Bridges server-core's `CanvasClientNotifier` port onto the SSE sync
  * streams a page holds open.
@@ -64,10 +74,7 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
           if (path === null) return
           sendAgentActivity(activity.workspaceId, path, {
             operator: { kind: 'ai', actor: DAEMON_AGENT_ACTOR },
-            touched: {
-              nodes: [...activity.touched.nodes],
-              edges: [...activity.touched.edges],
-            },
+            touched: touchedForFrame(activity.touched),
             summary: activity.summary,
           })
         } catch (err) {

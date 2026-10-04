@@ -1,3 +1,4 @@
+import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
 import type { ComponentProps } from 'react'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
@@ -25,6 +26,14 @@ export interface GestureOverlaysProps {
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly agentTouchedNodeIds: ReadonlySet<string> | undefined
   readonly agentTouchedEdgeIds: ReadonlySet<string> | undefined
+  readonly agentTouchedLineIds: ReadonlySet<string> | undefined
+  readonly agentTouchedCommentIds: ReadonlySet<string> | undefined
+  /** The boxes the renderer painted for comment pins and bubbles. */
+  readonly commentChromeBoxes: readonly {
+    readonly commentId: string
+    readonly part: string
+    readonly bbox: BoundingBox
+  }[]
 }
 
 const EMPTY_IDS: ReadonlySet<string> = new Set()
@@ -69,17 +78,8 @@ export function GestureOverlays(props: GestureOverlaysProps) {
  * member travels with the ghost, so outlines derived from the committed scene
  * would mark geometry no longer drawn there.
  */
-function ReachOutlines({
-  gesture,
-  cutIds,
-  members,
-  edgePaths,
-  boxes,
-  agentTouchedNodeIds,
-  agentTouchedEdgeIds,
-}: GestureOverlaysProps) {
-  const touchedNodes = agentTouchedNodeIds ?? EMPTY_IDS
-  const touchedEdges = agentTouchedEdgeIds ?? EMPTY_IDS
+function ReachOutlines(props: GestureOverlaysProps) {
+  const { gesture, cutIds, members, edgePaths } = props
   const { state, canvas, viewport } = gesture
   return (
     <>
@@ -101,21 +101,69 @@ function ReachOutlines({
           zoom={viewport.zoom}
         />
       )}
-      {/* The same drawing in another colour. Edges are outlined only when
-        the agent NAMED them: a selection's rule (both ends are members) would
-        mark every edge between two touched nodes, which the agent did not
-        change. The geometry is the editor's own routed `edgePaths`. */}
-      {(touchedNodes.size > 0 || touchedEdges.size > 0) && (
-        <MemberOutlinesOverlay
-          testId="agent-touch-outlines"
-          stroke="var(--accent-foreground)"
-          selectionMembers={boxes.filter((entry) => touchedNodes.has(entry.id))}
-          edges={canvas.edges}
-          outlinedEdgeIds={touchedEdges}
-          edgePaths={edgePaths}
-          zoom={viewport.zoom}
-        />
-      )}
+      <AgentTouchOutlines {...props} />
     </>
+  )
+}
+
+/**
+ * The same drawing as a selection's, in another colour. Edges and strokes are
+ * outlined only when the agent NAMED them: a selection's rule (both ends are
+ * members) would mark every edge between two touched nodes, which the agent
+ * did not change. The geometry is the editor's own routed `edgePaths`, which
+ * holds a stroke beside the edges.
+ */
+function AgentTouchOutlines({
+  gesture,
+  edgePaths,
+  boxes,
+  agentTouchedNodeIds,
+  agentTouchedEdgeIds,
+  agentTouchedLineIds,
+  agentTouchedCommentIds,
+  commentChromeBoxes,
+}: GestureOverlaysProps) {
+  const touchedNodes = agentTouchedNodeIds ?? EMPTY_IDS
+  const touchedRoutes = new Set([
+    ...(agentTouchedEdgeIds ?? EMPTY_IDS),
+    ...(agentTouchedLineIds ?? EMPTY_IDS),
+  ])
+  const touchedComments = agentTouchedCommentIds ?? EMPTY_IDS
+  if (touchedNodes.size === 0 && touchedRoutes.size === 0 && touchedComments.size === 0) {
+    return null
+  }
+  return (
+    <MemberOutlinesOverlay
+      testId="agent-touch-outlines"
+      stroke="var(--accent-foreground)"
+      selectionMembers={[
+        ...boxes.filter((entry) => touchedNodes.has(entry.id)),
+        ...commentChromeOutlines(commentChromeBoxes, touchedComments),
+      ]}
+      outlinedEdgeIds={touchedRoutes}
+      edgePaths={edgePaths}
+      zoom={gesture.viewport.zoom}
+    />
+  )
+}
+
+/**
+ * A touched comment is marked on the pin and bubble the renderer painted, so
+ * the outline sits on exactly the geometry a press would hit. Region and
+ * passage chrome is the thread's anchor, not the comment itself.
+ */
+function commentChromeOutlines(
+  chrome: GestureOverlaysProps['commentChromeBoxes'],
+  touched: ReadonlySet<string>,
+): readonly NodeBox[] {
+  return chrome.flatMap((entry) =>
+    touched.has(entry.commentId) && (entry.part === 'pin' || entry.part === 'bubble')
+      ? [
+          {
+            id: `${entry.commentId}/${entry.part}`,
+            box: { x: entry.bbox.x, y: entry.bbox.y, width: entry.bbox.w, height: entry.bbox.h },
+          },
+        ]
+      : [],
   )
 }

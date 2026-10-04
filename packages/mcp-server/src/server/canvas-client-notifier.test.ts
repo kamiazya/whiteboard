@@ -29,7 +29,7 @@ function makeIndex(): InMemoryDocumentIndex {
 const ACTIVITY = {
   workspaceId: WORKSPACE_ID,
   documentId: DOCUMENT_ID,
-  touched: { nodes: ['a'], edges: [] },
+  touched: { nodes: ['a'], edges: [], lines: ['l1'], comments: ['c1'] },
   summary: 'added 1',
 }
 
@@ -51,7 +51,7 @@ describe('createCanvasClientNotifier', () => {
 
     expect(sendAgentActivity).toHaveBeenCalledWith(WORKSPACE_ID, PATH, {
       operator: { kind: 'ai', actor: expect.stringMatching(/^process:daemon-/) },
-      touched: { nodes: ['a'], edges: [] },
+      touched: { nodes: ['a'], edges: [], lines: ['l1'], comments: ['c1'] },
       summary: 'added 1',
     })
   })

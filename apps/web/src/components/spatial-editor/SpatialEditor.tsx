@@ -257,6 +257,10 @@ export interface SpatialEditorProps {
   readonly agentTouchedNodeIds?: ReadonlySet<string>
   /** Edge ids an agent just changed, outlined on the same terms as the nodes. */
   readonly agentTouchedEdgeIds?: ReadonlySet<string>
+  /** Stroke ids an agent just changed, outlined on the same terms. */
+  readonly agentTouchedLineIds?: ReadonlySet<string>
+  /** Comment ids an agent just added or resolved; their pin and bubble are outlined. */
+  readonly agentTouchedCommentIds?: ReadonlySet<string>
   /**
    * Canvas references the picker offers for file nodes. The reference is an
    * OPAQUE string owned by the composition root (canvas id minted in the browser,
@@ -394,6 +398,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       lockedEdgeIds,
       agentTouchedNodeIds,
       agentTouchedEdgeIds,
+      agentTouchedLineIds,
+      agentTouchedCommentIds,
       onToggleEdgeLock,
       onToggleNodeLock,
       onOpenInEditor,
@@ -1731,6 +1737,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           edgePaths={edgePaths}
           agentTouchedNodeIds={agentTouchedNodeIds}
           agentTouchedEdgeIds={agentTouchedEdgeIds}
+          agentTouchedLineIds={agentTouchedLineIds}
+          agentTouchedCommentIds={agentTouchedCommentIds}
+          commentChromeBoxes={commentChromeBoxes}
         />
         {selectionAndEditorLayers()}
       </div>

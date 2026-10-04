@@ -1,3 +1,4 @@
+import type { AgentActivityPayload } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
@@ -12,10 +13,7 @@ export const AGENT_PRESENCE_MS = 8_000
 /** How long the elements an agent touched stay outlined. */
 export const AGENT_HIGHLIGHT_MS = 3_000
 
-export interface AgentActivityReport {
-  readonly touched: { readonly nodes: readonly string[]; readonly edges: readonly string[] }
-  readonly summary: string
-}
+export type AgentActivityReport = Pick<AgentActivityPayload, 'touched' | 'summary'>
 
 export interface AgentActivityState {
   /** Whether to show "an agent is editing". */
@@ -24,6 +22,18 @@ export interface AgentActivityState {
   readonly summary: string | null
   readonly touchedNodeIds: ReadonlySet<string>
   readonly touchedEdgeIds: ReadonlySet<string>
+  readonly touchedLineIds: ReadonlySet<string>
+  readonly touchedCommentIds: ReadonlySet<string>
+}
+
+/** The state's highlight sets under the names the spatial editor's props carry. */
+export function agentTouchedProps(state: AgentActivityState) {
+  return {
+    agentTouchedNodeIds: state.touchedNodeIds,
+    agentTouchedEdgeIds: state.touchedEdgeIds,
+    agentTouchedLineIds: state.touchedLineIds,
+    agentTouchedCommentIds: state.touchedCommentIds,
+  }
 }
 
 const IDLE: AgentActivityState = {
@@ -31,6 +41,8 @@ const IDLE: AgentActivityState = {
   summary: null,
   touchedNodeIds: new Set(),
   touchedEdgeIds: new Set(),
+  touchedLineIds: new Set(),
+  touchedCommentIds: new Set(),
 }
 
 /**
@@ -65,6 +77,8 @@ export function useAgentActivity(): {
       summary: activity.summary,
       touchedNodeIds: new Set(activity.touched.nodes),
       touchedEdgeIds: new Set(activity.touched.edges),
+      touchedLineIds: new Set(activity.touched.lines),
+      touchedCommentIds: new Set(activity.touched.comments),
     })
 
     clearTimeout(highlightTimer.current)
@@ -75,6 +89,8 @@ export function useAgentActivity(): {
         ...current,
         touchedNodeIds: new Set(),
         touchedEdgeIds: new Set(),
+        touchedLineIds: new Set(),
+        touchedCommentIds: new Set(),
       }))
     }, AGENT_HIGHLIGHT_MS)
 

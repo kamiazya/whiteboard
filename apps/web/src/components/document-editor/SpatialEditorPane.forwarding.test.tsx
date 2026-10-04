@@ -34,6 +34,8 @@ const passedThrough: Required<SpatialEditorPassedThrough> = {
   onToggleEdgeLock: () => {},
   agentTouchedNodeIds: new Set(['n2']),
   agentTouchedEdgeIds: new Set(['e2']),
+  agentTouchedLineIds: new Set(['l2']),
+  agentTouchedCommentIds: new Set(['c2']),
   threads: [],
   proposals: [],
   tagLibrary: { tags: {} },
