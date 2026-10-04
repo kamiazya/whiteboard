@@ -1,6 +1,7 @@
 /**
- * Three walkers move or measure a scene — `translateScene`, `scaleScene`,
- * `sceneBounds` — and each carries its own switch over the node kinds that
+ * Walkers move, measure or read a scene — `translateScene`, `scaleScene`,
+ * `sceneBounds`, and `fitBlocksToHeight`'s run search — and the ones that do
+ * not share `sceneChildrenOf` carry their own switch over the node kinds that
  * hold children. A kind missing from ONE of them is silent: the node lands
  * where it should and the things inside it do not.
  *
@@ -12,8 +13,8 @@
  *
  * So the fixture below is exhaustive BY TYPE (`satisfies Record<...>`): a
  * kind added to the scene graph has to be classified here before this file
- * compiles, and a kind that says it holds children is driven through all
- * three walkers. `childrenAnywhere` reads every child field the scene graph
+ * compiles, and a kind that says it holds children is driven through every
+ * walker. `childrenAnywhere` reads every child field the scene graph
  * has rather than asking a walker which one applies — an oracle built out of
  * the switches under test would share their blind spot.
  */
@@ -27,6 +28,7 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { expect, it } from 'vitest'
+import { fitBlocksToHeight } from './layout/nodes/mdast-blocks.js'
 import { scaleScene } from './layout/scale-scene.js'
 import { translateScene } from './layout/translate-scene.js'
 import { sceneBounds } from './scene-bounds.js'
@@ -173,5 +175,16 @@ it('sceneBounds measures what every container holds', () => {
     const bounds = sceneBounds({ nodes: [sample.node as SceneNode] })
     const bottom = marker().bbox.y + marker().bbox.h
     expect(bounds.y + bounds.h, kind).toBeGreaterThanOrEqual(bottom)
+  }
+})
+
+it('fitBlocksToHeight finds an overflowing run under every container', () => {
+  for (const [kind, sample] of CONTAINERS) {
+    const node = structuredClone(sample.node) as SceneNode
+    for (const run of leaves([node as WalkableNode])) {
+      ;(run as { overflows?: boolean }).overflows = true
+    }
+    // Tall enough that no block is cut, so only the run search can answer.
+    expect(fitBlocksToHeight([node], 10_000).overflows, kind).toBe(true)
   }
 })

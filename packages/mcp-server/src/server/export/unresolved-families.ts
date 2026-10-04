@@ -1,4 +1,4 @@
-import type { Scene, SceneNode } from '@kamiazya/whiteboard-canvas-render'
+import { type Scene, type SceneWalkNode, sceneChildrenOf } from '@kamiazya/whiteboard-canvas-render'
 
 /**
  * The font families this render DECLARED and the renderer could not provide.
@@ -32,17 +32,8 @@ export function unresolvedFamilies(
   const available = new Set(availableFamilies.map(normalize))
   const seen = new Set<string>()
   const unresolved: string[] = []
-  const visit = (node: unknown): void => {
-    if (node === null || typeof node !== 'object') return
-    const entry = node as SceneNode & {
-      appearance?: { fontFamily?: string }
-      runs?: unknown[]
-      children?: unknown[]
-      items?: unknown[]
-      cells?: unknown[]
-      rows?: unknown[]
-    }
-    const declared = entry.appearance?.fontFamily
+  const visit = (node: SceneWalkNode): void => {
+    const declared = 'appearance' in node ? node.appearance?.fontFamily : undefined
     if (declared !== undefined && declared !== '' && !seen.has(declared)) {
       seen.add(declared)
       // A CSS chain is a preference list, and resvg takes the first name it
@@ -51,9 +42,7 @@ export function unresolvedFamilies(
       // with a real face, which is the whole point of reporting this.
       if (!splitFamilies(declared).some((name) => available.has(name))) unresolved.push(declared)
     }
-    for (const key of ['runs', 'children', 'items', 'cells', 'rows'] as const) {
-      for (const child of entry[key] ?? []) visit(child)
-    }
+    for (const child of sceneChildrenOf(node) ?? []) visit(child)
   }
   for (const node of scene.nodes) visit(node)
   return unresolved

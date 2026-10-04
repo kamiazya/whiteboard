@@ -1,4 +1,4 @@
-import type { Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
 import { unresolvedFamilies } from './unresolved-families.js'
 
@@ -52,11 +52,64 @@ describe('the families a render declared but could not resolve', () => {
         {
           kind: 'table',
           bbox: { x: 0, y: 0, w: 1, h: 1 },
-          rows: [{ cells: [{ runs: [run('Cell')] }] }],
+          rows: [
+            {
+              kind: 'tableRow',
+              bbox: { x: 0, y: 0, w: 1, h: 1 },
+              cells: [{ kind: 'tableCell', bbox: { x: 0, y: 0, w: 1, h: 1 }, runs: [run('Cell')] }],
+            },
+          ],
         },
       ],
     } as unknown as Scene
     expect(unresolvedFamilies(nested, ['Roboto'])).toEqual(['Mono', 'Cell'])
+  })
+
+  // Exhaustive by type: a node kind added to the scene has to say here whether
+  // it holds runs, so a container the walk does not reach cannot go unnoticed.
+  // The nesting is written out literally rather than read through the walker's
+  // own child lookup, which would share its blind spot.
+  const BOX = { x: 0, y: 0, w: 1, h: 1 }
+  const inRow = {
+    kind: 'tableRow',
+    bbox: BOX,
+    cells: [{ kind: 'tableCell', bbox: BOX, runs: [run('Deep')] }],
+  }
+  const NESTED: Record<SceneNode['kind'], object | null> = {
+    heading: { kind: 'heading', bbox: BOX, runs: [run('Deep')] },
+    paragraph: { kind: 'paragraph', bbox: BOX, runs: [run('Deep')] },
+    codeBlock: { kind: 'codeBlock', bbox: BOX, runs: [run('Deep')] },
+    blockquote: { kind: 'blockquote', bbox: BOX, children: [run('Deep')] },
+    group: { kind: 'group', bbox: BOX, children: [run('Deep')] },
+    embedResolved: { kind: 'embedResolved', bbox: BOX, children: [run('Deep')] },
+    list: {
+      kind: 'list',
+      bbox: BOX,
+      items: [{ kind: 'listItem', bbox: BOX, children: [run('Deep')] }],
+    },
+    table: { kind: 'table', bbox: BOX, rows: [inRow] },
+    textRun: run('Deep'),
+    thematicBreak: null,
+    rawHtml: null,
+    unresolvedReference: null,
+    svgFragment: null,
+    embedPlaceholder: null,
+    image: null,
+    icon: null,
+    glyph: null,
+    shape: null,
+    edge: null,
+  }
+
+  it.each(
+    Object.entries(NESTED).filter(([, node]) => node !== null),
+  )('reaches a run held by a %s', (_kind, node) => {
+    const nested = { nodes: [node] } as unknown as Scene
+    expect(unresolvedFamilies(nested, ['Roboto'])).toEqual(['Deep'])
+  })
+
+  it('has a nested sample for every container kind', () => {
+    expect(Object.values(NESTED).filter((node) => node !== null).length).toBe(9)
   })
 
   it('says nothing when no face was loaded at all, matching undrawable', () => {
