@@ -72,6 +72,7 @@ export {
 } from './tools/version-restore.js'
 export { createVersionSaveTool } from './tools/version-save.js'
 export { createWorkspaceEditTool } from './tools/workspace-edit.js'
+export { answerUnhandled } from './unhandled-error.js'
 export type {
   Attestation,
   OperatorInfo,

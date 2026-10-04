@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody, issueText } from './api-errors.js'
 import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
+import { getLogger } from './log.js'
 import { factsCacheFor } from './references/content-source.js'
 import { vectorCacheFor } from './search/document-vector-cache.js'
 import { SEARCH_QUERY_KEYS, searchInputFromQuery, searchWireName } from './search-query.js'
@@ -71,6 +72,7 @@ import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
 import { createViewportSetTool } from './tools/viewport-set.js'
 import { createWorkspaceEditTool } from './tools/workspace-edit.js'
+import { answerUnhandled } from './unhandled-error.js'
 import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-handle.js'
 
 /**
@@ -210,8 +212,19 @@ function refusingIn(deps: ServerDeps) {
   }
 }
 
+const log = getLogger('http')
+
 export function createServer(deps: ServerDeps) {
   const app = new Hono<{ Variables: { workspaceId: string } }>()
+  // This server may be hosted without the daemon's app around it, so it
+  // answers its own uncaught throws rather than leaving them to the host.
+  app.onError(
+    answerUnhandled(({ busy, ...request }) =>
+      busy
+        ? log.warning('request refused: database busy', request)
+        : log.error('unhandled error', request),
+    ),
+  )
   // The stamp-validated facts cache is held by the deps, not this server: /mcp
   // builds a server per request, which would otherwise search from an empty
   // cache. Backlinks, tags and search share it, whichever write path changed a document.
