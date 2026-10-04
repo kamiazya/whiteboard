@@ -99,8 +99,8 @@ export function compareDocumentEntries(
  *
  * A listing row is eight of these, and written out each carries its own
  * `=== undefined ? {} : { … }` — which is eight branches saying one thing.
- * `exactOptionalPropertyTypes` is why the key cannot simply be assigned
- * `undefined`.
+ * The key is left out rather than assigned `undefined`: a row is compared and
+ * serialized, and a key holding `undefined` is still a key.
  */
 export function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
   return (value === undefined ? {} : { [key]: value }) as { [P in K]?: V }

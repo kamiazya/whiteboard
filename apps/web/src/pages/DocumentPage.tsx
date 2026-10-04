@@ -238,9 +238,9 @@ function useVersionSavePanel(
 
 /**
  * What the markdown pane is handed. A builder rather than inline JSX because
- * the optional fields are spread-or-nothing (the props are `exactOptionalPropertyTypes`,
- * so `undefined` is not the same as absent), and a column of those inside a
- * render reads as branching the page does not do.
+ * the optional fields are spread-or-nothing (a prop is either given a
+ * value or not given at all), and a column of those inside a render reads as
+ * branching the page does not do.
  *
  * `hydrating` is the one real branch: a body that has not arrived is `null`
  * rather than an empty document, so the editor draws a waiting pane instead
