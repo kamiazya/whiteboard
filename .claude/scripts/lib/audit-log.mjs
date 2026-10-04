@@ -12,7 +12,7 @@ export function parseAuditLog(text) {
 }
 
 const RECORD_COMMAND = 'node .claude/scripts/record-audit.mjs audit-triage'
-const LEDGER = '.claude/audit-log.jsonl'
+const AUDIT_LOG_PATH = '.claude/audit-log.jsonl'
 
 /**
  * Audit-wave commits since `lastAt` that did not themselves append to the ledger. A wave that
@@ -23,7 +23,7 @@ export function countUnrecordedWaves(lastAt, git) {
   const since = `--since=${lastAt}`
   const lines = (text) => text.split('\n').filter((line) => line !== '')
   const waves = lines(git(['log', since, '--regexp-ignore-case', '--grep=audit wave', '--format=%H']))
-  const recorded = new Set(lines(git(['log', since, '--format=%H', '--', LEDGER])))
+  const recorded = new Set(lines(git(['log', since, '--format=%H', '--', AUDIT_LOG_PATH])))
   return waves.filter((hash) => !recorded.has(hash)).length
 }
 
@@ -43,7 +43,7 @@ export function formatNudge(entries, nowMs, unrecordedWaves = 0) {
   if (unrecordedWaves > 0) {
     const noun = unrecordedWaves === 1 ? 'commit' : 'commits'
     lines.push(
-      `[audit-nudge] ${unrecordedWaves} audit-wave ${noun} landed since the last recorded audit-triage — the fold skipped \`${RECORD_COMMAND}\`. Run it and commit ${LEDGER}.`,
+      `[audit-nudge] ${unrecordedWaves} audit-wave ${noun} landed since the last recorded audit-triage — the fold skipped \`${RECORD_COMMAND}\`. Run it and commit ${AUDIT_LOG_PATH}.`,
     )
   }
   return lines.join('\n')
