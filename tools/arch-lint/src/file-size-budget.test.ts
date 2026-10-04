@@ -484,8 +484,9 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // lives in `smoke/lib`).
   // The canvas_view theme-font steps, with the widget's refresh-keeps-the-theme
   // step, live in `smoke/lib/canvas-view-theme.mjs`; the listed-pin check is
-  // `smoke/lib/listed-pin.mjs`, leaving an import and a call here.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2709,
+  // `smoke/lib/listed-pin.mjs`, leaving an import and a call here; so are the
+  // proposal-author and facet-write refusal checks (`smoke/lib/*.mjs`).
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2712,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

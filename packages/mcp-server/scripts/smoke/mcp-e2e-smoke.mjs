@@ -24,6 +24,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
+import { assertCanvasFacetWritesRefused } from './lib/facet-write-refusals.mjs'
 import { assertListedRowIsNotPinned } from './lib/listed-pin.mjs'
 import { assertProposalAuthor, SMOKE_AUTHOR } from './lib/proposal-author.mjs'
 import { anAutomaticCheckpointFollowsAMoveOrDelete } from './lib/session-end-checkpoint.mjs'
@@ -1290,6 +1291,8 @@ async function storedBendsDrawAndProposeModeStores(ctx) {
     throw new Error('wb_scene_render drew no edge through the stored bend')
   }
   console.log('[e2e] wb_canvas_edit + wb_scene_render → an edge is drawn through its stored bend')
+  await assertCanvasFacetWritesRefused(callToolExpectingError, WORKSPACE_ID, documentId)
+  console.log('[e2e] wb_canvas_edit → an invalid facet payload and a non-record bucket are refused')
 
   // The bend is deliberately NOT cleared: `edge.patch` merges, so it has no
   // way to REMOVE an optional field (the same is true of `label` and
