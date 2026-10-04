@@ -93,9 +93,11 @@ export interface WorkspacesRouterOptions {
 // POST /api/workspaces/:workspaceId/documents  body: { path: string }
 /**
  * The move is `wbDocumentMove`'s; what this surface adds is saying so when
- * the follow pass could not repair every reference, since the operation
- * reports rather than logs (server-core has no logger). The move stands
- * either way, so neither case changes the answer.
+ * the follow pass could not repair every reference. The operation returns
+ * that outcome instead of logging it, because only the surface knows how it
+ * reports — `wb_workspace_edit` answers it in the result row, this route
+ * has only the log. The move stands either way, so neither case changes the
+ * answer.
  */
 function logFollowOutcome(workspaceId: string, moved: WbDocumentMoveResult): void {
   const { from, path: to } = moved

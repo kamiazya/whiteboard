@@ -4,7 +4,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, onTestFinished, test } from 'vitest'
 import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
 import { setLogSink } from './log.js'
 import { FakeDocumentStore, seedDoc } from './test-utils/fake-document-store.js'
@@ -250,6 +250,9 @@ describe('documentWritten', () => {
   // pins that rather than leaving it to a comment the next caller may not
   // read.
   test('a throwing observer does not fail a write that already succeeded', async () => {
+    const records: { level: string; msg: string; data?: Record<string, unknown> }[] = []
+    setLogSink((record) => records.push(record))
+    onTestFinished(() => setLogSink(() => {}))
     const documentStore = new FakeDocumentStore()
 
     await expect(
@@ -273,5 +276,10 @@ describe('documentWritten', () => {
         docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
       }),
     ).not.toBeNull()
+    // Swallowed for the caller, not for the operator: a scheduler that keeps
+    // throwing would otherwise stop compacting with nothing to say so.
+    expect(records.find((record) => record.level === 'warning')).toMatchObject({
+      data: { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, err: 'scheduler exploded' },
+    })
   })
 })

@@ -194,9 +194,9 @@ export async function saveDocumentSnapshot(
   // After the bytes are safe, and never allowed to undo them: what the
   // composition root does here (the daemon schedules a debounced
   // compaction) is not part of this write's correctness, so a scheduler
-  // that throws must not turn a successful save into a failed one. The
-  // observer owns reporting its own failure — server-core is a shared
-  // layer with no logger to report it for them.
+  // that throws must not turn a successful save into a failed one. It is
+  // logged rather than rethrown, so a scheduler that keeps failing stops
+  // compacting on the record instead of in silence.
   try {
     // A lookup that fails costs the observer its path, not the notification:
     // compaction is addressed by workspace and needs none.
@@ -207,8 +207,12 @@ export async function saveDocumentSnapshot(
       doc,
       ...(path === undefined ? {} : { path }),
     })
-  } catch {
-    // Deliberately swallowed; see above and document-io.test.ts.
+  } catch (err) {
+    log.warning('the document-written observer failed after a successful save', {
+      workspaceId,
+      documentId,
+      err: messageOf(err),
+    })
   }
 }
 

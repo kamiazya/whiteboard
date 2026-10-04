@@ -16,9 +16,10 @@ import {
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, onTestFinished, test } from 'vitest'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
+import { setLogSink } from '../log.js'
 import type { AgentActivity } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -1083,6 +1084,9 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     // The write is committed by the time anyone is told. Letting a broken
     // socket surface as a tool error would tell the agent its edit failed
     // when the edit is on disk.
+    const warned: unknown[] = []
+    setLogSink((record) => record.level === 'warning' && warned.push(record.data?.notification))
+    onTestFinished(() => setLogSink(() => {}))
     const store = new FakeDocumentStore()
     await seedCanvas(store, EMPTY)
     const tool = createCanvasEditTool({
@@ -1109,6 +1113,8 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     expect(result.applied).toBe(1)
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
+    // A notifier throwing past its own error handling is a defect: each is logged.
+    expect(warned).toEqual(['agentActivity', 'requestViewport'])
   })
 })
 
