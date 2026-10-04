@@ -37,7 +37,9 @@ export type VersionRestoreInput = z.infer<typeof versionRestoreInputSchema>
 
 export const versionRestoreOutputSchema = z
   .object({
-    documentId: documentIdSchema,
+    documentId: documentIdSchema.describe(
+      'The document holding the restored state: the one addressed for in-place and subtree, the document at targetPath (new or overwritten, not the source) for into-target.',
+    ),
     restoredVersionId: z.string(),
     label: z.string().optional(),
     mode: z.enum(['in-place', 'into-target', 'subtree']),
@@ -112,6 +114,7 @@ function restoreOutput(
     case 'restored-to-target':
       return {
         ...base,
+        documentId: result.documentId,
         mode: 'into-target',
         targetPath: result.targetPath,
         elementCount: result.elementCount,

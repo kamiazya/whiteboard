@@ -32,6 +32,7 @@ import {
   purgeResultSchema,
   renameWorkspaceRequestSchema,
   restoreVersionRequestSchema,
+  restoreVersionResponseSchema,
   type SaveVersionResponse,
   saveVersionRequestSchema,
   saveVersionResponseSchema,
@@ -186,6 +187,21 @@ describe('restoreVersionRequestSchema', () => {
   it('rejects empty targetPath', () => {
     expect(restoreVersionRequestSchema.safeParse({ targetPath: '' }).success).toBe(false)
     expect(restoreVersionRequestSchema.safeParse({ targetPath: '   ' }).success).toBe(false)
+  })
+})
+
+describe('restoreVersionResponseSchema', () => {
+  it('names the restored target by its ULID and refuses a workspace/path key', () => {
+    expect(
+      restoreVersionResponseSchema.safeParse({
+        documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+        elementCount: 2,
+      }).success,
+    ).toBe(true)
+    expect(
+      restoreVersionResponseSchema.safeParse({ documentId: 'session1/canvas-b', elementCount: 2 })
+        .success,
+    ).toBe(false)
   })
 })
 

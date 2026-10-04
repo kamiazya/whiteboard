@@ -38,6 +38,9 @@ const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdat
 const { countSpatialNodes } = await import('@kamiazya/whiteboard-loro-adapter')
 const { createDocumentRouter } = await import('../document.js')
 
+const indexedIdAt = async (path: string) =>
+  (await serverDeps.documentIndex.resolveDocument({ workspaceId: 'session1', path }))?.documentId
+
 const createRouter = () =>
   createDocumentRouter(testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }))
 // Pre-load sync-audience.js before any restore call, mirroring
@@ -570,7 +573,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     }
     expect(restoreRes.status).toBe(200)
     const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
-    expect(restoreBody.documentId).toBe('session1/canvas-b')
+    expect(restoreBody.documentId).toBe(await indexedIdAt('canvas-b'))
 
     // One persisted write for the target reconcile; subscribers converge on
     // the document inside the workspace record rather than a path-addressed
@@ -611,8 +614,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     )
     expect(restoreRes.status).toBe(200)
     const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
-    expect(restoreBody.documentId).toBe('session1/canvas-new')
-    // The restored doc has one node ("keep-me").
+    expect(restoreBody.documentId).toBe(await indexedIdAt('canvas-new'))
     expect(restoreBody.elementCount).toBe(1)
   })
 

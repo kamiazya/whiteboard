@@ -43,7 +43,13 @@ export type RestoreVersionResult =
   | { kind: 'subtree-takes-no-target' }
   | { kind: 'subtree-needs-workspace-version' }
   | { kind: 'restored-in-place' }
-  | { kind: 'restored-to-target'; targetPath: string; elementCount: number }
+  | {
+      kind: 'restored-to-target'
+      targetPath: string
+      /** The document now holding the saved state — the target's own id, never the source's. */
+      documentId: string
+      elementCount: number
+    }
   | { kind: 'restored-subtree'; restoredCount: number }
 
 /**
@@ -185,6 +191,7 @@ async function restoreOntoExisting(
   return {
     kind: 'restored-to-target',
     targetPath,
+    documentId: await documentIdAt(live, workspaceId, targetPath),
     elementCount: countSpatialNodes(targetDoc),
   }
 }
@@ -231,7 +238,31 @@ async function restoreToTarget(
   // this path being served instead of the just-written snapshot.
   live.evict(workspaceId, targetPath)
   await recordMerge(versions, workspaceId, targetPath, past, versionId)
-  return { kind: 'restored-to-target', targetPath, elementCount: countSpatialNodes(past) }
+  return {
+    kind: 'restored-to-target',
+    targetPath,
+    documentId: await documentIdAt(live, workspaceId, targetPath),
+    elementCount: countSpatialNodes(past),
+  }
+}
+
+/**
+ * The id of the document a write just placed at `path`, read after the save
+ * so a freshly created row is the one answered. A caller that restored into a
+ * target goes on to address THAT document, so the source's id would send its
+ * next edit to the wrong one. Throws rather than answering a path-shaped
+ * stand-in: the row is there the moment `save` returns.
+ */
+async function documentIdAt(
+  live: LiveDocuments,
+  workspaceId: string,
+  path: string,
+): Promise<string> {
+  const row = (await live.list(workspaceId)).find((candidate) => candidate.path === path)
+  if (row?.documentId === undefined) {
+    throw new Error(`restored document has no id: ${path}`)
+  }
+  return row.documentId
 }
 
 /** Mode 1: roll the document AND every descendant back together. */

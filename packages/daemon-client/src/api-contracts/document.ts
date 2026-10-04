@@ -1,4 +1,5 @@
 import {
+  documentIdSchema,
   documentKindSchema,
   spatialCanvasSchema,
   workspaceDisplayNameSchema,
@@ -93,11 +94,12 @@ export const restoreVersionRequestSchema = z
 
 /**
  * What a restore answers, one arm per mode: a restore INTO a target names
- * the document it wrote and how many elements it holds; a subtree rollback
- * counts the documents it reverted; an in-place restore has nothing to add.
+ * the document it wrote (by its ULID, never a `workspace/path` key) and how
+ * many elements it holds; a subtree rollback counts the documents it
+ * reverted; an in-place restore has nothing to add.
  */
 export const restoreVersionResponseSchema = z.union([
-  z.object({ documentId: z.string().min(1), elementCount: z.number().int().nonnegative() }),
+  z.object({ documentId: documentIdSchema, elementCount: z.number().int().nonnegative() }),
   z.object({ ok: z.literal(true), restoredCount: z.number().int().nonnegative() }),
   z.object({ ok: z.literal(true) }),
 ])

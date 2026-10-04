@@ -59,7 +59,7 @@ function invalidTargetAnswer(targetPath: string | undefined): RestoreAnswer {
 
 function restoreAnswer(
   result: Awaited<ReturnType<typeof restoreVersion>>,
-  { workspaceId, targetPath }: { workspaceId: string; targetPath: string | undefined },
+  { targetPath }: { targetPath: string | undefined },
 ): RestoreAnswer {
   switch (result.kind) {
     case 'not-found':
@@ -97,7 +97,7 @@ function restoreAnswer(
       )
     case 'restored-to-target':
       return restored({
-        documentId: `${workspaceId}/${result.targetPath}`,
+        documentId: result.documentId,
         elementCount: result.elementCount,
       })
     case 'restored-subtree':
@@ -173,7 +173,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           },
           options.progress,
         )
-        const answer = restoreAnswer(result, { workspaceId, targetPath })
+        const answer = restoreAnswer(result, { targetPath })
         return c.json(answer.body, answer.status)
       } catch (err) {
         const issue = handleCorruptStoredData(err)
