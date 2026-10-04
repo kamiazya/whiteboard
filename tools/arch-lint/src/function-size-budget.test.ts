@@ -583,7 +583,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts#saveCompactedSnapshot': 75,
   'packages/mcp-server/src/server/store/version-store.ts#save': 84,
   'packages/mcp-server/src/server/store/workspace-tail.ts#createWorkspaceTail': 75,
-  'packages/mcp-server/src/shared/diagnostics/support-bundle-writer.ts#writeSupportBundle': 53,
   'packages/mcp-server/src/shared/test-utils/tool-surface-metrics.ts#parameterCoverage': 63,
   'packages/model/src/test-utils/zod-arbitrary.ts#walkShape': 132,
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,
