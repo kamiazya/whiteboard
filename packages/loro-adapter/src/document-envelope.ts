@@ -158,8 +158,8 @@ export function readTrustFacets(doc: DocumentContainers): TrustFacets | undefine
  * (a facet card beside a diagram, an OKF export's frontmatter) is showing
  * metadata the format cannot represent. Enforced on the READ because it is
  * total: it needs no migration, and no writer can reintroduce the state
- * behind it — `wb_facet_set` and `wb_document_set` both refuse a spatial
- * document, and after this there is no other writer.
+ * behind it — `wb_facet_set` and `wb_workspace_edit`'s `document.set` both
+ * refuse a spatial document, and after this there is no other writer.
  *
  * A document with no kind is allowed through, exactly as those tools allow
  * one: an absent kind is not evidence of a format.

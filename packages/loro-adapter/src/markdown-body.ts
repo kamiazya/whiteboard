@@ -12,7 +12,7 @@ import { spliceText } from './minimal-change.js'
 
 /**
  * The stored id of the single text node a markdown document's body lives in
- * on older daemon documents. Nothing writes it — `wb_document_set`
+ * on older daemon documents. Nothing writes it — `document.set`
  * writes the text container — but stored documents still hold one, so it is
  * how a reader finds such a body and how that tool recognises a document it
  * could itself have written.
@@ -23,7 +23,7 @@ export const MARKDOWN_BODY_NODE_ID = 'okf-body'
  * A markdown document's body, whichever way this codebase stored it.
  *
  * Every writer now writes the Loro TEXT CONTAINER named `body`
- * (`writeMarkdownBody`). It did not start that way: `wb_document_set` used
+ * (`writeMarkdownBody`). It did not start that way: `document.set` used
  * to store the body as a single `okf-body` TEXT NODE inside the spatial
  * canvas — which is why a markdown document also parsed as a perfectly
  * valid, if odd, canvas — while apps/web's editor wrote the container so a

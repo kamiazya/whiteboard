@@ -149,7 +149,7 @@ export async function wbDocumentCreate(
   const input = wbDocumentCreateInputSchema.parse(rawInput)
 
   // Parsed BEFORE anything exists, so a refusal leaves nothing behind. The
-  // body is applied by delegating to `wb_document_set` once the document
+  // body is applied by delegating to `document.set` once the document
   // exists, so a malformed one would fail there — leaving an empty
   // document squatting the requested path while the caller held an error
   // saying the create had not happened, and the retry then collided with
@@ -242,7 +242,7 @@ export async function wbDocumentCreate(
   writeDocumentKind(doc, input.kind)
   await saveDocumentSnapshot(deps, workspaceId, entry.documentId, doc)
 
-  // A body is written by DELEGATING to `wb_document_set` rather than by
+  // A body is written by DELEGATING to `document.set` rather than by
   // repeating what it does. Its write is not a one-liner — it parses OKF,
   // decides what the document's kind may become, and projects frontmatter
   // into the model — and a second copy of that reasoning here would be a

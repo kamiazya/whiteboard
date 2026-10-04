@@ -147,7 +147,7 @@ export class OkfParseError extends Error {
  * asks it rather than restating its rule.
  *
  * Frontmatter `tags` are held to the scoped-tag write grammar here, where both
- * body writers (`document.set`, `wb_document_create`'s preflight before its
+ * body writers (`document.set`, `document.create`'s preflight before its
  * mint) already share one parse: a colon-bearing tag that is not `key:value`
  * would otherwise be stored by a body while `wb_facet_set` and the editor
  * refuse it. Reading stays lenient — a stored tag is never re-judged.
@@ -187,7 +187,7 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
  *
  * A body is the other way to write a facet — the same payload as YAML instead
  * of as a tool argument — so it is held to the same registry rule, before the
- * document is opened. `wb_document_create` runs it in its preflight too, for
+ * document is opened. `document.create` runs it in its preflight too, for
  * the reason it runs the tag check there: the delegated write would otherwise
  * refuse AFTER the mint and leave an empty document squatting the path.
  */
@@ -213,7 +213,7 @@ export async function checkFrontmatterFacets(
  * Whether a `generated` the caller sent is foreign provenance to preserve,
  * rather than this server's own stamp echoed back by an edit.
  *
- * The distinction is needed because `wb_document_set` replaces the ENTIRE
+ * The distinction is needed because `document.set` replaces the ENTIRE
  * content, so an agent changing one paragraph must read the document first —
  * and the read hands back the `generated` block this server wrote. Honouring
  * a declared `generated` unconditionally therefore freezes the stamp at the
