@@ -332,6 +332,51 @@ describe('setupSwRegistration', () => {
     }
   })
 
+  // A later deploy supersedes a waiting worker and fires onNeedRefresh again.
+  // Applying asks the registration for whatever is waiting at that moment, so
+  // one idle listener already covers the newest worker; a second one would
+  // request the swap twice when the tab hides, and a request that lands in the
+  // swap window can lose it (see apply-update.ts).
+  it('requests the swap once when the tab hides after a repeated onNeedRefresh', async () => {
+    vi.resetModules()
+    vi.doMock('./reload-fresh.js', () => ({ reloadFresh: vi.fn() }))
+    const { setupSwRegistration: setup } = await import('./register-sw.js')
+    const { SW_IDLE_SETTLE_MS } = await import('./sw-idle-apply.js')
+    const { resetSwStatusForTests } = await import('./sw-status-store.js')
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const updateServiceWorker = vi.fn().mockResolvedValue(undefined)
+    const registerSW = vi.fn().mockReturnValue(updateServiceWorker)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+
+    try {
+      setup({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister: vi.fn().mockResolvedValue({ registerSW }),
+      })
+      await vi.waitFor(() => expect(registerSW).toHaveBeenCalled())
+      const { onNeedRefresh } = registerSW.mock.calls[0][0]
+      onNeedRefresh()
+      onNeedRefresh()
+      await vi.dynamicImportSettled()
+
+      vi.useFakeTimers()
+      visibility.mockReturnValue('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+      await vi.advanceTimersByTimeAsync(SW_IDLE_SETTLE_MS)
+
+      expect(updateServiceWorker).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+      visibility.mockRestore()
+      document.body.innerHTML = ''
+      vi.doUnmock('./reload-fresh.js')
+      resetSwStatusForTests()
+    }
+  })
+
   // The browser can leave an accepted update waiting for minutes (see
   // apply-update.ts); what the user sees is a Reload button that does nothing.
   it('reloads without the worker when an accepted update never takes over', async () => {

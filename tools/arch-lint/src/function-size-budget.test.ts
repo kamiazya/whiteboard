@@ -416,8 +416,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // of the three the daemon page was missing.
   'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 80,
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
-  'apps/web/src/pwa/register-sw.ts#setupSwRegistration': 76,
-  'apps/web/src/pwa/register-sw.ts#setupSwRegistration.register': 58,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
   'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,

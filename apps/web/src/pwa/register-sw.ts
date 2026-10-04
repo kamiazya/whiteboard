@@ -48,6 +48,46 @@ function offerUpdate(updateServiceWorker: () => Promise<void>): () => void {
   return () => void applyUpdate()
 }
 
+// One applier and one idle auto-applier serve the registration: every applying
+// call asks the registration for whatever is waiting at that moment, so a later
+// deploy superseding the waiting worker needs no new wiring. A second idle
+// listener would request the swap twice when the tab hides, and a request
+// landing in the swap window can lose it (see apply-update.ts). Starting once
+// rather than stopping and restarting also keeps a settle timer already
+// counting for a hidden tab: a restart waits for a visibilitychange that has
+// already happened.
+function createOnNeedRefresh(applyWaiting: () => Promise<void>): () => void {
+  let applyUpdate: (() => void) | undefined
+  return () => {
+    const firstOffer = applyUpdate === undefined
+    applyUpdate ??= offerUpdate(applyWaiting)
+    const apply = applyUpdate
+    // The toast UI (React component + createRoot) is only needed on the rare
+    // "an update is available" path, so it stays out of the entry chunk via a
+    // dynamic import too.
+    void import('./mount-update-toast.js')
+      .then(({ mountUpdateToast }) => {
+        mountUpdateToast(apply)
+      })
+      .catch((err: unknown) => {
+        log.error('failed to load the update toast module', err)
+      })
+    if (!firstOffer) return
+    // The notice alone leaves the swap waiting on a click that a user with no
+    // reason to care about versions may never give. Taking it while the tab is
+    // hidden costs nothing and needs no decision from them — and the prompt
+    // strategy's reason for existing (never swap under someone mid-draw) does
+    // not apply to a tab nobody is looking at.
+    void import('./sw-idle-apply.js')
+      .then(({ startSwIdleAutoApply }) => {
+        startSwIdleAutoApply({ apply })
+      })
+      .catch((err: unknown) => {
+        log.error('failed to load the idle auto-apply module', err)
+      })
+  }
+}
+
 // Registration is deferred behind `window`'s 'load' event and a dynamic
 // `import('virtual:pwa-register')` so the (small) registration glue never
 // enters the eagerly-loaded entry chunk — the entry gzip budget is razor
@@ -67,32 +107,7 @@ export function setupSwRegistration({
     void importRegister()
       .then(({ registerSW }) => {
         const updateServiceWorker = registerSW({
-          onNeedRefresh: () => {
-            const applyUpdate = offerUpdate(() => updateServiceWorker(true))
-            // The toast UI (React component + createRoot) is only needed on
-            // the rare "an update is available" path, so it stays out of the
-            // entry chunk via a dynamic import too.
-            void import('./mount-update-toast.js')
-              .then(({ mountUpdateToast }) => {
-                mountUpdateToast(applyUpdate)
-              })
-              .catch((err: unknown) => {
-                log.error('failed to load the update toast module', err)
-              })
-            // The notice alone leaves the swap waiting on a click that a user
-            // with no reason to care about versions may never give. Taking it
-            // while the tab is hidden costs nothing and needs no decision from
-            // them — and the prompt strategy's reason for existing (never swap
-            // under someone mid-draw) does not apply to a tab nobody is
-            // looking at.
-            void import('./sw-idle-apply.js')
-              .then(({ startSwIdleAutoApply }) => {
-                startSwIdleAutoApply({ apply: applyUpdate })
-              })
-              .catch((err: unknown) => {
-                log.error('failed to load the idle auto-apply module', err)
-              })
-          },
+          onNeedRefresh: createOnNeedRefresh(() => updateServiceWorker(true)),
           onRegisteredSW: (_swScriptUrl, registration) => {
             // A long-open or quickly-reloaded tab may never re-check sw.js on
             // its own cadence, so a deploy can go unnoticed indefinitely.
