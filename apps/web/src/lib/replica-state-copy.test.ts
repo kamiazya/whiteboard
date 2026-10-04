@@ -53,6 +53,6 @@ describe('lockedDetail', () => {
 
   it('says nothing extra for any other withheld reason', () => {
     expect(lockedDetail('unreachable')).toBeUndefined()
-    expect(lockedDetail('unknown_credential')).toBeUndefined()
+    expect(lockedDetail('requires_person_session')).toBeUndefined()
   })
 })

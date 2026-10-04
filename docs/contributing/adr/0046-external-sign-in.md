@@ -14,8 +14,9 @@ Built:
   accepted, each only from a declared address;
 - decisions 3-5 and 8, one configuration schema and one admission function
   on every path, with its code-rule seam;
-- decision 6, both invitation kinds, for redemption. Nothing creates an
-  invitation yet;
+- decision 6, the invitation link, for redemption and for creation (see the
+  2026-10-04 note); the email-addressed kind was removed (see the 2026-10-03
+  note);
 - decision 10, members-only workspaces in server mode, on the HTTP API and on
   `/mcp` alike.
 
@@ -26,6 +27,16 @@ Built:
 > configuration that still names the option is refused at startup. The
 > invitation link is the only invitation; revoking one is not built. Migration
 > 0040 dropped the `invitations.email` column and its index.
+
+> **Note (2026-10-04):** the Built list above once said nothing creates an
+> invitation yet; that stopped being true. An administrator creates an
+> invitation link to the server with `POST /api/invitations`
+> (`routes/tenant-people.ts`), and a workspace owner creates one to a
+> workspace with `POST /api/workspaces/:workspace/invitations`
+> (`routes/workspace-people.ts`); the self-hosting how-to documents both. The
+> `email_invitations_disabled` sign-in refusal, which belonged to the removed
+> email-addressed kind, was removed from the sign-in contract with it: no route
+> produced it.
 
 ## Context
 

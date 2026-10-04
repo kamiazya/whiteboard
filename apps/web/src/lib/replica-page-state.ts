@@ -36,14 +36,13 @@ export type ReplicaPageState = (typeof REPLICA_PAGE_STATES)[number]
 /**
  * A membership refusal the daemon itself returned — the key request
  * REACHED the daemon and it said no. Nothing here will ever be sent,
- * which is exactly what the 'removed' state promises. The other four
- * `WithheldReason` values (`unreachable`, `lapsed`, `unknown_credential`,
- * `requires_person_session`) all describe a condition that reconnecting
+ * which is exactly what the 'removed' state promises. The other three
+ * `WithheldReason` values (`unreachable`, `lapsed`, `requires_person_session`)
+ * all describe a condition that reconnecting
  * can fix, so they land on 'locked' instead.
  */
 const REMOVAL_REASONS = new Set<WithheldReason>([
   'not_a_member',
-  'unknown_profile',
   'replica_not_allowed',
   'unknown_workspace',
   'invalid_workspace_id',

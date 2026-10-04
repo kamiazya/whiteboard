@@ -7,7 +7,7 @@
  * header).
  *
  * Exhaustive over the full (key x remembered) input space rather than a
- * sample: the space is small and finite (12 x 2 = 24), and it is exactly what
+ * sample: the space is small and finite (10 x 2 = 20), and it is exactly what
  * a dropped arm — or a sixth state nobody wired a case for — would change the
  * count of.
  */
@@ -33,17 +33,11 @@ const REMEMBERED: readonly boolean[] = [false, true]
 // re-deriving REPLICA_PAGE_STATES's own length.
 const REMOVED_REASONS = [
   'not_a_member',
-  'unknown_profile',
   'replica_not_allowed',
   'unknown_workspace',
   'invalid_workspace_id',
 ] as const
-const LOCKED_REASONS = [
-  'unreachable',
-  'lapsed',
-  'unknown_credential',
-  'requires_person_session',
-] as const
+const LOCKED_REASONS = ['unreachable', 'lapsed', 'requires_person_session'] as const
 
 function expectedState(key: ReplicaKeyInput, remembered: boolean): ReplicaPageState {
   if (key === 'readable') return 'readable'
@@ -68,11 +62,11 @@ describe('replicaPageState', () => {
   const keys = allKeyInputs()
 
   it('the fixture reaches every membership refusal reason and both non-refusal withheld reasons', () => {
-    expect(REFUSAL_REASONS).toHaveLength(7)
-    expect(keys).toHaveLength(12)
+    expect(REFUSAL_REASONS).toHaveLength(5)
+    expect(keys).toHaveLength(10)
   })
 
-  it('is exhaustive: every (key x remembered) input maps to exactly one of the six states, 24 total', () => {
+  it('is exhaustive: every (key x remembered) input maps to exactly one of the six states, 20 total', () => {
     const tally: Record<ReplicaPageState, number> = {
       'needs-connection': 0,
       readable: 0,
@@ -91,13 +85,13 @@ describe('replicaPageState', () => {
         total += 1
       }
     }
-    expect(total).toBe(24)
+    expect(total).toBe(20)
     expect(tally).toEqual({
       'needs-connection': 1,
       readable: 2,
-      locked: 4,
-      unlockable: 5,
-      removed: 10,
+      locked: 3,
+      unlockable: 4,
+      removed: 8,
       rotated: 2,
     })
   })

@@ -12,8 +12,6 @@ import { roundtrip } from './roundtrip.test-helper.js'
 describe('membershipRefusalSchema', () => {
   const codes = [
     'not_a_member',
-    'unknown_credential',
-    'unknown_profile',
     'unknown_workspace',
     'invalid_workspace_id',
     'requires_person_session',

@@ -19,7 +19,6 @@ export const SIGN_IN_REFUSAL_COPY = {
   hosted_domain_not_allowed: 'Your organisation is not allowed on this server.',
   claim_not_satisfied: 'Your account is not in a group this server allows.',
   not_invited: 'You need an invitation to use this server. Ask someone who uses it to invite you.',
-  email_invitations_disabled: 'This server does not accept invitations sent to an email address.',
   rule_refused: 'This server does not allow your account.',
   reauthentication_unavailable:
     'Signing in again was not possible here. Sign in, or ask the operator to make the change.',
