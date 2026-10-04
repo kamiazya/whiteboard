@@ -169,13 +169,18 @@ They are named so a clean result is not read as covering them.
 - **The cycle resolver is intra-package.** It follows relative specifiers and
   declared aliases and drops anything else, so a cross-package cycle through a
   subpath is `package-cycle-check.ts`'s job and only at manifest level.
+- **`/// <reference lib>` and JSDoc types.** A `lib` directive names no module;
+  `@type {import('x').T}` in a comment is not a type node. Neither is read.
 
 What WAS closed in the same pass: a template-literal dynamic import, `require()`
 and `import x = require()`, `globalThis.<banned name>`, `inversify/…` and
 `@inversifyjs/*`, `from '.'` / `'..'` / `'../'` and an explicit `.ts` in the
 cycle resolver, and `peerDependencies` / `optionalDependencies` in the direction
 and allowed-dependency checks (neither field was read, so a reversing edge
-declared in one passed).
+declared in one passed), and `import('x')` types plus `/// <reference
+path|types>` directives, read as TYPE-only edges (a `types` directive naming
+`node` counts as a builtin) — a planted `typeof import('node:fs')` in `model`
+had passed.
 
 ## `port-conformance-ledger.test.ts`: every store implementer runs its suite
 
@@ -403,7 +408,11 @@ not debt, and a composition root's edges will never shrink.
 ## `mcp-server-layer-order.test.ts`: the layers inside the Node root
 
 `web-layer-order.test.ts` pins that root's layers and has an emptied
-ledger. `packages/mcp-server/src` had only ADR-0018's one-way scan, so a store
+ledger. Both, and `server-core-layer-order`, share `directory-loops.ts`: the
+mechanics layer has its own inner order (tenant, search, observability,
+release < store < security, export) and a directory-loop check, and
+`web-layer-order` pins its two remaining loops by exact edge count.
+`packages/mcp-server/src` had only ADR-0018's one-way scan, so a store
 importing a route and `shared/` importing the server logger were both planted
 (`store/names-store.ts`, `shared/sha256.ts`) and passed the whole project. The
 order, bottom to top, is stated in the test's header and derived from how the
@@ -641,6 +650,8 @@ Every method an interface in `security/*-store.ts` or `store/*-store.ts`
 declares needs a SHIPPED caller by name (`knip` cannot see interface members;
 two methods only tests called survived it) or a both-sided ledger entry. By
 name, so a method sharing one with an unrelated call (`list`) reads as used.
+A public method of a CLASS under `apps/web/src/lib` or `server/store` needs a
+caller outside its own class, or a `CLASS_METHOD_LEDGER` entry.
 
 ## `read-failure-as-absence.test.ts`
 
@@ -680,6 +691,9 @@ that date a comment to the work that produced it (`audit-triage`, `dogfood
 report`, `this PR`, "decision, this session", "this session's bug report");
 bare `this session` is NOT banned because the app's own noun hits about 50
 legitimate comments. Its ledger is empty and shrink-only.
+`comment-retired-pairing.test.ts` keeps the retired local-pairing flow
+(`pairing`, `paired`, `/pair`, "pair again") out of comments; the bare noun
+`pair` is not scanned. Its ledger is exact per file and shrink-only.
 
 ## `classifyPath` and `countNamedUses`: what every guard answers once
 
