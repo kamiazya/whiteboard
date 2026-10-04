@@ -59,11 +59,23 @@ function workspaceDocCacheKey(scope: StoreScope, workspaceId: string): string {
   return `${scope.dataDir}::${workspaceId}`
 }
 
+/** libsql reports the primary code in `code` and any extended one in `extendedCode`. */
+function isDatabaseBusy(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const { code, extendedCode } = err as { code?: unknown; extendedCode?: unknown }
+  return [code, extendedCode].some((c) => typeof c === 'string' && c.startsWith('SQLITE_BUSY'))
+}
+
 // A workspace record whose stored bytes will not decode is CORRUPTION, and
 // every reader should say so with the same structured error the per-document
 // path uses — a raw wasm decode error surfaces as an unstructured 500.
-function throwWorkspaceRecordCorrupt(workspaceId: string, err: unknown): never {
-  if (isCorruptStoredDataError(err)) throw err
+//
+// A busy database is not: the bytes were never read, so they say nothing about
+// the record, and calling them corrupt sends an operator looking for damage
+// that is not there. It is rethrown as itself, keeping the `SQLITE_BUSY` code
+// a caller matches on.
+function rethrowOpenFailure(workspaceId: string, err: unknown): never {
+  if (isCorruptStoredDataError(err) || isDatabaseBusy(err)) throw err
   throw corruptStoredData(
     `workspace-tree:${workspaceId}`,
     `workspace record could not be opened (${messageOf(err)})`,
@@ -184,7 +196,7 @@ async function openFollowed(
 ): Promise<LoroDoc | null> {
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
   const cursor = await docs.readCursor(workspaceId)
-  const doc = await open(docs).catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
+  const doc = await open(docs).catch((err) => rethrowOpenFailure(workspaceId, err))
   if (doc === null) return null
   followedTo.set(doc, cursor)
   workspaceDocCache.set(workspaceDocCacheKey(scope, workspaceId), doc)
