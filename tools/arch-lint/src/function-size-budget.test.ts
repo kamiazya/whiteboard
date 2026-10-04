@@ -557,7 +557,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // down, where a per-process memoized fallback used to resolve its own.
   'packages/mcp-server/src/server/routes/sync-sse.ts#createSyncSseRouter': 52,
   // The setter's write-side validation and the boolean answer to the lazy-row
-  // hazard (ADR-0042 decision 1 addendum) both belong beside tierFor/effectiveTier
+  // hazard (ADR-0042 decision 1 addendum) both belong beside effectiveTier
   // rather than in a second file over the same table; rotateKey (rotation
   // addendum) belongs beside keyFor/setTier for the same reason.
   'packages/mcp-server/src/server/security/workspace-replica-key-store.ts#createWorkspaceReplicaKeyStore': 78,

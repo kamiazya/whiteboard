@@ -134,6 +134,11 @@ paths:
   `target: 'canvas'` is refused at execute time
   (`NodeAndCanvasTargetError`) rather than by a schema `.refine`, because a
   refined schema loses the `.shape` MCP registration reads.
+- Registered-facet validation, unknown-key refusal and locks are ONE
+  judgement for every agent writer: `packages/server-core/src/tools/facet-write.ts` (canvas ops, OKF
+  frontmatter and `wb_facet_set` all call `partitionFacetWrites`) and
+  `element-lock.ts` beside it. A new refusal class needs a `REFUSALS` row in
+  `create-server.ts`, or its route answers 500.
 - A theme id in a clean render is asserted by the glow's filter id
   (`wb-glow`), never by the word `filter`: a drop shadow is a filter too,
   and the e2e smoke failed on exactly that substring once.
@@ -178,7 +183,8 @@ it already takes, and `GET /document-tags` (`computeDocumentTags`) as
 picker wants both layers in one round trip and that listing is already
 taken there. `wb_scene_render` passes it to layout only when the canvas
 carries a tag (`carriesATag`, exported for the daemon's export path to ask
-the same question), so an untagged board costs no listing.
+the same question), so an untagged board costs no listing; `canvas_view`
+asks the same question and sends the declared colours on the scene.
 
 **A BODY is the other way that stored field is written, and it is held to
 the same declaration** (increment 5c). `refuseFrontmatterTags` is the one

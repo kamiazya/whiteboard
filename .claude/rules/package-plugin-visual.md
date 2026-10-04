@@ -198,13 +198,14 @@ Not indexed: unconverted kana. CLDR's terms are kanji and katakana, so `ほし`
 finds nothing while `星` finds 42 — acceptable because an IME user converts
 before the term is a term, and a kana reading index is a different data set.
 
-## `/emoji` — the catalog as a reusable subpath
+## The emoji catalog — reached by dynamic import, not a subpath
 
-`@kamiazya/whiteboard-plugin-visual/emoji` exports `emojiSections()` (the
-picker's rows); `emojiSlug()` (the shortcode vocabulary) lives in
-`emoji/slug.ts`, read by the other emoji subpaths. It is a subpath
-rather than part of the barrel for the reason the dynamic import exists: the
-tables are 190KB and the default entry is loaded wherever a document is READ.
+`emojiSections()` (the picker's rows) lives in `emoji/sections.ts` and is
+reached only through `editors.ts`'s dynamic import (`SYMBOL_CATALOG.load`);
+there is no `/emoji` subpath. `emojiSlug()` (the shortcode vocabulary) lives
+in `emoji/slug.ts`, read by the `/emoji/*` subpaths. The tables are 190KB
+and the default entry is loaded wherever a document is READ, which is why
+the rows are never imported statically.
 
 `emojiSlug` turns a CLDR short name into what a person types between colons —
 `grinning face` -> `grinning_face` (user decision, 2026-09-11: CLDR-derived,
@@ -225,7 +226,7 @@ The slug is also a search KEYWORD, because the search splits on whitespace:
 `thumbs_up` finds nothing against a label reading `thumbs up`.
 
 `./emoji/shortcode` is the READ-PATH half, and a subpath of its own rather
-than part of `/emoji` for the reason `/emoji` is one: the barrel reaches
+than part of the barrel for the same reason: the barrel reaches
 `sections.ts`, which reaches `catalog-ja.ts` (118KB of search index nothing
 draws with). `expandEmojiShortcodes(text)` turns `:grinning_face:` into 😀
 and is called from canvas-render's inline walk, so every surface that draws
