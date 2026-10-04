@@ -87,8 +87,8 @@ function sleep(ms: number): Promise<void> {
  */
 async function retryWhileBusy<T>(
   attempt: () => Promise<T>,
-  policy: BusyRetryPolicy = DEFAULT_BUSY_RETRY,
-  onBusy: () => Promise<void> = async () => {},
+  policy: BusyRetryPolicy,
+  onBusy: () => Promise<void>,
 ): Promise<T> {
   const startedAt = performance.now()
   for (let attempts = 1; ; attempts++) {
