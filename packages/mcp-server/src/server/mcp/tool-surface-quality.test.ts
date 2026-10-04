@@ -179,7 +179,10 @@ describe('what the tool table costs to read', () => {
       // connect and by the model not at all — the split this scoreboard
       // keeps two columns for.
       wb_body_edit: {
-        visibleBytes: 2663,
+        // +202 on both and +1 parameter: `author`, who is proposing, shared with
+        // wb_canvas_edit's propose path. A proposal stored no author, so a person
+        // deciding on one could not tell which agent asked.
+        visibleBytes: 2865,
         // +1,396 wire, and it is the registration's PRICE rather than its
         // saving: a named subschema costs a `$defs` entry plus a `$ref`
         // wherever it is used, so a tool that uses one ONCE pays more than
@@ -218,9 +221,9 @@ describe('what the tool table costs to read', () => {
         // unmoved, which is what makes both safe on a table a model reads.
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 17694,
+        wireBytes: 17896,
         descriptionWords: 112,
-        parameters: 18,
+        parameters: 19,
         undescribed: 7,
         strays: 'refused',
         names: [],
@@ -363,6 +366,9 @@ describe('what the tool table costs to read', () => {
       // measured rather than reasoned: the same -4/-12 appears against
       // main's new base as it did against the old one.
       wb_canvas_edit: {
+        // +162 on both and -1 undescribed: `follow` described, and `comment.add`'s
+        // target rules spelled out. +202 and +1 parameter: `author`, as on
+        // wb_body_edit. Wire +159 more from the output: the snapshot's `lineCount`.
         // -79. The node input stopped publishing JSON Canvas 1.0's
         // `x-whiteboard` extension key and now names the model's own `embed`
         // and `facets` — which the model has had since ADR-0037, leaving the
@@ -407,7 +413,7 @@ describe('what the tool table costs to read', () => {
         // `embed` and `facets`, and the `ExtensionFacets` registration pays
         // for the four sites the retired composite left inline.
         // +58, wire too: a node's `embed` and a comment draft publish `additionalProperties: false` (C10, one level down).
-        visibleBytes: 14784,
+        visibleBytes: 15148,
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -421,7 +427,7 @@ describe('what the tool table costs to read', () => {
         // here through the echo this tool's output carries.
         // +221 wire: its answer is the board it produced, and the snapshot now
         // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
-        wireBytes: 33697,
+        wireBytes: 34220,
         descriptionWords: 169,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -432,8 +438,8 @@ describe('what the tool table costs to read', () => {
         // (`documentId`, `versionRef`, and the object) at each of the four
         // arms, for a field nothing draws — an agent writing it got a
         // backlink and a plain box. The stored field is untouched.
-        parameters: 205,
-        undescribed: 138,
+        parameters: 206,
+        undescribed: 137,
         strays: 'refused',
         names: [],
       },
@@ -441,6 +447,9 @@ describe('what the tool table costs to read', () => {
       // carries edges, so the endpoint union costs the client on connect and
       // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
+        // +141 visible, +21 words, +300 wire: lines are cut with a total
+        // (`lineCount`) and counted in `truncated`, a line carries its bends and
+        // facets, and the description says whole-document threads are left out.
         // +113 visible: the description names what a snapshot node now carries
         // (facets, tags; bends on an edge) and where the full conversations are.
         // What it buys is the read a blind agent was told to make and could
@@ -448,13 +457,13 @@ describe('what the tool table costs to read', () => {
         // all left no trace in the snapshot, so "read the board instead" of
         // looking at the render was a promise the payload did not keep.
         // +521 wire from the same output fields.
-        visibleBytes: 818,
+        visibleBytes: 959,
         // +1,303 wire: the snapshot answers with `lines` now. It did not,
         // which meant a model could write ink through `wb_canvas_edit` and
         // had no way to read it back — a write with no read is half a
         // capability, and the wire is where that costs.
-        wireBytes: 6053,
-        descriptionWords: 71,
+        wireBytes: 6353,
+        descriptionWords: 92,
         parameters: 3,
         undescribed: 3,
         strays: 'refused',
@@ -488,8 +497,10 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_document_list: {
+        // +153 wire, 0 visible: each row says whether the workspace pins it (an
+        // output field; omitted when the keeper keeps no pins).
         visibleBytes: 473,
-        wireBytes: 1130,
+        wireBytes: 1283,
         descriptionWords: 32,
         parameters: 1,
         undescribed: 1,
@@ -702,10 +713,12 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_version_restore: {
-        visibleBytes: 1504,
+        // +43 on both: `targetPath` must be the same kind as the saved state, since
+        // restoring across kinds converted the target and is now refused.
+        visibleBytes: 1547,
         // +23 wire: `destructiveHint: true` stated — its `subtree` mode deletes the
         // documents created since the version. Client-side only; visible bytes unmoved.
-        wireBytes: 2179,
+        wireBytes: 2222,
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
@@ -724,24 +737,30 @@ describe('what the tool table costs to read', () => {
         names: ['wb_version_restore'],
       },
       wb_viewport_set: {
+        // +163 on both and -2 undescribed: an omitted coordinate keeps the current
+        // view's, a contradiction is refused, and a request made before any tab is
+        // ready is replayed to the first one for 30s.
         // -29 on both and -1 parameter for `animate`, which the browser never read.
         // +183 on both and -1 undescribed for `mode`: without its description a
         // model sending scroll and zoom got `fit`, which ignores them, and was
         // told delivered:true. +162 and -1 undescribed: `zoom` bounded by the
         // editor's range and described (1 is actual size, not a percentage),
         // and `delivered` says a browser was TOLD, not that it confirmed.
-        visibleBytes: 1216,
+        visibleBytes: 1379,
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
         // Then +258: the +162 above plus `zoom`'s min/max.
-        wireBytes: 1734,
+        wireBytes: 1897,
         descriptionWords: 62,
         parameters: 7,
-        undescribed: 5,
+        undescribed: 3,
         strays: 'refused',
         names: ['wb_canvas_edit'],
       },
       wb_workspace_edit: {
+        // +201 on both and -2 undescribed: `document.create`'s `name` is described
+        // on both arms, the markdown one saying a frontmatter `title` is the same
+        // name (a mismatch is refused).
         // +60 on both: `markdown` now says a string with no `---` block is
         // the BODY, typed `note`. The bytes buy knowing WHICH type.
         // +412 on both, +3 parameters (2 undescribed: the arm's `op` and
@@ -759,11 +778,11 @@ describe('what the tool table costs to read', () => {
         // arm, and `path` optional. A spatial document has no frontmatter
         // `title`, so a rename of one had no tool at any price (C5); the web
         // app renames both kinds.
-        visibleBytes: 2946,
-        wireBytes: 4490,
+        visibleBytes: 3147,
+        wireBytes: 4691,
         descriptionWords: 47,
         parameters: 22,
-        undescribed: 16,
+        undescribed: 14,
         strays: 'refused',
         names: [],
       },
@@ -959,7 +978,8 @@ describe('what the tool table costs to read', () => {
       // Then -366 for `embed` leaving wb_canvas_edit's input and +92 for
       // `proposals` on wb_document_get (see those rows).
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
-      visibleBytes: 39589,
+      // Then +1,114 for this wave's seven rows (see each).
+      visibleBytes: 40703,
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -982,11 +1002,14 @@ describe('what the tool table costs to read', () => {
       // wb_document_get's output (see those rows).
       // Then -29 and +183, the same bytes as visible; then +47, the two
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
-      wireBytes: 130029,
+      // Then +1,585, the same rows' visible bytes plus their output fields.
+      wireBytes: 131614,
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
-      parameters: 331,
-      undescribed: 204,
+      // Then +2 for `author` on the two propose tools.
+      parameters: 333,
+      // Then -5: `follow`, viewport coordinates, `document.create`'s `name`.
+      undescribed: 199,
     })
   })
 
