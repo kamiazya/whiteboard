@@ -1,4 +1,8 @@
-import { documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  DOCUMENT_PATH_MAX_LENGTH,
+  documentPathSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
 import {
@@ -110,6 +114,10 @@ describe('validateDocumentPath / documentPathSchema conformance', () => {
       fc
         .array(fc.stringMatching(/^[a-zA-Z0-9-]{0,4}$/), { minLength: 1, maxLength: 3 })
         .map((parts) => `/${parts.join('//')}/`),
+      // Either side of the length bound, in segments both rules otherwise admit.
+      fc
+        .integer({ min: DOCUMENT_PATH_MAX_LENGTH - 8, max: DOCUMENT_PATH_MAX_LENGTH + 8 })
+        .map((length) => 'a'.repeat(length)),
     ),
   ])('accept exactly the same strings', (path) => {
     expect(documentPathSchema.safeParse(path).success).toBe(accepts(path))
@@ -135,6 +143,14 @@ describe('validator rejection reasons', () => {
     const error = rejection(() => validateDocumentPath(path))
     expect(error.error).toBe(code)
     expect(error.message).toMatch(message)
+  })
+
+  it('validateDocumentPath says a path past the bound is too long, without echoing it', () => {
+    const error = rejection(() => validateDocumentPath('a'.repeat(DOCUMENT_PATH_MAX_LENGTH + 1)))
+    expect(error.error).toBe('invalid_document_path')
+    expect(error.message).toBe(
+      'Invalid path: path is 1025 characters, past the 1024-character limit',
+    )
   })
 
   it.each([
