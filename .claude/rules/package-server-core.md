@@ -137,7 +137,9 @@ paths:
 - Registered-facet validation, unknown-key refusal and locks are ONE
   judgement for every agent writer: `packages/server-core/src/tools/facet-write.ts` (canvas ops, OKF
   frontmatter and `wb_facet_set` all call `partitionFacetWrites`) and
-  `element-lock.ts` beside it. A new refusal class needs a `REFUSALS` row in
+  `element-lock.ts` beside it. A lock also covers deletion by side effect:
+  `node.remove` and `region.set` refuse a locked edge their sweep would take
+  (`lockedEdgeLossDetail`). A new refusal class needs a `REFUSALS` row in
   `create-server.ts`, or its route answers 500 — `tools/arch-lint`'s
   `v1-refusals-cover-errors.test.ts` fails on an error class in ports, model
   or server-core with neither a row nor a reasoned `EXEMPT` entry.
