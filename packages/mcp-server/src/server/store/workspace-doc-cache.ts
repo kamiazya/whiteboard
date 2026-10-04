@@ -1,4 +1,5 @@
 import { messageOf } from '@kamiazya/whiteboard-model'
+import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import {
   type CaughtUp,
   DocumentStoreWorkspaceDocs,
@@ -57,13 +58,6 @@ function isCold(cursor: WorkspaceDocCursor): boolean {
 
 function workspaceDocCacheKey(scope: StoreScope, workspaceId: string): string {
   return `${scope.dataDir}::${workspaceId}`
-}
-
-/** libsql reports the primary code in `code` and any extended one in `extendedCode`. */
-function isDatabaseBusy(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false
-  const { code, extendedCode } = err as { code?: unknown; extendedCode?: unknown }
-  return [code, extendedCode].some((c) => typeof c === 'string' && c.startsWith('SQLITE_BUSY'))
 }
 
 // A workspace record whose stored bytes will not decode is CORRUPTION, and

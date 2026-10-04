@@ -1,5 +1,6 @@
 export { blobRefKey } from './blob-ref-key.js'
 export * from './blob-store.js'
+export { isDatabaseBusy } from './database-busy.js'
 export * from './delta.js'
 export * from './doc-ref.js'
 export { docRefKey, workspaceIdOfStoredDocKey } from './doc-ref-key.js'

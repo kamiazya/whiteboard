@@ -1,6 +1,7 @@
 import {
   DocumentHasDescendantsError,
   DocumentPathTakenError,
+  isDatabaseBusy,
   isDocumentNotFoundError,
   isWorkspaceNotFoundError,
   isWorkspaceSegmentTakenError,
@@ -210,18 +211,6 @@ function refusingIn(deps: ServerDeps) {
     const cause = said instanceof WorkspaceDocumentNotFoundError ? said : err
     return mapDocumentError(c, cause, said instanceof Error ? said.message : undefined)
   }
-}
-
-/**
- * A database that stayed locked past its retry budget, recognised by the code
- * it keeps rather than by its class: the class lives in a Node-only store,
- * and an unretried busy answer raised inside a transaction carries the same
- * code. SQLite reports extended codes as `SQLITE_BUSY_*`.
- */
-function isDatabaseBusy(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false
-  const { code } = err as { code?: unknown }
-  return typeof code === 'string' && code.startsWith('SQLITE_BUSY')
 }
 
 /**
