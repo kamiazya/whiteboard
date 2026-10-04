@@ -84,7 +84,7 @@ const documents = (headers: Record<string, string>) =>
 
 /** The handler answered, read by its body: a status alone cannot tell it from a 200 refusal. */
 const REACHED = { status: 200, body: { reached: true } }
-const answer = async (pending: Promise<Response>) => {
+const answer = async (pending: Response | Promise<Response>) => {
   const res = await pending
   return { status: res.status, body: await res.json() }
 }
