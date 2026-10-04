@@ -14,6 +14,8 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const hook = resolve(
   dirname(fileURLToPath(import.meta.url)),
   'hooks',
@@ -31,22 +33,9 @@ function scratch(prefix) {
   return dir
 }
 
-function cleanEnv(extra) {
-  const env = { ...process.env, ...extra }
-  for (const key of Object.keys(env)) {
-    if (
-      /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(
-        key,
-      )
-    )
-      delete env[key]
-  }
-  return env
-}
-
 function makeRepo(branch = 'feat') {
   const repo = join(scratch('pre-merge-show-comments-repo-'), 'repo')
-  execFileSync('git', ['init', '-b', branch, repo], { env: cleanEnv({}), encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', branch, repo], { env: isolatedGitEnv({}), encoding: 'utf-8' })
   return repo
 }
 
@@ -82,7 +71,7 @@ function runHook({ repo, command, input = { tool_input: { command } }, env = {} 
   const gh = makeGhStub()
   const result = spawnSync('node', [hook], {
     cwd: repo,
-    env: cleanEnv({
+    env: isolatedGitEnv({
       PATH: `${gh.dir}:${process.env.PATH}`,
       GH_STUB_HEAD: 'abc123',
       GH_STUB_REVIEW: '',

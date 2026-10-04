@@ -23,13 +23,16 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'cleanup-worktrees.mjs')
 
 const scratchDirs = []
 
+/** The fixtures' git, and the script's own, without the contributor's global config. */
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, { cwd, env: isolatedGitEnv(), encoding: 'utf-8' }).trim()
 }
 
 function makeScratch() {
@@ -65,7 +68,7 @@ function runCleanup(repoDir, extraArgs = []) {
   return execFileSync('node', [scriptPath, '--dry-run', ...extraArgs], {
     cwd: repoDir,
     encoding: 'utf-8',
-    env: { ...process.env, CLEANUP_WORKTREES_REPO_ROOT: repoDir },
+    env: isolatedGitEnv({ CLEANUP_WORKTREES_REPO_ROOT: repoDir }),
   })
 }
 
@@ -149,7 +152,7 @@ test('never removes the worktree the caller is standing in', () => {
   const fromInside = execFileSync('node', [scriptPath, '--dry-run'], {
     cwd: laneDir,
     encoding: 'utf-8',
-    env: { ...process.env, CLEANUP_WORKTREES_REPO_ROOT: repoDir },
+    env: isolatedGitEnv({ CLEANUP_WORKTREES_REPO_ROOT: repoDir }),
   })
   assert.match(fromInside, /keep lane-here: it is the current working directory/)
   assert.doesNotMatch(fromInside, /would remove lane-here/)
@@ -189,6 +192,7 @@ test('finds the main checkout when invoked through a linked worktree copy', () =
   const output = execFileSync('node', [hostScript, '--dry-run'], {
     cwd: hostDir,
     encoding: 'utf-8',
+    env: isolatedGitEnv(),
   })
   assert.doesNotMatch(output, /nothing to clean/, 'must not silently no-op from a linked worktree')
   assert.match(output, /would remove lane-merged/)
@@ -213,12 +217,11 @@ test('a real run sweeps the MCP registration a removed worktree left under the m
     },
   })
   writeFileSync(claudeJson, seeded)
-  const env = {
-    ...process.env,
+  const env = isolatedGitEnv({
     HOME: home,
     USERPROFILE: home,
     CLEANUP_WORKTREES_REPO_ROOT: repoDir,
-  }
+  })
 
   execFileSync('node', [scriptPath, '--dry-run'], { cwd: repoDir, encoding: 'utf-8', env })
   assert.equal(readFileSync(claudeJson, 'utf-8'), seeded, 'a dry run must not edit ~/.claude.json')
@@ -235,7 +238,7 @@ test('a real run sweeps the MCP registration a removed worktree left under the m
 function realEnv(repoDir) {
   const home = join(dirname(repoDir), 'home')
   mkdirSync(home, { recursive: true })
-  return { ...process.env, HOME: home, USERPROFILE: home, CLEANUP_WORKTREES_REPO_ROOT: repoDir }
+  return isolatedGitEnv({ HOME: home, USERPROFILE: home, CLEANUP_WORKTREES_REPO_ROOT: repoDir })
 }
 
 function runReal(repoDir, extraArgs = [], cwd = repoDir) {

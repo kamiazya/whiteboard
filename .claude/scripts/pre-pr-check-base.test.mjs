@@ -18,6 +18,8 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'pre-pr-check-base.mjs')
 
@@ -26,8 +28,11 @@ after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
+/** Scratch-repo git, and the hook's own, run without the contributor's global config. */
+const env = isolatedGitEnv()
+
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, { cwd, env, encoding: 'utf-8' }).trim()
 }
 
 function commitFile(repo, name, content, message) {
@@ -42,11 +47,11 @@ function makeRepoPair() {
   scratchDirs.push(dir)
   const origin = join(dir, 'origin')
   const work = join(dir, 'work')
-  execFileSync('git', ['init', '-b', 'main', origin], { encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', 'main', origin], { env, encoding: 'utf-8' })
   git(origin, ['config', 'user.email', 'test@example.com'])
   git(origin, ['config', 'user.name', 'test'])
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], { env, encoding: 'utf-8' })
   git(work, ['config', 'user.email', 'test@example.com'])
   git(work, ['config', 'user.name', 'test'])
   git(work, ['checkout', '-b', 'feat'])
@@ -60,6 +65,7 @@ function runHook(cwd, command = 'gh pr create --title x') {
   try {
     execFileSync('node', [scriptPath], {
       cwd,
+      env,
       input: stdin,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],

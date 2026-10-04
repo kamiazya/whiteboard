@@ -12,13 +12,17 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const scriptPath = resolve(dirname(fileURLToPath(import.meta.url)), 'stress-changed.mjs')
 const scratchDirs = []
 after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+/** The fixture's git, and the script's own, without the contributor's global config. */
+const git = (cwd, ...args) =>
+  execFileSync('git', args, { cwd, env: isolatedGitEnv(), encoding: 'utf-8' }).trim()
 
 /** A repo whose `feature` branch changed two real test files, a source file, a test under
  * `.claude/`, and deleted a test. */
@@ -66,11 +70,10 @@ function run(cwd, args, { shim, failOn } = {}) {
   return spawnSync('node', [scriptPath, ...args], {
     cwd,
     encoding: 'utf-8',
-    env: {
-      ...process.env,
+    env: isolatedGitEnv({
       PATH: `${shim?.dir ?? ''}:${process.env.PATH}`,
       FAKE_PNPM_FAIL_ON: String(failOn ?? 0),
-    },
+    }),
   })
 }
 

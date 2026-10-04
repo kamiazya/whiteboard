@@ -13,13 +13,17 @@ import { dirname, join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const here = dirname(fileURLToPath(import.meta.url))
 const script = join(here, 'complexity-of.mjs')
 const repoModules = join(here, '..', '..', 'node_modules')
 
-const sh = (cwd, cmd, args) => spawnSync(cmd, args, { cwd, encoding: 'utf8' })
-const git = (cwd, ...args) =>
-  sh(cwd, 'git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', ...args])
+// The fixture's git and the script's own run without the contributor's global config: a signed
+// tag or a global hook would otherwise fail the premise below and read as a missing biome.
+const env = isolatedGitEnv()
+const sh = (cwd, cmd, args) => spawnSync(cmd, args, { cwd, env, encoding: 'utf8' })
+const git = (cwd, ...args) => sh(cwd, 'git', args)
 
 const BASE_SOURCE = [
   'export function steady(a) {',
@@ -72,7 +76,7 @@ before(() => {
   const steps = [
     ['init', '-q'],
     ['add', 'm.mjs', 'biome.json', 'package.json'],
-    ['commit', '-qm', 'base', '--no-gpg-sign'],
+    ['commit', '-qm', 'base'],
     ['tag', 'fixture-base'],
   ]
   const committed = steps.every((step) => git(dir, ...step).status === 0)
@@ -81,7 +85,7 @@ before(() => {
     premise = 'needs git and a runnable `pnpm exec biome` in a scratch repository'
   else {
     writeFileSync(join(dir, 'm.mjs'), HEAD_SOURCE)
-    git(dir, 'commit', '-aqm', 'grow', '--no-gpg-sign')
+    git(dir, 'commit', '-aqm', 'grow')
   }
 })
 after(() => rmSync(dir, { recursive: true, force: true }))
@@ -91,7 +95,7 @@ test('the premise holds wherever CI runs', () => {
   if (process.env.CI) assert.equal(premise, null, premise ?? '')
 })
 
-const run = (...args) => spawnSync('node', [script, ...args], { cwd: dir, encoding: 'utf8' })
+const run = (...args) => spawnSync('node', [script, ...args], { cwd: dir, env, encoding: 'utf8' })
 // Decided when the case runs, after `before` has probed: the option form would read `premise` at registration.
 const probed = (body) => (t) => (premise === null ? body() : t.skip(premise))
 

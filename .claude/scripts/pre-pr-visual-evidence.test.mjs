@@ -15,6 +15,8 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'pre-pr-visual-evidence.mjs')
 
@@ -23,7 +25,9 @@ after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
-const git = (cwd, args) => execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+/** Scratch-repo git, and the hook's own, run without the contributor's global config. */
+const gitEnv = isolatedGitEnv()
+const git = (cwd, args) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf-8' }).trim()
 
 function commitFile(repo, name, content, message) {
   mkdirSync(dirname(join(repo, name)), { recursive: true })
@@ -38,11 +42,11 @@ function makeRepoPair(changed) {
   scratchDirs.push(dir)
   const origin = join(dir, 'origin')
   const work = join(dir, 'work')
-  execFileSync('git', ['init', '-b', 'main', origin], { encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', 'main', origin], { env: gitEnv, encoding: 'utf-8' })
   git(origin, ['config', 'user.email', 'test@example.com'])
   git(origin, ['config', 'user.name', 'test'])
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], { env: gitEnv, encoding: 'utf-8' })
   git(work, ['config', 'user.email', 'test@example.com'])
   git(work, ['config', 'user.name', 'test'])
   git(work, ['checkout', '-b', 'feat'])
@@ -51,7 +55,7 @@ function makeRepoPair(changed) {
 }
 
 /** Runs the hook against a `gh pr create` command; returns {status, stderr}. */
-function runHook(cwd, command, env = process.env) {
+function runHook(cwd, command, env = gitEnv) {
   const stdin = JSON.stringify({ tool_input: { command } })
   try {
     execFileSync('node', [scriptPath], {
@@ -208,7 +212,7 @@ function envWithGh({ hasImageExtension }) {
       : '#!/bin/sh\necho \'unknown command "image" for "gh"\' >&2\nexit 1\n',
     { mode: 0o755 },
   )
-  return { ...process.env, PATH: `${dir}:${process.env.PATH}` }
+  return isolatedGitEnv({ PATH: `${dir}:${process.env.PATH}` })
 }
 
 test('with no gh image extension, the remedy leads with the stated-reason escape and names the install', () => {
