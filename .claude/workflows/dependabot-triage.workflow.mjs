@@ -32,17 +32,21 @@ const REPO = 'kamiazya/whiteboard'
 // Published-artifact runtime deps carry the highest blast radius: they ship inside
 // @kamiazya/whiteboard-mcp on npm AND a prod high+ vuln BLOCKS the `verify` CI
 // (`pnpm audit --prod --audit-level=high`). zod is the schema single-source-of-truth;
-// loro-crdt is the CRDT persistence/merge core; the MCP SDK gates every tool contract.
+// loro-crdt is the CRDT persistence/merge core; the MCP packages gate every tool contract.
+// lib/dependabot-load-bearing.test.mjs holds this list to the manifests and to the
+// table in .claude/skills/dependabot-review/SKILL.md.
 const LOAD_BEARING = [
-  'zod', 'loro-crdt', '@modelcontextprotocol/sdk', 'hono', '@hono/node-server',
-  'kysely', '@libsql/client', '@libsql/kysely-libsql', 'jose', 'ws',
-  '@excalidraw/excalidraw', '@excalidraw/utils', 'pino', 'nanoid',
+  'zod', 'loro-crdt', 'yaml', 'inversify',
+  '@modelcontextprotocol/server', '@modelcontextprotocol/client', '@modelcontextprotocol/ext-apps',
+  'hono', '@hono/node-server',
+  'kysely', '@libsql/client', '@libsql/kysely-libsql',
+  'jose', 'openid-client', '@resvg/resvg-js', 'opentype.js', 'pino', 'nanoid',
 ]
 const loadBearingHint =
   `Load-bearing published runtime deps (extra scrutiny): ${LOAD_BEARING.join(', ')}. ` +
   `zod = schema single-source-of-truth (a minor can shift inference/parse behavior — check z.infer call sites + parse paths). ` +
-  `loro-crdt = CRDT persistence/merge core (reconcile-elements + useWhiteboardSync + export-json must stay green). ` +
-  `@modelcontextprotocol/sdk gates every MCP tool contract (re-check initialize negotiation + tools/list + smoke).`
+  `loro-crdt = CRDT persistence/merge core (packages/loro-adapter's and packages/server-core's tests must stay green). ` +
+  `@modelcontextprotocol/* gate every MCP tool contract (re-check initialize negotiation + tools/list + smoke).`
 
 // --- schemas ---
 const GATHER_SCHEMA = {

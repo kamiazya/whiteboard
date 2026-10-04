@@ -34,17 +34,22 @@ Read these before applying the reference playbook — they change several steps:
 ## Load-bearing runtime deps (extra scrutiny)
 
 These ship in the published package and/or anchor a cross-process contract — read the changelog
-even for a minor, and run the relevant smoke after merging:
+even for a minor, and run the relevant smoke after merging. The list itself is `LOAD_BEARING` in
+`.claude/workflows/dependabot-triage.workflow.mjs`; `.claude/workflows/lib/dependabot-load-bearing.test.mjs`
+fails when it names a package no manifest depends on or drifts from this table.
 
 | Package | Why it is load-bearing | Verify after bump |
 |---------|------------------------|-------------------|
 | `zod` | schema **single source of truth** (`z.infer`, parse at every boundary) | `pnpm smoke:e2e` + typecheck; a minor can shift inference/parse semantics |
-| `loro-crdt` | CRDT persistence/merge core | reconcile-elements + useWhiteboardSync + export-json tests green |
-| `@modelcontextprotocol/sdk` | gates every MCP tool contract | initialize negotiation + `tools/list` + `pnpm smoke:e2e`; re-check the protocol matrix in `docs/contributing/mcp-debugging.md` |
+| `loro-crdt` | CRDT persistence/merge core | `pnpm --filter @kamiazya/whiteboard-loro-adapter test` + `pnpm vitest run --project server-core-node` |
+| `yaml` | OKF frontmatter parse/serialize in `packages/codec` | `pnpm vitest run --project codec-node` |
+| `inversify` | the mcp-server DI container | `pnpm vitest run --project mcp-node packages/mcp-server/src/di` |
+| `@modelcontextprotocol/server` / `@modelcontextprotocol/client` / `@modelcontextprotocol/ext-apps` | gate every MCP tool contract and the MCP Apps widget | initialize negotiation + `tools/list` + `pnpm smoke:e2e`; re-check the protocol matrix in `docs/contributing/mcp-debugging.md` and the era tests (`app.test.ts`, `serve-stdio-eras.test.ts`) |
 | `hono` / `@hono/node-server` | HTTP routes + daemon transport | route tests + `pnpm mcp:http:dev` reachable |
-| `kysely` / `@libsql/*` | persistence query layer | store/route tests |
-| `@excalidraw/*` | canvas rendering surface | web-app smokes / browser tests |
-| `jose`, `ws`, `pino`, `nanoid` | auth tokens / websocket / logging / ids | nearest tests |
+| `kysely` / `@libsql/client` / `@libsql/kysely-libsql` | persistence query layer | `pnpm vitest run --project mcp-node packages/mcp-server/src/server/store` |
+| `jose` / `openid-client` | auth tokens / server-mode OIDC sign-in | `pnpm vitest run --project mcp-node packages/mcp-server/src/server/security` |
+| `@resvg/resvg-js` / `opentype.js` | headless export rasterising and text measuring | `pnpm vitest run --project mcp-node packages/mcp-server/src/server/export` |
+| `pino` / `nanoid` | logging / ids | nearest tests |
 
 `@types/node` must match `.node-version` (**currently 24**) — if a `@types/node` PR bumps the
 major past the runtime, **close it** rather than merge.
