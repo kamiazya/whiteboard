@@ -47,7 +47,12 @@ const NODE_AMBIENT_GLOBAL_IDENTIFIERS = new Set([
   'global',
 ])
 
+// What `/// <reference types="node" />` names: Node's ambient types, which a
+// shared package must not pull in any more than it may import `node:fs`.
+const NODE_TYPES_PACKAGES = new Set(['node', '@types/node'])
+
 function isNodeBuiltinSpecifier(specifier: string): boolean {
+  if (NODE_TYPES_PACKAGES.has(specifier)) return true
   const bare = specifier.startsWith('node:') ? specifier.slice('node:'.length) : specifier
   const rootPackage = bare.split('/')[0]
   return NODE_BUILTIN_NAMES.has(rootPackage) || specifier.startsWith('node:')
@@ -128,6 +133,15 @@ function callSpecifier(node: ts.CallExpression): string | undefined {
   return isDynamicImport || isRequire ? staticStringText(node.arguments[0]) : undefined
 }
 
+/**
+ * The module an `import('x')` TYPE names (`typeof import('x')`, `import('x').T`).
+ * Erased at emit like `import type`, so always type-only, but it binds the two
+ * modules exactly as an `import type` does and reaches the same boundaries.
+ */
+function importTypeSpecifier(node: ts.ImportTypeNode): string | undefined {
+  return ts.isLiteralTypeNode(node.argument) ? staticStringText(node.argument.literal) : undefined
+}
+
 interface NodeSpecifier {
   readonly specifier: string
   readonly typeOnly: boolean
@@ -157,20 +171,47 @@ function specifierOfNode(node: ts.Node): NodeSpecifier | undefined {
     const specifier = callSpecifier(node)
     if (specifier !== undefined) return { specifier, typeOnly: false }
   }
+  if (ts.isImportTypeNode(node)) {
+    const specifier = importTypeSpecifier(node)
+    if (specifier !== undefined) return { specifier, typeOnly: true }
+  }
   return undefined
+}
+
+/**
+ * `/// <reference path|types>` directives, which pull a file or a types package
+ * into the program with no import statement. `path` is resolved against the
+ * referencing file whether or not it starts with `./`, so it is normalised to
+ * the relative form every consumer of a specifier expects. `lib` names no
+ * module and is not read.
+ */
+function referenceDirectiveSpecifiers(sourceFile: ts.SourceFile): ModuleSpecifierReference[] {
+  const at = (pos: number) => sourceFile.getLineAndCharacterOfPosition(pos).line + 1
+  const paths = sourceFile.referencedFiles.map(({ fileName, pos }) => ({
+    specifier: fileName.startsWith('.') ? fileName : `./${fileName}`,
+    typeOnly: true,
+    line: at(pos),
+  }))
+  const types = sourceFile.typeReferenceDirectives.map(({ fileName, pos }) => ({
+    specifier: fileName,
+    typeOnly: true,
+    line: at(pos),
+  }))
+  return [...paths, ...types]
 }
 
 /**
  * Every place a module specifier can appear in source text: a static
  * `import`/`export ... from`, a dynamic `import(...)` call, a `require(...)`
- * call or an `import x = require(...)`. Missing any one of these would let a
+ * call, an `import x = require(...)`, an `import('x')` type, or a
+ * `/// <reference path|types>` directive. Missing any one of these would let a
  * banned import back in through a form the AST walk never visits. A specifier
  * written as a template literal with no substitution is read like a string;
  * one WITH a substitution names no module statically and is a named blind
  * spot (`.claude/rules/tool-arch-lint.md`).
  */
 export function collectModuleSpecifiers(sourceFile: ts.SourceFile): ModuleSpecifierReference[] {
-  const specifiers: ModuleSpecifierReference[] = []
+  const specifiers: ModuleSpecifierReference[] = referenceDirectiveSpecifiers(sourceFile)
 
   function visit(node: ts.Node): void {
     const found = specifierOfNode(node)

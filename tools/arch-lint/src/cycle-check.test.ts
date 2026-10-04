@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildTypeInclusiveImportGraph,
   buildValueImportGraph,
   collectRelativeImportEdges,
   findImportCycles,
@@ -126,6 +127,48 @@ describe('collectRelativeImportEdges: value-awareness', () => {
   it('ignores a bare (non-relative) specifier', () => {
     const edges = collectRelativeImportEdges('a.ts', "import { z } from 'zod'")
     expect(edges).toHaveLength(0)
+  })
+})
+
+describe('collectRelativeImportEdges: type-position and directive edges', () => {
+  it('reads `typeof import()` and `import().T` as type-only edges', () => {
+    const edges = collectRelativeImportEdges(
+      'a.ts',
+      "type A = typeof import('./b.js')\ntype C = import('../c.js').C",
+    )
+    expect(edges.map((edge) => [edge.specifier, edge.typeOnly])).toEqual([
+      ['./b.js', true],
+      ['../c.js', true],
+    ])
+  })
+
+  it('reads a `/// <reference path>` as a type-only edge, with or without a leading ./', () => {
+    const edges = collectRelativeImportEdges(
+      'a.ts',
+      '/// <reference path="./b.d.ts" />\n/// <reference path="c.d.ts" />\nexport {}',
+    )
+    expect(edges.map((edge) => [edge.specifier, edge.typeOnly])).toEqual([
+      ['./b.d.ts', true],
+      ['./c.d.ts', true],
+    ])
+  })
+})
+
+describe('type-position edges in the graphs', () => {
+  const files = [
+    file('src/a.ts', "export type A = typeof import('./b.js')"),
+    file('src/b.ts', "import { type A } from './a.js'\nexport const b = 1"),
+  ]
+
+  it('keeps an `import()` type in the type-inclusive graph, closing a loop a value scan cannot see', () => {
+    expect(findImportCycles(buildTypeInclusiveImportGraph(files))).toEqual([
+      ['src/a.ts', 'src/b.ts'],
+    ])
+  })
+
+  it('drops it from the value graph, where it is erased at emit', () => {
+    expect(buildValueImportGraph(files).get('src/a.ts')).toEqual([])
+    expect(findImportCycles(buildValueImportGraph(files))).toEqual([])
   })
 })
 
