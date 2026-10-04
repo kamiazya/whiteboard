@@ -7,7 +7,7 @@
 // Stays in REAL-browser mode on purpose: this file is part of the real-IDB
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
-// fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
+// fake-indexeddb instead — see e.g. browser-document-summary.test.tsx.
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'

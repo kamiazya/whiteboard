@@ -22,8 +22,8 @@ import '../components/WorkspaceTopBar.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
@@ -89,7 +89,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('renders loading state before canvas is loaded', () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     renderInRouter(
       <BrowserDocumentPage
         loro={store.loro}
@@ -102,7 +102,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('renders editor view once canvas is loaded', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -122,7 +122,7 @@ describe('BrowserDocumentPage', () => {
     // The store's read itself fails. A pointer naming a document the index
     // does not have is NOT this case: it opens what is left instead
     // (BrowserDocumentPage.browser.test.tsx pins that).
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     vi.spyOn(store.index, 'resolveDocumentById').mockRejectedValueOnce(
       new Error('store read failed'),
@@ -148,7 +148,7 @@ describe('BrowserDocumentPage', () => {
     // The store's read itself fails. A pointer naming a document the index
     // does not have is NOT this case: it opens what is left instead
     // (BrowserDocumentPage.browser.test.tsx pins that).
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     vi.spyOn(store.index, 'resolveDocumentById').mockRejectedValueOnce(
       new Error('store read failed'),
@@ -176,7 +176,7 @@ describe('BrowserDocumentPage', () => {
     // The store's read itself fails. A pointer naming a document the index
     // does not have is NOT this case: it opens what is left instead
     // (BrowserDocumentPage.browser.test.tsx pins that).
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     vi.spyOn(store.index, 'resolveDocumentById').mockRejectedValueOnce(
       new Error('store read failed'),
@@ -209,7 +209,7 @@ describe('BrowserDocumentPage', () => {
 
   it('opens a fresh canvas once a confirmed delete leaves nothing', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -239,7 +239,7 @@ describe('BrowserDocumentPage', () => {
 
   it('does not delete the canvas when the confirmation dialog is cancelled', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -265,7 +265,7 @@ describe('BrowserDocumentPage', () => {
 
   it('duplicates the canvas and switches to the copy when Duplicate is clicked', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     const loro = new FakeLoroStore()
@@ -291,7 +291,7 @@ describe('BrowserDocumentPage', () => {
 
   it('disables the Duplicate button while a duplicate is in flight, and double-clicking produces exactly one copy', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     const loro = new FakeLoroStore()
@@ -342,7 +342,7 @@ describe('BrowserDocumentPage', () => {
 
   it('shows an alert and re-enables the Duplicate button when duplicateDocument fails', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     const loro = new FakeLoroStore()
@@ -373,7 +373,7 @@ describe('BrowserDocumentPage', () => {
 
   it('Copy as JSON Canvas puts the extended document on the clipboard', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     const written: string[] = []
@@ -405,7 +405,7 @@ describe('BrowserDocumentPage', () => {
 
   it('export lives in the canvas row kebab, not the top bar menu', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -436,7 +436,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('renders a human-readable save status instead of the raw state enum', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -459,7 +459,7 @@ describe('BrowserDocumentPage', () => {
 
   it('the canvas row carries state, settings and operations in ONE row (no separate strip)', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -506,7 +506,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('publishes a healthy keeper to the shell until a write actually fails', async () => {
-    const base = new LocalStoreDouble()
+    const base = new BrowserStoreDouble()
     await base.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await base.save(snap)
     base.index.setDocumentName = async () => {
@@ -536,7 +536,7 @@ describe('BrowserDocumentPage', () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('', { status: 200 }))
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -563,7 +563,7 @@ describe('BrowserDocumentPage', () => {
 
   it('keeps a heading landmark distinct from the Delete button and the canvas actions control', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -584,7 +584,7 @@ describe('BrowserDocumentPage', () => {
 
   it('renaming through the title field updates the heading and flushes a save', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -613,7 +613,7 @@ describe('BrowserDocumentPage', () => {
   // pins, and it is invisible to an assertion that stops at the first match.
   it('Escape restores the previous name, and the abandoned one does not land afterwards', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -646,7 +646,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   it('does not render an "Add rectangle" button — scene writes flow through SpatialEditor gestures', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -669,7 +669,7 @@ describe('BrowserDocumentPage', () => {
     // App.test.tsx's "derives initialPath from the /local/:path URL"
     // test for that boundary.
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await store.save({
@@ -699,12 +699,12 @@ describe('BrowserDocumentPage', () => {
 
   it('shows the renamed document even when the list read wins the race against the save', async () => {
     vi.useRealTimers()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
 
     // Held open at the PORT, one rung below where the old double held it: the
-    // listing the page renders is `listLocalDocuments`, and the read it waits
+    // listing the page renders is `listBrowserDocuments`, and the read it waits
     // on is the index's.
     const resolvers: Array<(list: DocumentEntry[]) => void> = []
     store.index.listDocuments = () => new Promise((resolve) => resolvers.push(resolve))
@@ -750,7 +750,7 @@ describe('BrowserDocumentPage', () => {
     vi.useRealTimers()
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      const store = new LocalStoreDouble()
+      const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await store.save({
@@ -781,7 +781,7 @@ describe('BrowserDocumentPage', () => {
     const CTA_TEXT = 'Connect a daemon (MCP) so AI agents can work in this workspace.'
 
     it('keeps the capability CTA out of page chrome and reports "local" to the shell', async () => {
-      const store = new LocalStoreDouble()
+      const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await act(async () => {
@@ -813,7 +813,7 @@ describe('BrowserDocumentPage', () => {
     })
 
     it('does not render any mode-switch control — mode stays a read-only status', async () => {
-      const store = new LocalStoreDouble()
+      const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await act(async () => {
@@ -834,7 +834,7 @@ describe('BrowserDocumentPage', () => {
     })
 
     it('keeps the existing Delete button and canvas actions control working alongside the CTA line', async () => {
-      const store = new LocalStoreDouble()
+      const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await act(async () => {
@@ -851,10 +851,10 @@ describe('BrowserDocumentPage', () => {
     })
   })
 
-  describe('local mode issues no daemon network requests', () => {
+  describe('a browser-kept workspace issues no daemon network requests', () => {
     it('mounting renders no daemon thumbnail <img> and no pin affordance', async () => {
       vi.useRealTimers()
-      const store = new LocalStoreDouble()
+      const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
       await store.save({
@@ -886,7 +886,7 @@ describe('?new=canvas launch shortcut', () => {
   it('creates a fresh canvas on load and strips the param from the URL', async () => {
     // An existing profile: auto-create is skipped, so the count isolates
     // the shortcut's own create.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     window.history.replaceState(null, '', '/?new=canvas')
@@ -908,7 +908,7 @@ describe('?new=canvas launch shortcut', () => {
   })
 
   it('does not create extras on a plain load', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     renderInRouter(
       <BrowserDocumentPage
         store={store.index}
@@ -931,7 +931,7 @@ describe('?new=canvas launch shortcut', () => {
         throw new Error('loro save failed')
       }
     }
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     window.history.replaceState(null, '', '/?new=canvas')
@@ -960,7 +960,7 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
   })
 
   it('an empty canvas opens in Select — the user came to place, not to pan', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {
@@ -980,7 +980,7 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
 
   it("this tab's last choice outranks the canvas-shape guess", async () => {
     sessionStorage.setItem('wb.lastTool', 'hand')
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     await act(async () => {

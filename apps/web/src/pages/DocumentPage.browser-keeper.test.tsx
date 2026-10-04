@@ -7,12 +7,12 @@ import { act, render as rtlRender, screen, waitFor } from '@testing-library/reac
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { expect, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { BrowserStoreDouble, InMemoryLoroStore } from '../test-utils/browser-store-fixture.js'
 import {
   type ContractDocument,
   type DocumentPageFixture,
   describeDocumentPageContract,
 } from '../test-utils/document-page.contract.js'
-import { InMemoryLoroStore, LocalStoreDouble } from '../test-utils/local-index.js'
 
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()
@@ -28,14 +28,14 @@ vi.mock('../lib/browser-backend.js', async () => {
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 let router: ReturnType<typeof createMemoryRouter> | null = null
-let store: LocalStoreDouble | null = null
+let store: BrowserStoreDouble | null = null
 
 const browserFixture: DocumentPageFixture = {
   keeper: 'browser',
   async mount(documents: readonly ContractDocument[]) {
     const [open] = documents
     if (open === undefined) throw new Error('mount needs at least one document')
-    const seeded = new LocalStoreDouble()
+    const seeded = new BrowserStoreDouble()
     store = seeded
     await seeded.setDefaultDocumentId(open.id)
     for (const doc of documents) {

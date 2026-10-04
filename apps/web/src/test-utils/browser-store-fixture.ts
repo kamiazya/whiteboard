@@ -1,11 +1,11 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
-  listLocalDocuments,
-  loadLocalDocument,
-} from '../lib/local-document-summary.js'
+  listBrowserDocuments,
+  loadBrowserDocument,
+} from '../lib/browser-document-summary.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type { LoroStoreLike } from '../pages/use-browser-document-controller.js'
@@ -69,7 +69,7 @@ export class InMemoryLoroStore implements LoroStoreLike {
  * path it replaced was five creates and one rename, which is why the port
  * needed no upsert of its own.
  */
-export class LocalStoreDouble {
+export class BrowserStoreDouble {
   readonly index = new InMemoryDocumentIndex()
 
   readonly pointer = new InMemoryDefaultDocumentPointer()
@@ -108,7 +108,7 @@ export class LocalStoreDouble {
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
-    return listLocalDocuments(this.index, this.clock)
+    return listBrowserDocuments(this.index, this.clock)
   }
 
   /**
@@ -117,7 +117,7 @@ export class LocalStoreDouble {
    * `LoroStore.load`'s answer to give.
    */
   async load(documentId: string): Promise<DocumentSnapshot | null> {
-    return loadLocalDocument(this.index, documentId, this.clock)
+    return loadBrowserDocument(this.index, documentId, this.clock)
   }
 
   async removeDocument(documentId: string): Promise<void> {

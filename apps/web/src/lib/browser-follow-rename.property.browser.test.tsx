@@ -22,13 +22,13 @@ import { Loro } from 'loro-crdt'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
+import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
-import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
 
-claimIsolatedWhiteboardDb('local-follow-rename-property')
+claimIsolatedWhiteboardDb('browser-follow-rename-property')
 
 const SLOTS = [0, 1, 2] as const
 // Suffixes; every run prefixes them, so runs sharing one IndexedDB cannot
@@ -150,7 +150,7 @@ async function tokensOf(documentId: string): Promise<string[]> {
 
 let runSeq = 0
 
-describe('local rename follow parity', () => {
+describe('browser rename follow parity', () => {
   fcTest.prop([fc.array(cmdArb, { minLength: 1, maxLength: 6 })], withDefaults({ numRuns: 8 }))(
     'the browser keeper agrees with the naive follow model',
     async (cmds) => {
@@ -159,8 +159,8 @@ describe('local rename follow parity', () => {
       const NAME = `Plan-${prefix}`
       const alias = (a: string) => (a === 'Plan' ? NAME : P(a))
       const index = new IdbDocumentIndex()
-      await ensureLocalWorkspace(index)
-      const source = createLocalFilesSource({ index })
+      await ensureBrowserWorkspace(index)
+      const source = createBrowserFilesSource({ index })
       const model = new Model()
       const slots: (string | null)[] = [null, null, null]
 

@@ -106,11 +106,11 @@ export function idbContentClock(dbName?: string): ContentClock {
  * create costs one no-op write and removes the need for anyone to know
  * whether they are first.
  */
-export async function ensureLocalWorkspace(index: DocumentIndex): Promise<void> {
+export async function ensureBrowserWorkspace(index: DocumentIndex): Promise<void> {
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
 }
 
-export async function listLocalDocuments(
+export async function listBrowserDocuments(
   index: DocumentIndex,
   clock: ContentClock = idbContentClock(),
 ): Promise<DocumentSnapshot[]> {
@@ -121,7 +121,7 @@ export async function listLocalDocuments(
 }
 
 /** The same projection for one document, or null when the index has no such id. */
-export async function loadLocalDocument(
+export async function loadBrowserDocument(
   index: DocumentIndex,
   documentId: string,
   clock: ContentClock = idbContentClock(),

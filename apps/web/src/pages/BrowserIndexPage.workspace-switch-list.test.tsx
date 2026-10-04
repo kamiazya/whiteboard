@@ -6,7 +6,7 @@ import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 // A workspace switch is an in-SPA route change (ADR-0019), so this page stays
@@ -26,7 +26,7 @@ afterEach(cleanup)
 
 const OTHER_WORKSPACE = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
-function renderPage(store: LocalStoreDouble) {
+function renderPage(store: BrowserStoreDouble) {
   const onOpenDocument = vi.fn()
   render(
     <MemoryRouter initialEntries={['/']}>
@@ -48,7 +48,7 @@ const titles = () => screen.getAllByTestId('card-title').map((el) => el.textCont
 describe('the card list follows a workspace switch', () => {
   it('lists the workspace it switched TO, and nothing from the one it left', async () => {
     const settled = getBrowserWorkspaceId()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.save({
       documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
       workspaceId: settled,
@@ -87,7 +87,7 @@ describe('the card list follows a workspace switch', () => {
     // a row naming a document that is not here — paths and names collide
     // across workspaces, and the row is clickable.
     const settled = getBrowserWorkspaceId()
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.save({
       documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
       workspaceId: settled,

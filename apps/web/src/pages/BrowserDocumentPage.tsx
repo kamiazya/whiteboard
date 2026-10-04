@@ -11,6 +11,8 @@ import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
+import type { ContentClock, DefaultDocumentPointer } from '../lib/browser-document-summary.js'
+import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -20,8 +22,6 @@ import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
-import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -145,7 +145,7 @@ function useBrowserDocument(
   // same files source the document browser uses over the same stores, once
   // per page — the browser keeper answers it by opening every document.
   const tagsSource = useMemo(
-    () => createLocalFilesSource({ index: store, loro: resolvedLoro }),
+    () => createBrowserFilesSource({ index: store, loro: resolvedLoro }),
     [store, resolvedLoro],
   )
   const tagVocabulary = useTagVocabulary(tagsSource)

@@ -15,8 +15,8 @@ import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { inPage, renderPage } from '../test-utils/daemon-page-harness.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { setViewport } from '../test-utils/viewport.js'
 
@@ -48,7 +48,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 async function mountLoaded() {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(snap.documentId)
   await store.save(snap)
   const page = () => (

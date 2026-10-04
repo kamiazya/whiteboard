@@ -1,13 +1,13 @@
 import { renderHook } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
 
 const GONE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 it('an open abandoned while recovering a stale pointer seeds and repoints nothing', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.pointer.set(GONE)
   // The recovery lists what is left; park that listing until the page is gone.
   let release = () => {}

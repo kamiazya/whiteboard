@@ -17,8 +17,8 @@ import '../index.css'
 import { getBrowserWorkspaceId, switchBrowserWorkspace } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 claimIsolatedWhiteboardDb('browserindexpage-workspace-switch')
@@ -34,7 +34,7 @@ const titles = () => screen.getAllByTestId('card-title').map((el) => el.textCont
 
 it('lists the workspace switched to, told apart by count', async () => {
   const settled = getBrowserWorkspaceId()
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.save({
     documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
     workspaceId: settled,

@@ -11,7 +11,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BrowserIndexPage } from '../../pages/BrowserIndexPage.js'
 import { SettingsPage } from '../../pages/SettingsPage.js'
-import { LocalStoreDouble } from '../../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../../test-utils/browser-store-fixture.js'
 
 // Absent-extension behaviour is ExtensionConnectOption's own test; here the
 // question is only where it is placed.
@@ -39,7 +39,7 @@ describe('connecting through the extension', () => {
   })
 
   it('is offered on the empty landing page of a browser-kept workspace', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     render(
       <MemoryRouter initialEntries={['/']}>
         <BrowserIndexPage

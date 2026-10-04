@@ -34,6 +34,12 @@ import {
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
+import {
+  type ContentClock,
+  ensureBrowserWorkspace,
+  idbContentClock,
+} from './browser-document-summary.js'
+import { createTagBearersCache } from './browser-files-source-tags.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
@@ -42,12 +48,6 @@ import {
   WorkspaceMissingError,
 } from './files-source.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import {
-  type ContentClock,
-  ensureLocalWorkspace,
-  idbContentClock,
-} from './local-document-summary.js'
-import { createTagBearersCache } from './local-files-source-tags.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
 import {
   type ContentRecord,
@@ -242,14 +242,14 @@ function trashMembers(
 
 /**
  * `WorkspaceFilesSource` over the browser stores — the adapter that
- * lets the three-pane document browser serve local mode, which is what the
+ * lets the three-pane document browser serve a browser-kept workspace, which is what the
  * seam exists for.
  *
  * Reads go through the same `DocumentIndex`/`LoroStore` pair the editor
  * uses, so the browser and the editor cannot disagree about what exists or
  * what it currently says.
  */
-export function createLocalFilesSource(
+export function createBrowserFilesSource(
   deps: {
     // Injectable so the page can hand the panel the SAME stores it was
     // given: two index instances happen to agree because they open one
@@ -377,7 +377,7 @@ export function createLocalFilesSource(
       try {
         entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       } catch (err) {
-        // The panel's not-found state is mode-independent: this is the local
+        // The panel's not-found state is mode-independent: this is the browser
         // spelling of the daemon's 404.
         if (err instanceof WorkspaceNotFoundError) {
           throw new WorkspaceMissingError(getBrowserWorkspaceId())
@@ -387,7 +387,7 @@ export function createLocalFilesSource(
       if (entries.length === 0) return []
       const pinOrderById = await readPinOrder(index)
       const stamps = await clock(entries.map((entry) => entry.documentId))
-      // Tags for search and the filter chips: the local spelling of the
+      // Tags for search and the filter chips: the browser spelling of the
       // daemon's tag projection. A board's own tags are the document's
       // (ADR-0040 decision 2); what its boxes and edges carry is the carried
       // set that lets the `#tag` filter find the board (decision 3).
@@ -414,7 +414,7 @@ export function createLocalFilesSource(
     },
 
     async createDocument(path: string, kind: DocumentKind, name?: string): Promise<void> {
-      await ensureLocalWorkspace(index)
+      await ensureBrowserWorkspace(index)
       const trimmed = name?.trim()
       const entry = await index.createDocument({
         workspaceId: getBrowserWorkspaceId(),
@@ -422,7 +422,7 @@ export function createLocalFilesSource(
         kind,
         ...(trimmed ? { name: trimmed } : {}),
       })
-      // Seeded like every other local create: a document with no content
+      // Seeded like every other browser create: a document with no content
       // record has no last-edited time and nothing to open. Rolled back if
       // the seed fails, so a failed create never leaves a row with nothing
       // behind it.

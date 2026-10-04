@@ -131,7 +131,7 @@ describe('createRowRenderLoader', () => {
       bounds: BOUNDS,
     })
     // The whole entry, so the source addresses it its own way — the daemon
-    // by path, the local store by id.
+    // by path, the browser store by id.
     expect(d.source.loadSpatialSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'deep/one' }),
     )

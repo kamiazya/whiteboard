@@ -25,7 +25,7 @@ export interface WorkspaceDocumentEntry {
    * places that route a row by kind never see one — and the compile error
    * lands in whichever files-source builds the entry instead of at the
    * decision that has to be made. Measured by adding a third kind: the row
-   * renderer and the row outliner both stayed silent, and `local-files-source`
+   * renderer and the row outliner both stayed silent, and `browser-files-source`
    * and `daemon-files-source` failed in their place.
    */
   readonly kind?: DocumentKind

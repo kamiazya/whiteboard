@@ -1,9 +1,9 @@
 import { Loro } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
+import { listBrowserDocuments } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { duplicateBrowserDocument } from './duplicate-browser-document.js'
-import { listLocalDocuments } from './local-document-summary.js'
 
 function realSnapshotWithElements(elements: readonly unknown[]): Uint8Array {
   const doc = new Loro()
@@ -12,7 +12,7 @@ function realSnapshotWithElements(elements: readonly unknown[]): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-function bytesFor(store: LocalStoreDouble, documentId: string): Uint8Array | undefined {
+function bytesFor(store: BrowserStoreDouble, documentId: string): Uint8Array | undefined {
   // The double records every save in order; the LAST one for an id is what a
   // reader would load.
   return store.loro.saved.filter((row) => row.id === documentId).at(-1)?.bytes
@@ -24,7 +24,7 @@ function bytesFor(store: LocalStoreDouble, documentId: string): Uint8Array | und
  */
 describe('duplicating a browser-kept document by its path', () => {
   it('copies the content and gives the copy its own path and a derived name', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     const source = await store.index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/roadmap',
@@ -44,7 +44,7 @@ describe('duplicating a browser-kept document by its path', () => {
     // The kind travels: a duplicated note is a note, not a board.
     expect(copy.kind).toBe('markdown')
     expect(copy.name).toBe('Roadmap (copy)')
-    const rows = await listLocalDocuments(store.index, store.clock)
+    const rows = await listBrowserDocuments(store.index, store.clock)
     expect(rows.map((row) => row.path).sort()).toEqual(['notes/roadmap', copy.path].sort())
     expect(copy.path).not.toBe('notes/roadmap')
     // A deep copy: the bytes are the source's content, not an empty document.
@@ -52,7 +52,7 @@ describe('duplicating a browser-kept document by its path', () => {
   })
 
   it('refuses a path the workspace does not hold rather than copying an empty document', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await expect(
       duplicateBrowserDocument({
         index: store.index,

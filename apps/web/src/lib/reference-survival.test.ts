@@ -12,7 +12,7 @@
  *
  * The path cell's break is repaired one layer up — a move rewrites
  * references written to the old path (codec's `planReferenceRewrite`,
- * applied by the daemon's move route and by `local-files-source`). The
+ * applied by the daemon's move route and by `browser-files-source`). The
  * repair cannot reach a body edited outside the workspace or pasted back
  * in, so the cell stays true here at the resolver.
  *

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
@@ -23,7 +23,7 @@ claimIsolatedWhiteboardDb('browserdocumentpage-delete-confirm')
 async function expectReplacedBy(store: IdbDocumentIndex, beforeIds: string[]): Promise<void> {
   await waitFor(
     async () => {
-      const afterIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+      const afterIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
       for (const id of beforeIds) expect(afterIds).not.toContain(id)
       expect(afterIds).toHaveLength(1)
     },
@@ -90,16 +90,16 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
 
   it('opening the delete dialog does not delete the canvas yet', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+    const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
     await openDeleteDialog()
 
     // Not yet deleted: the same rows, not a fresh one standing in for them.
-    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
+    expect((await listBrowserDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })
 
   it('confirming deletion removes the canvas row and opens a fresh canvas', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+    const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
     expect(beforeIds.length).toBeGreaterThan(0)
 
     const dialog = await openDeleteDialog()
@@ -112,7 +112,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
 
   it('cancelling via the Cancel button keeps the canvas intact', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+    const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
     const dialog = await openDeleteDialog()
     within(dialog)
       .getByRole('button', { name: /cancel/i })
@@ -120,20 +120,20 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
-    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
+    expect((await listBrowserDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
     // No save state is drawn; the facts stay published, hidden, and untouched.
     expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 
   it('cancelling via Escape keeps the canvas intact', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+    const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
     const dialog = await openDeleteDialog()
     fireEvent.keyDown(dialog, { key: 'Escape' })
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
-    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
+    expect((await listBrowserDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })
 
   it('dialog exposes an accessible name and description tied to the destructive action', async () => {
@@ -166,7 +166,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
 
   it('confirming delete while a save is pending flushes and deletes exactly once', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+    const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
 
     // Put the header persistence state into "pending" by renaming, then
     // immediately open+confirm the delete dialog before the debounce fires.
@@ -191,7 +191,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
       throw new Error('simulated IndexedDB failure')
     }
     await renderLoaded(store)
-    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
+    const beforeIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
 
     const dialog = await openDeleteDialog()
     within(dialog)
@@ -208,6 +208,6 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     expect(alert.closest('[role="alert"]')).not.toBeNull()
     expect(alert.textContent).not.toMatch(/simulated IndexedDB failure/)
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
-    expect((await listLocalDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
+    expect((await listBrowserDocuments(store)).map((c) => c.documentId)).toEqual(beforeIds)
   })
 })

@@ -1,19 +1,19 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
-import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
-import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
   IdbDefaultDocumentPointer,
   idbContentClock,
-  listLocalDocuments,
-  loadLocalDocument,
-} from '../lib/local-document-summary.js'
+  listBrowserDocuments,
+  loadBrowserDocument,
+} from '../lib/browser-document-summary.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
+import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
+import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -138,7 +138,7 @@ async function openDeepLink(
       ? null
       : await stores.index.resolveDocument({ workspaceId, path }).catch(() => null)
   if (!alive() || requested === null) return null
-  const snap = await loadLocalDocument(stores.index, requested.documentId, stores.clock)
+  const snap = await loadBrowserDocument(stores.index, requested.documentId, stores.clock)
   if (!alive() || snap === null) return null
   await stores.pointer.set(requested.documentId)
   return alive() ? snap : null
@@ -164,7 +164,7 @@ async function openPointedAt(
     await stores.pointer.set(created.documentId)
     return alive() ? created : null
   }
-  const snap = await loadLocalDocument(stores.index, id, stores.clock)
+  const snap = await loadBrowserDocument(stores.index, id, stores.clock)
   if (!alive()) return null
   if (snap !== null) return snap
   const left = await openWhatIsLeft(stores, alive)
@@ -189,7 +189,7 @@ async function openWhatIsLeft(
   stores: OpeningStores,
   alive: StillMounted = () => true,
 ): Promise<DocumentSnapshot | null> {
-  const [next] = await listLocalDocuments(stores.index, stores.clock)
+  const [next] = await listBrowserDocuments(stores.index, stores.clock)
   if (!alive()) return null
   const opened = next ?? (await createSeededDocument(stores.index, stores.loro, stores.clock))
   if (!alive()) return null
@@ -494,7 +494,7 @@ export function useBrowserDocumentController(
   }, [])
 
   const listDocuments = useCallback((): Promise<DocumentSnapshot[]> => {
-    return listLocalDocuments(indexRef.current, clockRef.current)
+    return listBrowserDocuments(indexRef.current, clockRef.current)
   }, [])
 
   const createDocument = useCallback(
@@ -516,7 +516,7 @@ export function useBrowserDocumentController(
       if (generation !== switchGenerationRef.current) return false // superseded; optimisation only
       if (!flushed) return false
       try {
-        const loaded = await loadLocalDocument(indexRef.current, id, clockRef.current)
+        const loaded = await loadBrowserDocument(indexRef.current, id, clockRef.current)
         if (generation !== switchGenerationRef.current) return false // superseded while loading
         if (loaded === null) {
           // A missing target is a RECOVERABLE miss, not a degraded store: it

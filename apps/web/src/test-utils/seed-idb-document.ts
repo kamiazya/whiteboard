@@ -1,8 +1,8 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 
 /**

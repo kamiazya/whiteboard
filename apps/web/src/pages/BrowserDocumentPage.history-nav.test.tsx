@@ -26,12 +26,12 @@ import {
 } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
   idbContentClock,
-  listLocalDocuments,
-} from '../lib/local-document-summary.js'
+  listBrowserDocuments,
+} from '../lib/browser-document-summary.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
@@ -72,7 +72,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 // it by id. Every URL assertion below goes through this so the two are never
 // silently conflated.
 async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<string> {
-  const found = (await listLocalDocuments(store)).find((row) => row.documentId === documentId)
+  const found = (await listBrowserDocuments(store)).find((row) => row.documentId === documentId)
   if (found === undefined) throw new Error(`no document ${documentId}`)
   return found.path
 }

@@ -1,8 +1,8 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { type ContentClock, listBrowserDocuments } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { createSeededDocument } from './create-seeded-document.js'
 import { deriveCopyName } from './derive-copy-name.js'
-import { type ContentClock, listLocalDocuments } from './local-document-summary.js'
 import type { LoroStoreLike } from './loro-store.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 import { loadDocumentContent } from './workspace-content.js'
@@ -40,7 +40,7 @@ export async function duplicateBrowserDocument(input: {
     clock,
     deriveCopyName(
       source.name ?? sourcePath,
-      (await listLocalDocuments(index, clock).catch(() => [])).map((row) => row.name),
+      (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.name),
     ),
     source.kind,
     await readMergedContent(loro, source.documentId),

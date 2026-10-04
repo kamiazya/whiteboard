@@ -26,13 +26,13 @@ import { act, cleanup, configure, screen, waitFor } from '@testing-library/react
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
-import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
   idbContentClock,
-  listLocalDocuments,
-} from '../lib/local-document-summary.js'
+  listBrowserDocuments,
+} from '../lib/browser-document-summary.js'
+import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
@@ -102,7 +102,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 // The switcher addresses a document by PATH; the store's default pointer and
 // every persistence helper here address it by id. This is the one conversion.
 async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<string> {
-  const found = (await listLocalDocuments(store)).find((row) => row.documentId === documentId)
+  const found = (await listBrowserDocuments(store)).find((row) => row.documentId === documentId)
   if (found === undefined) throw new Error(`no document ${documentId}`)
   return found.path
 }

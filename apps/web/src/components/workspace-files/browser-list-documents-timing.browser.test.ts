@@ -17,15 +17,15 @@ import { writeCoreFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-a
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
+import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
+import { createBrowserFilesSource } from '../../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
-import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
-import { createLocalFilesSource } from '../../lib/local-files-source.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 
-claimIsolatedWhiteboardDb('local-list-documents-timing')
+claimIsolatedWhiteboardDb('browser-list-documents-timing')
 
 const SIZES = [25, 50, 100] as const
 
@@ -54,7 +54,7 @@ beforeEach(clearWhiteboardDb)
 
 it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 }, async () => {
   const index = new FoldingBrowserIndex()
-  await ensureLocalWorkspace(index)
+  await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const readings: Record<number, { coldMs: number; repeatMs: number }> = {}
   let seeded = 0
@@ -72,7 +72,7 @@ it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 
       await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
     }
 
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
     const startedCold = performance.now()
     const listed = await source.listDocuments()
     const coldMs = Math.round(performance.now() - startedCold)

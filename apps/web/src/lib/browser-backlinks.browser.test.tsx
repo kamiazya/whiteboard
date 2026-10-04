@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
@@ -41,7 +41,7 @@ async function note(index: FoldingBrowserIndex, path: string, name: string, body
 describe('the browser keeper answering what links here', () => {
   it('lists a document that links here, and one that names it without a link', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
     await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
@@ -58,7 +58,7 @@ describe('the browser keeper answering what links here', () => {
   // the very next ask, through the same reader.
   it('drops a backlink on the next ask once the link is edited away', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const alpha = await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
     const read = browserBacklinksReader(index, new LoroStore())

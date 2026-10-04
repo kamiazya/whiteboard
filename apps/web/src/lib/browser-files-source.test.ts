@@ -1,6 +1,6 @@
 /**
  * The browser's `WorkspaceFilesSource` — the adapter that lets the
- * three-pane browser serve local mode, which is the whole point of the seam.
+ * three-pane browser serve a browser-kept workspace, which is the whole point of the seam.
  */
 import 'fake-indexeddb/auto'
 import {
@@ -19,6 +19,8 @@ import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-sou
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
+import { createBrowserFilesSource } from './browser-files-source.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -26,14 +28,12 @@ import {
 } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
-import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
 import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
-claimIsolatedWhiteboardDb('local-files-source')
+claimIsolatedWhiteboardDb('browser-files-source')
 
-describe('createLocalFilesSource', () => {
+describe('createBrowserFilesSource', () => {
   beforeEach(clearWhiteboardDb)
 
   it('lists a fresh database as empty, not as missing', async () => {
@@ -51,7 +51,7 @@ describe('createLocalFilesSource', () => {
     // workspace explicitly under it.
     resetBrowserWorkspaceIdForTests()
     await resolveBrowserWorkspaceId()
-    await expect(createLocalFilesSource().listDocuments()).resolves.toEqual([])
+    await expect(createBrowserFilesSource().listDocuments()).resolves.toEqual([])
   })
 
   it('lists a legacy row-plane document — the startup fold absorbs it into the tree', async () => {
@@ -59,7 +59,7 @@ describe('createLocalFilesSource', () => {
     // nothing in the workspace tree. The default source folds on first read,
     // so the legacy document lists with its name and kind intact.
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'a',
@@ -68,7 +68,7 @@ describe('createLocalFilesSource', () => {
     })
     await new LoroStore().save(entry.documentId, new Loro().export({ mode: 'snapshot' }))
 
-    const entries = await createLocalFilesSource().listDocuments()
+    const entries = await createBrowserFilesSource().listDocuments()
     expect(entries.map((e) => ({ path: e.path, name: e.name, kind: e.kind }))).toEqual([
       { path: 'a', name: 'A', kind: 'spatial' },
     ])
@@ -89,14 +89,14 @@ describe('createLocalFilesSource', () => {
       name: 'Tree Only',
     })
 
-    const entries = await createLocalFilesSource().listDocuments()
+    const entries = await createBrowserFilesSource().listDocuments()
     expect(entries.map((e) => e.path)).toContain('tree-only')
   })
 
-  it('creates a document with seeded content, like every other local create', async () => {
-    const source = createLocalFilesSource()
+  it('creates a document with seeded content, like every other browser create', async () => {
+    const source = createBrowserFilesSource()
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
 
     await source.createDocument('notes/plan', 'markdown')
 
@@ -109,7 +109,7 @@ describe('createLocalFilesSource', () => {
   })
 
   it('renames through the index, so the subtree moves with it', async () => {
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     await source.createDocument('plan', 'markdown')
     await source.createDocument('plan/sub', 'markdown')
 
@@ -124,7 +124,7 @@ describe('createLocalFilesSource', () => {
     // so a swap typechecks and silently renames nothing. The fixture makes
     // the two addresses differ (a nested path never equals an id) so only
     // the id can produce this result.
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     await source.createDocument('plans/roadmap', 'markdown')
     const created = (await source.listDocuments())[0]
     expect(created).toBeDefined()
@@ -140,20 +140,20 @@ describe('createLocalFilesSource', () => {
   })
 
   it('reads a markdown document body back', async () => {
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'n',
       kind: 'markdown',
     })
     const doc = new Loro()
-    doc.getText('body').insert(0, '# Hello from local')
+    doc.getText('body').insert(0, '# Hello from browser')
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const markdown = await source.loadMarkdown({ ...entry, kind: 'markdown' })
-    expect(markdown.body).toContain('Hello from local')
+    expect(markdown.body).toContain('Hello from browser')
   })
 
   // The document's own mark, off the same read as the body. Both keepers
@@ -161,9 +161,9 @@ describe('createLocalFilesSource', () => {
   // because a feature written into one keeper and not the other is an absent
   // test rather than a failing one (coverage-ledger.md).
   it('reads a markdown document’s facets back with its body', async () => {
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'marked',
@@ -180,9 +180,9 @@ describe('createLocalFilesSource', () => {
   })
 
   it('answers the CURRENT spatial bytes, deltas folded in', async () => {
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 's',
@@ -209,12 +209,12 @@ describe('createLocalFilesSource', () => {
   })
 })
 
-describe('createLocalFilesSource tags', () => {
+describe('createBrowserFilesSource tags', () => {
   beforeEach(clearWhiteboardDb)
 
   it('surfaces core-facet tags on markdown entries and omits them elsewhere', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const tagged = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'tagged',
@@ -230,26 +230,26 @@ describe('createLocalFilesSource tags', () => {
     writeCoreFacets(doc, { type: 'note', tags: ['release', 'q3'] })
     await new LoroStore().save(tagged.documentId, doc.export({ mode: 'snapshot' }))
 
-    const entries = await createLocalFilesSource().listDocuments()
+    const entries = await createBrowserFilesSource().listDocuments()
     expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
     expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
     await expectLoggedFailure('startup fold left documents behind')
   })
 })
 
-describe('createLocalFilesSource trash', () => {
+describe('createBrowserFilesSource trash', () => {
   beforeEach(clearWhiteboardDb)
 
   it('exposes the shared index trash: delete lists it, restore brings it back', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'doomed',
       kind: 'spatial',
     })
     await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
     await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: 'doomed' })
 
     const trash = await source.listTrash?.()
@@ -267,8 +267,8 @@ describe('createLocalFilesSource trash', () => {
     // row still there — a silent no-op. The daemon path already rejects
     // (its route 404s); the browser path must agree.
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
-    const source = createLocalFilesSource({ index })
+    await ensureBrowserWorkspace(index)
+    const source = createBrowserFilesSource({ index })
 
     await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow()
   })
@@ -276,13 +276,13 @@ describe('createLocalFilesSource trash', () => {
   it('stays capability-less over an index that keeps no trash', async () => {
     // The legacy row-plane index has no listTrash/restoreDocument, so the
     // source must not offer the affordance it could not honour.
-    const source = createLocalFilesSource({ index: new IdbDocumentIndex() })
+    const source = createBrowserFilesSource({ index: new IdbDocumentIndex() })
     expect(source.listTrash).toBeUndefined()
     expect(source.restoreFromTrash).toBeUndefined()
   })
 })
 
-describe('createLocalFilesSource search', () => {
+describe('createBrowserFilesSource search', () => {
   beforeEach(clearWhiteboardDb)
 
   /**
@@ -298,7 +298,7 @@ describe('createLocalFilesSource search', () => {
    */
   it('finds a document by what its emoji is called, in either language', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/untitled-1',
@@ -308,7 +308,7 @@ describe('createLocalFilesSource search', () => {
     const doc = new Loro()
     writeMarkdownBody(doc, '次のリリースは 🚀 で行く。')
     await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
 
     const byEnglish = await source.searchDocuments('rocket')
     expect(byEnglish.map((hit) => hit.document.path)).toEqual(['notes/untitled-1'])
@@ -321,7 +321,7 @@ describe('createLocalFilesSource search', () => {
   // through `readDocumentContent`, and this holds the browser's half.
   it('finds a document by a word only its description holds', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/quarterly',
@@ -331,7 +331,7 @@ describe('createLocalFilesSource search', () => {
     writeMarkdownBody(doc, 'Nothing relevant here.')
     writeCoreFacets(doc, { type: 'note', description: 'Quarterly zebracrossing summary' })
     await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' }))
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
 
     const hits = await source.searchDocuments('zebracrossing')
     expect(hits.map((hit) => hit.document.path)).toEqual(['notes/quarterly'])
@@ -341,12 +341,12 @@ describe('createLocalFilesSource search', () => {
 // ADR-0040: a board's own tags are the document's, listed like a note's, and
 // what its boxes and edges carry is counted in the workspace's vocabulary —
 // the browser keeper's spelling of the daemon's /document-tags.
-describe('createLocalFilesSource board tags and the vocabulary in use', () => {
+describe('createBrowserFilesSource board tags and the vocabulary in use', () => {
   beforeEach(clearWhiteboardDb)
 
   it('lists a board’s own tags on its entry and counts every bearer in listTagsInUse', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const note = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'note',
@@ -372,7 +372,7 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
     })
     await store.save(board.documentId, boardDoc.export({ mode: 'snapshot' }))
 
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     const entries = await source.listDocuments()
     expect(entries.find((e) => e.path === 'board')?.tags).toEqual(['team:core', 'q3'])
     // What the boxes and the edge carry, once each, beside the board's own —
@@ -389,9 +389,9 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
 
   it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const store = new LoroStore()
-    const before = createLocalFilesSource()
+    const before = createBrowserFilesSource()
     await expect(before.readTagLibrary?.()).resolves.toEqual({})
     const library = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -403,7 +403,7 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       'visual.tags/v0': { keys: { health: { exclusive: true, values: { ok: { color: '4' } } } } },
     } as never)
     await store.save(library.documentId, doc.export({ mode: 'snapshot' }))
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     await expect(source.readTagLibrary?.()).resolves.toEqual({
       health: { exclusive: true, values: { ok: { color: '4' } } },
     })
@@ -411,9 +411,9 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
 
   it('reads the stencil library the document at the stencil library path declares, and answers none without one', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const store = new LoroStore()
-    await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({})
+    await expect(createBrowserFilesSource().readStencilLibrary?.()).resolves.toEqual({})
     const library = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: STENCIL_LIBRARY_PATH,
@@ -424,14 +424,14 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       'visual.stencils/v0': { stencils: { lakehouse: { displayName: 'Lakehouse', color: '3' } } },
     } as never)
     await store.save(library.documentId, doc.export({ mode: 'snapshot' }))
-    await expect(createLocalFilesSource().readStencilLibrary?.()).resolves.toEqual({
+    await expect(createBrowserFilesSource().readStencilLibrary?.()).resolves.toEqual({
       lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
     })
   })
 
   it('reads a library document whose stored bytes cannot be decoded as no library, not as a failure', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const store = new LoroStore()
     for (const path of [TAG_LIBRARY_PATH, STENCIL_LIBRARY_PATH]) {
       const entry = await index.createDocument({
@@ -441,20 +441,20 @@ describe('createLocalFilesSource board tags and the vocabulary in use', () => {
       })
       await store.save(entry.documentId, new Uint8Array([1, 2, 3, 4]))
     }
-    const source = createLocalFilesSource()
+    const source = createBrowserFilesSource()
     await expect(source.readTagLibrary?.()).resolves.toEqual({})
     await expect(source.readStencilLibrary?.()).resolves.toEqual({})
     await expectLoggedFailure('startup fold left documents behind')
   })
 })
 
-describe('createLocalFilesSource tag cache', () => {
+describe('createBrowserFilesSource tag cache', () => {
   beforeEach(clearWhiteboardDb)
 
   /** Two tagged notes in the legacy row plane, whose content reads go through a counting store. */
   async function twoTaggedNotes() {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const real = new LoroStore()
     const loads: string[] = []
     const loro = {
@@ -485,7 +485,7 @@ describe('createLocalFilesSource tag cache', () => {
       [ids.one as string, 'stamp-1'],
       [ids.two as string, 'stamp-1'],
     ])
-    const source = createLocalFilesSource({ index, loro, clock: async () => new Map(stamps) })
+    const source = createBrowserFilesSource({ index, loro, clock: async () => new Map(stamps) })
     return { source, loads, ids, stamps, write }
   }
 
@@ -530,7 +530,7 @@ describe('createLocalFilesSource tag cache', () => {
     // A document that records no kind is whatever its row says, so what it
     // bears depends on the row as well as on the content.
     const base = new IdbDocumentIndex()
-    await ensureLocalWorkspace(base)
+    await ensureBrowserWorkspace(base)
     const entry = await base.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'shape-shifter',
@@ -552,7 +552,7 @@ describe('createLocalFilesSource tag cache', () => {
           (await base.listDocuments(input)).map((row) => ({ ...row, kind: rowKind.value })),
       },
     }) as IdbDocumentIndex
-    const source = createLocalFilesSource({
+    const source = createBrowserFilesSource({
       index,
       clock: async () => new Map([[entry.documentId, 'stamp-1']]),
     })
@@ -571,7 +571,7 @@ describe('createLocalFilesSource tag cache', () => {
   })
 })
 
-describe('createLocalFilesSource over a row that names no kind', () => {
+describe('createBrowserFilesSource over a row that names no kind', () => {
   beforeEach(clearWhiteboardDb)
 
   it('reads it as a canvas — its carried tags are listed and its text is searched', async () => {
@@ -579,7 +579,7 @@ describe('createLocalFilesSource over a row that names no kind', () => {
     // holds, `readDocumentContent` says what such a document is, and every walk
     // in the source has to agree with it rather than each choosing its own.
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'pre-kind',
@@ -609,7 +609,7 @@ describe('createLocalFilesSource over a row that names no kind', () => {
           (await index.listDocuments(input)).map(({ kind: _kind, ...row }) => row),
       },
     }) as FoldingBrowserIndex
-    const source = createLocalFilesSource({ index: kindless })
+    const source = createBrowserFilesSource({ index: kindless })
 
     const [listed] = await source.listDocuments()
     expect(listed?.kind).toBeUndefined()
@@ -648,12 +648,12 @@ function boardOf(document: {
   }
 }
 
-describe('createLocalFilesSource conformance', () => {
+describe('createBrowserFilesSource conformance', () => {
   beforeEach(clearWhiteboardDb)
 
-  describeWorkspaceFilesSourceConformance('createLocalFilesSource', async (fixture) => {
+  describeWorkspaceFilesSourceConformance('createBrowserFilesSource', async (fixture) => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const workspaceId = getBrowserWorkspaceId()
     for (const document of fixture.documents ?? []) {
       const entry = await index.createDocument({
@@ -677,6 +677,6 @@ describe('createLocalFilesSource conformance', () => {
       await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
       await index.deleteDocument({ workspaceId, path: gone.path })
     }
-    return createLocalFilesSource({ index })
+    return createBrowserFilesSource({ index })
   })
 })

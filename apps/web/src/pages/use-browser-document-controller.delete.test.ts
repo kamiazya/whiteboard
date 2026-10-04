@@ -6,7 +6,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
 
 const C1 = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -30,7 +30,7 @@ describe('useBrowserDocumentController delete', () => {
   })
 
   it('deleteDocument flushes pending save, deletes, and opens a fresh document when none is left', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const { result } = renderHook(() =>
@@ -65,7 +65,7 @@ describe('useBrowserDocumentController delete', () => {
     // A load between the two writes read the pointer, found no row behind it
     // and reported "could not be read". Cleared first, a load in that window
     // finds no pointer and opens as a first visit would.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
     const pointerWhenRowGoes: (string | null)[] = []
@@ -89,7 +89,7 @@ describe('useBrowserDocumentController delete', () => {
   })
 
   it('deleteDocument opens the document that is left', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
     await store.save(snap)
     await store.save({ ...snap, documentId: C2, path: 'other', name: 'Other' })

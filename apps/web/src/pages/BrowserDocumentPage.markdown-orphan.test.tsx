@@ -23,8 +23,8 @@ import {
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { renderInRouter } from '../test-utils/daemon-page-harness.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 
 // jsdom has no IndexedDB, so the startup fold cannot run here: it throws, the
 // production path catches it and continues, and that guarded continue is
@@ -107,7 +107,7 @@ seed.note = noteWithBothKinds
 afterEach(cleanup)
 
 it('marks the conversation whose passage is gone, and only that one', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
 

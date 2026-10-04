@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { BrowserIndexPage } from '../pages/BrowserIndexPage.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import '../index.css'
 import { resolveDocAssetPath } from './_helpers.js'
 
@@ -33,7 +33,7 @@ afterEach(() => {
 
 describe('docs snapshot: browser document list', () => {
   it('captures the list with a markdown note and a spatial pair', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     // Named so the page's h1 reads as a workspace a
     // person named, not the raw ULID the seeded double falls back to.
     await store.index.renameWorkspace({

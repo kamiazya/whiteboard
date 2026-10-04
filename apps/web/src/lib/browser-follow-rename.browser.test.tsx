@@ -1,6 +1,6 @@
 /**
  * The browser keeper's half of reference-following: a move through the
- * local files source repoints references other documents wrote to the old
+ * browser files source repoints references other documents wrote to the old
  * path — the same codec plan the daemon's route applies, so both modes give
  * one answer.
  */
@@ -19,18 +19,18 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
+import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
-import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
 
-claimIsolatedWhiteboardDb('local-follow-rename')
+claimIsolatedWhiteboardDb('browser-follow-rename')
 
 // The claim is made once per MODULE, and `--repeats` re-runs the tests
 // without re-importing — so without this every seed after the first collides
 // on its own path (`DocumentPathTakenError`). The same beat as
-// `local-search.browser.test.tsx`, and found the same way: CI's
+// `browser-search.browser.test.tsx`, and found the same way: CI's
 // `stress-changed-tests` repeats a PR's touched test files in-process, so a
 // file that was never repeat-safe becomes a candidate the moment a diff
 // touches it.
@@ -79,10 +79,10 @@ async function bodyOf(documentId: string): Promise<string> {
   return readMarkdownBody(doc)
 }
 
-describe('local rename follows references', () => {
+describe('browser rename follows references', () => {
   it('a path move repoints markdown and spatial references to the old path', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     await seedMarkdown(index, 'follow/design-login', 'the target')
     const sourceId = await seedMarkdown(
       index,
@@ -104,7 +104,7 @@ describe('local rename follows references', () => {
       edges: [],
     })
 
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
     await source.renameDocumentPath('follow/design-login', 'follow/archive-login')
 
     expect(await bodyOf(sourceId)).toBe('see [[follow/archive-login]] and [[unrelated]]')
@@ -121,12 +121,12 @@ describe('local rename follows references', () => {
 
   it('a subtree move follows references to a descendant', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     await seedMarkdown(index, 'tree/folder', 'the parent')
     await seedMarkdown(index, 'tree/folder/child', 'the child')
     const sourceId = await seedMarkdown(index, 'tree/daily', 'see [[tree/folder/child]]')
 
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
     await source.renameDocumentPath('tree/folder', 'tree/archive')
 
     expect(await bodyOf(sourceId)).toBe('see [[tree/archive/child]]')

@@ -15,10 +15,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
+import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
-import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
 import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
@@ -30,7 +30,7 @@ const SEEDED_WALK_TIMEOUT_MS = 30_000
 
 async function seedWorkspace(): Promise<{ index: FoldingBrowserIndex; documentIds: string[] }> {
   const index = new FoldingBrowserIndex()
-  await ensureLocalWorkspace(index)
+  await ensureBrowserWorkspace(index)
   const documentIds: string[] = []
   for (let n = 0; n < DOCUMENTS; n++) {
     const entry = await index.createDocument({
@@ -73,7 +73,7 @@ describe('a cold walk over a browser workspace', () => {
     timeout: SEEDED_WALK_TIMEOUT_MS,
   }, async () => {
     const { index } = await seedWorkspace()
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
     let listed: Awaited<ReturnType<typeof source.listDocuments>> = []
 
     const walkOpens = await opensForTheColdWalk(async () => {
@@ -89,7 +89,7 @@ describe('a cold walk over a browser workspace', () => {
     timeout: SEEDED_WALK_TIMEOUT_MS,
   }, async () => {
     const { index } = await seedWorkspace()
-    const source = createLocalFilesSource({ index })
+    const source = createBrowserFilesSource({ index })
     await source.listDocuments()
     let hits: Awaited<ReturnType<typeof source.searchDocuments>> = []
 

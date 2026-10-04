@@ -17,8 +17,8 @@ import '../index.css'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 claimIsolatedWhiteboardDb('browserindexpage-duplicate')
@@ -32,7 +32,7 @@ const titles = () => screen.getAllByTestId('card-title').map((each) => each.text
 
 async function seedOne() {
   const workspaceId = getBrowserWorkspaceId()
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   const documentId = '0CFJNRVY147ADGKPSWZ258BEHM'
   await store.save({
     documentId,
@@ -50,7 +50,7 @@ async function seedOne() {
   return store
 }
 
-function renderPage(store: LocalStoreDouble, index = store.index) {
+function renderPage(store: BrowserStoreDouble, index = store.index) {
   render(
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage

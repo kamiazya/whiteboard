@@ -12,11 +12,11 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { BrowserStoreDouble, InMemoryLoroStore } from '../test-utils/browser-store-fixture.js'
 import {
   latestEditorProps,
   resetCapturedEditorProps,
 } from '../test-utils/capturing-spatial-editor.js'
-import { InMemoryLoroStore, LocalStoreDouble } from '../test-utils/local-index.js'
 
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()
@@ -34,8 +34,8 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 const HERE_ID = '005AFMSY38DJQW16BGNTZ49EKR'
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-async function seededStore(): Promise<LocalStoreDouble> {
-  const store = new LocalStoreDouble()
+async function seededStore(): Promise<BrowserStoreDouble> {
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(HERE_ID)
   await store.save({
     documentId: HERE_ID,
@@ -56,7 +56,7 @@ async function seededStore(): Promise<LocalStoreDouble> {
   return store
 }
 
-async function mountPage(store: LocalStoreDouble) {
+async function mountPage(store: BrowserStoreDouble) {
   const router = createMemoryRouter(
     [
       {

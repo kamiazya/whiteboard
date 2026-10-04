@@ -8,26 +8,27 @@
  * than bending the contract around them.
  */
 
-// jsdom + fake-indexeddb: this file exercises IndexedDB persistence logic,
-// not browser layout or input fidelity — the real-IDB contract stays pinned
-// by idb-document-index/loro-store/browser-backend/browser-idb-migration
-// in the browser project.
-import 'fake-indexeddb/auto'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
-import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
   idbContentClock,
-  listLocalDocuments,
-} from './local-document-summary.js'
+  listBrowserDocuments,
+} from './browser-document-summary.js'
+import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = 'whiteboard-summary-test'
 
 async function seedWorkspace(): Promise<IdbDocumentIndex> {
+  // This file's DB is claimed by literal name rather than through
+  // `claimIsolatedWhiteboardDb` (it predates that helper), so the
+  // `getBrowserWorkspaceId()` seam is not set for it automatically — set it
+  // fresh per test instead, matching what the seam-owning helper does.
+  setBrowserWorkspaceIdForTests(generateDocumentId())
   const index = new IdbDocumentIndex(DB_NAME)
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   return index
@@ -39,7 +40,7 @@ async function writeContent(documentId: string): Promise<void> {
   await new LoroStore(DB_NAME).save(documentId, doc.export({ mode: 'snapshot' }))
 }
 
-describe('local document summary', () => {
+describe('browser document summary', () => {
   beforeEach(() => clearNamedDb(DB_NAME))
   afterEach(() => clearNamedDb(DB_NAME))
 
@@ -53,7 +54,7 @@ describe('local document summary', () => {
     })
     await writeContent(entry.documentId)
 
-    const [row] = await listLocalDocuments(index, idbContentClock(DB_NAME))
+    const [row] = await listBrowserDocuments(index, idbContentClock(DB_NAME))
     expect(row?.documentId).toBe(entry.documentId)
     expect(row?.path).toBe('notes')
     expect(row?.name).toBe('Notes')
@@ -74,7 +75,7 @@ describe('local document summary', () => {
     })
     await writeContent(entry.documentId)
 
-    const [row] = await listLocalDocuments(index, idbContentClock(DB_NAME))
+    const [row] = await listBrowserDocuments(index, idbContentClock(DB_NAME))
     expect(row?.name).toBe('archive/untitled')
   })
 
@@ -90,7 +91,7 @@ describe('local document summary', () => {
       kind: 'spatial',
     })
 
-    const rows = await listLocalDocuments(index, idbContentClock(DB_NAME))
+    const rows = await listBrowserDocuments(index, idbContentClock(DB_NAME))
     expect(rows).toHaveLength(1)
     expect(rows[0]?.updatedAt).toBe(new Date(0).toISOString())
   })

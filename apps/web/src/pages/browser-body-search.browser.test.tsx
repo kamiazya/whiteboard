@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { ensureLocalWorkspace } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
@@ -13,14 +13,14 @@ import { BrowserIndexPage } from './BrowserIndexPage.js'
 // The page, its source and the panel together — the seam the unit tests
 // each covered one side of, and where the preview found nothing.
 
-claimIsolatedWhiteboardDb('local-body-search-page')
+claimIsolatedWhiteboardDb('browser-body-search-page')
 
 afterEach(cleanup)
 
 describe('searching from the page', () => {
   it('finds a document by a word only its body carries', async () => {
     const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'untitled',

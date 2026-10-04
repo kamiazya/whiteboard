@@ -1,7 +1,7 @@
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { expectTypedSource, waitForOrSayWhen } from '../test-utils/late-arrival.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 /**
@@ -364,7 +364,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // content: the document a rename touches holds no `title` facet at all
     // (ADR-0009 decision 2). Without this the test passes on a document that
     // stores the name twice, which is the state it exists to rule out.
-    const entry = (await listLocalDocuments(store)).find((row) => row.kind === 'markdown')
+    const entry = (await listBrowserDocuments(store)).find((row) => row.kind === 'markdown')
     expect(entry?.name).toBe('リリース計画')
     const loaded = await new LoroStore().load(entry?.documentId ?? '')
     expect(loaded.kind).toBe('ok')
@@ -484,7 +484,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // ONE read, taken the moment the page goes away — deliberately not a
     // waitFor. Retrying would pass either way once the queued write lands,
     // which is exactly the difference this is here to see.
-    const listed = await listLocalDocuments(store)
+    const listed = await listBrowserDocuments(store)
     expect(listed.map((row) => row.name)).toContain('Release plan')
   })
 
@@ -959,7 +959,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
 
     await waitFor(
       async () => {
-        const row = (await listLocalDocuments(new FoldingBrowserIndex())).find(
+        const row = (await listBrowserDocuments(new FoldingBrowserIndex())).find(
           (r) => r.kind === 'markdown',
         )
         expect(row?.name).toBe('Weekly review')
@@ -983,7 +983,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
-      (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+      (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')
     await waitFor(() => expect(resolveEditable()).not.toBeNull())
@@ -1014,7 +1014,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
-      (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+      (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
     const before = (await markdownRow())?.updatedAt
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')
@@ -1036,7 +1036,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     renderPage(<BrowserDocumentPage store={store} />)
 
     const markdownRow = async () =>
-      (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+      (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
     const before = (await markdownRow())?.updatedAt
 
     const resolveEditable = () => document.querySelector('[contenteditable="true"]')

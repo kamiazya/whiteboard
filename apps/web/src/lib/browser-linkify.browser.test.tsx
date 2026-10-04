@@ -8,10 +8,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { ensureLocalWorkspace } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent, seedWorkspaceDocumentContent } from './workspace-content.js'
 
@@ -45,7 +45,7 @@ async function note(index: FoldingBrowserIndex, path: string, name: string, body
 describe("the browser keeper's Link on a mention", () => {
   it('writes the mention as a link in the source, and the source becomes a backlink', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const gamma = await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
     const read = browserBacklinksReader(index, new LoroStore())
@@ -66,7 +66,7 @@ describe("the browser keeper's Link on a mention", () => {
 
   it('writes nothing when the source has nothing to link', async () => {
     const index = new FoldingBrowserIndex()
-    await ensureLocalWorkspace(index)
+    await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const alpha = await note(index, 'alpha', 'Alpha', 'Nothing about it here.')
 

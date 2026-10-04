@@ -13,7 +13,7 @@ import { z } from 'zod'
  * enforces that rather than a comment asking nicely.
  *
  * Nothing parses a stored row with it — the row is assembled from the
- * workspace's document index (`local-document-summary.ts`) — so it is the
+ * workspace's document index (`browser-document-summary.ts`) — so it is the
  * single definition `DocumentSnapshot` is derived from, and its test pins the
  * shape.
  *

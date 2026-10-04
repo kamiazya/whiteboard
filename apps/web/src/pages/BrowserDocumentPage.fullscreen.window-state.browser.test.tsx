@@ -20,12 +20,12 @@ import {
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { setViewport } from '../test-utils/viewport.js'
 
-// No real IndexedDB in this file (`LocalStoreDouble` is in-memory), so
+// No real IndexedDB in this file (`BrowserStoreDouble` is in-memory), so
 // nothing else in this page's module graph resolves the workspace-id
 // accessor the way `claimIsolatedWhiteboardDb` would for a real-DB file.
 setBrowserWorkspaceIdForTests(generateDocumentId())
@@ -65,7 +65,7 @@ const snap: DocumentSnapshot = {
 }
 
 async function renderLoaded() {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)
   await act(async () => {

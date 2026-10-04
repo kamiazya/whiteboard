@@ -8,6 +8,15 @@ import { DocumentsSkeleton } from '../components/document-list/DocumentsSkeleton
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
+import {
+  type ContentClock,
+  type DefaultDocumentPointer,
+  ensureBrowserWorkspace,
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  listBrowserDocuments,
+} from '../lib/browser-document-summary.js'
+import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
 import {
   browserWorkspaceIdentitySnapshot,
@@ -18,15 +27,6 @@ import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import {
-  type ContentClock,
-  type DefaultDocumentPointer,
-  ensureLocalWorkspace,
-  IdbDefaultDocumentPointer,
-  idbContentClock,
-  listLocalDocuments,
-} from '../lib/local-document-summary.js'
-import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
@@ -179,7 +179,7 @@ function useBrowserFilesSource(
   // card menu's Delete carries a PATH, which this page then resolves against
   // whichever workspace is active NOW.
   const filesSource = useMemo(
-    () => createLocalFilesSource({ index, loro, clock }),
+    () => createBrowserFilesSource({ index, loro, clock }),
     // `activeWorkspace` is not read by the factory — the source reads the
     // accessor at call time. It is here as the switch SIGNAL the panel keys
     // on, which is the whole point of the memo.
@@ -192,7 +192,7 @@ function useBrowserFilesSource(
 interface BrowserDocumentsLoadInput {
   index: BrowserIndexPageProps['index'] & {}
   clock: BrowserIndexPageProps['clock'] & {}
-  filesSource: ReturnType<typeof createLocalFilesSource>
+  filesSource: ReturnType<typeof createBrowserFilesSource>
   activeWorkspace: ReturnType<typeof browserWorkspaceIdentitySnapshot>
   revision: BrowserIndexPageProps['revision']
   filesRevision: number
@@ -213,8 +213,8 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
     // list, and the port answers that with an error rather than an empty
     // list. Ensuring it here is what makes a first visit render the empty
     // state instead of "Failed to load documents from this browser."
-    ensureLocalWorkspace(props.index)
-      .then(() => listLocalDocuments(props.index, props.clock))
+    ensureBrowserWorkspace(props.index)
+      .then(() => listBrowserDocuments(props.index, props.clock))
       .then((all) => {
         if (!cancelled) props.setSnapshots(all)
       })
@@ -315,7 +315,7 @@ interface BrowserIndexBodyProps {
   trashCount: number
   error: string | null
   creating: boolean
-  filesSource: ReturnType<typeof createLocalFilesSource>
+  filesSource: ReturnType<typeof createBrowserFilesSource>
   activeWorkspace: ReturnType<typeof browserWorkspaceIdentitySnapshot>
   routedFolder: ReturnType<typeof useRoutedFolder>['folder']
   setRoutedFolder: ReturnType<typeof useRoutedFolder>['setFolder']
@@ -434,7 +434,7 @@ export function BrowserIndexPage({
   // partial failure: the ones that went are gone, and a list still showing
   // them behind the dialog contradicts the count above it.
   const refreshAfterDelete = useCallback(async () => {
-    setSnapshots(await listLocalDocuments(index, clock))
+    setSnapshots(await listBrowserDocuments(index, clock))
     // The delete just moved a document INTO the trash — re-count so the
     // onboarding decision below sees it before choosing what to render.
     const trashRows = await filesSource.listTrash?.().catch(() => null)

@@ -11,7 +11,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 class FakeLoroStore implements LoroStoreLike {
@@ -48,7 +48,7 @@ afterEach(cleanup)
 
 describe('stale /w/:workspace/d/:path deep link', () => {
   it('falls back to the default canvas and replaces the URL', async () => {
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
@@ -99,7 +99,7 @@ describe('stale /w/:workspace/d/:path deep link', () => {
     // resolves the requested path against the in-memory list, and a path that
     // is not in it used to make the effect return before reaching its own
     // documented repair — leaving the address bar naming nothing.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
@@ -151,7 +151,7 @@ describe('stale /w/:workspace/d/:path deep link', () => {
     // "not in the list" means "not known yet", not "does not exist". Repairing
     // there would overwrite a navigation to a perfectly valid document with
     // the current path, and the list arriving later cannot undo it.
-    const store = new LocalStoreDouble()
+    const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',

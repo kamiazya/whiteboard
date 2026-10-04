@@ -120,7 +120,7 @@ export class IdbDocumentIndex implements DocumentIndex {
       // whatever identity layers the row already carried.
       //
       // Load-bearing for `FoldingBrowserIndex`, whose `createWorkspace`
-      // writes its registry half through this call: `ensureLocalWorkspace`
+      // writes its registry half through this call: `ensureBrowserWorkspace`
       // re-creates the browser workspace bare on every boot path, and an
       // overwrite here would strip the identity `renameWorkspace` — right
       // below, on this same store — had written.

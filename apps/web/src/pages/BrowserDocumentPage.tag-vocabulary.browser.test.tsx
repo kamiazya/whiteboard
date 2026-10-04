@@ -10,7 +10,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { setViewport } from '../test-utils/viewport.js'
@@ -60,7 +60,7 @@ const offered = () =>
   [...document.querySelectorAll('datalist option')].map((option) => option.getAttribute('value'))
 
 it('the board tag row offers a note’s tag and the library’s values, and refuses what the library forbids', async () => {
-  const store = new LocalStoreDouble()
+  const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId(board.documentId)
   await store.save(board)
   await store.save(note)

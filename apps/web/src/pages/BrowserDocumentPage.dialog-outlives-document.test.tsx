@@ -27,9 +27,9 @@ import { act, cleanup, configure, fireEvent, screen, waitFor, within } from '@te
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
+import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -158,7 +158,7 @@ describe('a destructive dialog does not outlive its document', () => {
       ).not.toBeNull(),
     )
     await waitFor(async () => {
-      expect((await listLocalDocuments(store)).map((r) => r.path)).toHaveLength(2)
+      expect((await listBrowserDocuments(store)).map((r) => r.path)).toHaveLength(2)
     })
 
     await openDeleteDialog()
@@ -204,12 +204,12 @@ describe('a destructive dialog does not outlive its document', () => {
         .click()
       for (let i = 0; i < 100; i++) {
         await new Promise((r) => setTimeout(r, 50))
-        if ((await listLocalDocuments(store)).length < 2) break
+        if ((await listBrowserDocuments(store)).length < 2) break
       }
       await act(async () => {})
     }
 
-    const paths = (await listLocalDocuments(store)).map((row) => row.path)
+    const paths = (await listBrowserDocuments(store)).map((row) => row.path)
     expect(
       paths,
       'the delete was confirmed on a dialog opened about another document, and it took this one — the dialog said its name and the action never looked',
@@ -237,7 +237,7 @@ describe('a destructive dialog does not outlive its document', () => {
       ).not.toBeNull(),
     )
     await waitFor(async () => {
-      expect((await listLocalDocuments(store)).map((r) => r.path)).toHaveLength(2)
+      expect((await listBrowserDocuments(store)).map((r) => r.path)).toHaveLength(2)
     })
 
     store.holdNextCreate = true
@@ -292,7 +292,7 @@ describe('a destructive dialog does not outlive its document', () => {
       ).not.toBeNull(),
     )
     await waitFor(async () => {
-      expect((await listLocalDocuments(store)).map((r) => r.path)).toHaveLength(2)
+      expect((await listBrowserDocuments(store)).map((r) => r.path)).toHaveLength(2)
     })
 
     await act(async () => {

@@ -59,7 +59,7 @@ type KeeperReach =
   | { readonly reach: 'gap'; readonly missing: string; readonly followUp: string }
 
 const BROWSER_VERSIONS = 'src/lib/browser-versions-backend.ts'
-const BROWSER_FILES = 'src/lib/local-files-source.ts'
+const BROWSER_FILES = 'src/lib/browser-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
@@ -423,7 +423,7 @@ const FILES_SOURCE_OMISSIONS: Record<
 
 const FILES_SOURCE_KEEPERS = {
   daemon: '/src/lib/daemon-files-source.ts',
-  browser: '/src/lib/local-files-source.ts',
+  browser: '/src/lib/browser-files-source.ts',
 } as const
 
 /** The members `WorkspaceFilesSource` declares optional, from its own source. */
