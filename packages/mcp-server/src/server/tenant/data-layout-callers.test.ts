@@ -1,6 +1,7 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { productionSourceFiles } from '../../shared/test-utils/source-files.js'
 import { stripComments } from '../../shared/test-utils/strip-comments.js'
 
 /**
@@ -28,22 +29,11 @@ const NAMES_DIRECTORY = /join\([^)]*['"](?:blobs|files)['"]/
 const COMPARES_A_SEGMENT =
   /(?:\[\d+\]|\bhead)\s*[!=]==\s*['"](?:tenants|workspaces|blobs|files|exports)['"]/
 
-async function sourceFiles(dir: string): Promise<string[]> {
-  const out: string[] = []
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name)
-    // A migration names the layout as it stood at its own point in the log,
-    // and the boot move runs after them all (`prepare.ts`).
-    if (entry.isDirectory() && entry.name !== 'migrations') out.push(...(await sourceFiles(path)))
-    else if (entry.isFile() && /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name))
-      out.push(path)
-  }
-  return out
-}
-
 describe('who may name a store directory', () => {
   it('only the files listed, and each listed file still does', async () => {
-    const files = await sourceFiles(SRC)
+    // A migration names the layout as it stood at its own point in the log, and
+    // the boot move runs after them all (`prepare.ts`).
+    const files = productionSourceFiles(SRC, { skipDirs: ['migrations'], extensions: ['.ts'] })
     expect(files.length).toBeGreaterThan(150)
     const namers: string[] = []
     for (const file of files) {

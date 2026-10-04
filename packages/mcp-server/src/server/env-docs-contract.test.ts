@@ -12,6 +12,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { repoRoot } from '../shared/test-utils/repo-root.js'
+import { productionSourceFiles } from '../shared/test-utils/source-files.js'
 import { ENV_KEYS } from './security/server-mode-env-config.js'
 
 const REPO_ROOT = repoRoot()
@@ -34,13 +35,14 @@ const NOT_READ_BY_SOURCE: Readonly<Record<string, string>> = {
 
 const NAME_PATTERN = /\b((?:WHITEBOARD|MCP|OTEL)_[A-Z0-9_]*[A-Z0-9])\b/g
 
+// The scripts the dev daemon and the smokes run are `.mjs`, and a smoke driver
+// sets variables an operator can too, so every extension a package writes is
+// taken and so is every harness.
 function sourceFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) return entry.name === '__fixtures__' ? [] : sourceFiles(path)
-    return /\.(?:[mc]?[jt]sx?)$/.test(entry.name) && !/\.test\.[mc]?[jt]sx?$/.test(entry.name)
-      ? [path]
-      : []
+  return productionSourceFiles(dir, {
+    skipDirs: ['__fixtures__'],
+    includeHarnesses: true,
+    extensions: ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'],
   })
 }
 

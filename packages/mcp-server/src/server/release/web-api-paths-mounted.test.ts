@@ -18,13 +18,14 @@
 // checked. It mounts the real routes, which is why it cannot sit in
 // tools/arch-lint with the other repo-wide guards.
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { productionSourceFiles } from '../../shared/test-utils/source-files.js'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
 import { stripComments } from '../../shared/test-utils/strip-comments.js'
 import { serverModeSignIn } from '../_test-server-mode-harness.js'
@@ -105,18 +106,6 @@ function code(text: string): string {
   return stripComments(text)
 }
 
-function sourceFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      if (entry.name !== 'node_modules') sourceFiles(full, out)
-    } else if (/\.tsx?$/.test(entry.name) && !/\.test\./.test(entry.name)) {
-      out.push(full)
-    }
-  }
-  return out
-}
-
 /**
  * `${...}` interpolations and `:name` segments both stand for one segment, and
  * a query string is not part of the route a request is matched against.
@@ -137,7 +126,9 @@ interface WebPath {
 
 function webApiPaths(): WebPath[] {
   const seen = new Map<string, WebPath>()
-  for (const file of [...sourceFiles(WEB_SRC), ...sourceFiles(DAEMON_CLIENT_SRC)]) {
+  for (const file of [WEB_SRC, DAEMON_CLIENT_SRC].flatMap((dir) =>
+    productionSourceFiles(dir, { skipDirs: ['node_modules'] }),
+  )) {
     const text = code(readFileSync(file, 'utf-8'))
     // All three quotings, matched with a backreference so the closing quote is
     // the opening one. Double quotes are not hypothetical here: biome.json sets

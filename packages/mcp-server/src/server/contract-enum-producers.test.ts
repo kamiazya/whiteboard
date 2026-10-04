@@ -13,10 +13,10 @@
  * test that fails when a member is declared first and wired never, which is
  * the order contracts get written in.
  */
-import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { productionSourceFiles } from '../shared/test-utils/source-files.js'
 import { stripComments } from '../shared/test-utils/strip-comments.js'
 
 const CONTRACTS = fileURLToPath(
@@ -30,15 +30,10 @@ const PRODUCER_ROOTS = [
 const TEST_SOURCE =
   /\.(?:test|property\.test|smoke|conformance|contract|test-helper)(?:\.\w+)*\.tsx?$|\/test-utils\/|\/migrations\//
 
-async function sourceFiles(dir: string): Promise<string[]> {
-  const found: string[] = []
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === 'dist') continue
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) found.push(...(await sourceFiles(path)))
-    else if (/\.tsx?$/.test(entry.name) && !TEST_SOURCE.test(path)) found.push(path)
-  }
-  return found
+function sourceFiles(dir: string): string[] {
+  return productionSourceFiles(dir, { skipDirs: ['node_modules', 'dist'] }).filter(
+    (path) => !TEST_SOURCE.test(path),
+  )
 }
 
 interface EnumMember {
@@ -66,7 +61,7 @@ function withoutProducer(members: readonly EnumMember[], sources: readonly strin
 
 describe('contract enum members have a producer', () => {
   it('finds no member of a daemon-client contract enum that no server source writes', async () => {
-    const contractFiles = (await sourceFiles(CONTRACTS)).sort()
+    const contractFiles = sourceFiles(CONTRACTS).sort()
     const members = (
       await Promise.all(
         contractFiles.map(async (file) =>
@@ -75,9 +70,9 @@ describe('contract enum members have a producer', () => {
       )
     ).flat()
     const sources = await Promise.all(
-      (await Promise.all(PRODUCER_ROOTS.map(sourceFiles)))
-        .flat()
-        .map(async (file) => stripComments(await readFile(file, 'utf8'))),
+      PRODUCER_ROOTS.flatMap((root) => sourceFiles(root)).map(async (file) =>
+        stripComments(await readFile(file, 'utf8')),
+      ),
     )
 
     // The subject is present: a scan that found nothing would pass as "every
