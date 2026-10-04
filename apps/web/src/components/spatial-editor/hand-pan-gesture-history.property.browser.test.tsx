@@ -17,11 +17,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { fc } from '../../test-utils/fast-check.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -36,14 +35,11 @@ const board: SpatialCanvas = {
   edges: [],
 }
 
-function Host() {
-  const [canvas, setCanvas] = useState(board)
-  return (
-    <div style={{ width: ROOT_W, height: ROOT_H }}>
-      <SpatialEditor defaultTool="hand" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({
+  initial: board,
+  tool: 'hand',
+  size: { width: ROOT_W, height: ROOT_H },
+})
 
 interface Pt {
   readonly x: number

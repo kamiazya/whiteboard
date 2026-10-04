@@ -15,10 +15,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -39,14 +38,7 @@ const many = (): SpatialCanvas => ({
   edges: [],
 })
 
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(many)
-  return (
-    <div style={{ width: 1100, height: 800 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({ initial: many(), size: { width: 1100, height: 800 } })
 
 const frame = () => new Promise((r) => requestAnimationFrame(r))
 
