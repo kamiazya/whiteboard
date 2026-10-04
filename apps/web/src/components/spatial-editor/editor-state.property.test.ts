@@ -701,36 +701,11 @@ function checkInvariants(real: Real): void {
  */
 function checkCanvasReadable(real: Real): void {
   const parsed = spatialCanvasSchema.safeParse(real.canvas)
-  const issues = parsed.success
-    ? []
-    : parsed.error.issues.filter((issue) => !isKnownEndKindIssue(issue))
+  const issues = parsed.success ? [] : parsed.error.issues
   expect(
     issues,
     `R1 the canvas fails the model's validation after ${real.trail.join(' → ')}`,
   ).toEqual([])
-}
-
-/**
- * ponytail: the one defect R1 found that is not fixed where it is made. A
- * cut-and-pasted boundary edge is reconnected with `kind: 'node'` spread onto
- * its `EdgeEnd`s (`fragment-insert.ts`), a key only a line's end has, which
- * `edgeEndSchema`'s strict object refuses. Remove this filter with that
- * `kind`; any other issue, or the same key anywhere else, still fails.
- */
-function isKnownEndKindIssue(issue: {
-  readonly code: string
-  readonly path: readonly PropertyKey[]
-  readonly keys?: readonly string[]
-}): boolean {
-  const [collection, , end] = issue.path
-  return (
-    issue.code === 'unrecognized_keys' &&
-    issue.keys?.length === 1 &&
-    issue.keys[0] === 'kind' &&
-    collection === 'edges' &&
-    (end === 'from' || end === 'to') &&
-    issue.path.length === 3
-  )
 }
 
 /**

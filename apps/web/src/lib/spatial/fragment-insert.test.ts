@@ -1,7 +1,12 @@
 // @vitest-environment node
 
 import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { endNode, nodeText, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import {
+  canvasEdgeSchema,
+  endNode,
+  nodeText,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, type EditorCommand } from './commands.js'
@@ -136,6 +141,9 @@ describe('buildFragmentInsertCommand', () => {
       to: { node: 'peer' },
     })
     expect(boundary?.id).not.toBe('src-boundary')
+    // Every reader validates through the model's strict edge schema and skips
+    // a record it refuses, so a reconnected edge must be one it accepts.
+    expect(canvasEdgeSchema.safeParse(boundary).success).toBe(true)
     expect(edgeCommands.some((c) => endNode(c.edge.to) === 'vanished')).toBe(false)
   })
 
