@@ -98,6 +98,17 @@ describe('resolveRequestedOutputPath', () => {
       resolveRequestedOutputPath({ outputPath, overwrite: true }, 'ws', dir),
     ).resolves.toEqual({ outputPath })
   })
+
+  // A failure that is not a judgement on the path is the file system's, and
+  // answering it as a 400 would blame the caller for it.
+  it('rethrows a file-system failure rather than refusing the path', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    await writeFile(join(dir, 'a-file'), 'x')
+    const throughAFile = join(dir, 'a-file', 'board.png')
+    await expect(
+      resolveRequestedOutputPath({ outputPath: throughAFile }, 'ws', dir),
+    ).rejects.toMatchObject({ code: 'ENOTDIR' })
+  })
 })
 
 describe('the shared bodies', () => {

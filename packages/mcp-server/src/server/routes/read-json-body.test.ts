@@ -120,6 +120,15 @@ describe('readJsonBody: an optional body', () => {
     expect(apiErrorReason(json)).toBe(NOT_JSON_REASON)
   })
 
+  // Only a body with nothing in it is absent. Whitespace was sent, and a
+  // sender that sends something meant to send JSON.
+  it('refuses a whitespace-only body as present and not JSON', async () => {
+    expect(await post(appFor('code', true), ' \n')).toEqual({
+      status: 400,
+      json: { error: 'invalid_body', message: NOT_JSON_REASON },
+    })
+  })
+
   it('still refuses a present body the schema rejects', async () => {
     const { status } = await post(appFor('code', true), '{"zzz":1}')
     expect(status).toBe(400)
