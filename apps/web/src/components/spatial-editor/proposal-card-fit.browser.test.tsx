@@ -28,22 +28,33 @@ const proposal: Proposal = {
   })),
 }
 
-function mount(y: number) {
+function mount(y: number, x = 20, rootWidth = 480, rootHeight = ROOT_HEIGHT) {
   return render(
     <div
       data-testid="fit-root"
-      style={{ position: 'relative', width: 480, height: ROOT_HEIGHT, overflow: 'hidden' }}
+      style={{ position: 'relative', width: rootWidth, height: rootHeight, overflow: 'hidden' }}
     >
       <ProposalCard
         proposal={proposal}
         canvas={canvas}
-        box={{ x: 20, y, width: 300, height: 0 }}
+        box={{ x, y, width: 300, height: 0 }}
         palette={SPATIAL_LIGHT_PALETTE}
         onDecide={vi.fn()}
         onClose={vi.fn()}
       />
     </div>,
   )
+}
+
+/** The card's box relative to the root's, so offsets read as root coordinates. */
+async function cardInRoot(): Promise<{ left: number; top: number; rightClearance: number }> {
+  const root = (await page.getByTestId('fit-root').element()).getBoundingClientRect()
+  const card = (await page.getByTestId('proposal-card').element()).getBoundingClientRect()
+  return {
+    left: card.left - root.left,
+    top: card.top - root.top,
+    rightClearance: root.right - card.right,
+  }
 }
 
 /** How far the card's bottom edge sits above the root's bottom edge. */
@@ -74,5 +85,26 @@ it('keeps the card inside the root when expanding per-change rows grows its heig
 
   await vi.waitFor(async () => {
     expect(await bottomClearance()).toBeGreaterThanOrEqual(EDGE_MARGIN_PX)
+  })
+})
+
+// The slide is a correction toward the root, never a push: a card with room on
+// every side keeps the place its box gave it. The fit runs in a layout effect,
+// so an unclamped slide would already have moved the card by first paint.
+it('leaves a card that already fits inside the root where its box put it', async () => {
+  mount(40, 30, 900, 700)
+  await expect.element(page.getByTestId('proposal-card')).toBeInTheDocument()
+  const { left, top } = await cardInRoot()
+  expect(left).toBeCloseTo(30, 0)
+  expect(top).toBeCloseTo(40, 0)
+})
+
+it('slides a card hanging past the right edge to end exactly at the margin', async () => {
+  mount(40, 400, 480, 700)
+  await expect.element(page.getByTestId('proposal-card')).toBeInTheDocument()
+  await vi.waitFor(async () => {
+    const { top, rightClearance } = await cardInRoot()
+    expect(rightClearance).toBeCloseTo(EDGE_MARGIN_PX, 0)
+    expect(top).toBeCloseTo(40, 0)
   })
 })
