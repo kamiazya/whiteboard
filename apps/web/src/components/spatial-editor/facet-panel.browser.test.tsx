@@ -10,6 +10,7 @@ import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -24,21 +25,7 @@ const initial: SpatialCanvas = {
 }
 
 it('the Facets entry opens the panel, and a pick there stores and draws', () => {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -105,21 +92,7 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
 // applies the same id through `wb_canvas_edit` — the chip writes the record and
 // the editor expands the appearance beside it.
 it('a stencil picked in the panel draws its silhouette, not only the record', () => {
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host, latest } = makeEditorHost({ initial })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -157,22 +130,7 @@ it('a stencil from the registry the editor was handed is offered and applied', (
       facets: { 'visual.shape/v0': { kind: 'hexagon' } },
     },
   })
-  const latest: { canvas: SpatialCanvas } = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          facetRegistry={registry}
-        />
-      </div>
-    )
-  }
+  const { Host, latest } = makeEditorHost({ initial, editorProps: { facetRegistry: registry } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -200,21 +158,7 @@ it('a tag finished in the panel’s tag row lands on every selected box, keeping
     ],
     edges: [],
   }
-  const latest: { canvas: SpatialCanvas } = { canvas: start }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()

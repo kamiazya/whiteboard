@@ -7,10 +7,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -36,21 +35,7 @@ it('a carried edge re-sides mid-drag to match the drop result', async () => {
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
-  const latest = { canvas: initial }
-  function Host() {
-    const [canvas, setCanvas] = useState(initial)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial, size: { width: 900, height: 700 } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -100,19 +85,7 @@ it('bystander edges stay frozen while an unrelated node is dragged', async () =>
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
-  function Host() {
-    const [canvas, setCanvas] = useState(initial)
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial, size: { width: 900, height: 700 } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
@@ -162,19 +135,7 @@ it('a bystander edge holds its exact anchor when the carried edge joins its side
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
-  function Host() {
-    const [canvas, setCanvas] = useState(initial)
-    return (
-      <div style={{ width: 900, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial, size: { width: 900, height: 700 } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
