@@ -308,11 +308,11 @@ export function forgetAllForTests(): void {
 }
 
 export interface ReplicaKeyProvider {
-  keyFor(documentId: string): Promise<{ key: CryptoKey; epoch: number } | 'withheld'>
+  keyFor(docKey: string): Promise<{ key: CryptoKey; epoch: number } | 'withheld'>
 }
 
 // Non-extractable derived CryptoKeys, memoised per (daemon, workspace,
-// documentId) so a repeat read is O(1) rather than a fresh HKDF derive.
+// docKey) so a repeat read is O(1) rather than a fresh HKDF derive.
 // Cleared by forget()/forgetAllForTests() alongside the session key they derive from.
 const derivedKeyMemo = new Map<string, Map<string, CryptoKey>>()
 
@@ -328,19 +328,19 @@ export function replicaKeyProviderFor(
 ): ReplicaKeyProvider {
   const key = cacheKey(daemonBaseUrl, workspaceId)
   return {
-    async keyFor(documentId: string) {
+    async keyFor(docKey: string) {
       const result = await sessionKey(daemonBaseUrl, workspaceId, source)
       if (result.kind === 'withheld') {
         return 'withheld'
       }
-      const cachedDerived = derivedKeyMemo.get(key)?.get(documentId)
+      const cachedDerived = derivedKeyMemo.get(key)?.get(docKey)
       if (cachedDerived !== undefined) {
         return { key: cachedDerived, epoch: EPOCH }
       }
       const derived = await deriveDocumentKey({
         workspaceKey: result.workspaceKey,
         workspaceKeySalt: result.workspaceKeySalt,
-        documentId,
+        documentId: docKey,
         epoch: EPOCH,
       })
       // forget()/forgetAllForTests() may have run while the request or the derive
@@ -356,7 +356,7 @@ export function replicaKeyProviderFor(
         perWorkspace = new Map()
         derivedKeyMemo.set(key, perWorkspace)
       }
-      perWorkspace.set(documentId, derived)
+      perWorkspace.set(docKey, derived)
       return { key: derived, epoch: EPOCH }
     },
   }
