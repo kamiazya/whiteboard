@@ -14,6 +14,7 @@ import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { hasLoadedFace } from './font-loading.js'
 import { createBrowserMeasureText } from './measure-text.js'
+import { SceneSvg } from './SceneSvg.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
 
 /** Which of canvas-render's two shared spatial palettes a viewer draws in. */
@@ -198,13 +199,7 @@ export function CanvasViewer({
     fontReady,
   ])
 
-  // Injecting canvas-render's SVG string via dangerouslySetInnerHTML is sound
-  // BECAUSE canvas-render's serializer (packages/canvas-render/src/svg/format.ts)
-  // is the SOLE producer of this string and escapes `&`/`<`/`>` in text content
-  // plus `"`/`'` in attribute values — there is no untrusted-HTML injection
-  // path here, and this is not a generic sanitizer-needed sink. Do not add a
-  // sanitizer dependency; if this ever stops being canvas-render's own output,
-  // this reasoning no longer holds and must be revisited.
+  // Why injecting the string is sound is SceneSvg's doc comment.
   // `figure`, not `img`: the injected SVG's `<text>` runs are real content
   // and today the ONLY way a screen reader reaches any of it, and `img`
   // marks every child presentational — that would buy a name at the cost of
@@ -213,8 +208,10 @@ export function CanvasViewer({
   // document order), which is what the deferred a11y projection is for; a
   // name and reachable text is the honest floor until then.
   return (
-    <figure
+    <SceneSvg
+      as="figure"
       ref={hostRef}
+      svg={svg}
       data-testid={testId}
       aria-label={label}
       // A real <figure>, not role="figure" on a div: same semantics, and the
@@ -226,8 +223,6 @@ export function CanvasViewer({
         overflow: 'hidden',
         margin: 0,
       }}
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: canvas-render's serializer is the SOLE producer and escapes &/</> in text and quotes in attributes (see this file's doc comment)
-      dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
 }

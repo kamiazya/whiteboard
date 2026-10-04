@@ -60,7 +60,7 @@
  */
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
-import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import { createBrowserMeasureText, SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
@@ -1683,13 +1683,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // Mount-once keyed patching (use-keyed-svg.ts): every byte that
           // lands in this container is still canvas-render's serializer
           // output — the patcher only decides WHICH groups to replace —
-          // so CanvasViewer.tsx's single-producer injection reasoning
-          // carries over unchanged, and untouched groups keep their DOM
+          // so SceneSvg's single-producer injection reasoning carries over
+          // unchanged, and untouched groups keep their DOM
           // nodes across commits (selection, focus, animations survive).
           ref={canvasContentRef}
         />
         {liveEdges !== undefined && (
-          <div
+          <SceneSvg
+            svg={liveEdges.svg}
             data-testid="live-edges"
             aria-hidden="true"
             style={{
@@ -1698,14 +1699,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               top: liveEdges.bounds.y,
               pointerEvents: 'none',
             }}
-            // Same trusted producer as the committed scene (canvas-render's
-            // escaping serializer).
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
-            dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
           />
         )}
         {liveNode !== undefined && (
-          <div
+          <SceneSvg
+            svg={liveNode.svg}
             data-testid="live-node"
             aria-hidden="true"
             style={{
@@ -1714,10 +1712,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               top: liveNode.bounds.y,
               pointerEvents: 'none',
             }}
-            // Same trusted producer as the committed scene (canvas-render's
-            // escaping serializer).
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
-            dangerouslySetInnerHTML={{ __html: liveNode.svg }}
           />
         )}
         <GestureOverlays

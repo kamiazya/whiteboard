@@ -11,6 +11,7 @@
  * keep throwing you into an editor.
  */
 
+import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
@@ -108,13 +109,10 @@ export function DocumentPreview({
     <div className={cn('flex min-h-0 flex-col gap-3', className)} data-testid="okf-preview">
       <div className="bg-muted/30 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-md border p-2">
         {state.kind === 'drawn' ? (
-          // The same injection the editor's preview pane uses: the SVG comes
-          // from this app's own renderer, over the document's own content.
-          <div
+          <SceneSvg
+            svg={fitSvgToBox(state.svg)}
             data-testid="preview-render"
             className="size-full [&>svg]:size-full"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
-            dangerouslySetInnerHTML={{ __html: fitSvgToBox(state.svg) }}
           />
         ) : (
           <p className="text-muted-foreground text-sm">

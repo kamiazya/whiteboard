@@ -11,6 +11,7 @@
  * bytes plus a worker slot — both are spent only on what someone can see.
  */
 
+import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { FileText, LayoutGrid } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
@@ -97,10 +98,10 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
               51ms of its nominal 220ms, which is what read as a pop. A
               dissolve wants the two halves to trade evenly, and they now do:
               their opacities sum to 1.00 across the whole 220ms. */}
-          <span
+          <SceneSvg
+            as="span"
+            svg={fitSvgToBox(drawn.svg)}
             className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
-            // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
-            dangerouslySetInnerHTML={{ __html: fitSvgToBox(drawn.svg) }}
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app
               before this: it unmounted in the same frame the render mounted
