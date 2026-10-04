@@ -22,8 +22,8 @@ interface Listed {
   readonly canManage: boolean
 }
 
-/** The list the keeper answers, read again whenever `reloadKey` changes. */
-function useWorkspacePeople(fetchFn: Fetch, workspaceId: string, reloadKey: number) {
+/** The list the keeper answers, read again whenever the keeper or workspace changes, or `reload` is called. */
+function useWorkspacePeople(fetchFn: Fetch, workspaceId: string) {
   const [listed, setListed] = useState<Outcome<Listed> | null>(null)
   const [generation, setGeneration] = useState(0)
   useEffect(() => {
@@ -35,7 +35,7 @@ function useWorkspacePeople(fetchFn: Fetch, workspaceId: string, reloadKey: numb
     return () => {
       live = false
     }
-  }, [fetchFn, workspaceId, reloadKey, generation])
+  }, [fetchFn, workspaceId, generation])
   const reload = useCallback(() => setGeneration((g) => g + 1), [])
   return [listed, reload] as const
 }
@@ -179,15 +179,13 @@ function PeopleRows({
 export function WorkspacePeopleList({
   fetchFn,
   workspaceId,
-  reloadKey = 0,
   adding,
 }: {
   fetchFn: Fetch
   workspaceId: string
-  reloadKey?: number
   adding?: ReactNode
 }) {
-  const [listed, reload] = useWorkspacePeople(fetchFn, workspaceId, reloadKey)
+  const [listed, reload] = useWorkspacePeople(fetchFn, workspaceId)
   const changes = usePeopleChanges(fetchFn, workspaceId, reload)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const statusRef = useRef<HTMLParagraphElement>(null)
