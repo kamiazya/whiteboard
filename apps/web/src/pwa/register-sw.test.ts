@@ -18,6 +18,10 @@ describe('setupSwRegistration', () => {
       Object.defineProperty(navigator, 'serviceWorker', originalServiceWorker)
     }
     vi.restoreAllMocks()
+    // An offered update mounts the toast for real, and a test that resets the
+    // module graph would otherwise find that portal already rooted by the
+    // previous module instance and root it again.
+    document.body.innerHTML = ''
   })
 
   it('defers registration to the load event while the document is still loading', async () => {
