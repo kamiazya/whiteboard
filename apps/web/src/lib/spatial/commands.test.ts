@@ -9,6 +9,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import {
   isFrame,
+  MAX_BENDS,
   nodeFile,
   nodeText,
   nodeUrl,
@@ -1157,6 +1158,28 @@ describe('lines in the editor', () => {
     const straight = applyCommand(bent, { kind: 'set-line-bends', id: 'l1', bends: [] })
     expect(straight.lines?.[0]).not.toHaveProperty('bends')
     expect(() => spatialCanvasSchema.parse(straight)).not.toThrow()
+  })
+
+  // The model refuses a record over `MAX_BENDS` on every read, and a reader
+  // that refuses it drops the whole element — so the drag that would place
+  // one more is declined, the way every other refused write here is: the
+  // canvas comes back unchanged.
+  it('refuses a bend list over the model cap, on a stroke and on a relation alike', () => {
+    const bends = (count: number) => Array.from({ length: count }, (_, i) => ({ x: i, y: i }))
+    const board: SpatialCanvas = {
+      ...lineCanvas(),
+      edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+    }
+    for (const [kind, collection] of [
+      ['set-line-bends', 'lines'],
+      ['set-edge-bends', 'edges'],
+    ] as const) {
+      const id = collection === 'lines' ? 'l1' : 'e1'
+      const atCap = applyCommand(board, { kind, id, bends: bends(MAX_BENDS) })
+      expect(atCap[collection]?.[0]?.bends).toHaveLength(MAX_BENDS)
+      expect(spatialCanvasSchema.safeParse(atCap).success).toBe(true)
+      expect(applyCommand(atCap, { kind, id, bends: bends(MAX_BENDS + 1) })).toBe(atCap)
+    }
   })
 
   it('names a stroke, and clears the name with an empty one', () => {

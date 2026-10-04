@@ -21,7 +21,7 @@
  * display — at zoom 0.25 the same wobble covers four times the document.
  */
 
-import type { CanvasLine } from '@kamiazya/whiteboard-model'
+import { type CanvasLine, MAX_BENDS } from '@kamiazya/whiteboard-model'
 import { VISUAL_EDGES_KEY, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { Point } from './viewport.js'
 
@@ -56,8 +56,13 @@ export const MIN_STROKE_TRAVEL_PX = 3
  * pressed-down minute is thousands of coordinates, and every one of them
  * would be written into the document's own record and merged by the CRDT
  * forever after.
+ *
+ * The bound is the MODEL's, not the editor's: the stroke's turns are the
+ * line's `bends`, and a line holding more than `MAX_BENDS` fails validation
+ * on every read, so a larger stroke would be accepted by the editor and then
+ * vanish from every other surface. The two ends are not bends.
  */
-export const FREEHAND_MAX_POINTS = 256
+export const FREEHAND_MAX_POINTS = MAX_BENDS + 2
 
 /** Perpendicular distance from `p` to the segment `a`-`b`. */
 function distanceToSegment(p: Point, a: Point, b: Point): number {

@@ -51,6 +51,7 @@ import {
   type CanvasEdge,
   endIn,
   endNode,
+  MAX_BENDS,
   nodeKind,
   nodeText,
   type SpatialCanvas,
@@ -499,6 +500,8 @@ interface Stats {
   connectArms: number
   /** Strokes that really became ink — not presses in the draw tool. */
   inkStrokes: number
+  /** Strokes long enough that the model's bend cap, not the tolerance, ended the simplification. */
+  cappedStrokes: number
   toolSwitches: number
   /** Move commits that carried at least one node besides the grabbed one. */
   carriedMoves: number
@@ -688,6 +691,49 @@ function checkInvariants(real: Real): void {
 }
 
 /**
+ * R1: whatever the editor holds is a canvas the model reads back.
+ *
+ * Every other surface — reload, the daemon's snapshot, render, export —
+ * reads through `spatialCanvasSchema`, and a record it refuses is skipped
+ * there without a word, so a command that stores one has no visible failure
+ * at all in the tab that wrote it. This is the model's own validator, not a
+ * shadow of it.
+ */
+function checkCanvasReadable(real: Real): void {
+  const parsed = spatialCanvasSchema.safeParse(real.canvas)
+  const issues = parsed.success
+    ? []
+    : parsed.error.issues.filter((issue) => !isKnownEndKindIssue(issue))
+  expect(
+    issues,
+    `R1 the canvas fails the model's validation after ${real.trail.join(' → ')}`,
+  ).toEqual([])
+}
+
+/**
+ * ponytail: the one defect R1 found that is not fixed where it is made. A
+ * cut-and-pasted boundary edge is reconnected with `kind: 'node'` spread onto
+ * its `EdgeEnd`s (`fragment-insert.ts`), a key only a line's end has, which
+ * `edgeEndSchema`'s strict object refuses. Remove this filter with that
+ * `kind`; any other issue, or the same key anywhere else, still fails.
+ */
+function isKnownEndKindIssue(issue: {
+  readonly code: string
+  readonly path: readonly PropertyKey[]
+  readonly keys?: readonly string[]
+}): boolean {
+  const [collection, , end] = issue.path
+  return (
+    issue.code === 'unrecognized_keys' &&
+    issue.keys?.length === 1 &&
+    issue.keys[0] === 'kind' &&
+    collection === 'edges' &&
+    (end === 'from' || end === 'to') &&
+    issue.path.length === 3
+  )
+}
+
+/**
  * The editor's lock effect, run to settlement, then the invariants.
  *
  * The effect is keyed on `[lockEnabled, lockedNodeIds, selectedId,
@@ -731,6 +777,7 @@ function settle(real: Real): void {
   }
 
   checkInvariants(real)
+  checkCanvasReadable(real)
 }
 
 /**
@@ -2195,6 +2242,50 @@ class DrawStroke implements fc.Command<Model, Real> {
 }
 
 /**
+ * A stroke held down long enough to outrun the model's bend cap: a zigzag
+ * of `samples` pointer moves, each a real turn, so the simplifier keeps
+ * every one it is allowed to. `DrawStroke`'s single off-chord sample never
+ * gets near the cap, which is why the cap went unchecked while the editor
+ * stored strokes no reader would load.
+ *
+ * The moves go straight through the reducer rather than `dispatch`: a
+ * mid-stroke move carries no command, and settling a 400-sample stroke one
+ * sample at a time would validate the canvas 400 times to learn nothing.
+ */
+class DrawLongStroke implements fc.Command<Model, Real> {
+  constructor(
+    private readonly from: Point,
+    private readonly samples: number,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    new SwitchTool('draw').run(model, real)
+    const before = real.canvas.lines?.length ?? 0
+    dispatch(real, { type: 'pointerdown-draw', point: this.from, zoom: 1 }, this.toString())
+    let point = this.from
+    for (let i = 1; i <= this.samples; i++) {
+      point = { x: this.from.x + i * 3, y: this.from.y + (i % 2 === 0 ? 0 : 40) }
+      real.stats.eventTypes.pointermove += 1
+      real.gesture = reduceGesture(
+        real.gesture,
+        real.canvas,
+        { type: 'pointermove', point },
+        { createId: () => `made-${real.nextId++}` },
+      ).state
+    }
+    dispatch(real, { type: 'pointerup', point }, `${this.toString()}:up`)
+    const stroke = real.canvas.lines?.[before]
+    if (stroke !== undefined) real.stats.inkStrokes += 1
+    if (stroke?.bends?.length === MAX_BENDS) real.stats.cappedStrokes += 1
+  }
+  toString(): string {
+    return `drawLong(${this.from.x},${this.from.y}x${this.samples})`
+  }
+}
+
+/**
  * Frame the current selection: a group node at the enclosing box plus
  * padding, which becomes the selection. The frame therefore CONTAINS what
  * it was made from, so a later drag of it carries them — the one
@@ -2434,6 +2525,9 @@ const allCommands = [
     .tuple(fc.constantFrom<'hand' | 'connect'>('hand', 'connect'), indexArb, indexArb)
     .map(([t, from, to]) => new WithTool(t, from, to)),
   fc.tuple(pointArb, nonZeroDeltaArb).map(([from, delta]) => new DrawStroke(from, delta)),
+  fc
+    .tuple(pointArb, fc.integer({ min: MAX_BENDS + 40, max: 400 }))
+    .map(([from, samples]) => new DrawLongStroke(from, samples)),
   fc.constant(new GroupSelection()),
   fc
     .tuple(fc.constantFrom<'multi' | 'group'>('multi', 'group'), nonZeroDeltaArb)
@@ -2469,6 +2563,7 @@ function newStats(): Stats {
     handEntries: 0,
     connectArms: 0,
     inkStrokes: 0,
+    cappedStrokes: 0,
     toolSwitches: 0,
     carriedMoves: 0,
     groupOrMultiDrags: 0,
@@ -2656,6 +2751,7 @@ describe('editor composite state (command-based)', () => {
     atLeast(stats.handEntries, 14, 'hand mode was never entered')
     atLeast(stats.connectArms, 14, 'the connect tool never armed')
     atLeast(stats.inkStrokes, 24, 'the draw tool never made ink')
+    atLeast(stats.cappedStrokes, 13, 'no stroke ever reached the bend cap')
     atLeast(stats.toolSwitches, 60, 'the tool never changed')
     atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
     atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')

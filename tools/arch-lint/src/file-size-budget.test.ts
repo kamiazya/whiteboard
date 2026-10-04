@@ -148,7 +148,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // list rules (`lib/spatial/tags.ts`), the z-order block (`z-order.ts`) and
   // the paste/duplicate builder (`fragment-insert.ts`). The next shrink is the
   // line arms leaving as a sibling the way the ink-id family did.
-  'apps/web/src/lib/spatial/commands.ts': 1314,
+  // +7: the bend cap on `set-line-bends` / `set-edge-bends`, which refuse a list
+  // the model would refuse on read.
+  'apps/web/src/lib/spatial/commands.ts': 1321,
   // The markdown host: CodeMirror's extensions, the preview column and the
   // conversation and proposal markers drawn beside it. What has a seam has
   // already left — the pane scroll sync and the preview geometry it shares
@@ -329,7 +331,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // on failure is one draw from its left tail.
   // The directed scripts for the four rare chains, whose statistical floors
   // no sample size makes safe, and the setup both runs share.
-  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2864,
+  // +95: R1 (the canvas stays readable through the model's own schema after
+  // every step) and the long-stroke command that reaches the bend cap.
+  'apps/web/src/components/spatial-editor/editor-state.property.test.ts': 2959,
   'apps/web/src/components/spatial-editor/gestures.test.ts': 864,
   // The v19 -> v20 upgrade block (the plaintext replica discard): the seed
   // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical
@@ -344,7 +348,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // verbs where every row is one example is what stops the next one being
   // added without one. It grows one row per verb the parity matrix reports,
   // which is the growth it is for.
-  'apps/web/src/lib/spatial/commands.test.ts': 1681,
+  // +23: the bend-cap refusal, on a stroke and on a relation.
+  'apps/web/src/lib/spatial/commands.test.ts': 1704,
   // The embed-preview waits use `waitForOrSayWhen`, which needs a line saying why
   // a wait here reports more than "it expired"; both the page embed and its
   // sibling, the note-body embed, have failed on CI from branches that cannot
