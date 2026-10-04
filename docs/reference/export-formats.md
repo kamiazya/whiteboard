@@ -21,6 +21,19 @@ gives it one.
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+## How large a markdown document may be
+
+One markdown write — the `markdown` field of a `wb_workspace_edit`
+`document.create` or `document.set` op, or of `POST /api/v1/workspaces/{id}/documents`
+— carries at most **262,144 characters** (256 Ki UTF-16 code units, frontmatter
+and body together). A longer one is refused with "markdown is longer than the
+262144-character limit for one write" before anything is stored. The count is
+characters, not bytes, because the cost of storing a document follows the
+character count: the limit is where one write still finishes in about a second.
+`wb_body_edit` is held to the same ceiling: an edit that would leave the body
+longer than that is refused, though an edit that shrinks an already-longer
+body is accepted. Split longer content across documents.
+
 ## OKF frontmatter this server does not model
 
 OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))
