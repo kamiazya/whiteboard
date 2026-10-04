@@ -49,7 +49,8 @@ export async function writeSupportBundle(
   options: WriteSupportBundleOptions,
 ): Promise<{ outputDir: string; files: string[] }> {
   // Canonicalise BEFORE the containment check, so a symlinked ancestor cannot
-  // pass a string-prefix guard; the entry written through must not be a symlink.
+  // pass a string-prefix guard. The refusal also covers the target itself being
+  // a symlink, so the lstat below never sees one.
   const canonicalTarget = await canonicalizeWithMissingTail(targetDir, {
     symlinkRefusal: () =>
       new SupportBundleError('Target path traverses a symlink, which is not allowed.'),
@@ -61,9 +62,6 @@ export async function writeSupportBundle(
 
   const stat = await lstatOrNull(targetDir)
   if (stat !== null) {
-    if (stat.isSymbolicLink()) {
-      throw new SupportBundleError('Target directory is a symlink, which is not allowed.')
-    }
     if (!stat.isDirectory()) {
       throw new SupportBundleError('Target path exists and is not a directory.')
     }
