@@ -1,9 +1,15 @@
 import { userInfo } from 'node:os'
+import {
+  documentPathForAction,
+  documentPathForFile,
+  parseDocumentApiPath,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentPathTakenError,
+  hasDocumentTrash,
   isDocumentNotFoundError,
   isWorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
@@ -17,8 +23,8 @@ import {
 import type { MiddlewareHandler } from 'hono'
 import type { z } from 'zod'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
-import { validationErrorBody } from '../../validators.js'
-import { refuseMalformedHandle } from '../../workspace-handle.js'
+import { validateDocumentPath, validationErrorBody } from '../../validators.js'
+import { refuseMalformedHandle, workspaceIdFromHandle } from '../../workspace-handle.js'
 
 export function defaultHumanDisplayName(): string {
   try {
@@ -182,6 +188,53 @@ export function refuseUnknownWorkspace(deps: Pick<ServerDeps, 'documentIndex'>):
       return c.json(workspaceNotFoundRefusal(handle), 404)
     }
     await next()
+  }
+}
+
+/**
+ * Refuses a write to a document that is in the trash and has no live
+ * successor, on the two page-facing write routes (an update, a file upload).
+ *
+ * A tab that still holds a document someone deleted keeps pushing to it, and
+ * those routes take a path nothing holds as the first write of a new document
+ * (an open page's first edit is how one begins), so the push recreated the
+ * path as an unrelated document while the original sat in the trash. A path
+ * that was never created is NOT refused, and neither is one whose trash entry
+ * has a live document at the same path again.
+ *
+ * The trash is read only when the path holds no live document, so the usual
+ * write costs one existence check. A malformed address or path passes through to
+ * each route's own 400.
+ */
+export function refuseTrashedDocument(
+  deps: Pick<ServerDeps, 'documentIndex' | 'liveDocuments'>,
+): MiddlewareHandler {
+  return async (c, next) => {
+    const parsed = parseDocumentApiPath(c.req.path)
+    if (parsed === null) return next()
+    const path =
+      c.req.method === 'POST'
+        ? documentPathForAction(parsed.tail, 'update')
+        : c.req.method === 'PUT'
+          ? (documentPathForFile(parsed.tail)?.path ?? null)
+          : null
+    const index = deps.documentIndex
+    if (
+      path === null ||
+      !hasDocumentTrash(index) ||
+      refuseMalformedHandle(c, parsed.workspaceId) !== null ||
+      refusedBy(() => validateDocumentPath(path)) !== null
+    ) {
+      return next()
+    }
+    const workspaceId = await workspaceIdFromHandle(c, parsed.workspaceId)
+    if (await deps.liveDocuments.exists(workspaceId, path)) return next()
+    const trash = await index.listTrash({ workspaceId })
+    if (trash.some((entry) => entry.path === path)) {
+      const body = { error: 'not_found', message: `Document "${path}" not found` }
+      return c.json(body satisfies ApiErrorBody, 404)
+    }
+    return next()
   }
 }
 

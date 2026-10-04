@@ -1,5 +1,9 @@
 import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import {
+  type ApiErrorBody,
+  applyDocumentUpdate,
+  type ServerDeps,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
 import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
@@ -25,11 +29,15 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
   onDocumentAction(app, 'get', 'snapshot', async (c, workspaceId, path) => {
     // get()'s lazy-create would otherwise silently hand back an empty
     // doc for a document that does not exist — indistinguishable from a
-    // never-created OR just-deleted document. Same problem-details { title }
-    // shape as DELETE, deliberately not thumbnails/restore's { error,
-    // message }: the client parses problem-details for both routes.
+    // never-created OR just-deleted document. Spoken in `{ error, message }`
+    // like the workspace refusal in front of this route, so one route does not
+    // answer "absent" in two body families; every reader goes through
+    // `apiErrorReason`, which takes either.
     if (!(await deps.liveDocuments.exists(workspaceId, path))) {
-      return c.json({ title: `Document "${path}" not found` }, 404)
+      return c.json(
+        { error: 'not_found', message: `Document "${path}" not found` } satisfies ApiErrorBody,
+        404,
+      )
     }
     const doc = await deps.liveDocuments.get(workspaceId, path)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>

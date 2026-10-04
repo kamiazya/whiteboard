@@ -13,6 +13,7 @@ const tmp = withTempDataDir('whiteboard-auto-version-test-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
 })
 
 vi.mock('../config.js', () => ({
