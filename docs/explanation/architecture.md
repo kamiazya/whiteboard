@@ -3,7 +3,7 @@
 <p align="center">
   <img src="../assets/architecture.png" alt="Agent and user both draw on the same whiteboard via the Whiteboard MCP server" width="780" />
   <br />
-  <sub><i>Source: <a href="../assets/architecture.canvas">architecture.canvas</a> — open as a JSON Canvas document to remix.</i></sub>
+  <sub><i>Source: <a href="../assets/architecture.canvas">architecture.canvas</a> — a JSON Canvas 1.0 document any JSON Canvas-compatible tool can open.</i></sub>
 </p>
 
 This project is split into three main runtime layers:

@@ -27,6 +27,8 @@ Nothing is sent anywhere by itself. The trace leaves your device only when you c
 
 ## What an investigator can do with it
 
-The canvas's gesture decisions are made by a pure function over these events, so a pasted trace
-can be replayed exactly, away from your device — including whether a press ever reached the
-editor at all, or was consumed by another element in front of it.
+Each pointer entry records the element it landed on and whether it reached the editor at all, so
+a trace shows a press consumed by another element in front of it. The canvas's gesture decisions
+are also made by a pure function over these events, which a developer can fold over a pasted
+trace in a test to reproduce the decisions away from your device. The app has no screen or
+command that replays a trace for you.

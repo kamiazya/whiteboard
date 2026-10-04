@@ -234,7 +234,7 @@ document (extended mode, `x-whiteboard` included) in a PNG `iTXt` chunk under
 the `whiteboard` keyword — the same pattern
 draw.io uses. A shared PNG therefore carries its exact node coordinates and edges, not just
 pixels; any PNG chunk reader can recover the document, and image viewers ignore
-the chunk. Unlike draw.io, the app does not yet open such a PNG back as an
+the chunk. Unlike draw.io, the app does not open such a PNG back as an
 editable canvas: a PNG dropped into the editor is inserted as an image.
 
 There is currently no raster (PNG) export tool and no tool that returns image
