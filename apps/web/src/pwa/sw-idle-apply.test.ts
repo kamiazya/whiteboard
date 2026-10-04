@@ -35,6 +35,21 @@ describe('startSwIdleAutoApply', () => {
     expect(apply).toHaveBeenCalledTimes(1)
   })
 
+  // The other cases read the constant, so they follow any value it is given.
+  // Five seconds is the decision — past a quick tab switch and past the
+  // editor's debounced write window — so it is spelled as a literal here once.
+  it('settles for five seconds of hidden time, no less', async () => {
+    const apply = vi.fn()
+    const doc = fakeDoc()
+    startSwIdleAutoApply({ apply, doc: doc as unknown as Document })
+
+    doc.setVisibility('hidden')
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(apply).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(apply).toHaveBeenCalledTimes(1)
+  })
+
   // Applying reloads the page. Doing that under someone who is looking at it —
   // let alone mid-drag — is exactly what the prompt strategy exists to avoid.
   it('never applies while the tab is visible', async () => {

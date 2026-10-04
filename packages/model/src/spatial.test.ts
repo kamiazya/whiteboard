@@ -5,6 +5,7 @@ import {
   canvasEdgeSchema,
   canvasLineSchema,
   findDuplicateId,
+  MAX_BENDS,
   spatialCanvasSchema,
   spatialNodeSchema,
 } from './spatial.js'
@@ -229,6 +230,25 @@ describe('canvasEdgeSchema', () => {
   it('rejects a missing fromNode or toNode', () => {
     expect(canvasEdgeSchema.safeParse({ id: 'e1', to: { node: 'n2' } }).success).toBe(false)
     expect(canvasEdgeSchema.safeParse({ id: 'e1', from: { node: 'n1' } }).success).toBe(false)
+  })
+
+  /**
+   * A stored-format limit, published as `maxItems` in the x-whiteboard JSON
+   * Schema: a document written under one cap and read under another loses the
+   * whole element. Spelled as a literal here, once, so a change to the
+   * constant is a decision someone makes rather than a drift every test
+   * reading `MAX_BENDS` follows silently.
+   */
+  it('holds an edge to 64 bends, the cap every writer and reader agrees on', () => {
+    const withBends = (count: number) => ({
+      id: 'e1',
+      from: { node: 'n1' },
+      to: { node: 'n2' },
+      bends: Array.from({ length: count }, (_, i) => ({ x: i, y: i })),
+    })
+    expect(MAX_BENDS).toBe(64)
+    expect(canvasEdgeSchema.safeParse(withBends(64)).success).toBe(true)
+    expect(canvasEdgeSchema.safeParse(withBends(65)).success).toBe(false)
   })
 })
 
