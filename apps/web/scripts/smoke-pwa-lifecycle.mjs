@@ -47,9 +47,20 @@ const state = {
 }
 
 const versionHandler = (version) =>
-  `\nself.addEventListener('message', (e) => { if (e.data === 'smoke:version') e.ports[0].postMessage('${version}') })\n`
+  `\nself.__smoke = { version: '${version}', skipRequests: 0 }
+self.addEventListener('message', (e) => {
+  if (e.data === 'smoke:version') e.ports[0].postMessage('${version}')
+  if (e.data && e.data.type === 'SKIP_WAITING') self.__smoke.skipRequests++
+})\n`
+
+// Requests the server has taken and not yet answered, for a step's timeout dump.
+const serverInFlight = new Map()
+let requestSeq = 0
 
 async function respond(req, res) {
+  const id = ++requestSeq
+  serverInFlight.set(id, `${req.method} ${req.url}`)
+  res.on('close', () => serverInFlight.delete(id))
   let path = new URL(req.url, 'http://localhost').pathname
   const isNavigation = req.headers['sec-fetch-mode'] === 'navigate'
   if (path === '/' || !path.includes('.')) path = '/index.html'
@@ -126,6 +137,47 @@ const workerSummary = (page) =>
       active: sw(reg?.active),
     }
   })
+
+// Every request the page issued and has not seen finish or fail, with whether
+// a worker answered it: an active worker whose fetch event never settles is
+// what defers the waiting worker's skipWaiting.
+const requestsInFlight = new Map()
+function trackRequests(page) {
+  page.on('request', (r) =>
+    requestsInFlight.set(r, { url: r.url(), type: r.resourceType(), startedAt: Date.now() }),
+  )
+  page.on('requestfinished', (r) => requestsInFlight.delete(r))
+  page.on('requestfailed', (r) => requestsInFlight.delete(r))
+}
+const inFlight = () =>
+  [...requestsInFlight.entries()].map(([r, info]) => ({
+    ...info,
+    ageMs: Date.now() - info.startedAt,
+    fromServiceWorker: r.serviceWorker() !== null,
+  }))
+
+// The browser process's own view of every worker version: running status,
+// lifecycle status and the clients it controls, as the DevTools protocol
+// reports them. A page cannot see whether the worker controlling it is running.
+const workerVersions = new Map()
+let cdp
+async function trackWorkerVersions(page) {
+  cdp = await page.context().newCDPSession(page)
+  cdp.on('ServiceWorker.workerVersionUpdated', ({ versions }) => {
+    for (const v of versions) workerVersions.set(v.versionId, v)
+  })
+  cdp.on('ServiceWorker.workerErrorReported', ({ errorMessage }) => {
+    consoleTail.push(`[sw-error] ${errorMessage.errorMessage}`)
+  })
+  await cdp.send('ServiceWorker.enable')
+}
+const versionsSeen = () =>
+  [...workerVersions.values()].map((v) => ({
+    versionId: v.versionId,
+    status: v.status,
+    runningStatus: v.runningStatus,
+    controlledClients: v.controlledClients.length,
+  }))
 
 const consoleTail = []
 function tailConsole(page) {
@@ -210,8 +262,52 @@ async function acceptUpdate(page, toast) {
       ...(await workerSummary(page)),
       posted: await page.evaluate(() => window.__smokePosted),
       console: consoleTail,
+      requestsInFlight: inFlight(),
+      serverInFlight: [...serverInFlight.values()],
+      // Each worker Playwright can reach, from inside: its state, how many
+      // skip requests reached it, and whether its own skipWaiting() settles.
+      workers: await Promise.all(
+        page
+          .context()
+          .serviceWorkers()
+          .map((w) =>
+            Promise.race([
+              w.evaluate(async () => {
+                const skip =
+                  self.serviceWorker?.state === 'installed'
+                    ? await Promise.race([
+                        self.skipWaiting().then(
+                          () => 'resolved',
+                          (e) => `rejected: ${e}`,
+                        ),
+                        new Promise((r) => setTimeout(() => r('pending after 3s'), 3000)),
+                      ])
+                    : 'not asked'
+                return {
+                  state: self.serviceWorker?.state,
+                  ...self.__smoke,
+                  skipWaiting: skip,
+                  stateAfter: self.serviceWorker?.state,
+                }
+              }),
+              new Promise((r) => setTimeout(() => r('worker evaluate timed out'), 5000)),
+            ]).catch((err) => `worker evaluate failed: ${err}`),
+          ),
+      ),
       // Whether the waiting worker honours a skip at all from this page: the
       // same message the toast's path sends, posted directly, then its state.
+      versions: versionsSeen(),
+      // Whether the old worker's running state is what holds the activation:
+      // stop it from the browser side, then read every version again.
+      afterStoppingActive: await (async () => {
+        const active = [...workerVersions.values()].find(
+          (v) => v.status === 'activated' && v.runningStatus === 'running',
+        )
+        if (!active) return 'no running activated version to stop'
+        await cdp.send('ServiceWorker.stopWorker', { versionId: active.versionId })
+        await new Promise((r) => setTimeout(r, 3000))
+        return versionsSeen()
+      })().catch((err) => `stop probe failed: ${err}`),
       afterDirectSkip: await page.evaluate(async () => {
         const reg = await navigator.serviceWorker.getRegistration()
         reg?.waiting?.postMessage({ type: 'SKIP_WAITING' })
@@ -309,6 +405,8 @@ try {
   const origin = `http://127.0.0.1:${server.address().port}/`
   const page = await (await browser.newContext()).newPage()
   tailConsole(page)
+  trackRequests(page)
+  await trackWorkerVersions(page)
   console.log(`[smoke-pwa-lifecycle] ${browser.browserType().name()} ${browser.version()}`)
   await installAndControl(page, origin)
   const toast = await waitForUpdate(page)
