@@ -676,9 +676,10 @@ function readStored<T>(
 
 /**
  * `readSpatialCanvas`, plus how many stored nodes, edges and lines the schema
- * refused. A skipped record is not damage — a newer client may have written a
- * field this build does not know — but a caller that is about to write the
- * canvas back should be able to say that it read less than the document holds.
+ * refused. Why a record fails validation is not knowable here (an older or
+ * newer writer, or a bug in one), so this states only that it did; a caller
+ * about to write the canvas back can then say it read less than the document
+ * holds.
  */
 export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   readonly canvas: SpatialCanvas

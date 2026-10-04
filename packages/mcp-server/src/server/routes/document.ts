@@ -24,14 +24,11 @@ export interface DocumentRouterOptions {
   // Required: the root's own, built over `scope`. A router that built its own
   // would be a second composition path only tests take.
   versionStore: VersionStore
-  // Auto-version interval in milliseconds. Tests can reduce it.
   /**
    * The pause after which a document's automatic checkpoint is taken. Tests
    * that want no checkpoint at all pass a value longer than they run.
    */
   autoVersionQuietMs?: number
-  // Resolve the HEAD branch name for manual and auto version saves.
-  // If omitted, ignore branch metadata. Production wires this from app.ts.
   // The operations the routes below adapt onto (ADR-0018), handed down from
   // app.ts. Required: a router that composed its own would be a second
   // composition path, and the one it built carried none of what the root
@@ -108,7 +105,7 @@ function refuseUnaddressable(app: Hono, serverDeps: ServerDeps): void {
   app.use(DOCUMENT_WILDCARD, refuseTrashedDocument(serverDeps))
 }
 
-// Entry point that composes the canvas API's sub-routers: workspace/canvas
+// Entry point that composes the document API's sub-routers: workspace/document
 // CRUD, names/pin metadata, the live-doc snapshot+update path, version
 // history (list/save/restore), and maintenance (compact/prune/
 // optimize). Split by concern so each is independently testable; this file
