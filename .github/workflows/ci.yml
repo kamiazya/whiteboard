@@ -186,7 +186,7 @@ jobs:
 
   test-browser:
     runs-on: ubuntu-24.04
-    # Run on bare ubuntu-latest with the pre-installed system Chrome.
+    # Run on bare ubuntu-24.04 with the pre-installed system Chrome.
     timeout-minutes: 15
     # Sharded like test-unit: the browser job is the longest in the workflow
     # (5.0min measured on a green main) AND its flake family is contention-
