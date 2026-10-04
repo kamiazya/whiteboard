@@ -11,7 +11,6 @@ import {
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { getLogger } from '../../log.js'
 import type { StoreScope } from '../../store/store-scope.js'
-import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import {
   defaultExportPath,
   documentMissingBody,
@@ -46,65 +45,59 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
   const documentExists = async (workspaceId: string, path: string) =>
     options.liveDocuments.exists(workspaceId, path)
 
-  onDocumentAction(
-    app,
-    'post',
-    'export-svg',
-    async (c, workspaceId, path) => {
-      const parsedBody = await readExportBody(c, exportSvgRequestSchema)
-      if ('refusal' in parsedBody) return parsedBody.refusal
-      const body: ExportSvgRequest = parsedBody.data
+  onDocumentAction(app, 'post', 'export-svg', async (c, workspaceId, path) => {
+    const parsedBody = await readExportBody(c, exportSvgRequestSchema)
+    if ('refusal' in parsedBody) return parsedBody.refusal
+    const body: ExportSvgRequest = parsedBody.data
 
-      const exportsDir = options.scope.layout.exportsDir(workspaceId)
-      const resolved = await resolveRequestedOutputPath(body, workspaceId, exportsDir)
-      if ('error' in resolved) return c.json(resolved.error, resolved.status)
-      const outputPath = resolved.outputPath
+    const exportsDir = options.scope.layout.exportsDir(workspaceId)
+    const resolved = await resolveRequestedOutputPath(body, workspaceId, exportsDir)
+    if ('error' in resolved) return c.json(resolved.error, resolved.status)
+    const outputPath = resolved.outputPath
 
-      if (!(await documentExists(workspaceId, path))) {
-        return c.json(documentMissingBody(workspaceId, path), 404)
+    if (!(await documentExists(workspaceId, path))) {
+      return c.json(documentMissingBody(workspaceId, path), 404)
+    }
+
+    let svg: string
+    let undrawable: readonly string[]
+    let unresolvedFamilies: readonly string[]
+    try {
+      const result = await exportCanvasHeadlessSvg({
+        workspaceId,
+        path,
+        scope: options.scope,
+        options: { padding: body.padding, theme: body.theme, style: body.style },
+      })
+      svg = result.svg
+      undrawable = result.undrawable
+      unresolvedFamilies = result.unresolvedFamilies
+    } catch (err) {
+      // A busy database is the app's to answer (503 with Retry-After). Any
+      // other cause reaches the log only: a renderer's message can carry a
+      // path or a statement.
+      if (isDatabaseBusy(err)) throw err
+      getLogger('export').error({ err, workspaceId, path }, 'headless SVG export failed')
+      const errBody: ApiErrorBody = {
+        error: 'headless_export_failed',
+        message: 'The document could not be rendered to SVG.',
       }
+      return c.json(errBody, 500)
+    }
 
-      let svg: string
-      let undrawable: readonly string[]
-      let unresolvedFamilies: readonly string[]
-      try {
-        const result = await exportCanvasHeadlessSvg({
-          workspaceId,
-          path,
-          scope: options.scope,
-          options: { padding: body.padding, theme: body.theme, style: body.style },
-        })
-        svg = result.svg
-        undrawable = result.undrawable
-        unresolvedFamilies = result.unresolvedFamilies
-      } catch (err) {
-        // A busy database is the app's to answer (503 with Retry-After). Any
-        // other cause reaches the log only: a renderer's message can carry a
-        // path or a statement.
-        if (isDatabaseBusy(err)) throw err
-        getLogger('export').error({ err, workspaceId, path }, 'headless SVG export failed')
-        const errBody: ApiErrorBody = {
-          error: 'headless_export_failed',
-          message: 'The document could not be rendered to SVG.',
-        }
-        return c.json(errBody, 500)
-      }
-
-      const filePath = outputPath ?? defaultExportPath(exportsDir, path, 'svg')
-      await mkdir(dirname(filePath), { recursive: true })
-      await writeFile(filePath, svg, 'utf-8')
-      // Typed rather than a bare literal so the contract, not this handler,
-      // decides what an export answers with — the PNG route and this one had
-      // already drifted into two different response shapes.
-      const response: ExportResponse = {
-        filePath,
-        undrawable: [...undrawable],
-        unresolvedFamilies: [...unresolvedFamilies],
-      }
-      return c.json(response)
-    },
-    limitBody(EXPORT_OPTIONS_BODY_LIMIT_BYTES, 'Request body'),
-  )
+    const filePath = outputPath ?? defaultExportPath(exportsDir, path, 'svg')
+    await mkdir(dirname(filePath), { recursive: true })
+    await writeFile(filePath, svg, 'utf-8')
+    // Typed rather than a bare literal so the contract, not this handler,
+    // decides what an export answers with — the PNG route and this one had
+    // already drifted into two different response shapes.
+    const response: ExportResponse = {
+      filePath,
+      undrawable: [...undrawable],
+      unresolvedFamilies: [...unresolvedFamilies],
+    }
+    return c.json(response)
+  })
 
   return app
 }

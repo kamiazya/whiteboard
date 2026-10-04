@@ -396,17 +396,27 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
-  it('rejects an oversized request body with 413 payload_too_large', async () => {
+  // Declared or counted as it streams, an oversized body is refused in the
+  // one sentence every JSON route speaks, before anything is rendered.
+  it.each([
+    ['declares its length', true],
+    ['declares no length', false],
+  ])('rejects an oversized request body that %s with 413 payload_too_large', async (_name, declared) => {
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
     const res = await app.request('/api/w/s1/document/canvas-a/export', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(declared ? { 'Content-Length': String(oversized.length) } : {}),
+      },
       body: oversized,
     })
     expect(res.status).toBe(413)
-    const body: unknown = await res.json()
-    expect(body).toMatchObject({ error: 'payload_too_large' })
+    expect(await res.json()).toEqual({
+      error: 'payload_too_large',
+      message: 'Request body exceeds 1048576 bytes limit.',
+    })
   })
 
   // A field the contract does not define is refused rather than dropped, so a

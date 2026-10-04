@@ -9,11 +9,7 @@ import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { stripComments } from '../../shared/test-utils/strip-comments.js'
-import {
-  CONTENT_BODY_LIMIT_BYTES,
-  EXPORT_OPTIONS_BODY_LIMIT_BYTES,
-  limitBody,
-} from './body-limit.js'
+import { CONTENT_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 
 function appLimitedTo(maxSize: number, noun: string) {
   const app = new Hono()
@@ -66,12 +62,6 @@ describe('limitBody and the request a later handler recognises', () => {
     const res = await app.request('/x', { method: 'POST', body: 'okay', headers })
 
     expect(await res.json()).toEqual({ same: true, text: 'okay' })
-  })
-})
-
-describe('EXPORT_OPTIONS_BODY_LIMIT_BYTES', () => {
-  it('bounds an options object, not canvas content', () => {
-    expect(EXPORT_OPTIONS_BODY_LIMIT_BYTES).toBe(1024 * 1024)
   })
 })
 

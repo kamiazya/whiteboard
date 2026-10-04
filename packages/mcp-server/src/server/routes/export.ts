@@ -10,7 +10,6 @@ import { isErrnoCode } from '../../shared/errno.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import type { StoreScope } from '../store/store-scope.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
-import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentAction } from './document/path-route.js'
 import {
   defaultExportPath,
@@ -68,51 +67,45 @@ export function createExportRouter(options: ExportRouterOptions) {
     options.liveDocuments.exists(workspaceId, path)
 
   // POST /api/w/:workspaceId/document/<path>/export
-  onDocumentAction(
-    app,
-    'post',
-    'export',
-    async (c, workspaceId, path) => {
-      const parsedBody = await readExportBody(c, exportRequestSchema)
-      if ('refusal' in parsedBody) return parsedBody.refusal
-      const body = parsedBody.data
+  onDocumentAction(app, 'post', 'export', async (c, workspaceId, path) => {
+    const parsedBody = await readExportBody(c, exportRequestSchema)
+    if ('refusal' in parsedBody) return parsedBody.refusal
+    const body = parsedBody.data
 
-      // Validated up front, before rendering, so the caller does not waste a
-      // render on a write that will fail.
-      const resolved = await resolveRequestedOutputPath(
-        body,
-        workspaceId,
-        options.scope.layout.exportsDir(workspaceId),
-      )
-      if ('error' in resolved) return c.json(resolved.error, resolved.status)
-      const outputPath = resolved.outputPath
+    // Validated up front, before rendering, so the caller does not waste a
+    // render on a write that will fail.
+    const resolved = await resolveRequestedOutputPath(
+      body,
+      workspaceId,
+      options.scope.layout.exportsDir(workspaceId),
+    )
+    if ('error' in resolved) return c.json(resolved.error, resolved.status)
+    const outputPath = resolved.outputPath
 
-      // The headless path operates directly on the LoroDoc and does NOT
-      // verify that the canvas actually exists — getDoc / loadDocument return
-      // an empty doc on cache miss, so a typoed path would otherwise emit a
-      // blank PNG. Reject up front with 404 so callers learn about the typo
-      // instead of shipping the silently-empty file.
-      if (!(await documentExists(workspaceId, path))) {
-        return c.json(documentMissingBody(workspaceId, path), 404)
-      }
+    // The headless path operates directly on the LoroDoc and does NOT
+    // verify that the canvas actually exists — getDoc / loadDocument return
+    // an empty doc on cache miss, so a typoed path would otherwise emit a
+    // blank PNG. Reject up front with 404 so callers learn about the typo
+    // instead of shipping the silently-empty file.
+    if (!(await documentExists(workspaceId, path))) {
+      return c.json(documentMissingBody(workspaceId, path), 404)
+    }
 
-      const rendered = await renderedExport(workspaceId, path, body, options.scope)
-      if ('error' in rendered) return c.json(rendered.error, rendered.status)
-      const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
+    const rendered = await renderedExport(workspaceId, path, body, options.scope)
+    if ('error' in rendered) return c.json(rendered.error, rendered.status)
+    const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
 
-      const filePath =
-        outputPath !== undefined
-          ? await writeExplicitOutput(outputPath, pngBuffer)
-          : await writeDefaultOutput(options.scope.layout, workspaceId, path, pngBuffer)
-      const response: ExportResponse = {
-        filePath,
-        undrawable: [...undrawable],
-        unresolvedFamilies: [...unresolvedFamilies],
-      }
-      return c.json(response)
-    },
-    limitBody(EXPORT_OPTIONS_BODY_LIMIT_BYTES, 'Request body'),
-  )
+    const filePath =
+      outputPath !== undefined
+        ? await writeExplicitOutput(outputPath, pngBuffer)
+        : await writeDefaultOutput(options.scope.layout, workspaceId, path, pngBuffer)
+    const response: ExportResponse = {
+      filePath,
+      undrawable: [...undrawable],
+      unresolvedFamilies: [...unresolvedFamilies],
+    }
+    return c.json(response)
+  })
 
   return app
 }

@@ -543,7 +543,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // address translation it owes — path to id, absent to 404 — is three lines
   // the port call did not need.
   'packages/mcp-server/src/server/routes/document/workspaces.ts#createWorkspacesRouter': 266,
-  'packages/mcp-server/src/server/routes/export.ts#createExportRouter': 54,
   'packages/mcp-server/src/server/routes/files.ts#createFilesRouter': 108,
   // PUT .../replica-tier and POST .../replica-key/rotate (ADR-0042 decision 1
   // and its rotation addendum) join the same router as POST .../replica-key —
