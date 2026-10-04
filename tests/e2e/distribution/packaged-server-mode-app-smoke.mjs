@@ -229,7 +229,7 @@ try {
         got: exposure.publicBaseUrl,
       })
     }
-    if (!exposure.allowedOrigins.includes('https://example.com')) {
+    if (JSON.stringify(exposure.allowedOrigins) !== JSON.stringify(['https://example.com'])) {
       fail('2: allowedOrigins not normalized', { got: JSON.stringify(exposure.allowedOrigins) })
     }
   }
