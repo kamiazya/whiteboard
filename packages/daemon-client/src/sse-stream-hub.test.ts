@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   canvasSnapshotUrl,
+  documentSyncKey,
   documentUpdateUrl,
   parseSseEvent,
   SseStreamHub,
@@ -510,6 +511,18 @@ describe('doc-key URL mapping', () => {
     expect(documentUpdateUrl('http://d', 'ws-1/nested/path')).toBe(
       'http://d/api/w/ws-1/document/nested/path/update',
     )
+  })
+})
+
+describe('documentSyncKey', () => {
+  it('joins the handle and the path on one slash, keeping the path whole', () => {
+    expect(documentSyncKey('ws-1', 'nested/path')).toBe('ws-1/nested/path')
+  })
+
+  it('is read back by the two parsers as a per-document key', () => {
+    const key = documentSyncKey('ws-1', 'a')
+    expect(workspaceHandleOfSyncKey(key)).toBe('ws-1')
+    expect(workspaceIdOfSyncKey(key)).toBeNull()
   })
 })
 

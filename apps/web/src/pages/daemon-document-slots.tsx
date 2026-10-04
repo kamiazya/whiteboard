@@ -10,6 +10,7 @@
  */
 
 import type { Extension } from '@codemirror/state'
+import { documentSyncKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type { ReactNode } from 'react'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -188,12 +189,12 @@ export function daemonDocumentLabels(canvas: { workspaceId: string; path: string
     }
   }
   return {
-    documentKey: `${canvas.workspaceId}/${canvas.path}`,
+    documentKey: documentSyncKey(canvas.workspaceId, canvas.path),
     scopeKey: `${canvas.workspaceId}:${canvas.path}`,
     overlayTitle: canvas.path,
     exportFilenameBase: canvas.path,
     // Identity key = workspaceId+path, matching this page's own canvas.
-    registryKey: `${canvas.workspaceId}/${canvas.path}`,
+    registryKey: documentSyncKey(canvas.workspaceId, canvas.path),
     workspaceId: canvas.workspaceId,
     path: canvas.path,
     // The daemon's command surface addresses a document by path (the row it

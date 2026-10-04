@@ -4,14 +4,17 @@
  *
  * A page follows a workspace's record as `workspace:<id>` and a document as
  * `<handle>/<path>`; `sse-stream-hub.ts` in daemon-client builds and parses
- * both. That grammar is not the STORED key (`workspace-tree:<id>`, ports'
+ * both (`workspaceDocKey` and `documentSyncKey` build, the `*OfSyncKey`
+ * functions parse). That grammar is not the STORED key (`workspace-tree:<id>`, ports'
  * `docRefKey` — see `doc-ref-key-one-place.test.ts`): the two answer
  * different questions and a reader holding the wrong parser fails open, so a
  * second hand spelling of the wire prefix is a parser that agrees with
  * itself.
  *
  * The prefix constant is deliberately not exported, so a consumer cannot
- * reach it at all; what this scan finds is the literal spelled by hand.
+ * reach it at all; what this scan finds is the literal spelled by hand. The
+ * per-document half has no prefix to hide, so it is found by its join: a
+ * template that is exactly a workspace handle, a slash and a path.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -32,12 +35,35 @@ const DECLARATION_SITE = 'packages/daemon-client/src/sse-stream-hub.ts'
 const WIRE_SPELLING =
   /`workspace:\$\{|['"]\^?workspace:['"]|\/\^?workspace:|\bWORKSPACE_DOC_KEY_PREFIX\b/g
 
-function spellings(source: string): number {
-  const code = source
+/**
+ * The per-document key spelled by hand: a whole template of
+ * `<…workspaceId or …handle>/<…path>`. Closing the backtick right after the
+ * path is what separates a key from a message that merely names a document
+ * (`Document "${workspaceId}/${path}" already exists`) or a longer URL.
+ */
+const DOCUMENT_KEY_JOIN = /`\$\{[\w.]*(?:[wW]orkspaceId|[hH]andle)\}\/\$\{[\w.]*[pP]ath\}`/g
+
+/**
+ * Files that join a handle and a path into a key of their own, one that is
+ * never parsed by `workspaceHandleOfSyncKey` and never leaves the process.
+ * `history` cannot import daemon-client, and the scheduler's map key is
+ * private to it.
+ */
+const PRIVATE_DOCUMENT_KEYS = new Set(['packages/history/src/checkpoints/scheduler.ts'])
+
+function code(source: string): string {
+  return source
     .split('\n')
     .filter((line) => !/^\s*(?:\/\/|\/\*|\*)/.test(line))
     .join('\n')
-  return code.match(WIRE_SPELLING)?.length ?? 0
+}
+
+function spellings(source: string): number {
+  return code(source).match(WIRE_SPELLING)?.length ?? 0
+}
+
+function documentJoins(source: string): number {
+  return code(source).match(DOCUMENT_KEY_JOIN)?.length ?? 0
 }
 
 const files = SCAN_ROOTS.flatMap((root) => walkSourceFiles(join(REPO_ROOT, root))).filter(
@@ -59,6 +85,21 @@ describe('the sync wire doc key is spelled in one place', () => {
     expect(spellings(`const k = \`workspaces:${HOLE}\``)).toBe(0)
   })
 
+  it('recognises a handle-and-path join under every name in use, and passes messages and URLs through', () => {
+    const hole = (name: string) => ['$', `{${name}}`].join('')
+    const join = (a: string, b: string) => `${hole(a)}/${hole(b)}`
+    expect(documentJoins(`const k = \`${join('workspaceId', 'path')}\``)).toBe(1)
+    expect(documentJoins(`const k = \`${join('handle', 'path')}\``)).toBe(1)
+    expect(documentJoins(`const k = \`${join('canvas.workspaceId', 'canvas.path')}\``)).toBe(1)
+    expect(documentJoins(`key = \`${join('this.workspaceId', 'documentPath')}\``)).toBe(1)
+    expect(
+      documentJoins(`throw new Error(\`Document "${join('workspaceId', 'path')}" exists\`)`),
+    ).toBe(0)
+    expect(documentJoins(`const url = \`${join('base', 'path')}\``)).toBe(0)
+    expect(documentJoins(`const url = \`/api/w/${join('workspaceId', 'path')}\``)).toBe(0)
+    expect(documentJoins(`// \`${join('workspaceId', 'path')}\` in a comment`)).toBe(0)
+  })
+
   it('scans a tree worth scanning', () => {
     expect(files.length).toBeGreaterThan(800)
   })
@@ -72,6 +113,26 @@ describe('the sync wire doc key is spelled in one place', () => {
       if (found > 0) hits.push(`${rel}: ${found}`)
     }
     expect(hits).toEqual([])
+  })
+
+  it('no file outside the declaration site joins a handle and a path into a key by hand', () => {
+    const hits: string[] = []
+    for (const path of files) {
+      const rel = relativeToRepo(path)
+      if (rel === DECLARATION_SITE || PRIVATE_DOCUMENT_KEYS.has(rel)) continue
+      const found = documentJoins(readFileSync(path, 'utf8'))
+      if (found > 0) hits.push(`${rel}: ${found}`)
+    }
+    expect(hits).toEqual([])
+  })
+
+  it('the private-key exemptions still join one, and the declaration site joins exactly once', () => {
+    // An exemption whose file stopped spelling the join is a stale entry; a
+    // declaration site at zero would mean the builder moved.
+    for (const rel of PRIVATE_DOCUMENT_KEYS) {
+      expect(documentJoins(readFileSync(join(REPO_ROOT, rel), 'utf8'))).toBeGreaterThan(0)
+    }
+    expect(documentJoins(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(1)
   })
 
   it('the declaration site spells it exactly as often as the grammar needs', () => {

@@ -183,6 +183,16 @@ export function workspaceDocKey(workspaceId: string): string {
 }
 
 /**
+ * The per-document sync key: `${handle}/${path}`, the grammar
+ * `workspaceHandleOfSyncKey` splits on the first slash. The daemon's stream
+ * registry, the client backend and the page's identity key all spell it
+ * through here, so a change to the join reaches the parser it must agree with.
+ */
+export function documentSyncKey(handle: string, path: string): string {
+  return `${handle}/${path}`
+}
+
+/**
  * The workspace id a workspace-granularity sync key names, or `null` for any
  * other key — a per-document key, the bare prefix, or the STORED key shape
  * (`workspace-tree:<id>`, ports' `docRefKey`, a different grammar).

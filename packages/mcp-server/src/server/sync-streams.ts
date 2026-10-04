@@ -8,6 +8,7 @@
 // notifier read and write through these functions without importing a route.
 
 import {
+  documentSyncKey,
   workspaceDocKey,
   workspaceIdOfSyncKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
@@ -96,7 +97,7 @@ export function sseSubscribedWorkspaceIds(): string[] {
 }
 
 export function docKey(workspaceId: string, path: string): string {
-  return `${workspaceId}/${path}`
+  return documentSyncKey(workspaceId, path)
 }
 
 function toBase64(bytes: Uint8Array): string {
