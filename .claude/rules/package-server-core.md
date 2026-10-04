@@ -193,12 +193,12 @@ asks the same question and sends the declared colours on the scene.
 **A BODY is the other way that stored field is written, and it is held to
 the same declaration** (increment 5c). `refuseFrontmatterTags` is the one
 judgement for a writer that takes a whole OKF document — `document.set`,
-`wb_document_create`'s markdown arm, and the `POST /documents` route behind
+`document.create`'s markdown arm, and the `POST /documents` route behind
 them. Such a write replaces the tags wholesale, so the parsed frontmatter IS
 the resulting set and there is no `tagSetsAfter` merge to compute. It runs
 at two call sites deliberately: in the writer, before the document is
 opened, so a refusal leaves the stored body as it stands; and in
-`wb_document_create`'s preflight beside the OKF parse already hoisted ahead
+`document.create`'s preflight beside the OKF parse already hoisted ahead
 of ADR-0019's mint, because the delegated write would otherwise refuse AFTER
 the mint and leave an empty document squatting the path the caller was told
 they did not get. A tagged create therefore takes one extra listing, and
