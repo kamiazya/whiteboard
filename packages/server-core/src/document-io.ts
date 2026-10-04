@@ -47,7 +47,7 @@ export class SnapshotNotFoundError extends Error {
  * message rather than `instanceof WebAssembly.RuntimeError`, which a trap
  * raised in another realm (a worker, a test sandbox) does not satisfy.
  */
-function isEngineTrap(err: unknown): boolean {
+export function isEngineTrap(err: unknown): boolean {
   return (
     err instanceof Error && err.name === 'RuntimeError' && err.message.startsWith('unreachable')
   )
