@@ -365,9 +365,9 @@ fails the file if it stops being drawn: at one draw in six it was missed by
 one mutation run in three. `test-utils/fast-check.ts`'s `withDefaults` is
 generic for that, since `fc.Parameters<never>` types `examples` as `never[]`.
 An example is the CASE, not the RNG state, so it is not a pinned seed.
-Locally the browser project runs with
-`WHITEBOARD_CHROME_PATH=/opt/pw-browsers/chromium_headless_shell-<rev>/chrome-linux/headless_shell`
-when the installed Playwright revision is not the one the config pins.
+Locally the browser project runs on Playwright's own Chromium;
+`WHITEBOARD_CHROME_PATH` (`docs/contributing/development.md`) points it at
+another build when the installed one is not the revision the config pins.
 
 `lib/idb-stored-shapes-surface.test.ts` is what keeps that lane honest as the
 app grows: it scans `lib/` for a module that names an object store AND hands
