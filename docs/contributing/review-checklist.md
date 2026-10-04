@@ -17,7 +17,7 @@ Use this checklist when reviewing or self-reviewing a pull request in this repos
 
 ## Schema and contracts
 
-- [ ] Any cross-boundary contract (MCP tool, HTTP route, persisted JSON, sync text frame) is backed by a Zod schema.
+- [ ] Any cross-boundary contract (MCP tool, HTTP route, persisted JSON, SSE sync frame) is backed by a Zod schema.
 - [ ] Types are derived via `z.infer<>` — no hand-written parallel interfaces.
 - [ ] If a new MCP tool is added, `pnpm smoke:e2e` is extended to call it at least once.
 
