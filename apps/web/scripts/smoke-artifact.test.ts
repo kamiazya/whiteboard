@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { findFilesContainingBytes, listAllRegularFiles } from './smoke-artifact.mjs'
 
@@ -71,7 +71,13 @@ describe('entry-point guard', () => {
     dir = join(dirname(SCRIPT_PATH), 'tmp-entrypoint-guard-fixture space')
     mkdirSync(dir, { recursive: true })
     const scriptCopy = join(dir, 'smoke-artifact.mjs')
-    copyFileSync(SCRIPT_PATH, scriptCopy)
+    // One directory deeper, the script's relative import of the entry helper
+    // names nothing, so the copy imports it by absolute URL instead.
+    const helper = '../../../tools/checks/src/is-run-as-script.mjs'
+    const source = readFileSync(SCRIPT_PATH, 'utf-8')
+    expect(source).toContain(`'${helper}'`)
+    const absolute = pathToFileURL(join(dirname(SCRIPT_PATH), helper)).href
+    writeFileSync(scriptCopy, source.replace(`'${helper}'`, `'${absolute}'`))
 
     let stdout = ''
     let status = 0

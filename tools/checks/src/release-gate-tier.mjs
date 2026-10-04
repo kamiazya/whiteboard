@@ -17,6 +17,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from './is-run-as-script.mjs'
 import { validateMatrix } from './release-gate-matrix-schema.mjs'
 import { splitCommand } from './split-command.mjs'
 
@@ -154,7 +155,7 @@ Options:
 
 /** Run `main` only when `entryUrl` (the caller's `import.meta.url`) is the process entry point. */
 export function runIfEntry(entryUrl, main) {
-  if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(entryUrl)) {
+  if (isRunAsScript(entryUrl)) {
     process.exit(main())
   }
 }

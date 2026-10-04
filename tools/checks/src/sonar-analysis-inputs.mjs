@@ -16,6 +16,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isRunAsScript } from './is-run-as-script.mjs'
 
 /**
  * The comma-separated, backslash-continued value of one properties key.
@@ -81,7 +82,7 @@ export function affectsSonarAnalysis(changedPaths, exclusions) {
 // analysis is the project's record and is never skipped. Fails OPEN like
 // docker-build-inputs.mjs — an unresolvable diff prints `true`.
 
-if (process.argv[1]?.endsWith('sonar-analysis-inputs.mjs')) {
+if (isRunAsScript(import.meta.url)) {
   const { execFileSync } = await import('node:child_process')
   const { appendFileSync } = await import('node:fs')
 

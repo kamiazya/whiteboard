@@ -6,7 +6,7 @@ import {
   REPO_ROOT,
   relativeToRepo,
   SCAN_ROOTS,
-  SCRIPT_SCAN_ROOTS,
+  scriptFiles,
   walk,
 } from './scan-roots.js'
 import { registerSizeLedgerAssertions } from './size-ledger-assertions.js'
@@ -103,16 +103,8 @@ function scanTestFiles(): string[] {
     .sort()
 }
 
-function isScannedScriptFile(absolutePath: string): boolean {
-  return absolutePath.endsWith('.mjs') && !isExcludedPath(absolutePath)
-}
-
 function scanScriptFiles(): string[] {
-  return SCRIPT_SCAN_ROOTS.flatMap((relRoot) =>
-    walk(join(REPO_ROOT, relRoot), { include: isScannedScriptFile }),
-  )
-    .map((absolutePath) => relativeToRepo(absolutePath))
-    .sort()
+  return scriptFiles().filter((path) => path.endsWith('.mjs'))
 }
 
 function scanFiles(): string[] {

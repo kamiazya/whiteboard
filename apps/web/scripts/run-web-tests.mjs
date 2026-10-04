@@ -15,7 +15,7 @@
 
 import { spawnSync } from 'node:child_process'
 import process from 'node:process'
-import { pathToFileURL } from 'node:url'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
 /** The two configs that together are "the apps/web suite". */
 export const RUNS = [
@@ -52,4 +52,4 @@ function main() {
 }
 
 // Importable for its own test; still the executable CI and `pnpm test` invoke.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (isRunAsScript(import.meta.url)) main()

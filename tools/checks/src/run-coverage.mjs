@@ -34,6 +34,7 @@
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from './is-run-as-script.mjs'
 import { buildVitestArgv, readVitestProjects } from './vitest-projects.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -102,6 +103,6 @@ export function main(options = {}) {
   return result.status ?? 1
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isRunAsScript(import.meta.url)) {
   process.exit(main())
 }

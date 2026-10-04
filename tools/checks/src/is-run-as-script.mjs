@@ -3,7 +3,7 @@
 // `import.meta.url` is percent-encoded and `process.argv[1]` is a raw path, so comparing them as
 // strings is false under any checkout whose path holds a space, `#` or `%`. A script guarded that
 // way then does nothing and exits 0 — a build "succeeds" with nothing copied, a gate passes with
-// nothing checked. `script-entry-check.test.ts` fails the raw spelling anywhere in the scripts.
+// nothing checked. `script-entry-check.test.ts` fails any other script that reads `process.argv[1]`.
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 

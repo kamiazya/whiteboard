@@ -9,7 +9,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { REPO_ROOT, relativeToRepo, SCRIPT_SCAN_ROOTS, walk } from './scan-roots.js'
+import { REPO_ROOT, scriptFiles } from './scan-roots.js'
 
 const YAML_NAME = /[A-Za-z0-9_][A-Za-z0-9_.-]*\.ya?ml\b/g
 
@@ -32,29 +32,18 @@ const exists = {
   rootFile: (name: string) => existsSync(join(REPO_ROOT, name)),
 }
 
-const SCRIPT_FILE = /\.(mjs|js|ts|sh)$/
-const isScript = (path: string) => SCRIPT_FILE.test(path) && !/\.test\.[cm]?[jt]s$/.test(path)
-
 describe('scripts name only workflow files that exist', () => {
-  const scripts = [...SCRIPT_SCAN_ROOTS, '.claude/scripts']
-    .filter((dir) => existsSync(join(REPO_ROOT, dir)))
-    .flatMap((dir) =>
-      walk(join(REPO_ROOT, dir), {
-        include: isScript,
-        skip: (_path, name) => name === 'node_modules',
-      }),
-    )
+  const scripts = scriptFiles().filter((path) => !/\.test\.[cm]?js$/.test(path))
 
   it('scans the release scripts that carry workflow pointers', () => {
-    const scanned = scripts.map((path) => relativeToRepo(path))
-    expect(scanned).toContain('packages/mcp-server/scripts/release/publish-dry-run-npm.mjs')
-    expect(scanned).toContain('packages/mcp-server/scripts/release/publish-dry-run-docker.mjs')
+    expect(scripts).toContain('packages/mcp-server/scripts/release/publish-dry-run-npm.mjs')
+    expect(scripts).toContain('packages/mcp-server/scripts/release/publish-dry-run-docker.mjs')
   })
 
   it('finds no .yml name that is not a workflow or a root file', () => {
     const dangling = scripts.flatMap((path) =>
-      unresolvedYamlNames(readFileSync(path, 'utf8'), exists).map(
-        (name) => `${relativeToRepo(path)}: ${name}`,
+      unresolvedYamlNames(readFileSync(join(REPO_ROOT, path), 'utf8'), exists).map(
+        (name) => `${path}: ${name}`,
       ),
     )
     expect(dangling).toEqual([])

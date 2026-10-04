@@ -17,13 +17,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { isExcludedPath, REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
+import { REPO_ROOT, scriptFiles } from './scan-roots.js'
 import { stripComments } from './strip-comments.js'
 
 const HOME = 'tools/checks/src/serve-dist.mjs'
-
-/** The roots that hold plain-Node scripts: package scripts, the smokes, the gates and the dev tooling. */
-const SCRIPT_ROOTS = ['apps', 'packages', 'tests', 'tools', '.claude/scripts']
 
 const WEB_TYPE =
   /['"`](?:text\/(?:html|css|javascript)|application\/(?:javascript|wasm)|image\/svg\+xml|font\/(?:woff2|ttf))\b/g
@@ -33,14 +30,7 @@ function webTypesIn(source: string): number {
   return new Set(stripComments(source).match(WEB_TYPE)).size
 }
 
-const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'tmp', '.git', 'public'])
-
-const scripts = SCRIPT_ROOTS.flatMap((root) =>
-  walk(join(REPO_ROOT, root), {
-    include: (path) => /\.(mjs|cjs|js)$/.test(path) && !isExcludedPath(path),
-    skip: (_path, name) => SKIPPED_DIRS.has(name),
-  }),
-).map((path) => relativeToRepo(path))
+const scripts = scriptFiles()
 
 const MIME_TABLE_OF_A_SMOKE = `
 const MIME = {
