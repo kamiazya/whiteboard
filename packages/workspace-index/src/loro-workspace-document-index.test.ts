@@ -26,13 +26,15 @@ import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
 /**
- * Workspace documents in memory.
+ * Workspace documents in memory, kept the way a real store keeps them: only
+ * what `save` exported survives, and every `open` is a restart that imports it
+ * into a document nobody else holds.
  *
- * `save` is a no-op because these ARE the stored documents — nothing is
- * exported. A real backing store exports and writes there, which is exactly
- * the part this package does not decide.
- */
-/**
+ * A double whose `save` is a no-op over live documents passes an index that
+ * never calls `save` at all, because the mutation is already in the very
+ * object the next read returns. A real backing store would have lost it, so the
+ * conformance suites run here must not be able to pass on that.
+ *
  * Doubles as this index's `WorkspaceRegistry`, which is why it holds identity
  * separately from the documents: the tree index never writes a registry row —
  * `createWorkspace` only creates the tree doc — so `segment`/`displayName`
@@ -45,22 +47,27 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 } {
   const identities = new Map<string, WorkspaceEntry>()
-  const docs = new Map<string, LoroDoc>()
+  const stored = new Map<string, Uint8Array>()
   let nextPeer = 1n
-  return {
+  const fresh = (): LoroDoc => {
+    const doc = new LoroDoc()
+    doc.setPeerId(nextPeer)
+    nextPeer += 1n
+    return doc
+  }
+  const docs: ReturnType<typeof inMemoryWorkspaceDocs> = {
     async open(workspaceId) {
-      return docs.get(workspaceId) ?? null
-    },
-    async create(workspaceId) {
-      const existing = docs.get(workspaceId)
-      if (existing !== undefined) return existing
-      const doc = new LoroDoc()
-      doc.setPeerId(nextPeer)
-      nextPeer += 1n
-      docs.set(workspaceId, doc)
+      const bytes = stored.get(workspaceId)
+      if (bytes === undefined) return null
+      const doc = fresh()
+      doc.import(bytes)
       return doc
     },
-    async save() {
+    async create(workspaceId) {
+      return (await docs.open(workspaceId)) ?? fresh()
+    },
+    async save(workspaceId, doc) {
+      stored.set(workspaceId, doc.export({ mode: 'snapshot' }))
       return null
     },
     // These doubles serve INDEX tests, which never tail. Rejecting rather than
@@ -69,15 +76,15 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
     readCursor: () => Promise.reject(new Error('not implemented')),
     catchUp: () => Promise.reject(new Error('not implemented')),
     async listWorkspaces() {
-      return [...docs.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
+      return [...stored.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
     },
     async seedWorkspace(entry) {
       identities.set(entry.workspaceId, entry)
-      await this.create(entry.workspaceId)
+      await docs.save(entry.workspaceId, await docs.create(entry.workspaceId))
     },
     async renameWorkspace({ workspaceId, segment, displayName }) {
-      if (!docs.has(workspaceId)) throw new WorkspaceNotFoundError(workspaceId)
-      const rows = [...docs.keys()].map(
+      if (!stored.has(workspaceId)) throw new WorkspaceNotFoundError(workspaceId)
+      const rows = [...stored.keys()].map(
         (id) => identities.get(id) ?? ({ workspaceId: id } satisfies WorkspaceEntry),
       )
       if (
@@ -96,6 +103,7 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
       return renamed
     },
   }
+  return docs
 }
 
 /** Enough of a `BlobStore` for the evacuation a delete performs. */
