@@ -210,4 +210,47 @@ describe('carriedWithDrag', () => {
     const carried = carriedWithDrag(canvas, gesture, new Set(), (id) => id === 'locked')
     expect(carried).toEqual(new Set(['g1', 'in']))
   })
+
+  // The committed frame can move on under a gesture (a peer's edit), but the
+  // members it carries are the ones inside where the grab began.
+  it('takes the frame start position from the gesture, not from the committed node', () => {
+    const moved: SpatialCanvas = {
+      nodes: [
+        groupNode({ id: 'g1', x: 400, y: 400, width: 300, height: 200 }),
+        textNode({ id: 'at-start', x: 10, y: 10, width: 50, height: 40, text: 'a' }),
+        textNode({ id: 'at-now', x: 410, y: 410, width: 50, height: 40, text: 'b' }),
+      ],
+      edges: [],
+    }
+
+    const carried = carriedWithDrag(
+      moved,
+      { nodeId: 'g1', startX: 0, startY: 0 },
+      new Set(),
+      () => false,
+    )
+
+    expect(carried).toEqual(new Set(['g1', 'at-start']))
+  })
+
+  it('takes the frame size from the committed node', () => {
+    const sized: SpatialCanvas = {
+      nodes: [
+        groupNode({ id: 'g1', x: 0, y: 0, width: 100, height: 100 }),
+        textNode({ id: 'wide', x: 10, y: 10, width: 120, height: 20, text: 'w' }),
+        textNode({ id: 'tall', x: 10, y: 10, width: 20, height: 120, text: 't' }),
+        textNode({ id: 'fits', x: 10, y: 10, width: 80, height: 80, text: 'f' }),
+      ],
+      edges: [],
+    }
+
+    const carried = carriedWithDrag(
+      sized,
+      { nodeId: 'g1', startX: 0, startY: 0 },
+      new Set(),
+      () => false,
+    )
+
+    expect(carried).toEqual(new Set(['g1', 'fits']))
+  })
 })

@@ -19,7 +19,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetTool, OkfParseError, parseWritableOkf } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
 import { TAG_LIBRARY_PATH } from './tag-library.js'
@@ -527,6 +527,18 @@ describe('wb_document_set and the scoped-tag grammar (ADR-0040 decision 1)', () 
     )
 
     expect(readMarkdownBody(await loadDoc(store, DOCUMENT_ID))).toBe(STORED)
+  })
+
+  // An author has the refusal's text alone to find the offending line: the
+  // wire code and the tag are pinned elsewhere, but not WHERE it failed.
+  test('the refusal names the tags stage and the index of the offending entry', () => {
+    const attempt = () => parseWritableOkf('---\ntype: note\ntags:\n  - fine\n  - a:b:c\n---\nbody')
+
+    expect(attempt).toThrow(OkfParseError)
+    expect(attempt).toThrow(
+      /^OKF parse failed at frontmatter-tags: frontmatter tags are refused — tags\.1: /,
+    )
+    expect(attempt).toThrow(/a:b:c/)
   })
 
   test('still writes a plain tag and a well-formed scoped one', async () => {

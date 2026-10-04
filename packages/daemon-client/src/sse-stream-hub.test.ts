@@ -514,6 +514,11 @@ describe('workspaceHandleOfSyncKey', () => {
     expect(workspaceHandleOfSyncKey('no-slash-here')).toBeNull()
     expect(workspaceHandleOfSyncKey('/leading-slash')).toBeNull()
   })
+
+  it('refuses a handle with no path behind it, and builds no snapshot URL for it', () => {
+    expect(workspaceHandleOfSyncKey('ws-1/')).toBeNull()
+    expect(canvasSnapshotUrl('http://d', 'ws-1/')).toBeNull()
+  })
 })
 
 describe('workspaceIdOfSyncKey', () => {
