@@ -63,6 +63,20 @@ describe('ProposalsPanel', () => {
     expect(screen.getByText(/1 change waiting/)).not.toBeNull()
   })
 
+  // Provenance is optional (a browser-kept workspace has nobody to name), so
+  // the row says who proposed it when the proposal does, and nothing when not.
+  it('names who proposed a waiting proposal when it says', () => {
+    render(<ProposalsPanel proposals={[{ ...waiting, author: 'claude-code/1.0' }]} />)
+
+    expect(screen.getByText('by claude-code/1.0')).not.toBeNull()
+  })
+
+  it('says nothing about an author when the proposal carries none', () => {
+    render(<ProposalsPanel proposals={[waiting]} />)
+
+    expect(screen.queryByText(/^by\b/)).toBeNull()
+  })
+
   it('says what an empty panel means rather than drawing nothing', () => {
     render(<ProposalsPanel proposals={[decided]} onOpen={() => {}} />)
 

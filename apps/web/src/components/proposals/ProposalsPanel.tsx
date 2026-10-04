@@ -102,6 +102,12 @@ function Row({
             {verb}
           </span>
         ))}
+      {/* The name alone would read as a verb or a node beside the lines above;
+          `okfActor` carries no human-vs-agent kind to badge, so the word "by"
+          is all the row can honestly add. */}
+      {proposal.author === undefined ? null : (
+        <span className="text-muted-foreground truncate text-[11px]">by {proposal.author}</span>
+      )}
     </>
   )
   const shape = 'flex min-w-0 flex-col gap-0.5 rounded px-2 py-1.5 text-left'

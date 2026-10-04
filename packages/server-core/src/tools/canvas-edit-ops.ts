@@ -26,6 +26,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
+import { proposalAuthorSchema } from './proposal-author.js'
 
 // Geometry and identity are DERIVED from the stored node's own fields rather
 // than restated beside them, so a change to what an `x` may hold reaches this
@@ -560,6 +561,8 @@ export const canvasEditInputSchema = z
      * opinion beside it.
      */
     proposalId: annotationIdSchema.optional(),
+    /** Only meaningful with `mode: 'propose'`; see `proposalAuthorSchema`. */
+    author: proposalAuthorSchema,
     /**
      * Move a watching browser's viewport onto what this batch touched.
      * Defaults to true: an agent editing a board a human is looking at

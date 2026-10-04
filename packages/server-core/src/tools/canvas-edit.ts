@@ -198,12 +198,10 @@ async function commitAsProposal({
 }): Promise<CanvasEditOutput> {
   const proposal = await storeCanvasProposal({
     deps,
-    workspaceId: input.workspaceId,
-    documentId: input.documentId,
-    ...(input.proposalId === undefined ? {} : { proposalId: input.proposalId }),
+    input,
     doc,
     before: canvas,
-    after: after,
+    after,
   })
   if (proposal === undefined) {
     throw new CanvasEditError(
