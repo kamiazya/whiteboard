@@ -243,7 +243,7 @@ If you also need a zero-context LLM-level check:
 
 ```bash
 pnpm smoke:claude   # spawn the claude CLI; verifies tools are callable via description / schema (uses API quota)
-pnpm smoke:all      # smoke:e2e + smoke:claude
+pnpm smoke:all      # smoke:e2e + smoke:claude (spends API quota)
 ```
 
 The project-scoped skill `.claude/skills/whiteboard-mcp-smoke/SKILL.md` encodes this workflow — restart triage, which smoke to run in what order, and how to read a failure — so a "verify behavior" request can trigger it without restarting manually.

@@ -25,7 +25,18 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { isCliAvailable } from './lib/cli-available.mjs'
+
+// Parsed before the CLI probe so `--help` neither launches a model nor reaches the SKIP line.
+parseScriptArgs({
+  argv: process.argv.slice(2),
+  usage: [
+    'usage: mcp-claude-cli-smoke.mjs',
+    '  runs one real claude CLI session against the whiteboard MCP server - this SPENDS API QUOTA.',
+    '  takes no options; skips cleanly when the claude CLI is not on PATH.',
+  ].join('\n'),
+})
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')

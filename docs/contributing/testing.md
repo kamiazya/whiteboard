@@ -33,7 +33,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 pnpm check:local         # every gate CI's check job runs
 pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
-pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
+pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior (spends API quota: it chains the claude and codex CLI smokes, which skip when the CLI is absent)
 ```
 
 A pull request that touches test files also runs CI's `stress-changed-tests` job: every changed

@@ -14,7 +14,9 @@
 // This consumes API quota, so it is not part of `pnpm test` and skips
 // cleanly where no claude CLI is installed. Manual use, from this package:
 //   node scripts/eval/mcp-tool-surface-eval.mjs [--trials=3] [--model=sonnet]
-//     [--only=<substring>] [--out=<file.json>] [--dry-run]
+//     [--only=<substring>] [--out=<file.json>] [--max-turns=15] [--max-budget-usd=1] [--dry-run]
+// Flags are parsed before anything heavy loads: `--help` prints the usage and exits 0, and an
+// unknown option exits 2 instead of falling through to the real lane.
 // `--dry-run` seeds the fixture and runs every verifier against it WITHOUT
 // calling a model: read tasks are checked to be answerable from the store
 // and write tasks must FAIL on the untouched fixture, or the verifier is not
@@ -25,11 +27,28 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { register } from 'tsx/esm/api'
+import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
 import { facetLine } from './lib/report-line.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS, tagLibrary } from './tasks.mjs'
+
+const VALUED_OPTIONS = ['trials', 'model', 'only', 'out', 'max-turns', 'max-budget-usd']
+const USAGE = [
+  `usage: mcp-tool-surface-eval.mjs ${VALUED_OPTIONS.map((name) => `[--${name}=<v>]`).join(' ')} [--dry-run]`,
+  '  runs each task through a real model via the claude CLI - this SPENDS API QUOTA.',
+  '  --dry-run seeds the fixture and runs every verifier without calling a model.',
+].join('\n')
+
+const valued = new Map()
+const unvalued = []
+for (const argument of process.argv.slice(2)) {
+  const match = new RegExp(`^--(${VALUED_OPTIONS.join('|')})=(.*)$`).exec(argument)
+  if (match) valued.set(match[1], match[2])
+  else unvalued.push(argument)
+}
+const { flags } = parseScriptArgs({ argv: unvalued, flags: ['--dry-run'], usage: USAGE })
 
 // The drawing score reads a laid-out scene, and both packages that build
 // one are source-only; `tsx` resolves them the way the server launcher
@@ -42,11 +61,7 @@ const { scoreComposition, scoreDrawing, scoreFacets } = await import(
 )
 const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
-const arg = (name, fallback) => {
-  const found = process.argv.find((a) => a.startsWith(`--${name}=`))
-  return found === undefined ? fallback : found.slice(name.length + 3)
-}
-const flag = (name) => process.argv.includes(`--${name}`)
+const arg = (name, fallback) => valued.get(name) ?? fallback
 
 const TRIALS = Number(arg('trials', '1'))
 if (!Number.isSafeInteger(TRIALS) || TRIALS < 1) {
@@ -56,7 +71,7 @@ if (!Number.isSafeInteger(TRIALS) || TRIALS < 1) {
 const MODEL = arg('model', undefined)
 const ONLY = arg('only', undefined)
 const OUT = arg('out', undefined)
-const DRY_RUN = flag('dry-run')
+const DRY_RUN = flags.has('--dry-run')
 const MAX_TURNS = arg('max-turns', '15')
 const MAX_BUDGET_USD = arg('max-budget-usd', '1')
 const TASK_TIMEOUT_MS = 240_000
