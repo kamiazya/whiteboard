@@ -15,7 +15,7 @@ import { onDocumentAction } from './document/path-route.js'
 import {
   defaultExportPath,
   documentMissingBody,
-  parseExportBody,
+  readExportBody,
   resolveRequestedOutputPath,
 } from './export-request.js'
 
@@ -73,9 +73,9 @@ export function createExportRouter(options: ExportRouterOptions) {
     'post',
     'export',
     async (c, workspaceId, path) => {
-      const parsedBody = parseExportBody(await c.req.text(), exportRequestSchema)
-      if ('error' in parsedBody) return c.json(parsedBody.error, 400)
-      const body = parsedBody.body
+      const parsedBody = await readExportBody(c, exportRequestSchema)
+      if ('refusal' in parsedBody) return parsedBody.refusal
+      const body = parsedBody.data
 
       // Validated up front, before rendering, so the caller does not waste a
       // render on a write that will fail.

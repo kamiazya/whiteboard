@@ -11,6 +11,7 @@ import {
 } from '../../store/names-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import { parseWorkspaceHandle } from '../../workspace-handle.js'
+import { readJsonBody } from '../read-json-body.js'
 import { firstOwned, invalidBodyRefusal, STORED_DOCUMENT_ANSWERS } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -47,10 +48,11 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
     const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
-    const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) {
-      return c.json(invalidBodyRefusal(parsed.error, 'name must be a string'), 400)
-    }
+    const parsed = await readJsonBody(c, setNameRequestSchema, {
+      voice: 'code',
+      refuseShape: (error) => invalidBodyRefusal(error, 'name must be a string'),
+    })
+    if ('refusal' in parsed) return parsed.refusal
     try {
       const updated = await setWorkspaceName(workspaceId, parsed.data.name, scope)
       return c.json(updated)
@@ -62,10 +64,11 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
   })
 
   onDocumentsRoute(app, 'put', ['name'], async (c, workspaceId, path) => {
-    const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) {
-      return c.json(invalidBodyRefusal(parsed.error, 'name must be a string'), 400)
-    }
+    const parsed = await readJsonBody(c, setNameRequestSchema, {
+      voice: 'code',
+      refuseShape: (error) => invalidBodyRefusal(error, 'name must be a string'),
+    })
+    if ('refusal' in parsed) return parsed.refusal
     try {
       const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name, scope)
       return c.json(updated)
@@ -78,10 +81,11 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
 
   // Idempotently set pin on/off and return the full updated WorkspaceNames payload.
   onDocumentsRoute(app, 'put', ['pin'], async (c, workspaceId, path) => {
-    const parsed = setPinnedRequestSchema.safeParse(await c.req.json().catch(() => null))
-    if (!parsed.success) {
-      return c.json(invalidBodyRefusal(parsed.error, 'pinned must be boolean'), 400)
-    }
+    const parsed = await readJsonBody(c, setPinnedRequestSchema, {
+      voice: 'code',
+      refuseShape: (error) => invalidBodyRefusal(error, 'pinned must be boolean'),
+    })
+    if ('refusal' in parsed) return parsed.refusal
     try {
       const updated = await setDocumentPinned(workspaceId, path, parsed.data.pinned, scope)
       return c.json(updated)

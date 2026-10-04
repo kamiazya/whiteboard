@@ -5,7 +5,6 @@ import {
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
-import type { RequestOperator } from '@kamiazya/whiteboard-server-core'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
@@ -13,6 +12,7 @@ import type { z } from 'zod'
 import { getDoc, listDocuments } from '../../store/document-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
+import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
 import {
   defaultHumanDisplayName,
   firstOwned,
@@ -34,27 +34,6 @@ export interface VersionsRouterOptions {
 }
 
 /**
- * An empty body is valid — a version needs neither a label nor an operator.
- * A body that is PRESENT must parse as JSON and pass the schema.
- */
-function parseSaveVersionBody(
-  rawText: string,
-): { label?: string; operator?: RequestOperator } | { error: { error: string; message: string } } {
-  if (rawText.length === 0) return {}
-  let json: unknown
-  try {
-    json = JSON.parse(rawText)
-  } catch {
-    return { error: { error: 'invalid_body', message: 'malformed JSON' } }
-  }
-  const parsed = saveVersionRequestSchema.safeParse(json)
-  if (!parsed.success) {
-    return { error: { error: 'invalid_body', message: saveVersionIssueMessage(parsed.error) } }
-  }
-  return { label: parsed.data.label, operator: parsed.data.operator }
-}
-
-/**
  * The actor case gets its own sentence: a caller sending one has a wrong
  * model of whose name it is, and "operator is invalid" would send them
  * looking at the wrong field.
@@ -66,6 +45,13 @@ function saveVersionIssueMessage(error: z.ZodError): string {
   }
   const fallback = issue?.path[0] === 'operator' ? 'operator is invalid' : 'label must be string'
   return refusalReason(error, fallback)
+}
+
+/** An empty body is valid — a version needs neither a label nor an operator. */
+const SAVE_VERSION_BODY: ReadJsonBodyOptions = {
+  voice: 'code',
+  optional: true,
+  refuseShape: (error) => errorBody('invalid_body', saveVersionIssueMessage(error)),
 }
 
 /**
@@ -156,9 +142,9 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   // Save a manual version with body { label?: string; operator?: RequestOperator }.
   // auto is false.
   onDocumentsRoute(app, 'post', ['versions'], async (c, workspaceId, path) => {
-    const parsed = parseSaveVersionBody(await c.req.text())
-    if ('error' in parsed) return c.json(parsed.error, 400)
-    const { label, operator } = parsed
+    const parsed = await readJsonBody(c, saveVersionRequestSchema, SAVE_VERSION_BODY)
+    if ('refusal' in parsed) return parsed.refusal
+    const { label, operator } = parsed.data
 
     try {
       const doc = await getDoc(workspaceId, path, scope)

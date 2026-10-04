@@ -12,7 +12,8 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { validateDocumentPath, validateVersionId } from '../../validators.js'
-import { handleCorruptStoredData, refusalReason, refusedBy } from './_shared.js'
+import { readJsonBody } from '../read-json-body.js'
+import { handleCorruptStoredData, invalidBodyRefusal, refusedBy } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
@@ -107,43 +108,6 @@ function restoreAnswer(
   }
 }
 
-/**
- * What a restore was ASKED for, read off an optional body.
- *
- * The body is optional and its absence means in-place: an empty request is
- * the commonest restore there is, so it must not be a refusal. A body that
- * is present and unreadable IS one, and the two unreadable kinds stay
- * distinct — malformed JSON and well-formed JSON of the wrong shape are
- * different mistakes to make.
- */
-function restoreOptionsFrom(
-  rawText: string,
-):
-  | { targetPath: string | undefined; overwrite: boolean; subtree: boolean }
-  | { refusal: { error: 'invalid_body'; message: string } } {
-  if (rawText.length === 0) return { targetPath: undefined, overwrite: false, subtree: false }
-  let parsedJson: unknown
-  try {
-    parsedJson = JSON.parse(rawText)
-  } catch {
-    return { refusal: { error: 'invalid_body', message: 'malformed JSON' } }
-  }
-  const parsed = restoreVersionRequestSchema.safeParse(parsedJson)
-  if (!parsed.success) {
-    return {
-      refusal: {
-        error: 'invalid_body',
-        message: refusalReason(parsed.error, 'invalid restore options'),
-      },
-    }
-  }
-  return {
-    targetPath: parsed.data.targetPath,
-    overwrite: parsed.data.overwrite === true,
-    subtree: parsed.data.subtree === true,
-  }
-}
-
 export function createRestoreRouter(options: RestoreRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
@@ -156,9 +120,17 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       const id = params.id as string
       const invalidVersionId = refusedBy(() => validateVersionId(id))
       if (invalidVersionId) return c.json(invalidVersionId, 400)
-      const asked = restoreOptionsFrom(await c.req.text())
-      if ('refusal' in asked) return c.json(asked.refusal, 400)
-      const { targetPath, overwrite, subtree } = asked
+      // The body is optional and its absence means in-place: an empty request
+      // is the commonest restore there is, so it must not be a refusal.
+      const asked = await readJsonBody(c, restoreVersionRequestSchema, {
+        voice: 'code',
+        optional: true,
+        refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
+      })
+      if ('refusal' in asked) return asked.refusal
+      const { targetPath } = asked.data
+      const overwrite = asked.data.overwrite === true
+      const subtree = asked.data.subtree === true
       try {
         const deps = options.serverDeps
         const result = await restoreVersion(

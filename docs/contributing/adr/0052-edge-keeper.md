@@ -270,7 +270,7 @@ as measured on 2026-10-02:
 | `runtime.ts` (router) | the daemon's liveness, status and storage reports, with the report readers handed in | portable by its own imports; transitively held by `node:crypto` and a `Buffer` global in `security/timing-safe.ts` |
 | `mcp.ts` (router) | the `/mcp` endpoint | portable by its own imports; transitively held by the `log.ts` and `mcp/server.ts` seams and a `process` global in `app-helpers.ts` |
 | `auth.ts` (middleware) | the bearer gate | portable by its own imports; transitively held by both seams, `node:crypto` and a `Buffer` global in `security/timing-safe.ts` |
-| `body-limit.ts`, `document-output-path-error.ts` (helpers) | two small helpers | portable, and clean over their transitive imports |
+| `body-limit.ts`, `document-output-path-error.ts`, `read-json-body.ts` (helpers) | three small helpers | portable, and clean over their transitive imports |
 | `document/metadata.ts` | workspace and document names | node-bound: `store/names-store` |
 | `document/maintenance.ts`, `document/versions.ts`, `document.ts` | version pruning, optimisation, history | node-bound: `store/document-store`, `store/version-store`, `store/auto-version` |
 | `files.ts` | file purge and the file routes | node-bound: `node:fs`, `store/` |
@@ -287,13 +287,13 @@ edges are erased at emit) with three named cut seams, `log.ts` (the Node
 logger), `workspace-handle.ts` (which reads the store's workspace registry
 through a module-level handle, a ledgered edge in `adapter-mechanic-check`) and
 `mcp/server.ts` (the `McpServer` factory over the widget bundle on disk), that a
-lift would replace with a handed-in dependency. Of the thirteen files, nine are
-routers (they mount a Hono app); the other four are the bearer gate and three
+lift would replace with a handed-in dependency. Of the fourteen files, nine are
+routers (they mount a Hono app); the other five are the bearer gate and four
 helpers, which sit in `routes/` and are not routes.
 
-Counted that way, as measured on 2026-10-02: **two** of the thirteen are clean as
-they stand (`body-limit.ts`, `document-output-path-error.ts`, neither a router),
-**five** are held only by the cut seams, and **two** of the nine routers
+Counted that way, as measured on 2026-10-02: **three** of the fourteen are clean as
+they stand (`body-limit.ts`, `document-output-path-error.ts`, `read-json-body.ts`, none a router),
+**six** are held only by the cut seams, and **two** of the nine routers
 (`live-doc`, `trash`) are among those. The rest carry a named blocker: `node:os`
 in `document/_shared.ts` (`restore`, `workspaces`), `node:crypto` and a `Buffer`
 in `security/timing-safe.ts` (`auth`, `runtime`), a `process` global in `app-helpers.ts`
@@ -303,12 +303,12 @@ always counted an ambient `Buffer` as Node (it is why `workspace-document.ts` is
 node-bound), and the same base64 helper that clears that one clears
 `sync-streams.ts` too.
 
-The thirteen portable files, the role of each and what holds it are listed in the
+The fourteen portable files, the role of each and what holds it are listed in the
 test, which holds that list from both sides, checks each file's blockers
 against the closure and pins its length and the three counts so they can only
 fall: a portable route added to `mcp-server` fails the build until the ceiling
 is raised on the record, and one lifted into `server-core` fails it until the
-ceiling is lowered. The same test reads this note, so the thirteen names, the
+ceiling is lowered. The same test reads this note, so the fourteen names, the
 three counts and the seam list above cannot drift from the ledger unseen.
 
 **Whether to lift the seam-only routes into `server-core` is an OPEN DECISION

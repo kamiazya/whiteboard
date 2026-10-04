@@ -47,11 +47,12 @@ import {
   setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
-import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
+import { invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import type { WorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../validators.js'
+import { readJsonBody } from './read-json-body.js'
 
 const log = getLogger('replica-key')
 
@@ -144,16 +145,11 @@ export function createReplicaKeyRouter({
     const invalidId = badWorkspaceIdBody(workspaceId)
     if (invalidId) return c.json(invalidId, 400)
 
-    let body: unknown
-    try {
-      body = await c.req.json()
-    } catch {
-      return c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400)
-    }
-    const parsed = setReplicaTierRequestSchema.safeParse(body)
-    if (!parsed.success) {
-      return c.json(invalidRequestBody(parsed.error), 400)
-    }
+    const parsed = await readJsonBody(c, setReplicaTierRequestSchema, {
+      voice: 'code',
+      refuseShape: invalidRequestBody,
+    })
+    if ('refusal' in parsed) return parsed.refusal
 
     if (!(await workspaceExists(workspaceId))) {
       log.warning({ workspaceId, reason: 'workspace_not_found' }, 'replica-tier refused')

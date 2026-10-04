@@ -13,9 +13,8 @@ import {
   workspacePeopleResponseSchema,
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
-import { errorBody, invalidRequestBody } from '@kamiazya/whiteboard-server-core'
+import { invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
-import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import type { WorkspacePeopleAdministration } from '../security/people-administration.js'
 import type { WorkspacePeopleKeeper } from '../security/people-keepers.js'
@@ -23,6 +22,7 @@ import type { WorkspaceMember, WorkspaceRoles } from '../security/workspace-role
 import { endSyncStreamsOf } from '../sync-streams.js'
 import { workspaceIdFromHandle } from '../workspace-handle.js'
 import { issueInvitationLink } from './invitation-link.js'
+import { readJsonBody } from './read-json-body.js'
 
 const log = getLogger('workspace-people')
 
@@ -53,18 +53,6 @@ function toPerson(member: WorkspaceMember) {
     role: member.role,
     deactivated: member.deactivated,
   })
-}
-
-async function readBody<S extends z.ZodTypeAny>(c: Context, schema: S) {
-  let body: unknown
-  try {
-    body = await c.req.json()
-  } catch {
-    return { error: c.json(errorBody('invalid_body', 'the request body is not valid JSON'), 400) }
-  }
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) return { error: c.json(invalidRequestBody(parsed.error), 400) }
-  return { data: parsed.data as z.infer<S> }
 }
 
 const workspaceOf = (c: Context) => workspaceIdFromHandle(c, c.req.param('workspace') ?? '')
@@ -126,8 +114,11 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
   })
 
   app.post('/api/workspaces/:workspace/people', async (c) => {
-    const body = await readBody(c, addWorkspacePersonRequestSchema)
-    if (body.error !== undefined) return body.error
+    const body = await readJsonBody(c, addWorkspacePersonRequestSchema, {
+      voice: 'code',
+      refuseShape: invalidRequestBody,
+    })
+    if ('refusal' in body) return body.refusal
     const workspaceId = await ownedWorkspace(c)
     if (workspaceId === null) return refuse(c, 'not_an_owner')
     const { userId } = body.data
@@ -137,8 +128,11 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
   })
 
   app.patch('/api/workspaces/:workspace/people/:userId', async (c) => {
-    const body = await readBody(c, changeWorkspaceRoleRequestSchema)
-    if (body.error !== undefined) return body.error
+    const body = await readJsonBody(c, changeWorkspaceRoleRequestSchema, {
+      voice: 'code',
+      refuseShape: invalidRequestBody,
+    })
+    if ('refusal' in body) return body.refusal
     const workspaceId = await ownedWorkspace(c)
     if (workspaceId === null) return refuse(c, 'not_an_owner')
     const userId = c.req.param('userId')
