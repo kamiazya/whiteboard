@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto'
 import { type Client, type Config, createClient } from '@libsql/client'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import {
@@ -98,7 +99,9 @@ async function retryWhileBusy<T>(
       await onBusy()
       const waitedMs = performance.now() - startedAt
       const bound = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** (attempts - 1))
-      const delayMs = Math.max(1, Math.ceil(Math.random() * bound))
+      // Full jitter over [1, bound]: two processes that collided must not
+      // retry in step.
+      const delayMs = randomInt(1, Math.max(1, Math.ceil(bound)) + 1)
       if (waitedMs + delayMs > policy.ceilingMs) {
         throw new DatabaseBusyError(Math.round(waitedMs), attempts, err)
       }
