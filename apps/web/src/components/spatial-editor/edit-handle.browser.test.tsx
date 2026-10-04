@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorText } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -21,19 +22,7 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({ initial: start })
 
 it('selecting a node shows one More-actions control; it opens the object menu HERE', async () => {
   const { container } = render(<Host />)
