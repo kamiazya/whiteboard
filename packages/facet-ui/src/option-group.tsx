@@ -33,13 +33,7 @@
  */
 import type { CSSProperties, ReactNode } from 'react'
 import { useId } from 'react'
-
-const INK = 'var(--foreground, #171717)'
-const MUTED = 'var(--muted-foreground, #737373)'
-const ACCENT = 'var(--accent, #f2f2f2)'
-const RING = 'var(--ring, #3b82f6)'
-const LINE = 'var(--border, #e5e5e5)'
-const PRIMARY = 'var(--primary, #171717)'
+import { ACCENT, INK, LINE, MUTED, PRIMARY, RING } from './chrome-tokens.js'
 
 /**
  * Wraps for the reason every options row in the app wraps: a row that

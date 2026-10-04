@@ -22,17 +22,10 @@ import type {
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, type ReactNode, useState } from 'react'
 import { CatalogPopover } from './catalog-popover.js'
+import { ACCENT, DANGER, INK, LINE, MUTED, SURFACE } from './chrome-tokens.js'
 import { FacetCatalogPicker } from './facet-catalog-picker.js'
 import { EmojiText, glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
-
-/** The host supplies these; the literal is what a bare page falls back to. */
-const INK = 'var(--foreground, #171717)'
-const MUTED = 'var(--muted-foreground, #737373)'
-const LINE = 'var(--border, #e5e5e5)'
-const SURFACE = 'var(--background, #ffffff)'
-const ACCENT = 'var(--accent, #f2f2f2)'
-const DANGER = 'var(--destructive, #b3261e)'
 
 const ROW: CSSProperties = {
   display: 'flex',
