@@ -219,18 +219,29 @@ Mutation: without the pointer wait, the stronger final assertion failed 4 of 6.
 
 ### skip-waiting-ignored-on-the-runner
 
-**The PWA update-lifecycle smoke (`verify`) times out at "the page to reload
-onto a controller" on the runner's Chrome stable and passes locally.** The
-smoke serves the built app, installs a worker, deploys a second one, clicks
-the update toast's Reload and expects the page to come back under the new
-worker. Measured on Chrome 154 (the runner's), 2 of 3 runs: thirty seconds
-after the click the FIRST document is still there, the new worker still reads
-`installed` (never activated), and the console is empty — so the `SKIP_WAITING`
-the toast's Reload sends through Workbox either never reached the waiting
-worker or was not acted on. Chromium 141 here passes 6 of 6. The smoke now
-prints, on that timeout, which document holds the page, every worker's state,
-every message the page posted to a worker since the click, and what a direct
-`SKIP_WAITING` from the page then does — read that dump before re-running:
-"posted, not honoured" is the browser's, "never posted" is the toast's. One
-re-run is the only permitted answer until the dump says which.
+**The PWA update-lifecycle smoke (`verify`) timed out at "the page to reload
+onto a controller" on the runner's Chrome stable and passed locally.** It was
+the HARNESS, not the app: Playwright's locator click on the update toast's
+Reload. Reproduced with Chrome 154 by pinning the smoke and two busy loops to
+one core (3 of 8, 3 of 8, 3 of 6). In a failing run the waiting worker
+receives the `SKIP_WAITING`, its own `skipWaiting()` stays pending with no
+request in flight on either side, and stopping the OLD worker over DevTools
+activates the new one at once; left alone, Chrome activates it after 300 s,
+its lame-duck ceiling — the old worker never reports itself idle.
 
+Ruled out one variable at a time, each eight starved rounds and 0 failures:
+a raw-DevTools driver doing the same steps, then that driver with Playwright's
+exact launch switches, its service-worker attachment, page network
+instrumentation, its page auto-attach, a DevTools mouse-event click, a 3 s
+settle after each load, and a message to the old worker while the new one
+waits. Inside the Playwright smoke, replacing only the locator click with a
+DOM `click()` on the same button took it to 0 of 16; disabling Playwright's
+service-worker network inspection did not (3 of 8). So the smoke clicks
+Reload through the DOM, which runs the same handler a person's click does —
+0 of 10 starved after the change.
+
+A timeout at that step still prints which document holds the page, every
+worker's state, what the page posted to a worker, what is in flight, the
+browser's view of every worker version, and what stopping the old worker
+does. "Activates once the old one is stopped" is this shape again; "never
+posted" is the toast's.

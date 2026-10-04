@@ -47,11 +47,7 @@ const state = {
 }
 
 const versionHandler = (version) =>
-  `\nself.__smoke = { version: '${version}', skipRequests: 0 }
-self.addEventListener('message', (e) => {
-  if (e.data === 'smoke:version') e.ports[0].postMessage('${version}')
-  if (e.data && e.data.type === 'SKIP_WAITING') self.__smoke.skipRequests++
-})\n`
+  `\nself.addEventListener('message', (e) => { if (e.data === 'smoke:version') e.ports[0].postMessage('${version}') })\n`
 
 // Requests the server has taken and not yet answered, for a step's timeout dump.
 const serverInFlight = new Map()
@@ -250,7 +246,13 @@ async function acceptUpdate(page, toast) {
       return post.apply(this, args)
     }
   })
-  await toast.getByRole('button', { name: 'Reload' }).click()
+  // Clicked through the DOM, which runs the same handler a person's click
+  // does. Not a Playwright locator click: on Chrome 154 with a starved CPU
+  // that left the OLD worker unable to go idle, so the waiting one's
+  // skipWaiting() sat out the browser's five-minute lame-duck ceiling — 3 of 8
+  // runs, while a DOM click, a DevTools mouse event and a driver other than
+  // Playwright each swapped in about a second every time.
+  await toast.getByRole('button', { name: 'Reload' }).evaluate((button) => button.click())
   await until(
     'the page to reload onto a controller',
     () =>
@@ -264,36 +266,6 @@ async function acceptUpdate(page, toast) {
       console: consoleTail,
       requestsInFlight: inFlight(),
       serverInFlight: [...serverInFlight.values()],
-      // Each worker Playwright can reach, from inside: its state, how many
-      // skip requests reached it, and whether its own skipWaiting() settles.
-      workers: await Promise.all(
-        page
-          .context()
-          .serviceWorkers()
-          .map((w) =>
-            Promise.race([
-              w.evaluate(async () => {
-                const skip =
-                  self.serviceWorker?.state === 'installed'
-                    ? await Promise.race([
-                        self.skipWaiting().then(
-                          () => 'resolved',
-                          (e) => `rejected: ${e}`,
-                        ),
-                        new Promise((r) => setTimeout(() => r('pending after 3s'), 3000)),
-                      ])
-                    : 'not asked'
-                return {
-                  state: self.serviceWorker?.state,
-                  ...self.__smoke,
-                  skipWaiting: skip,
-                  stateAfter: self.serviceWorker?.state,
-                }
-              }),
-              new Promise((r) => setTimeout(() => r('worker evaluate timed out'), 5000)),
-            ]).catch((err) => `worker evaluate failed: ${err}`),
-          ),
-      ),
       // Whether the waiting worker honours a skip at all from this page: the
       // same message the toast's path sends, posted directly, then its state.
       versions: versionsSeen(),
