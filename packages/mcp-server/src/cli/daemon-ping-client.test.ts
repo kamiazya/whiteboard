@@ -4,6 +4,7 @@ import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './dae
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('resolveConnectHost', () => {
@@ -77,6 +78,18 @@ describe('fetchDaemonPing', () => {
     const result = await fetchDaemonPing('127.0.0.1', 3099)
 
     expect(result).toBeNull()
+  })
+
+  // Long enough for a loaded daemon to answer, short enough that a status or
+  // stop against a hung one reports rather than hangs the operator's shell.
+  it('gives the daemon two seconds to answer unless told otherwise', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    vi.stubGlobal('fetch', async () => ({ ok: false, json: async () => ({}) }))
+
+    await fetchDaemonPing('127.0.0.1', 3099)
+    await fetchDaemonPing('127.0.0.1', 3099, 50)
+
+    expect(timeout.mock.calls).toEqual([[2000], [50]])
   })
 
   it('returns null when fetch throws (connection refused, timeout, etc.)', async () => {
