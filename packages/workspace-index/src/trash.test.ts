@@ -271,6 +271,21 @@ describe('purging a trashed document', () => {
     expect(await blobs.has({ ref: row.blob })).toEqual({ exists: false })
   })
 
+  it("destroys the purged entry's own bytes while another entry with different bytes stays", async () => {
+    const purged = await createAndDelete('design')
+    const kept = await createAndDelete('notes')
+    const rows = await index.listTrash({ workspaceId: WS })
+    const purgedRow = rows.find((entry) => entry.documentId === purged)
+    const keptRow = rows.find((entry) => entry.documentId === kept)
+    if (purgedRow === undefined || keptRow === undefined) throw new Error('expected two trash rows')
+    expect(blobs.size()).toBe(2)
+
+    await index.purgeTrashEntry({ workspaceId: WS, documentId: purged })
+
+    expect(await blobs.has({ ref: purgedRow.blob })).toEqual({ exists: false })
+    expect(await blobs.has({ ref: keptRow.blob })).toEqual({ exists: true })
+  })
+
   it('keeps the bytes another trash row still names', async () => {
     const documentId = await createAndDelete('design')
     const other = await createAndDelete('notes')

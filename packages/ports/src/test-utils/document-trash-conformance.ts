@@ -143,6 +143,21 @@ function describePurgeEffect(withIndex: WithIndex): void {
       ).resolves.not.toBeNull()
     })
   })
+
+  it("destroys the purged entry's bytes and keeps the bytes of the entry that stays", async () => {
+    await withIndex(async (index, evacuatedBlobCount) => {
+      const kept = await trashed(index, 'a')
+      const purged = await trashed(index, 'b')
+      await expect(evacuatedBlobCount()).resolves.toBe(2)
+
+      await index.purgeTrashEntry({ workspaceId: WS, documentId: purged })
+
+      await expect(evacuatedBlobCount()).resolves.toBe(1)
+      await expect(
+        index.restoreDocument({ workspaceId: WS, documentId: kept }),
+      ).resolves.not.toBeNull()
+    })
+  })
 }
 
 function describePurgeRefusals(withIndex: WithIndex): void {
