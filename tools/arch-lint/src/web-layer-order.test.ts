@@ -333,6 +333,11 @@ describe('what the layer scan reads, on fixture trees', () => {
       "import type { Chip } from '../components/Chip.js'\nexport type X = Chip\n",
       ' (type)',
     ],
+    [
+      'a worker built from the file by URL',
+      "export const w = new Worker(new URL('../components/Chip.tsx', import.meta.url))\n",
+      '',
+    ],
     ['a re-export', "export { Chip } from '../components/Chip.js'\n", ''],
     ['an export-star', "export * from '../components/Chip.js'\n", ''],
     ['a side-effect import', "import '../components/Chip.js'\n", ''],
