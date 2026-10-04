@@ -60,10 +60,8 @@ const PACKAGE_SRC_DIRS: readonly string[] = readdirSync(join(REPO_ROOT, 'package
  * word is the point) or whose text is sample content.
  */
 const WEBSOCKET_WORDING: Readonly<Record<string, string>> = {
-  'packages/daemon-client/src/sse-backend.ts': 'says why a page has no WebSocket path',
   'packages/mcp-server/src/server/routes/sync-sse.ts': 'states that the WebSocket is retired',
   'packages/mcp-server/src/server/sync-audience.ts': 'states that the WebSocket is retired',
-  'apps/web/src/pages/ServerModeWorkspace.tsx': 'says server mode has no WebSocket',
   'packages/server-core/src/search/search-corpus.ts':
     'sample document text the search tests index; the word is its content',
 }
