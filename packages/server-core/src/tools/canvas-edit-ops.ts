@@ -202,7 +202,12 @@ export function draftContent(draft: NodeDraft): {
 }
 
 // `tags` omitted for the reason the node draft omits it (ADR-0040 decision 7).
-const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true })
+// `facets` is re-added through `WRITE_EXTENSION` for the reason the node draft
+// does: the stored edge's `.catch` would drop a malformed bucket unseen.
+const edgeDraftSchema = canvasEdgeSchema
+  .omit({ tags: true })
+  .extend(WRITE_EXTENSION)
+  .partial({ id: true })
 
 /**
  * Ink, which an edge cannot be: a LINE's ends are a node or a bare POINT, so
@@ -210,7 +215,13 @@ const edgeDraftSchema = canvasEdgeSchema.omit({ tags: true }).partial({ id: true
  * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2).
  */
-const lineDraftSchema = canvasLineSchema.partial({ id: true })
+const lineDraftSchema = canvasLineSchema.extend(WRITE_EXTENSION).partial({ id: true })
+
+// The patches are the model's, which proposals store too, so the write-side
+// `facets` is laid over them here rather than in the model, where the
+// read-side tolerance belongs.
+const edgePatchSchema = edgePatchFieldsSchema.extend(WRITE_EXTENSION)
+const linePatchSchema = linePatchFieldsSchema.extend(WRITE_EXTENSION)
 
 /**
  * A key of the draft, written beside `op` instead of inside it, is told
@@ -403,9 +414,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       draftKeysBelongInside('edge', EDGE_DRAFT_KEYS),
     )
     .strict(),
-  z
-    .object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchFieldsSchema })
-    .strict(),
+  z.object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchSchema }).strict(),
   z
     .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
     .strict()
@@ -429,9 +438,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       draftKeysBelongInside('line', LINE_DRAFT_KEYS),
     )
     .strict(),
-  z
-    .object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchFieldsSchema })
-    .strict(),
+  z.object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchSchema }).strict(),
   z.object({ op: z.literal('line.remove'), id: nodeIdSchema }).strict(),
   z
     .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
