@@ -94,3 +94,23 @@ test('a command that only mentions a PR creation does not fetch or block', () =>
   // No fetch ran, so the advance is still unknown to the clone.
   assert.equal(git(work, ['rev-list', '--count', 'feat..origin/main']), '0')
 })
+
+test('--head names the branch being published, whatever the checkout is on', () => {
+  const { origin, work } = makeRepoPair()
+  git(work, ['push', 'origin', 'feat'])
+  commitFile(origin, 'feat.txt', 'main moved it\n', 'advance touching feat.txt')
+  git(work, ['checkout', 'main'])
+  const result = runHook(work, 'gh pr create --head feat --title x')
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+})
+
+test('a leading `cd <checkout> &&` selects that checkout even when the hook runs elsewhere', () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'feat.txt', 'main moved it\n', 'advance touching feat.txt')
+  const elsewhere = mkdtempSync(join(tmpdir(), 'pre-pr-check-base-elsewhere-'))
+  scratchDirs.push(elsewhere)
+  const result = runHook(elsewhere, `cd ${work} && gh pr create --title x`)
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+})

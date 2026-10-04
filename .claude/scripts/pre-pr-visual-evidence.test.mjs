@@ -118,6 +118,14 @@ test('a one-character reason is still not a stated decision', () => {
   assert.equal(runHook(work, bodyArg('Visual evidence: none — x')).status, 2)
 })
 
+test('a reason of exactly three non-space characters is a stated decision; two are not', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, bodyArg('Visual evidence: none — n/a')).status, 0)
+  assert.equal(runHook(work, bodyArg('Visual evidence: none — a b c')).status, 0)
+  assert.equal(runHook(work, bodyArg('Visual evidence: none — ok')).status, 2)
+  assert.equal(runHook(work, bodyArg('Visual evidence: none — a  b')).status, 2)
+})
+
 test('a test-utils file under a UI package is not a rendered surface', () => {
   // canvas-render's entry in VISUAL_PATHS is the whole package, so a
   // three-line fast-check configuration under it was reported as a file a
