@@ -18,6 +18,7 @@ import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api
 import {
   type DocumentTrash,
   hasDocumentTrash,
+  isDatabaseBusy,
   isWorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
@@ -34,8 +35,9 @@ type Handler = (c: Context) => Promise<Response>
 const NO_TRASH: ApiErrorBody = { title: 'This composition has no trash.' }
 
 // The addressing every trash route shares: the workspace handle parsed and
-// refused outside the try below, the unknown workspace answered 404, anything
-// else logged and answered 500.
+// refused outside the try below, the unknown workspace answered 404, a busy
+// database left to the app's 503 with Retry-After, anything else logged and
+// answered 500.
 async function answering(
   deps: ServerDeps,
   c: Context,
@@ -58,6 +60,7 @@ async function answering(
     if (isWorkspaceNotFoundError(err)) {
       return c.json(workspaceNotFoundRefusal(workspaceId), 404)
     }
+    if (isDatabaseBusy(err)) throw err
     getLogger('document').error({ err: err as Error }, failure.logged)
     return c.json({ title: failure.answered } satisfies ApiErrorBody, 500)
   }

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { ExportResponse } from '../../../shared/api-contracts/export.js'
@@ -9,6 +9,7 @@ import {
   exportSvgRequestSchema,
 } from '../../../shared/api-contracts/export-svg.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
+import { getLogger } from '../../log.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import {
@@ -77,9 +78,14 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         undrawable = result.undrawable
         unresolvedFamilies = result.unresolvedFamilies
       } catch (err) {
+        // A busy database is the app's to answer (503 with Retry-After). Any
+        // other cause reaches the log only: a renderer's message can carry a
+        // path or a statement.
+        if (isDatabaseBusy(err)) throw err
+        getLogger('export').error({ err, workspaceId, path }, 'headless SVG export failed')
         const errBody: ApiErrorBody = {
           error: 'headless_export_failed',
-          message: messageOf(err),
+          message: 'The document could not be rendered to SVG.',
         }
         return c.json(errBody, 500)
       }
