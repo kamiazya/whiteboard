@@ -34,6 +34,7 @@ vi.mock('../../config.js', () => ({
 const { saveDocument, resolveDocumentIdAtPath } = await import('../../store/document-store.js')
 const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
+const { createTrashRouter } = await import('./trash.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
@@ -172,6 +173,9 @@ describe('trash routes', () => {
     // restoreDocument, so resolveServerDeps leaves deps.trash undefined.
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
     expect(deps.trash).toBeUndefined()
+    // The workspace exists: an unknown one is refused before the capability
+    // is consulted, so it would hide the 501 this case is about.
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
 
     expect((await app.request('/api/workspaces/ws/trash')).status).toBe(501)
@@ -189,6 +193,24 @@ describe('trash routes', () => {
         })
       ).status,
     ).toBe(501)
+  })
+
+  // The guard in front of the document router answers an unknown workspace
+  // first; the trash router's own translation is for one that vanishes after.
+  it('the trash router alone answers an unknown workspace in the shared workspace voice', async () => {
+    await prepareDataDir(tmp.dir)
+    const db = await getDb(tmp.dir)
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
+
+    const res = await createTrashRouter({ serverDeps: deps }).request(
+      '/api/workspaces/ws-nowhere/trash',
+    )
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({
+      error: 'workspace_not_found',
+      message: 'Workspace "ws-nowhere" not found',
+    })
   })
 
   it('unknown workspace answers 404 on list and purge; unknown documentId answers 404 on restore', async () => {

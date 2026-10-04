@@ -43,7 +43,7 @@ describe('POST /api/workspaces/:workspaceId/replica-key/rotate', () => {
     const fixture = await makeApp({ known: [] })
     const res = await rotate(fixture.app, WS, { Authorization: `Bearer ${DAEMON_TOKEN}` })
     expect(res.status).toBe(404)
-    expect((await res.json()) as { error: string }).toMatchObject({ error: 'unknown_workspace' })
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'workspace_not_found' })
   })
 
   it('rotation is not gated on tier — a no-offline workspace still rotates 200', async () => {

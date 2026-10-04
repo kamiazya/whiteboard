@@ -33,7 +33,10 @@
 // behind — a tier is a security-posture change about whether a copy may
 // leave the daemon at all, an operator decision rather than something any
 // member may relax for everyone.
-import type { MembershipRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
+import {
+  type MembershipRefusal,
+  workspaceNotFoundRefusal,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   type ReplicaKeyResponse,
   type RotateReplicaKeyResponse,
@@ -68,13 +71,6 @@ function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
   }
 }
 
-function unknownWorkspaceRefusal(workspaceId: string): MembershipRefusal {
-  return {
-    error: 'unknown_workspace',
-    message: `no such workspace: ${workspaceId}`,
-  } satisfies MembershipRefusal
-}
-
 export interface ReplicaKeyRouterOptions {
   keys: WorkspaceReplicaKeyStore
   leaseTtlMs: number
@@ -93,8 +89,8 @@ export function createReplicaKeyRouter({
     const invalidId = badWorkspaceIdBody(workspaceId)
     if (invalidId) return c.json(invalidId, 400)
     if (!(await workspaceExists(workspaceId))) {
-      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'replica-key refused')
-      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+      log.warning({ workspaceId, reason: 'workspace_not_found' }, 'replica-key refused')
+      return c.json(workspaceNotFoundRefusal(workspaceId), 404)
     }
 
     const tier = await keys.effectiveTier(workspaceId)
@@ -127,8 +123,8 @@ export function createReplicaKeyRouter({
     const invalidId = badWorkspaceIdBody(workspaceId)
     if (invalidId) return c.json(invalidId, 400)
     if (!(await workspaceExists(workspaceId))) {
-      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'replica-key rotation refused')
-      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+      log.warning({ workspaceId, reason: 'workspace_not_found' }, 'replica-key rotation refused')
+      return c.json(workspaceNotFoundRefusal(workspaceId), 404)
     }
 
     const rotated = await keys.rotateKey(workspaceId)
@@ -160,8 +156,8 @@ export function createReplicaKeyRouter({
     }
 
     if (!(await workspaceExists(workspaceId))) {
-      log.warning({ workspaceId, reason: 'unknown_workspace' }, 'replica-tier refused')
-      return c.json(unknownWorkspaceRefusal(workspaceId), 404)
+      log.warning({ workspaceId, reason: 'workspace_not_found' }, 'replica-tier refused')
+      return c.json(workspaceNotFoundRefusal(workspaceId), 404)
     }
 
     await keys.setTier(workspaceId, parsed.data.tier)

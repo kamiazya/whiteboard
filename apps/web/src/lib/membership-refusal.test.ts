@@ -23,7 +23,7 @@ describe('membershipRefusal', () => {
 
   it('answers null for a membership refusal code this slice does not act on, even carrying the classifier sentence', () => {
     const err = new DaemonApiError('irrelevant text', 403, {
-      error: 'unknown_workspace',
+      error: 'workspace_not_found',
       message: 'this session is not signed in as a member',
     })
     expect(membershipRefusal(err)).toBeNull()

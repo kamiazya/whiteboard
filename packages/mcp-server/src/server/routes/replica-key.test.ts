@@ -52,7 +52,7 @@ describe('POST /api/workspaces/:workspaceId/replica-key', () => {
       Authorization: `Bearer ${DAEMON_TOKEN}`,
     })
     expect(res.status).toBe(404)
-    expect((await res.json()) as { error: string }).toMatchObject({ error: 'unknown_workspace' })
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'workspace_not_found' })
   })
 
   it('the daemon token gets 200 with the same key on every call', async () => {
@@ -199,7 +199,7 @@ describe('PUT /api/workspaces/:workspaceId/replica-tier', () => {
       },
     )
     expect(res.status).toBe(404)
-    expect((await res.json()) as { error: string }).toMatchObject({ error: 'unknown_workspace' })
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'workspace_not_found' })
   })
 
   it('400s a body that is not valid JSON', async () => {

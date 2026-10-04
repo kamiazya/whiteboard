@@ -29,8 +29,8 @@ describe('startHttpServer replica-key route wiring (ADR-0042/0043)', () => {
     })
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({
-      error: 'unknown_workspace',
-      message: 'no such workspace: any-workspace',
+      error: 'workspace_not_found',
+      message: 'Workspace "any-workspace" not found',
     })
   })
 })

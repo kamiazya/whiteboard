@@ -253,6 +253,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
 describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await seedWorkspaceRow(tmp.dir, 'session1')
   })
 
   it('returns 200 { ok: true }, parses with deleteDocumentResponseSchema, and the canvas is gone from list/snapshot', async () => {
@@ -387,6 +388,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await seedWorkspaceRow(tmp.dir, 'session1')
   })
 
   // The store computes WHICH path actually collided; rebuilding the message

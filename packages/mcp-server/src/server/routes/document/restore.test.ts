@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
   resolveTestServerDeps,
+  seedWorkspaceRow,
   testDocumentRouterOptions,
   withTempDataDir,
 } from '../_test-helpers.js'
@@ -44,12 +45,8 @@ const createRouter = () =>
 // dynamic import.
 await import('../../sync-audience.js')
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
-afterEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(clearDocCacheForTests)
+afterEach(clearDocCacheForTests)
 
 describe('restore router', () => {
   it('returns a Hono instance', () => {
@@ -390,6 +387,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 404 when restoring a missing version id', async () => {
+    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createRouter()
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/nonexistent/restore',
@@ -402,6 +400,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 400 for an invalid version id', async () => {
+    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createRouter()
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/bad.id/restore',

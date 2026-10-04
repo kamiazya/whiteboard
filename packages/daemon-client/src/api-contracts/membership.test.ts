@@ -6,13 +6,13 @@
 
 import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core/api-errors'
 import { describe, expect, it } from 'vitest'
-import { membershipRefusalSchema } from './membership.js'
+import { membershipRefusalSchema, workspaceNotFoundRefusal } from './membership.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('membershipRefusalSchema', () => {
   const codes = [
     'not_a_member',
-    'unknown_workspace',
+    'workspace_not_found',
     'invalid_workspace_id',
     'requires_person_session',
     'replica_not_allowed',
@@ -54,5 +54,16 @@ describe('membershipRefusalSchema', () => {
       expect(apiErrorBodySchema.safeParse(refusal).success).toBe(true)
       expect(apiErrorReason(refusal)).toBe(refusal.message)
     }
+  })
+})
+
+describe('workspaceNotFoundRefusal', () => {
+  it('names what the caller typed, in a body both the refusal and the error contract read', () => {
+    const body = workspaceNotFoundRefusal('nowhere')
+
+    expect(body).toEqual({ error: 'workspace_not_found', message: 'Workspace "nowhere" not found' })
+    expect(membershipRefusalSchema.safeParse(body).success).toBe(true)
+    expect(apiErrorBodySchema.safeParse(body).success).toBe(true)
+    expect(apiErrorReason(body)).toBe(body.message)
   })
 })

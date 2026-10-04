@@ -14,6 +14,7 @@ import type {
   PurgeTrashEntryResponse,
   RestoreTrashResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
@@ -47,7 +48,7 @@ async function answering(
     return await body(workspaceId, deps.trash)
   } catch (err) {
     if (isWorkspaceNotFoundError(err)) {
-      return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
+      return c.json(workspaceNotFoundRefusal(workspaceId), 404)
     }
     getLogger('document').error({ err: err as Error }, failure.logged)
     return c.json({ title: failure.answered } satisfies ApiErrorBody, 500)

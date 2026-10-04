@@ -5,7 +5,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { WorkspaceNotFoundForCallerError } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
-import { firstOwned, notFoundAs, STORED_DOCUMENT_ANSWERS, workspaceNotFoundAs } from './_shared.js'
+import { firstOwned, notFoundAs, STORED_DOCUMENT_ANSWERS, workspaceNotFound } from './_shared.js'
 
 describe('the not-found translations over the port error', () => {
   const absent = new DocumentNotFoundError('ws', 'notes/a')
@@ -24,22 +24,27 @@ describe('the not-found translations over the port error', () => {
     })
   })
 
-  it('answers the same title for an absent workspace', () => {
+  it('answers an absent workspace in the shared workspace voice, not the document title', () => {
     expect(notFoundAs('gone')(new WorkspaceNotFoundError('ws'))).toEqual({
       status: 404,
-      body: { title: 'gone' },
+      body: { error: 'workspace_not_found', message: 'Workspace "ws" not found' },
     })
   })
 
-  it("answers the same title for the tool layer's own absent-workspace error", () => {
+  it("answers the tool layer's own absent-workspace error the same way", () => {
     const toolError = new WorkspaceNotFoundForCallerError('ws')
-    expect(notFoundAs('gone')(toolError)).toEqual({ status: 404, body: { title: 'gone' } })
-    expect(workspaceNotFoundAs('gone')(toolError)).toEqual({ status: 404, body: { title: 'gone' } })
+    const workspaceVoice = {
+      status: 404,
+      body: { error: 'workspace_not_found', message: 'Workspace "ws" not found' },
+    }
+    expect(notFoundAs('gone')(toolError)).toEqual(workspaceVoice)
+    expect(workspaceNotFound(toolError)).toEqual(workspaceVoice)
   })
 
   it('leaves an unrelated error to the caller', () => {
     expect(firstOwned(new Error('boom'), STORED_DOCUMENT_ANSWERS)).toBeNull()
     expect(notFoundAs('gone')(new Error('boom'))).toBeNull()
+    expect(workspaceNotFound(new Error('boom'))).toBeNull()
   })
 })
 

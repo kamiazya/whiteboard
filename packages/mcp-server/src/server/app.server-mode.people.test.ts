@@ -173,6 +173,29 @@ describe('server mode — a stream open before someone loses access ends with it
   })
 })
 
+// The unknown-workspace guard answers 404 workspace_not_found, which would tell
+// a stranger which workspaces exist if it ran first: the membership gate has to
+// answer both the same.
+describe('server mode — an unknown workspace is refused as one the caller is not in', () => {
+  it('answers a signed-in person not_a_member for a workspace that does not exist', async () => {
+    const ada = await signedIn('ada')
+    const eve = await signedIn('eve')
+    const { workspaceId } = (await (await create(ada, 'Plans')).json()) as { workspaceId: string }
+
+    const real = await app.request(`${PUBLIC_URL}/api/workspaces/${workspaceId}/names`, {
+      headers: eve,
+    })
+    const absent = await app.request(`${PUBLIC_URL}/api/workspaces/nowhere/names`, {
+      headers: eve,
+    })
+
+    expect(absent.status).toBe(real.status)
+    expect(absent.status).toBe(403)
+    expect(await absent.json()).toMatchObject({ error: 'not_a_member' })
+    expect(await real.json()).toMatchObject({ error: 'not_a_member' })
+  })
+})
+
 // The workspace id travels in the body of both sync POSTs, so no path
 // middleware can gate them: the refusal in the handler is the only check.
 describe('server mode — the sync transport is members-only', () => {

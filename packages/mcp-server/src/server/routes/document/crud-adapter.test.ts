@@ -245,7 +245,12 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     const res = await app.request('/api/workspaces/never-made/documents')
 
     expect(res.status).toBe(404)
-  })
+    // The router's own translation, for a workspace that vanishes after the
+    // guard in front of it: the same body as the guard's.
+    expect(await res.json()).toEqual({
+      error: 'workspace_not_found',
+      message: 'Workspace "never-made" not found',
+    })
   })
 })
 

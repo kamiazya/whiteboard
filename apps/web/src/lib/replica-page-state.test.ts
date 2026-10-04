@@ -34,7 +34,7 @@ const REMEMBERED: readonly boolean[] = [false, true]
 const REMOVED_REASONS = [
   'not_a_member',
   'replica_not_allowed',
-  'unknown_workspace',
+  'workspace_not_found',
   'invalid_workspace_id',
 ] as const
 const LOCKED_REASONS = ['unreachable', 'lapsed', 'requires_person_session'] as const

@@ -125,6 +125,19 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
   })
 
   it('answers no-file for a workspace with nothing stored', async () => {
+    // A registered workspace whose record was never written: the index's own
+    // `createWorkspace` writes one, so the bare row is inserted directly.
+    await (await getDb(tmp.dir))
+      .insertInto('workspaces')
+      .values({
+        id: 'session1',
+        displayName: null,
+        segment: null,
+        createdAt: 0,
+        updatedAt: 0,
+        replicaTier: null,
+      })
+      .execute()
     const app = createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,

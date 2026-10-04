@@ -12,7 +12,7 @@ import { membershipRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-
 import { DaemonApiError } from './daemon-api-client.js'
 
 /** The membership refusal code this page acts on — every other code
- *  (requires_person_session, unknown_workspace, …) is left to the generic
+ *  (requires_person_session, workspace_not_found, …) is left to the generic
  *  `loadError` path, unclassified. */
 export type MembershipRefusalAction = 'not_a_member'
 

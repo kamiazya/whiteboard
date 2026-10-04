@@ -44,7 +44,7 @@ export type ReplicaPageState = (typeof REPLICA_PAGE_STATES)[number]
 const REMOVAL_REASONS = new Set<WithheldReason>([
   'not_a_member',
   'replica_not_allowed',
-  'unknown_workspace',
+  'workspace_not_found',
   'invalid_workspace_id',
 ])
 

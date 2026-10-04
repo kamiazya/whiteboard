@@ -6,6 +6,7 @@ import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto
 import type { StoreScope } from '../store/store-scope.js'
 import type { VersionStore } from '../store/version-store.js'
 import { sendRestoreEvent, sendVersionCreated } from '../sync-audience.js'
+import { refuseUnknownWorkspace } from './document/_shared.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
@@ -105,6 +106,8 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
   const { versionStore } = options
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
+  // First: it also guards the routers composed beside this one afterwards (files).
+  app.use('/api/workspaces/:workspaceId/*', refuseUnknownWorkspace(options.serverDeps))
   app.route('/', createWorkspacesRouter(workspacesRouterOptions(options)))
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter({ scope: options.scope }))

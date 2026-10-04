@@ -101,7 +101,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
 
   it("reports the daemon's refusal with its status and reason, exit 1", async () => {
     const daemon = daemonAnswering(404, {
-      error: 'unknown_workspace',
+      error: 'workspace_not_found',
       title: 'Workspace not found',
     })
     const { result, exitCode } = await runDaemonRotateReplicaKey({
@@ -124,7 +124,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
 
   it("reports the daemon's sentence, not its code, when the refusal carries both", async () => {
     const daemon = daemonAnswering(404, {
-      error: 'unknown_workspace',
+      error: 'workspace_not_found',
       message: 'Workspace "nope" is not one this daemon holds.',
     })
     const { result } = await runDaemonRotateReplicaKey({
@@ -190,7 +190,7 @@ describe('a workspace addressed by its segment', () => {
   it('leaves a handle the daemon does not list to the daemon to refuse', async () => {
     const daemon = daemonAnswering(
       404,
-      { error: 'unknown_workspace', title: 'no such workspace' },
+      { error: 'workspace_not_found', title: 'no such workspace' },
       held,
     )
     const { result } = await runDaemonRotateReplicaKey({
