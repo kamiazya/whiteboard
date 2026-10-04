@@ -108,12 +108,17 @@ function readSentinel<T>(path: string): T {
 
 describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   const cleanupPids: number[] = []
+  // Every hook run's spawned daemons are killed in afterEach, not at the end of
+  // the test body: an assertion that fails first (a readiness timeout under
+  // load) would otherwise skip the kill and leave the daemon running.
+  const cleanupSentinelDirs: string[] = []
   const cleanupDirs: string[] = []
   let cleanupResponder: (() => Promise<void>) | undefined
   let cleanupServer: Server | undefined
 
   afterEach(async () => {
     for (const pid of cleanupPids.splice(0)) killQuietly(pid)
+    for (const dir of cleanupSentinelDirs.splice(0)) killAllSpawnedPids(dir)
     if (cleanupResponder) {
       await cleanupResponder()
       cleanupResponder = undefined
@@ -147,6 +152,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
     cleanupDirs.push(dataDir, shimDir)
     const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
     const invokedSentinelDir = join(dataDir, 'invoked-sentinels')
+    cleanupSentinelDirs.push(invokedSentinelDir)
     const lockPath = join(dataDir, 'dev-daemon-spawn.lock')
     const countSpawns = () =>
       existsSync(invokedSentinelDir) ? readdirSync(invokedSentinelDir).length : 0
@@ -257,7 +263,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   itPosix(
     'spawns a daemon when the record left behind names a socket nothing answers on',
     async () => {
-      const { token, dataDir, invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+      const { token, dataDir, countSpawns, env } = await prepareHookRun()
       writeFileSync(
         join(dataDir, 'daemon.json'),
         JSON.stringify({ pid: 999_999, token, socketPath: join(dataDir, 'gone.sock') }),
@@ -270,7 +276,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
 
       expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
       expect(countSpawns()).toBe(1)
-      killAllSpawnedPids(invokedSentinelDir)
     },
   )
 
@@ -296,7 +301,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   itPosix(
     'two concurrent hooks with no daemon up produce exactly one spawn, both exit 0',
     async () => {
-      const { invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+      const { countSpawns, env } = await prepareHookRun()
 
       const runEnv = {
         ...env,
@@ -317,8 +322,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       // The discriminating assertion: exactly one process was ever spawned.
       // Without the lock, both hooks find no daemon and both spawn.
       expect(countSpawns()).toBe(1)
-
-      killAllSpawnedPids(invokedSentinelDir)
     },
   )
 
@@ -362,7 +365,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   itPosix(
     'a stale lock (dead recorded pid) does not block a spawn, and the hook still terminates within its bound',
     async () => {
-      const { lockPath, invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+      const { lockPath, countSpawns, env } = await prepareHookRun()
 
       // A definitely-dead pid: reserve one by starting and killing a
       // throwaway child, so this isn't a real live pid on the test machine.
@@ -383,8 +386,6 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
       expect(elapsedMs).toBeLessThan(6_000)
       expect(countSpawns()).toBe(1)
-
-      killAllSpawnedPids(invokedSentinelDir)
     },
   )
 })
