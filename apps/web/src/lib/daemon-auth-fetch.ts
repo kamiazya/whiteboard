@@ -37,7 +37,7 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
 }
 
 /**
- * Cross-origin fetch wrapper for a paired daemon. Resolves relative
+ * Cross-origin fetch wrapper for a connected daemon. Resolves relative
  * `/api/...` paths against `daemonBaseUrl` and attaches an `Authorization:
  * Bearer` header — but ONLY when the fully-resolved request URL's origin
  * equals the daemon's own origin. This mirrors apiFetch's same-origin-only
@@ -89,7 +89,7 @@ function rebuiltRequestInit(
 export function createDaemonFetch(
   daemonBaseUrl: string,
   // A function rather than a value when the credential outlives the wrapper: a
-  // pairing session token is rotated while the page stays open, and a holder
+  // session token is rotated while the page stays open, and a holder
   // that captured the old one keeps presenting a dead credential. Callers that
   // rebuild the wrapper on rotation (React memo on `token`) pass the string.
   token?: string | (() => string | undefined),

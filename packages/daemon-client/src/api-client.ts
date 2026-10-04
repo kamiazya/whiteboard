@@ -52,7 +52,7 @@ export const runtimeConfigSchema = z
     // Public origin of this deployed app (e.g., 'https://app.example.com').
     // Used to construct absolute URLs for same-origin API calls.
     publicOrigin: bareOriginSchema.optional(),
-    // Base URL of the local whiteboard daemon for daemon-pairing mode.
+    // Base URL of the local whiteboard daemon the app is connected to.
     // e.g. 'http://127.0.0.1:3099'
     daemonBaseUrl: bareOriginSchema.optional(),
     // Set by a server-mode keeper that serves this app from its own origin

@@ -305,10 +305,10 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
       return c.json(response)
     } catch (err) {
       // "Empty" and "never registered" are different answers, and conflating
-      // them is what let a stale pairing render as an empty workspace with a
-      // Create button. The operation refuses an unknown workspace rather than
-      // answering with an empty list, which is what makes this translation
-      // possible without a second existence query.
+      // them lets a client holding a stale workspace id render it as an empty
+      // workspace with a Create button. The operation refuses an unknown
+      // workspace rather than answering with an empty list, which is what makes
+      // this translation possible without a second existence query.
       //
       // So the two cases a client must tell apart are: a workspace that
       // exists and holds nothing answers 200 with an empty array, and only an
