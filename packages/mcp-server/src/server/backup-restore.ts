@@ -24,12 +24,12 @@ import {
 // version-store, routes/files):
 //   <data>/whiteboard.db                                   libsql DB
 //                                                          (workspaces, documents, versions
-//                                                           metadata + frontiers, branches,
+//                                                           metadata + frontiers,
 //                                                           runtime)
 //   <data>/<workspaceId>/files/<fileId>.<ext>              binary file blobs (image attachments)
-//   <data>/blobs/<workspaceId>/document/<documentId>.loro      Loro canvas snapshot
+//   <data>/blobs/<workspaceId>/document/<documentId>.loro      Loro document snapshot
 // Per-version `.loro` files are NOT written — version state is captured by
-// frontiers in the DB plus the live canvas snapshot.
+// frontiers in the DB plus the live document snapshot.
 //
 // MVP contract: copy the data dir wholesale, restore into a fresh dir,
 // verify the daemon can read it again. No archive format, no encryption,

@@ -128,7 +128,7 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
  * Fan a server text message (version_created, restore_started, …) out to
  * SSE subscribers, wrapped with the document it belongs to. One stream
  * serves many documents, so an unaddressed frame would be applied to
- * whichever canvas happened to be listening — a restore for one canvas
+ * whichever document happened to be listening — a restore for one document
  * landing on another.
  */
 export function sseBroadcastText(workspaceId: string, path: string, raw: string): void {

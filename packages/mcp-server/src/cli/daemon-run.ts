@@ -182,7 +182,7 @@ async function resolveStartupToken(
 }
 
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
-  // An explicit --data-dir must govern ALL persistence (sqlite db, canvas
+  // An explicit --data-dir must govern ALL persistence (sqlite db, document
   // blobs, exports), not just the daemon registry file. Redirect the shared
   // data-dir seam before anything below touches disk so every store that
   // reads getDataDir() follows the requested directory.
