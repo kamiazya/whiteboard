@@ -231,6 +231,46 @@ async function waitForUpdate(page) {
   return toast
 }
 
+// Whether the old worker's running state is what holds the activation: stop
+// it from the browser side, then read every version again.
+async function stopActiveWorkerAndRead() {
+  const active = [...workerVersions.values()].find(
+    (v) => v.status === 'activated' && v.runningStatus === 'running',
+  )
+  if (!active) return 'no running activated version to stop'
+  await cdp.send('ServiceWorker.stopWorker', { versionId: active.versionId })
+  await new Promise((r) => setTimeout(r, 3000))
+  return versionsSeen()
+}
+
+// What the page, the server and the browser hold when the reload never lands.
+async function describeReloadStall(page) {
+  return {
+    ...(await workerSummary(page)),
+    posted: await page.evaluate(() => window.__smokePosted),
+    console: consoleTail,
+    requestsInFlight: inFlight(),
+    serverInFlight: [...serverInFlight.values()],
+    versions: versionsSeen(),
+    afterStoppingActive: await stopActiveWorkerAndRead().catch(
+      (err) => `stop probe failed: ${err}`,
+    ),
+    // Whether the waiting worker honours a skip at all from this page: the
+    // same message the toast's path sends, posted directly, then its state.
+    afterDirectSkip: await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.getRegistration()
+      reg?.waiting?.postMessage({ type: 'SKIP_WAITING' })
+      await new Promise((r) => setTimeout(r, 3000))
+      const sw = (w) => (w ? { url: w.scriptURL, state: w.state } : null)
+      return {
+        waiting: sw(reg?.waiting),
+        active: sw(reg?.active),
+        firstDocument: window.__smokeFirstDocument,
+      }
+    }),
+  }
+}
+
 // Messaging the controller while it is being replaced is avoided on purpose:
 // the swap is observed through the document being replaced, and the version
 // is asked of the controller once the new document holds it.
@@ -260,38 +300,7 @@ async function acceptUpdate(page, toast) {
         () =>
           window.__smokeFirstDocument === undefined && navigator.serviceWorker.controller !== null,
       ),
-    async () => ({
-      ...(await workerSummary(page)),
-      posted: await page.evaluate(() => window.__smokePosted),
-      console: consoleTail,
-      requestsInFlight: inFlight(),
-      serverInFlight: [...serverInFlight.values()],
-      // Whether the waiting worker honours a skip at all from this page: the
-      // same message the toast's path sends, posted directly, then its state.
-      versions: versionsSeen(),
-      // Whether the old worker's running state is what holds the activation:
-      // stop it from the browser side, then read every version again.
-      afterStoppingActive: await (async () => {
-        const active = [...workerVersions.values()].find(
-          (v) => v.status === 'activated' && v.runningStatus === 'running',
-        )
-        if (!active) return 'no running activated version to stop'
-        await cdp.send('ServiceWorker.stopWorker', { versionId: active.versionId })
-        await new Promise((r) => setTimeout(r, 3000))
-        return versionsSeen()
-      })().catch((err) => `stop probe failed: ${err}`),
-      afterDirectSkip: await page.evaluate(async () => {
-        const reg = await navigator.serviceWorker.getRegistration()
-        reg?.waiting?.postMessage({ type: 'SKIP_WAITING' })
-        await new Promise((r) => setTimeout(r, 3000))
-        const sw = (w) => (w ? { url: w.scriptURL, state: w.state } : null)
-        return {
-          waiting: sw(reg?.waiting),
-          active: sw(reg?.active),
-          firstDocument: window.__smokeFirstDocument,
-        }
-      }),
-    }),
+    () => describeReloadStall(page),
   )
   check(
     "the toast's Reload moves the page onto the new worker",
