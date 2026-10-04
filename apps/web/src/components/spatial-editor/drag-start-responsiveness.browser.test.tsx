@@ -25,10 +25,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -58,14 +57,7 @@ const heavy = (): SpatialCanvas => ({
 const frame = () => new Promise((r) => requestAnimationFrame(r))
 
 it('measures the main-thread block at drag start on a heavy canvas', async () => {
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(heavy)
-    return (
-      <div style={{ width: 1000, height: 700 }}>
-        <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial: heavy(), size: { width: 1000, height: 700 } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   // Let the mount settle (first scene is synchronous; the worker warms in the
