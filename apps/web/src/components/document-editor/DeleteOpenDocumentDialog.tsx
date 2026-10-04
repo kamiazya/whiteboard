@@ -59,6 +59,9 @@ export function DeleteOpenDocumentDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
+          {/* Closes on click by design, so not a PinnedConfirmDialog: the delete
+              runs after the dialog is gone and its failure is reported on the
+              page row, not in here. */}
           <AlertDialogAction
             onClick={onConfirm}
             className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"

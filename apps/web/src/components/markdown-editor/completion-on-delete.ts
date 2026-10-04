@@ -27,7 +27,7 @@ export function completionOnDelete(): Extension {
     // An open or in-flight query owns itself — `validFor` is already handling
     // the shrinking case, and restarting re-runs the source. Measured over
     // four backspaces that shrink an open list: 2 source calls with this
-    // guard, 5 without, each one a scan of the 1914-row emoji index.
+    // guard, 5 without, each one a scan of the ~1.9k-row emoji index.
     if (completionStatus(update.state) !== null) return
     startCompletion(update.view)
   })

@@ -40,7 +40,7 @@ You and your agent both reach the same whiteboard — they talk, the agent acts,
 <p align="center">
   <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP syncs the Browser Canvas through the whiteboard extension." width="780" />
   <br />
-  <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.canvas">architecture.canvas</a> to open it as a JSON Canvas document and remix.</i></sub>
+  <sub><i>Diagram drawn with whiteboard itself — its source is <a href="docs/assets/architecture.canvas">architecture.canvas</a>, a JSON Canvas 1.0 document any JSON Canvas-compatible tool can open.</i></sub>
 </p>
 
 `@kamiazya/whiteboard-mcp` runs a spatial canvas editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, reach the browser within about half a second while the daemon runs, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.

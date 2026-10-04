@@ -13,8 +13,10 @@
  *   the viewBox's aspect ratio (no preserveAspectRatio letterboxing); solve
  *   with getScreenCTM if an envelope-rendered widget ever ships.
  *
- * Answers `undefined` for a degenerate element (zero-size rect, unparseable
- * viewBox) — a click nobody can map is not an anchor.
+ * Answers `undefined` for a degenerate element (a rect with no positive width
+ * and height) — a click nobody can map is not an anchor. An unparseable
+ * viewBox is not that: the click still landed inside a sized element, so it
+ * reads as the bodyless-root shape rather than being dropped.
  */
 export function canvasPointFromClick(
   svg: SVGSVGElement,

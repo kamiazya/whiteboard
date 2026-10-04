@@ -9,6 +9,7 @@
  * deterministic order must not move when it does.
  */
 
+import { compareCodeUnit } from './code-unit-order.js'
 import type { FacetDefinition, FacetRegistry } from './registry.js'
 
 /**
@@ -57,11 +58,11 @@ export function resolveFacetContributions(
 ): readonly NamespaceContributions[] {
   const target = POINT_TARGET[point]
   return [...registry.plugins]
-    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .sort((a, b) => compareCodeUnit(a.id, b.id))
     .flatMap((plugin) => {
       const facets = plugin.facets
         .filter((definition) => definition.targets.includes(target))
-        .sort((a, b) => (a.name < b.name ? -1 : 1))
+        .sort((a, b) => compareCodeUnit(a.name, b.name))
         .map((definition) => ({
           key: `${plugin.id}.${definition.name}/${definition.version}`,
           definition,

@@ -36,7 +36,7 @@ function accept(doc: string, result: CompletionResult, index: number, against = 
 describe('what opens the list', () => {
   /**
    * Two characters, which is what keeps this out of prose. A lone colon
-   * would open 1914 rows on every `10:`, every `http:` and every sentence
+   * would open ~1.9k rows on every `10:`, every `http:` and every sentence
    * with a clause in it.
    */
   it('stays shut on a bare colon and on one character', async () => {
@@ -159,7 +159,7 @@ describe('an icon is offered under the same colon', () => {
   })
 
   /**
-   * Six names against 1914 rows: ordered by score they would be buried, and
+   * Six names against ~1.9k rows: ordered by score they would be buried, and
    * an icon is the answer a person cannot get any other way — the emoji they
    * are also offered is a character they could have pasted.
    *
@@ -168,7 +168,7 @@ describe('an icon is offered under the same colon', () => {
    * `icon-lock` and the vocabulary spells it `locked`, so the assertion was
    * about CLDR rather than about ordering.
    */
-  it('offers icons before the 1914 emoji, without crowding them out', async () => {
+  it('offers icons before the emoji, without crowding them out', async () => {
     const labels = (await complete('a :lock'))?.options.map((o) => o.label) ?? []
     expect(labels[0]).toBe('icon-lock')
     expect(labels.filter((l) => !l.startsWith('icon-')).length).toBeGreaterThan(1)

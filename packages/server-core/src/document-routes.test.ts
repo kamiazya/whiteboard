@@ -217,6 +217,25 @@ describe('canvas CRUD routes', () => {
     expect(apiErrorReason(refused)).toContain('health:unknown')
   })
 
+  it('POST a markdown document with a colon-bearing tag that is not scoped returns 400, not stored', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'services/api',
+        kind: 'markdown',
+        markdown: '---\ntype: note\ntags:\n  - a:b:c\n---\nBody.',
+        createWorkspace: true,
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    const refused = await res.json()
+    expect(refused).toMatchObject({ error: 'okf_parse_failed' })
+    expect(apiErrorReason(refused)).toContain('a:b:c')
+  })
+
   it('POST with a registered facet the schema refuses returns 400, not a server error', async () => {
     const app = makeApp()
     const res = await app.request('/api/v1/workspaces/ws-1/documents', {

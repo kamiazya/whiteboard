@@ -45,6 +45,7 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
 describe('live-doc routes and the deps they were handed', () => {
   it('POST /update reads and writes through the INJECTED liveDocuments', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
+    await deps.documentIndex.createWorkspace({ workspaceId: 'seam-ws' })
     const recorded: string[] = []
     const real = deps.liveDocuments
     deps.liveDocuments = {

@@ -1,33 +1,15 @@
 import ts from '@typescript/typescript6'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 
 /** A POSIX errno name. No underscore, which keeps Node's own `ERR_*` codes out. */
 const ERRNO_NAME = /^E[A-Z0-9]+$/
-
-function scriptKind(fileName: string): ts.ScriptKind {
-  return fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-}
-
-/** An expression with its parentheses, assertions and non-null marks looked through. */
-function unwrap(node: ts.Expression): ts.Expression {
-  let inner = node
-  while (
-    ts.isParenthesizedExpression(inner) ||
-    ts.isAsExpression(inner) ||
-    ts.isSatisfiesExpression(inner) ||
-    ts.isNonNullExpression(inner) ||
-    ts.isTypeAssertionExpression(inner)
-  ) {
-    inner = inner.expression
-  }
-  return inner
-}
 
 const isErrnoLiteral = (node: ts.Node): boolean =>
   ts.isStringLiteralLike(node) && ERRNO_NAME.test(node.text)
 
 /** `code`, `x.code`, `x?.code` and `x['code']` — what an errno is read through. */
 function isCodeRead(node: ts.Expression): boolean {
-  const inner = unwrap(node)
+  const inner = unwrapExpression(node)
   if (ts.isIdentifier(inner)) return inner.text === 'code'
   if (ts.isPropertyAccessExpression(inner)) return inner.name.text === 'code'
   return (
@@ -55,7 +37,7 @@ function namesErrnoException(type: ts.TypeNode): boolean {
 function isErrnoListIncludes(node: ts.Node): boolean {
   if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false
   const [asked] = node.arguments
-  const list = unwrap(node.expression.expression)
+  const list = unwrapExpression(node.expression.expression)
   return (
     node.expression.name.text === 'includes' &&
     asked !== undefined &&
@@ -84,8 +66,8 @@ function isErrnoComparison(node: ts.Node): boolean {
   if (!ts.isBinaryExpression(node) || !COMPARISON_OPERATORS.has(node.operatorToken.kind)) {
     return false
   }
-  const left = unwrap(node.left)
-  const right = unwrap(node.right)
+  const left = unwrapExpression(node.left)
+  const right = unwrapExpression(node.right)
   return (isCodeRead(left) && isErrnoLiteral(right)) || (isErrnoLiteral(left) && isCodeRead(right))
 }
 
@@ -117,13 +99,7 @@ const SPELLINGS: readonly ((node: ts.Node) => boolean)[] = [
  * `includes` over a list of them).
  */
 export function errnoSpellings(fileName: string, source: string): string[] {
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(fileName),
-  )
+  const file = parseSource(fileName, source)
   const found: string[] = []
   const visit = (node: ts.Node): void => {
     if (SPELLINGS.some((isSpelling) => isSpelling(node))) found.push(node.getText(file))

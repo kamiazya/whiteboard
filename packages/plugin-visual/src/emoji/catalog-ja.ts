@@ -5,7 +5,7 @@
  * `common/annotationsDerived/ja.xml`.
  * © Unicode, Inc. SPDX-License-Identifier: Unicode-3.0
  *
- * 1914 of 1914 rows, as `character<TAB>terms` — each row's CLDR
+ * Every catalog row, as `character<TAB>terms` — each row's CLDR
  * display name and keywords, deduped, space-joined. It is a SEARCH index and
  * not a label set: what the picker shows is still the English short name,
  * because the UI around it is English.

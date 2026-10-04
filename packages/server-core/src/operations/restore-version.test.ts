@@ -395,8 +395,10 @@ describe('restoreVersion restore-to-target mode', () => {
     expect(result).toEqual({
       kind: 'restored-to-target',
       targetPath: 'canvas-new',
+      documentId: live.stored('canvas-new')?.id,
       elementCount: 3,
     })
+    expect(live.stored('canvas-new')?.id).not.toBe(live.stored('canvas-a')?.id)
     expect(live.stored('canvas-new')?.kind).toBe('markdown')
     expect(live.evicted).toEqual(['canvas-new'])
     expectAllCallsLocked(live)
@@ -410,7 +412,11 @@ describe('restoreVersion restore-to-target mode', () => {
       targetPath: 'canvas-b',
       overwrite: true,
     })
-    expect(result).toMatchObject({ kind: 'restored-to-target', targetPath: 'canvas-b' })
+    expect(result).toMatchObject({
+      kind: 'restored-to-target',
+      targetPath: 'canvas-b',
+      documentId: live.stored('canvas-b')?.id,
+    })
     expect(live.stored('canvas-b')?.kind).toBe('markdown')
     expectAllCallsLocked(live)
   })

@@ -35,7 +35,7 @@ paths:
 
 - The LoroDoc<->model bridge, attachments, multi-canvas OKF bundles, or bundle manifests —
   deferred to `loro-adapter` (see architecture-map.md).
-- Scene graph, layout, rendering (`canvas-render`, planned).
+- Scene graph, layout, rendering (`canvas-render`).
 - Storage, HTTP/MCP surfaces, Inversify DI (composition roots only: `mcp-server`, `apps/web`).
 - Any runtime behavior beyond parsing/serializing a single document.
 

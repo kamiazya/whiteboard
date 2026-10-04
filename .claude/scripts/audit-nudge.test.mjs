@@ -36,6 +36,35 @@ test('no audit on record says so explicitly, not as age 0', () => {
   assert.match(out, /no audit-triage run on record/)
 })
 
+test('the NEWEST audit sets the age, whatever order the ledger lists them in', () => {
+  const old = { kind: 'audit-triage', at: new Date(NOW - 30 * DAY).toISOString() }
+  const fresh = { kind: 'audit-triage', at: new Date(NOW - 1 * DAY).toISOString() }
+  assert.equal(formatNudge([old, fresh], NOW), '')
+  assert.equal(formatNudge([fresh, old], NOW), '')
+})
+
+test('exactly the 7 day budget is still silent; a day over speaks', () => {
+  assert.equal(
+    formatNudge([{ kind: 'audit-triage', at: new Date(NOW - 7 * DAY).toISOString() }], NOW),
+    '',
+  )
+  assert.match(
+    formatNudge([{ kind: 'audit-triage', at: new Date(NOW - 8 * DAY).toISOString() }], NOW),
+    /8 days ago/,
+  )
+})
+
+test('a part-day age is floored, so 7.9 days has not exceeded the budget', () => {
+  assert.equal(
+    formatNudge([{ kind: 'audit-triage', at: new Date(NOW - 7.9 * DAY).toISOString() }], NOW),
+    '',
+  )
+  assert.match(
+    formatNudge([{ kind: 'audit-triage', at: new Date(NOW - 8.1 * DAY).toISOString() }], NOW),
+    /8 days ago/,
+  )
+})
+
 test('only audit-triage entries count toward the audit age', () => {
   const entries = [
     { kind: 'audit-triage', at: new Date(NOW - 10 * DAY).toISOString() },

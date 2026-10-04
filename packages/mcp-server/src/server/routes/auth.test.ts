@@ -13,12 +13,8 @@ describe('requiresDaemonAuth', () => {
   it('default-requires bearer auth for every /api method, not just mutations', () => {
     expect(requiresDaemonAuth('/api/workspaces/session-1/documents')).toBe(true)
     expect(requiresDaemonAuth('/api/brand-new-mutation')).toBe(true)
-    // Canvas/asset reads are covered too: ADR-0002's read carve-out assumed a
-    // hosted origin could never reach the daemon, which ADR-0005 retires. The
-    // client already sends the bearer on every read (apiFetch, and every image
-    // consumer fetches+blobs instead of using a bare <img src>), so requiring
-    // it server-side costs nothing on the happy path and closes the
-    // read-without-a-token surface for anyone else.
+    // Reads are gated like writes: a narrower credential is held to its scopes
+    // on a read too, and the client already sends its bearer on every read.
     expect(requiresDaemonAuth('/api/workspaces')).toBe(true)
     expect(requiresDaemonAuth('/api/w/session-1/document/demo/snapshot')).toBe(true)
     expect(
@@ -27,8 +23,8 @@ describe('requiresDaemonAuth', () => {
     expect(requiresDaemonAuth('/api/w/session-1/document/demo/file/f1')).toBe(true)
   })
 
-  it('allows only /api/runtime/ping to bypass the middleware', () => {
-    expect(requiresDaemonAuth('/api/runtime/ping')).toBe(false)
+  it('gates every /api path, leaving which of them are public to the route-scope registry alone', () => {
+    expect(requiresDaemonAuth('/api/runtime/ping')).toBe(true)
     expect(requiresDaemonAuth('/api/runtime/status')).toBe(true)
     expect(requiresDaemonAuth('/api/runtime/storage')).toBe(true)
     expect(requiresDaemonAuth('/api/runtime/brand-new')).toBe(true)
@@ -37,6 +33,26 @@ describe('requiresDaemonAuth', () => {
   it('leaves non-/api paths alone', () => {
     expect(requiresDaemonAuth('/document/session-1/demo')).toBe(false)
     expect(requiresDaemonAuth('/')).toBe(false)
+  })
+})
+
+describe('createDaemonAuthMiddleware public routes', () => {
+  const refusesEveryone: CredentialResolver = { resolve: async () => null }
+  const appRefusingEveryone = () => {
+    const app = new Hono()
+    app.use('/api/*', createDaemonAuthMiddleware(refusesEveryone))
+    app.all('/api/*', (c) => c.json({ reached: true }))
+    return app
+  }
+
+  it('lets /api/runtime/ping through with no credential, by the registry alone', async () => {
+    const res = await appRefusingEveryone().request('/api/runtime/ping')
+    expect(res.status).toBe(200)
+  })
+
+  it('refuses a sibling runtime path with no credential', async () => {
+    const res = await appRefusingEveryone().request('/api/runtime/status')
+    expect(res.status).toBe(401)
   })
 })
 

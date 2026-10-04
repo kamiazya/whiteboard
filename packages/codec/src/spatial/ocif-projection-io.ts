@@ -9,6 +9,7 @@ import type {
 import {
   EXTENSION_FACET_KEY_PATTERN,
   isFrame,
+  membersOf,
   nodeFile,
   nodeKind,
   nodeSubpath,
@@ -131,20 +132,6 @@ function representationFor(node: SpatialNode): OcifResource['representations'][n
   return representation
 }
 
-/** Which nodes a group holds, by this model's rule: geometric containment. */
-function membersOf(group: SpatialNode, nodes: readonly SpatialNode[]): string[] {
-  return nodes
-    .filter(
-      (node) =>
-        node.id !== group.id &&
-        node.x >= group.x &&
-        node.y >= group.y &&
-        node.x + node.width <= group.x + group.width &&
-        node.y + node.height <= group.y + group.height,
-    )
-    .map((node) => node.id)
-}
-
 /**
  * The one node shape whose kind a reader cannot derive from what the node
  * shows: an embed took the resource slot, so the kind's own content — and
@@ -162,7 +149,10 @@ function frameEntries(node: SpatialNode, nodes: readonly SpatialNode[]): OcifExt
       backgroundStyle: node.backgroundStyle,
     }),
   )
-  const group: OcifExtension = { type: OCIF_TYPE.group, members: membersOf(node, nodes) }
+  const group: OcifExtension = {
+    type: OCIF_TYPE.group,
+    members: membersOf(nodes, node).map((member) => member.id),
+  }
   return chrome === undefined ? [group] : [group, chrome]
 }
 

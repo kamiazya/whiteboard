@@ -18,6 +18,8 @@ const tmp = withTempDataDir('whiteboard-live-doc-test-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
+  // The document routes address a workspace that exists; none is minted from a handle.
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
 })
 
 vi.mock('../../config.js', () => ({
@@ -81,16 +83,16 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns 404 with Problem Details { title } for a canvas that was never created', async () => {
+  it('returns 404 { error, message } for a canvas that was never created', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request('/api/w/session1/document/never-created/snapshot')
     expect(res.status).toBe(404)
-    const json = (await res.json()) as { title?: string }
-    // Same shape as DELETE's 404 — the client parses problem-details for
-    // both routes — deliberately not thumbnails/restore's { error, message }.
-    // A document of either kind lives at this path, so the title names none.
-    expect(json.title).toBe('Document "never-created" not found')
-    expect(json).not.toHaveProperty('error')
+    // The same body family as the workspace refusal in front of this route;
+    // a document of either kind lives at this path, so the message names none.
+    expect(await res.json()).toEqual({
+      error: 'not_found',
+      message: 'Document "never-created" not found',
+    })
   })
 
   it('returns 404 for a canvas that existed and was deleted', async () => {

@@ -16,6 +16,7 @@
 
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, sep } from 'node:path'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
@@ -407,7 +408,7 @@ function recordableManifest(references: BackupBlobReferences) {
 }
 
 function byKey([a]: [string, unknown], [b]: [string, unknown]): number {
-  return a < b ? -1 : 1
+  return compareCodeUnit(a, b)
 }
 
 async function writeManifest(backupDir: string, references: BackupBlobReferences): Promise<void> {

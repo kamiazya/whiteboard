@@ -378,3 +378,39 @@ test('isValidDesignShape rejects every constrained field set to a wrong-typed va
     assert.equal(sharedIsValidDesignShape(design), false, JSON.stringify(design))
   }
 })
+
+// The inline copy is the one dev-loop runs, and `every` over a list's entries is what the earlier
+// cases (a wholly-bad list) cannot tell from `some`: one bad entry among good ones must still fail.
+test('isValidDesignShape refuses ONE bad entry among good ones, in the inline copy as in the module', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const valid = {
+    completionCriteria: ['c'],
+    scope: 's',
+    testScenarios: { unit: ['u'] },
+    properties: ['none: fine'],
+    blastRadius: ['none: fine'],
+    userReach: ['rendered by CanvasList'],
+    benefit: 'obvious: visible in the diff',
+  }
+  const designs = [
+    ...['properties', 'blastRadius', 'userReach'].map((key) => ({
+      ...valid,
+      [key]: ['none: fine', '   '],
+    })),
+    ...['properties', 'blastRadius', 'userReach'].map((key) => ({
+      ...valid,
+      [key]: ['none: fine', 5],
+    })),
+    { ...valid, completionCriteria: ['c', 5] },
+    { ...valid, risks: ['r', 5] },
+    { ...valid, testScenarios: { unit: ['u', 5] } },
+    { ...valid, testScenarios: { unit: ['u'], browser: ['b', 5] } },
+    { ...valid, testScenarios: { unit: ['u'], e2e: ['e', 5] } },
+    { ...valid, testScenarios: null },
+  ]
+  for (const design of designs) {
+    assert.equal(isValidDesignShape(design), false, JSON.stringify(design))
+    assert.equal(sharedIsValidDesignShape(design), false, JSON.stringify(design))
+  }
+  assert.equal(isValidDesignShape(valid), true)
+})

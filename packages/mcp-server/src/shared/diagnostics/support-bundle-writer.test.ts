@@ -79,7 +79,7 @@ describe('writeSupportBundle', () => {
     expect(await readFile(target, 'utf-8')).toBe('preexisting')
   })
 
-  it('target path is a symlink: throws with the dedicated symlink-not-allowed error and does not follow', async () => {
+  it('target path is a symlink: refused by the canonicalizer with the traversal error, and not followed', async () => {
     const realDir = join(root, 'real')
     await mkdir(realDir, { recursive: true })
     const target = join(root, 'link')
@@ -91,12 +91,10 @@ describe('writeSupportBundle', () => {
       caught = err
     }
     expect(caught).toBeInstanceOf(SupportBundleError)
-    // Pin the dedicated symlink branch — a regression that drops it
-    // and falls through to the "not a directory" path would still
-    // reject (lstat reports !isDirectory for a symlink) but lose
-    // the documented symlink-aware message that future log readers
-    // rely on.
-    expect((caught as Error).message).toMatch(/symlink/i)
+    // The refusal is the canonicalizer's: a symlink target never reaches the
+    // directory checks, so a regression that drops the refusal would write
+    // through the link and fail here on the message and the untouched dir.
+    expect((caught as Error).message).toBe('Target path traverses a symlink, which is not allowed.')
     expect((await readdir(realDir)).sort()).toEqual([])
   })
 

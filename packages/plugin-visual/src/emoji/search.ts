@@ -71,8 +71,9 @@ function rank(row: Row, query: string): number {
 /**
  * The rows a query names, best first, at most `limit` of them.
  *
- * Bounded because the source is 1914 rows and a completion list is read at a
- * glance; an unbounded answer would have CodeMirror render all of them.
+ * Bounded because the source is ~1.9k rows (the exact count is in
+ * `catalog-data.ts`'s header) and a completion list is read at a glance; an
+ * unbounded answer would have CodeMirror render all of them.
  */
 export function searchEmojiShortcodes(query: string, limit = 20): readonly EmojiShortcodeMatch[] {
   const wanted = query.trim().toLowerCase()

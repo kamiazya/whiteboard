@@ -1,16 +1,16 @@
 import { workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { docRefKey, workspaceIdOfDocKey } from './doc-ref-key.js'
+import { docRefKey, workspaceIdOfStoredDocKey } from './doc-ref-key.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const workspaceIdArbitrary = fc.stringMatching(/^[a-zA-Z0-9_-]{1,40}$/)
 const documentIdArbitrary = fc.stringMatching(/^[0-9A-HJKMNP-TV-Z]{26}$/)
 
-describe('workspaceIdOfDocKey', () => {
+describe('workspaceIdOfStoredDocKey', () => {
   fcTest.prop([workspaceIdArbitrary], withDefaults())(
     'answers the workspace id docRefKey wrote for a workspace-tree ref',
     (workspaceId) => {
-      expect(workspaceIdOfDocKey(docRefKey({ kind: 'workspace-tree', workspaceId }))).toBe(
+      expect(workspaceIdOfStoredDocKey(docRefKey({ kind: 'workspace-tree', workspaceId }))).toBe(
         workspaceId,
       )
     },
@@ -20,7 +20,7 @@ describe('workspaceIdOfDocKey', () => {
     'answers null for the key of a document ref',
     (workspaceId, documentId) => {
       expect(
-        workspaceIdOfDocKey(docRefKey({ kind: 'document', workspaceId, documentId })),
+        workspaceIdOfStoredDocKey(docRefKey({ kind: 'document', workspaceId, documentId })),
       ).toBeNull()
     },
   )
@@ -28,7 +28,7 @@ describe('workspaceIdOfDocKey', () => {
   fcTest.prop([fc.string({ maxLength: 60 })], withDefaults())(
     'answers a workspace id only for a key docRefKey could have written',
     (key) => {
-      const workspaceId = workspaceIdOfDocKey(key)
+      const workspaceId = workspaceIdOfStoredDocKey(key)
       if (workspaceId === null) return
       expect(workspaceIdSchema.safeParse(workspaceId).success).toBe(true)
       expect(docRefKey({ kind: 'workspace-tree', workspaceId })).toBe(key)
@@ -45,6 +45,6 @@ describe('workspaceIdOfDocKey', () => {
     ['an unrelated key', 'blob:abc'],
     ['an empty key', ''],
   ])('answers null for %s', (_what, key) => {
-    expect(workspaceIdOfDocKey(key)).toBeNull()
+    expect(workspaceIdOfStoredDocKey(key)).toBeNull()
   })
 })

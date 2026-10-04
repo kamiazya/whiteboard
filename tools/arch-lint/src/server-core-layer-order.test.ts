@@ -37,7 +37,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   directoryLoops,
-  type ImportEdge,
+  type ResolvedImportEdge,
   resolvedImportEdges,
   type SourceFile,
 } from './directory-loops.js'
@@ -90,7 +90,7 @@ function layerOf(path: string): Layer | undefined {
   return DIRECTORY_LAYERS[parts[0] as string]
 }
 
-const spell = ({ from, to, typeOnly }: ImportEdge): string =>
+const spell = ({ from, to, typeOnly }: ResolvedImportEdge): string =>
   `${from} -> ${to}${typeOnly ? ' (type)' : ''}`
 
 /** Every import that reaches a layer above the importer's own. */

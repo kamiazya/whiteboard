@@ -241,6 +241,9 @@ function DeletePersonDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
+          {/* Closes on click by design, so not a PinnedConfirmDialog: the outcome,
+              a refusal included, is shown on the page by `useChange`, not in
+              here. */}
           <AlertDialogAction onClick={() => person !== null && onConfirm(person)}>
             Delete
           </AlertDialogAction>

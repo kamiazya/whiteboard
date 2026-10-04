@@ -21,6 +21,7 @@
  */
 
 import type { BoundingBox, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
@@ -59,7 +60,8 @@ export function CommentDragLayer({
     [comment, measure, theme, obstacles],
   )
   return (
-    <div
+    <SceneSvg
+      svg={fragment.svg}
       data-testid="comment-drag-preview"
       aria-hidden="true"
       style={{
@@ -69,10 +71,6 @@ export function CommentDragLayer({
         pointerEvents: 'none',
         opacity: 0.85,
       }}
-      // Same trusted producer as the committed scene: canvas-render's
-      // escaping serializer is the sole source of this string.
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene — canvas-render's escaping serializer
-      dangerouslySetInnerHTML={{ __html: fragment.svg }}
     />
   )
 }

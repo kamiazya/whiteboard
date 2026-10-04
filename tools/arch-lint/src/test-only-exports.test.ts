@@ -169,7 +169,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/mcp-server/src/server/routes/auth.ts#grantCoversRoute',
   'packages/mcp-server/src/server/routes/auth.ts#requiresDaemonAuth',
   'packages/mcp-server/src/server/routes/document/path-route.ts#DOCUMENTS_WILDCARD',
-  'packages/mcp-server/src/server/routes/document/path-route.ts#DOCUMENT_WILDCARD',
   'packages/mcp-server/src/server/routes/document/path-route.ts#matchDocumentsTail',
   'packages/mcp-server/src/server/security/credential-resolver.ts#CredentialResolverConfig',
   'packages/mcp-server/src/server/security/daemon-identity.ts#buildSignedPayload',
@@ -361,7 +360,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 158
+const DEBT_CEILING = 157
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 25

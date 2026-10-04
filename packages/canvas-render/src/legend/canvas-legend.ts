@@ -10,7 +10,7 @@
  * one line rather than inventing a key.
  */
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { isFrame, parseScopedTag } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, isFrame, parseScopedTag } from '@kamiazya/whiteboard-model'
 import type { LegendEntry, LegendKey, LegendSwatch, SceneLegend } from '@kamiazya/whiteboard-scene'
 import { scoreFacets } from '../quality/facet-score.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
@@ -51,7 +51,7 @@ function entriesFor<T extends Tagged>(
   // Values in code-unit order, the untagged class last: a reader scans the
   // named values first and the remainder is what is left.
   return [...classes]
-    .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a < b ? -1 : a > b ? 1 : 0))
+    .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : compareCodeUnit(a, b)))
     .map(([value, { count, swatch }]) => ({ value, count, swatch }))
 }
 

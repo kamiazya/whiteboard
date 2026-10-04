@@ -1,5 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
@@ -286,14 +286,19 @@ describe('wb_version_restore', () => {
       targetPath: 'notes/plan-copy',
     })
 
+    // `documentId` names the document that now holds the saved state: the
+    // copy, not the source an agent would otherwise go on to edit.
+    const copyRow = (await live.list()).find((row) => row.path === 'notes/plan-copy')
+    expect(documentIdSchema.safeParse(copyRow?.documentId).success).toBe(true)
     expect(result).toEqual({
-      documentId: DOCUMENT_ID,
+      documentId: copyRow?.documentId,
       restoredVersionId: saved.id,
       label: 'checkpoint',
       mode: 'into-target',
       targetPath: 'notes/plan-copy',
       elementCount: 1,
     })
+    expect(result.documentId).not.toBe(DOCUMENT_ID)
     const copy = live.docs.get('notes/plan-copy')
     expect(copy && textOf(copy)).toBe('original')
     // The source stayed as it was: a copy is not an in-place restore.
@@ -328,7 +333,12 @@ describe('wb_version_restore', () => {
       targetPath: 'notes/other',
       overwrite: true,
     })
-    expect(result).toMatchObject({ mode: 'into-target', targetPath: 'notes/other' })
+    expect(result).toMatchObject({
+      mode: 'into-target',
+      targetPath: 'notes/other',
+      documentId: (await live.list()).find((row) => row.path === 'notes/other')?.documentId,
+    })
+    expect(result.documentId).not.toBe(DOCUMENT_ID)
     // Reconciled onto the SAME instance a client may hold, not swapped.
     expect(live.docs.get('notes/other')).toBe(occupant)
     expect(textOf(occupant)).toBe('original')

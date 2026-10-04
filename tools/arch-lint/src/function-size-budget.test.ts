@@ -357,7 +357,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DocumentPage.tsx#DocumentPageBody': 338,
   // The merged row: the top bar, its title slot, and the row actions the
   // slot carries. Long because every optional prop is spread-or-nothing
-  // (`exactOptionalPropertyTypes`), and splitting it further would cut the
+  // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
   'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 65,
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
@@ -476,7 +476,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/CanvasViewer.tsx#CanvasViewer': 136,
   'packages/canvas-viewer/src/font-loading.ts#loadViewerFont': 61,
   'packages/canvas-viewer/src/widget-entry.ts#applyToolResult': 58,
-  'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 200,
+  'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 170,
   'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 118,
   'packages/codec/src/markdown/from-remark.ts#toFlow': 55,
   'packages/codec/src/markdown/from-remark.ts#toPhrasing': 55,
@@ -583,7 +583,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts#saveCompactedSnapshot': 75,
   'packages/mcp-server/src/server/store/version-store.ts#save': 84,
   'packages/mcp-server/src/server/store/workspace-tail.ts#createWorkspaceTail': 75,
-  'packages/mcp-server/src/shared/diagnostics/support-bundle-writer.ts#writeSupportBundle': 53,
   'packages/mcp-server/src/shared/test-utils/tool-surface-metrics.ts#parameterCoverage': 63,
   'packages/model/src/test-utils/zod-arbitrary.ts#walkShape': 132,
   'packages/model/src/text-anchor.ts#resolveTextAnchor': 67,

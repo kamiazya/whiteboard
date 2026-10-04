@@ -332,6 +332,94 @@ describe('a workspace\u2019s own stencil library', () => {
     expect(node?.facets?.['visual.stencil/v0']).toEqual({ stencil: 'workspace.bucket' })
   })
 
+  test('a facets bucket naming a library stencil is judged against the library even when another op writes no stencil', async () => {
+    const library = {
+      'visual.stencils/v0': { stencils: { bucket: { displayName: 'Bucket', color: '2' } } },
+    }
+    const { canvas } = await runWithLibrary(library, [
+      {
+        op: 'node.add',
+        node: {
+          type: 'text',
+          id: 'a',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 40,
+          text: 'a',
+          facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+        },
+      },
+      {
+        op: 'node.add',
+        node: {
+          type: 'text',
+          id: 'b',
+          x: 200,
+          y: 0,
+          width: 100,
+          height: 40,
+          text: 'b',
+          facets: { 'visual.stencil/v0': { stencil: 'workspace.bucket' } },
+        },
+      },
+    ])
+    expect(canvas.nodes.find((n) => n.id === 'b')?.facets?.['visual.stencil/v0']).toEqual({
+      stencil: 'workspace.bucket',
+    })
+  })
+
+  test('a facets bucket that names no stencil reads no library', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, { nodes: [], edges: [] })
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+    const input = canvasEditInputSchema.parse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: {
+            type: 'text',
+            id: 'p',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 80,
+            text: 'plain',
+            facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+          },
+        },
+        {
+          op: 'node.add',
+          node: {
+            type: 'text',
+            id: 'q',
+            x: 300,
+            y: 0,
+            width: 200,
+            height: 80,
+            text: 'null',
+            facets: { 'visual.stencil/v0': null },
+          },
+        },
+      ],
+    })
+    await createCanvasEditTool(deps).execute(input as never)
+    expect(listings).toBe(0)
+  })
+
   test('re-dressing takes the NEW stencil\u2019s colour, not the one it already had', async () => {
     // Found by re-reading the diff. `dressWithStencil` decided "the caller
     // was explicit" by looking at `node.color` — which on a patch is always

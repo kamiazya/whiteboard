@@ -1,4 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import type { LiveDocuments } from '../server-deps.js'
 
@@ -24,8 +25,14 @@ export class FakeLiveDocuments implements LiveDocuments {
   kind(_workspaceId: string, path: string): Promise<DocumentKind | null> {
     return Promise.resolve(this.kinds.get(path) ?? 'spatial')
   }
+  /** Ids by path, minted the first time a row is listed and stable after. */
+  private readonly ids = new Map<string, string>()
   async list(): Promise<readonly { documentId?: string; path: string }[]> {
-    return [...this.docs.keys()].map((path) => ({ path }))
+    return [...this.docs.keys()].map((path) => {
+      const documentId = this.ids.get(path) ?? generateDocumentId()
+      this.ids.set(path, documentId)
+      return { documentId, path }
+    })
   }
   async rename(): Promise<void> {
     throw new Error('not exercised')

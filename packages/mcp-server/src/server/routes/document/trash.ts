@@ -2,8 +2,8 @@
  * The trash surface: list what deletes evacuated, restore one entry, or
  * destroy one for good.
  *
- * An ADAPTER over the deps' trash seam (ADR-0018): the evacuate/restore
- * mechanics live in workspace-index behind `ServerDeps.trash`, and all this
+ * An ADAPTER over the index's `DocumentTrash` capability (ADR-0018): the
+ * evacuate/restore mechanics live in workspace-index, and all this
  * translates is the ADDRESS (workspaceId + documentId in the URL) and the
  * absent cases — unknown workspace and unknown entry are both 404 here, a
  * composition with no trash capability is 501.
@@ -15,7 +15,11 @@ import type {
   RestoreTrashResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
-import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  type DocumentTrash,
+  hasDocumentTrash,
+  isWorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { getLogger } from '../../log.js'
@@ -36,7 +40,7 @@ async function answering(
   deps: ServerDeps,
   c: Context,
   failure: { readonly answered: string; readonly logged: string },
-  body: (workspaceId: string, trash: NonNullable<ServerDeps['trash']>) => Promise<Response>,
+  body: (workspaceId: string, trash: DocumentTrash) => Promise<Response>,
 ): Promise<Response> {
   // A malformed address is the caller's error, not this server's — kept
   // outside the try below so it cannot fall through to the 500 arm.
@@ -44,8 +48,12 @@ async function answering(
   if ('refusal' in address) return address.refusal
   const { workspaceId } = address
   try {
-    if (deps.trash === undefined) return c.json(NO_TRASH, 501)
-    return await body(workspaceId, deps.trash)
+    // Structural rather than `instanceof`: the binding is a composition
+    // root's choice, and vitest's module-graph split makes `instanceof` lie
+    // across realms (see ports' `isWorkspaceNotFoundError`).
+    const { documentIndex } = deps
+    if (!hasDocumentTrash(documentIndex)) return c.json(NO_TRASH, 501)
+    return await body(workspaceId, documentIndex)
   } catch (err) {
     if (isWorkspaceNotFoundError(err)) {
       return c.json(workspaceNotFoundRefusal(workspaceId), 404)
@@ -66,7 +74,7 @@ const listHandler =
         // The trash lives in the workspace record; an unknown workspace has no
         // record to open, which the seam refuses — translated to 404 by
         // `answering`. A known-but-empty trash is an empty list, never an error.
-        const entries = await trash.list({ workspaceId })
+        const entries = await trash.listTrash({ workspaceId })
         const response: ListTrashResponse = {
           entries: entries.map((entry) => ({
             documentId: entry.documentId,
@@ -90,7 +98,7 @@ const restoreHandler =
       },
       async (workspaceId, trash) => {
         const documentId = c.req.param('documentId') ?? ''
-        const restored = await trash.restore({ workspaceId, documentId })
+        const restored = await trash.restoreDocument({ workspaceId, documentId })
         // null covers both "never in the trash" and "entry present but the
         // evacuated bytes are gone" — either way there is nothing to bring
         // back, and inventing a distinction here would promise recovery the
@@ -117,7 +125,7 @@ const purgeHandler =
         // Only an entry that IS in the trash is reachable: a live document with
         // the same id is not, so this cannot be turned into a way to destroy
         // something nobody deleted.
-        if (!(await trash.purge({ workspaceId, documentId }))) {
+        if (!(await trash.purgeTrashEntry({ workspaceId, documentId }))) {
           return c.json({ title: `Nothing in the trash for "${documentId}"` }, 404)
         }
         const response: PurgeTrashEntryResponse = { purged: { documentId } }

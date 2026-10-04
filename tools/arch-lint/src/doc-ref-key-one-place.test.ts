@@ -123,7 +123,7 @@ describe('the stored document key is spelled in one place', () => {
   })
 
   it('the declaration site still spells both prefixes and the inverse that parses one back', () => {
-    // Two templates in `docRefKey`, one regex in `workspaceIdOfDocKey`.
+    // Two templates in `docRefKey`, one regex in `workspaceIdOfStoredDocKey`.
     expect(spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(3)
   })
 

@@ -43,6 +43,15 @@ const documentGetInputSchema = z
   .strict()
 export type DocumentGetInput = z.infer<typeof documentGetInputSchema>
 
+// `facetsRaw` is the parser's bucket for root keys it does not interpret, so a
+// note with `created: 2020-01-02` reads back as `facetsRaw.created`: a reader
+// of the schema cannot otherwise tell it from a field the server defines.
+const documentFrontmatterSchema = okfMarkdownFrontmatterSchema.extend({
+  facetsRaw: okfMarkdownFrontmatterSchema.shape.facetsRaw.describe(
+    'Root frontmatter keys the server does not interpret, kept verbatim under their own names (a note with `created: 2020-01-02` reads back as facetsRaw.created).',
+  ),
+})
+
 const readDocumentSchema = z
   .object({
     documentId: documentIdSchema,
@@ -51,7 +60,7 @@ const readDocumentSchema = z
     // Present only for a markdown document. Frontmatter is OKF's, and a JSON
     // Canvas document has none (ADR-0009 decision 3) — an always-present
     // field would have to invent one.
-    frontmatter: okfMarkdownFrontmatterSchema.optional(),
+    frontmatter: documentFrontmatterSchema.optional(),
     // The annotation layer, whole, on either kind: neither format's `content`
     // carries it, so this is the one read an agent has of what people said
     // about a document. Absent when there is none, so an uncommented

@@ -28,11 +28,13 @@ const { createContainer, resolveServerDeps } = await import('../../di/container.
 
 const TOKEN = 'uploadable-token'
 
-function app() {
+async function app() {
+  const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'ws-up' })
   return createApp({
     authMode: 'local-daemon' as const,
     token: TOKEN,
-    serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
+    serverDeps,
     dataLayout: testDataLayout(tmp.dir),
     touch: vi.fn(),
     getStatus: vi.fn(),
@@ -40,7 +42,7 @@ function app() {
 }
 
 function put(
-  target: ReturnType<typeof app>,
+  target: Awaited<ReturnType<typeof app>>,
   fileId: string,
   type: string,
   body: Uint8Array<ArrayBuffer>,
@@ -53,9 +55,9 @@ function put(
 }
 
 describe('the daemon file route against the declared upload contract', () => {
-  let target: ReturnType<typeof app>
-  beforeEach(() => {
-    target = app()
+  let target: Awaited<ReturnType<typeof app>>
+  beforeEach(async () => {
+    target = await app()
   })
 
   it('declares a population, so the per-type cases below are not vacuous', () => {

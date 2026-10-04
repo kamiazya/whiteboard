@@ -1,5 +1,5 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { endNode, frameLabel, isFrame } from '@kamiazya/whiteboard-model'
+import { endNode, frameLabel, isFrame, membersOf } from '@kamiazya/whiteboard-model'
 
 /**
  * The part of a canvas a `#fragment` names, as a canvas of its own.
@@ -29,7 +29,7 @@ export function selectCanvasFragment(
   if (root === undefined) return undefined
   const ids = new Set<string>([root.id])
   if (isFrame(root)) {
-    for (const node of canvas.nodes) if (node !== root && within(node, root)) ids.add(node.id)
+    for (const member of membersOf(canvas.nodes, root)) ids.add(member.id)
   }
   return {
     ...canvas,
@@ -56,14 +56,5 @@ function findGroupByLabel(nodes: readonly SpatialNode[], label: string): Spatial
   return (
     labelled.find((entry) => entry.label === label)?.node ??
     labelled.find((entry) => entry.label.toLowerCase() === label.toLowerCase())?.node
-  )
-}
-
-function within(node: SpatialNode, box: SpatialNode): boolean {
-  return (
-    node.x >= box.x &&
-    node.y >= box.y &&
-    node.x + node.width <= box.x + box.width &&
-    node.y + node.height <= box.y + box.height
   )
 }

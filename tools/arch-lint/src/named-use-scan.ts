@@ -1,8 +1,5 @@
 import ts from '@typescript/typescript6'
-
-function scriptKind(fileName: string): ts.ScriptKind {
-  return fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-}
+import { parseSource } from './ast-helpers.js'
 
 /** The name an identifier DECLARES or labels, as opposed to a use of a binding. */
 function isNameSlot(node: ts.Identifier): boolean {
@@ -57,13 +54,7 @@ export function aliasesOf(file: ts.SourceFile, wanted: ReadonlySet<string>): Set
  */
 export function countNamedUses(fileName: string, source: string, names: readonly string[]): number {
   const wanted = new Set(names)
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(fileName),
-  )
+  const file = parseSource(fileName, source)
   const aliases = aliasesOf(file, wanted)
 
   let uses = 0

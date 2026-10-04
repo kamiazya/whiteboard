@@ -4,41 +4,41 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const workspaceKeyArb = fc.uint8Array({ minLength: 32, maxLength: 32 })
 const saltArb = fc.uint8Array({ minLength: 16, maxLength: 64 })
-const documentIdArb = fc.string({ minLength: 1, maxLength: 32 })
+const docKeyArb = fc.string({ minLength: 1, maxLength: 32 })
 const epochArb = fc.nat({ max: 1_000_000 })
 const plaintextArb = fc.uint8Array({ minLength: 0, maxLength: 256 })
 
 describe('read-plane: round trip and sibling-key attenuation', () => {
   fcTest.prop(
-    [workspaceKeyArb, saltArb, documentIdArb, epochArb, plaintextArb, fc.boolean(), fc.nat()],
+    [workspaceKeyArb, saltArb, docKeyArb, epochArb, plaintextArb, fc.boolean(), fc.nat()],
     withDefaults(),
   )(
-    'open(seal(x)) === x; a sibling differing in documentId or epoch, a raw-imported key, and a wrong aad all fail to open',
+    'open(seal(x)) === x; a sibling differing in docKey or epoch, a raw-imported key, and a wrong aad all fail to open',
     async (
       workspaceKey,
       workspaceKeySalt,
-      documentId,
+      docKey,
       epoch,
       plaintext,
-      siblingVariesDocumentId,
+      siblingVariesDocKey,
       epochDelta,
     ) => {
-      const context = { documentId, epoch }
-      const key = await deriveDocumentKey({ workspaceKey, workspaceKeySalt, documentId, epoch })
+      const context = { docKey, epoch }
+      const key = await deriveDocumentKey({ workspaceKey, workspaceKeySalt, docKey, epoch })
 
       // Round trip.
       const envelope = await sealBytes(key, plaintext, context)
       const opened = await openBytes(key, envelope, context)
       expect(opened).toEqual(plaintext)
 
-      // Sibling key: exactly one of documentId or epoch differs.
-      const siblingDocumentId = siblingVariesDocumentId ? `${documentId}~sibling` : documentId
-      const siblingEpoch = siblingVariesDocumentId ? epoch : epoch + 1 + (epochDelta % 1000)
-      const siblingContext = { documentId: siblingDocumentId, epoch: siblingEpoch }
+      // Sibling key: exactly one of docKey or epoch differs.
+      const siblingDocKey = siblingVariesDocKey ? `${docKey}~sibling` : docKey
+      const siblingEpoch = siblingVariesDocKey ? epoch : epoch + 1 + (epochDelta % 1000)
+      const siblingContext = { docKey: siblingDocKey, epoch: siblingEpoch }
       const siblingKey = await deriveDocumentKey({
         workspaceKey,
         workspaceKeySalt,
-        documentId: siblingDocumentId,
+        docKey: siblingDocKey,
         epoch: siblingEpoch,
       })
       await expect(openBytes(siblingKey, envelope, context)).rejects.toMatchObject({

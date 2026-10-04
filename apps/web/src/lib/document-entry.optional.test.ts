@@ -8,8 +8,7 @@ describe('optional', () => {
 
   // ABSENT, not present-as-undefined. Nineteen listing fields across the two
   // file sources spread this, and a row is compared and serialized — a key
-  // holding `undefined` is a key, which `exactOptionalPropertyTypes` also
-  // refuses at the type level. Mutating the guard away leaves every
+  // holding `undefined` is still a key. Mutating the guard away leaves every
   // files-source test green, which is why this one is here.
   it('omits the key entirely when there is no value', () => {
     const row = { path: 'a', ...optional('name', undefined) }

@@ -71,13 +71,24 @@ describe('Content-Security-Policy directives', () => {
     // The web app fetches a theme's family from the catalogue's pinned source
     // when no daemon holds it (ADR-0012, 2026-09-09). The origin is read off
     // the catalogue constant rather than spelled here, so the policy and the
-    // fetch cannot drift apart — and it is the ONLY https origin admitted:
-    // every other connect target is this origin or a loopback daemon.
+    // fetch cannot drift apart — and it is the ONLY origin admitted besides
+    // this one (see the next test).
     const csp = extractCsp(headersContent)
     const connectSrcMatch = /connect-src\s+([^;]*)/.exec(csp)
     const tokens = connectSrcMatch?.[1]?.trim().split(/\s+/) ?? []
     expect(tokens).toContain(FONT_SOURCE_ORIGIN)
     expect(tokens.filter((t) => t.startsWith('https://'))).toEqual([FONT_SOURCE_ORIGIN])
+  })
+
+  it('connect-src admits no loopback origin: a hosted page reaches the daemon through the extension', () => {
+    // ADR-0050: the daemon listens on an owner-only socket and the page talks
+    // to it through the extension's bridge (a postMessage, not a network
+    // request), so the page never needs a loopback http/ws connect target. A
+    // loopback source here would only let injected script probe whatever
+    // listens on the visitor's machine.
+    const csp = extractCsp(headersContent)
+    const tokens = (/connect-src\s+([^;]*)/.exec(csp)?.[1] ?? '').trim().split(/\s+/)
+    expect(tokens).toEqual(["'self'", FONT_SOURCE_ORIGIN])
   })
 
   it('connect-src does not contain preview-origin wildcard patterns', () => {

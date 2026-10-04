@@ -4,6 +4,7 @@
  * reason as SelectionOverlay.tsx — one focused file per rendered concern.
  * Purely a function of its props; never reads gesture/canvas state itself.
  */
+import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import type { DragPreview } from './drag-preview.js'
 
 export interface DragPreviewLayerProps {
@@ -25,7 +26,8 @@ export function DragPreviewLayer({ preview, zoom, contentSvg }: DragPreviewLayer
   const dashArray = `${6 / zoom} ${4 / zoom}`
   if (preview.kind === 'box' && contentSvg !== undefined) {
     return (
-      <div
+      <SceneSvg
+        svg={contentSvg.svg}
         data-testid="drag-preview"
         aria-hidden="true"
         // The preview's canvas-space box, exposed for tests: the visual
@@ -44,11 +46,6 @@ export function DragPreviewLayer({ preview, zoom, contentSvg }: DragPreviewLayer
           transform: `translate(${preview.box.x - contentSvg.originX}px, ${preview.box.y - contentSvg.originY}px)`,
           opacity: 0.85,
         }}
-        // Same trusted producer as the committed scene: canvas-render's
-        // serializer is the sole source of this string (see CanvasViewer's
-        // documented reasoning for dangerouslySetInnerHTML).
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene — canvas-render's escaping serializer
-        dangerouslySetInnerHTML={{ __html: contentSvg.svg }}
       />
     )
   }

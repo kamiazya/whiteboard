@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 
 /** The four seams a layout reads to draw what a document points at. */
 const SEAM_NAMES: ReadonlySet<string> = new Set([
@@ -14,29 +15,10 @@ export interface SeamDefinition {
   readonly text: string
 }
 
-function scriptKind(fileName: string): ts.ScriptKind {
-  return fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-}
-
-/** `(x)`, `x as T`, `x satisfies T`, `x!` around a value are the value. */
-function unwrap(expression: ts.Expression): ts.Expression {
-  let current = expression
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isSatisfiesExpression(current) ||
-    ts.isNonNullExpression(current) ||
-    ts.isTypeAssertionExpression(current)
-  ) {
-    current = current.expression
-  }
-  return current
-}
-
 /** A function written out, as opposed to a call that returns one or a name that points at one. */
 function isFunctionBody(expression: ts.Expression | undefined): boolean {
   if (expression === undefined) return false
-  const value = unwrap(expression)
+  const value = unwrapExpression(expression)
   return ts.isArrowFunction(value) || ts.isFunctionExpression(value)
 }
 
@@ -49,7 +31,7 @@ function seamNameOf(name: ts.Node | undefined): string | undefined {
   if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
     return SEAM_NAMES.has(name.text) ? name.text : undefined
   }
-  if (ts.isComputedPropertyName(name)) return seamNameOf(unwrap(name.expression))
+  if (ts.isComputedPropertyName(name)) return seamNameOf(unwrapExpression(name.expression))
   return undefined
 }
 
@@ -104,13 +86,7 @@ function definitionOf(node: ts.Node): Hit | undefined {
  * hands on a locally DECLARED function is caught at the declaration.
  */
 export function findSeamDefinitions(fileName: string, source: string): SeamDefinition[] {
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(fileName),
-  )
+  const file = parseSource(fileName, source)
   const found: SeamDefinition[] = []
   const visit = (node: ts.Node): void => {
     const hit = definitionOf(node)

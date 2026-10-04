@@ -32,6 +32,7 @@ import {
   sealBytes,
   sealedEnvelopeSchema,
 } from '@kamiazya/whiteboard-daemon-client/read-plane'
+import type { ReplicaKeyAnswer } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -54,16 +55,16 @@ import type {
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 
 /**
- * What the in-memory session-key holder answers for one document.
+ * What the in-memory session-key holder answers for one document: the
+ * daemon-client provider's answer plus the two this layer adds.
+ * `'rotated'` is a key generation the daemon has since replaced.
  * `'plaintext'` is `replica-store.ts`'s routing answer for a ref this build
  * never seals — a browser-kept workspace, or any `document:*` ref — so the
  * ONE factory can hand every construction the same decorator instead of
  * branching between a sealed and a bare `DocumentStore`.
  */
 export interface ReplicaKeyProvider {
-  keyFor(
-    docKey: string,
-  ): Promise<{ key: CryptoKey; epoch: number } | 'withheld' | 'rotated' | 'plaintext'>
+  keyFor(docKey: string): Promise<ReplicaKeyAnswer | 'rotated' | 'plaintext'>
 }
 
 /**
@@ -205,7 +206,7 @@ export class SealedDocumentStore implements DocumentStore {
     if (resolved === 'plaintext') return new Uint8Array(plaintext) as Uint8Array<ArrayBuffer>
     // A private copy: `sealBytes` wants the buffer-backed narrowing WebCrypto requires.
     const envelope = await sealBytes(resolved.key, new Uint8Array(plaintext), {
-      documentId: docKey,
+      docKey,
       epoch: resolved.epoch,
     })
     return encodeEnvelope(envelope)
@@ -235,7 +236,7 @@ export class SealedDocumentStore implements DocumentStore {
       )
     }
     try {
-      return await openBytes(resolved.key, envelope, { documentId: docKey, epoch: envelope.epoch })
+      return await openBytes(resolved.key, envelope, { docKey, epoch: envelope.epoch })
     } catch (cause) {
       throw new StoredDocumentUnreadableError(
         'malformed',

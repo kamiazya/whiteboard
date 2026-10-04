@@ -32,8 +32,9 @@ paths:
 - `CanvasViewer.tsx`: builds a scene via canvas-render's shared
   `layoutSpatialCanvas` (with the theme's `VIEWER_APPEARANCES` entry and
   codec's `parseMarkdownBody` injected) and renders it via canvas-render's
-  `renderSceneToSvg`, injecting the resulting string with
-  `dangerouslySetInnerHTML`.
+  `renderSceneToSvg`, injecting the resulting string through `SceneSvg`.
+- `SceneSvg.tsx`: the ONE component that turns a scene's SVG string into
+  DOM; apps/web imports it too.
 - `mount.ts`: the imperative `mountCanvasViewer` API for non-React hosts
   (the MCP Apps widget), converting `parseViewerScene`'s result into a
   thrown `ViewerSceneError` at this one imperative boundary.
@@ -82,8 +83,10 @@ paths:
 
 ## Conventions
 
-- `dangerouslySetInnerHTML` in `CanvasViewer.tsx` is deliberate, not an
-  unguarded sink: canvas-render's serializer is the SOLE producer of the
+- `SceneSvg`'s markup sink is deliberate, not an unguarded one, and it is
+  the only one: `tools/arch-lint`'s `html-sink-ledger.test.ts` fails any
+  other `dangerouslySetInnerHTML` or `innerHTML =` in shipped source until it
+  is ledgered with a reason. Canvas-render's serializer is the SOLE producer of the
   injected string and escapes `&`/`<`/`>` in text and `"`/`'` in attribute
   values (`packages/canvas-render/src/svg/format.ts`). No sanitizer
   dependency is added because of this.

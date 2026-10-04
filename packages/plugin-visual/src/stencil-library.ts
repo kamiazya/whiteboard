@@ -14,7 +14,11 @@ import {
   type StencilAssetInput,
   stencilAssetSchema,
 } from '@kamiazya/whiteboard-facet-engine'
-import { canvasColorSchema, type ExtensionFacets } from '@kamiazya/whiteboard-model'
+import {
+  canvasColorSchema,
+  compareCodeUnit,
+  type ExtensionFacets,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
@@ -125,6 +129,6 @@ export function readStencilLibrary(
     const parsed = libraryStencilSchema.safeParse(stencil)
     if (parsed.success) valid.push([name, parsed.data])
   }
-  valid.sort(([left], [right]) => (left < right ? -1 : 1))
+  valid.sort(([left], [right]) => compareCodeUnit(left, right))
   return Object.fromEntries(valid)
 }

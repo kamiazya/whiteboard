@@ -271,6 +271,21 @@ describe('purging a trashed document', () => {
     expect(await blobs.has({ ref: row.blob })).toEqual({ exists: false })
   })
 
+  it("destroys the purged entry's own bytes while another entry with different bytes stays", async () => {
+    const purged = await createAndDelete('design')
+    const kept = await createAndDelete('notes')
+    const rows = await index.listTrash({ workspaceId: WS })
+    const purgedRow = rows.find((entry) => entry.documentId === purged)
+    const keptRow = rows.find((entry) => entry.documentId === kept)
+    if (purgedRow === undefined || keptRow === undefined) throw new Error('expected two trash rows')
+    expect(blobs.size()).toBe(2)
+
+    await index.purgeTrashEntry({ workspaceId: WS, documentId: purged })
+
+    expect(await blobs.has({ ref: purgedRow.blob })).toEqual({ exists: false })
+    expect(await blobs.has({ ref: keptRow.blob })).toEqual({ exists: true })
+  })
+
   it('keeps the bytes another trash row still names', async () => {
     const documentId = await createAndDelete('design')
     const other = await createAndDelete('notes')
@@ -284,6 +299,45 @@ describe('purging a trashed document', () => {
     await index.purgeTrashEntry({ workspaceId: WS, documentId })
 
     expect(await blobs.has({ ref: row.blob })).toEqual({ exists: true })
+  })
+
+  it('keeps the bytes another trash row still names when one of them is restored', async () => {
+    const documentId = await createAndDelete('design')
+    const other = await createAndDelete('notes')
+    const [row] = (await index.listTrash({ workspaceId: WS })).filter(
+      (entry) => entry.documentId === documentId,
+    )
+    if (row === undefined) throw new Error('expected a trash row')
+    recordTrashEntry(docs.peek(WS), { ...row, documentId: other })
+
+    await index.restoreDocument({ workspaceId: WS, documentId })
+
+    expect(await blobs.has({ ref: row.blob })).toEqual({ exists: true })
+  })
+
+  it('keeps the evacuated bytes when the restore cannot be saved', async () => {
+    const documentId = await createAndDelete('design')
+    const failing = vi.spyOn(docs, 'save').mockRejectedValueOnce(new Error('disk full'))
+
+    await expect(index.restoreDocument({ workspaceId: WS, documentId })).rejects.toThrow(
+      'disk full',
+    )
+
+    failing.mockRestore()
+    expect(blobs.size()).toBe(1)
+  })
+
+  it('leaves the document restored and its row gone when dropping the old bytes fails', async () => {
+    const documentId = await createAndDelete('design')
+    const failing = vi.spyOn(blobs, 'delete').mockRejectedValueOnce(new Error('disk gone'))
+
+    await expect(index.restoreDocument({ workspaceId: WS, documentId })).rejects.toThrow(
+      'disk gone',
+    )
+
+    failing.mockRestore()
+    expect(await index.listTrash({ workspaceId: WS })).toEqual([])
+    expect(await index.resolveDocumentById({ workspaceId: WS, documentId })).not.toBeNull()
   })
 
   it('removes a row whose bytes are already gone, the one way to clear it', async () => {

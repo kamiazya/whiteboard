@@ -244,7 +244,7 @@ describe('replica-session-key: bounded lease lapse', () => {
     expect(second).not.toBe('withheld')
     if (first === 'withheld' || second === 'withheld') return
 
-    const context = { documentId: 'doc-1', epoch: 0 }
+    const context = { docKey: 'doc-1', epoch: 0 }
     const envelope = await sealBytes(first.key, new TextEncoder().encode('probe'), context)
     // If the lapse path failed to clear the memo, `second.key` would be the
     // SAME memoized CryptoKey derived from the pre-lapse workspace key, and
@@ -416,7 +416,7 @@ describe('replicaKeyProviderFor', () => {
     expect(second).not.toBe('withheld')
     if (first === 'withheld' || second === 'withheld') return
 
-    const context = { documentId: 'doc-1', epoch: 0 }
+    const context = { docKey: 'doc-1', epoch: 0 }
     const envelope = await sealBytes(first.key, new TextEncoder().encode('probe'), context)
     // If forget() failed to clear the memo, `second.key` would be the SAME
     // memoized CryptoKey as `first.key` and this would open cleanly.
@@ -456,10 +456,10 @@ describe('replicaKeyProviderFor', () => {
     const expected = await deriveDocumentKey({
       workspaceKey: otherWorkspaceKey,
       workspaceKeySalt: WORKSPACE_SALT,
-      documentId: 'doc-1',
+      docKey: 'doc-1',
       epoch: 0,
     })
-    const context = { documentId: 'doc-1', epoch: 0 }
+    const context = { docKey: 'doc-1', epoch: 0 }
     const envelope = await sealBytes(expected, new TextEncoder().encode('probe'), context)
     expect(new TextDecoder().decode(await openBytes(fresh.key, envelope, context))).toBe('probe')
   })
@@ -483,7 +483,7 @@ describe('replicaKeyProviderFor', () => {
     expect(second).not.toBe('withheld')
     if (first === 'withheld' || second === 'withheld') return
 
-    const context = { documentId: 'doc-1', epoch: 0 }
+    const context = { docKey: 'doc-1', epoch: 0 }
     const envelope = await sealBytes(first.key, new TextEncoder().encode('probe'), context)
     await expect(openBytes(second.key, envelope, context)).rejects.toMatchObject({
       name: 'OperationError',

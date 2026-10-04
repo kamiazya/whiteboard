@@ -45,6 +45,10 @@ const ESCAPES: Readonly<Record<string, string>> = {
     'a release-policy test that reads one workflow job through the arch-lint helper; the daemon-side twin of a guard that could not move (tool-arch-lint.md, "Repo-policy guards live here")',
   'packages/mcp-server/src/server/release/sbom-policy.test.ts -> tools/arch-lint/src/job-section.js':
     'a release-policy test that reads one workflow job through the arch-lint helper; the daemon-side twin of a guard that could not move (tool-arch-lint.md, "Repo-policy guards live here")',
+  'packages/mcp-server/src/server/contract-enum-producers.test.ts -> packages/daemon-client/src/api-contracts':
+    'a contract test that reads the daemon-client contracts directory as source, because the enums it checks producers against are declared there',
+  'packages/mcp-server/src/server/contract-enum-producers.test.ts -> packages/server-core/src':
+    'a contract test that reads the server-core source tree, which holds the producers of the enums it checks against the contracts',
   'apps/web/src/vitest-project-name.test.ts -> package.json':
     'asserts the root manifest and the web vitest project agree on a project name, so it has to read the root `package.json`',
   'tools/arch-lint/src/browser-launch-options.test.ts -> vitest.browser.launch-options.js':
@@ -138,6 +142,23 @@ describe('a relative import never leaves its workspace', () => {
     expect(workspaceDirs().length, 'the workspace walk found almost nothing').toBeGreaterThan(15)
     expect(FILES.length, 'the source walk found almost nothing').toBeGreaterThan(2000)
     expect(EDGES.length, 'the import walk found almost nothing').toBeGreaterThan(5000)
+  })
+
+  it('reads the worker URLs that bind a file to its worker, which no import statement spells', () => {
+    const workerEdges = EDGES.filter(({ from }) =>
+      [
+        'apps/web/src/components/spatial-editor/use-worker-scene.ts',
+        'apps/web/src/lib/sse-shared-stream-source.ts',
+        'apps/web/src/lib/layout-worker-pool.ts',
+      ].includes(from),
+    ).map(({ from, target }) => `${from} -> ${target}`)
+    expect(workerEdges).toEqual(
+      expect.arrayContaining([
+        'apps/web/src/components/spatial-editor/use-worker-scene.ts -> apps/web/src/lib/layout-worker.ts',
+        'apps/web/src/lib/sse-shared-stream-source.ts -> apps/web/src/lib/sse-shared-worker.js',
+        'apps/web/src/lib/layout-worker-pool.ts -> apps/web/src/lib/layout-worker.ts',
+      ]),
+    )
   })
 
   it('has no shipped file that imports outside its workspace', () => {

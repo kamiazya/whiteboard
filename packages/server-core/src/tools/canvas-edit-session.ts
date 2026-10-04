@@ -11,6 +11,7 @@ import {
   type CanvasEdge,
   type CanvasLine,
   endIn,
+  frameHolds,
   isFrame,
   nodePatchField,
   type nodePatchFieldsSchema,
@@ -180,11 +181,7 @@ export class CanvasEditSession {
   enclosedBy =
     (group: SpatialNode) =>
     (node: SpatialNode): boolean =>
-      node.id !== group.id &&
-      node.x >= group.x &&
-      node.y >= group.y &&
-      node.x + node.width <= group.x + group.width &&
-      node.y + node.height <= group.y + group.height
+      node.id !== group.id && frameHolds(group, node)
   /**
    * Grows a group so that every rect is inside it, gutter included.
    * Grow-only, only when a rect reaches past the right or bottom edge

@@ -142,6 +142,44 @@ function importTypeSpecifier(node: ts.ImportTypeNode): string | undefined {
   return ts.isLiteralTypeNode(node.argument) ? staticStringText(node.argument.literal) : undefined
 }
 
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+
+const isImportMetaUrl = (node: ts.Expression | undefined): boolean =>
+  node !== undefined &&
+  ts.isPropertyAccessExpression(node) &&
+  node.name.text === 'url' &&
+  ts.isMetaProperty(node.expression) &&
+  node.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+
+/**
+ * The file `new URL('./x.ts', import.meta.url)` names, as the relative
+ * specifier an import of it would carry. That is how a bundler is told to build
+ * a worker's module graph (`new Worker(new URL(...))`), so it binds the two
+ * files exactly as an import does and reaches the same layer boundaries — an
+ * edge no `import` statement spells. Only a URL resolved against
+ * `import.meta.url` counts: any other base names no file this tree owns.
+ */
+function importMetaUrlSpecifier(node: ts.NewExpression): string | undefined {
+  if (!ts.isIdentifier(node.expression) || node.expression.text !== 'URL') return undefined
+  const [target, base] = node.arguments ?? []
+  const text = staticStringText(target)
+  if (
+    text === undefined ||
+    !isImportMetaUrl(base) ||
+    URL_SCHEME.test(text) ||
+    text.startsWith('/')
+  ) {
+    return undefined
+  }
+  return text.startsWith('./') || text.startsWith('../') ? text : `./${text}`
+}
+
+/** The module an expression that runs at load time names, which is a value edge by construction. */
+function evaluatedSpecifier(node: ts.Node): string | undefined {
+  if (ts.isCallExpression(node)) return callSpecifier(node)
+  return ts.isNewExpression(node) ? importMetaUrlSpecifier(node) : undefined
+}
+
 interface NodeSpecifier {
   readonly specifier: string
   readonly typeOnly: boolean
@@ -167,10 +205,8 @@ function specifierOfNode(node: ts.Node): NodeSpecifier | undefined {
   ) {
     return { specifier: node.moduleReference.expression.text, typeOnly: node.isTypeOnly }
   }
-  if (ts.isCallExpression(node)) {
-    const specifier = callSpecifier(node)
-    if (specifier !== undefined) return { specifier, typeOnly: false }
-  }
+  const evaluated = evaluatedSpecifier(node)
+  if (evaluated !== undefined) return { specifier: evaluated, typeOnly: false }
   if (ts.isImportTypeNode(node)) {
     const specifier = importTypeSpecifier(node)
     if (specifier !== undefined) return { specifier, typeOnly: true }

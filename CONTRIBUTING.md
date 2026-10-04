@@ -62,6 +62,10 @@ Releases are automated by [release-please](https://github.com/googleapis/release
 Keep published MCP wrapper configs on `@latest` unless you also update release-please sync rules. If you pin `@kamiazya/whiteboard-mcp@x.y.z` inside `.mcp.json` or plugin manifests, add the pinned fields to `release-please-config.json` `extra-files` at the same time.
 When upgrading `@modelcontextprotocol/sdk`, re-check the supported MCP protocol matrix in `docs/contributing/mcp-debugging.md` and the initialize negotiation tests.
 
+## Where code goes
+
+Package boundaries are cut by runtime requirements (the shared layer runs unchanged on Node, the browser and Cloudflare Workers), and each package has a fixed list of what it may depend on. [`.claude/rules/architecture-map.md`](.claude/rules/architecture-map.md) is the table and the rules; the path-scoped `.claude/rules/package-<name>.md` beside it covers one package in detail. The same table, as data, is [`tools/arch-lint/src/architecture-map.data.ts`](tools/arch-lint/src/architecture-map.data.ts) (with its helpers in [`architecture-map.ts`](tools/arch-lint/src/architecture-map.ts)), and `pnpm vitest run --project arch-lint-node` fails a banned import, a dependency in the wrong direction, or a new third-party dependency outside a package's allowlist. Unsure where something belongs? Read the table first; the pre-push gate runs those checks too.
+
 ## Lint
 
 [Biome](https://biomejs.dev/) is already configured (`biome.json`). Please try to keep new and modified files passing before you commit:
@@ -92,6 +96,7 @@ Hooks are a local safety net, **not** a replacement for CI (the authoritative ga
 - New behavior has at least one nearest-layer automated test
 - For UI / browser-mode changes: `pnpm test:browser` is green
 - For MCP tool / route changes: `pnpm smoke:e2e` is green
+- For packaging, tarball or binary changes: `pnpm smoke:distribution:packaged:node` is green (needs `pnpm build`; CI runs it on every PR as `packaged-smoke`)
 - README / AGENTS.md updated if the public surface changed
 - No secrets, `.env`, or large binaries committed
 
@@ -111,13 +116,14 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
    - `verify-pack-contents`, then `pnpm pack` → `npm publish`
    - GitHub Release + tag creation
 
-   The `docker-publish-sign` job runs the same gate, then the container smokes, before it pushes and signs the image. [docs/contributing/releasing.md](docs/contributing/releasing.md) has the step-by-step.
+   The `docker-publish-sign` job runs the same gate, then the container smokes, before it pushes and signs the image. Two more jobs run from the same release: `advance-stable` fast-forwards the `stable` branch (what the Claude Code marketplace and Codex `@stable` plugin consumers resolve) to the release tag and fails, rather than forces, when `stable` has diverged; `deploy-web` deploys `apps/web` to Cloudflare Pages production under the `production-web` environment. The jobs are independent of each other. [docs/contributing/releasing.md](docs/contributing/releasing.md) has the step-by-step, the required environments and the `advance-stable` recovery.
 
 ### Local checks before merging a release PR
 
 ```bash
 pnpm check:release-candidate   # typecheck, build, distribution + artifact checks, SBOM, tests, smokes (spends API quota: chains the claude and codex CLI smokes)
-npm pack --dry-run             # verify the tarball includes dist/, skills/, package README, and LICENSE
+(cd packages/mcp-server && npm pack --dry-run)                                  # after `pnpm build`: the tarball's file list; package.json `files` is dist/, README.md, LICENSE, NOTICE and CHANGELOG.md
+(cd packages/mcp-server && node ../../tools/checks/src/verify-pack-contents.mjs)  # the release job's check: required files present, no test artifacts or _artifacts/
 ```
 
 `pnpm check:release-candidate:local` adds the mutation lane; `pnpm check:release-candidate:docker` adds the container smokes.

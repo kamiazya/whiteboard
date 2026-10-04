@@ -281,6 +281,17 @@ describe('buildValueImportGraph: alias specifiers', () => {
   })
 })
 
+describe('buildValueImportGraph: a worker URL is an edge', () => {
+  it('closes a cycle that only a `new Worker(new URL(...))` completes', () => {
+    const files = [
+      file('src/a.ts', "export const w = new Worker(new URL('./b.ts', import.meta.url))"),
+      file('src/b.ts', "import { w } from './a.js'"),
+    ]
+    expect(buildValueImportGraph(files).get('src/a.ts')).toEqual(['src/b.ts'])
+    expect(findImportCycles(buildValueImportGraph(files))).toEqual([['src/a.ts', 'src/b.ts']])
+  })
+})
+
 describe('buildValueImportGraph + findImportCycles: end-to-end', () => {
   it('does not flag a cycle that is type-only in one direction', () => {
     const files = [

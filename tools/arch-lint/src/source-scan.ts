@@ -18,6 +18,7 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
+import { scriptKindOf } from './ast-helpers.js'
 
 /**
  * Every `.ts`/`.tsx` under `dir`, skipping `node_modules`, `dist` and `tmp`.
@@ -105,7 +106,7 @@ function syntaxErrors(file: ts.SourceFile): number {
 
 function parseSource(source: string, fileName: string | undefined): ts.SourceFile {
   if (fileName !== undefined) {
-    return parse(source, fileName, fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
+    return parse(source, fileName, scriptKindOf(fileName))
   }
   const plain = parse(source, 'source.ts', ts.ScriptKind.TS)
   if (syntaxErrors(plain) === 0) return plain

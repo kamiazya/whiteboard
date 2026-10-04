@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { adapterFiles } from './adapter-files.js'
+import { unwrapExpression } from './ast-helpers.js'
 import { collectModuleSpecifiers } from './scanner.js'
 
 /**
@@ -42,20 +43,6 @@ function isProcessModule(specifier: string): boolean {
   return specifier === 'node:process' || specifier === 'process'
 }
 
-function unwrap(node: ts.Expression): ts.Expression {
-  let current = node
-  while (
-    ts.isParenthesizedExpression(current) ||
-    ts.isAsExpression(current) ||
-    ts.isNonNullExpression(current) ||
-    ts.isTypeAssertionExpression(current) ||
-    ts.isSatisfiesExpression(current)
-  ) {
-    current = current.expression
-  }
-  return current
-}
-
 /** The name a property or string-key access reads, if it reads one. */
 function accessedName(node: ts.Node): string | undefined {
   if (ts.isPropertyAccessExpression(node)) return node.name.text
@@ -74,7 +61,7 @@ function keyText(name: ts.Node | undefined): string | undefined {
 
 /** Whether an expression is the `process` object: a binding of it, or `<anything>.process`. */
 function isProcessObject(expression: ts.Expression, bindings: ReadonlySet<string>): boolean {
-  const inner = unwrap(expression)
+  const inner = unwrapExpression(expression)
   return ts.isIdentifier(inner) ? bindings.has(inner.text) : accessedName(inner) === 'process'
 }
 

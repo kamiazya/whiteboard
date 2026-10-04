@@ -97,10 +97,10 @@ export function FacetCatalogPicker({
         // handed — so a loader could write a shape the facet refuses.
         //
         // At the PICK rather than over the loaded sections, measured: the
-        // bundled catalog is 1914 rows and validating all of them costs
+        // bundled catalog is ~1.9k rows and validating all of them costs
         // 15-23ms of the thread that just opened the panel, every open. A
         // row the facet refuses is a plugin defect its own catalog test
-        // owes (`plugin-visual/src/emoji/catalog.test.ts` parses all 1914);
+        // owes (`plugin-visual/src/emoji/catalog.test.ts` parses every row);
         // paying a frame per open to soften it is the wrong trade. What
         // this must not do is let it reach storage, and it does not.
         //

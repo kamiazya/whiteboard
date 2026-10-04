@@ -19,8 +19,8 @@ vi.mock('./config.js', () => ({
   getDataDir: () => tempDir,
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  // Server-mode never reads DIST_WEB_APP_DIR — its root serves a static
-  // inline placeholder (see app.ts), not the apps/web build.
+  // No web build exists at this path, so server mode answers its root with
+  // the placeholder page (server-mode-web-app.ts).
   DIST_WEB_APP_DIR: '/tmp/whiteboard/dist/web-app',
 }))
 
@@ -150,11 +150,10 @@ describe('app — server-mode composition', () => {
     expect(res.status).toBe(200)
   })
 
-  // R5 of the MCP-UI retirement (ADR 0001): server-mode's root serves a
-  // static placeholder, not apps/web — apps/web's provider model has no
-  // OAuth/JWT auth flow, only a local-daemon bearer token, so injecting the
-  // apps/web build here without a real token would 401 on every request.
-  describe('server-mode root serves a static placeholder (R5 UI retirement)', () => {
+  // A server-mode keeper with no web build in its image answers its root with
+  // a placeholder, and never injects a daemon token or the local-daemon
+  // runtime config into it (ADR-0047).
+  describe('server-mode root without a web build serves the placeholder', () => {
     it('GET / returns 200 text/html with no token or runtime-config injection', async () => {
       const app = createApp(makeServerModeOptions([]))
       const res = await app.request('/')
@@ -166,7 +165,7 @@ describe('app — server-mode composition', () => {
       expect(html).toContain('/mcp')
     })
 
-    it('reserved prefixes (/api, /mcp, /ws, /.well-known) do not fall through to the placeholder', async () => {
+    it('reserved prefixes (/api, /mcp, /.well-known) do not fall through to the placeholder', async () => {
       const app = createApp(makeServerModeOptions([]))
       const apiRes = await app.request('/api/not-real')
       expect(apiRes.status).not.toBe(200)

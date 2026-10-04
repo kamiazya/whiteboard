@@ -11,6 +11,7 @@
  */
 
 import { z } from 'zod'
+import { compareCodeUnit } from './code-unit-order.js'
 
 /**
  * The SHAPE glyphs a spec may name — closed, and owned by the core the way
@@ -233,7 +234,7 @@ export function facetPayloadKey(payload: unknown): string {
     if (typeof value !== 'object' || value === null) return value
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .sort(([a], [b]) => compareCodeUnit(a, b))
         .map(([key, member]) => [key, canonical(member)]),
     )
   }

@@ -67,7 +67,7 @@ describe('typing a name after a colon finds the emoji it names', () => {
   })
 
   /**
-   * A completion list is read at a glance, and the source is 1914 rows. An
+   * A completion list is read at a glance, and the source is ~1.9k rows. An
    * unbounded answer would push CodeMirror into rendering all of them.
    */
   it('bounds what it returns', () => {

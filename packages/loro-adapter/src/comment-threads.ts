@@ -6,6 +6,7 @@ import {
   canvasCommentSchema,
   commentMessageSchema,
   commentThreadSchema,
+  compareCodeUnit,
   compareMessages,
   threadFromCanvasComment,
 } from '@kamiazya/whiteboard-model'
@@ -151,7 +152,7 @@ export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
     })
     if (parsed.success) threads.push(parsed.data)
   }
-  return threads.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  return threads.sort((a, b) => compareCodeUnit(a.id, b.id))
 }
 
 /**

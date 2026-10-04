@@ -494,6 +494,47 @@ describe('wb_facet_set refuses a locked node or edge, and writes nothing', () =>
     expect(await storedBoard(fx)).toEqual(before)
   })
 
+  // `.some` over the element's tags, not `.every`: an element carrying one
+  // renamed tag and one untouched tag is still rewritten by the rename.
+  test.each([
+    'node',
+    'edge',
+  ] as const)('a board-wide rename refuses a locked %s that carries a tag the rename leaves alone', async (lock) => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'a',
+            x: 0,
+            y: 0,
+            width: 80,
+            height: 40,
+            text: 'A',
+            tags: ['old', 'keep'],
+          }),
+          textNode({ id: 'b', x: 300, y: 0, width: 80, height: 40, text: 'B', tags: ['keep'] }),
+        ],
+        edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['old', 'keep'] }],
+      })
+      if (lock === 'node') setNodeLock(doc, 'a', true)
+      else setEdgeLock(doc, 'e', true)
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, CANVAS_ID, 'board')
+    const fx = {
+      store,
+      deps: makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    }
+    const before = await storedBoard(fx)
+
+    await expect(set(fx, { tags: { rename: [{ from: 'old', to: 'new' }] } })).rejects.toMatchObject(
+      { name: 'ElementLockedError' },
+    )
+
+    expect(await storedBoard(fx)).toEqual(before)
+  })
+
   test('a board-wide rename that reaches only unlocked elements still applies', async () => {
     const fx = await lockedFixture()
 
@@ -516,5 +557,93 @@ describe('wb_facet_set refuses a locked node or edge, and writes nothing', () =>
     const node = (await storedBoard(fx)).nodes.find((candidate) => candidate.id === 'b')
     expect(node?.facets).toEqual({ 'visual.shape/v0': { kind: 'ellipse' } })
     expect(node?.tags).toContain('t')
+  })
+})
+
+describe('what an op stores of a facets bucket it carries', () => {
+  const stored = async (fx: Fixture) =>
+    readSpatialCanvas((await loadDocument(fx.deps, WORKSPACE_ID, CANVAS_ID)).doc)
+  const nodeC = (facets: unknown) => ({
+    op: 'node.add',
+    node: { type: 'text', text: 'c', id: 'c', x: 0, y: 300, facets },
+  })
+
+  test('a deletion tombstone beside a valid payload is not stored', async () => {
+    const fx = await fixture()
+    await edit(fx.deps, [
+      nodeC({ 'visual.shape/v0': { kind: 'ellipse' }, 'visual.stencil/v0': null }),
+    ])
+    expect((await stored(fx)).nodes.find((n) => n.id === 'c')?.facets).toEqual({
+      'visual.shape/v0': { kind: 'ellipse' },
+    })
+  })
+
+  test('a bucket of tombstones alone stores no bucket at all', async () => {
+    const fx = await fixture()
+    await edit(fx.deps, [nodeC({ 'visual.shape/v0': null })])
+    const node = (await stored(fx)).nodes.find((n) => n.id === 'c')
+    expect(node).toBeDefined()
+    expect('facets' in (node as object)).toBe(false)
+  })
+
+  test('edge.add and line.add store a valid bucket', async () => {
+    const fx = await fixture()
+    await edit(fx.deps, [
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'e2',
+          from: { node: 'a' },
+          to: { node: 'b' },
+          facets: { 'visual.edges/v0': { routing: 'curved' } },
+        },
+      },
+      {
+        op: 'line.add',
+        line: {
+          id: 'l2',
+          from: { kind: 'point', point: { x: 0, y: 200 } },
+          to: { kind: 'point', point: { x: 50, y: 200 } },
+          facets: { 'visual.ink/v0': { group: 'g' } },
+        },
+      },
+    ])
+    const canvas = await stored(fx)
+    expect(canvas.edges.find((e) => e.id === 'e2')?.facets).toEqual({
+      'visual.edges/v0': { routing: 'curved' },
+    })
+    expect(canvas.lines?.find((l) => l.id === 'l2')?.facets).toEqual({
+      'visual.ink/v0': { group: 'g' },
+    })
+  })
+
+  test('a patch that carries no facets leaves the stored bucket alone', async () => {
+    const fx = await fixture()
+    await edit(fx.deps, [
+      {
+        op: 'edge.patch',
+        id: 'e',
+        patch: { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+      },
+    ])
+    await edit(fx.deps, [{ op: 'edge.patch', id: 'e', patch: { label: 'renamed' } }])
+    const edge = (await stored(fx)).edges.find((e) => e.id === 'e')
+    expect(edge?.label).toBe('renamed')
+    expect(edge?.facets).toEqual({ 'visual.edges/v0': { routing: 'curved' } })
+  })
+
+  test('a patch whose bucket is all tombstones clears the stored bucket', async () => {
+    const fx = await fixture()
+    await edit(fx.deps, [
+      {
+        op: 'edge.patch',
+        id: 'e',
+        patch: { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+      },
+    ])
+    await edit(fx.deps, [
+      { op: 'edge.patch', id: 'e', patch: { facets: { 'visual.edges/v0': null } } },
+    ])
+    expect((await stored(fx)).edges.find((e) => e.id === 'e')?.facets).toBeUndefined()
   })
 })

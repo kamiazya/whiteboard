@@ -111,4 +111,36 @@ describe('wb_version_* tools over the daemon history', () => {
     expect(restored).toMatchObject({ documentId, restoredVersionId: savedRow?.version.id })
     expect(await textOf(reborn, documentId)).toBe('original')
   })
+
+  it('a restore into a new targetPath answers the id the daemon index holds for that path, not the source', async () => {
+    const deps = await resolveTestServerDeps(tmp.dir)
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
+    const { documentId } = await deps.documentIndex.createDocument({
+      workspaceId: WS,
+      path: 'canvas-src',
+      kind: 'spatial',
+    })
+    await writeText(deps, documentId, 'original')
+    const { saved } = await createVersionSaveTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [documentId],
+      label: 'checkpoint',
+    })
+
+    const restored = await createVersionRestoreTool(deps).execute({
+      workspaceId: WS,
+      documentId,
+      versionId: saved[0]?.version.id,
+      targetPath: 'canvas-copy',
+    })
+
+    const copy = await deps.documentIndex.resolveDocument({
+      workspaceId: WS,
+      path: 'canvas-copy',
+    })
+    expect(copy).not.toBeNull()
+    expect(restored.mode).toBe('into-target')
+    expect(restored.documentId).toBe(copy?.documentId)
+    expect(restored.documentId).not.toBe(documentId)
+  })
 })

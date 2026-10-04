@@ -87,6 +87,58 @@ test('isValidDesignShape agrees with explainDesignShape on every fixture', () =>
   }
 })
 
+// A list field is only as good as its WORST entry: `every` over the entries is what a mutant to
+// `some` would break, and a one-entry fixture cannot tell the two apart.
+test('one blank entry among good ones is refused by both halves of the gate', () => {
+  for (const field of ['properties', 'blastRadius', 'userReach']) {
+    const design = { ...complete, [field]: ['none: fine', '   '] }
+    assert.equal(isValidDesignShape(design), false, `${field}: shape`)
+    const problems = explainDesignShape(design)
+    assert.equal(problems.length, 1, `${field}: explain`)
+    assert.ok(problems[0].startsWith(`${field}:`), problems[0])
+  }
+})
+
+test('one non-string entry among strings is refused in every string list', () => {
+  const mixed = ['ok', 5]
+  const designs = {
+    completionCriteria: { ...complete, completionCriteria: mixed },
+    unit: { ...complete, testScenarios: { unit: mixed } },
+    risks: { ...complete, risks: mixed },
+    browser: { ...complete, testScenarios: { unit: ['ok'], browser: mixed } },
+    e2e: { ...complete, testScenarios: { unit: ['ok'], e2e: mixed } },
+  }
+  for (const [name, design] of Object.entries(designs)) {
+    assert.equal(isValidDesignShape(design), false, name)
+  }
+  assert.equal(explainDesignShape(designs.completionCriteria).length, 1)
+  assert.equal(explainDesignShape(designs.unit).length, 1)
+})
+
+test('a defined value that is not a list is refused where a list is required', () => {
+  const problems = explainDesignShape({ ...complete, completionCriteria: 'not a list' })
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /^completionCriteria: present but empty or malformed/)
+  assert.equal(explainDesignShape({ ...complete, testScenarios: { unit: 'not a list' } }).length, 1)
+})
+
+test('a null testScenarios is refused rather than thrown on, and reads as malformed', () => {
+  const design = { ...complete, testScenarios: null }
+  assert.equal(isValidDesignShape(design), false)
+  const problems = explainDesignShape(design)
+  assert.equal(problems.length, 1)
+  assert.match(problems[0], /^testScenarios\.unit: present but empty or malformed/)
+})
+
+test('a missing field says "missing", a present one that fails says it is malformed', () => {
+  const { scope, ...noScope } = complete
+  assert.match(explainDesignShape(noScope)[0], /^scope: missing/)
+  assert.match(
+    explainDesignShape({ ...complete, scope: 7 })[0],
+    /^scope: present but empty or malformed/,
+  )
+})
+
 // --- execution-mode handback ---
 import { shouldHandBackForLiveVerification } from './explain-design.mjs'
 

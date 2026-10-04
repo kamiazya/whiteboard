@@ -174,7 +174,7 @@ refutes it.
 SHOWS is still the English short name, because the UI around it is English
 and translating one string while leaving the rest is a half-localised panel;
 what it MATCHES is a different question, and a person typing 星 is looking
-for something this build has. Full coverage of all 1914, +118KB raw / ~34KB
+for something this build has. Full coverage of every row, +118KB raw / ~34KB
 gzipped, in the lazily-loaded chunk.
 
 Two mechanics it needed, both found by measuring:
@@ -218,7 +218,7 @@ Its symbol map (`#` -> `hash`, `*` -> `asterisk`) is what keeps slugs unique,
 and it came from measuring rather than reading: stripping punctuation
 outright collides `keycap: #` with `keycap: *`, both landing on `keycap`. A
 shortcode naming two emoji is the one defect this vocabulary must not have,
-so `catalog.test.ts` asserts every one of the 1914 is distinct — over the
+so `catalog.test.ts` asserts every row is distinct — over the
 whole table, so a future Unicode release that introduces a collision fails
 the suite rather than shipping an ambiguous `:name:`.
 
@@ -254,7 +254,7 @@ against the 69.5KB this costs, so a second table buys 30KB and pays with a
 drift class — the day it lags, the picker inserts a shortcode the renderer
 will not resolve, silently, in a document that already has the text in it.
 `shortcode.test.ts` checks the two directions against each other over all
-1914 rows rather than against a hand-written list.
+~1.9k rows rather than against a hand-written list.
 
 `./emoji/search` is the TYPING half — `searchEmojiShortcodes(query)`, which
 the markdown editor's `:` completion reaches by dynamic import. It reads the

@@ -63,6 +63,7 @@ import {
   DocumentNotFoundError,
   DocumentPathContestedError,
   DocumentPathTakenError,
+  KeyedSerializer,
   resolveWorkspaceHandle,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
@@ -176,6 +177,14 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
       if (restored === null) return null
       forgetTrashEntry(doc, input.documentId)
       await this.docs.save(input.workspaceId, doc)
+      // After the save, not before: a failure between the two would otherwise
+      // leave a row naming bytes that are gone. The other order strands one
+      // blob a later purge cannot reach, which costs space and not the document.
+      // A restored document is a new tree node, so its next evacuation is
+      // different bytes — this one is never reused.
+      if (!isNamedByAnotherRow(readTrashEntries(doc), entry)) {
+        await this.blobs.delete({ ref: entry.blob })
+      }
       return restored
     })
   }
@@ -201,11 +210,7 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
       const rows = readTrashEntries(doc)
       const entry = rows.find((row) => row.documentId === input.documentId)
       if (entry === undefined) return false
-      const shared = rows.some(
-        (row) =>
-          row.documentId !== entry.documentId && blobRefKey(row.blob) === blobRefKey(entry.blob),
-      )
-      if (!shared) await this.blobs.delete({ ref: entry.blob })
+      if (!isNamedByAnotherRow(rows, entry)) await this.blobs.delete({ ref: entry.blob })
       forgetTrashEntry(doc, entry.documentId)
       await this.docs.save(input.workspaceId, doc)
       return true
@@ -220,17 +225,10 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
    * the create — and without this an interleaved pair produces the duplicate
    * the check exists to prevent.
    */
-  readonly #writes = new Map<string, Promise<unknown>>()
+  readonly #writes = new KeyedSerializer()
 
   #serialise<T>(workspaceId: string, body: () => Promise<T>): Promise<T> {
-    const previous = this.#writes.get(workspaceId) ?? Promise.resolve()
-    // `.then(body, body)` so a failed operation does not poison the queue.
-    const next = previous.then(body, body)
-    this.#writes.set(
-      workspaceId,
-      next.catch(() => {}),
-    )
-    return next
+    return this.#writes.run(workspaceId, body)
   }
 
   async #open(workspaceId: string): Promise<LoroDoc> {
@@ -473,6 +471,13 @@ function moveCollision(
       return occupant === undefined ? [] : [{ produced, withFolder: occupant.type === 'folder' }]
     })
   return (collisions.find((c) => !c.withFolder) ?? collisions[0])?.produced
+}
+
+/** Whether a purge or restore of `entry` must leave its bytes for another trash row. */
+function isNamedByAnotherRow(rows: readonly TrashEntry[], entry: TrashEntry): boolean {
+  return rows.some(
+    (row) => row.documentId !== entry.documentId && blobRefKey(row.blob) === blobRefKey(entry.blob),
+  )
 }
 
 function entryOf(found: {

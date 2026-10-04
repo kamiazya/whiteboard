@@ -5,25 +5,20 @@ import type { CredentialResolver, ResolvedGrant } from '../security/credential-r
 import { rememberGrant } from '../security/membership-gate.js'
 import { type RouteScopeDecision, resolveApiRouteScope } from '../security/route-scope-registry.js'
 
-// Local-daemon mode requires the shared bearer token on every /api/* request,
-// read or write. `/api/runtime/ping` is the sole exception — it is the
-// availability probe apps/web calls before it knows whether a token is even
-// available (see ADR-0002) — everything else under /api/runtime/* re-checks
-// the bearer itself (runtime.ts), so double-gating it here is redundant but
-// harmless, not a hole.
+// Every /api/* request needs a credential the resolver accepts, read or write.
+// Which routes are exempt is declared once, in `route-scope-registry.ts`, and
+// the middleware below consults it before this gate — so this function is only
+// the /api boundary and names no path of its own.
 //
-// Reads are gated too, not carved out. A loopback bind, a Host-loopback check
-// and hard-to-guess ids contain a read only while nobody else can reach the
-// port; once a hosted origin is an admitted CORS caller (ADR-0005), an
-// admitted origin, or anyone who gets past the allowlist, could read every
-// document with no credential at all. Gating reads costs clients nothing:
-// every read already goes through a bearer-carrying fetch (daemon-client's
-// api-client.ts apiFetch, and every thumbnail/file consumer fetches bytes and
-// renders an object URL instead of a bare <img src>).
+// Reads are gated too, because a narrower credential (a member's, a macaroon,
+// an OAuth token) is held to its scopes on a read as well, and because being
+// able to reach the transport (the owner-only socket locally, a network
+// listener in server mode) is not authority to read documents. Every client
+// read already goes through a bearer-carrying fetch (daemon-client's
+// api-client.ts apiFetch; thumbnail and file consumers fetch bytes and render
+// an object URL instead of a bare <img src>), so gating them costs nothing.
 export function requiresDaemonAuth(path: string): boolean {
-  if (!path.startsWith('/api/')) return false
-  if (path === '/api/runtime/ping') return false
-  return true
+  return path.startsWith('/api/')
 }
 
 /**

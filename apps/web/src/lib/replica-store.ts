@@ -26,7 +26,7 @@ import {
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
-import { workspaceIdOfDocKey } from '@kamiazya/whiteboard-ports'
+import { workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { sealedUnderSupersededKey } from './replicas.js'
@@ -73,7 +73,7 @@ function sourceFor(daemonBaseUrl: string): ReplicaSource | undefined {
 
 const routingProvider: ReplicaKeyProvider = {
   async keyFor(docKey) {
-    const workspaceId = workspaceIdOfDocKey(docKey)
+    const workspaceId = workspaceIdOfStoredDocKey(docKey)
     // `SealedDocumentStore` only ever asks with a `docRefKey`, so the one shape
     // that is not a workspace record is a `document:*` key — never sealed, per
     // the file header. Plaintext is therefore the answer for that shape alone,

@@ -11,11 +11,9 @@
  * the editor's scene is the one SVG in this container and tests reach for
  * it by tag.
  */
-import type { SceneLegend } from '@kamiazya/whiteboard-canvas-render'
+import { legendValueLabel, type SceneLegend } from '@kamiazya/whiteboard-canvas-render'
 import { ChevronDown } from 'lucide-react'
 import { useState } from 'react'
-
-const UNTAGGED = 'untagged'
 
 export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
   const [open, setOpen] = useState(true)
@@ -49,7 +47,7 @@ export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
                 <span
                   key={entry.value}
                   className="flex items-center gap-1.5"
-                  data-testid={`legend-${key.of}-${entry.value === '' ? UNTAGGED : entry.value}`}
+                  data-testid={`legend-${key.of}-${legendValueLabel(entry.value)}`}
                 >
                   {key.of === 'edges' ? (
                     <span
@@ -74,7 +72,7 @@ export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
                       }}
                     />
                   )}
-                  <span>{entry.value === '' ? UNTAGGED : entry.value}</span>
+                  <span>{legendValueLabel(entry.value)}</span>
                 </span>
               ))}
             </div>

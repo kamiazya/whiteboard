@@ -1,5 +1,5 @@
 import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
-import { canvasColorSchema } from '@kamiazya/whiteboard-model'
+import { canvasColorSchema, compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -295,7 +295,7 @@ export function createFacetListTool(deps: ServerDeps) {
         )
         // Sorted by key so two calls agree and a diff of the output is
         // stable; registration order is an implementation detail.
-        .sort((a, b) => (a.key < b.key ? -1 : 1))
+        .sort((a, b) => compareCodeUnit(a.key, b.key))
       const facets = allFacets.filter(
         (facet) => parsed.target === undefined || facet.targets.includes(parsed.target),
       )

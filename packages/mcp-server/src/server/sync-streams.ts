@@ -8,8 +8,8 @@
 // notifier read and write through these functions without importing a route.
 
 import {
-  WORKSPACE_DOC_KEY_PREFIX,
   workspaceDocKey,
+  workspaceIdOfSyncKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type {
   SyncMessageEvent,
@@ -88,8 +88,8 @@ export function sseSubscribedWorkspaceIds(): string[] {
   const ids = new Set<string>()
   for (const stream of streams.values()) {
     for (const { key } of stream.docs.values()) {
-      if (key.startsWith(WORKSPACE_DOC_KEY_PREFIX))
-        ids.add(key.slice(WORKSPACE_DOC_KEY_PREFIX.length))
+      const workspaceId = workspaceIdOfSyncKey(key)
+      if (workspaceId !== null) ids.add(workspaceId)
     }
   }
   return [...ids]

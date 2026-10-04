@@ -22,6 +22,7 @@ const tmp = withTempDataDir('whiteboard-payload-too-large-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: 's1' })
 })
 
 vi.mock('../config.js', () => ({

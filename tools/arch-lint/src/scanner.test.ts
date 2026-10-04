@@ -253,3 +253,43 @@ describe('scanSourceForBoundaryViolations — edges the other cases do not reach
     expect(found.map((v) => [v.name, v.line])).toEqual([['window', 3]])
   })
 })
+
+describe('collectModuleSpecifiers: a URL resolved against import.meta.url', () => {
+  const specifiersOf = (text: string) =>
+    collectModuleSpecifiers(
+      ts.createSourceFile('fixture.ts', text, ts.ScriptTarget.Latest, true),
+    ).map(({ specifier, typeOnly }) => [specifier, typeOnly])
+
+  it('reads the file a worker is built from as a value edge', () => {
+    expect(
+      specifiersOf(
+        [
+          "const w = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' })",
+          "const s = new SharedWorker(new URL('../sse-shared-worker.js', import.meta.url))",
+        ].join('\n'),
+      ),
+    ).toEqual([
+      ['./layout-worker.ts', false],
+      ['../sse-shared-worker.js', false],
+    ])
+  })
+
+  it('writes a bare file name the way an import of it would be', () => {
+    expect(specifiersOf("new URL('worker.ts', import.meta.url)")).toEqual([['./worker.ts', false]])
+  })
+
+  it('leaves a URL with another base, a scheme, a root path or a computed name alone', () => {
+    expect(
+      specifiersOf(
+        [
+          "new URL('./x.ts', base)",
+          "new URL('./x.ts')",
+          "new URL('https://example.com/x.js', import.meta.url)",
+          "new URL('/x.js', import.meta.url)",
+          'new URL(name, import.meta.url)',
+          "new URL('./x.ts', import.meta.dirname)",
+        ].join('\n'),
+      ),
+    ).toEqual([])
+  })
+})

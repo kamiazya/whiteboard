@@ -17,6 +17,7 @@
 
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { Cron } from 'croner'
 import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
 import { getLogger } from '../log.js'
@@ -193,7 +194,9 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
       return
     }
     // Newest first by name, which for this format is newest first by time.
-    const ours = entries.filter((name) => isBackupDirName(name)).sort((a, b) => (a < b ? 1 : -1))
+    const ours = entries
+      .filter((name) => isBackupDirName(name))
+      .sort((a, b) => compareCodeUnit(b, a))
     for (const name of ours.slice(keepCount)) {
       try {
         await rm(join(dir, name), { recursive: true, force: true })

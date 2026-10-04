@@ -73,6 +73,41 @@ describe('wb_canvas_edit comment ops', () => {
     expect(comment?.y).toBe(NODE.y)
   })
 
+  test.each([
+    ['only x', { x: 5 }],
+    ['only y', { y: 5 }],
+  ])('comment.add with %s and a target node ignores the half point and anchors at the node corner', async (_what, point) => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [NODE], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'half a point', ...point } }],
+    })
+
+    const [comment] = await storedComments(store)
+    expect({ x: comment?.x, y: comment?.y }).toEqual({ x: 300, y: 40 })
+  })
+
+  test('comment.add with only half a point and no target is refused, not stored without a coordinate', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [NODE], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'comment.add', comment: { x: 5, text: 'half a point' } }],
+      }),
+    ).rejects.toThrow(/needs an anchor/)
+    expect(await storedComments(store)).toEqual([])
+  })
+
   test('comment.add refuses an anchorless comment naming the op, and applies nothing', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, { nodes: [NODE], edges: [] })

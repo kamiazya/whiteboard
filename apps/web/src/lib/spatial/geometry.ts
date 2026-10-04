@@ -5,8 +5,8 @@
  * selection and rendering can never disagree about where a node is. See
  * `scene-render.test.ts`'s drift guard.
  */
-import { paintOrderOf } from '@kamiazya/whiteboard-canvas-render'
-import { isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { boxContains, paintOrderOf, topmostHit } from '@kamiazya/whiteboard-canvas-render'
+import { frameHolds, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from './viewport.js'
 
 export interface Box {
@@ -34,37 +34,11 @@ export function indexNodeBoxes(canvas: SpatialCanvas): readonly NodeBox[] {
   }))
 }
 
-/** Inclusive of the box edge — a point exactly on the boundary is "inside". */
-export function boxContains(box: Box, point: Point): boolean {
-  return (
-    point.x >= box.x &&
-    point.x <= box.x + box.width &&
-    point.y >= box.y &&
-    point.y <= box.y + box.height
-  )
-}
-
-/**
- * Returns the id of the topmost node under `point`, or undefined for empty
- * space. "Topmost" is document-order-last, matching paint order (later
- * nodes draw over earlier ones).
- */
-export function hitTest(boxes: readonly NodeBox[], point: Point): string | undefined {
-  // Container frames (groups) paint behind their members, so a content node
-  // under the pointer is always visible — the click lands on what the user
-  // sees. Membership is geometric in this app, so z-order between a member
-  // and its frame carries no occlusion meaning. A frame is hit only where
-  // no content node is (its padding area), innermost frame first when
-  // frames nest.
-  let containerHit: string | undefined
-  for (let i = boxes.length - 1; i >= 0; i -= 1) {
-    const candidate = boxes[i]
-    if (candidate === undefined || !boxContains(candidate.box, point)) continue
-    if (candidate.container !== true) return candidate.id
-    containerHit ??= candidate.id
-  }
-  return containerHit
-}
+// Hit-testing is the renderer's rule, shared with the MCP Apps widget so a
+// click names the same node in both surfaces. Imported and then exported, not
+// `export … from`: the test-only-export scan counts an import as this
+// module's use, and a bare re-export would read as a barrel-only one.
+export { boxContains, topmostHit as hitTest }
 
 export type ResizeHandleKind = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
@@ -190,12 +164,7 @@ export function findFreeSpot(
     height: size.height,
   })
   const isFree = (box: Box) => !occupied.some((other) => boxesIntersect(box, other))
-  const insideVisible = (box: Box) =>
-    visible === undefined ||
-    (box.x >= visible.x &&
-      box.y >= visible.y &&
-      box.x + box.width <= visible.x + visible.width &&
-      box.y + box.height <= visible.y + visible.height)
+  const insideVisible = (box: Box) => visible === undefined || frameHolds(visible, box)
 
   // First pass: a spot that is both free AND already on screen. Walking the
   // cascade off the edge is what makes creation pan the canvas — the node

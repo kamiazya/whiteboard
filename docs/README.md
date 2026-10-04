@@ -2,10 +2,6 @@
 
 Whiteboard is a canvas you and an AI agent can draw on together.
 
-> **Note for contributors:** the persona "doors" below are structural — the three entry points
-> and their targets are confirmed, but the final value/positioning wording is owned by
-> marketing and is marked _(copy TBD)_ until the persona review is folded in.
-
 ## Start here
 
 Whiteboard is a **browser-first whiteboard that grows with you** — open a canvas in your

@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
@@ -35,10 +36,6 @@ const OWNER = 'packages/model/src/document-path.ts'
 
 /** Sites that state the rule by hand on purpose, each with why it cannot use the owner. */
 const LEFT_IN_PLACE: Readonly<Record<string, string>> = {}
-
-function scriptKind(fileName: string): ts.ScriptKind {
-  return fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-}
 
 const isLengthOf = (node: ts.Expression): boolean =>
   ts.isPropertyAccessExpression(node) && node.name.text === 'length'
@@ -95,13 +92,7 @@ function isSliceOffBoundPrefix(node: ts.Node, prefixes: ReadonlySet<string>): bo
 
 /** How many hand-spelled subtree tests and re-roots `source` holds. */
 function countPathSubtreeSpellings(fileName: string, source: string): number {
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(fileName),
-  )
+  const file = parseSource(fileName, source)
   const prefixes = slashPrefixNames(file)
   let found = 0
   const visit = (node: ts.Node): void => {

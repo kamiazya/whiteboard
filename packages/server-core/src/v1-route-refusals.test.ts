@@ -1,11 +1,23 @@
+import {
+  DocumentNotFoundError,
+  SnapshotReassemblyError,
+  StoredDocumentUnreadableError,
+  WorkspaceSegmentTakenError,
+} from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import { apiErrorReason } from './api-errors.js'
+import { createServer } from './create-server.js'
+import { FakeDocumentStore } from './test-utils/fake-document-store.js'
+import { makeTestDeps } from './test-utils/make-test-deps.js'
 import {
   SEEDED_MARKDOWN_ID,
+  SEEDED_MARKDOWN_PATH,
   SEEDED_SPATIAL_ID,
   SEEDED_WORKSPACE_ID,
   seededServer,
 } from './test-utils/seeded-workspace.js'
+import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
+import { DocumentSerializeError } from './tools/errors.js'
 
 const ws = `/api/v1/workspaces/${SEEDED_WORKSPACE_ID}`
 
@@ -120,5 +132,120 @@ describe('/api/v1 workspace that names nothing', () => {
     expect(status).toBe(404)
     expect(reason).toContain('Check the id against the workspaces you know')
     expect(reason).not.toContain('Pass createWorkspace: true on this')
+  })
+})
+
+describe('DELETE /api/v1 document with documents below it', () => {
+  it('is refused as a 409 naming the descendants rather than escaping as a 500', async () => {
+    const { app } = await seededServer()
+    const created = await app.request(`${ws}/documents`, {
+      ...json,
+      body: JSON.stringify({ path: `${SEEDED_MARKDOWN_PATH}/child`, kind: 'markdown' }),
+    })
+    expect(created.status).toBe(201)
+
+    const res = await app.request(`${ws}/documents/${SEEDED_MARKDOWN_ID}`, { method: 'DELETE' })
+    const body: unknown = await res.json()
+    expect(res.status).toBe(409)
+    expect(body).toMatchObject({ error: 'document_has_descendants' })
+    expect(apiErrorReason(body)).toContain(`"${SEEDED_MARKDOWN_PATH}" has descendants`)
+  })
+})
+
+/** A store whose one record is there and cannot be read back, whatever the reason. */
+class UnreadableStore extends FakeDocumentStore {
+  constructor(private readonly failure: () => Error) {
+    super()
+  }
+  override loadSnapshot(): never {
+    throw this.failure()
+  }
+}
+
+describe('GET /api/v1 document the store holds but cannot read', () => {
+  async function readOf(failure: () => Error) {
+    const store = new UnreadableStore(failure)
+    store.documentIndex.seed({
+      workspaceId: SEEDED_WORKSPACE_ID,
+      documentId: SEEDED_MARKDOWN_ID,
+      path: SEEDED_MARKDOWN_PATH,
+      kind: 'markdown',
+    })
+    const { app } = createServer(
+      makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+    )
+    const res = await app.request(`${ws}/documents/${SEEDED_MARKDOWN_ID}/okf`)
+    const body: unknown = await res.json()
+    return { status: res.status, body }
+  }
+
+  it('answers a malformed record as JSON naming corrupt stored data, not a bare 500', async () => {
+    const { status, body } = await readOf(
+      () => new StoredDocumentUnreadableError('malformed', 'header describes no snapshot'),
+    )
+    expect(status).toBe(500)
+    expect(body).toMatchObject({
+      error: 'corrupt_stored_data',
+      message: 'header describes no snapshot',
+    })
+  })
+
+  it('tells a record written by a newer build from a damaged one', async () => {
+    const { status, body } = await readOf(
+      () => new StoredDocumentUnreadableError('unsupported-version', 'envelope v9'),
+    )
+    expect(status).toBe(500)
+    expect(body).toMatchObject({ error: 'stored_document_unsupported_version' })
+  })
+
+  it('answers chunks that do not reassemble as corrupt stored data', async () => {
+    const { status, body } = await readOf(
+      () => new SnapshotReassemblyError('MISSING_CHUNK', 'chunk index 1 is missing'),
+    )
+    expect(status).toBe(500)
+    expect(body).toMatchObject({ error: 'corrupt_stored_data' })
+  })
+})
+
+describe('DELETE /api/v1 document whose index raises a refusal of its own', () => {
+  // The index raises these from inside the delete, past the route's own
+  // checks, so each is the route's answer to an error it did not predict.
+  it.each([
+    {
+      error: () => new DocumentNotFoundError('ws-1', SEEDED_MARKDOWN_PATH),
+      status: 404,
+      code: 'document_not_found',
+    },
+    {
+      error: () => new WorkspaceSegmentTakenError('plan'),
+      status: 409,
+      code: 'workspace_segment_taken',
+    },
+    {
+      error: () => new DocumentSerializeError(SEEDED_MARKDOWN_ID, 'OKF Markdown', new Error('x')),
+      status: 409,
+      code: 'document_serialize_failed',
+    },
+  ])('answers $code as $status JSON', async ({ error, status, code }) => {
+    const store = new FakeDocumentStore()
+    store.documentIndex.seed({
+      workspaceId: SEEDED_WORKSPACE_ID,
+      documentId: SEEDED_MARKDOWN_ID,
+      path: SEEDED_MARKDOWN_PATH,
+      kind: 'markdown',
+    })
+    store.documentIndex.deleteDocument = () => {
+      throw error()
+    }
+    const { app } = createServer(
+      makeTestDeps({
+        documentStore: store,
+        documentIndex: store.documentIndex,
+        documentTeardown: inMemoryDocumentTeardown(),
+      }),
+    )
+    const res = await app.request(`${ws}/documents/${SEEDED_MARKDOWN_ID}`, { method: 'DELETE' })
+    expect(res.status).toBe(status)
+    expect(await res.json()).toMatchObject({ error: code })
   })
 })

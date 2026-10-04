@@ -1,14 +1,11 @@
 import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 import { aliasesOf } from './named-use-scan.js'
 
 /** A binding or field that holds a snapshot chunk size, under any of the names writers gave it. */
 const CHUNK_SIZE_NAME = /^(?:[A-Z0-9_]*CHUNK_BYTES|(?:[a-z]\w*)?[cC]hunkBytes)$/
 
 const CHUNKER = 'chunkSnapshot'
-
-function scriptKind(fileName: string): ts.ScriptKind {
-  return fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-}
 
 /**
  * Whether an expression writes a number into the value: a literal anywhere in
@@ -77,13 +74,7 @@ function chunkerCallWithSize(
  * no number and is not an entry.
  */
 export function chunkSizeDeclarations(fileName: string, source: string): string[] {
-  const file = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(fileName),
-  )
+  const file = parseSource(fileName, source)
   const aliases = aliasesOf(file, new Set([CHUNKER]))
   const found: string[] = []
   const visit = (node: ts.Node): void => {

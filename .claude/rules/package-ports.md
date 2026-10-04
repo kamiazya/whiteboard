@@ -77,7 +77,10 @@ assertions stay here. `describeDocumentPinsConformance` covers the
 `DocumentPins` capability beside `DocumentIndex` (tree-backed indexes only;
 the legacy row index keeps no pinned list, which is why it is a capability
 and not a method on the port). `describeDocumentTrashConformance` covers
-the `DocumentTrash` capability (list, restore, purge) the same way.
+the `DocumentTrash` capability (list, restore, purge) the same way, with a
+required `evacuatedBlobCount` seam pinning that restore and purge destroy
+the evacuated bytes. `KeyedSerializer` is the one per-key, submission-ordered,
+non-poisoning async queue (the index's writes and apps/web's `LoroStore`).
 
 They must run unchanged in a browser like the rest of the package — the blob
 suite computes its expected digest with `globalThis.crypto.subtle`, never
@@ -113,7 +116,8 @@ in `arch-lint` fails on a second spelling of the stored key.
 
 `docRefKey` lives here for the same reason. It is a STORED key, and two
 stores that spell it differently cannot read each other's documents — with
-nothing to say so at compile time. `workspaceIdOfDocKey` is its exact inverse, and
+nothing to say so at compile time. `workspaceIdOfStoredDocKey` is its exact inverse (the sync wire key is another
+grammar, daemon-client's `sse-stream-hub.ts`), and
 `doc-ref-key-one-place.test.ts` fails on any other spelling of the key outside
 ports (frozen migrations skipped).
 

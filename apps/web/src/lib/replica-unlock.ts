@@ -26,6 +26,7 @@
  */
 
 import {
+  type ReplicaKeyResponse,
   type ReplicaTier,
   replicaKeyResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
@@ -34,7 +35,6 @@ import {
   unwrapWorkspaceKey,
   wrapWorkspaceKey,
 } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
-import type { ReplicaKeyResponse } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import {
   adoptSessionKey,
   sessionKeyStatus,

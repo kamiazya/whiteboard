@@ -15,6 +15,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../../../shared/test-utils/store-memory.module.js'
@@ -60,7 +61,7 @@ async function appWithRealDeps() {
   // The store-local composition is the trash-capable one — pinned here so a
   // regression in the DI's structural capability detection fails loudly,
   // rather than as a cascade of 501s in the tests below.
-  expect(deps.trash).toBeDefined()
+  expect(hasDocumentTrash(deps.documentIndex)).toBe(true)
   return createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
 }
 
@@ -170,9 +171,9 @@ describe('trash routes', () => {
 
   it('a composition without the trash capability answers 501 on every trash route', async () => {
     // The default (in-memory) module binds an index with no listTrash /
-    // restoreDocument, so resolveServerDeps leaves deps.trash undefined.
+    // restoreDocument, so the route finds no trash on it.
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
-    expect(deps.trash).toBeUndefined()
+    expect(hasDocumentTrash(deps.documentIndex)).toBe(false)
     // The workspace exists: an unknown one is refused before the capability
     // is consulted, so it would hide the 501 this case is about.
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })

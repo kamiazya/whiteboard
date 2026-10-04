@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 import { classifyPath } from './source-scan.js'
 
 export interface MeasuredFunction {
@@ -62,13 +63,7 @@ function nameOf(node: ts.Node): string | undefined {
  */
 export function measureSource(text: string, relativePath: string): MeasuredFunction[] {
   const isTest = classifyPath(relativePath) === 'test'
-  const source = ts.createSourceFile(
-    relativePath,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    relativePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  )
+  const source = parseSource(relativePath, text)
   const found: MeasuredFunction[] = []
   const visit = (node: ts.Node, chain: readonly string[]): void => {
     const name = nameOf(node)

@@ -296,6 +296,37 @@ describe('createDaemonFilesSource searchDocuments', () => {
     expect(hits.map((hit) => hit.lexicalRank)).toEqual([1, undefined])
     expect(hits.map((hit) => hit.semanticRank)).toEqual([3, 1])
   })
+
+  it('carries the display name and kind when the daemon sent them, and omits both keys when it did not', async () => {
+    const source = createDaemonFilesSource(
+      searchFetchStub([
+        {
+          documentId: '01M0P7D8CDZ5TP3C8ZYM8G275W',
+          path: 'plans/roadmap',
+          name: 'Roadmap',
+          kind: 'markdown',
+          score: 2.5,
+          contexts: ['…'],
+        },
+        {
+          documentId: '01M0P7D8CDZ5TP3C8ZYM8G276X',
+          path: 'notes/storage',
+          score: 1.1,
+          contexts: ['…'],
+        },
+      ]),
+      BASE,
+      'ws',
+    )
+    const hits = await source.searchDocuments('quota', 20)
+    expect(hits[0]?.document).toEqual({
+      documentId: '01M0P7D8CDZ5TP3C8ZYM8G275W',
+      path: 'plans/roadmap',
+      name: 'Roadmap',
+      kind: 'markdown',
+    })
+    expect(Object.keys(hits[1]?.document ?? {}).sort()).toEqual(['documentId', 'path'])
+  })
 })
 
 // The half that was missing, and the reason it was missing: nothing here

@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
   resolveTestServerDeps,
-  seedWorkspaceRow,
   testDocumentRouterOptions,
   withTempDataDir,
 } from '../_test-helpers.js'
@@ -28,6 +27,9 @@ const tmp = withTempDataDir('whiteboard-restore-test-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
+  // The page-facing document routes refuse an unknown workspace, so the
+  // workspace these tests write through exists before the first update.
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
 })
 
 const { createRestoreRouter } = await import('./restore.js')
@@ -37,6 +39,9 @@ const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdat
 )
 const { countSpatialNodes } = await import('@kamiazya/whiteboard-loro-adapter')
 const { createDocumentRouter } = await import('../document.js')
+
+const indexedIdAt = async (path: string) =>
+  (await serverDeps.documentIndex.resolveDocument({ workspaceId: 'session1', path }))?.documentId
 
 const createRouter = () =>
   createDocumentRouter(testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }))
@@ -387,7 +392,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 404 when restoring a missing version id', async () => {
-    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createRouter()
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/nonexistent/restore',
@@ -400,7 +404,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
   })
 
   it('returns 400 for an invalid version id', async () => {
-    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createRouter()
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/bad.id/restore',
@@ -570,7 +573,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     }
     expect(restoreRes.status).toBe(200)
     const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
-    expect(restoreBody.documentId).toBe('session1/canvas-b')
+    expect(restoreBody.documentId).toBe(await indexedIdAt('canvas-b'))
 
     // One persisted write for the target reconcile; subscribers converge on
     // the document inside the workspace record rather than a path-addressed
@@ -611,8 +614,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     )
     expect(restoreRes.status).toBe(200)
     const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
-    expect(restoreBody.documentId).toBe('session1/canvas-new')
-    // The restored doc has one node ("keep-me").
+    expect(restoreBody.documentId).toBe(await indexedIdAt('canvas-new'))
     expect(restoreBody.elementCount).toBe(1)
   })
 

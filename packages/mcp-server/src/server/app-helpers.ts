@@ -1,3 +1,6 @@
+import { errorBody } from '@kamiazya/whiteboard-server-core'
+import type { Context } from 'hono'
+
 export function shouldLogMcpHttpDebug(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.MCP_HTTP_DEBUG === '1'
 }
@@ -34,28 +37,38 @@ export function toInlineScriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c')
 }
 
-// Paths reserved for /api, /mcp, /ws, and .well-known routes must never
-// fall through to the SPA catch-all: an unmatched request under one of
-// these prefixes means "route not found", not "serve index.html".
+// Paths whose own routes answer them — /api, /mcp, /.well-known — must never
+// fall through to the UI catch-all: an unmatched request under one of these
+// prefixes means "route not found", not "serve index.html".
 export function isReservedUiPath(path: string): boolean {
   return (
     path === '/api' ||
     path.startsWith('/api/') ||
     path === '/mcp' ||
     path.startsWith('/mcp/') ||
-    path === '/ws' ||
-    path.startsWith('/ws/') ||
-    path.startsWith('/.well-known/') ||
-    path === '/token'
+    path.startsWith('/.well-known/')
   )
 }
 
-// Minimal, honest placeholder served at server-mode's root. Server-mode has
-// its own OAuth/JWT auth (see AsyncAuthStrategy) and no local-daemon bearer
-// token; apps/web's provider model only knows a browser-kept
-// workspace and a daemon bearer token, so injecting it here without a real token would
-// serve a UI whose every request 401s. Point operators at the API/MCP
-// surface instead until apps/web grows a server-mode-aware auth flow.
+/**
+ * The answer to a request no route claims. Under `/api` that is a refusal in
+ * the one JSON shape every route refuses in, because a client of the API
+ * parses the body of whatever it gets back; Hono's own 404 is `text/plain`
+ * and made a missing route read as a SyntaxError. Anywhere else a browser or
+ * a probe may be asking, so it keeps Hono's plain answer.
+ */
+export function answerNotFound(c: Context): Response {
+  const { method } = c.req
+  const { path } = c.req
+  if (path === '/api' || path.startsWith('/api/')) {
+    return c.json(errorBody('not_found', `No route answers ${method} ${path}`), 404)
+  }
+  return c.text('404 Not Found', 404)
+}
+
+// Served at server mode's root only when the image carries no web build
+// (ADR-0047 serves the build itself otherwise), so a browser still gets an
+// answer that says what is missing instead of a bare 404.
 export const SERVER_MODE_PLACEHOLDER_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,8 +78,8 @@ export const SERVER_MODE_PLACEHOLDER_HTML = `<!DOCTYPE html>
 </head>
 <body>
 <h1>Whiteboard server</h1>
-<p>This daemon is running in server mode, which does not serve the browser UI.</p>
-<p>Use the HTTP API under <code>/api</code> or connect an MCP client to <code>/mcp</code>.</p>
+<p>This build carries no web app, so there is no browser UI to show. Build <code>apps/web</code> to serve it from here.</p>
+<p>The HTTP API under <code>/api</code> and an MCP client at <code>/mcp</code> work without it.</p>
 </body>
 </html>
 `

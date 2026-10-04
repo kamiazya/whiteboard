@@ -45,18 +45,17 @@ export interface PreviewPaneProps {
  * the edited block's group, so decoded images, running diagrams and
  * animations in untouched blocks survive, and block moves glide (FLIP).
  * Every byte the patcher injects is still canvas-render's serializer
- * output, carrying the same soundness rationale as
- * `packages/canvas-viewer/src/CanvasViewer.tsx`: the serializer is the
- * SOLE producer and escapes text content (`&`/`<`/`>`) and attribute
- * values (`"`/`'`) — there is no untrusted-HTML injection path here. The
- * one addition to that reasoning: `renderMath` / `renderDiagram` fragments
- * are emitted verbatim by the backend, so they must come only from engines
- * safe against untrusted document text — MathJax typesets into its own
- * glyph paths, and mermaid runs at securityLevel 'strict' (see
- * markdown-fragment-renderers.ts). Do not add a sanitizer dependency; if
- * these bytes ever stop being canvas-render's own output plus those two
- * engines' fragments, this reasoning no longer holds and must be
- * revisited.
+ * output, so the soundness argument is the one written once in
+ * `packages/canvas-viewer/src/SceneSvg.tsx` (the serializer is the SOLE
+ * producer; there is no untrusted-HTML injection path) and held by
+ * `tools/arch-lint`'s html-sink-ledger. The one addition to that
+ * reasoning: `renderMath` / `renderDiagram` fragments are emitted verbatim by
+ * the backend, so they must come only from engines safe against untrusted
+ * document text — MathJax typesets into its own glyph paths, and mermaid runs
+ * at securityLevel 'strict' (see markdown-fragment-renderers.ts). Do not add a
+ * sanitizer dependency; if these bytes ever stop being canvas-render's own
+ * output plus those two engines' fragments, this reasoning no longer holds
+ * and must be revisited.
  */
 export function PreviewPane({
   value,

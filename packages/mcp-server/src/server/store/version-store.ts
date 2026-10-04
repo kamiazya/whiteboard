@@ -204,8 +204,8 @@ function versionRow({
 /**
  * What the caller is told it saved. Spread-or-nothing on every optional
  * field, so a version with no label carries no `label` key at all rather
- * than an explicit `undefined` — the published shape says absent, and
- * `exactOptionalPropertyTypes` holds that.
+ * than an explicit `undefined` — the published shape says absent, and a row
+ * that is compared or spread would see the difference.
  */
 function savedVersion({
   id,

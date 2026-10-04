@@ -8,7 +8,7 @@
  * Every byte that reaches the DOM is serializer-produced (the group
  * strings themselves): this layer decides only WHICH elements to replace,
  * never how markup is spelled, so canvas-render stays the single producer
- * the `dangerouslySetInnerHTML` safety argument rests on. What patching
+ * the `SceneSvg` safety argument rests on. What patching
  * buys over innerHTML replacement is DOM continuity for the 94-99% of
  * groups a typical edit leaves byte-identical (the scene-diff scoreboard's
  * measured reuse ceiling): selection, focus, running CSS animations and

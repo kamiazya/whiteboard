@@ -6,11 +6,12 @@ import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto
 import type { StoreScope } from '../store/store-scope.js'
 import type { VersionStore } from '../store/version-store.js'
 import { sendRestoreEvent, sendVersionCreated } from '../sync-audience.js'
-import { refuseUnknownWorkspace } from './document/_shared.js'
+import { refuseTrashedDocument, refuseUnknownWorkspace } from './document/_shared.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
 import { createDocumentMetadataRouter } from './document/metadata.js'
+import { DOCUMENT_WILDCARD } from './document/path-route.js'
 import { createRestoreRouter } from './document/restore.js'
 import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
@@ -94,6 +95,19 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
   }
 }
 
+/**
+ * What no route below should be reached for, registered ahead of all of them
+ * so it also guards the routers composed beside this one afterwards (files,
+ * status, export). The page-facing document routes resolve their handle by
+ * pass-through, so without the `/api/w` registrations an unknown workspace is
+ * minted by the first write and a trashed document recreated by a stale tab.
+ */
+function refuseUnaddressable(app: Hono, serverDeps: ServerDeps): void {
+  app.use('/api/workspaces/:workspaceId/*', refuseUnknownWorkspace(serverDeps))
+  app.use(DOCUMENT_WILDCARD, refuseUnknownWorkspace(serverDeps))
+  app.use(DOCUMENT_WILDCARD, refuseTrashedDocument(serverDeps))
+}
+
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
 // CRUD, names/pin metadata, the live-doc snapshot+update path, version
 // history (list/save/restore), and maintenance (compact/prune/
@@ -106,8 +120,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
   const { versionStore } = options
   const triggerAutoVersion = armAutoVersionTrigger(options, versionStore)
 
-  // First: it also guards the routers composed beside this one afterwards (files).
-  app.use('/api/workspaces/:workspaceId/*', refuseUnknownWorkspace(options.serverDeps))
+  refuseUnaddressable(app, options.serverDeps)
   app.route('/', createWorkspacesRouter(workspacesRouterOptions(options)))
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter({ scope: options.scope }))
