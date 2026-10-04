@@ -177,7 +177,7 @@ function daemonStep(
       kind: 'action',
       title: 'Connect the companion app',
       state: 'not connected',
-      desc: 'Run the companion app to keep documents in real files on your computer, with version history.',
+      desc: 'Run the companion app so AI assistants on this computer can open and edit your documents.',
       action: (
         <Link to={settingsPath('connections')} className={ACTION_CLASS}>
           How to connect
