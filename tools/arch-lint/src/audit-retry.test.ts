@@ -8,16 +8,20 @@
 // The classifier is pure and lives beside the runner in
 // tools/checks/src/audit-with-retry.mjs; these fixtures are the two real
 // outputs those jobs produced, abbreviated to their signatures.
+import { spawnSync } from 'node:child_process'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
 const ROOT = REPO_ROOT
+const SCRIPT = join(ROOT, 'tools/checks/src/audit-with-retry.mjs')
 
-const { classifyAuditFailure } = (await import(
-  pathToFileURL(join(ROOT, 'tools/checks/src/audit-with-retry.mjs')).href
-)) as { classifyAuditFailure: (output: string) => 'network' | 'findings' }
+const { classifyAuditFailure } = (await import(pathToFileURL(SCRIPT).href)) as {
+  classifyAuditFailure: (output: string) => 'network' | 'findings'
+}
 
 /** The Sep 4 main failure, verbatim signature (run 33822259235). */
 const REGISTRY_TIMEOUT = [
@@ -68,5 +72,103 @@ describe('classifyAuditFailure', () => {
       'network',
     )
     expect(classifyAuditFailure('getaddrinfo EAI_AGAIN registry.npmjs.org')).toBe('network')
+  })
+})
+
+// `pnpm audit:prod` runs the file as a process, so its entry guard, its
+// retry loop and the offline escape are only reached that way. A `pnpm` on
+// PATH stands in for the real audit, answering each call from a script and
+// recording the arguments it was given.
+describe('audit-with-retry as `pnpm audit:prod` runs it', () => {
+  const workDir = mkdtempSync(join(tmpdir(), 'audit-with-retry-'))
+  afterAll(() => rmSync(workDir, { recursive: true, force: true }))
+  let runCount = 0
+
+  function run(answers: { status: number; out: string }[], env: Record<string, string> = {}) {
+    runCount += 1
+    const binDir = join(workDir, `bin-${runCount}`)
+    mkdirSync(binDir)
+    const callLog = join(binDir, 'calls.jsonl')
+    writeFileSync(callLog, '')
+    writeFileSync(
+      join(binDir, 'pnpm'),
+      `#!${process.execPath}
+const fs = require('node:fs')
+const log = ${JSON.stringify(callLog)}
+const n = fs.readFileSync(log, 'utf8').split('\\n').filter(Boolean).length
+fs.appendFileSync(log, JSON.stringify(process.argv.slice(2)) + '\\n')
+const answers = ${JSON.stringify(answers)}
+const answer = answers[Math.min(n, answers.length - 1)]
+process.stdout.write(answer.out)
+process.exit(answer.status)
+`,
+    )
+    chmodSync(join(binDir, 'pnpm'), 0o755)
+    const r = spawnSync(process.execPath, [SCRIPT], {
+      cwd: workDir,
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: {
+        PATH: `${binDir}:${process.env.PATH ?? ''}`,
+        AUDIT_RETRY_BACKOFF_MS: '1,1',
+        ...env,
+      },
+    })
+    const calls = readFileSync(callLog, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as string[])
+    return { status: r.status, stdout: r.stdout, stderr: r.stderr, calls }
+  }
+
+  const CLEAN = { status: 0, out: 'No known vulnerabilities found\n' }
+  const FINDING = { status: 1, out: '1 vulnerabilities found\nSeverity: 1 high\n' }
+  const REGISTRY_DOWN = { status: 1, out: 'request to registry.npmjs.org failed: ECONNRESET\n' }
+
+  it('runs the prod audit once and passes on a clean answer', () => {
+    const r = run([CLEAN])
+    expect(r.status).toBe(0)
+    expect(r.calls).toEqual([['audit', '--prod', '--audit-level=high']])
+    expect(r.stdout).toContain('No known vulnerabilities found')
+  })
+
+  it('fails at once on a finding, without retrying', () => {
+    const r = run([FINDING, CLEAN])
+    expect(r.status).toBe(1)
+    expect(r.calls).toHaveLength(1)
+  })
+
+  it('retries a registry failure and passes when the registry recovers', () => {
+    const r = run([REGISTRY_DOWN, CLEAN])
+    expect(r.status).toBe(0)
+    expect(r.calls).toHaveLength(2)
+    expect(r.stderr).toContain('registry failure; retrying in 0.001s (attempt 2 of 3)')
+  })
+
+  it('fails on a finding that follows a registry failure', () => {
+    const r = run([REGISTRY_DOWN, FINDING, CLEAN])
+    expect(r.status).toBe(1)
+    expect(r.calls).toHaveLength(2)
+  })
+
+  it('gives up after three attempts, failing rather than skipping', () => {
+    const r = run([REGISTRY_DOWN])
+    expect(r.status).toBe(1)
+    expect(r.calls).toHaveLength(3)
+    expect(r.stderr).toContain('the registry stayed unreachable across every attempt')
+  })
+
+  it('skips loudly, without running the audit, when WHITEBOARD_SKIP_AUDIT=1', () => {
+    const r = run([FINDING], { WHITEBOARD_SKIP_AUDIT: '1' })
+    expect(r.status).toBe(0)
+    expect(r.calls).toEqual([])
+    expect(r.stderr).toContain('the prod audit was SKIPPED, not passed')
+  })
+
+  it('runs the audit for any other WHITEBOARD_SKIP_AUDIT value', () => {
+    const r = run([FINDING], { WHITEBOARD_SKIP_AUDIT: 'true' })
+    expect(r.status).toBe(1)
+    expect(r.calls).toHaveLength(1)
+    expect(r.stderr).not.toContain('SKIPPED')
   })
 })
