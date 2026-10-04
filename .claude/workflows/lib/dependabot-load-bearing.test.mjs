@@ -15,7 +15,10 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const WORKFLOW = readFileSync(join(ROOT, '.claude/workflows/dependabot-triage.workflow.mjs'), 'utf8')
+const WORKFLOW = readFileSync(
+  join(ROOT, '.claude/workflows/dependabot-triage.workflow.mjs'),
+  'utf8',
+)
 const SKILL = readFileSync(join(ROOT, '.claude/skills/dependabot-review/SKILL.md'), 'utf8')
 
 const NPM_NAME = /^(?:@[a-z0-9-]+\/)?[a-z0-9][a-z0-9._-]*$/
@@ -81,7 +84,9 @@ test('the skill table names exactly the packages the workflow list does', () => 
 test('the list readers parse their own fixtures', () => {
   assert.deepEqual(loadBearingNames("const LOAD_BEARING = [\n  'a', '@s/b',\n]"), ['a', '@s/b'])
   assert.deepEqual(
-    tableNames('## Load-bearing runtime deps\n\n| P | W |\n|--|--|\n| `a` / `@s/b` | x |\n\n## Next'),
+    tableNames(
+      '## Load-bearing runtime deps\n\n| P | W |\n|--|--|\n| `a` / `@s/b` | x |\n\n## Next',
+    ),
     ['a', '@s/b'],
   )
 })
