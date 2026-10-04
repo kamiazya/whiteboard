@@ -168,8 +168,14 @@ export type SpatialNode = z.infer<typeof spatialNodeSchema>
  * A hand-placed bend is a point somebody dragged, so the cap is about a
  * payload nobody meant rather than about the geometry: an edge with 64 bends
  * is a defect or an attack, not a drawing.
+ *
+ * Exported because every writer has to stay inside it: a record over the cap
+ * fails validation on read, and a reader that skips it drops the whole
+ * element. A freehand stroke stores its turns as bends too, so the editor's
+ * stroke budget derives from this rather than from a number of its own.
+ * Published as `maxItems` in `docs/reference/x-whiteboard.schema.json`.
  */
-const MAX_BENDS = 64
+export const MAX_BENDS = 64
 
 const canvasPointSchema = z.object({ x: nodePositionSchema, y: nodePositionSchema }).strict()
 z.globalRegistry.add(canvasPointSchema, { id: 'CanvasPoint' })
