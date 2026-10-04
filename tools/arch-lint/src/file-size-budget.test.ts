@@ -378,8 +378,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // A referenced canvas arriving in the form canvas_view
   // sends it (JSON Canvas) reaches the viewer as the model.
   // The refresh asking for the style the last result drew, which needs the
-  // file's embedded-host and fake-App setup.
-  'packages/canvas-viewer/src/widget-entry.test.tsx': 1340,
+  // file's embedded-host and fake-App setup, and a click's anchor naming the
+  // member drawn over a frame the document stores first, which needs the same.
+  'packages/canvas-viewer/src/widget-entry.test.tsx': 1375,
   // An unchanged canvas reconciling to no ops, which the "writes only what
   // changed" test above it could not see; the delete cascade pinned over ink
   // (anchored ink goes, free ink stays, the line's lock goes with it); and the

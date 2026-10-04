@@ -822,6 +822,41 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(sendMessageMock).not.toHaveBeenCalled()
   })
 
+  it('anchors a click inside a frame to the member it landed on, whatever order the document stores them in', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // The frame is stored BEFORE its member, so a first-match scan would name
+    // the frame; the renderer paints the member over it.
+    const scene = {
+      nodes: [
+        { id: 'frame', type: 'group', x: 0, y: 0, width: 400, height: 300 },
+        { id: 'a', type: 'text', text: '', x: 90, y: 50, width: 40, height: 30 },
+      ],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+    await Promise.resolve()
+
+    const svg = installFakeSvg({ left: 10, top: 20 })
+    clickCanvas(svg, 110, 80)
+    const form = queryCommentForm() as HTMLFormElement
+    expect(form.querySelector('[data-testid="widget-comment-anchor"]')?.textContent ?? '').toBe(
+      'a (100, 60)',
+    )
+
+    // Padding inside the frame but outside every member names the frame.
+    clickCanvas(svg, 310, 220)
+    expect(form.querySelector('[data-testid="widget-comment-anchor"]')?.textContent ?? '').toBe(
+      'frame (300, 200)',
+    )
+  })
+
   it('delivers the comment to the model via sendMessage when the host advertises it', async () => {
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)

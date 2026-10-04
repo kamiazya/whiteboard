@@ -4,7 +4,11 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { resolveCanvasPalette, type SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
+import {
+  resolveCanvasPalette,
+  type SpatialRenderStyle,
+  topmostNodeAt,
+} from '@kamiazya/whiteboard-canvas-render'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { dataUriToBytes } from './font-loading.js'
 import { type CanvasViewerHandle, mountCanvasViewer } from './mount.js'
@@ -234,6 +238,21 @@ function applyToolResult(
   }
 }
 
+/**
+ * The comment anchor a click at `point` picks, and how the form names it: the
+ * node the click landed on is its target, so the pin follows that node.
+ */
+function pickAnchor(
+  scene: ViewerScene | undefined,
+  point: { readonly x: number; readonly y: number },
+): { anchor: { x: number; y: number; targetNodeId?: string }; label: string } {
+  const target = scene === undefined ? undefined : topmostNodeAt(scene.nodes, point)
+  const where = `(${point.x}, ${point.y})`
+  return target === undefined
+    ? { anchor: { ...point }, label: where }
+    : { anchor: { ...point, targetNodeId: target.id }, label: `${target.id} ${where}` }
+}
+
 // `remount` is the single place a mount produced by this bridge happens.
 // `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a tool-result can
 // legitimately arrive AFTER the caller already decided `connectedToHost`
@@ -401,17 +420,9 @@ async function mountFromHost(
       if (!(svg instanceof SVGSVGElement)) return
       const point = canvasPointFromClick(svg, event.clientX, event.clientY)
       if (point === undefined) return
-      const target = committedScene?.nodes.find(
-        (node) =>
-          point.x >= node.x &&
-          point.x <= node.x + node.width &&
-          point.y >= node.y &&
-          point.y <= node.y + node.height,
-      )
-      pendingAnchor = { ...point, ...(target === undefined ? {} : { targetNodeId: target.id }) }
-      commentControl.setAnchor(
-        target === undefined ? `(${point.x}, ${point.y})` : `${target.id} (${point.x}, ${point.y})`,
-      )
+      const picked = pickAnchor(committedScene, point)
+      pendingAnchor = picked.anchor
+      commentControl.setAnchor(picked.label)
     })
 
     // A tool-result can commit ids during connect() above, before the

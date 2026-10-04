@@ -301,9 +301,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // 104 and 22 with `scene-children.ts`, `sceneChildrenOf` lifted out of
     // `scene-bounds.ts` so a layout stage below it reads the one definition;
     // in the lane for the same reason.
+    //
+    // 105 with `hit-test.ts`, the one rule for which node a click lands on,
+    // shared by the editor and the MCP Apps widget. Outside the lane: its own
+    // example suite pins each branch and a surviving mutant would show there.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 22,
-      production: 104,
+      production: 105,
     })
   })
 

@@ -716,3 +716,33 @@ export const spatialCanvasSchema = z
   })
 
 export type SpatialCanvas = z.infer<typeof spatialCanvasSchema>
+
+type NodeBox = Pick<SpatialNode, 'x' | 'y' | 'width' | 'height'>
+
+/**
+ * Whether a frame's box holds a node: the node's whole box lies inside it,
+ * edges inclusive, so a node flush with the frame's border is a member.
+ * Membership is geometric in this model — no stored list says who is in a
+ * frame — and this is the one place that says what "in" means. The frame is a
+ * box rather than a node because a gesture asks about the box a frame WILL
+ * have, not the one it has.
+ *
+ * A frame holds itself by this rule; a caller that wants the members alone
+ * uses `membersOf`, which drops it by id.
+ */
+export function frameHolds(frame: NodeBox, node: NodeBox): boolean {
+  return (
+    node.x >= frame.x &&
+    node.y >= frame.y &&
+    node.x + node.width <= frame.x + frame.width &&
+    node.y + node.height <= frame.y + frame.height
+  )
+}
+
+/** The nodes a frame holds, the frame itself excluded, in the order given. */
+export function membersOf(
+  nodes: readonly SpatialNode[],
+  frame: SpatialNode,
+): readonly SpatialNode[] {
+  return nodes.filter((node) => node.id !== frame.id && frameHolds(frame, node))
+}

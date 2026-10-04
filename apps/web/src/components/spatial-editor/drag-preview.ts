@@ -1,4 +1,4 @@
-import { type CanvasEdge, isFrame, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
+import { type CanvasEdge, frameHolds, isFrame, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 /**
  * Pure derivation of the in-flight gesture preview from the gesture's own
  * start snapshot plus the live pointer position — never from `canvas`, so it
@@ -194,16 +194,15 @@ export function carriedWithDrag(
   const carried = new Set<string>([gesture.nodeId, ...extraIds])
   const movingNode = canvas.nodes.find((n) => n.id === gesture.nodeId)
   if (movingNode !== undefined && isFrame(movingNode)) {
+    // The frame's box where the gesture began, not where the ghost is now.
+    const startBox = {
+      x: gesture.startX,
+      y: gesture.startY,
+      width: movingNode.width,
+      height: movingNode.height,
+    }
     for (const n of canvas.nodes) {
-      if (
-        !isLocked(n.id) &&
-        n.x >= gesture.startX &&
-        n.y >= gesture.startY &&
-        n.x + n.width <= gesture.startX + movingNode.width &&
-        n.y + n.height <= gesture.startY + movingNode.height
-      ) {
-        carried.add(n.id)
-      }
+      if (!isLocked(n.id) && frameHolds(startBox, n)) carried.add(n.id)
     }
   }
   return carried
