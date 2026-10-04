@@ -32,7 +32,13 @@ async function readWithin(
     }
     chunks.push(value)
   }
-  return Buffer.concat(chunks)
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, at)
+    at += chunk.length
+  }
+  return bytes
 }
 
 /** A body whose declared length is already past the ceiling needs no read to be refused. */

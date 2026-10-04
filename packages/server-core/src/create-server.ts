@@ -7,8 +7,9 @@ import {
   SnapshotReassemblyError,
   StoredDocumentUnreadableError,
 } from '@kamiazya/whiteboard-ports'
-import type { Context, MiddlewareHandler } from 'hono'
+import type { Context, ErrorHandler, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody, issueText } from './api-errors.js'
 import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
@@ -72,7 +73,6 @@ import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
 import { createViewportSetTool } from './tools/viewport-set.js'
 import { createWorkspaceEditTool } from './tools/workspace-edit.js'
-import { answerUnhandled } from './unhandled-error.js'
 import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-handle.js'
 
 /**
@@ -212,19 +212,57 @@ function refusingIn(deps: ServerDeps) {
   }
 }
 
+/**
+ * A database that stayed locked past its retry budget, recognised by the code
+ * it keeps rather than by its class: the class lives in a Node-only store,
+ * and an unretried busy answer raised inside a transaction carries the same
+ * code. SQLite reports extended codes as `SQLITE_BUSY_*`.
+ */
+function isDatabaseBusy(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  const { code } = err as { code?: unknown }
+  return typeof code === 'string' && code.startsWith('SQLITE_BUSY')
+}
+
+/**
+ * The one answer to an uncaught throw: JSON in the contract every other
+ * refusal speaks, so a client that parses the body of whatever comes back
+ * reads a refusal rather than failing on Hono's `text/plain` default, and a
+ * `report` the composition root points at its logger — the default prints the
+ * raw error with `console.error`, which a server must never do.
+ *
+ * The body carries no part of the error: its message can hold a path, a
+ * statement or a secret, and it reaches the log through `report` alone, with
+ * the request it came from. A thrown `HTTPException` already carries the
+ * response it means to send.
+ */
+export function answerUnhandled(
+  report: (request: { err: unknown; method: string; path: string; busy: boolean }) => void,
+): ErrorHandler {
+  return (err: unknown, c: Context) => {
+    if (err instanceof HTTPException) return err.getResponse()
+    const busy = isDatabaseBusy(err)
+    report({ err, method: c.req.method, path: c.req.path, busy })
+    if (busy) {
+      return c.json(errorBody('database_busy', 'The database is busy; retry shortly.'), 503, {
+        'Retry-After': '1',
+      })
+    }
+    return c.json(errorBody('internal_error', 'The server failed to handle this request.'), 500)
+  }
+}
+
 const log = getLogger('http')
 
+/** This server may be hosted without the daemon's app around it, so it answers its own uncaught throws. */
+const answerAndLogUnhandled = answerUnhandled(({ busy, ...request }) =>
+  busy
+    ? log.warning('request refused: database busy', request)
+    : log.error('unhandled error', request),
+)
+
 export function createServer(deps: ServerDeps) {
-  const app = new Hono<{ Variables: { workspaceId: string } }>()
-  // This server may be hosted without the daemon's app around it, so it
-  // answers its own uncaught throws rather than leaving them to the host.
-  app.onError(
-    answerUnhandled(({ busy, ...request }) =>
-      busy
-        ? log.warning('request refused: database busy', request)
-        : log.error('unhandled error', request),
-    ),
-  )
+  const app = new Hono<{ Variables: { workspaceId: string } }>().onError(answerAndLogUnhandled)
   // The stamp-validated facts cache is held by the deps, not this server: /mcp
   // builds a server per request, which would otherwise search from an empty
   // cache. Backlinks, tags and search share it, whichever write path changed a document.

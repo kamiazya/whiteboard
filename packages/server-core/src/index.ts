@@ -6,7 +6,7 @@ export {
   invalidRequestBody,
   issueText,
 } from './api-errors.js'
-export { createServer } from './create-server.js'
+export { answerUnhandled, createServer } from './create-server.js'
 export { getLogger, setLogSink } from './log.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
@@ -72,7 +72,6 @@ export {
 } from './tools/version-restore.js'
 export { createVersionSaveTool } from './tools/version-save.js'
 export { createWorkspaceEditTool } from './tools/workspace-edit.js'
-export { answerUnhandled } from './unhandled-error.js'
 export type {
   Attestation,
   OperatorInfo,

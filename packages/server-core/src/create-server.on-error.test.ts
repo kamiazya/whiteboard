@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { apiErrorBodySchema } from './api-errors.js'
 import { createServer } from './create-server.js'
-import { type LogSink, setLogSink } from './log.js'
+import { setLogSink } from './log.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
 
@@ -36,7 +36,7 @@ describe('/api/v1 on an unhandled throw', () => {
   })
 
   it('logs the error with the request through the log seam, once', async () => {
-    const records: Parameters<LogSink>[0][] = []
+    const records: Parameters<Parameters<typeof setLogSink>[0]>[0][] = []
     setLogSink((record) => records.push(record))
     const error = new Error('boom')
 
