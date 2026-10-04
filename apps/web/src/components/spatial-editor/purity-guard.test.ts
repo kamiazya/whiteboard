@@ -159,14 +159,10 @@ describe('single content path (S10 guardrail)', () => {
     // insertAdjacentHTML). The escaping guarantee itself lives in
     // canvas-render's serializer tests — this test only pins that nothing
     // BUT the serializer's documented injection points exists here.
+    // The editor's overlays (live edges, resize, drag preview, comment drag)
+    // inject through canvas-viewer's `SceneSvg`, which tools/arch-lint's
+    // html-sink-ledger holds as the one component sink, so none is counted here.
     const allowed = new Map([
-      // The live-edges drag overlay + the live-node resize overlay, both
-      // fed solely by canvas-render's escaping serializer.
-      ['./SpatialEditor.tsx', 2],
-      ['./DragPreviewLayer.tsx', 1],
-      // The comment pin-drag overlay: the dragged comment's chrome, rendered
-      // once through the same serializer and translated per frame.
-      ['./CommentDragLayer.tsx', 1],
       // The committed-scene sink: mount-once innerHTML write of the full
       // keyed document, plus the per-group parse the patcher replaces
       // changed groups through. Every byte both writes carry is
