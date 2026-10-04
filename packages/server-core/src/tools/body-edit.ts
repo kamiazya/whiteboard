@@ -6,16 +6,18 @@ import {
   writeProposal,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  applyBodyChange,
+  applyPassages,
   type BodyProposedChange,
   bodyChangeConflicts,
   bodyReplaceChangeSchema,
   documentIdSchema,
+  findPassageOverlap,
   MARKDOWN_MAX_CHARS,
   mintProposalId,
+  type PassageOverlap,
+  type PlacedPassage,
   type Proposal,
   proposalSchema,
-  type ResolvedPassage,
   resolveTextAnchor,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -80,15 +82,9 @@ const bodyEditOutputSchema = z
   .strict()
 export type BodyEditOutput = z.infer<typeof bodyEditOutputSchema>
 
-/** A change paired with where the body currently holds its passage. */
-interface PlacedChange {
-  readonly change: BodyProposedChange
-  readonly at: ResolvedPassage
-}
-
 /**
- * Every op placed against `body`, or a refusal naming the first that cannot
- * be placed.
+ * Every op paired with where `body` holds its passage, or a refusal naming
+ * the first that cannot be placed.
  *
  * Placement happens for the WHOLE batch before anything is written, and one
  * unplaceable op refuses all of them. A partial result would leave the caller
@@ -106,9 +102,9 @@ function placeAll(
   body: string,
   ops: readonly BodyEditOp[],
   taken: ReadonlySet<string> = new Set(),
-): PlacedChange[] {
+): PlacedPassage[] {
   const seen = new Set<string>(taken)
-  const placed: PlacedChange[] = []
+  const placed: PlacedPassage[] = []
   for (const op of ops) {
     if (seen.has(op.id)) {
       throw new PassageNotApplicableError(
@@ -149,9 +145,9 @@ function placeAll(
  * applied either, so letting it forbid an overlap would be a phantom
  * refusing real work.
  */
-function placeExisting(body: string, proposal: Proposal | undefined): PlacedChange[] {
+function placeExisting(body: string, proposal: Proposal | undefined): PlacedPassage[] {
   if (proposal === undefined) return []
-  const placed: PlacedChange[] = []
+  const placed: PlacedPassage[] = []
   for (const change of proposal.changes) {
     if (change.op !== 'body.replace' || change.status !== 'open') continue
     const resolved = resolveTextAnchor(body, change.anchor)
@@ -162,54 +158,38 @@ function placeExisting(body: string, proposal: Proposal | undefined): PlacedChan
 }
 
 /**
+ * The refusal for two passages that reach into one another — what overlapping
+ * means, and why applying them would corrupt the body, is `applyPassages`'s.
+ */
+function overlapRefusal({ passage, overlaps }: PassageOverlap): PassageNotApplicableError {
+  return new PassageNotApplicableError(
+    passage.change.id,
+    `its passage [${passage.at.start}, ${passage.at.end}) overlaps ${overlaps.change.id}'s [${overlaps.at.start}, ${overlaps.at.end}) — applying both would write text neither one proposed`,
+  )
+}
+
+/**
  * Refuses a batch whose passages reach into one another.
- *
- * Placement reads ONE body, and applying back-to-front is what keeps each
- * op's offsets valid — but that equivalence holds only while the ranges are
- * disjoint. Two overlapping passages are each applicable against the body the
- * caller saw and produce, together, a result that is neither: 'abc'→'X' and
- * 'bcd'→'Y' over `abcdef` persist `Xf`, not `Xdef` and not `aYef`. Nothing
- * downstream could tell that apart from an edit somebody meant.
  *
  * Checked when proposing too, since a whole-proposal Adopt applies exactly
  * this set and would corrupt the body the same way — later, and further from
  * the call that caused it.
  *
- * Ranges that merely TOUCH are fine — `[0,3)` and `[3,6)` share no character,
- * so neither rewrites text the other was placed on. Hence a strict overlap
- * test rather than a `<=`.
- *
  * A placed range is never empty here: `resolveTextAnchor` places a passage by
  * finding `quote.exact`, which the schema requires to be at least one
- * character, so the degenerate zero-length case this test would miss cannot
- * arise.
+ * character, so the degenerate zero-length case a strict overlap test would
+ * miss cannot arise.
  */
-function assertDisjoint(placed: readonly PlacedChange[]): void {
-  const byStart = [...placed].sort((a, b) => a.at.start - b.at.start)
-  for (let i = 1; i < byStart.length; i += 1) {
-    const previous = byStart[i - 1] as PlacedChange
-    const current = byStart[i] as PlacedChange
-    if (current.at.start < previous.at.end) {
-      throw new PassageNotApplicableError(
-        current.change.id,
-        `its passage [${current.at.start}, ${current.at.end}) overlaps ${previous.change.id}'s [${previous.at.start}, ${previous.at.end}) — applying both would write text neither one proposed`,
-      )
-    }
-  }
+function assertDisjoint(placed: readonly PlacedPassage[]): void {
+  const overlap = findPassageOverlap(placed)
+  if (overlap !== undefined) throw overlapRefusal(overlap)
 }
 
-/**
- * The body once every placed passage is applied.
- *
- * Applied from the LAST passage backwards, so an earlier op's replacement
- * never shifts the offsets a later one was placed at. Placement read one body;
- * applying in document order would make every op after the first act on
- * offsets taken from a body that no longer exists.
- */
-function applyPlaced(body: string, placed: readonly PlacedChange[]): string {
-  return [...placed]
-    .sort((a, b) => b.at.start - a.at.start)
-    .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
+/** The body once every placed passage is applied, or the overlap's refusal. */
+function applyPlaced(body: string, placed: readonly PlacedPassage[]): string {
+  const outcome = applyPassages(body, placed)
+  if (outcome.kind === 'overlap') throw overlapRefusal(outcome)
+  return outcome.body
 }
 
 /**
@@ -222,9 +202,9 @@ function applyPlaced(body: string, placed: readonly PlacedChange[]): string {
  * Only growth is refused. A body written before the limit existed stays
  * editable toward it, which a flat length test would forbid.
  */
-function assertWithinLimit(body: string, placed: readonly PlacedChange[], result: string): void {
+function assertWithinLimit(body: string, placed: readonly PlacedPassage[], result: string): void {
   if (result.length <= MARKDOWN_MAX_CHARS || result.length <= body.length) return
-  const growth = (entry: PlacedChange): number =>
+  const growth = (entry: PlacedPassage): number =>
     entry.change.text.length - (entry.at.end - entry.at.start)
   const largest = placed.reduce((a, b) => (growth(b) > growth(a) ? b : a))
   throw new PassageNotApplicableError(
@@ -242,7 +222,7 @@ function assertWithinLimit(body: string, placed: readonly PlacedChange[], result
  * deciding needs to be shown; refusing it at the door would throw away the
  * proposal rather than surface the disagreement.
  */
-function assertAssumptionsHold(placed: readonly PlacedChange[], body: string): void {
+function assertAssumptionsHold(placed: readonly PlacedPassage[], body: string): void {
   for (const { change, at } of placed) {
     if (!bodyChangeConflicts(change, body, at)) continue
     throw new PassageNotApplicableError(

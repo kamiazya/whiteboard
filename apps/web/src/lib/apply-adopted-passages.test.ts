@@ -120,6 +120,44 @@ describe('applyAdoptedPassages', () => {
     expect(write).toHaveBeenCalledExactlyOnceWith('# Plan\n\nThe plan is to ship on Friday.\n')
   })
 
+  it('skips two passages an edit has made overlap rather than writing text neither proposed', () => {
+    // Proposed against `xx abc yy cde`, where the two are disjoint. Somebody
+    // then deleted ` yy c`, so `cde` now starts inside `abc`; applying both
+    // back-to-front would write `xx 11122`.
+    const proposedOver = 'xx abc yy cde'
+    const doc = noteWithBody('xx abcde')
+    const write = vi.fn()
+
+    applyAdoptedPassages(
+      doc,
+      [
+        passageChange('A', 'abc', '111', proposedOver),
+        passageChange('B', 'cde', '222', proposedOver),
+      ],
+      write,
+    )
+
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('still applies a disjoint sibling when two other passages overlap', () => {
+    const proposedOver = 'xx abc yy cde zz end'
+    const doc = noteWithBody('xx abcde zz end')
+    const write = vi.fn()
+
+    applyAdoptedPassages(
+      doc,
+      [
+        passageChange('A', 'abc', '111', proposedOver),
+        passageChange('B', 'cde', '222', proposedOver),
+        passageChange('C', 'end', 'fin', proposedOver),
+      ],
+      write,
+    )
+
+    expect(write).toHaveBeenCalledExactlyOnceWith('xx abcde zz fin')
+  })
+
   it('writes nothing for changes that name no passage', () => {
     const doc = noteWithBody(BODY)
     const write = vi.fn()

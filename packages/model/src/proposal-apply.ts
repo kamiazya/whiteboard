@@ -15,7 +15,7 @@ import { withoutNodes } from './spatial-cascade.js'
  *
  * The two canvas functions are excluded from judging `body.replace` by TYPE
  * rather than answering `false`, which would be a verdict nobody computed;
- * `applyBodyChange` and `bodyChangeConflicts` at the foot of this file are
+ * `applyPassages` and `bodyChangeConflicts` at the foot of this file are
  * its prose twins (decision 6). They live here, beside the canvas pair, for
  * the reason above: what adopting means is one reading.
  */
@@ -250,23 +250,15 @@ export interface ResolvedPassage {
 }
 
 /**
- * The body with the passage replaced, or the body unchanged when the passage
- * could not be placed.
+ * One placed passage spliced in. An empty passage is an INSERTION and empty
+ * text is a DELETION; neither is a special case, because a splice already
+ * means both.
  *
- * Idempotent in the same sense `applyCanvasChange` is, and by the same
- * argument: adopting twice is an ordinary race. Re-applying against a body
- * that already carries the replacement — resolved to where the replacement
- * now is — writes the same characters back over themselves.
- *
- * An empty passage is an INSERTION and empty text is a DELETION; neither is
- * a special case here, because a splice already means both.
+ * Not exported: a caller adopting prose adopts a BATCH, and the batch is
+ * `applyPassages`, which owns the order and the overlap refusal one splice
+ * cannot see.
  */
-export function applyBodyChange(
-  body: string,
-  change: BodyProposedChange,
-  at: ResolvedPassage | undefined,
-): string {
-  if (at === undefined) return body
+function applyBodyChange(body: string, change: BodyProposedChange, at: ResolvedPassage): string {
   return body.slice(0, at.start) + change.text + body.slice(at.end)
 }
 
@@ -295,4 +287,73 @@ export function bodyChangeConflicts(
   // onto text the proposer was never shown.
   if (at.end > body.length || at.start > at.end) return true
   return body.slice(at.start, at.end) !== change.assumed
+}
+
+/** A change, with where the body currently holds its passage. */
+export interface PlacedPassage {
+  readonly change: BodyProposedChange
+  readonly at: ResolvedPassage
+}
+
+/** Two placed passages that reach into one another; `passage` starts no earlier than `overlaps`. */
+export interface PassageOverlap {
+  readonly passage: PlacedPassage
+  readonly overlaps: PlacedPassage
+}
+
+/**
+ * The first pair of passages that reach into one another, in start order, or
+ * `undefined` when every passage is disjoint from every other.
+ *
+ * Ranges that merely TOUCH are disjoint — `[0,3)` and `[3,6)` share no
+ * character, so neither rewrites text the other was placed on. Hence a strict
+ * overlap test rather than a `<=`. Comparing neighbours in start order is
+ * enough: if any two passages overlap, some neighbouring pair does, because a
+ * passage starting between them starts before the earlier one ends.
+ */
+export function findPassageOverlap(placed: readonly PlacedPassage[]): PassageOverlap | undefined {
+  const byStart = [...placed].sort((a, b) => a.at.start - b.at.start)
+  for (let i = 1; i < byStart.length; i += 1) {
+    const overlaps = byStart[i - 1] as PlacedPassage
+    const passage = byStart[i] as PlacedPassage
+    if (passage.at.start < overlaps.at.end) return { passage, overlaps }
+  }
+  return undefined
+}
+
+export type AppliedPassages =
+  | { readonly kind: 'applied'; readonly body: string }
+  | ({ readonly kind: 'overlap' } & PassageOverlap)
+
+/**
+ * The body with every placed passage applied, or the overlap that refuses
+ * them — decision 6's batch, adopted as one reading wherever it is adopted.
+ *
+ * Every position comes from ONE read of `body`, and applying from the LAST
+ * passage backwards is what keeps each one valid: an earlier replacement
+ * never shifts the offsets a later one was placed at. That equivalence holds
+ * only while the ranges are disjoint. Two overlapping passages are each
+ * applicable against the body that was read and produce, together, a result
+ * that is neither: 'abc'→'X' and 'bcd'→'Y' over `abcdef` give `Xf`, not
+ * `Xdef` and not `aYef`, and nothing downstream could tell that apart from an
+ * edit somebody meant. Passages proposed apart can come to overlap, since the
+ * body moves under a proposal, so the refusal is asked at every adoption
+ * rather than only when proposing.
+ *
+ * Idempotent in the same sense `applyCanvasChange` is, and by the same
+ * argument: adopting twice is an ordinary race. Re-applying against a body
+ * that already carries the replacement — placed where the replacement now
+ * is — writes the same characters back over themselves.
+ *
+ * The overlap is answered rather than thrown because what a refusal means
+ * belongs to the surface: a tool refuses the whole call by name, an editor
+ * skips what it cannot write honestly.
+ */
+export function applyPassages(body: string, placed: readonly PlacedPassage[]): AppliedPassages {
+  const overlap = findPassageOverlap(placed)
+  if (overlap !== undefined) return { kind: 'overlap', ...overlap }
+  const next = [...placed]
+    .sort((a, b) => b.at.start - a.at.start)
+    .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
+  return { kind: 'applied', body: next }
 }
