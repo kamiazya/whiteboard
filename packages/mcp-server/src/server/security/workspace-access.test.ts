@@ -18,7 +18,6 @@ import {
   passkeyBinding,
 } from './member-profile-store.js'
 import { membershipRefusal, OPERATOR_ISSUED_KINDS, workspaceAccess } from './workspace-access.js'
-import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 
 const WS = 'ws-1'
 const ORIGIN = 'https://a.example'
@@ -26,18 +25,26 @@ const ORIGIN = 'https://a.example'
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
-let roles: WorkspaceRoles
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-workspace-access-'))
   handle = await createIsolatedDb({ dataDir: root })
   members = createMemberProfileStore(handle.db)
-  roles = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
 })
 afterEach(async () => {
   await handle.dispose()
   await rm(root, { recursive: true, force: true })
 })
+
+// The workspace's last owner cannot leave through the roles store, so the cases
+// that need an empty workspace delete the membership row itself.
+async function dropMembership(workspaceId: string, profileId: string): Promise<void> {
+  await handle.rawDb
+    .deleteFrom('workspaceMemberships')
+    .where('workspaceId', '=', workspaceId)
+    .where('profileId', '=', profileId)
+    .execute()
+}
 
 function grantOf(
   kind: ResolvedGrant['kind'],
@@ -141,7 +148,7 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     await members.addMember(WS, profile.id)
     expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
 
-    await roles.remove(WS, profile.id)
+    await dropMembership(WS, profile.id)
     expect(await workspaceAccess(UNBOUND_SESSION, WS, members)).toBe('requires_person_session')
   })
 
@@ -151,7 +158,7 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
       displayName: 'Ada',
     })
     await members.addMember(WS, profile.id)
-    await roles.remove(WS, profile.id)
+    await dropMembership(WS, profile.id)
 
     const grant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-1' })
     expect(await workspaceAccess(grant, WS, members)).toBe('not_a_member')
@@ -169,7 +176,7 @@ describe('workspaceAccess — membership monotonicity (user decision 2026-09-21)
     await members.addMember(WS, removed.id)
     await members.addMember(WS, staying.id)
 
-    await roles.remove(WS, removed.id)
+    await dropMembership(WS, removed.id)
 
     const stayingGrant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-staying' })
     const removedGrant = grantOf('signed-in', { origin: ORIGIN, credentialId: 'cred-removed' })

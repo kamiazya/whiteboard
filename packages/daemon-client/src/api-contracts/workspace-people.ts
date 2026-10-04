@@ -1,11 +1,10 @@
 import { z } from 'zod'
 
 /**
- * ADR-0049 decisions 1 and 5: a workspace's people as its owners manage
- * them, on either keeper. Any member may read the list; only an owner
- * changes it, and the keeper decides who that is — a member with the owner
- * role on server mode, the machine's owner on the local daemon. Deliberately free of any node:* import —
- * the browser consumes these schemas directly.
+ * ADR-0049 decision 1: a workspace's people as its owners manage them. Server
+ * mode is the keeper with people (ADR-0050 decision 3): any member may read
+ * the list, and only a member whose role is `owner` changes it. Deliberately
+ * free of any node:* import — the browser consumes these schemas directly.
  */
 
 const workspaceRoleSchema = z.enum(['owner', 'member'])
@@ -22,7 +21,7 @@ export const workspacePersonSchema = z.object({
 export const workspacePeopleResponseSchema = z.object({
   people: z.array(workspacePersonSchema),
   // Whether the caller may change these people — the keeper decides who
-  // that is (ADR-0049 decision 5), so a screen asks rather than guessing.
+  // that is, so a screen asks rather than guessing.
   canManage: z.boolean(),
 })
 

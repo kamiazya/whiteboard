@@ -15,20 +15,28 @@ import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let store: MemberProfileStore
-// Removal is the roles store's: the machine-owned form lets a workspace's last
-// owner go, which is what these cases need to take everyone out.
 let roles: WorkspaceRoles
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'wb-member-profiles-'))
   handle = await createIsolatedDb({ dataDir: root })
   store = createMemberProfileStore(handle.db)
-  roles = createWorkspaceRoles(handle.db, { ownedByTheMachine: true })
+  roles = createWorkspaceRoles(handle.db)
 })
 afterEach(async () => {
   await handle.dispose()
   await rm(root, { recursive: true, force: true })
 })
+
+// The workspace's last owner cannot leave through the roles store, so the cases
+// that need an empty workspace delete the membership row itself.
+async function dropMembership(workspaceId: string, profileId: string): Promise<void> {
+  await handle.rawDb
+    .deleteFrom('workspaceMemberships')
+    .where('workspaceId', '=', workspaceId)
+    .where('profileId', '=', profileId)
+    .execute()
+}
 
 describe('profileForBinding', () => {
   it('is null for an unknown (origin, credentialId)', async () => {
@@ -92,7 +100,7 @@ describe('removing a member', () => {
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
-    expect(await roles.remove('ws-1', profile.id)).toBe('ok')
+    await dropMembership('ws-1', profile.id)
     await store.addMember('ws-1', profile.id)
 
     expect((await roles.list('ws-1')).map((m) => m.profile.id)).toEqual([profile.id])
@@ -104,7 +112,7 @@ describe('removing a member', () => {
       displayName: 'Ada',
     })
     await store.addMember('ws-1', profile.id)
-    await roles.remove('ws-1', profile.id)
+    await dropMembership('ws-1', profile.id)
 
     expect(await store.profileForBinding(passkeyBinding('https://a.example', 'cred-1'))).toEqual(
       profile,
@@ -125,7 +133,7 @@ describe('membersOnly', () => {
     await store.addMember('ws-1', profile.id)
     expect(await store.membersOnly('ws-1')).toBe(true)
 
-    await roles.remove('ws-1', profile.id)
+    await dropMembership('ws-1', profile.id)
     expect(await store.membersOnly('ws-1')).toBe(true)
   })
 
@@ -174,7 +182,7 @@ describe('isWorkspaceMember', () => {
     await store.addMember('ws-1', profile.id)
     expect(await store.isWorkspaceMember('ws-1', profile.id)).toBe('member')
 
-    await roles.remove('ws-1', profile.id)
+    await dropMembership('ws-1', profile.id)
     expect(await store.isWorkspaceMember('ws-1', profile.id)).toBe('not-a-member')
   })
 
@@ -273,7 +281,7 @@ describe('membershipRole', () => {
     const ada = await user('ada')
     const bob = await user('bob')
     await store.addMember('ws-1', ada.id)
-    await roles.remove('ws-1', ada.id)
+    await dropMembership('ws-1', ada.id)
     await store.addMember('ws-1', bob.id)
     expect(await store.membershipRole('ws-1', bob.id)).toBe('owner')
   })

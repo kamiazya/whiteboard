@@ -172,10 +172,9 @@ type WorkspaceRole = WorkspaceMember['role']
 
 /**
  * What may be done to one workspace's people, once the caller is known to be
- * allowed to do it. WHETHER a caller may — an owner of this workspace, the
- * machine's owner on the local daemon, the operator at the machine — is the
- * keeper's authority and stays with the surface, so `not_an_owner` is not a
- * refusal here. The rest are the rules about the people themselves, written
+ * allowed to do it. WHETHER a caller may — an owner of this workspace, or the
+ * operator at the machine — is the keeper's authority and stays with the
+ * surface, so `not_an_owner` is not a refusal here. The rest are the rules about the people themselves, written
  * once for the HTTP route and the operator's command line.
  */
 export interface WorkspacePeopleAdministration {
