@@ -1,4 +1,12 @@
-import { DocumentPathTakenError, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  DocumentHasDescendantsError,
+  DocumentPathTakenError,
+  isDocumentNotFoundError,
+  isWorkspaceNotFoundError,
+  isWorkspaceSegmentTakenError,
+  SnapshotReassemblyError,
+  StoredDocumentUnreadableError,
+} from '@kamiazya/whiteboard-ports'
 import type { Context, MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import type { z } from 'zod'
@@ -43,7 +51,11 @@ import {
 } from './tools/document-search.js'
 import { OKF_YAML_SAFE_STAGE, OkfParseError } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
-import { DocumentKindMismatchError, FacetWriteRejectedError } from './tools/errors.js'
+import {
+  DocumentKindMismatchError,
+  DocumentSerializeError,
+  FacetWriteRejectedError,
+} from './tools/errors.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetListTool } from './tools/facet-list.js'
 import { createFacetSetTool } from './tools/facet-set.js'
@@ -421,7 +433,7 @@ export function createServer(deps: ServerDeps) {
 interface Refusal {
   readonly matches: (err: unknown) => boolean
   readonly code: (err: unknown) => string
-  readonly status: 400 | 404 | 409
+  readonly status: 400 | 404 | 409 | 500
 }
 
 const refusalOf = (
@@ -437,7 +449,13 @@ const refusalOf = (
 /**
  * The errors a route answers rather than lets escape, in the order they are
  * tried. Each is a request that is well-formed to a server that is fine: only
- * the caller can send something the operation admits, so none is a 500.
+ * the caller can send something the operation admits — except the stored-data
+ * arms at the end, whose 500 is the honest status for a record the server
+ * cannot read, answered as JSON so a client gets a reason where a bare 500
+ * gives it a stack trace's silence.
+ *
+ * Every error class a `/api/v1` operation can raise has an arm here or a
+ * reasoned exemption in `tools/arch-lint`'s `v1-refusals-cover-errors` ledger.
  */
 const REFUSALS: readonly Refusal[] = [
   refusalOf(WorkspaceDocumentNotFoundError, 'document_not_found', 404),
@@ -481,6 +499,38 @@ const REFUSALS: readonly Refusal[] = [
   refusalOf(FacetWriteRejectedError, 'facet_write_rejected', 400),
   // Two display names for one document, which no server choice could settle.
   refusalOf(DocumentNameConflictError, 'document_name_conflict', 400),
+  // Deleting a document takes the documents below it only when the caller
+  // names them; the refusal says which to delete first.
+  refusalOf(DocumentHasDescendantsError, 'document_has_descendants', 409),
+  // An operation named a document the index no longer holds (a delete racing
+  // another delete): a read miss like the others, not a server fault.
+  {
+    matches: isDocumentNotFoundError,
+    code: () => 'document_not_found',
+    status: 404,
+  },
+  // Another create bootstrapped the workspace's segment and the registry
+  // cannot resolve it back, so the mint cannot converge on the winner.
+  {
+    matches: isWorkspaceSegmentTakenError,
+    code: () => 'workspace_segment_taken',
+    status: 409,
+  },
+  // A stored value OKF has no spelling for: the request is fine and the
+  // document cannot be projected until its content is rewritten.
+  refusalOf(DocumentSerializeError, 'document_serialize_failed', 409),
+  // A record the keeper holds and cannot read back. `unsupported-version` is
+  // a reader that is too old, `malformed` is damage; they ask the caller for
+  // opposite things, so they carry different codes.
+  refusalOf(
+    StoredDocumentUnreadableError,
+    (err: StoredDocumentUnreadableError) =>
+      err.code === 'unsupported-version'
+        ? 'stored_document_unsupported_version'
+        : 'corrupt_stored_data',
+    500,
+  ),
+  refusalOf(SnapshotReassemblyError, 'corrupt_stored_data', 500),
 ]
 
 /** `said` is the reason as the caller's own words re-state it; the error's own message otherwise. */
