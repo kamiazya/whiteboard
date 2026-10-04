@@ -14,7 +14,7 @@ paths:
 
 ## What does NOT belong here
 
-- File parsing/serialization (goes to `codec`, planned), Loro containers, storage, rendering, HTTP/MCP surfaces.
+- File parsing/serialization (goes to `codec`), Loro containers, storage, rendering, HTTP/MCP surfaces.
 - Runtime behavior that is not schema validation or pure document semantics (above) — I/O, clocks, storage handles, anything that needs `node:*` or a DOM — with the deliberate exceptions below (the base64 codec, `isUint8ArrayAnyRealm`, `messageOf`).
 
 ## The base64 codec

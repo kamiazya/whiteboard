@@ -9,8 +9,8 @@ paths:
 
 - The `createServer(deps)` factory: assembles a `Hono` app from the
   store/sync ports supplied via `ServerDeps`, and returns `{ app }`.
-- `/api/v1` Hono route definitions (future slices).
-- MCP tool definitions and MCP resource definitions (future slices) —
+- `/api/v1` Hono route definitions.
+- MCP tool definitions and MCP resource definitions —
   their `inputSchema`/`outputSchema` and `execute` handlers, wired to the
   injected deps.
 - Response-schema declarations shared with typed clients (declared once as
