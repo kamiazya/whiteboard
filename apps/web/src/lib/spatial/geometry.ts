@@ -5,7 +5,7 @@
  * selection and rendering can never disagree about where a node is. See
  * `scene-render.test.ts`'s drift guard.
  */
-import { paintOrderOf } from '@kamiazya/whiteboard-canvas-render'
+import { boxContains, paintOrderOf, topmostHit } from '@kamiazya/whiteboard-canvas-render'
 import { frameHolds, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from './viewport.js'
 
@@ -35,8 +35,10 @@ export function indexNodeBoxes(canvas: SpatialCanvas): readonly NodeBox[] {
 }
 
 // Hit-testing is the renderer's rule, shared with the MCP Apps widget so a
-// click names the same node in both surfaces.
-export { boxContains, topmostHit as hitTest } from '@kamiazya/whiteboard-canvas-render'
+// click names the same node in both surfaces. Imported and then exported, not
+// `export … from`: the test-only-export scan counts an import as this
+// module's use, and a bare re-export would read as a barrel-only one.
+export { boxContains, topmostHit as hitTest }
 
 export type ResizeHandleKind = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
