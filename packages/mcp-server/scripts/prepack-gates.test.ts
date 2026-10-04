@@ -3,6 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { repoRoot } from '../src/shared/test-utils/repo-root.js'
 
 // `prepack` chains the three gates with `&&`, so one that silently does
 // nothing turns the whole check off while still exiting 0. The entry check
@@ -37,7 +38,7 @@ describe('the prepack gates', () => {
     const checks = join(root, 'tools', 'checks', 'src')
     mkdirSync(checks, { recursive: true })
     copyFileSync(
-      join(import.meta.dirname, '../../../tools/checks/src/is-run-as-script.mjs'),
+      join(repoRoot(), 'tools/checks/src/is-run-as-script.mjs'),
       join(checks, 'is-run-as-script.mjs'),
     )
     return packageRoot
