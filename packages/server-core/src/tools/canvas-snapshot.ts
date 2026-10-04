@@ -2,9 +2,11 @@ import { sceneDigest, sceneDigestSchema } from '@kamiazya/whiteboard-canvas-rend
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
+  type CanvasLine,
   canvasColorSchema,
   canvasCommentSchema,
   canvasEdgeSchema,
+  canvasLineSchema,
   documentIdSchema,
   type ExtensionFacets,
   edgeEndSchema,
@@ -38,7 +40,7 @@ import { type PublishedNodeKind, publishedKind } from './published-node-kind.js'
 export const SNAPSHOT_TEXT_MAX_CHARS = 400
 /** Upper bound on the nodes returned. Boards larger than this are reported truncated. */
 export const SNAPSHOT_MAX_NODES = 300
-/** Upper bound on the edges returned, budgeted independently of nodes. */
+/** Upper bound on the edges returned, and separately on the lines, each budgeted independently of nodes. */
 export const SNAPSHOT_MAX_EDGES = 600
 
 /**
@@ -99,8 +101,9 @@ const canvasSnapshotNodeSchema = z
  * own array rather than a flag on the edge list — a reader counting relations
  * must not have to subtract the strokes.
  *
- * It carries no `locked`: lines have no lock op, so a field that is always
- * absent would be a promise the surface does not keep.
+ * It carries no `locked` and no `tags`: lines have no lock op and ink makes no
+ * claim to classify, so a field that is always absent would be a promise the
+ * surface does not keep.
  */
 const canvasSnapshotLineSchema = z
   .object({
@@ -109,6 +112,9 @@ const canvasSnapshotLineSchema = z
     to: lineEndSchema,
     label: z.string().optional(),
     color: canvasColorSchema.optional(),
+    /** Hand-placed waypoints; absent when the route is computed. */
+    bends: canvasLineSchema.shape.bends,
+    facets: dressingFields.facets,
   })
   .strict()
 
@@ -149,6 +155,8 @@ export const canvasSnapshotSchema = z
      */
     nodeCount: z.number().int().nonnegative(),
     edgeCount: z.number().int().nonnegative(),
+    lineCount: z.number().int().nonnegative(),
+    /** True when ANY of the three lists, or a node's text, was cut. */
     truncated: z.boolean(),
     /**
      * The annotation layer (ADR-0024), resolved records included — they are
@@ -293,6 +301,19 @@ function projectEdge(edge: CanvasEdge, locked: boolean): z.infer<typeof canvasSn
   }
 }
 
+function projectLine(line: CanvasLine): z.infer<typeof canvasSnapshotLineSchema> {
+  const { facets } = dressing(line)
+  return {
+    id: line.id,
+    from: line.from,
+    to: line.to,
+    ...(line.label === undefined ? {} : { label: line.label }),
+    ...(line.color === undefined ? {} : { color: line.color }),
+    ...(line.bends === undefined ? {} : { bends: line.bends }),
+    ...(facets === undefined ? {} : { facets }),
+  }
+}
+
 /**
  * Projects a canvas value plus its lock sets into the snapshot payload.
  *
@@ -313,23 +334,21 @@ export function projectCanvasSnapshot(
     .slice(0, SNAPSHOT_MAX_EDGES)
     .map((edge) => projectEdge(edge, edgeLocks.has(edge.id)))
 
+  const allLines = canvas.lines ?? []
+
   return {
     documentId,
     nodes: projected.map((entry) => entry.node),
     edges,
-    lines: (canvas.lines ?? []).slice(0, SNAPSHOT_MAX_EDGES).map((line) => ({
-      id: line.id,
-      from: line.from,
-      to: line.to,
-      ...(line.label === undefined ? {} : { label: line.label }),
-      ...(line.color === undefined ? {} : { color: line.color }),
-    })),
+    lines: allLines.slice(0, SNAPSHOT_MAX_EDGES).map(projectLine),
     comments: canvas.comments ?? [],
     nodeCount: canvas.nodes.length,
     edgeCount: canvas.edges.length,
+    lineCount: allLines.length,
     truncated:
       canvas.nodes.length > SNAPSHOT_MAX_NODES ||
       canvas.edges.length > SNAPSHOT_MAX_EDGES ||
+      allLines.length > SNAPSHOT_MAX_EDGES ||
       projected.some((entry) => entry.truncated),
   }
 }
@@ -348,7 +367,7 @@ export function projectCanvasSnapshot(
  * payload is unbounded, and being safe to call on any board is the whole
  * reason this tool exists.
  *
- * Both caps take the FIRST N in stored order.
+ * Every cap takes the FIRST N in stored order.
  * ponytail: stored order, viewport- or selection-scoped windowing if
  * reading past the cap turns out to matter.
  */
@@ -356,7 +375,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_snapshot' as const,
     description:
-      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry, lock state, facets and tags, plus every edge with its bends. Long text and large boards are cut, and the true totals are reported alongside so nothing is hidden silently. Comments hold only the opening message of a thread; wb_document_get has them whole. Prefer this over wb_document_get when reading a canvas to decide what to change.',
+      'Read a spatial canvas as a compact snapshot: every node with its type, text, geometry, lock state, facets and tags, plus every edge and every line with its bends and facets. Long text and large boards are cut, and the true totals (nodeCount, edgeCount, lineCount) are reported alongside so nothing is hidden silently. Comments hold only the opening message of a thread, and leave out whole-document threads, which have no place on the canvas; wb_document_get has every thread whole. Prefer this over wb_document_get when reading a canvas to decide what to change.',
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
