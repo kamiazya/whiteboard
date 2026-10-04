@@ -15,36 +15,15 @@ import {
   type FacetRegistry,
   type WorkspaceStencils,
 } from '@kamiazya/whiteboard-facet-engine'
-import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
 import {
   readStencilLibrary,
   STENCIL_LIBRARY_PATH,
   VISUAL_STENCILS_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
-import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
-import { loadOrCreateDocument } from '../document-io.js'
+import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
 import { FacetWriteRejectedError } from './errors.js'
-
-/**
- * What to answer when the WORKSPACE itself does not exist. Stated by every
- * caller rather than defaulted, because the two right answers are opposite
- * and which one is right is a property of the caller, not of looking a
- * library up.
- *
- * - `'deployment'` — hand back the deployment's registry as though the
- *   workspace simply had no library. For a caller that is ABOUT to refuse
- *   the same id more specifically: rethrowing from here put
- *   `WorkspaceNotFoundError` in front of `WorkspaceDocumentNotFoundError`
- *   on `wb_facet_set`, which is the refusal-names-the-wrong-thing class
- *   ADR-0031 C11 already paid for once.
- * - `'refuse'` — let `WorkspaceNotFoundError` through. For a caller whose
- *   ANSWER is the workspace's vocabulary and which therefore has no better
- *   refusal to make room for: `wb_facet_list` handed a workspace nobody
- *   made would otherwise report the deployment's stencils, and "the
- *   deployment's six" reads as "this workspace defines none".
- */
-export type UnknownWorkspace = 'deployment' | 'refuse'
+import { readWorkspaceLibraryFacets, type UnknownWorkspace } from './workspace-library-document.js'
 
 /**
  * The registry this workspace's stencils resolve through: the deployment's,
@@ -92,7 +71,7 @@ export function refuseUnusableStencilLibrary(
   if (candidate === undefined) return
   const { dropped } = composeWorkspaceStencils(
     deps.facetRegistry,
-    readStencilLibrary({ [VISUAL_STENCILS_KEY]: candidate } as never),
+    readStencilLibrary({ [VISUAL_STENCILS_KEY]: candidate }),
   )
   if (dropped.length === 0) return
   throw new FacetWriteRejectedError(
@@ -113,22 +92,13 @@ export async function workspaceStencilLibrary(
   unknownWorkspace: UnknownWorkspace,
   listed?: readonly DocumentEntry[],
 ): Promise<WorkspaceStencils> {
-  const entries = listed ?? (await listWorkspaceDocuments(deps, workspaceId, unknownWorkspace))
-  const library = entries.find((entry) => entry.path === STENCIL_LIBRARY_PATH)
-  if (library === undefined) return {}
-  const doc = await loadOrCreateDocument(deps, workspaceId, library.documentId)
-  return readStencilLibrary(readFacets(doc))
-}
-
-export async function listWorkspaceDocuments(
-  deps: ServerDeps,
-  workspaceId: string,
-  unknownWorkspace: UnknownWorkspace,
-): Promise<DocumentEntry[]> {
-  try {
-    return await deps.documentIndex.listDocuments({ workspaceId })
-  } catch (error) {
-    if (unknownWorkspace === 'deployment' && isWorkspaceNotFoundError(error)) return []
-    throw error
-  }
+  return readStencilLibrary(
+    await readWorkspaceLibraryFacets(
+      deps,
+      workspaceId,
+      STENCIL_LIBRARY_PATH,
+      unknownWorkspace,
+      listed,
+    ),
+  )
 }
