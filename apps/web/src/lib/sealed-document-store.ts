@@ -62,7 +62,7 @@ import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-p
  */
 export interface ReplicaKeyProvider {
   keyFor(
-    documentId: string,
+    docKey: string,
   ): Promise<{ key: CryptoKey; epoch: number } | 'withheld' | 'rotated' | 'plaintext'>
 }
 
@@ -74,8 +74,8 @@ export interface ReplicaKeyProvider {
  * temporarily gone.
  */
 export class ReplicaKeyWithheldError extends Error {
-  constructor(readonly documentId: string) {
-    super(`replica key for document ${documentId} is withheld`)
+  constructor(readonly docKey: string) {
+    super(`replica key for document ${docKey} is withheld`)
     this.name = 'ReplicaKeyWithheldError'
   }
 }
@@ -88,8 +88,8 @@ export class ReplicaKeyWithheldError extends Error {
  * the one thing a rotated key must never be mistaken for.
  */
 export class ReplicaKeyRotatedError extends Error {
-  constructor(readonly documentId: string) {
-    super(`replica of document ${documentId} is sealed under a replaced key`)
+  constructor(readonly docKey: string) {
+    super(`replica of document ${docKey} is sealed under a replaced key`)
     this.name = 'ReplicaKeyRotatedError'
   }
 }
@@ -149,7 +149,7 @@ function sealManifest(manifest: SnapshotManifest): SnapshotManifest {
   }
 }
 
-function openManifest(manifest: SnapshotManifest, documentId: string): SnapshotManifest {
+function openManifest(manifest: SnapshotManifest, docKey: string): SnapshotManifest {
   const overhead = ENVELOPE_OVERHEAD * manifest.chunkCount
   const totalBytes = manifest.totalBytes - overhead
   // Re-check the port's own `(chunkCount === 0) === (totalBytes === 0)` invariant
@@ -165,7 +165,7 @@ function openManifest(manifest: SnapshotManifest, documentId: string): SnapshotM
   if (malformed) {
     throw new StoredDocumentUnreadableError(
       'malformed',
-      `sealed manifest for document ${documentId} is smaller than its own envelope overhead`,
+      `sealed manifest for document ${docKey} is smaller than its own envelope overhead`,
     )
   }
   return {
@@ -190,22 +190,22 @@ export class SealedDocumentStore implements DocumentStore {
    * (a fresh epoch, or a session that has since locked; 'plaintext' never
    * changes for a given ref, but asking costs nothing extra to route on).
    */
-  async #resolveKey(documentId: string): Promise<ResolvedKey> {
-    const resolved = await this.keys.keyFor(documentId)
-    if (resolved === 'withheld') throw new ReplicaKeyWithheldError(documentId)
-    if (resolved === 'rotated') throw new ReplicaKeyRotatedError(documentId)
+  async #resolveKey(docKey: string): Promise<ResolvedKey> {
+    const resolved = await this.keys.keyFor(docKey)
+    if (resolved === 'withheld') throw new ReplicaKeyWithheldError(docKey)
+    if (resolved === 'rotated') throw new ReplicaKeyRotatedError(docKey)
     return resolved
   }
 
   async #seal(
     resolved: ResolvedKey,
-    documentId: string,
+    docKey: string,
     plaintext: Uint8Array,
   ): Promise<Uint8Array<ArrayBuffer>> {
     if (resolved === 'plaintext') return new Uint8Array(plaintext) as Uint8Array<ArrayBuffer>
     // A private copy: `sealBytes` wants the buffer-backed narrowing WebCrypto requires.
     const envelope = await sealBytes(resolved.key, new Uint8Array(plaintext), {
-      documentId,
+      documentId: docKey,
       epoch: resolved.epoch,
     })
     return encodeEnvelope(envelope)
@@ -220,7 +220,7 @@ export class SealedDocumentStore implements DocumentStore {
    */
   async #open(
     resolved: ResolvedKey,
-    documentId: string,
+    docKey: string,
     sealed: Uint8Array,
     what: string,
   ): Promise<Uint8Array<ArrayBuffer>> {
@@ -231,15 +231,15 @@ export class SealedDocumentStore implements DocumentStore {
     } catch (cause) {
       throw new StoredDocumentUnreadableError(
         'malformed',
-        `${what} of document ${documentId} does not decode as a sealed envelope: ${String(cause)}`,
+        `${what} of document ${docKey} does not decode as a sealed envelope: ${String(cause)}`,
       )
     }
     try {
-      return await openBytes(resolved.key, envelope, { documentId, epoch: envelope.epoch })
+      return await openBytes(resolved.key, envelope, { documentId: docKey, epoch: envelope.epoch })
     } catch (cause) {
       throw new StoredDocumentUnreadableError(
         'malformed',
-        `${what} of document ${documentId} failed to open under its sealed key: ${String(cause)}`,
+        `${what} of document ${docKey} failed to open under its sealed key: ${String(cause)}`,
       )
     }
   }
@@ -249,17 +249,17 @@ export class SealedDocumentStore implements DocumentStore {
    * empty batch must succeed even while the key is withheld.
    */
   async #withKey<T, R>(
-    documentId: string,
+    docKey: string,
     items: readonly T[],
     fn: (resolved: ResolvedKey, item: T) => Promise<R>,
   ): Promise<R[]> {
     if (items.length === 0) return []
-    const resolved = await this.#resolveKey(documentId)
+    const resolved = await this.#resolveKey(docKey)
     return Promise.all(items.map((item) => fn(resolved, item)))
   }
 
   async #sealChunks(
-    documentId: string,
+    docKey: string,
     manifest: SnapshotManifest,
     chunks: readonly SnapshotChunk[],
   ): Promise<{ manifest: SnapshotManifest; chunks: SnapshotChunk[] }> {
@@ -267,11 +267,11 @@ export class SealedDocumentStore implements DocumentStore {
     // no chunks must save even while the key is withheld, and the manifest
     // for one is arm-independent (chunkCount 0 <=> totalBytes 0 either way).
     if (chunks.length === 0) return { manifest, chunks: [] }
-    const resolved = await this.#resolveKey(documentId)
+    const resolved = await this.#resolveKey(docKey)
     const sealed = await Promise.all(
       chunks.map(async (chunk) => ({
         ...chunk,
-        bytes: await this.#seal(resolved, documentId, chunk.bytes),
+        bytes: await this.#seal(resolved, docKey, chunk.bytes),
       })),
     )
     // Plaintext never carries the envelope overhead: applying sealManifest
@@ -295,26 +295,23 @@ export class SealedDocumentStore implements DocumentStore {
    * Otherwise the key is resolved (the holder memoises, so a replica pays one
    * mint) to decide whether `openManifest`'s arithmetic applies.
    */
-  async #openManifestArm(
-    documentId: string,
-    manifest: SnapshotManifest,
-  ): Promise<SnapshotManifest> {
+  async #openManifestArm(docKey: string, manifest: SnapshotManifest): Promise<SnapshotManifest> {
     if (manifest.chunkCount === 0) return manifest
-    const resolved = await this.#resolveKey(documentId)
-    return resolved === 'plaintext' ? manifest : openManifest(manifest, documentId)
+    const resolved = await this.#resolveKey(docKey)
+    return resolved === 'plaintext' ? manifest : openManifest(manifest, docKey)
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
-    const documentId = docRefKey(input.docRef)
-    const sealed = await this.#sealChunks(documentId, input.manifest, input.chunks)
+    const docKey = docRefKey(input.docRef)
+    const sealed = await this.#sealChunks(docKey, input.manifest, input.chunks)
     await this.inner.saveSnapshot({ ...input, manifest: sealed.manifest, chunks: sealed.chunks })
   }
 
   async saveCompactedSnapshot(
     input: SaveCompactedSnapshotInput,
   ): Promise<SaveCompactedSnapshotResult> {
-    const documentId = docRefKey(input.docRef)
-    const sealed = await this.#sealChunks(documentId, input.manifest, input.chunks)
+    const docKey = docRefKey(input.docRef)
+    const sealed = await this.#sealChunks(docKey, input.manifest, input.chunks)
     return this.inner.saveCompactedSnapshot({
       ...input,
       manifest: sealed.manifest,
@@ -325,11 +322,11 @@ export class SealedDocumentStore implements DocumentStore {
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const result = await this.inner.loadSnapshot(input)
     if (result === null) return null
-    const documentId = docRefKey(input.docRef)
-    const manifest = await this.#openManifestArm(documentId, result.manifest)
-    const chunks = await this.#withKey(documentId, result.chunks, async (resolved, chunk) => ({
+    const docKey = docRefKey(input.docRef)
+    const manifest = await this.#openManifestArm(docKey, result.manifest)
+    const chunks = await this.#withKey(docKey, result.chunks, async (resolved, chunk) => ({
       ...chunk,
-      bytes: await this.#open(resolved, documentId, chunk.bytes, `chunk ${chunk.index}`),
+      bytes: await this.#open(resolved, docKey, chunk.bytes, `chunk ${chunk.index}`),
     }))
     return { ...result, manifest, chunks }
   }
@@ -351,18 +348,18 @@ export class SealedDocumentStore implements DocumentStore {
   }
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {
-    const documentId = docRefKey(input.docRef)
-    const updates = await this.#withKey(documentId, input.deltaBatch.updates, (resolved, u) =>
-      this.#seal(resolved, documentId, u),
+    const docKey = docRefKey(input.docRef)
+    const updates = await this.#withKey(docKey, input.deltaBatch.updates, (resolved, u) =>
+      this.#seal(resolved, docKey, u),
     )
     return this.inner.appendDeltas({ ...input, deltaBatch: { ...input.deltaBatch, updates } })
   }
 
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
-    const documentId = docRefKey(input.docRef)
+    const docKey = docRefKey(input.docRef)
     const result = await this.inner.loadDeltas(input)
-    const updates = await this.#withKey(documentId, result.updates, (resolved, u) =>
-      this.#open(resolved, documentId, u, 'a delta'),
+    const updates = await this.#withKey(docKey, result.updates, (resolved, u) =>
+      this.#open(resolved, docKey, u, 'a delta'),
     )
     return { ...result, updates }
   }

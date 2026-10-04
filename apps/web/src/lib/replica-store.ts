@@ -26,14 +26,13 @@ import {
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
+import { workspaceIdOfDocKey } from '@kamiazya/whiteboard-ports'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { sealedUnderSupersededKey } from './replicas.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
 import { SealedDocumentStore } from './sealed-document-store.js'
 import { createUserSettingsStore } from './user-settings-store.js'
-
-const WORKSPACE_TREE_REF = /^workspace-tree:(.+)$/
 
 interface ConnectedKeeper {
   baseUrl: string
@@ -73,17 +72,20 @@ function sourceFor(daemonBaseUrl: string): ReplicaSource | undefined {
 }
 
 const routingProvider: ReplicaKeyProvider = {
-  async keyFor(documentId) {
-    const match = WORKSPACE_TREE_REF.exec(documentId)
-    if (match === null) return 'plaintext'
-    const workspaceId = match[1] as string
+  async keyFor(docKey) {
+    const workspaceId = workspaceIdOfDocKey(docKey)
+    // `SealedDocumentStore` only ever asks with a `docRefKey`, so the one shape
+    // that is not a workspace record is a `document:*` key — never sealed, per
+    // the file header. Plaintext is therefore the answer for that shape alone,
+    // and the fallback is deliberate rather than a parse failure read as consent.
+    if (workspaceId === null) return 'plaintext'
     const daemonBaseUrl = replicaDaemonBaseUrl(workspaceId)
     if (daemonBaseUrl === undefined) return 'plaintext'
     const resolved = await replicaKeyProviderFor(
       daemonBaseUrl,
       workspaceId,
       sourceFor(daemonBaseUrl),
-    ).keyFor(documentId)
+    ).keyFor(docKey)
     if (resolved === 'withheld') return resolved
     // After the ask, so the holder's answer is the one compared: the key it
     // now holds against the generation the stored bytes were sealed under.
