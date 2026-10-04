@@ -125,16 +125,16 @@ if (inspectResult.status !== 0 || inspectResult.error) {
 
 const imageId = inspectResult.stdout.trim()
 
-// Step 3: write metadata placeholder for the publish-workflow slice.
+// Step 3: write the metadata placeholder; the real push, SBOM and signing run in release.yml.
 const metadata = {
   schemaVersion: 1,
   artifactId: 'docker-image',
   imageTag: IMAGE_TAG,
   imageId,
-  registryDigest: 'deferred',
-  sbomStatus: 'deferred',
-  signingStatus: 'deferred',
-  note: 'No registry push. SBOM (docker buildx --sbom=true) and cosign keyless signing deferred to publish-workflow slice.',
+  registryDigest: 'skipped-dry-run',
+  sbomStatus: 'skipped-dry-run',
+  signingStatus: 'skipped-dry-run',
+  note: 'No registry push. SBOM (docker/build-push-action sbom: true) and cosign keyless signing run in release.yml.',
   // Full report, step names included: this file is an artifact of the same run
   // whose log already names them, and trending the slowest steps across runs is
   // what turns "the build is slow" into a specific layer.
@@ -164,9 +164,9 @@ process.stdout.write(
         executedStepSeconds: cacheReport.executedStepSeconds,
         elapsedSeconds,
       },
-      sbomStatus: 'deferred',
-      signingStatus: 'deferred',
-      note: 'no registry push; no cosign signing; publish-workflow slice required',
+      sbomStatus: 'skipped-dry-run',
+      signingStatus: 'skipped-dry-run',
+      note: 'no registry push; no cosign signing; the real publish runs in release.yml',
     },
     null,
     2,
