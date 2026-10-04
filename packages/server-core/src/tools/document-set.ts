@@ -29,6 +29,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
+import { refuseUnusableStencilLibrary } from './stencil-library.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 /**
@@ -161,8 +162,8 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
 
 /**
  * The frontmatter's `facets` bucket as it is stored, refused if a registered
- * facet in it is one `wb_facet_set` would refuse for a document (ADR-0013
- * decisions 6 and 10).
+ * facet in it, or a stencil library it carries, is one `wb_facet_set` would
+ * refuse for a document (ADR-0013 decisions 6 and 10).
  *
  * A body is the other way to write a facet — the same payload as YAML instead
  * of as a tool argument — so it is held to the same registry rule, before the
@@ -180,7 +181,12 @@ export async function checkFrontmatterFacets(
   // The sent bucket with each registered payload replaced by its parsed
   // value: a body is a whole-document import, so what the caller wrote and the
   // schema has no opinion on (an unregistered facet) round-trips as it came.
-  return { ...facets, ...partitionFacetWrites(registry, facets, 'document').sets }
+  const { sets } = partitionFacetWrites(registry, facets, 'document')
+  // A stencil library is a facet whose payload only means something once it is
+  // composed with the deployment's registry, and `wb_facet_set` refuses an
+  // unusable one for the same reason this body must.
+  refuseUnusableStencilLibrary(deps, sets)
+  return { ...facets, ...sets }
 }
 
 /**
