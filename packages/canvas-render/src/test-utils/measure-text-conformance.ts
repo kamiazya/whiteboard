@@ -18,18 +18,21 @@ const FAMILY = 'Roboto'
 const SIZE_PX = 16
 
 // Roboto's hhea table: ascender 1900, descender -500, lineGap 0, in 2048
-// units per em. Canvas 2D reports font bounding boxes rounded to whole
-// pixels (13 and 3 at 14px against 12.988 and 3.418), so a vertical metric
-// is judged to the half pixel a rounding to the nearest integer can move
-// it — tighter would fail a correct browser, looser would admit a wrong face.
+// units per em. Canvas 2D reports font bounding boxes snapped to whole
+// pixels, and the snap is not a rounding to nearest (Chromium answers 12 and
+// 4 at 14px for 12.988 and 3.418), so a vertical metric is judged to a pixel.
+// That is a plausibility bound on the line box, not a check of the face — the
+// advances below are the face check.
 const ASCENT_EM = 1900 / 2048
 const DESCENT_EM = 500 / 2048
-const VERTICAL_TOLERANCE_PX = 0.5
+const VERTICAL_TOLERANCE_PX = 1
 
-// Advances are fractional on both sides (measured: Chromium returns the
-// design-unit sum, not a pixel-snapped one), so a hundredth of a pixel
+// A measurer that asks for unhinted, unkerned advances returns the face's
+// design-unit sum, fractions included. A hundredth of a pixel therefore
 // separates "the same advance" from "a different face" with room to spare:
-// the nearest real difference, bold against regular, is over a pixel.
+// the smallest real difference, bold against regular, is over a pixel. Default
+// Chromium on Linux hints advances to whole pixels (122 for 123.5), which is
+// exactly what this tolerance is here to refuse.
 const ADVANCE_TOLERANCE_PX = 0.01
 
 const SAMPLE = 'Hamburgefonstiv'
@@ -61,9 +64,21 @@ function descriptor(overrides: Partial<FontDescriptor> = {}): FontDescriptor {
   }
 }
 
+export interface MeasureTextConformanceOptions {
+  /**
+   * A realm that holds the Regular face alone leaves bold and italic to the
+   * platform, which synthesises them at the Regular advance. Stating why, with
+   * the measured cost, ledgers that as a known gap instead of failing it: the
+   * emphasis assertions then pin the synthesis itself, and go red the day the
+   * faces arrive so the entry cannot outlive the gap.
+   */
+  readonly synthesisedEmphasis?: string
+}
+
 export function describeMeasureTextConformance(
   /** Resolves once the realm holds every face the measurer will be asked for. */
   makeMeasure: () => MeasureText | Promise<MeasureText>,
+  options: MeasureTextConformanceOptions = {},
 ): void {
   let measure: MeasureText
   beforeAll(async () => {
@@ -108,7 +123,9 @@ export function describeMeasureTextConformance(
     })
 
     it('is the sum of the face advances, with no kerning applied', () => {
-      expect(measure('AVATAR', descriptor()).advanceWidth).toBeCloseTo(60.90625, 1)
+      expect(Math.abs(measure('AVATAR', descriptor()).advanceWidth - 60.90625)).toBeLessThan(
+        ADVANCE_TOLERANCE_PX,
+      )
     })
 
     it('matches the regular face design advance', () => {
@@ -117,28 +134,39 @@ export function describeMeasureTextConformance(
     })
   })
 
-  describe('emphasis', () => {
-    it('measures bold wider than regular', () => {
-      const regular = measure(SAMPLE, descriptor()).advanceWidth
-      const bold = measure(SAMPLE, descriptor({ weight: 700 })).advanceWidth
-      expect(bold).toBeGreaterThan(regular)
-    })
+  const emphases = Object.keys(SAMPLE_ADVANCE_PX) as Emphasis[]
+  const advanceOf = (emphasis: Emphasis): number =>
+    measure(SAMPLE, descriptor(EMPHASIS_DESCRIPTOR[emphasis])).advanceWidth
 
-    it('measures italic differently from regular', () => {
-      const regular = measure(SAMPLE, descriptor()).advanceWidth
-      const italic = measure(SAMPLE, descriptor({ style: 'italic' })).advanceWidth
-      expect(italic).not.toBeCloseTo(regular, 1)
-    })
+  if (options.synthesisedEmphasis === undefined) {
+    describe('emphasis', () => {
+      it('measures bold wider than regular', () => {
+        expect(advanceOf('bold')).toBeGreaterThan(advanceOf('regular'))
+      })
 
-    it.each(
-      Object.keys(SAMPLE_ADVANCE_PX) as Emphasis[],
-    )('matches the %s face design advance', (emphasis) => {
-      const { advanceWidth } = measure(SAMPLE, descriptor(EMPHASIS_DESCRIPTOR[emphasis]))
-      expect(Math.abs(advanceWidth - SAMPLE_ADVANCE_PX[emphasis])).toBeLessThan(
-        ADVANCE_TOLERANCE_PX,
-      )
+      it('measures italic differently from regular', () => {
+        expect(advanceOf('italic')).not.toBeCloseTo(advanceOf('regular'), 1)
+      })
+
+      it.each(emphases)('matches the %s face design advance', (emphasis) => {
+        expect(Math.abs(advanceOf(emphasis) - SAMPLE_ADVANCE_PX[emphasis])).toBeLessThan(
+          ADVANCE_TOLERANCE_PX,
+        )
+      })
     })
-  })
+  } else {
+    // Ledgered gap: `options.synthesisedEmphasis` names the cost.
+    describe('emphasis (known gap: synthesised)', () => {
+      it.each(
+        emphases.filter((emphasis) => emphasis !== 'regular'),
+      )('measures %s at the regular advance, so the gap is still open', (emphasis) => {
+        expect(
+          Math.abs(advanceOf(emphasis) - advanceOf('regular')),
+          `${options.synthesisedEmphasis} — if ${emphasis} now has its own face, drop the ledger entry`,
+        ).toBeLessThan(ADVANCE_TOLERANCE_PX)
+      })
+    })
+  }
 
   describe('vertical metrics', () => {
     it.each([

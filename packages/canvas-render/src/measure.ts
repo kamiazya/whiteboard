@@ -6,6 +6,11 @@
  *
  * `fallbackChain` is declared here but RESOLVED by the composition-root
  * measurer; this package never picks a font.
+ *
+ * What the two real measurers owe each other beyond this signature —
+ * unkerned, unhinted design advances, so `advance(a + b)` equals
+ * `advance(a) + advance(b)` — is `describeMeasureTextConformance`
+ * (`test-utils`), run against each of them.
  */
 export interface FontDescriptor {
   readonly family: string

@@ -1,9 +1,19 @@
-// Loads the vendored Roboto face (the exact bytes mcp-server's opentype.js
-// exporter measures) as a real webfont, so the browser's Canvas 2D
-// `measureText` and the Node export pipeline agree on line breaks and
-// content sizing. Without this, `document.fonts` never contains the face,
-// Canvas 2D silently falls back to a system font, and the editor's on-screen
-// layout diverges from what a user exports (see font.ts's doc comment).
+// Loads the vendored Roboto Regular face (the exact bytes mcp-server's
+// opentype.js exporter measures) as a real webfont, so the browser's Canvas 2D
+// `measureText` and the Node export pipeline agree on line breaks and content
+// sizing for regular text. Without this, `document.fonts` never contains the
+// face, Canvas 2D silently falls back to a system font, and the editor's
+// on-screen layout diverges from what a user exports (see font.ts's doc
+// comment).
+//
+// Only Regular is vendored, and it is registered with no weight or style
+// descriptor, so the browser synthesises bold and italic at the Regular
+// advance where the export measures the real faces: a bold line is about 1.6%
+// narrower here, an italic one about 2.8% wider. That gap is deliberate and is
+// ledgered in measure-text.conformance.browser.test.tsx with its cost: the
+// three faces add 1.1 MB that boot waits on (the font gate measured 400 ms to
+// 1190 ms at 10 Mbps) and a layout worker whose content cache is sound only
+// because its face is loaded before the first layout.
 
 // Vite's `?url` asset suffix, resolved at build/dev-server time.
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
