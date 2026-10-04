@@ -37,4 +37,24 @@ describe('withViewerFontEmbedded with host-held faces', () => {
     expect(out).toContain("font-family:'Yomogi'")
     expect(out).not.toContain("font-family:'Roboto'")
   })
+
+  // The <img> a PNG export draws through is an XML parser: one byte lost at
+  // the splice and the export is a broken image rather than a drawing with
+  // the wrong face, so the output is read the way that parser reads it.
+  it('splices the faces in as a well-formed first child of the root', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1, 2, 3])))
+    const head = '<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 9 9">'
+    const drawing = '<text font-family="Roboto">a</text></svg>'
+    const out = await withViewerFontEmbedded(head + drawing)
+
+    const doc = new DOMParser().parseFromString(out, 'image/svg+xml')
+    expect(doc.getElementsByTagName('parsererror')).toHaveLength(0)
+    const root = doc.documentElement
+    expect(root.getAttribute('viewBox')).toBe('0 0 9 9')
+    expect(root.firstElementChild?.tagName).toBe('defs')
+    expect(root.firstElementChild?.firstElementChild?.tagName).toBe('style')
+    // Only inserted: the root's own tag and the drawing are byte for byte.
+    expect(out.startsWith(`${head}<defs>`)).toBe(true)
+    expect(out.slice(out.indexOf('</defs>') + '</defs>'.length)).toBe(drawing)
+  })
 })
