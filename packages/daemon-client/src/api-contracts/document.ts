@@ -2,6 +2,7 @@ import {
   documentIdSchema,
   documentKindSchema,
   spatialCanvasSchema,
+  versionLabelSchema,
   workspaceDisplayNameSchema,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
@@ -61,7 +62,7 @@ export const versionEntryAnswerSchema = versionEntrySchema.extend({
 // name the device. See its definition in server-core for why.
 export const saveVersionRequestSchema = z
   .object({
-    label: z.string().optional(),
+    label: versionLabelSchema.optional(),
     operator: requestOperatorSchema.optional(),
   })
   .strict()
@@ -277,12 +278,12 @@ export const renameWorkspaceRequestSchema = z
 
 export const documentSummarySchema = z.object({
   path: z.string(),
-  // The immutable id behind the path (the documents row's nanoid PK).
-  // Stored references (file nodes) key on this so a path rename cannot
-  // dangle them (ADR-0008: stored links key on ids); the path stays the
-  // user-facing, URL-addressed identity. Deliberately not pattern-bound:
-  // clients must treat it as opaque and resolve refs by LOOKUP, never by
-  // format — the nanoid alphabet overlaps the path charset.
+  // The immutable id behind the path: the document's ULID node name in the
+  // workspace tree. Stored references (file nodes) key on this so a path
+  // rename cannot dangle them (ADR-0008: stored links key on ids); the path
+  // stays the user-facing, URL-addressed identity. Deliberately not
+  // pattern-bound: clients must treat it as opaque and resolve refs by
+  // LOOKUP, never by format — a path segment can be spelled like a ULID.
   // Required: every row has the id, and the workspace-granularity sync
   // contract binds a session's content by it, so a summary without one
   // would leave the client no document to sync.
