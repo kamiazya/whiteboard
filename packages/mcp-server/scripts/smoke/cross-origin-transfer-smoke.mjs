@@ -30,13 +30,14 @@
 // Needs the built dist (`pnpm build`) and Playwright's Chromium or
 // WHITEBOARD_CHROME_PATH. Run: `pnpm smoke:transfer`.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request } from 'node:http'
 import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { serveDist } from '../../../../tools/checks/src/serve-dist.mjs'
 import { fakeOidcProvider } from '../../src/shared/test-utils/fake-oidc-provider.ts'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -170,35 +171,10 @@ function hostingHeaders() {
   return headers
 }
 
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.png': 'image/png',
-  '.wasm': 'application/wasm',
-}
-
 /** The browser-mode app, with its hosting's single-page fallback. */
 async function serveBrowserApp() {
-  const headers = hostingHeaders()
-  const server = createServer((req, res) => {
-    const path = join(WEB_DIST, decodeURIComponent(new URL(req.url, 'http://x').pathname))
-    const file =
-      path.startsWith(WEB_DIST) && existsSync(path) && statSync(path).isFile()
-        ? path
-        : join(WEB_DIST, 'index.html')
-    res.writeHead(200, {
-      ...headers,
-      'content-type': MIME[extname(file)] ?? 'application/octet-stream',
-    })
-    res.end(readFileSync(file))
-  })
-  return { origin: `http://127.0.0.1:${await listen(server)}`, close: () => server.close() }
+  const app = await serveDist({ root: WEB_DIST, headers: hostingHeaders() })
+  return { origin: app.origin, close: () => app.close() }
 }
 
 /** `whiteboard server run` from the built dist; resolves once it prints its ready line. */

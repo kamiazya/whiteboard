@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 // Behavioral artifact smoke: loads the built dist/ in a real Chromium browser with
 // __WHITEBOARD_RUNTIME_CONFIG__.publicOrigin set to a preview URL and asserts that
 // App renders data-provider="invalid-config" rather than entering browser mode.
@@ -15,44 +15,13 @@ import { existsSync, readFileSync } from 'node:fs'
 //
 // The static bundle check in smoke-artifact.mjs verifies separately that
 // window.location.origin is also wired up as a secondary defense.
-import { createServer } from 'node:http'
-import { dirname, extname, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { serveDist } from '../../../tools/checks/src/serve-dist.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
-
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'application/javascript',
-  '.css': 'text/css',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.ico': 'image/x-icon',
-  '': 'application/octet-stream',
-}
-
-function startServer() {
-  return new Promise((resolve) => {
-    const server = createServer((req, res) => {
-      let urlPath = new URL(req.url, 'http://localhost').pathname
-      if (urlPath === '/' || !urlPath.includes('.')) urlPath = '/index.html'
-      const filePath = `${DIST}${urlPath}`
-      if (!existsSync(filePath)) {
-        res.writeHead(404)
-        res.end('not found')
-        return
-      }
-      const ext = extname(filePath)
-      res.writeHead(200, { 'Content-Type': MIME[ext] ?? MIME[''] })
-      res.end(readFileSync(filePath))
-    })
-    server.listen(0, '127.0.0.1', () => {
-      resolve({ server, port: server.address().port })
-    })
-  })
-}
 
 // registerType 'prompt' registers without claiming clients, so the first load
 // is never controlled: the worker takes over on the NEXT navigation. The
@@ -78,7 +47,9 @@ if (!existsSync(DIST)) {
   process.exit(1)
 }
 
-const { server, port } = await startServer()
+// A missing asset must stay a 404: the worker's precache would otherwise
+// "succeed" on the page's HTML in place of the file it asked for.
+const app = await serveDist({ root: DIST, fallback: 'extensionless' })
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.WHITEBOARD_CHROME_PATH && {
@@ -99,7 +70,7 @@ try {
     window.__WHITEBOARD_RUNTIME_CONFIG__ = { publicOrigin: 'https://abc123.whiteboard.pages.dev' }
   })
 
-  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'networkidle' })
+  await page.goto(`${app.origin}/`, { waitUntil: 'networkidle' })
 
   // Wait for the element rather than sampling count() immediately after
   // networkidle: React mounts <main> asynchronously (and the page components
@@ -121,9 +92,7 @@ try {
     failed = true
   }
 
-  const controlled = await serviceWorkerControlsReload(browser, `http://127.0.0.1:${port}/`).catch(
-    () => false,
-  )
+  const controlled = await serviceWorkerControlsReload(browser, `${app.origin}/`).catch(() => false)
   if (controlled) {
     console.log('  pass  a service worker controls the page after its registration settles')
   } else {
@@ -132,7 +101,7 @@ try {
   }
 } finally {
   await browser.close()
-  server.close()
+  await app.close()
 }
 
 if (failed) {

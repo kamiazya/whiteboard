@@ -11,11 +11,11 @@
 // plus a message handler naming its version, and bumping the version changes
 // the worker's bytes the way a deploy does — the browser installs it and, under
 // registerType 'prompt', leaves it WAITING until the page asks.
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { serveDist } from '../../../tools/checks/src/serve-dist.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
@@ -27,18 +27,6 @@ setTimeout(() => {
   console.error('[smoke-pwa-lifecycle] gave up after 120s')
   process.exit(1)
 }, 120_000).unref()
-
-const MIME = {
-  js: 'text/javascript',
-  html: 'text/html',
-  css: 'text/css',
-  svg: 'image/svg+xml',
-  png: 'image/png',
-  ico: 'image/x-icon',
-  wasm: 'application/wasm',
-  ttf: 'font/ttf',
-  webmanifest: 'application/manifest+json',
-}
 
 const state = {
   swVersion: 'v1',
@@ -55,42 +43,38 @@ const versionHandler = (version) =>
 const serverInFlight = new Map()
 let requestSeq = 0
 
-async function respond(req, res) {
+// Runs before the file is looked up: tracks the request, parks a navigation the
+// scenario asked to hold, and refuses a chunk it asked to lose.
+async function onRequest(req, res, { pathname }) {
   const id = ++requestSeq
   serverInFlight.set(id, `${req.method} ${req.url}`)
   res.on('close', () => serverInFlight.delete(id))
-  let path = new URL(req.url, 'http://localhost').pathname
-  const isNavigation = req.headers['sec-fetch-mode'] === 'navigate'
-  if (path === '/' || !path.includes('.')) path = '/index.html'
-  if (isNavigation && state.holdNavigation) {
+  if (req.headers['sec-fetch-mode'] === 'navigate' && state.holdNavigation) {
     const hold = state.holdNavigation
     state.holdNavigation = null
     hold.arrived()
     await hold.released
   }
-  const file = `${DIST}${path}`
-  if (!existsSync(file) || (state.refusedChunk && path.endsWith(state.refusedChunk))) {
-    res.writeHead(404)
-    res.end('not found')
-    return
+  if (state.refusedChunk && pathname.endsWith(state.refusedChunk)) {
+    return { status: 404, body: 'not found' }
   }
-  let body = readFileSync(file)
-  if (path === '/sw.js') body = Buffer.concat([body, Buffer.from(versionHandler(state.swVersion))])
-  res.writeHead(200, {
-    'Content-Type': MIME[path.split('.').pop()] ?? 'application/octet-stream',
-    // The browser's own update check already bypasses the HTTP cache for the
-    // worker script; this keeps every other file honest too.
-    'Cache-Control': 'no-store',
-  })
-  res.end(body)
 }
 
-function startServer() {
-  return new Promise((resolveServer) => {
-    const server = createServer((req, res) => void respond(req, res))
-    server.listen(0, '127.0.0.1', () => resolveServer(server))
+const startServer = () =>
+  serveDist({
+    root: DIST,
+    // A missing asset stays a 404: a catch-all would answer the page's HTML
+    // where a step needs the browser to see the file gone.
+    fallback: 'extensionless',
+    // The browser's own update check already bypasses the HTTP cache for the
+    // worker script; this keeps every other file honest too.
+    headers: { 'Cache-Control': 'no-store' },
+    onRequest,
+    transform: (pathname, body) =>
+      pathname === '/sw.js'
+        ? Buffer.concat([body, Buffer.from(versionHandler(state.swVersion))])
+        : body,
   })
-}
 
 const failures = []
 function check(label, ok) {
@@ -458,13 +442,13 @@ if (!existsSync(DIST)) {
   process.exit(1)
 }
 
-const server = await startServer()
+const app = await startServer()
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.WHITEBOARD_CHROME_PATH && { executablePath: process.env.WHITEBOARD_CHROME_PATH }),
 })
 try {
-  const origin = `http://127.0.0.1:${server.address().port}/`
+  const origin = `${app.origin}/`
   const page = await (await browser.newContext()).newPage()
   tailConsole(page)
   trackRequests(page)
@@ -485,7 +469,7 @@ try {
   failures.push(err.message)
 } finally {
   await browser.close()
-  server.close()
+  await app.close()
 }
 
 if (failures.length > 0) {
