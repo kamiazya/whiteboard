@@ -75,34 +75,32 @@ export interface MeasureTextConformanceOptions {
   readonly synthesisedEmphasis?: string
 }
 
-export function describeMeasureTextConformance(
-  /** Resolves once the realm holds every face the measurer will be asked for. */
-  makeMeasure: () => MeasureText | Promise<MeasureText>,
-  options: MeasureTextConformanceOptions = {},
-): void {
-  let measure: MeasureText
-  beforeAll(async () => {
-    measure = await makeMeasure()
-  })
+/** The measurer under test, read at run time: it exists only after `beforeAll`. */
+type MeasureOf = () => MeasureText
 
+function contractCases(measureOf: MeasureOf): void {
   describe('the contract', () => {
     it('measures an empty string as nothing', () => {
-      expect(measure('', descriptor()).advanceWidth).toBe(0)
+      expect(measureOf()('', descriptor()).advanceWidth).toBe(0)
     })
 
     it('answers finite, non-negative metrics', () => {
-      for (const value of Object.values(measure(SAMPLE, descriptor()))) {
+      for (const value of Object.values(measureOf()(SAMPLE, descriptor()))) {
         expect(Number.isFinite(value)).toBe(true)
         expect(value).toBeGreaterThanOrEqual(0)
       }
     })
 
     it('scales the advance linearly with the font size', () => {
-      const small = measure(SAMPLE, descriptor({ sizePx: 16 })).advanceWidth
-      const large = measure(SAMPLE, descriptor({ sizePx: 48 })).advanceWidth
+      const small = measureOf()(SAMPLE, descriptor({ sizePx: 16 })).advanceWidth
+      const large = measureOf()(SAMPLE, descriptor({ sizePx: 48 })).advanceWidth
       expect(large).toBeCloseTo(small * 3, 1)
     })
   })
+}
+
+function advanceCases(measureOf: MeasureOf): void {
+  const advance = (text: string): number => measureOf()(text, descriptor()).advanceWidth
 
   describe('advance', () => {
     it('is additive across a split, so a seam between two runs costs nothing', () => {
@@ -114,67 +112,69 @@ export function describeMeasureTextConformance(
         ['To', 'Yo'],
         ['Ratio AV', 'AT war'],
       ] as const) {
-        const whole = measure(a + b, descriptor()).advanceWidth
-        const parts = measure(a, descriptor()).advanceWidth + measure(b, descriptor()).advanceWidth
-        expect(Math.abs(whole - parts), `${JSON.stringify(a)} + ${JSON.stringify(b)}`).toBeLessThan(
-          ADVANCE_TOLERANCE_PX,
-        )
+        expect(
+          Math.abs(advance(a + b) - (advance(a) + advance(b))),
+          `${JSON.stringify(a)} + ${JSON.stringify(b)}`,
+        ).toBeLessThan(ADVANCE_TOLERANCE_PX)
       }
     })
 
     it('is the sum of the face advances, with no kerning applied', () => {
-      expect(Math.abs(measure('AVATAR', descriptor()).advanceWidth - 60.90625)).toBeLessThan(
-        ADVANCE_TOLERANCE_PX,
-      )
+      expect(Math.abs(advance('AVATAR') - 60.90625)).toBeLessThan(ADVANCE_TOLERANCE_PX)
     })
 
     it('matches the regular face design advance', () => {
-      const { advanceWidth } = measure(SAMPLE, descriptor())
-      expect(Math.abs(advanceWidth - SAMPLE_ADVANCE_PX.regular)).toBeLessThan(ADVANCE_TOLERANCE_PX)
+      expect(Math.abs(advance(SAMPLE) - SAMPLE_ADVANCE_PX.regular)).toBeLessThan(
+        ADVANCE_TOLERANCE_PX,
+      )
     })
   })
+}
 
+function emphasisCases(measureOf: MeasureOf, synthesisedEmphasis: string | undefined): void {
   const emphases = Object.keys(SAMPLE_ADVANCE_PX) as Emphasis[]
   const advanceOf = (emphasis: Emphasis): number =>
-    measure(SAMPLE, descriptor(EMPHASIS_DESCRIPTOR[emphasis])).advanceWidth
+    measureOf()(SAMPLE, descriptor(EMPHASIS_DESCRIPTOR[emphasis])).advanceWidth
 
-  if (options.synthesisedEmphasis === undefined) {
-    describe('emphasis', () => {
-      it('measures bold wider than regular', () => {
-        expect(advanceOf('bold')).toBeGreaterThan(advanceOf('regular'))
-      })
-
-      it('measures italic differently from regular', () => {
-        expect(advanceOf('italic')).not.toBeCloseTo(advanceOf('regular'), 1)
-      })
-
-      it.each(emphases)('matches the %s face design advance', (emphasis) => {
-        expect(Math.abs(advanceOf(emphasis) - SAMPLE_ADVANCE_PX[emphasis])).toBeLessThan(
-          ADVANCE_TOLERANCE_PX,
-        )
-      })
-    })
-  } else {
-    // Ledgered gap: `options.synthesisedEmphasis` names the cost.
+  if (synthesisedEmphasis !== undefined) {
     describe('emphasis (known gap: synthesised)', () => {
       it.each(
         emphases.filter((emphasis) => emphasis !== 'regular'),
       )('measures %s at the regular advance, so the gap is still open', (emphasis) => {
         expect(
           Math.abs(advanceOf(emphasis) - advanceOf('regular')),
-          `${options.synthesisedEmphasis} — if ${emphasis} now has its own face, drop the ledger entry`,
+          `${synthesisedEmphasis} — if ${emphasis} now has its own face, drop the ledger entry`,
         ).toBeLessThan(ADVANCE_TOLERANCE_PX)
       })
     })
+    return
   }
 
+  describe('emphasis', () => {
+    it('measures bold wider than regular', () => {
+      expect(advanceOf('bold')).toBeGreaterThan(advanceOf('regular'))
+    })
+
+    it('measures italic differently from regular', () => {
+      expect(advanceOf('italic')).not.toBeCloseTo(advanceOf('regular'), 1)
+    })
+
+    it.each(emphases)('matches the %s face design advance', (emphasis) => {
+      expect(Math.abs(advanceOf(emphasis) - SAMPLE_ADVANCE_PX[emphasis])).toBeLessThan(
+        ADVANCE_TOLERANCE_PX,
+      )
+    })
+  })
+}
+
+function verticalCases(measureOf: MeasureOf): void {
   describe('vertical metrics', () => {
     it.each([
       { sizePx: 14 },
       { sizePx: 16 },
       { sizePx: 40 },
     ])('are Roboto hhea scaled, at $sizePx px', ({ sizePx }) => {
-      const metrics = measure(SAMPLE, descriptor({ sizePx }))
+      const metrics = measureOf()(SAMPLE, descriptor({ sizePx }))
       expect(Math.abs(metrics.ascent - ASCENT_EM * sizePx)).toBeLessThanOrEqual(
         VERTICAL_TOLERANCE_PX,
       )
@@ -183,4 +183,24 @@ export function describeMeasureTextConformance(
       )
     })
   })
+}
+
+export function describeMeasureTextConformance(
+  /** Resolves once the realm holds every face the measurer will be asked for. */
+  makeMeasure: () => MeasureText | Promise<MeasureText>,
+  options: MeasureTextConformanceOptions = {},
+): void {
+  let measure: MeasureText | undefined
+  beforeAll(async () => {
+    measure = await makeMeasure()
+  })
+  const measureOf: MeasureOf = () => {
+    if (measure === undefined) throw new Error('the measurer is built in beforeAll')
+    return measure
+  }
+
+  contractCases(measureOf)
+  advanceCases(measureOf)
+  emphasisCases(measureOf, options.synthesisedEmphasis)
+  verticalCases(measureOf)
 }
