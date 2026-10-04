@@ -72,7 +72,7 @@ done
 
 ## Triage rubric (signal vs noise)
 
-- **CI failure (`ci-gate` or a job under it)** → almost always REAL and blocking. Read `--log-failed`, reproduce locally, fix on the spot (it gates merge). A flaky-isolation failure (see `audit-test-fixture-dedup`) is the one exception — re-run before treating as real.
+- **CI failure (`ci-gate` or a job under it)** → almost always REAL and blocking. Read `--log-failed`, reproduce locally, fix on the spot (it gates merge). A known flake shape (`steward`'s `reference/failure-modes.md` indexes them by symptom) is the one exception — it gets the single `gh run rerun <id> --failed` that `.claude/rules/integrator-flow.md`'s CI-flakes rule allows, and a second occurrence is a root-cause lane, not another re-run.
 - **CodeRabbit** → high recall, variable precision. Treat each comment as a CANDIDATE: keep correctness/security/contract points; drop style nits already covered by Biome and "consider"-grade suggestions that don't apply. Verify against the actual code before filing (it hallucinates context).
 - **AccessLint** → real a11y findings on UI diffs; keep, file under the touched component.
 - **CodeQL** (`github-advanced-security[bot]` PR comments) → security; verify the data-flow is real (not an already-sanitized path). A finding on an **untrusted-input path** (a parser/regex over user/document content — ReDoS, injection) is REAL and **blocking**: fix it on the branch (red test first) before merge, don't just task-track it. Genuinely lower-severity or false-positive ones → task-track / dismiss with a recorded rationale.
