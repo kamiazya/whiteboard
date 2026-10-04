@@ -98,32 +98,30 @@ export function compare(baseRows, headRows) {
  */
 export function formatTable(rows, threshold, near = 3) {
   const floor = threshold - near
-  const isNewOrGone = (r) =>
-    'base' in r && (r.base === null || r.score === null || r.from !== undefined)
-  const worth = rows.filter(
-    (r) =>
-      (r.score ?? 0) >= floor || (r.base ?? 0) >= floor || (r.delta ?? 0) !== 0 || isNewOrGone(r),
-  )
+  const worth = rows.filter((r) => isWorthShowing(r, floor))
   worth.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.file.localeCompare(b.file))
   const hasBase = rows.some((r) => 'base' in r)
   const lines = [hasBase ? 'score  base  delta  function' : 'score  function']
-  for (const r of worth) {
-    const flag = (r.score ?? 0) > threshold ? '!' : (r.score ?? 0) >= threshold - near ? '~' : ' '
-    const score = r.score === null ? '   -' : String(r.score).padStart(4)
-    const where = `${r.file}:${r.line}  ${r.name}${r.from ? `  (from ${r.from})` : ''}`
-    if (!hasBase) {
-      lines.push(`${flag}${score}  ${where}`)
-      continue
-    }
-    const base = r.base === null ? '   new' : String(r.base).padStart(6)
-    const delta =
-      r.delta === null
-        ? r.score === null
-          ? '  gone'
-          : '      '
-        : `${r.delta > 0 ? '+' : ''}${r.delta}`.padStart(6)
-    lines.push(`${flag}${score}${base} ${delta}  ${where}`)
-  }
+  for (const r of worth) lines.push(formatRow(r, hasBase, threshold, near))
   lines.push('', `! over the ${threshold} threshold   ~ within ${near} of it`)
   return lines.join('\n')
+}
+
+function isWorthShowing(r, floor) {
+  const isNewOrGone = 'base' in r && (r.base === null || r.score === null || r.from !== undefined)
+  return (r.score ?? 0) >= floor || (r.base ?? 0) >= floor || (r.delta ?? 0) !== 0 || isNewOrGone
+}
+
+function formatRow(r, hasBase, threshold, near) {
+  const flag = (r.score ?? 0) > threshold ? '!' : (r.score ?? 0) >= threshold - near ? '~' : ' '
+  const score = r.score === null ? '   -' : String(r.score).padStart(4)
+  const where = `${r.file}:${r.line}  ${r.name}${r.from ? `  (from ${r.from})` : ''}`
+  if (!hasBase) return `${flag}${score}  ${where}`
+  const base = r.base === null ? '   new' : String(r.base).padStart(6)
+  return `${flag}${score}${base} ${deltaCell(r)}  ${where}`
+}
+
+function deltaCell(r) {
+  if (r.delta !== null) return `${r.delta > 0 ? '+' : ''}${r.delta}`.padStart(6)
+  return r.score === null ? '  gone' : '      '
 }

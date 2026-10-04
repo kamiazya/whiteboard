@@ -68,7 +68,12 @@ const vitestArgs = (project, { repeats }, files) => [
   ...files,
 ]
 
-function main() {
+function refuse(reason) {
+  process.stderr.write(`${reason}\n${USAGE}\n`)
+  process.exit(2)
+}
+
+function parseInvocation() {
   const options = {}
   const rest = []
   for (const arg of process.argv.slice(2)) {
@@ -81,61 +86,70 @@ function main() {
     flags: ['--dry-run', '--committed-only'],
     usage: USAGE,
   })
-  const refuse = (reason) => {
-    process.stderr.write(`${reason}\n${USAGE}\n`)
-    process.exit(2)
-  }
   const base = options.base ?? 'origin/main'
   if (base === '') refuse('--base needs a ref')
   if (options.only !== undefined && !LEGS.some((leg) => leg.name === options.only)) {
     refuse(`--only must be one of ${LEGS.map((leg) => leg.name).join(', ')}`)
   }
   const legs = LEGS.filter((leg) => options.only === undefined || leg.name === options.only)
+  return { base, legs, flags }
+}
 
-  const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim()
-  const diffArgs = ['diff', '--name-only', `${base}...HEAD`, '--', ...CHANGED_TEST_PATHSPEC]
-  const workingTreeArgs = [
-    ['diff', '--name-only', 'HEAD', '--', ...CHANGED_TEST_PATHSPEC],
-    ['ls-files', '--others', '--exclude-standard', '--', ...CHANGED_TEST_PATHSPEC],
-  ]
-  const list = (args) =>
-    execFileSync('git', args, {
-      cwd: root,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).split('\n')
+const diffArgsAgainst = (base) => [
+  'diff',
+  '--name-only',
+  `${base}...HEAD`,
+  '--',
+  ...CHANGED_TEST_PATHSPEC,
+]
+const WORKING_TREE_ARGS = [
+  ['diff', '--name-only', 'HEAD', '--', ...CHANGED_TEST_PATHSPEC],
+  ['ls-files', '--others', '--exclude-standard', '--', ...CHANGED_TEST_PATHSPEC],
+]
+
+const listGit = (root, args) =>
+  execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).split('\n')
+
+function failListing(what, error) {
+  process.stderr.write(`${what}: ${String(error.stderr ?? error.message).trim()}\n`)
+  process.exit(1)
+}
+
+/** Changed test files (that still exist) mapped to where each came from. */
+function collectChangedFiles(root, base, committedOnly) {
   const sources = new Map()
   const note = (file, source) => {
     if (file !== '') sources.set(file, [...(sources.get(file) ?? []), source])
   }
   try {
-    for (const file of list(diffArgs)) note(file, 'committed')
+    for (const file of listGit(root, diffArgsAgainst(base))) note(file, 'committed')
   } catch (error) {
     // An unresolvable base is an error, never "no files changed": an empty list stresses nothing
     // and reads as success.
-    process.stderr.write(
-      `cannot list changed test files against ${base}: ${String(error.stderr ?? error.message).trim()}\n`,
-    )
-    process.exit(1)
+    failListing(`cannot list changed test files against ${base}`, error)
   }
-  if (!flags.has('--committed-only')) {
+  if (!committedOnly) {
     try {
-      for (const file of list(workingTreeArgs[0])) note(file, 'modified')
-      for (const file of list(workingTreeArgs[1])) note(file, 'untracked')
+      for (const file of listGit(root, WORKING_TREE_ARGS[0])) note(file, 'modified')
+      for (const file of listGit(root, WORKING_TREE_ARGS[1])) note(file, 'untracked')
     } catch (error) {
-      process.stderr.write(
-        `cannot list working-tree test files: ${String(error.stderr ?? error.message).trim()}\n`,
-      )
-      process.exit(1)
+      failListing('cannot list working-tree test files', error)
     }
   }
   // A file the diff DELETED has nothing to run.
   const files = [...sources.keys()].filter((file) => existsSync(join(root, file))).sort()
+  return { files, sources }
+}
 
+function printPlan({ base, legs, committedOnly, files, sources }) {
   console.log(`plan base: ${base}`)
-  console.log(`plan collect: ${commandLine(['git', ...diffArgs])}`)
-  if (!flags.has('--committed-only'))
-    for (const args of workingTreeArgs)
+  console.log(`plan collect: ${commandLine(['git', ...diffArgsAgainst(base)])}`)
+  if (!committedOnly)
+    for (const args of WORKING_TREE_ARGS)
       console.log(`plan collect: ${commandLine(['git', ...args])}`)
   console.log(`plan files: ${files.length}`)
   for (const file of files) console.log(`plan file: ${file} (${sources.get(file).join(', ')})`)
@@ -148,14 +162,9 @@ function main() {
       `plan ${leg.name} repeats: ${commandLine(['pnpm', ...vitestArgs(leg.project, { repeats: true }, [FILES_PLACEHOLDER])])}`,
     )
   }
-  if (flags.has('--dry-run')) return
-  if (files.length === 0) {
-    console.log(
-      `no changed test files against ${base}${flags.has('--committed-only') ? '' : ' or in the working tree'} - nothing to stress`,
-    )
-    return
-  }
+}
 
+function runStress(root, legs, files) {
   const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
   const run = (label, args) => {
     console.log(`=== ${label} ===`)
@@ -179,6 +188,22 @@ function main() {
       vitestArgs(leg.project, { repeats: true }, files),
     )
   }
+}
+
+function main() {
+  const { base, legs, flags } = parseInvocation()
+  const committedOnly = flags.has('--committed-only')
+  const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim()
+  const { files, sources } = collectChangedFiles(root, base, committedOnly)
+  printPlan({ base, legs, committedOnly, files, sources })
+  if (flags.has('--dry-run')) return
+  if (files.length === 0) {
+    console.log(
+      `no changed test files against ${base}${committedOnly ? '' : ' or in the working tree'} - nothing to stress`,
+    )
+    return
+  }
+  runStress(root, legs, files)
   console.log('stress-changed: all runs passed')
 }
 

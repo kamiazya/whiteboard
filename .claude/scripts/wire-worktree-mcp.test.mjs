@@ -83,7 +83,7 @@ test('main: absent registration + successful `claude mcp add` + matching post-wr
     argv: [repoRoot],
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
-    spawn: (cmd, args) => {
+    spawn: (_cmd, args) => {
       if (args?.includes('add')) {
         addSpawns += 1
         // Real `claude mcp add` writes the entry into ~/.claude.json itself;
@@ -133,7 +133,7 @@ test('main: a conflicting existing registration is left untouched — no `claude
     argv: [repoRoot],
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
-    spawn: (cmd, args) => {
+    spawn: (_cmd, args) => {
       if (args?.includes('add')) addSpawned = true
       return fakeSpawnOk()
     },
@@ -163,7 +163,7 @@ test('main: a post-write mismatch is reported without retrying the write', async
     argv: [repoRoot],
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
-    spawn: (cmd, args) => {
+    spawn: (_cmd, args) => {
       if (args?.includes('add')) addSpawns += 1
       return fakeSpawnOk()
     },
@@ -199,7 +199,7 @@ test('main: an already-identical registration is a no-op — no `claude mcp add`
     argv: [repoRoot],
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
-    spawn: (cmd, args) => {
+    spawn: (_cmd, args) => {
       if (args?.includes('add')) addSpawned = true
       return fakeSpawnOk()
     },
@@ -239,7 +239,7 @@ test('main: a non-zero-exit `claude mcp add` is logged without a post-write veri
     argv: [repoRoot],
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
-    spawn: (cmd, args) => {
+    spawn: (_cmd, args) => {
       if (args?.includes('add')) {
         return { status: 1, stdout: '', stderr: 'boom: unauthorized', error: undefined }
       }
@@ -326,7 +326,7 @@ test("main: with the main checkout's slot empty, `claude mcp add` registers the 
     isMainCheckoutOverride: false,
     claudeCliAvailableOverride: true,
     mainCheckoutRootOverride: mainRoot,
-    spawn: (cmd, args) => {
+    spawn: (_cmd, args) => {
       if (args?.includes('add')) addArgs = args
       return fakeSpawnOk()
     },

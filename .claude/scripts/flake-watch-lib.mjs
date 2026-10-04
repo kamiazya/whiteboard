@@ -129,6 +129,27 @@ function annotationsOf(run) {
 }
 
 /**
+ * The flake identities one run's annotations name, as id -> path (null for a
+ * test id, which carries its own).
+ */
+function identitiesOf(annotations) {
+  // A real test failure is the better identity, so it wins outright: an
+  // unhandled error beside one is usually the same collapse seen from the
+  // other end, and keying both would report one run as two flakes.
+  const keyed = new Map()
+  for (const annotation of annotations) {
+    const testId = testIdFromTitle(annotation.title)
+    if (testId !== null) keyed.set(testId, null)
+  }
+  if (keyed.size > 0) return keyed
+  for (const annotation of annotations) {
+    const unhandled = unhandledIdFrom(annotation)
+    if (unhandled !== null) keyed.set(unhandled.id, unhandled.path)
+  }
+  return keyed
+}
+
+/**
  * @param window `{ runId, createdAt, titles }[]` — one entry per failed run,
  *   `titles` the test-failure annotation titles that run produced.
  * @returns recurrences (id seen in >= 2 DISTINCT runs, most-occurrences
@@ -142,20 +163,7 @@ export function clusterFailures(window) {
   const unattributedRuns = []
   for (const run of window) {
     const annotations = annotationsOf(run)
-    // A real test failure is the better identity, so it wins outright: an
-    // unhandled error beside one is usually the same collapse seen from the
-    // other end, and keying both would report one run as two flakes.
-    const keyed = new Map()
-    for (const annotation of annotations) {
-      const testId = testIdFromTitle(annotation.title)
-      if (testId !== null) keyed.set(testId, null)
-    }
-    if (keyed.size === 0) {
-      for (const annotation of annotations) {
-        const unhandled = unhandledIdFrom(annotation)
-        if (unhandled !== null) keyed.set(unhandled.id, unhandled.path)
-      }
-    }
+    const keyed = identitiesOf(annotations)
     if (keyed.size === 0) {
       const legs = [...new Set(annotations.map(failedLegFrom).filter((leg) => leg !== null))]
       unattributedRuns.push({ runId: run.runId, createdAt: run.createdAt, legs })

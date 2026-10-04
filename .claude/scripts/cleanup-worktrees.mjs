@@ -89,9 +89,8 @@ try {
   console.warn('warning: fetch from origin failed (offline?) — proceeding with local ref cache')
 }
 
-let mainTip
 try {
-  mainTip = git(['rev-parse', 'origin/main'])
+  git(['rev-parse', 'origin/main'])
 } catch {
   console.error('error: origin/main ref not found — cannot determine merged status')
   process.exit(1)

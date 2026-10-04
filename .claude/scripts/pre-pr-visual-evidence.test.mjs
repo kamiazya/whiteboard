@@ -221,10 +221,10 @@ test('with no gh image extension, the remedy leads with the stated-reason escape
   assert.equal(status, 2)
   assert.match(stderr, /gh image.*not installed/)
   assert.match(stderr, /gh extension install drogers0\/gh-image/)
-  const escape = stderr.indexOf('Visual evidence: none')
+  const escapeAt = stderr.indexOf('Visual evidence: none')
   const upload = stderr.indexOf('upload it with')
-  assert.ok(escape !== -1, 'the escape is named')
-  assert.ok(upload === -1 || escape < upload, 'the escape comes before the upload instruction')
+  assert.ok(escapeAt !== -1, 'the escape is named')
+  assert.ok(upload === -1 || escapeAt < upload, 'the escape comes before the upload instruction')
 })
 
 test('with the extension present, the remedy is the upload instruction as before', () => {

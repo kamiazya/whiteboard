@@ -330,3 +330,51 @@ test('shouldGenerateDesign generates when design was never skipped and none is p
   assert.equal(shouldGenerateDesign(input), true)
   assert.equal(sharedShouldGenerateDesign(input), true)
 })
+
+// Each constrained field, broken one at a time, so a field dropped from either copy's checks
+// shows up as the two implementations disagreeing with the schema rather than going unnoticed.
+test('isValidDesignShape rejects every constrained field set to a wrong-typed value, in both copies', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const valid = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    contractChanges: 'none',
+    testScenarios: { unit: ['u'], browser: ['b'], e2e: ['e'] },
+    risks: ['r'],
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+    blastRadius: ['none: new leaf module, no existing callers'],
+    userReach: ['rendered by CanvasList'],
+    benefit: 'obvious: visible in the diff',
+    manualVerification: 'none: pure refactor',
+  }
+  assert.equal(isValidDesignShape(valid), true)
+  assert.equal(sharedIsValidDesignShape(valid), true)
+
+  const broken = {
+    completionCriteria: 'not a list',
+    scope: 7,
+    contractChanges: 7,
+    testScenarios: 'not an object',
+    risks: 'not a list',
+    properties: [],
+    blastRadius: ['   '],
+    userReach: [],
+    benefit: 'prose naming no column',
+    manualVerification: 7,
+    extraneous: 'unknown top-level key',
+  }
+  const nestedBroken = [
+    { unit: 'not a list' },
+    { unit: ['u'], browser: 'not a list' },
+    { unit: ['u'], e2e: 'not a list' },
+    { unit: ['u'], extraneous: ['unknown scenario key'] },
+  ]
+  const designs = [
+    ...Object.entries(broken).map(([key, value]) => ({ ...valid, [key]: value })),
+    ...nestedBroken.map((testScenarios) => ({ ...valid, testScenarios })),
+  ]
+  for (const design of designs) {
+    assert.equal(isValidDesignShape(design), false, JSON.stringify(design))
+    assert.equal(sharedIsValidDesignShape(design), false, JSON.stringify(design))
+  }
+})

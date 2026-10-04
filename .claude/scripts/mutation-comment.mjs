@@ -47,10 +47,53 @@ export function mutantKey(source, mutant) {
 /** Survivors listed inline; the rest stay in the uploaded HTML report. */
 const MAX_ROWS = 20
 
-/** Statuses that count as a mutant the tests DETECTED. */
-const DETECTED = new Set(['Killed', 'Timeout'])
-/** Statuses that count against the score — everything the tests let through. */
-const UNDETECTED = new Set(['Survived', 'NoCoverage'])
+function survivorOf(file, mutant) {
+  return {
+    file,
+    line: mutant.location?.start?.line ?? 0,
+    mutator: mutant.mutatorName ?? 'unknown',
+    replacement: mutant.replacement ?? '',
+    status: mutant.status,
+    // How many tests Stryker ran against this mutant. Absent on a
+    // NoCoverage (there were none) and on a Timeout (it never finished).
+    tests: typeof mutant.testsCompleted === 'number' ? mutant.testsCompleted : undefined,
+  }
+}
+
+/**
+ * Tally one file's mutants into `counts` and split its undetected ones into
+ * those the ledger already settles and new survivors.
+ */
+function summarizeFile(file, entry, recorded, counts) {
+  // A ceiling per key, spent in report order: the (N+1)th of a mutation
+  // recorded N times is a survivor nobody has looked at yet, and saying
+  // otherwise is how a mute turns into a blind spot.
+  const budget = new Map(Object.entries(recorded))
+  const survivors = []
+  let settled = 0
+  for (const mutant of entry.mutants ?? []) {
+    if (mutant.status in counts) counts[mutant.status] += 1
+    else counts.other += 1
+    if (mutant.status !== 'Survived' && mutant.status !== 'NoCoverage') continue
+    const key = mutantKey(entry.source, mutant)
+    const left = budget.get(key) ?? 0
+    if (left > 0) {
+      budget.set(key, left - 1)
+      settled += 1
+      continue
+    }
+    survivors.push(survivorOf(file, mutant))
+  }
+  // Budget this run did not spend: the ledger claims N survivors of this
+  // mutation and the run produced fewer. Only meaningful for a file the run
+  // actually mutated, which is why it is collected per file of
+  // `report.files` rather than over the ledger.
+  const unspent = []
+  for (const [key, left] of budget) {
+    if (left > 0) unspent.push({ file, key, left })
+  }
+  return { survivors, unspent, settled }
+}
 
 export function summarize(report, knownEquivalent = {}) {
   const counts = { Killed: 0, Timeout: 0, Survived: 0, NoCoverage: 0, other: 0 }
@@ -58,40 +101,10 @@ export function summarize(report, knownEquivalent = {}) {
   const unspent = []
   let settled = 0
   for (const [file, entry] of Object.entries(report.files ?? {})) {
-    // A ceiling per key, spent in report order: the (N+1)th of a mutation
-    // recorded N times is a survivor nobody has looked at yet, and saying
-    // otherwise is how a mute turns into a blind spot.
-    const budget = new Map(Object.entries(knownEquivalent[file] ?? {}))
-    for (const mutant of entry.mutants ?? []) {
-      if (mutant.status in counts) counts[mutant.status] += 1
-      else counts.other += 1
-      if (mutant.status === 'Survived' || mutant.status === 'NoCoverage') {
-        const key = mutantKey(entry.source, mutant)
-        const left = budget.get(key) ?? 0
-        if (left > 0) {
-          budget.set(key, left - 1)
-          settled += 1
-          continue
-        }
-        survivors.push({
-          file,
-          line: mutant.location?.start?.line ?? 0,
-          mutator: mutant.mutatorName ?? 'unknown',
-          replacement: mutant.replacement ?? '',
-          status: mutant.status,
-          // How many tests Stryker ran against this mutant. Absent on a
-          // NoCoverage (there were none) and on a Timeout (it never finished).
-          tests: typeof mutant.testsCompleted === 'number' ? mutant.testsCompleted : undefined,
-        })
-      }
-    }
-    // Budget this run did not spend: the ledger claims N survivors of this
-    // mutation and the run produced fewer. Only meaningful for a file the run
-    // actually mutated, which is why it is collected inside the loop over
-    // `report.files` rather than over the ledger.
-    for (const [key, left] of budget) {
-      if (left > 0) unspent.push({ file, key, left })
-    }
+    const found = summarizeFile(file, entry, knownEquivalent[file] ?? {}, counts)
+    survivors.push(...found.survivors)
+    unspent.push(...found.unspent)
+    settled += found.settled
   }
   const detected = counts.Killed + counts.Timeout
   const undetected = counts.Survived + counts.NoCoverage
@@ -127,85 +140,96 @@ function cell(text) {
   return `\`${clipped.replaceAll('`', "'").replaceAll('|', '\\|')}\``
 }
 
-export function renderComment(report, marker, knownEquivalent = {}) {
-  const { counts, score, survivors, unjudged, settled, total, unspent } = summarize(
-    report,
-    knownEquivalent,
-  )
-  if (total === 0) return ''
-
-  const recorded = settled === 0 ? '' : ` · ${settled} already recorded as equivalent`
-  const head =
-    survivors.length === 0
-      ? settled === 0
-        ? `🧬 **Mutation** — ${score?.toFixed(1)}%, and nothing survived across ${total} mutants.`
-        : `🧬 **Mutation** — ${score?.toFixed(1)}% across ${total} mutants. Nothing NEW survived` +
+function headline({ counts, score, survivors, settled, total }) {
+  const pct = score?.toFixed(1)
+  if (survivors.length === 0) {
+    return settled === 0
+      ? `🧬 **Mutation** — ${pct}%, and nothing survived across ${total} mutants.`
+      : `🧬 **Mutation** — ${pct}% across ${total} mutants. Nothing NEW survived` +
           ` — all ${settled} are already recorded as equivalent.`
-      : `🧬 **Mutation** — ${score?.toFixed(1)}% · ${counts.Killed} killed · **${survivors.length} new survivor` +
-        `${survivors.length === 1 ? '' : 's'}**${recorded}` +
-        `${counts.Timeout > 0 ? ` · ${counts.Timeout} timed out` : ''}`
+  }
+  const recorded = settled === 0 ? '' : ` · ${settled} already recorded as equivalent`
+  return (
+    `🧬 **Mutation** — ${pct}% · ${counts.Killed} killed · **${survivors.length} new survivor` +
+    `${survivors.length === 1 ? '' : 's'}**${recorded}` +
+    `${counts.Timeout > 0 ? ` · ${counts.Timeout} timed out` : ''}`
+  )
+}
 
-  const lines = [marker, '', head, '']
-  if (survivors.length > 0) {
-    lines.push(
-      'A survivor is a line no test pins: the edit below can be made and nothing goes red.',
-      'It is a HYPOTHESIS, not a verdict — apply the edit and run the suite before acting on it.',
-      'This tool reports false survivors AND false kills, and the score has a noise floor of a',
-      'mutant or so between identical runs, so read a small change as nothing. Settled cases are',
-      'in `KNOWN_EQUIVALENT`; the reasoning is `docs/contributing/architecture/canvas-render-decisions.md`.',
-      '',
-      '`judged by` is how many tests actually ran against that mutant. Stryker picks them by',
-      'relatedness, so a module few test files import is judged by a handful and its survivors are',
-      'a much weaker claim than ones judged by hundreds — check those by hand first.',
-      '',
-      '| where | mutator | survives as | judged by |',
-      '| --- | --- | --- | --- |',
-    )
-    for (const s of survivors.slice(0, MAX_ROWS)) {
-      const status = s.status === 'NoCoverage' ? `${s.mutator} (no coverage)` : s.mutator
-      const judged = s.tests === undefined ? '—' : `${s.tests} test${s.tests === 1 ? '' : 's'}`
-      lines.push(`| \`${s.file}:${s.line}\` | ${status} | ${cell(s.replacement)} | ${judged} |`)
-    }
-    if (survivors.length > MAX_ROWS) {
-      lines.push('', `…and ${survivors.length - MAX_ROWS} more — the full report is the artifact.`)
-    }
+function survivorLines(survivors) {
+  const lines = [
+    'A survivor is a line no test pins: the edit below can be made and nothing goes red.',
+    'It is a HYPOTHESIS, not a verdict — apply the edit and run the suite before acting on it.',
+    'This tool reports false survivors AND false kills, and the score has a noise floor of a',
+    'mutant or so between identical runs, so read a small change as nothing. Settled cases are',
+    'in `KNOWN_EQUIVALENT`; the reasoning is `docs/contributing/architecture/canvas-render-decisions.md`.',
+    '',
+    '`judged by` is how many tests actually ran against that mutant. Stryker picks them by',
+    'relatedness, so a module few test files import is judged by a handful and its survivors are',
+    'a much weaker claim than ones judged by hundreds — check those by hand first.',
+    '',
+    '| where | mutator | survives as | judged by |',
+    '| --- | --- | --- | --- |',
+  ]
+  for (const s of survivors.slice(0, MAX_ROWS)) {
+    const status = s.status === 'NoCoverage' ? `${s.mutator} (no coverage)` : s.mutator
+    const judged = s.tests === undefined ? '—' : `${s.tests} test${s.tests === 1 ? '' : 's'}`
+    lines.push(`| \`${s.file}:${s.line}\` | ${status} | ${cell(s.replacement)} | ${judged} |`)
   }
-  if (unjudged.length > 0) {
-    lines.push(
-      '',
-      `**${unjudged.length} mutant${unjudged.length === 1 ? '' : 's'} the lane ran NO test against.**`,
-      'Not survivors: nothing judged them. This is the runner failing to select the covering tests',
-      '(seen once as vitest and the runner disagreeing on how a nested test is named), so fix the',
-      'lane before reading anything into the rows.',
-      '',
-      '| where | mutator | survives as |',
-      '| --- | --- | --- |',
-    )
-    for (const s of unjudged.slice(0, MAX_ROWS)) {
-      lines.push(`| \`${s.file}:${s.line}\` | ${s.mutator} | ${cell(s.replacement)} |`)
-    }
+  if (survivors.length > MAX_ROWS) {
+    lines.push('', `…and ${survivors.length - MAX_ROWS} more — the full report is the artifact.`)
   }
-  if (unspent.length > 0) {
-    // The ledger's own decay, and the half a source scan cannot see: the
-    // expression is still in the file, so the entry looks live, but the run
-    // no longer produces the survivor it records. Either the mutant is killed
-    // now — in which case the entry asserts something false and should go —
-    // or it is the noise floor, which is why this is a prompt and not a
-    // failure.
-    lines.push(
-      '',
-      `**${unspent.length} recorded equivalent${unspent.length === 1 ? '' : 's'} did not show up`,
-      'in this run.** The entry says this mutation survives and cannot be killed; the run says it',
-      'was not there to settle. If a test now kills it, the entry is asserting something false —',
-      'drop it. Re-run before acting: an entry can go missing to the same noise floor as a score.',
-      '',
-      '| file | recorded mutation | unspent |',
-      '| --- | --- | --- |',
-    )
-    for (const entry of unspent.slice(0, MAX_ROWS)) {
-      lines.push(`| \`${entry.file}\` | ${cell(entry.key)} | ${entry.left} |`)
-    }
+  return lines
+}
+
+function unjudgedLines(unjudged) {
+  const lines = [
+    '',
+    `**${unjudged.length} mutant${unjudged.length === 1 ? '' : 's'} the lane ran NO test against.**`,
+    'Not survivors: nothing judged them. This is the runner failing to select the covering tests',
+    '(seen once as vitest and the runner disagreeing on how a nested test is named), so fix the',
+    'lane before reading anything into the rows.',
+    '',
+    '| where | mutator | survives as |',
+    '| --- | --- | --- |',
+  ]
+  for (const s of unjudged.slice(0, MAX_ROWS)) {
+    lines.push(`| \`${s.file}:${s.line}\` | ${s.mutator} | ${cell(s.replacement)} |`)
   }
+  return lines
+}
+
+// The ledger's own decay, and the half a source scan cannot see: the
+// expression is still in the file, so the entry looks live, but the run
+// no longer produces the survivor it records. Either the mutant is killed
+// now — in which case the entry asserts something false and should go —
+// or it is the noise floor, which is why this is a prompt and not a
+// failure.
+function unspentLines(unspent) {
+  const lines = [
+    '',
+    `**${unspent.length} recorded equivalent${unspent.length === 1 ? '' : 's'} did not show up`,
+    'in this run.** The entry says this mutation survives and cannot be killed; the run says it',
+    'was not there to settle. If a test now kills it, the entry is asserting something false —',
+    'drop it. Re-run before acting: an entry can go missing to the same noise floor as a score.',
+    '',
+    '| file | recorded mutation | unspent |',
+    '| --- | --- | --- |',
+  ]
+  for (const entry of unspent.slice(0, MAX_ROWS)) {
+    lines.push(`| \`${entry.file}\` | ${cell(entry.key)} | ${entry.left} |`)
+  }
+  return lines
+}
+
+export function renderComment(report, marker, knownEquivalent = {}) {
+  const summary = summarize(report, knownEquivalent)
+  if (summary.total === 0) return ''
+
+  const lines = [marker, '', headline(summary), '']
+  if (summary.survivors.length > 0) lines.push(...survivorLines(summary.survivors))
+  if (summary.unjudged.length > 0) lines.push(...unjudgedLines(summary.unjudged))
+  if (summary.unspent.length > 0) lines.push(...unspentLines(summary.unspent))
   lines.push('', '_Report-only: this never blocks the merge._')
   return lines.join('\n')
 }

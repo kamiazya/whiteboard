@@ -277,7 +277,7 @@ test('a never-published lane with committed work is kept', () => {
 })
 
 test('a lane whose upstream is another remote is kept when absent under origin/', () => {
-  const { repoDir, laneDir } = squashMergedLane('lane-fork', { publish: false })
+  const { repoDir } = squashMergedLane('lane-fork', { publish: false })
   git(repoDir, ['config', 'branch.lane-fork.merge', 'refs/heads/lane-fork'])
   git(repoDir, ['config', 'branch.lane-fork.remote', 'fork'])
   const out = runCleanup(repoDir)

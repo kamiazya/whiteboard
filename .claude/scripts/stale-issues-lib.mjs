@@ -54,16 +54,7 @@ export function collectStaleIssues(documents, inspect) {
     const sources = doc.sources ?? []
     if (sources.length === 0 || typeof doc.generatedAt !== 'string') continue
 
-    const changed = []
-    const missing = []
-    for (const source of sources) {
-      const resource = resourceOf(source)
-      if (!isCheckableResource(resource)) continue
-      const target = toRepoRelative(resource)
-      const verdict = inspect(target, doc.generatedAt)
-      if (verdict === 'missing') missing.push(target)
-      else if (verdict === 'changed') changed.push(target)
-    }
+    const { changed, missing } = inspectSources(sources, doc.generatedAt, inspect)
     if (changed.length === 0 && missing.length === 0) continue
 
     findings.push({
@@ -77,6 +68,20 @@ export function collectStaleIssues(documents, inspect) {
     })
   }
   return findings
+}
+
+function inspectSources(sources, generatedAt, inspect) {
+  const changed = []
+  const missing = []
+  for (const source of sources) {
+    const resource = resourceOf(source)
+    if (!isCheckableResource(resource)) continue
+    const target = toRepoRelative(resource)
+    const verdict = inspect(target, generatedAt)
+    if (verdict === 'missing') missing.push(target)
+    else if (verdict === 'changed') changed.push(target)
+  }
+  return { changed, missing }
 }
 
 /** One block per finding. `missing` leads: a deleted source is the surest signal. */
@@ -127,6 +132,17 @@ export function unwrapToolResult(name, payload) {
   return result.structuredContent ?? {}
 }
 
+function issueDocumentOf(entry, front, sources) {
+  return {
+    documentId: entry.documentId,
+    path: entry.path,
+    ...(entry.name === undefined ? {} : { name: entry.name }),
+    ...(front.generated?.at === undefined ? {} : { generatedAt: front.generated.at }),
+    ...(front.generated?.by === undefined ? {} : { generatedBy: front.generated.by }),
+    sources,
+  }
+}
+
 /**
  * Join a `wb_document_list` listing to a batch `wb_document_get` answer and
  * keep the issues.
@@ -151,14 +167,7 @@ export function issueDocumentsFrom(listed, fetched) {
     if (sources.length > 0 && !sources.some((source) => isCheckableResource(resourceOf(source)))) {
       unreadableSources.push(entry.path)
     }
-    documents.push({
-      documentId: entry.documentId,
-      path: entry.path,
-      ...(entry.name === undefined ? {} : { name: entry.name }),
-      ...(front.generated?.at === undefined ? {} : { generatedAt: front.generated.at }),
-      ...(front.generated?.by === undefined ? {} : { generatedBy: front.generated.by }),
-      sources,
-    })
+    documents.push(issueDocumentOf(entry, front, sources))
   }
   return { documents, unreadableSources, failed: fetched?.failed ?? [] }
 }
