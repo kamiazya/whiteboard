@@ -395,6 +395,15 @@ describe('documentSummarySchema', () => {
     ).toBe(false)
   })
 
+  // Absent, not false: a keeper that keeps no pins has said nothing about
+  // them, and a client must not read that as "none pinned".
+  it('carries pinned as an optional boolean', () => {
+    expect(documentSummarySchema.parse({ ...valid, pinned: true }).pinned).toBe(true)
+    expect(documentSummarySchema.parse({ ...valid, pinned: false }).pinned).toBe(false)
+    expect('pinned' in documentSummarySchema.parse(valid)).toBe(false)
+    expect(documentSummarySchema.safeParse({ ...valid, pinned: 'yes' }).success).toBe(false)
+  })
+
   it('accepts an explicit kind: markdown', () => {
     const result = documentSummarySchema.parse({ ...valid, kind: 'markdown' })
     expect(result.kind).toBe('markdown')

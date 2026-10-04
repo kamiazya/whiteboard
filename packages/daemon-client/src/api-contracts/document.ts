@@ -317,6 +317,10 @@ export const documentSummarySchema = z.object({
   // always does, so in practice every row has it; a client that finds it
   // absent must not memoise a render of that row.
   contentDigest: z.string().min(1).optional(),
+  // Whether the workspace pins this document to the top of its file list,
+  // spelled as `wb_document_list` and `/api/v1` spell it. ABSENT, not false,
+  // when the keeper keeps no pins: silence about pins is not "none pinned".
+  pinned: z.boolean().optional(),
 })
 
 export const listDocumentsResponseSchema = z.object({

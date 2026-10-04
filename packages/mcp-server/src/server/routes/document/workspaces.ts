@@ -291,17 +291,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     const { workspaceId } = address
     try {
       const deps = options.serverDeps
+      // The operation's own rows are this response's rows: re-listing its
+      // fields here is how `pinned` went unanswered while the tool and
+      // `/api/v1` carried it.
       const { documents } = await wbDocumentList(deps, { workspaceId })
-      const response: ListDocumentsResponse = {
-        documents: documents.map((entry) => ({
-          path: entry.path,
-          documentId: entry.documentId,
-          ...(entry.name === undefined ? {} : { name: entry.name }),
-          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-          ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-          ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
-        })),
-      }
+      const response: ListDocumentsResponse = { documents }
       return c.json(response)
     } catch (err) {
       // "Empty" and "never registered" are different answers, and conflating

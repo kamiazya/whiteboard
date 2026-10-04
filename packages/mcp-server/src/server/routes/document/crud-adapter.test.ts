@@ -13,6 +13,7 @@
  * implementations produced right up until one of them grew a step.
  */
 import { listDocumentsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { DocumentPins } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../_test-helpers.js'
@@ -190,6 +191,50 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     expect(body.documents[0]).toMatchObject({ path: 'a', shadowed: true })
   })
 
+  it('says per document whether it is pinned, the way the list tool and /api/v1 do', async () => {
+    const { deps } = await depsRecordingList()
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'b', kind: 'markdown' })
+    const listed = await deps.documentIndex.listDocuments({ workspaceId: 'ws-1' })
+    const pinnedId = listed.find((entry) => entry.path === 'b')?.documentId as string
+    await (deps.documentIndex as unknown as DocumentPins).setDocumentPinned({
+      workspaceId: 'ws-1',
+      documentId: pinnedId,
+      pinned: true,
+    })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    const parsed = listDocumentsResponseSchema.parse(await res.json())
+    expect(parsed.documents.map((d) => [d.path, d.pinned])).toEqual([
+      ['a', false],
+      ['b', true],
+    ])
+  })
+
+  // Absent, not false: a keeper that keeps no pins has said nothing about them,
+  // which is not the same as saying none are pinned.
+  it('omits pinned when the keeper keeps no pins', async () => {
+    const { deps } = await depsRecordingList()
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    const inner = deps.documentIndex
+    const pinless = new Proxy(inner, {
+      has: (target, key) => key !== 'listPinnedDocuments' && key in target,
+      get: (target, key) =>
+        key === 'listPinnedDocuments' || key === 'setDocumentPinned'
+          ? undefined
+          : (Reflect.get(target, key, target) as unknown),
+    })
+    const app = createWorkspacesRouter({ serverDeps: { ...deps, documentIndex: pinless } })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    const body = (await res.json()) as { documents: Record<string, unknown>[] }
+    expect(body.documents).toHaveLength(1)
+    expect(Object.keys(body.documents[0] ?? {})).not.toContain('pinned')
+  })
+
   // "Empty" and "never registered" are different answers, and conflating them
   // is what let a stale pairing render as an empty workspace with a Create
   // button. The operation raises it; this surface translates it.
@@ -200,6 +245,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     const res = await app.request('/api/workspaces/never-made/documents')
 
     expect(res.status).toBe(404)
+  })
   })
 })
 
