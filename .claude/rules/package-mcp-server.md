@@ -98,6 +98,13 @@ scan says.
   disabled `/api/debug` router. It is scoped to `routes/` because
   `c.notFound()` is CORRECT twice outside `routes/`: the two UI catch-alls
   in `app.ts` serve a browser.
+- **A page-facing write never mints.** `/api/w/:workspaceId/document/*`
+  sits behind `refuseUnknownWorkspace` and `refuseTrashedDocument`
+  (`routes/document.ts`'s `refuseUnaddressable`), so a fixture seeds its
+  workspace with `createWorkspace` / `seedWorkspaceRow` rather than by
+  posting an update to an unknown handle. A never-created PATH in a known
+  workspace still takes its first update: that is how an open page starts
+  a document.
 
 ## The export reads the workspace's tag library (ADR-0040 decision 5)
 
