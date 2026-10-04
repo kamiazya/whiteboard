@@ -10,10 +10,10 @@
 //
 // Remove when done: git worktree remove --force .claude/worktrees/<name>
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, cpSync as nodeCpSync, realpathSync } from 'node:fs'
+import { existsSync, cpSync as nodeCpSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseScriptArgs } from './script-flags.mjs'
+import { isRunAsScript, parseScriptArgs } from './script-flags.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -107,15 +107,6 @@ export function seedBuiltDist({
   }
 }
 
-function isRunAsScript() {
-  if (!process.argv[1]) return false
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
-  } catch {
-    return false
-  }
-}
-
 const USAGE =
   'usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: freshly fetched origin/main)'
 
@@ -167,6 +158,6 @@ function main() {
   console.log(`  cleanup: git worktree remove --force ${wtPath}`)
 }
 
-if (isRunAsScript()) {
+if (isRunAsScript(import.meta.url)) {
   main()
 }

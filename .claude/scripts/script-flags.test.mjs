@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 // Run with: pnpm test:scripts
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { parseScriptArgs } from './script-flags.mjs'
 
 class Exited extends Error {
@@ -66,4 +71,47 @@ test('a positional beyond the allowance is refused, and a lone "-" counts as a p
   assert.equal(run(['a']).code, 2)
   assert.equal(run(['a', 'b'], { maxPositionals: 1 }).code, 2)
   assert.deepEqual(run(['-'], { maxPositionals: 1 }).parsed.positionals, ['-'])
+})
+
+const SCRIPT_FLAGS = fileURLToPath(new URL('./script-flags.mjs', import.meta.url))
+
+function withScratch(body) {
+  const dir = mkdtempSync(join(tmpdir(), 'script-flags-'))
+  try {
+    return body(dir)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function node(args) {
+  const result = spawnSync(process.execPath, args, { encoding: 'utf8' })
+  assert.equal(result.status, 0, result.stderr)
+  return result.stdout.trim()
+}
+
+const PROBE = `import { isRunAsScript } from ${JSON.stringify(SCRIPT_FLAGS)}
+console.log(isRunAsScript(import.meta.url))
+`
+
+test('isRunAsScript is true for the entry module, also when it is reached through a symlink', () => {
+  withScratch((dir) => {
+    writeFileSync(join(dir, 'probe.mjs'), PROBE)
+    symlinkSync(join(dir, 'probe.mjs'), join(dir, 'link.mjs'))
+    assert.equal(node([join(dir, 'probe.mjs')]), 'true')
+    assert.equal(node([join(dir, 'link.mjs')]), 'true')
+  })
+})
+
+test('isRunAsScript is false for a module something else imported', () => {
+  withScratch((dir) => {
+    writeFileSync(join(dir, 'probe.mjs'), PROBE)
+    writeFileSync(join(dir, 'entry.mjs'), "import './probe.mjs'\n")
+    assert.equal(node([join(dir, 'entry.mjs')]), 'false')
+  })
+})
+
+test('isRunAsScript is false with no entry script at all', () => {
+  const probe = PROBE.replace('import.meta.url', "'file:///x.mjs'")
+  assert.equal(node(['--input-type=module', '-e', probe]), 'false')
 })

@@ -37,9 +37,8 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/checkout-kind-lib.mjs'
-import { parseScriptArgs } from './script-flags.mjs'
+import { isRunAsScript, parseScriptArgs } from './script-flags.mjs'
 import {
   assertNotTrackedSettingsPath,
   buildClaudeMcpAddArgs,
@@ -417,16 +416,7 @@ export async function main({
   })
 }
 
-function isRunAsScript() {
-  if (!process.argv[1]) return false
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
-  } catch {
-    return false
-  }
-}
-
-if (isRunAsScript()) {
+if (isRunAsScript(import.meta.url)) {
   main().catch((err) => {
     console.error(err)
     process.exitCode = 1
