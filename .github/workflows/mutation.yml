@@ -39,7 +39,7 @@ concurrency:
 jobs:
   pr:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # measured: 2026-10-02 40 min
     timeout-minutes: 60
     permissions:
@@ -160,7 +160,7 @@ jobs:
   weekly:
     if: github.event_name != 'pull_request'
     name: weekly (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # measured: 2026-09-28 44 min
     timeout-minutes: 90
     strategy:
@@ -202,7 +202,7 @@ jobs:
   weekly-report:
     if: github.event_name != 'pull_request' && !cancelled()
     needs: weekly
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # measured: 2026-10-03 1 min
     # Two jq calls over the downloaded reports (0.04 s locally over two real
     # ones); the download and upload are the rest, and are not yet observed.

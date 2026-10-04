@@ -50,7 +50,7 @@ on:
 
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Needed for release-please: write PRs, create tags/releases.
     # packages: write is NOT included — it is scoped to docker-publish-sign.
     permissions:
@@ -83,7 +83,7 @@ jobs:
   advance-stable:
     needs: release-please
     if: ${{ needs.release-please.outputs.root_release_created == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -105,7 +105,7 @@ jobs:
   publish-mcp:
     needs: release-please
     if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_npm) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production-npm
     permissions:
       contents: read
@@ -201,7 +201,7 @@ jobs:
   docker-publish-sign:
     needs: release-please
     if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || (inputs.force_publish_tag != '' && inputs.publish_docker) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production-docker
     permissions:
       contents: read
@@ -291,7 +291,7 @@ jobs:
 
   deploy-web:
     needs: release-please
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Deploy apps/web to Cloudflare Pages when a project release is created.
     # Skipped when no release happened (e.g. mid-cycle pushes).
     # The Deploy step skips itself when Cloudflare secrets are not yet configured.

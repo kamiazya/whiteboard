@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
@@ -96,6 +96,65 @@ describe('release.yml — permissions are granted per job, never at the root', (
       .filter(([, job]) => job.permissions?.packages === 'write')
       .map(([id]) => id)
     expect(withPackagesWrite).toEqual(['docker-publish-sign'])
+  })
+})
+
+describe('workflows — runner images are pinned, never floating', () => {
+  // `ubuntu-latest` is a label GitHub re-points at a new image on its own
+  // schedule, and jobs here depend on what the current image ships (Chrome at
+  // /usr/bin/google-chrome-stable, Mozilla's Firefox behind $GECKOWEBDRIVER,
+  // apt's imagemagick, docker buildx). A floating label turns an image change
+  // into a red merge gate with no diff to explain it; a pinned one makes the
+  // move a reviewed PR. Moving to a newer image is
+  // `.claude/skills/steward/reference/gates.md`'s procedure.
+  const PINNED_IMAGE_RE = /^(ubuntu-\d{2}\.\d{2}(-arm)?|windows-\d{4}|macos-\d+)$/
+
+  // A `runs-on` that is a matrix or expression cannot be read as a label, so it
+  // is ledgered here by `<workflow>:<job>` with the reason its images are
+  // still a deliberate choice. Empty today; an entry is a decision on the record.
+  const EXPRESSION_RUNS_ON_LEDGER: Record<string, string> = {}
+
+  async function runsOnSites(): Promise<Array<{ site: string; label: unknown }>> {
+    const dir = join(REPO_ROOT, '.github/workflows')
+    const files = (await readdir(dir)).filter((f) => f.endsWith('.yml')).sort()
+    const sites: Array<{ site: string; label: unknown }> = []
+    for (const file of files) {
+      const workflow = parseYaml(await readFile(join(dir, file), 'utf-8')) as {
+        jobs?: Record<string, { 'runs-on'?: unknown }>
+      }
+      for (const [job, def] of Object.entries(workflow.jobs ?? {})) {
+        if (def['runs-on'] !== undefined)
+          sites.push({ site: `${file}:${job}`, label: def['runs-on'] })
+      }
+    }
+    return sites
+  }
+
+  it('every runs-on is a pinned image label or a ledgered expression', async () => {
+    const sites = await runsOnSites()
+    expect(sites.length, 'no runs-on parsed — the check would pass vacuously').toBeGreaterThan(20)
+    const floating = sites
+      .filter(({ site, label }) => {
+        if (typeof label === 'string' && PINNED_IMAGE_RE.test(label)) return false
+        if (typeof label === 'string' && label.includes('${{')) {
+          return EXPRESSION_RUNS_ON_LEDGER[site] === undefined
+        }
+        return true
+      })
+      .map(({ site, label }) => `${site}: ${JSON.stringify(label)}`)
+    expect(
+      floating,
+      'these jobs run on a floating or unrecognised runner label — pin an image (ubuntu-24.04) or ledger the expression with a reason',
+    ).toEqual([])
+  })
+
+  it('has no ledger entry for a job that no longer has an expression runs-on', async () => {
+    const sites = new Map((await runsOnSites()).map((s) => [s.site, s.label]))
+    const stale = Object.keys(EXPRESSION_RUNS_ON_LEDGER).filter((site) => {
+      const label = sites.get(site)
+      return typeof label !== 'string' || !label.includes('${{')
+    })
+    expect(stale, 'ledger entries that name no expression runs-on').toEqual([])
   })
 })
 
