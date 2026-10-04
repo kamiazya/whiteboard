@@ -16,7 +16,12 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { compareToLedger, parseDiagnostics, ratchetLedger } from './typecheck-tests-lib.mjs'
+import {
+  compareToLedger,
+  interruptedRun,
+  parseDiagnostics,
+  ratchetLedger,
+} from './typecheck-tests-lib.mjs'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const LEDGER_PATH = resolve(PACKAGE_ROOT, 'scripts', 'typecheck-tests-debt.json')
@@ -62,6 +67,11 @@ function main() {
   })
   if (run.error) {
     console.error(`could not run tsc: ${run.error.message}`)
+    return 2
+  }
+  const interrupted = interruptedRun(run)
+  if (interrupted) {
+    console.error(`${interrupted}; its output cannot be compared to the ledger`)
     return 2
   }
   const output = `${run.stdout}${run.stderr}`
