@@ -19,6 +19,7 @@
 // the audit from the derived list.
 
 import { spawnSync } from 'node:child_process'
+import { isRunAsScript } from './is-run-as-script.mjs'
 
 /**
  * Only a failure the registry is known to produce earns a retry; anything
@@ -80,6 +81,6 @@ async function main() {
 
 // Import-safe: the classifier is unit-tested from mcp-server's release
 // suite, and importing this module must not run an audit.
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (isRunAsScript(import.meta.url)) {
   await main()
 }

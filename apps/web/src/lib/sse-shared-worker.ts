@@ -12,7 +12,7 @@
  */
 import { SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
-import { createDaemonFetch } from './daemon-auth-fetch.js'
+import { createDaemonFetch } from './daemon-fetch.js'
 import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
 /**

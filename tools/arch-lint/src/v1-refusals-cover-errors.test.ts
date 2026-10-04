@@ -3,12 +3,13 @@
  * `createServer`'s `/api/v1` routes or exempted here with the reason it
  * cannot reach them.
  *
- * Why: an error with no arm in `create-server.ts` escapes the handler and
- * Hono answers `500 text/plain` — `DocumentHasDescendantsError` did exactly
- * that on `DELETE …/documents/:id` while the legacy route answered 409 and the
- * MCP tool refused in words. Nothing in the type system relates "a class an
+ * Why: an error with no arm in `create-server.ts` escapes the handler to the
+ * catch-all, which answers `500 internal_error` — JSON, but a server failure
+ * where the caller should have read a refusal it could act on.
+ * `DocumentHasDescendantsError` did exactly that on `DELETE …/documents/:id`
+ * while the legacy route answered 409 and the MCP tool refused in words. Nothing in the type system relates "a class an
  * operation can throw" to "a status a route answers", so the relation is a
- * ledger: a class added anywhere in ports, model or server-core stops this test
+ * ledger: a class added anywhere in a package server-core depends on stops this test
  * until someone decides which side of it the class is on.
  *
  * `tools` below means the class is raised only by an MCP tool's own
@@ -18,16 +19,43 @@
  * sides: an exempt class that now has an arm is stale, and an entry naming a
  * class that no longer exists is too.
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { countNamedUses } from './named-use-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const CREATE_SERVER = 'packages/server-core/src/create-server.ts'
-const SCANNED_PACKAGES = ['ports', 'model', 'server-core'] as const
+const SERVER_CORE_MANIFEST = 'packages/server-core/package.json'
+const WORKSPACE_SCOPE = '@kamiazya/whiteboard-'
+
+/**
+ * Every workspace package server-core depends on, as its directory under
+ * `packages/`. An error class defined in any of them can be thrown through a
+ * `createServer` operation, so the list is the manifest's and not a
+ * remembered one: a hand list left `codec` out while `serializeOkf` threw its
+ * `OkfNotYamlSafeError` through the OKF projection.
+ */
+function scannedPackages(): string[] {
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, SERVER_CORE_MANIFEST), 'utf8')) as {
+    dependencies?: Record<string, string>
+  }
+  const wanted = Object.keys(manifest.dependencies ?? {}).filter((name) =>
+    name.startsWith(WORKSPACE_SCOPE),
+  )
+  const dirsByName = new Map(
+    readdirSync(join(REPO_ROOT, 'packages')).flatMap((dir) => {
+      const path = join(REPO_ROOT, 'packages', dir, 'package.json')
+      return existsSync(path)
+        ? [[(JSON.parse(readFileSync(path, 'utf8')) as { name: string }).name, dir] as const]
+        : []
+    }),
+  )
+  return ['server-core', ...wanted.map((name) => dirsByName.get(name) ?? '')]
+}
 
 const FACET_SET = 'raised by wb_facet_set alone; no /api/v1 route writes a facet through it'
 const CANVAS_TOOLS = 'raised by the canvas tools (wb_canvas_edit / wb_scene_render / thread-edit)'
@@ -62,6 +90,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
   SubtreeTakesNoTargetError: VERSION_TOOLS,
   WorkspaceEditError: WORKSPACE_EDIT,
   DocumentKindUnknownError: 'raised by wb_document_get reading a document of no known kind',
+  OkfNotYamlSafeError:
+    'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }
 
 /** Whether a class heritage clause names `Error` or one of its built-in subclasses. */
@@ -77,13 +107,7 @@ function errorClassesIn(dir: string): string[] {
   const found: string[] = []
   for (const path of walkSourceFiles(dir)) {
     if (isTestPath(path)) continue
-    const file = ts.createSourceFile(
-      path,
-      readFileSync(path, 'utf8'),
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    )
+    const file = parseSource(path, readFileSync(path, 'utf8'), true, ts.ScriptKind.TS)
     const visit = (node: ts.Node): void => {
       if (ts.isClassDeclaration(node) && node.name !== undefined && extendsAnError(node)) {
         found.push(node.name.text)
@@ -95,6 +119,7 @@ function errorClassesIn(dir: string): string[] {
   return found
 }
 
+const SCANNED_PACKAGES = scannedPackages()
 const classes = SCANNED_PACKAGES.flatMap((pkg) =>
   errorClassesIn(join(REPO_ROOT, 'packages', pkg, 'src')),
 )
@@ -105,6 +130,14 @@ const answered = (name: string): boolean =>
   countNamedUses(CREATE_SERVER, createServerSource, [name, `is${name}`]) > 0
 
 describe('/api/v1 answers every error class the shared layer defines, or says why it cannot', () => {
+  it('scans every workspace package server-core depends on, each found on disk', () => {
+    expect(SCANNED_PACKAGES).not.toContain('')
+    expect(SCANNED_PACKAGES).toEqual(
+      expect.arrayContaining(['server-core', 'ports', 'model', 'codec']),
+    )
+    expect(new Set(SCANNED_PACKAGES).size).toBe(SCANNED_PACKAGES.length)
+  })
+
   it('finds the classes it judges', () => {
     // A scan that found none would report every ledger entry stale and send a
     // reader to the wrong file; the repo holds fifty or so.

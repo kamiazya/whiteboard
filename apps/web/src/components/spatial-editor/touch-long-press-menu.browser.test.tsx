@@ -8,11 +8,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { touch } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -22,16 +21,7 @@ const withNode: SpatialCanvas = {
 }
 
 function mount(canvas: SpatialCanvas, tool: 'select' | 'hand' = 'select') {
-  const latest: { canvas: SpatialCanvas } = { canvas }
-  function Host() {
-    const [current, setCurrent] = useState<SpatialCanvas>(canvas)
-    latest.canvas = current
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor defaultTool={tool} canvas={current} onChange={setCurrent} theme="light" />
-      </div>
-    )
-  }
+  const { Host, latest } = makeEditorHost({ initial: canvas, tool })
   return { latest, ...render(<Host />) }
 }
 

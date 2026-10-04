@@ -1,7 +1,8 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { productionSourceFiles } from '../shared/test-utils/source-files.js'
 import { stripComments } from '../shared/test-utils/strip-comments.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 
@@ -143,16 +144,6 @@ describe('background work is declared before it is armed', () => {
 const SERVER_SRC = fileURLToPath(new URL('.', import.meta.url))
 const PACKAGE_SRC = fileURLToPath(new URL('../', import.meta.url))
 
-async function sourceFiles(dir: string): Promise<string[]> {
-  const found: string[] = []
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) found.push(...(await sourceFiles(path)))
-    else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) found.push(path)
-  }
-  return found
-}
-
 /**
  * The other bypass, and the one `.start()` cannot see: a module that owns a
  * timer arms itself the moment something calls into it, so it is a background
@@ -188,7 +179,7 @@ describe('a timer-owning store module is a declared worker', () => {
   async function timerOwners(): Promise<string[]> {
     const storeDir = join(SERVER_SRC, 'store')
     const owners: string[] = []
-    for (const file of await sourceFiles(storeDir)) {
+    for (const file of productionSourceFiles(storeDir)) {
       const code = stripComments(await readFile(file, 'utf8'))
       if (/\b(setTimeout|setInterval)\(/.test(code)) owners.push(relative(storeDir, file))
     }
@@ -230,7 +221,7 @@ const AUTO_COMPACT_IMPORTERS = [
 describe('the auto-compact scheduler is reached only where it is declared', () => {
   it('has exactly the importers it declares', async () => {
     const importers: string[] = []
-    for (const file of await sourceFiles(PACKAGE_SRC)) {
+    for (const file of productionSourceFiles(PACKAGE_SRC)) {
       const code = stripComments(await readFile(file, 'utf8'))
       if (/\/auto-compact(\.js)?['"]/.test(code) && !file.endsWith('store/auto-compact.ts')) {
         importers.push(relative(PACKAGE_SRC, file))

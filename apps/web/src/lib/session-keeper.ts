@@ -1,6 +1,6 @@
 import type { WorkspaceRoute } from './app-routes.js'
 import { browserWorkspaceMatches } from './browser-workspace-id.js'
-import type { ConnectedDaemon } from './daemon-auth-fetch.js'
+import type { ConnectedDaemon } from './daemon-fetch.js'
 import type { ProviderState } from './provider.js'
 import { findReplicaForHandle, type ReplicaMatch } from './replicas.js'
 import type { UserSettings } from './user-settings-store.js'
@@ -57,34 +57,15 @@ export function daemonKeepsSession({
 }
 
 /**
- * Which daemon the SHELL is talking to: the one this page reconnected to
- * through the extension, or the configured provider state.
+ * Which daemon a surface talks to: the one this page reconnected to through
+ * the extension, or the configured provider state.
  *
  * `undefined` under the 'Work in this browser instead' escape, which opts out
- * of every daemon the session might otherwise have reached.
+ * of every daemon the session might otherwise have reached. That check comes
+ * first, so a caller may hand it the raw provider state or the effective one
+ * and get the same answer.
  */
-export function shellDaemon({
-  forcedBrowser,
-  connection,
-  effectiveState,
-}: {
-  forcedBrowser: boolean
-  connection: { daemonBaseUrl: string } | null
-  effectiveState: ProviderState
-}): ConnectedDaemon | undefined {
-  if (forcedBrowser) return undefined
-  if (connection !== null) return { baseUrl: connection.daemonBaseUrl }
-  if (effectiveState.kind === 'daemon') return { baseUrl: effectiveState.daemonBaseUrl }
-  return undefined
-}
-
-/**
- * The daemon /settings talks to. It renders on its own route ahead of (and
- * independent from) the daemon/browser branch, so its connection is resolved
- * here rather than reusing a local that exists only inside one of those
- * branches' scope.
- */
-export function settingsDaemon({
+export function daemonForSession({
   forcedBrowser,
   connection,
   providerState,

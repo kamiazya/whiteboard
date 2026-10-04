@@ -90,9 +90,8 @@ Use PBT when the behavior is better described as an invariant over many inputs t
 
 **Shared utilities:**
 
-- Use `src/shared/test-utils/fast-check.ts` instead of importing `fast-check` directly.
-- Shared arbitraries belong under `src/shared/test-utils/arbitraries/` when they model a shared contract.
-- Shared model helpers belong under `src/shared/test-utils/models/` when multiple tests share the same state vocabulary.
+- Import `fc`, `fcTest` and `withDefaults` from the package's own `test-utils/fast-check.ts` (in `mcp-server`, `src/shared/test-utils/fast-check.ts`) instead of importing `fast-check` directly. Each of those files re-exports the one prelude in `@kamiazya/whiteboard-model/test-utils`, and `tools/arch-lint/src/fast-check-prelude-check.test.ts` fails a package that defines its own.
+- Arbitraries that generate valid model values (nodes, edges, canvases, a schema's own `zod-arbitrary`) live in `packages/model/src/test-utils/` and are exported through that same `@kamiazya/whiteboard-model/test-utils` entry, so codec, canvas-render and the rest share them rather than copy them. An arbitrary that only one package needs stays in that package's `test-utils/`.
 
 **Replayability:** Avoid `Math.random()`, wall-clock timing, real network, and unseeded global state inside generated runs.
 

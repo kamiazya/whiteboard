@@ -48,6 +48,7 @@ describe('createDaemonAuthMiddleware public routes', () => {
   it('lets /api/runtime/ping through with no credential, by the registry alone', async () => {
     const res = await appRefusingEveryone().request('/api/runtime/ping')
     expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ reached: true })
   })
 
   it('refuses a sibling runtime path with no credential', async () => {

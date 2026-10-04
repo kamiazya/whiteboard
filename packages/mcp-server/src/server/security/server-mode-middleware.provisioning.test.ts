@@ -95,6 +95,7 @@ describe('server mode — a bearer becoming a user', () => {
       headers: { authorization: 'Bearer claude-code:ada' },
     })
     expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ reached: true })
     expect((await userFor(ISSUER, 'ada'))?.displayName).toBe('ada')
   })
 
@@ -113,6 +114,7 @@ describe('server mode — a bearer becoming a user', () => {
       headers: { authorization: 'Bearer other-app:ada' },
     })
     expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ reached: true })
     expect(await userFor(other, 'ada')).toBeNull()
   })
 
@@ -127,6 +129,7 @@ describe('server mode — a bearer becoming a user', () => {
       headers: { authorization: 'Bearer other-app:ada' },
     })
     expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ reached: true })
   })
 })
 

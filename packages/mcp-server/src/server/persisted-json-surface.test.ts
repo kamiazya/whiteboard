@@ -31,10 +31,11 @@
  *     scope** — `structuredClone` through IndexedDB is the browser's
  *     equivalent and has its own ledger in `apps/web`.
  */
-import { readdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { productionSourceFiles } from '../shared/test-utils/source-files.js'
 
 const PACKAGE_SRC = fileURLToPath(new URL('..', import.meta.url))
 
@@ -145,8 +146,6 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'version-store.test.ts round-trips save({ attestation }) through list(), and a value the ' +
       'schema refuses reads back as no attestation by design',
   ),
-  'server/_test-route-fuzz-lane.ts':
-    'not modelled: a response body the route fuzz lanes read back against its client contract — a reply, not a stored shape',
 }
 
 /** `<name>Schema.parse(` / `<name>Schema.safeParse(` — how every schema in this package is spelled. */
@@ -154,22 +153,16 @@ const SCHEMA_PARSE = /[A-Za-z]+Schema\.(?:safeParse|parse)\(/
 
 async function scanPersistedJsonFiles(): Promise<string[]> {
   const found: string[] = []
-  async function walk(dir: string): Promise<void> {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        // Test helpers are not production readers; a fixture parsing its own
-        // JSON is the test, not the boundary.
-        if (entry.name !== 'test-utils') await walk(path)
-        continue
-      }
-      if (!entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts')) continue
-      const source = await readFile(path, 'utf8')
-      if (!source.includes('JSON.parse') || !SCHEMA_PARSE.test(source)) continue
-      found.push(path.slice(PACKAGE_SRC.length).replaceAll('\\', '/'))
-    }
+  // Test helpers are not production readers; a fixture parsing its own JSON is
+  // the test, not the boundary.
+  for (const path of productionSourceFiles(PACKAGE_SRC, {
+    skipDirs: ['test-utils'],
+    extensions: ['.ts'],
+  })) {
+    const source = await readFile(path, 'utf8')
+    if (!source.includes('JSON.parse') || !SCHEMA_PARSE.test(source)) continue
+    found.push(path.slice(PACKAGE_SRC.length).replaceAll('\\', '/'))
   }
-  await walk(PACKAGE_SRC)
   return found.sort()
 }
 

@@ -7,6 +7,7 @@
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runPrepackGate } from './prepack-gate-lib.mjs'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -15,14 +16,9 @@ export function findMissingWidgetHtml(packageRoot = PACKAGE_ROOT) {
   return existsSync(htmlPath) ? null : htmlPath
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const missing = findMissingWidgetHtml()
-  if (missing) {
-    console.error(
-      `prepack gate: ${missing} not found — run \`pnpm build\` (canvas-viewer's build:widget + copy-widget-into-dist.mjs) before packing.`,
-    )
-    process.exit(1)
-  }
-  // stderr, not stdout — see verify-web-app-dist.mjs for why.
-  console.error('prepack gate: dist/widget/canvas-viewer.html present — OK')
-}
+runPrepackGate(import.meta.url, {
+  find: findMissingWidgetHtml,
+  remedy:
+    "run `pnpm build` (canvas-viewer's build:widget + copy-widget-into-dist.mjs) before packing.",
+  present: 'dist/widget/canvas-viewer.html present',
+})

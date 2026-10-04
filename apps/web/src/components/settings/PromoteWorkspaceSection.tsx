@@ -31,7 +31,7 @@ import {
 } from '../../components/ui/dialog.js'
 import { getAppLogger } from '../../lib/app-logger.js'
 import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
-import type { ConnectedDaemon } from '../../lib/daemon-auth-fetch.js'
+import type { ConnectedDaemon } from '../../lib/daemon-fetch.js'
 import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import type { PromotionResultRecord, UserSettings } from '../../lib/user-settings-store.js'

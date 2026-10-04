@@ -2,6 +2,7 @@ import {
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
+  markdownInputSchema,
   okfActorSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -50,11 +51,10 @@ export const wbDocumentCreateInputSchema = z
         kind: z
           .literal('markdown')
           .describe('An OKF markdown document. Serialises as OKF Markdown.'),
-        markdown: z
-          .string()
+        markdown: markdownInputSchema
           .optional()
           .describe(
-            'The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Omit to create it empty, which is what a caller wants when the content comes from somewhere else.',
+            'The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Facets go under `facets:`, never at the root of the `---` block. Omit to create it empty, which is what a caller wants when the content comes from somewhere else.',
           ),
         actor: okfActorSchema
           .optional()

@@ -105,6 +105,11 @@ const RETIRED: readonly RetiredClaim[] = [
     example: 'unless the request names a `background` of its own',
   },
   {
+    pattern: /browser's\s+own\s+copy\s+remains/i,
+    why: 'a whole-workspace move deletes the old browser record once every document and image is verified on the daemon (`demoteBrowserWorkspace`); only an unverified move keeps it',
+    example: "The browser's own copy remains — the two copies do not sync on their own",
+  },
+  {
     pattern: /\.dev-data\.bak/,
     why: 'a sibling of `.dev-data/` is not git-ignored and would hold the dev token; back up under `tmp/`',
     example: 'cp -r .dev-data .dev-data.bak',

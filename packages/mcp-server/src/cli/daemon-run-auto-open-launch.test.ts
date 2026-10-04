@@ -33,10 +33,11 @@
 // (whose presence alone routes `open_generic` to a real browser launch
 // ahead of `$BROWSER` — see `has_display()`), making `$BROWSER` reach the
 // fake executable regardless of the host desktop session.
-import { spawn, spawnSync } from 'node:child_process'
+import { type ChildProcessByStdio, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import type { Readable } from 'node:stream'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -58,7 +59,10 @@ const SHUTDOWN_TIMEOUT_MS = 5_000
 const FAKE_BROWSER_COMMAND = 'whiteboard-fake-open'
 
 const tempDirs: string[] = []
-const liveChildren: Array<{ pid: number; closed: Promise<unknown> }> = []
+// Registered the moment a child is spawned, before readiness is awaited: a
+// launch that times out still owns a live broker and a daemon mid-start, and a
+// list filled only on success never reaches them.
+const liveChildren: Array<{ stop: () => Promise<void> }> = []
 
 function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix))
@@ -94,13 +98,48 @@ interface LaunchResult {
   closed: Promise<unknown>
 }
 
+/** Resolves with the daemon's ready JSON line once the child's stdout shows it. */
+function readyLineFrom(
+  child: ChildProcessByStdio<null, Readable, Readable>,
+): Promise<Record<string, unknown>> {
+  let buffer = ''
+  let found = false
+  let readyResolve!: (value: Record<string, unknown>) => void
+  const readyPromise = new Promise<Record<string, unknown>>((res) => {
+    readyResolve = res
+  })
+  child.stdout.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString()
+    let newlineIndex = buffer.indexOf('\n')
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex).replace(/\r$/, '')
+      buffer = buffer.slice(newlineIndex + 1)
+      if (!found && line.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(line) as Record<string, unknown>
+          if (parsed.ok === true && typeof parsed.socketPath === 'string') {
+            found = true
+            readyResolve(parsed)
+          }
+        } catch {
+          // Not the ready line (a log line, tsx diagnostic, …) — keep scanning.
+        }
+      }
+      newlineIndex = buffer.indexOf('\n')
+    }
+  })
+  return readyPromise
+}
+
 /** Boots the real dispatcher CLI (via tsx) inside a real pty, and resolves
  * once the ready JSON line has been observed. */
 async function launchDaemonInPty(args: {
   dataDir: string
   extraArgs?: readonly string[]
   extraEnv?: Readonly<Record<string, string | undefined>>
+  readinessMs?: number
 }): Promise<LaunchResult> {
+  const readinessMs = args.readinessMs ?? READINESS_TIMEOUT_MS
   const pidfile = join(makeTempDir('whiteboard-auto-open-launch-pid-'), 'pid')
   const cliArgs = [
     'node',
@@ -119,47 +158,26 @@ async function launchDaemonInPty(args: {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  let buffer = ''
-  let readyLine: Record<string, unknown> | null = null
-  let readyResolve!: (value: Record<string, unknown>) => void
-  const readyPromise = new Promise<Record<string, unknown>>((res) => {
-    readyResolve = res
-  })
-  child.stdout.on('data', (chunk: Buffer) => {
-    buffer += chunk.toString()
-    let newlineIndex = buffer.indexOf('\n')
-    while (newlineIndex !== -1) {
-      const line = buffer.slice(0, newlineIndex).replace(/\r$/, '')
-      buffer = buffer.slice(newlineIndex + 1)
-      if (readyLine === null && line.trim().startsWith('{')) {
-        try {
-          const parsed = JSON.parse(line) as Record<string, unknown>
-          if (parsed.ok === true && typeof parsed.socketPath === 'string') {
-            readyLine = parsed
-            readyResolve(parsed)
-          }
-        } catch {
-          // Not the ready line (a log line, tsx diagnostic, …) — keep scanning.
-        }
-      }
-      newlineIndex = buffer.indexOf('\n')
-    }
-  })
+  const readyPromise = readyLineFrom(child)
 
   const closed = new Promise((res) => child.once('close', res))
+  liveChildren.push({
+    stop: async () => {
+      const pid = readBrokerChildPid(pidfile)
+      // No pidfile means the broker never got as far as forking; killing it is
+      // the whole cleanup.
+      if (pid === undefined) child.kill('SIGKILL')
+      await killAndWait(pid, closed)
+    },
+  })
 
-  const winner = await Promise.race([readyPromise, delay(READINESS_TIMEOUT_MS, 'timeout' as const)])
+  const winner = await Promise.race([readyPromise, delay(readinessMs, 'timeout' as const)])
   if (winner === 'timeout') {
-    throw new Error(`daemon did not emit ready JSON within ${READINESS_TIMEOUT_MS}ms`)
+    throw new Error(`daemon did not emit ready JSON within ${readinessMs}ms`)
   }
 
-  let pid: number
-  try {
-    pid = Number.parseInt(readFileSync(pidfile, 'utf8').trim(), 10)
-  } catch (err) {
-    throw new Error(`pidfile was not written by pty-broker: ${String(err)}`)
-  }
-  liveChildren.push({ pid, closed })
+  const pid = readBrokerChildPid(pidfile)
+  if (pid === undefined) throw new Error('pidfile was not written by pty-broker')
 
   return { readyLine: winner, pid, closed }
 }
@@ -190,16 +208,26 @@ async function pollForRecordedLines(recordFile: string, deadlineMs: number): Pro
   }
 }
 
-async function killAndWait(pid: number, closed: Promise<unknown>): Promise<void> {
+/** The command's pid, which the broker writes right after forking; undefined until it has. */
+function readBrokerChildPid(pidfile: string): number | undefined {
   try {
-    process.kill(pid, 'SIGTERM')
+    const pid = Number.parseInt(readFileSync(pidfile, 'utf8').trim(), 10)
+    return Number.isNaN(pid) ? undefined : pid
+  } catch {
+    return undefined
+  }
+}
+
+async function killAndWait(pid: number | undefined, closed: Promise<unknown>): Promise<void> {
+  try {
+    if (pid !== undefined) process.kill(pid, 'SIGTERM')
   } catch {
     // Already gone.
   }
   const result = await Promise.race([closed, delay(SHUTDOWN_TIMEOUT_MS, 'timeout' as const)])
   if (result === 'timeout') {
     try {
-      process.kill(pid, 'SIGKILL')
+      if (pid !== undefined) process.kill(pid, 'SIGKILL')
     } catch {
       // Already gone.
     }
@@ -207,11 +235,14 @@ async function killAndWait(pid: number, closed: Promise<unknown>): Promise<void>
   }
 }
 
-afterEach(async () => {
+async function stopLiveChildren(): Promise<void> {
   while (liveChildren.length > 0) {
-    const entry = liveChildren.pop()
-    if (entry) await killAndWait(entry.pid, entry.closed)
+    await liveChildren.pop()?.stop()
   }
+}
+
+afterEach(async () => {
+  await stopLiveChildren()
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop()
     if (dir) rmSync(dir, { recursive: true, force: true })
@@ -225,6 +256,24 @@ afterEach(async () => {
 describe.skipIf(!hasWorkingPty && !process.env.CI)(
   'daemon run auto-open: real process launch',
   () => {
+    it('leaves no broker or daemon behind when readiness is not reached in time', async () => {
+      const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
+
+      // Short enough that the daemon is still starting when the bound
+      // fires: that is the moment a launch has a live process and no ready
+      // line to hand back.
+      await expect(launchDaemonInPty({ dataDir, readinessMs: 1_500 })).rejects.toThrow(
+        /did not emit ready JSON/,
+      )
+      await stopLiveChildren()
+
+      // The data dir is on both the broker's and the daemon's command line.
+      const survivors = spawnSync('pgrep', ['-f', '--', `--data-dir=${dataDir}`], {
+        encoding: 'utf8',
+      })
+      expect(survivors.stdout.trim()).toBe('')
+    }, 30_000)
+
     it(
       'invokes the fake opener with the hosted app URL exactly once when every guard passes',
       async () => {

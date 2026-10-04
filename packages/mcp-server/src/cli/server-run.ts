@@ -13,11 +13,9 @@ import type { z } from 'zod'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { getLogger } from '../server/log.js'
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
-import type { AuthenticatorBinding } from '../server/security/member-profile-store.js'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
 import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
-import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import {
   parseServerModeEnvConfig,
   type ServerModeEnvConfigResult,
@@ -30,6 +28,7 @@ import {
   writeServerModeRecord,
 } from '../server/security/server-mode-record.js'
 import { loadSignInConfig, SIGN_IN_CONFIG_ENV } from '../server/security/sign-in-config-file.js'
+import type { ServerModeRunning, StartServerModeHttpOptions } from '../server/server-mode-http.js'
 import { collectStartupEnvIssues } from '../server/startup-env.js'
 import {
   OPERATOR_JSON_SCHEMA_VERSION,
@@ -41,15 +40,13 @@ import { mergeCliFlagsIntoEnv, type ServerRunArgs } from './server-run-args.js'
 type ServerRunDryRunResult = z.infer<typeof serverRunDryRunOutputSchema>
 type ServerRunReadyResult = z.infer<typeof serverRunReadyOutputSchema>
 
-interface StartServerOptions {
-  host: string
-  port: number
-  publicBaseUrl: string
-  allowedOrigins: readonly string[]
-  authStrategy: AsyncAuthStrategy
-  signInProviders?: readonly ConfiguredProvider[]
-  configuredAdministrators?: readonly AuthenticatorBinding[]
-}
+// Type-only, so the server module stays out of this file's static graph (it is
+// imported dynamically below). The two factory seams are wiring-test hooks the
+// CLI never sets.
+type StartServerOptions = Omit<
+  StartServerModeHttpOptions,
+  'fileGcSweeperFactory' | 'workspaceTailFactory'
+>
 
 const log = getLogger('server-run')
 
@@ -63,15 +60,6 @@ function signInConfigFrom(env: NodeJS.ProcessEnv): ReturnType<typeof loadSignInC
     log.error({ err }, 'the sign-in configuration cannot be used')
     return null
   }
-}
-
-interface ServerModeRunning {
-  port: number
-  host: string
-  startedAt: string
-  resolvedDataDir: string
-  instanceId: string
-  close: () => Promise<void>
 }
 
 export type StartServerFn = (opts: StartServerOptions) => Promise<ServerModeRunning>

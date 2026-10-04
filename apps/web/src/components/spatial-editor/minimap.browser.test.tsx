@@ -5,10 +5,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -20,20 +19,6 @@ const spread: SpatialCanvas = {
   edges: [],
 }
 
-function Host({ canvas0, width = 800 }: { canvas0: SpatialCanvas; width?: number }) {
-  const [canvas, setCanvas] = useState(canvas0)
-  return (
-    <div style={{ width, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
-
 const minimapOf = (c: HTMLElement) =>
   c.querySelector('[data-testid="minimap"]') as HTMLElement | null
 const transformOf = (c: HTMLElement) =>
@@ -41,7 +26,8 @@ const transformOf = (c: HTMLElement) =>
 const editorOf = (c: HTMLElement) => rootOf(c)
 
 it('shows an overview once the canvas has content', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   expect(minimapOf(container)).toBeTruthy()
   expect(container.querySelector('[data-testid="minimap-viewport"]')).toBeTruthy()
 })
@@ -52,12 +38,14 @@ it('shows an overview once the canvas has content', () => {
 // width, not the viewport's: a narrow editor column on a wide screen collides
 // exactly the same way, and a media query would miss it.
 it('stays away when the editor is too narrow to hold it beside the dock', () => {
-  const { container } = render(<Host canvas0={spread} width={390} />)
+  const { Host } = makeEditorHost({ initial: spread, size: { width: 390, height: 600 } })
+  const { container } = render(<Host />)
   expect(minimapOf(container)).toBeNull()
 })
 
 it('comes back when the editor is widened past that point', async () => {
-  const { container } = render(<Host canvas0={spread} width={390} />)
+  const { Host } = makeEditorHost({ initial: spread, size: { width: 390, height: 600 } })
+  const { container } = render(<Host />)
   const host = container.firstElementChild as HTMLElement
   expect(minimapOf(container)).toBeNull()
 
@@ -69,14 +57,16 @@ it('comes back when the editor is widened past that point', async () => {
 })
 
 it('stays away on an empty canvas, where an overview has no job', () => {
-  const { container } = render(<Host canvas0={{ nodes: [], edges: [] }} />)
+  const { Host } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
   expect(minimapOf(container)).toBeNull()
 })
 
 // The scene is an <svg> and callers reach for it with container-wide
 // selectors; a second SVG here would answer for it.
 it('adds no <svg> of its own, so scene queries still find only the scene', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   const before = container.querySelectorAll('svg').length
   expect(minimapOf(container)).toBeTruthy()
   expect(container.querySelectorAll('svg').length).toBe(before)
@@ -84,7 +74,8 @@ it('adds no <svg> of its own, so scene queries still find only the scene', () =>
 })
 
 it('centres the canvas on the point that was pressed', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   const minimap = minimapOf(container)!
   const before = transformOf(container)
   const rect = minimap.getBoundingClientRect()
@@ -104,7 +95,8 @@ it('centres the canvas on the point that was pressed', () => {
 })
 
 it('does not move the viewport on a bare hover', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   const minimap = minimapOf(container)!
   const before = transformOf(container)
   const rect = minimap.getBoundingClientRect()
@@ -121,7 +113,8 @@ it('does not move the viewport on a bare hover', () => {
 // It stays up during a drag now: data-editor-overlay stops a press on it
 // reaching the canvas, so hiding bought nothing and flickered every gesture.
 it('stays visible while a gesture is in flight', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   const editor = editorOf(container)
   const r = editor.getBoundingClientRect()
 
@@ -142,7 +135,8 @@ it('stays visible while a gesture is in flight', () => {
 // without data-editor-overlay a minimap press ALSO starts a marquee (Select)
 // or a pan (Hand) underneath the navigation.
 it('navigates without starting a canvas gesture underneath', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   const minimap = minimapOf(container)!
   const rect = minimap.getBoundingClientRect()
 
@@ -162,7 +156,8 @@ it('navigates without starting a canvas gesture underneath', () => {
 // listener: the container can change size without the window doing so, and a
 // marker that lags that is wrong about where you are.
 it('tracks a container resize that the window never sees', async () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   const host = container.firstElementChild as HTMLElement
   const markerWidth = () =>
     (container.querySelector('[data-testid="minimap-viewport"]') as HTMLElement).style.width
@@ -189,7 +184,8 @@ it('paints an authored preset colour, and leaves an unstyled node muted', () => 
     ],
     edges: [],
   }
-  const { container } = render(<Host canvas0={coloured} />)
+  const { Host } = makeEditorHost({ initial: coloured })
+  const { container } = render(<Host />)
   const blocks = [...minimapOf(container)!.querySelectorAll('div')].filter(
     (el) => el.getAttribute('data-testid') !== 'minimap-viewport',
   )
@@ -204,7 +200,8 @@ it('paints an authored preset colour, and leaves an unstyled node muted', () => 
 // Without a stacking context the scene paints over the overview: it is
 // later in the DOM and its nodes are positioned, so document order wins.
 it('sits above the canvas scene', () => {
-  const { container } = render(<Host canvas0={spread} />)
+  const { Host } = makeEditorHost({ initial: spread })
+  const { container } = render(<Host />)
   expect(getComputedStyle(minimapOf(container)!).zIndex).not.toBe('auto')
 })
 
@@ -229,7 +226,8 @@ const marked = (width: number): SpatialCanvas => ({
 it("draws a node's symbol in the overview once its box is big enough to hold one", () => {
   // A node occupying most of the fitted bounds projects well past the
   // threshold.
-  const { container } = render(<Host canvas0={marked(3000)} />)
+  const { Host } = makeEditorHost({ initial: marked(3000) })
+  const { container } = render(<Host />)
   expect(container.querySelector('[data-testid="minimap-symbol"]')).toBeTruthy()
 })
 
@@ -237,7 +235,8 @@ it('leaves a box too small for a mark as a plain box', () => {
   // The same document, with the marked node small enough that its projected
   // box is a few pixels: a symbol drawn there is dirt on the box, not a
   // mark, so the overview keeps what it had.
-  const { container } = render(<Host canvas0={marked(40)} />)
+  const { Host } = makeEditorHost({ initial: marked(40) })
+  const { container } = render(<Host />)
   expect(container.querySelector('[data-testid="minimap"]')).toBeTruthy()
   expect(container.querySelector('[data-testid="minimap-symbol"]')).toBeNull()
 })
@@ -272,7 +271,8 @@ const twoMarked: SpatialCanvas = {
 }
 
 it('draws every mark in the overview at one size, whatever box it sits in', () => {
-  const { container } = render(<Host canvas0={twoMarked} />)
+  const { Host } = makeEditorHost({ initial: twoMarked })
+  const { container } = render(<Host />)
   const marks = [...container.querySelectorAll('[data-testid="minimap-symbol"]')]
   expect(marks.length).toBe(2)
   const sizes = marks.map((mark) => mark.getBoundingClientRect().width)
@@ -282,7 +282,8 @@ it('draws every mark in the overview at one size, whatever box it sits in', () =
 it('leaves the box it marks still visible around the mark', () => {
   // The box carries WHERE and its authored colour; the mark adds WHICH. A
   // glyph at 80% of the short side reduced the first to a rim.
-  const { container } = render(<Host canvas0={twoMarked} />)
+  const { Host } = makeEditorHost({ initial: twoMarked })
+  const { container } = render(<Host />)
   const mark = container.querySelector('[data-testid="minimap-symbol"]') as HTMLElement
   const box = mark.parentElement as HTMLElement
   const shortSide = Math.min(box.getBoundingClientRect().width, box.getBoundingClientRect().height)

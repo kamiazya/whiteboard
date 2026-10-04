@@ -1215,7 +1215,7 @@ describe('App /settings routing', () => {
       // measured. Swapping the daemon arm for the browser one leaves this
       // green. The two iterations still earn their place, since an absent or
       // throwing source on either arm fails them; the source CHOICE is keyed
-      // off the same `settingsDaemon` as the `daemon` prop beside it, and
+      // off the same resolved settings daemon as the `daemon` prop beside it, and
       // that pairing is what keeps them from disagreeing.
       expect(popover.textContent?.trim()).not.toBe('')
       cleanup()
@@ -1232,7 +1232,7 @@ describe('App /settings routing', () => {
     renderAppWithRouter(BROWSER_STATE, '/settings')
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toBeUndefined()
-    // settingsDaemon is undefined in browser mode, so the ternary that
+    // The settings daemon is undefined in browser mode, so the ternary that
     // gates workspaceId on it must answer undefined too — regardless of
     // whatever daemonView.workspace happens to hold.
     expect(receivedSettingsPageProps?.workspaceId).toBeUndefined()

@@ -2,11 +2,12 @@
 // built web app served as its hosting serves it, and an agent's MCP tool call
 // over the daemon's socket. Each browser's smoke drives its own browser.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, request } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { serveDist } from '../../../tools/checks/src/serve-dist.mjs'
 
 export const EXTENSION_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MCP_SERVER_DIR = resolve(EXTENSION_DIR, '../../packages/mcp-server')
@@ -184,31 +185,14 @@ export function agentEdits(record, documentId) {
   })
 }
 
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.png': 'image/png',
-  '.wasm': 'application/wasm',
-}
-
 /** Serves `html`, or the built web app with its hosting's single-page fallback. */
 export async function serve(html) {
-  const root = join(WEB_DIR, 'dist')
-  const server = createServer((req, res) => {
-    if (html !== undefined) return res.writeHead(200, { 'content-type': 'text/html' }).end(html)
-    const path = join(root, decodeURIComponent(new URL(req.url, 'http://x').pathname))
-    const file =
-      path.startsWith(root) && existsSync(path) && statSync(path).isFile()
-        ? path
-        : join(root, 'index.html')
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' })
-    res.end(readFileSync(file))
+  if (html === undefined) {
+    const dist = await serveDist({ root: join(WEB_DIR, 'dist') })
+    return { url: `${dist.origin}/`, close: () => dist.close() }
+  }
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html' }).end(html)
   })
   await new Promise((listening) => server.listen(0, '127.0.0.1', listening))
   return { url: `http://127.0.0.1:${server.address().port}/`, close: () => server.close() }

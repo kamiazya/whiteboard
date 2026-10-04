@@ -1,5 +1,5 @@
 import ts from '@typescript/typescript6'
-import { scriptKindOf, unwrapExpression } from './ast-helpers.js'
+import { parseSource, scriptKindOf, unwrapExpression } from './ast-helpers.js'
 import { createExportResolver, type ModuleExports } from './module-exports-resolve.js'
 import { isShippedPath } from './source-scan.js'
 
@@ -518,13 +518,7 @@ function readFiles(files: readonly ScannedFile[]): ReadFiles {
   }
   for (const { path, text } of files) {
     // No parent pointers: nothing here walks upward, and they are most of the cost of a parse.
-    const source = ts.createSourceFile(
-      path,
-      text,
-      ts.ScriptTarget.Latest,
-      false,
-      scriptKindOrJs(path),
-    )
+    const source = parseSource(path, text, false, scriptKindOrJs(path))
     const facts = staticFacts(source)
     read.modules.set(path, facts.exports)
     if (!isTestFile(path)) {

@@ -13,13 +13,12 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { HistoryCluster } from '../../components/history-cluster/HistoryCluster.js'
 import { DOCK_BUTTON_CLASS } from '../../components/ui/dock-button.js'
 import { controlHeightsPx } from '../../test-utils/control-heights-px.js'
+import { type EditorHostOptions, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -55,21 +54,12 @@ const HEIGHTS = [480, 844] as const
  * present for the same reason: both add an entry to the "+" menu, and the menu
  * is chrome that has to fit too.
  */
-function Host({ width, height }: { width: number; height: number }) {
-  const [canvas, setCanvas] = useState(canvas0)
-  return (
-    <div style={{ width, height }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={setCanvas}
-        theme="light"
-        fileRefOptions={[]}
-        onAddImage={async () => ({ ok: true, ref: 'asset:test' })}
-        paletteLeading={<HistoryCluster onUndo={() => {}} onRedo={() => {}} canUndo canRedo />}
-      />
-    </div>
-  )
+
+/** The optional chrome the layout contract covers: file refs, image add and the history cluster. */
+const CHROME_PROPS: EditorHostOptions['editorProps'] = {
+  fileRefOptions: [],
+  onAddImage: async () => ({ ok: true, ref: 'asset:test' }),
+  paletteLeading: <HistoryCluster onUndo={() => {}} onRedo={() => {}} canUndo canRedo />,
 }
 
 interface Chrome {
@@ -150,7 +140,12 @@ const cases = WIDTHS.flatMap((width) => HEIGHTS.map((height) => ({ width, height
 
 describe.each(cases)('editor chrome at $width x $height', ({ width, height }) => {
   it('keeps every overlay inside the editor', () => {
-    const { container } = render(<Host width={width} height={height} />)
+    const { Host } = makeEditorHost({
+      initial: canvas0,
+      size: { width, height },
+      editorProps: CHROME_PROPS,
+    })
+    const { container } = render(<Host />)
     const root = rootOf(container)
     const bounds = root.getBoundingClientRect()
 
@@ -166,7 +161,12 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
   })
 
   it('leaves no two overlays on top of each other, touch sizing included', () => {
-    const { container } = render(<Host width={width} height={height} />)
+    const { Host } = makeEditorHost({
+      initial: canvas0,
+      size: { width, height },
+      editorProps: CHROME_PROPS,
+    })
+    const { container } = render(<Host />)
     const root = rootOf(container)
     const controlCount = root.querySelectorAll('[data-testid="tool-palette"] button').length
 
@@ -193,7 +193,12 @@ describe.each(cases)('editor chrome at $width x $height', ({ width, height }) =>
 describe('the assumptions this grid rests on', () => {
   // A grid that silently stopped finding any chrome would pass forever.
   it('finds the dock, and the overview once there is room for it', () => {
-    const { container } = render(<Host width={1280} height={844} />)
+    const { Host } = makeEditorHost({
+      initial: canvas0,
+      size: { width: 1280, height: 844 },
+      editorProps: CHROME_PROPS,
+    })
+    const { container } = render(<Host />)
     const root = rootOf(container)
     const names = collectChrome(root).map((entry) => entry.name)
 

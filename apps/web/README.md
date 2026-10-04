@@ -45,7 +45,6 @@ the seam is intentionally minimal.
 
 `apps/web/src` must not import:
 - Node.js builtins (`node:fs`, `crypto`, etc.)
-- Anything from `packages/mcp-server/src/server`, `src/cli`, or `src/daemon`
-- Unlisted `packages/mcp-server/src/shared` modules
+- Anything under `packages/mcp-server/src`, by relative path, or `@kamiazya/whiteboard-mcp` at all, bare or by subpath — the browser-safe client half is `@kamiazya/whiteboard-daemon-client`
 
-Boundary violations are caught automatically by `web-app-boundary.test.ts`.
+Boundary violations are caught automatically by `tools/arch-lint/src/web-app-boundary.test.ts`.

@@ -13,6 +13,8 @@ import { waitFor } from '@testing-library/react'
 import { page } from 'vitest/browser'
 import { jsonResponse } from '../test-utils/json-response.js'
 
+const LEGEND_DIAGNOSTIC = 'no key carries it'
+
 export function resolveDocAssetPath(name: `${string}.png`): string {
   const dir: unknown = import.meta.env.VITE_DOCS_ASSETS_DIR
   if (typeof dir !== 'string' || dir.length === 0) {
@@ -96,6 +98,15 @@ export async function captureDocAsset(
   const target = container.querySelector(`[data-testid="${testId}"]`)
   if (!(target instanceof HTMLElement)) {
     throw new Error(`docs-snapshot: no element with data-testid="${testId}"`)
+  }
+  // A figure in the docs is a drawing, not a lint report: the legend's
+  // "no key carries it" line is a diagnostic about the board, and a legend
+  // panel is board chrome the doc scenes do not draw (see LegendlessCanvas).
+  if (
+    target.querySelector('[data-wb-legend]') !== null ||
+    (target.textContent ?? '').includes(LEGEND_DIAGNOSTIC)
+  ) {
+    throw new Error(`docs-snapshot: ${fileName} carries a legend or its diagnostic chip`)
   }
   await page.screenshot({
     path: resolveDocAssetPath(fileName),

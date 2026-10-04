@@ -11,6 +11,7 @@ import {
   bodyChangeConflicts,
   bodyReplaceChangeSchema,
   documentIdSchema,
+  MARKDOWN_MAX_CHARS,
   mintProposalId,
   type Proposal,
   proposalSchema,
@@ -198,6 +199,41 @@ function assertDisjoint(placed: readonly PlacedChange[]): void {
 }
 
 /**
+ * The body once every placed passage is applied.
+ *
+ * Applied from the LAST passage backwards, so an earlier op's replacement
+ * never shifts the offsets a later one was placed at. Placement read one body;
+ * applying in document order would make every op after the first act on
+ * offsets taken from a body that no longer exists.
+ */
+function applyPlaced(body: string, placed: readonly PlacedChange[]): string {
+  return [...placed]
+    .sort((a, b) => b.at.start - a.at.start)
+    .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
+}
+
+/**
+ * Refuses a batch that would leave the body longer than a whole-document write
+ * may be (`MARKDOWN_MAX_CHARS`). A replacement reaches the CRDT as the same
+ * text insert a create does, so growing a body past the limit by editing costs
+ * what writing it past the limit would, and a PROPOSAL is held to it too:
+ * adopting one that cannot apply is a change nobody can accept.
+ *
+ * Only growth is refused. A body written before the limit existed stays
+ * editable toward it, which a flat length test would forbid.
+ */
+function assertWithinLimit(body: string, placed: readonly PlacedChange[], result: string): void {
+  if (result.length <= MARKDOWN_MAX_CHARS || result.length <= body.length) return
+  const growth = (entry: PlacedChange): number =>
+    entry.change.text.length - (entry.at.end - entry.at.start)
+  const largest = placed.reduce((a, b) => (growth(b) > growth(a) ? b : a))
+  throw new PassageNotApplicableError(
+    largest.change.id,
+    `the edit would leave the body ${result.length} characters, over the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`,
+  )
+}
+
+/**
  * Refuses a batch that would rewrite words the caller did not see — the
  * APPLY-side half of decision 5.
  *
@@ -300,6 +336,7 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
       new Set(continuing?.changes.map((change) => change.id) ?? []),
     )
     assertDisjoint([...existing, ...placed])
+    assertWithinLimit(body, placed, applyPlaced(body, placed))
     const proposed = await storeBodyProposal({
       deps,
       input,
@@ -314,14 +351,8 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
 
   assertAssumptionsHold(placed, body)
 
-  // Applied from the LAST passage backwards, so an earlier op's
-  // replacement never shifts the offsets a later one was placed at.
-  // Placement read one body; applying in document order would make every
-  // op after the first act on offsets taken from a body that no longer
-  // exists.
-  const next = [...placed]
-    .sort((a, b) => b.at.start - a.at.start)
-    .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
+  const next = applyPlaced(body, placed)
+  assertWithinLimit(body, placed, next)
 
   writeMarkdownBody(doc, next)
   await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)

@@ -1,17 +1,13 @@
 /**
- * SseBackend: the DocumentBackend for a page that has no WebSocket path to the
- * daemon.
+ * SseBackend: the DocumentBackend every keeper's page syncs through — SSE
+ * downstream, ordinary POSTs upstream.
  *
- * A page served over https cannot open a `ws://` socket to loopback — mixed
- * content blocks the upgrade before auth is attempted — while a plain `http://`
- * fetch to loopback stays allowed. The hosted web app therefore syncs over SSE
- * downstream with ordinary POSTs upstream.
- *
- * The stream is read with `fetch` + `ReadableStream` rather than `EventSource`:
- * EventSource cannot carry an Authorization header, and the alternative — the
- * bearer token in the query string — would put a credential into URLs, history
- * and any access log that sees it. Reading the body ourselves keeps the token
- * in a header and works unchanged inside a SharedWorker.
+ * The stream is read with `fetch` + `ReadableStream` rather than `EventSource`
+ * because a daemon reached through the browser extension is reachable only
+ * through the bridge, whose transport is a `fetch`; an `EventSource` or a
+ * socket has no way across it. A server-mode keeper
+ * authenticates with its session cookie, which a same-origin `fetch` carries
+ * too. Reading the body ourselves also works unchanged inside a SharedWorker.
  */
 
 import { apiFetch } from './api-client.js'

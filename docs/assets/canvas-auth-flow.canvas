@@ -82,9 +82,11 @@
     }
   ],
   "x-whiteboard": {
-    "edgeRouting": {
-      "style": "orthogonal",
-      "lineJumps": "arc"
+    "facets": {
+      "visual.edges/v0": {
+        "routing": "orthogonal",
+        "lineJumps": "arc"
+      }
     }
   }
 }

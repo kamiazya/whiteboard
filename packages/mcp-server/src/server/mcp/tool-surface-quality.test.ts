@@ -413,7 +413,8 @@ describe('what the tool table costs to read', () => {
         // `embed` and `facets`, and the `ExtensionFacets` registration pays
         // for the four sites the retired composite left inline.
         // +58, wire too: a node's `embed` and a comment draft publish `additionalProperties: false` (C10, one level down).
-        visibleBytes: 15148,
+        // +55 wire too, +9 words: explicit propose refuses comments/locks/tidy/region.set, not "whatever the mode".
+        visibleBytes: 15203,
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -427,8 +428,8 @@ describe('what the tool table costs to read', () => {
         // here through the echo this tool's output carries.
         // +221 wire: its answer is the board it produced, and the snapshot now
         // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
-        wireBytes: 34220,
-        descriptionWords: 169,
+        wireBytes: 34275,
+        descriptionWords: 178,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
         // defines. All four were undescribed, so the whole of the parameter
@@ -500,7 +501,7 @@ describe('what the tool table costs to read', () => {
         // +153 wire, 0 visible: each row says whether the workspace pins it (an
         // output field; omitted when the keeper keeps no pins).
         visibleBytes: 473,
-        wireBytes: 1283,
+        wireBytes: 1300, // +17: the output's `path` states its 1024-character bound
         descriptionWords: 32,
         parameters: 1,
         undescribed: 1,
@@ -515,7 +516,7 @@ describe('what the tool table costs to read', () => {
       // a list and a read of every document), 1 after.
       wb_document_search: {
         visibleBytes: 1410,
-        wireBytes: 2240,
+        wireBytes: 2257, // +17: the output's `path` states its 1024-character bound
         descriptionWords: 68,
         parameters: 5,
         undescribed: 0,
@@ -715,11 +716,11 @@ describe('what the tool table costs to read', () => {
       wb_version_restore: {
         // +43 on both: `targetPath` must be the same kind as the saved state, since
         // restoring across kinds converted the target and is now refused.
-        visibleBytes: 1547,
+        visibleBytes: 1564, // +17: `targetPath` states the 1024-character path bound
         // +23 wire: `destructiveHint: true` stated — its `subtree` mode deletes the
         // documents created since the version. Client-side only; visible bytes unmoved.
         // +182: the output's documentId is the written document's ULID, schema'd as one.
-        wireBytes: 2404,
+        wireBytes: 2421, // +17 likewise
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
@@ -779,8 +780,9 @@ describe('what the tool table costs to read', () => {
         // arm, and `path` optional. A spatial document has no frontmatter
         // `title`, so a rename of one had no tool at any price (C5); the web
         // app renames both kinds.
-        visibleBytes: 3147,
-        wireBytes: 4691,
+        // +103 both: markdown `maxLength` on two arms (+38); `document.create` says facets go under `facets:` (+65).
+        visibleBytes: 3301, // +51: three input paths state the 1024-character bound
+        wireBytes: 4862, // +68: the same, and the output's path
         descriptionWords: 47,
         parameters: 22,
         undescribed: 14,
@@ -980,7 +982,8 @@ describe('what the tool table costs to read', () => {
       // `proposals` on wb_document_get (see those rows).
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
-      visibleBytes: 40703,
+      // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103).
+      visibleBytes: 40929, // +68 for the 1024-character document path bound
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1005,7 +1008,8 @@ describe('what the tool table costs to read', () => {
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
-      wireBytes: 131998,
+      // Then +158, the same bytes as visible.
+      wireBytes: 132275, // +119 for the 1024-character document path bound (see those rows)
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

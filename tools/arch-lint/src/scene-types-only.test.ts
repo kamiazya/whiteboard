@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo } from './scan-roots.js'
 import { walkSourceFiles } from './source-scan.js'
 
@@ -25,7 +26,7 @@ function runtimeStatements(source: string): string[] {
     compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
     reportDiagnostics: false,
   })
-  const emitted = ts.createSourceFile('emitted.js', outputText, ts.ScriptTarget.ESNext, true)
+  const emitted = parseSource('emitted.js', outputText, true, ts.ScriptKind.JS)
   return emitted.statements
     .filter((statement) => {
       if (!ts.isExportDeclaration(statement)) return true

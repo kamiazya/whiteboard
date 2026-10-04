@@ -10,6 +10,7 @@
 // keeps only: publishability checks (build, artifact checks, SBOM, tarball/packaged
 // smokes) and a fast non-flaky correctness floor (typecheck + mcp-node).
 
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -302,6 +303,39 @@ describe.each(TIERS)('$script main() decides before it spawns anything', ({
     })
     expect(exitCode).toBe(0)
     expect(stdout.chunks.join('')).toBe(USAGE)
+  })
+
+  it('refuses an unexpected argument with exit 1 and the usage, without reading the matrix', async () => {
+    const { main, USAGE } = await loadRunner(entry)
+    const stderr = sink()
+    const exitCode = main({
+      argv: ['--bogus'],
+      readMatrix: () => {
+        throw new Error('an unexpected argument must not read the matrix')
+      },
+      spawn: () => {
+        throw new Error('an unexpected argument must not spawn a gate')
+      },
+      stdout: quiet,
+      stderr,
+    })
+    expect(exitCode).toBe(1)
+    expect(stderr.chunks.join('')).toBe(`[${script}] unexpected argument(s): --bogus\n\n${USAGE}`)
+  })
+})
+
+// The workflows run each entry as a file, so `runIfEntry` is what turns
+// `main()`'s answer into the process's exit code. Only `--help` is run here:
+// any invocation that reaches the gates would run the real release build.
+describe.each(TIERS)('$script run as a process', ({ entry }) => {
+  it('prints its usage and exits 0 on --help', async () => {
+    const { USAGE } = await loadRunner(entry)
+    const r = spawnSync(process.execPath, [join(ROOT, entry), '--help'], {
+      encoding: 'utf8',
+      timeout: 30_000,
+    })
+    expect(r.status).toBe(0)
+    expect(r.stdout).toBe(USAGE)
   })
 })
 

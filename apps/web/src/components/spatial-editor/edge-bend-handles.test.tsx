@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MAX_BENDS } from '@kamiazya/whiteboard-model'
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EdgeBendHandles, ghostPresses } from './EdgeBendHandles.js'
@@ -56,6 +57,30 @@ describe('ghost presses', () => {
     // stays unaimable; zoomed in they are plenty.
     expect(ghostPresses(stub, [], 0.5)).toHaveLength(0)
     expect(ghostPresses(stub, [], 4)).toHaveLength(2)
+  })
+})
+
+describe('ghost presses at the bend cap', () => {
+  // A press that would make a bend past MAX_BENDS is discarded by the reducer
+  // without a word, so a ghost offered there is a handle that does nothing.
+  const bendsOf = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({ x: 100 + i * 100, y: i % 2 === 0 ? 100 : -100 }))
+  const pathOf = (stored: readonly { x: number; y: number }[]) => [
+    { x: 0, y: 0 },
+    ...stored,
+    { x: 100 + stored.length * 100, y: 0 },
+  ]
+
+  it('still offers ghosts one bend under the cap, where a press still fits', () => {
+    const stored = bendsOf(MAX_BENDS - 1)
+    const ghosts = ghostPresses(pathOf(stored), stored, 1)
+    expect(ghosts.length).toBeGreaterThan(0)
+    expect(ghosts.every((ghost) => ghost.waypoints.length === MAX_BENDS)).toBe(true)
+  })
+
+  it('offers none once the stored bends are at the cap', () => {
+    const stored = bendsOf(MAX_BENDS)
+    expect(ghostPresses(pathOf(stored), stored, 1)).toEqual([])
   })
 })
 

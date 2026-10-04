@@ -1,4 +1,6 @@
-// "Known flags, or usage and exit" for the scripts that change state.
+// What a script that changes state needs at its entry: "known flags, or usage and exit".
+// Whether it was run as the script rather than imported is `tools/checks/src/is-run-as-script.mjs`;
+// this file stays import-free because tests copy it alone into a scratch layout.
 //
 // A script that reads its flags with `argv.includes('--dry-run')` treats everything it does not
 // recognise as consent: `--help`, or a typo such as `--dryrun`, then runs the destructive default.

@@ -19,6 +19,7 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
+import { isEngineTrap } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -39,9 +40,11 @@ const {
   saveDocument,
   loadDocument,
   cacheBackedWorkspaceDocs,
+  getDoc,
   resolveDocumentIdAtPath,
   workspaceRegistry,
 } = await import('./document-store.js')
+const { peekDoc } = await import('./doc-cache.js')
 const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
@@ -334,6 +337,86 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   saveSpy.mockRestore()
 
   expect(readText(await loadDocument('ws-a', 'design'))).toBe('persisted')
+})
+
+it('a CRDT engine trap evicts the document projection, so the next write rebuilds it from storage', async () => {
+  // After a WASM trap the LoroDoc that was inside the call keeps a lock it
+  // never released, and every later call on THAT instance traps again while a
+  // fresh one works. The cached projection is that instance, so without
+  // evicting it one oversize write leaves the document unwritable until the
+  // daemon restarts. A poisoned instance is modelled by an `import` that
+  // always throws the trap; the rebuilt projection is a different instance
+  // and is not affected.
+  const { routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('persisted'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+  const docRef = { kind: 'document', workspaceId: 'ws-a', documentId: rowId } as const
+  const trap = Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
+  expect(isEngineTrap(trap)).toBe(true)
+
+  const poisoned = await getDoc('ws-a', 'design')
+  vi.spyOn(poisoned, 'import').mockImplementation(() => {
+    throw trap
+  })
+  // Built on the snapshot a tool would have loaded: an edit from an unrelated
+  // peer is concurrent with the stored text, and the CRDT picks its winner by
+  // peer id, so the content assertion below would be a coin flip.
+  const save = async (text: string) => {
+    const loaded = await routed.loadSnapshot({ docRef })
+    if (loaded === null) throw new Error('snapshot missing')
+    const edited = new LoroDoc()
+    edited.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    writeSpatialCanvas(edited, {
+      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text })],
+      edges: [],
+    })
+    const { manifest, chunks } = chunkSnapshot(
+      new Uint8Array(edited.export({ mode: 'snapshot' })),
+      1_000_000,
+    )
+    await routed.saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: new Uint8Array(edited.oplogVersion().encode()),
+    })
+  }
+
+  await expect(save('trapped')).rejects.toBe(trap)
+  expect(peekDoc('ws-a', 'design')).toBeUndefined()
+
+  await save('after-trap')
+  expect(readText(await loadDocument('ws-a', 'design'))).toBe('after-trap')
+  expect(await getDoc('ws-a', 'design')).not.toBe(poisoned)
+})
+
+it('an ordinary save failure keeps the cached projection', async () => {
+  // Only a trap poisons an instance; evicting on every error would make each
+  // refused write cost a full re-projection of a document that is fine.
+  const { routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('persisted'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+
+  const live = await getDoc('ws-a', 'design')
+  vi.spyOn(live, 'import').mockImplementation(() => {
+    throw new Error('not a trap')
+  })
+  const edited = canvasDoc('refused')
+  const { manifest, chunks } = chunkSnapshot(
+    new Uint8Array(edited.export({ mode: 'snapshot' })),
+    1_000_000,
+  )
+  await expect(
+    routed.saveSnapshot({
+      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: rowId },
+      manifest,
+      chunks,
+      frontier: new Uint8Array(edited.oplogVersion().encode()),
+    }),
+  ).rejects.toThrow('not a trap')
+  expect(peekDoc('ws-a', 'design')).toBe(live)
 })
 
 describe('DocumentStore conformance (production wiring: routed over a tree-backed workspace)', () => {

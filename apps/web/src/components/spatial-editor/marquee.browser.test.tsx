@@ -6,11 +6,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -23,22 +22,7 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-let latest: SpatialCanvas = start
-
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  latest = canvas
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
+const { Host, latest } = makeEditorHost({ initial: start })
 
 function ev(el: HTMLElement, type: string, x: number, y: number, extra: PointerEventInit = {}) {
   const r = el.getBoundingClientRect()
@@ -110,7 +94,7 @@ it('a stationary empty double press still creates a node at the point', async ()
   ev(root, 'pointerup', 500, 500)
 
   await vi.waitFor(() => {
-    expect(latest.nodes.length).toBe(4)
+    expect(latest.canvas.nodes).toHaveLength(4)
     expect(nodeEditorContent(container)).not.toBeNull()
   })
 })

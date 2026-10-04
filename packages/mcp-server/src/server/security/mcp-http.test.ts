@@ -31,6 +31,9 @@ describe('createMcpHttpAuthMiddleware carries the request into the strategy', ()
       headers: { authorization: 'Bearer secret' },
     })
     expect(res.status).toBe(200)
+    // The handler's body, not only its status: a refusal built with no
+    // status would answer 200 too.
+    expect(await res.json()).toEqual({ reached: true })
   })
 
   it('answers 401 with no credential', async () => {

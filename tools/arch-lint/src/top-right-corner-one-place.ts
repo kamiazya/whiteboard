@@ -1,5 +1,5 @@
 import ts from '@typescript/typescript6'
-import { unwrapExpression } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 
 /**
  * Where an object literal spells a box's top-right corner:
@@ -60,7 +60,7 @@ function initializerOf(
 
 /** 1-based line of every object literal that spells a box's top-right corner. */
 export function topRightCornerLiterals(fileName: string, source: string): number[] {
-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true)
+  const file = parseSource(fileName, source)
   const lines: number[] = []
   const visit = (node: ts.Node): void => {
     if (ts.isObjectLiteralExpression(node)) {

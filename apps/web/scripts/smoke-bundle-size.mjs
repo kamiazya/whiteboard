@@ -20,6 +20,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
@@ -213,6 +214,6 @@ function main() {
   console.log('\nbundle-size gate: OK')
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunAsScript(import.meta.url)) {
   main()
 }

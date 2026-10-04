@@ -2,7 +2,7 @@ import {
   readSpatialCanvasWithSkipped,
   reconcileSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentId, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { type DocumentId, messageOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
@@ -36,6 +36,76 @@ export class SnapshotNotFoundError extends Error {
   }
 }
 
+/**
+ * Whether a throw is the CRDT engine's WASM aborting, as opposed to it
+ * refusing an input.
+ *
+ * Loro compiles its Rust panics to a `RuntimeError: unreachable` and, from the
+ * panic on, leaves the `LoroDoc` that was inside the call holding a lock it
+ * never released: every later call on THAT instance answers a "Locking order
+ * violation" trap of its own, while a fresh instance works. Matched by name and
+ * message rather than `instanceof WebAssembly.RuntimeError`, which a trap
+ * raised in another realm (a worker, a test sandbox) does not satisfy.
+ */
+export function isEngineTrap(err: unknown): boolean {
+  return (
+    err instanceof Error && err.name === 'RuntimeError' && err.message.startsWith('unreachable')
+  )
+}
+
+/**
+ * Thrown when the CRDT engine aborts while a document is being loaded or
+ * saved. Nothing from the write was stored. The in-memory copy the engine was
+ * working on is unusable from then on — a daemon that caches one keeps handing
+ * it out, and each later call on it traps again — so repeating the same call
+ * is not a retry. Deleting the document is the way out that needs no restart.
+ *
+ * It lives beside the loader that raises it, for the reason
+ * `SnapshotNotFoundError` does.
+ */
+export class DocumentEngineTrapError extends Error {
+  constructor(
+    public readonly documentId: string,
+    public readonly doing: 'loading' | 'saving',
+    cause: unknown,
+  ) {
+    super(
+      `The CRDT engine aborted while ${doing} document ${documentId}; nothing from this write was stored. ` +
+        'A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.',
+      { cause },
+    )
+    this.name = 'DocumentEngineTrapError'
+  }
+}
+
+/**
+ * Runs one load or save of a document and answers an engine abort as
+ * `DocumentEngineTrapError`, logged at error with the document it was about.
+ *
+ * Loud at the funnel every document read and write passes through: the
+ * engine's own panic text goes to stderr with no document in it, and the bare
+ * `unreachable` that would otherwise reach a caller names nothing.
+ */
+async function withEngineTrapReported<T>(
+  workspaceId: string,
+  documentId: string,
+  doing: 'loading' | 'saving',
+  work: () => Promise<T> | T,
+): Promise<T> {
+  try {
+    return await work()
+  } catch (err) {
+    if (!isEngineTrap(err)) throw err
+    log.error('the CRDT engine trapped on a document', {
+      workspaceId,
+      documentId,
+      doing,
+      err: messageOf(err),
+    })
+    throw new DocumentEngineTrapError(documentId, doing, err)
+  }
+}
+
 export interface LoadedDocument {
   doc: LoroDoc
   canvas: SpatialCanvas
@@ -54,7 +124,9 @@ export async function loadDocument(
   documentId: DocumentId,
 ): Promise<LoadedDocument> {
   const docRef = { kind: 'document' as const, workspaceId, documentId }
-  const existing = await deps.documentStore.loadSnapshot({ docRef })
+  const existing = await withEngineTrapReported(workspaceId, documentId, 'loading', () =>
+    deps.documentStore.loadSnapshot({ docRef }),
+  )
   if (existing === null) throw new SnapshotNotFoundError(documentId)
 
   const doc = new LoroDoc()
@@ -86,7 +158,9 @@ export async function loadOrCreateDocument(
   documentId: DocumentId,
 ): Promise<LoroDoc> {
   const docRef = { kind: 'document' as const, workspaceId, documentId }
-  const existing = await deps.documentStore.loadSnapshot({ docRef })
+  const existing = await withEngineTrapReported(workspaceId, documentId, 'loading', () =>
+    deps.documentStore.loadSnapshot({ docRef }),
+  )
   const doc = new LoroDoc()
   if (existing !== null) {
     doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
@@ -105,15 +179,17 @@ export async function saveDocumentSnapshot(
   documentId: DocumentId,
   doc: LoroDoc,
 ): Promise<void> {
-  const { manifest, chunks } = chunkSnapshot(
-    doc.export({ mode: 'snapshot' }),
-    DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
-  )
-  await deps.documentStore.saveSnapshot({
-    docRef: { kind: 'document', workspaceId, documentId },
-    manifest,
-    chunks,
-    frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+  await withEngineTrapReported(workspaceId, documentId, 'saving', async () => {
+    const { manifest, chunks } = chunkSnapshot(
+      doc.export({ mode: 'snapshot' }),
+      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+    )
+    await deps.documentStore.saveSnapshot({
+      docRef: { kind: 'document', workspaceId, documentId },
+      manifest,
+      chunks,
+      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    })
   })
   // After the bytes are safe, and never allowed to undo them: what the
   // composition root does here (the daemon schedules a debounced

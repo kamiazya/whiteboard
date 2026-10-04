@@ -5,10 +5,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -18,19 +17,7 @@ const initial: SpatialCanvas = {
 }
 
 it('the facets panel stays inside a phone-width editor', () => {
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
-    return (
-      <div style={{ width: 390, height: 700 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host } = makeEditorHost({ initial, size: { width: 390, height: 700 } })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()

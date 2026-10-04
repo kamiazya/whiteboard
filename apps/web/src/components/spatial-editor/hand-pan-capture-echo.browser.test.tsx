@@ -23,10 +23,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -35,14 +34,7 @@ const board: SpatialCanvas = {
   edges: [],
 }
 
-function Host() {
-  const [canvas, setCanvas] = useState(board)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="hand" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({ initial: board, tool: 'hand' })
 
 function translateOf(container: HTMLElement): { x: number; y: number } {
   const css = (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style

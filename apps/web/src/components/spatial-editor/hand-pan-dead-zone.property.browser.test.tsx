@@ -24,13 +24,11 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { createRef, useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import type { Viewport } from '../../lib/spatial/viewport.js'
 import { fc } from '../../test-utils/fast-check.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -89,25 +87,6 @@ const board: SpatialCanvas = {
       to: { node: 't2' },
     },
   ],
-}
-
-function Host({ handle }: { handle: React.RefObject<SpatialEditorHandle | null> }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(board)
-  return (
-    <div style={{ width: ROOT_W, height: ROOT_H }}>
-      <SpatialEditor
-        ref={handle}
-        defaultTool="hand"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-        fileRefOptions={[{ file: 'ref-1', label: 'Referenced canvas' }]}
-        references={referenceWire(new Map(), {
-          extras: new Map([['ref-1', { canvas: referenced }]]),
-        })}
-      />
-    </div>
-  )
 }
 
 function transformLayer(container: HTMLElement): HTMLElement {
@@ -197,8 +176,18 @@ it('a hand-tool press pans from any point on the canvas, at any pan and zoom', a
 
   await fc.assert(
     fc.asyncProperty(pressArb, async (press) => {
-      const handle = createRef<SpatialEditorHandle>()
-      const { container } = render(<Host handle={handle} />)
+      const { Host, latest } = makeEditorHost({
+        initial: board,
+        tool: 'hand',
+        size: { width: ROOT_W, height: ROOT_H },
+        editorProps: {
+          fileRefOptions: [{ file: 'ref-1', label: 'Referenced canvas' }],
+          references: referenceWire(new Map(), {
+            extras: new Map([['ref-1', { canvas: referenced }]]),
+          }),
+        },
+      })
+      const { container } = render(<Host />)
       try {
         const node = board.nodes[press.nodeIndex]!
         const centre = { x: node.x + node.width / 2, y: node.y + node.height / 2 }
@@ -208,7 +197,7 @@ it('a hand-tool press pans from any point on the canvas, at any pan and zoom', a
           y: centre.y - press.screenY / press.zoom,
         }
         await act(async () => {
-          handle.current?.setViewport(viewport)
+          latest.handle?.setViewport(viewport)
         })
         // Let the level-of-detail effects (canvas embeds, link facades)
         // settle at this zoom before anything is hit-tested.

@@ -3,9 +3,9 @@
 // filling the rest of a fixed-size white card. Only the framing dimensions
 // and the scene differ.
 
-import { CanvasViewer } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
+import { LegendlessCanvas } from './_legendless-canvas.js'
 
 const TOP_BAR_HEIGHT_PX = 48
 
@@ -32,12 +32,7 @@ export function TopBarFrame({ testId, width, height, scene }: TopBarFrameProps) 
         titleSlot={(identity) => <span>{identity.name}</span>}
       />
       <div style={{ height: `calc(100% - ${TOP_BAR_HEIGHT_PX}px)` }}>
-        <CanvasViewer
-          canvas={scene}
-          width={width}
-          height={height - TOP_BAR_HEIGHT_PX}
-          background="#ffffff"
-        />
+        <LegendlessCanvas canvas={scene} width={width} height={height - TOP_BAR_HEIGHT_PX} />
       </div>
     </div>
   )

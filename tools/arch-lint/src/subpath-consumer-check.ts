@@ -1,5 +1,5 @@
-import ts from '@typescript/typescript6'
 import type { SubpathPolicy } from './architecture-map.js'
+import { parseSource } from './ast-helpers.js'
 import { collectModuleSpecifiers } from './scanner.js'
 
 /** A shipped source file, and what it says. `path` is repo-relative and `/`-separated. */
@@ -34,7 +34,7 @@ export function findSubpathConsumerViolations(
 ): string[] {
   const violations: string[] = []
   for (const { path, text } of files) {
-    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
+    const source = parseSource(path, text)
     for (const { specifier } of collectModuleSpecifiers(source)) {
       const entry = policy[specifier]
       if (entry === undefined || entry.consumers.includes(workspaceOf(path))) continue
@@ -52,7 +52,7 @@ export function subpathConsumers(
 ): Map<string, Set<string>> {
   const found = new Map<string, Set<string>>()
   for (const { path, text } of files) {
-    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
+    const source = parseSource(path, text)
     for (const { specifier } of collectModuleSpecifiers(source)) {
       if (!(specifier in policy)) continue
       found.set(specifier, (found.get(specifier) ?? new Set()).add(workspaceOf(path)))

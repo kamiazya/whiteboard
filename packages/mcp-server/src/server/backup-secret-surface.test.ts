@@ -22,10 +22,10 @@
  * fresh at spawn) while the daemon's identity key costs every pinned client and
  * every past attestation. So each entry says which, and why.
  */
-import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { productionSourceFiles } from '../shared/test-utils/source-files.js'
 import { NEVER_COPIED_FOR_TESTS } from './backup-restore.js'
 
 const PACKAGE_SRC = fileURLToPath(new URL('..', import.meta.url))
@@ -59,20 +59,10 @@ const BACKUP_DISPOSITION = {
     'not-in-data-dir: mkdir-lock.ts writes it inside the lock directory it creates, wherever the caller puts that.',
 } satisfies Record<string, BackupDisposition>
 
-async function walk(dir: string): Promise<string[]> {
-  const out: string[] = []
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...(await walk(path)))
-    else if (entry.name.endsWith('.ts') && !entry.name.includes('.test.')) out.push(path)
-  }
-  return out
-}
-
 /** Every `…FILENAME = '<name>'` constant this package declares. */
 async function scanDeclaredFilenames(): Promise<Set<string>> {
   const found = new Set<string>()
-  for (const file of await walk(PACKAGE_SRC)) {
+  for (const file of productionSourceFiles(PACKAGE_SRC, { extensions: ['.ts'] })) {
     const source = await readFile(file, 'utf8')
     for (const match of source.matchAll(/(?:^|\s)[A-Z_]*FILENAME\s*=\s*'([^']+)'/gm)) {
       found.add(match[1] as string)

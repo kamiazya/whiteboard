@@ -16,6 +16,7 @@
 import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 export const SRC_DIR = resolve(SCRIPT_DIR, '..', 'dist')
@@ -67,7 +68,7 @@ export function copyIntoMcpDist(srcDir = SRC_DIR, destDir = DEST_DIR) {
   })
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunAsScript(import.meta.url)) {
   copyIntoMcpDist()
   console.log(`copied ${SRC_DIR} -> ${DEST_DIR} (excluding service worker assets)`)
 }

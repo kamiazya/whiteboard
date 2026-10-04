@@ -1,7 +1,8 @@
-import { CanvasViewer, ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
+import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, it } from 'vitest'
 import { captureDocAsset, waitForSnapshotContent } from './_helpers.js'
+import { LegendlessCanvas } from './_legendless-canvas.js'
 import { ARCHITECTURE_SCENE } from './_scenes.js'
 
 // Generates docs/assets/architecture.png by rendering the canonical
@@ -20,12 +21,11 @@ describe('docs snapshot — architecture diagram', () => {
     await ensureViewerFontLoaded()
 
     const { container } = render(
-      <CanvasViewer
+      <LegendlessCanvas
         canvas={ARCHITECTURE_SCENE}
         width={1100}
         height={620}
         padding={40}
-        background="#ffffff"
         testId="architecture-scene"
       />,
     )

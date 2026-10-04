@@ -13,7 +13,7 @@
 // unit tests can feed fixture graphs directly.
 
 import { posix } from 'node:path'
-import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 import { compareCodeUnit } from './code-unit-order.js'
 import { collectModuleSpecifiers } from './scanner.js'
 import {
@@ -38,7 +38,7 @@ export type PathAliases = Readonly<Record<string, string>>
 
 /** Relative-specifier subset of scanner.ts's module-specifier walk. */
 export function collectRelativeImportEdges(fileName: string, sourceText: string): ImportEdge[] {
-  const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
+  const sourceFile = parseSource(fileName, sourceText)
   return collectModuleSpecifiers(sourceFile).filter(({ specifier }) =>
     isRelativeSpecifier(specifier),
   )
@@ -55,7 +55,7 @@ function collectResolvableImportEdges(
   aliases: PathAliases,
 ): ImportEdge[] {
   const prefixes = Object.keys(aliases)
-  const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
+  const sourceFile = parseSource(fileName, sourceText)
   return collectModuleSpecifiers(sourceFile).filter(
     ({ specifier }) =>
       isRelativeSpecifier(specifier) || prefixes.some((prefix) => specifier.startsWith(prefix)),

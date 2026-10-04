@@ -364,7 +364,11 @@ function refuseLockedEdgeLoss(
   }
 }
 
-/** Remove the edges a membership change leaves stranded or unlisted. */
+/**
+ * Remove the edges a membership change leaves stranded or unlisted. None of
+ * them is locked — `refuseLockedEdgeLoss` refused the op over the same set
+ * before anything moved — so there is no lock to drop with it.
+ */
 function removeLeavingEdges(
   ctx: CanvasEditContext,
   members: ReadonlySet<string>,
@@ -372,10 +376,7 @@ function removeLeavingEdges(
   droppedIds: ReadonlySet<string>,
 ): void {
   const removedEdges = leavingEdges(ctx, members, keep, droppedIds)
-  for (const id of removedEdges.keys()) {
-    ctx.s.touchedEdges.add(id)
-    ctx.s.edgeLocks.delete(id)
-  }
+  for (const id of removedEdges.keys()) ctx.s.touchedEdges.add(id)
   ctx.s.edges = ctx.s.edges.filter((edge) => !removedEdges.has(edge.id))
 }
 

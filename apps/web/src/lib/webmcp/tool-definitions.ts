@@ -1,14 +1,11 @@
 import type { z } from 'zod'
 import type { WhiteboardCommands } from '../commands/index.js'
 import type { getAppContextInputSchema, getAppContextResultSchema } from '../commands/types.js'
-import getAppContextJsonSchema from './tool-result-schemas/get-app-context.schema.json' with {
-  type: 'json',
-}
 
 // Every WebMCP tool this app exposes takes no arguments today — a
 // literal, not derived from a Zod schema, because there is no input schema
 // to keep in sync with yet. If a future tool needs an argument, give it a
-// proper Zod input schema next to its result schema instead of reusing this.
+// proper Zod input schema next to its command instead of reusing this.
 const emptyObjectJsonSchema = {
   type: 'object',
   additionalProperties: false,
@@ -17,14 +14,13 @@ const emptyObjectJsonSchema = {
 
 /**
  * A read-only WebMCP tool this app registers via `useBrowserToolRegistry`.
- * `resultSchema` is a static JSON Schema literal (not derived via
- * zod-to-json-schema) so it is the exact value handed to the browser's tool
- * registry, with no runtime conversion step to drift; `tool-definitions.test.ts`
- * asserts it stays in agreement with the Zod result schema the executor
- * actually parses against. `execute`'s return type is derived from the
- * generic `Result` schema (via `z.infer`) rather than widened to
- * `Promise<unknown>`, so a tool's declared result type can never drift from
- * what its command actually parses against.
+ * The WebMCP `ModelContextTool` dictionary carries no result or output
+ * schema (name, title, description, inputSchema, execute, annotations), so a
+ * tool declares none: what it returns is whatever the command's Zod result
+ * schema parses. `execute`'s return type is derived from the generic
+ * `Result` schema (via `z.infer`) rather than widened to `Promise<unknown>`,
+ * so a tool's declared result type can never drift from what its command
+ * actually parses against.
  *
  * `input` is the raw, not-yet-validated payload the WebMCP host passes at
  * call time; each tool forwards it into its underlying command, which
@@ -37,7 +33,6 @@ export interface WebMcpToolDefinition<Result extends z.ZodTypeAny = z.ZodTypeAny
   readonly name: string
   readonly description: string
   readonly inputSchema: Record<string, unknown>
-  readonly resultSchema: Record<string, unknown>
   // Every tool this app exposes only reads state — never mutates the
   // canvas, settings, or anything else — so this is required rather than
   // defaulted, forcing a future non-read-only tool to make that choice
@@ -51,7 +46,6 @@ const whiteboardGetAppContextTool: WebMcpToolDefinition<typeof getAppContextResu
   description:
     'Read-only: reports which provider mode this whiteboard is running in and which canvas is currently open. Never includes secrets, tokens, or connection details.',
   inputSchema: emptyObjectJsonSchema,
-  resultSchema: getAppContextJsonSchema,
   readOnlyHint: true,
   execute: (commands, input) =>
     commands.getAppContext(input as z.infer<typeof getAppContextInputSchema>),

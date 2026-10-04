@@ -1,6 +1,7 @@
-import { readdir, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { productionSourceFiles } from '../../../shared/test-utils/source-files.js'
 import { stripComments } from '../../../shared/test-utils/strip-comments.js'
 
 /**
@@ -27,20 +28,9 @@ const SRC = join(import.meta.dirname, '../../..')
 // time instead (`tenant-database.ts`).
 const DOORS = /\bgetRawDb\s*\(|\.withoutPlugins\s*\(|\.executeQuery\s*\(/
 
-async function sourceFiles(dir: string): Promise<string[]> {
-  const out: string[] = []
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...(await sourceFiles(path)))
-    else if (/\.ts$/.test(entry.name) && !/\.test\.ts$|test-helpers\.ts$/.test(entry.name))
-      out.push(path)
-  }
-  return out
-}
-
 describe('who may reach the database around the tenant-bound handle', () => {
   it('only the files listed, and each listed file still does', async () => {
-    const files = await sourceFiles(SRC)
+    const files = productionSourceFiles(SRC, { extensions: ['.ts'] })
     expect(files.length).toBeGreaterThan(200)
     const callers: string[] = []
     for (const file of files) {

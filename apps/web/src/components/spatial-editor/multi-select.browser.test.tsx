@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -23,22 +24,7 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-let latest: SpatialCanvas = start
-
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  latest = canvas
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
+const { Host, latest } = makeEditorHost({ initial: start })
 
 function press(el: HTMLElement, x: number, y: number, opts: { shift?: boolean; id?: number } = {}) {
   const r = el.getBoundingClientRect()
@@ -116,9 +102,9 @@ it('dragging one member moves every member by the same delta', async () => {
   )
 
   await vi.waitFor(() => {
-    const a = latest.nodes.find((n) => n.id === 'a')
-    const b = latest.nodes.find((n) => n.id === 'b')
-    const c = latest.nodes.find((n) => n.id === 'c')
+    const a = latest.canvas.nodes.find((n) => n.id === 'a')
+    const b = latest.canvas.nodes.find((n) => n.id === 'b')
+    const c = latest.canvas.nodes.find((n) => n.id === 'c')
     expect({ a: [a?.x, a?.y], b: [b?.x, b?.y], c: [c?.x, c?.y] }).toEqual({
       a: [140, 120],
       b: [340, 120],
@@ -172,9 +158,9 @@ it('dragging a non-primary member moves the primary too', async () => {
   )
 
   await vi.waitFor(() => {
-    const a = latest.nodes.find((n) => n.id === 'a')
-    const b = latest.nodes.find((n) => n.id === 'b')
-    const c = latest.nodes.find((n) => n.id === 'c')
+    const a = latest.canvas.nodes.find((n) => n.id === 'a')
+    const b = latest.canvas.nodes.find((n) => n.id === 'b')
+    const c = latest.canvas.nodes.find((n) => n.id === 'c')
     expect({ a: [a?.x, a?.y], b: [b?.x, b?.y], c: [c?.x, c?.y] }).toEqual({
       a: [140, 120],
       b: [340, 120],
@@ -235,8 +221,8 @@ it('palette creation replaces the whole selection with the new node', async () =
       (b) => b.getAttribute('aria-label') === 'Note',
     ) as HTMLElement,
   )
-  await vi.waitFor(() => expect(latest.nodes.length).toBe(4))
-  const created = latest.nodes.find((n) => !['a', 'b', 'c'].includes(n.id)) as {
+  await vi.waitFor(() => expect(latest.canvas.nodes).toHaveLength(4))
+  const created = latest.canvas.nodes.find((n) => !['a', 'b', 'c'].includes(n.id)) as {
     id: string
     x: number
     y: number
@@ -266,11 +252,11 @@ it('palette creation replaces the whole selection with the new node', async () =
   })
 
   await vi.waitFor(() => {
-    const moved = latest.nodes.find((n) => n.id === created.id)
+    const moved = latest.canvas.nodes.find((n) => n.id === created.id)
     expect(moved?.x).not.toBe(created.x)
   })
-  expect(latest.nodes.find((n) => n.id === 'a')).toMatchObject({ x: 100, y: 100 })
-  expect(latest.nodes.find((n) => n.id === 'b')).toMatchObject({ x: 300, y: 100 })
+  expect(latest.canvas.nodes.find((n) => n.id === 'a')).toMatchObject({ x: 100, y: 100 })
+  expect(latest.canvas.nodes.find((n) => n.id === 'b')).toMatchObject({ x: 300, y: 100 })
 })
 
 it('Delete removes every member of the multi-selection', async () => {
@@ -285,7 +271,7 @@ it('Delete removes every member of the multi-selection', async () => {
   root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
 
   await vi.waitFor(() => {
-    expect(latest.nodes.map((n) => n.id)).toEqual(['c'])
+    expect(latest.canvas.nodes.map((n) => n.id)).toEqual(['c'])
   })
 })
 
@@ -312,20 +298,7 @@ it('member outlines include the edges between members, not edges leaving the are
       },
     ],
   }
-  function WiredHost() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(wired)
-    latest = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-        />
-      </div>
-    )
-  }
+  const { Host: WiredHost } = makeEditorHost({ initial: wired })
   const { container } = render(<WiredHost />)
   const root = rootOf(container)
 

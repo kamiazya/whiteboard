@@ -1,6 +1,6 @@
 import { builtinModules } from 'node:module'
 import ts from '@typescript/typescript6'
-import { unwrapExpression } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 
 export type BoundaryViolationKind =
   | 'node-builtin-import'
@@ -362,7 +362,7 @@ export function scanSourceForBoundaryViolations(
   fileName: string,
   sourceText: string,
 ): BoundaryViolation[] {
-  const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
+  const sourceFile = parseSource(fileName, sourceText)
   const violations: BoundaryViolation[] = []
 
   for (const { specifier, line } of collectModuleSpecifiers(sourceFile)) {

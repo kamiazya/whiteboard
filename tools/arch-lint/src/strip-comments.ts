@@ -20,6 +20,7 @@
  * them against this over every source file in the repo.
  */
 import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 
 function commentStarts(sourceFile: ts.SourceFile): Map<number, number> {
   const text = sourceFile.text
@@ -49,7 +50,7 @@ function commentStarts(sourceFile: ts.SourceFile): Map<number, number> {
 }
 
 export function stripComments(raw: string, fileName = 'source.tsx'): string {
-  const sourceFile = ts.createSourceFile(fileName, raw, ts.ScriptTarget.Latest, false)
+  const sourceFile = parseSource(fileName, raw, false)
   let out = ''
   let cursor = 0
   for (const [start, end] of [...commentStarts(sourceFile)].sort((a, b) => a[0] - b[0])) {

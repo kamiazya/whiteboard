@@ -47,10 +47,10 @@ paths:
 - `DocumentStore` and `BlobStore` are not workspace-scoped per-instance —
   a document's scope travels inside its `DocRef`, and blobs are
   deliberately global/content-addressed.
-- `workspaceIdSchema` (added to `model`) is a path-safe **slug**
-  (`/^[a-zA-Z0-9_-]+$/`, non-empty) — NOT a ULID. It codifies the
-  workspace-ID contract already enforced at runtime by mcp-server's
-  `WORKSPACE_ID_PATTERN` (`validators.ts`). Do not conflate it with a document id.
+- `workspaceIdSchema` (in `model`) is a path-safe id
+  (`/^[a-zA-Z0-9_-]+$/`, non-empty) — NOT a ULID. `model`'s
+  `WORKSPACE_ID_PATTERN` is the one definition; mcp-server's `validators.ts`
+  imports it. Do not conflate it with a document id.
 - `reassembleSnapshot` is order-independent (chunks are sorted by `index`
   before validation) — an out-of-order but otherwise well-formed chunk set
   is a success, never a `SnapshotReassemblyError`.

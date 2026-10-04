@@ -8,10 +8,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -20,14 +19,7 @@ const start: SpatialCanvas = {
   edges: [],
 }
 
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="dark" />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({ initial: start, editorProps: { theme: 'dark' } })
 
 /** The colour the body text actually paints with, resolved through inheritance. */
 const paintedFill = (container: HTMLElement, testId: string): string => {

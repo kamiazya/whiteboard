@@ -27,11 +27,12 @@
  * contract) catches what a literal cannot show — a body built from
  * variables.
  */
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
+import { productionSourceFiles } from '../../shared/test-utils/source-files.js'
 
 const REPO_ROOT = repoRoot()
 
@@ -47,16 +48,11 @@ const REPO_ROOT = repoRoot()
  */
 const SCAN_ROOTS = [__dirname, join(REPO_ROOT, 'packages/server-core/src')]
 
-function routeSources(dir: string, root: string): { file: string; source: string }[] {
-  const out: { file: string; source: string }[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) out.push(...routeSources(full, root))
-    else if (entry.name.endsWith('.ts') && !entry.name.includes('.test.')) {
-      out.push({ file: full.slice(root.length + 1), source: readFileSync(full, 'utf8') })
-    }
-  }
-  return out
+function routeSources(dir: string): { file: string; source: string }[] {
+  return productionSourceFiles(dir, { extensions: ['.ts'] }).map((full) => ({
+    file: relative(dir, full),
+    source: readFileSync(full, 'utf8'),
+  }))
 }
 
 /**
@@ -120,7 +116,7 @@ function isLiteral(body: string): boolean {
 }
 
 const REFUSALS = SCAN_ROOTS.flatMap((root) =>
-  routeSources(root, root).flatMap(({ file, source }) => refusalCalls(file, source)),
+  routeSources(root).flatMap(({ file, source }) => refusalCalls(file, source)),
 )
 const LITERALS = REFUSALS.filter((r) => isLiteral(r.body))
 

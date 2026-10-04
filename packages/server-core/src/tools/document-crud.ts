@@ -1,6 +1,6 @@
 import { hasOkfFrontmatter } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, messageOf, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import {
   hasDocumentPins,
   isWorkspaceSegmentTakenError,
@@ -9,6 +9,7 @@ import {
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { saveDocumentSnapshot } from '../document-io.js'
+import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   DocumentNameConflictError,
@@ -29,6 +30,8 @@ import type {
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { checkFrontmatterFacets, createDocumentSetTool, parseWritableOkf } from './document-set.js'
 import { refuseFrontmatterTags } from './tag-library.js'
+
+const log = getLogger('document-crud')
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
@@ -137,6 +140,73 @@ function refuseConflictingNames(name: string | undefined, title: string | undefi
   if (title.trim() !== given) throw new DocumentNameConflictError(given, title.trim())
 }
 
+/**
+ * Takes a document the create placed but could not finish back out of the
+ * index and the store, through the same path a caller's delete takes.
+ *
+ * Best effort by design: the caller is owed the error that stopped the create,
+ * not whichever one the cleanup then raised, so a failed removal is logged and
+ * swallowed rather than replacing it.
+ */
+async function removeHalfCreatedDocument(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: string,
+): Promise<void> {
+  try {
+    await wbDocumentDelete(deps, { workspaceId, documentId })
+  } catch (err) {
+    log.error('could not remove a half-created document after its write failed', {
+      workspaceId,
+      documentId,
+      err: messageOf(err),
+    })
+  }
+}
+
+/**
+ * Gives a document the index already holds its first content, and takes it
+ * back out if that fails.
+ */
+async function fillCreatedDocument(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: string,
+  input: z.infer<typeof wbDocumentCreateInputSchema>,
+  markdown: string | undefined,
+): Promise<void> {
+  try {
+    // Persist the document, not only its placement. A placement alone leaves
+    // the document to be conjured on first write, and nothing could then say
+    // what a document is: there is no document yet to ask. The kind is
+    // written once, at birth.
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, input.kind)
+    await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
+
+    // A body is written by DELEGATING to `document.set` rather than by
+    // repeating what it does. Its write is not a one-liner — it parses OKF,
+    // decides what the document's kind may become, and projects frontmatter
+    // into the model — and a second copy of that reasoning here would be a
+    // second answer to the same question, drifting from the first the moment
+    // either changes.
+    // `input.kind` is re-tested for the NARROWING, not for the condition:
+    // `markdown` is only ever defined on the markdown arm, but `input.actor`
+    // below is reachable only once TypeScript knows which arm this is.
+    if (input.kind === 'markdown' && markdown !== undefined) {
+      await createDocumentSetTool(deps).execute({
+        workspaceId,
+        documentId,
+        markdown,
+        ...(input.actor === undefined ? {} : { actor: input.actor }),
+      })
+    }
+  } catch (err) {
+    await removeHalfCreatedDocument(deps, workspaceId, documentId)
+    throw err
+  }
+}
+
 export async function wbDocumentCreate(
   deps: ServerDeps,
   rawInput: z.infer<typeof wbDocumentCreateInputSchema>,
@@ -234,31 +304,12 @@ export async function wbDocumentCreate(
     }),
   )
 
-  // Persist the document, not only its placement. A placement alone leaves
-  // the document to be conjured on first write, and nothing could then say
-  // what a document is: there is no document yet to ask. The kind is written
-  // once, at birth.
-  const doc = new LoroDoc()
-  writeDocumentKind(doc, input.kind)
-  await saveDocumentSnapshot(deps, workspaceId, entry.documentId, doc)
-
-  // A body is written by DELEGATING to `document.set` rather than by
-  // repeating what it does. Its write is not a one-liner — it parses OKF,
-  // decides what the document's kind may become, and projects frontmatter
-  // into the model — and a second copy of that reasoning here would be a
-  // second answer to the same question, drifting from the first the moment
-  // either changes.
-  // `input.kind` is re-tested for the NARROWING, not for the condition:
-  // `markdown` is only ever defined on the markdown arm, but `input.actor`
-  // below is reachable only once TypeScript knows which arm this is.
-  if (input.kind === 'markdown' && markdown !== undefined) {
-    await createDocumentSetTool(deps).execute({
-      workspaceId,
-      documentId: entry.documentId,
-      markdown,
-      ...(input.actor === undefined ? {} : { actor: input.actor }),
-    })
-  }
+  // Everything from here on runs against a document the index already holds,
+  // so a failure leaves it squatting the path the caller was just told they
+  // did not get — the ghost the preflight above exists to prevent for the
+  // refusals it can foresee. The ones it cannot (a store that errors, the
+  // engine aborting on a very large body) are cleaned up instead.
+  await fillCreatedDocument(deps, workspaceId, entry.documentId, input, markdown)
 
   return { workspaceId, documentId: entry.documentId, path: entry.path }
 }

@@ -18,7 +18,7 @@
 import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
-import { scriptKindOf } from './ast-helpers.js'
+import { parseSource } from './ast-helpers.js'
 
 /**
  * Every `.ts`/`.tsx` under `dir`, skipping `node_modules`, `dist` and `tmp`.
@@ -93,10 +93,6 @@ export function isTestPath(path: string): boolean {
   return category === 'test' || category === 'test-support'
 }
 
-function parse(source: string, fileName: string, kind: ts.ScriptKind): ts.SourceFile {
-  return ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false, kind)
-}
-
 /** The parser's own syntax-error count; `parseDiagnostics` is not in the public typings. */
 function syntaxErrors(file: ts.SourceFile): number {
   return (
@@ -104,13 +100,11 @@ function syntaxErrors(file: ts.SourceFile): number {
   )
 }
 
-function parseSource(source: string, fileName: string | undefined): ts.SourceFile {
-  if (fileName !== undefined) {
-    return parse(source, fileName, scriptKindOf(fileName))
-  }
-  const plain = parse(source, 'source.ts', ts.ScriptKind.TS)
+function parseNamedOrGuessed(source: string, fileName: string | undefined): ts.SourceFile {
+  if (fileName !== undefined) return parseSource(fileName, source, false)
+  const plain = parseSource('source.ts', source, false)
   if (syntaxErrors(plain) === 0) return plain
-  const jsx = parse(source, 'source.tsx', ts.ScriptKind.TSX)
+  const jsx = parseSource('source.tsx', source, false)
   return syntaxErrors(jsx) < syntaxErrors(plain) ? jsx : plain
 }
 
@@ -218,7 +212,7 @@ export function stripCommentsAndStrings(source: string, fileName?: string): stri
 }
 
 function stripUncached(source: string, fileName?: string): string {
-  const file = parseSource(source, fileName)
+  const file = parseNamedOrGuessed(source, fileName)
   const edits: Edit[] = []
   // Text a scanner cannot be trusted with, and which is not rewritten: JSX
   // children are prose that may hold an apostrophe or a `//`.

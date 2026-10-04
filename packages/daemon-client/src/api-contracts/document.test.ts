@@ -10,7 +10,7 @@
  * z.infer type alignment is checked at the TypeScript level by annotating
  * parsed results with the exported type aliases.
  */
-import { workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
+import { versionLabelSchema, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   type CompactWorkspaceResult,
@@ -160,6 +160,21 @@ describe('saveVersionRequestSchema', () => {
   it('parses an empty body', () => {
     const result = saveVersionRequestSchema.parse({})
     expect(result.label).toBeUndefined()
+  })
+
+  // `wb_version_save` holds the same definition, so a label one surface would
+  // refuse cannot be stored through the other and then re-sent with every
+  // listing of the document's history.
+  it.each([
+    ['empty', ''],
+    ['one character past the limit', 'x'.repeat(201)],
+  ])('refuses a %s label, as the shared label schema does', (_name, label) => {
+    expect(versionLabelSchema.safeParse(label).success).toBe(false)
+    expect(saveVersionRequestSchema.safeParse({ label }).success).toBe(false)
+  })
+
+  it('accepts a label of exactly 200 characters', () => {
+    expect(saveVersionRequestSchema.safeParse({ label: 'x'.repeat(200) }).success).toBe(true)
   })
 
   it('roundtrip with label and operator', () => {

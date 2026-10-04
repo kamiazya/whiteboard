@@ -7,11 +7,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -23,15 +22,6 @@ const start: SpatialCanvas = {
   ],
 }
 
-function Host({ theme }: { theme: 'light' | 'dark' }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme={theme} />
-    </div>
-  )
-}
-
 async function composeStyle(): Promise<CSSStyleDeclaration> {
   const compose = page.getByTestId('comment-compose')
   await expect.element(compose).toBeInTheDocument()
@@ -39,7 +29,8 @@ async function composeStyle(): Promise<CSSStyleDeclaration> {
 }
 
 it('the create compose bubble wears the light theme comment chrome', async () => {
-  const { container } = render(<Host theme="light" />)
+  const { Host } = makeEditorHost({ initial: start, editorProps: { theme: 'light' } })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 400, clientY: r.top + 300, button: 2 })
@@ -60,7 +51,8 @@ it('the compose bubble wears the dark theme comment chrome too', async () => {
   // the opening message, since what it wrote was the flat comment's `text`.
   // The chrome is the compose bubble's either way, so the create gesture
   // makes the claim now.
-  const { container } = render(<Host theme="dark" />)
+  const { Host } = makeEditorHost({ initial: start, editorProps: { theme: 'dark' } })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 400, clientY: r.top + 300, button: 2 })

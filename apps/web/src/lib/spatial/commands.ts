@@ -489,13 +489,12 @@ export type EditorCommand =
       readonly changes: readonly ProposedChange[]
     }
 
-/** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 /**
- * `+ 0` normalises NEGATIVE ZERO, which `Math.round` answers across
- * `[-0.5, 0)` and `moveNode`/`resizeNode` store as a WHOLE coordinate. It
- * renders the same and is `===` zero; it is not `Object.is` zero, which is
- * React's `memo` comparison — and `JSON.stringify(-0)` is `"0"`, so the live
- * canvas differed from its own persisted form for no change at all.
+ * Whole-number geometry is the editor's choice (the model takes any finite x/y
+ * and non-negative width/height). `+ 0` normalises NEGATIVE ZERO, which
+ * `Math.round` answers across `[-0.5, 0)`: `===` zero but not `Object.is` zero,
+ * which is React's `memo` comparison, and `JSON.stringify(-0)` is `"0"`, so the
+ * live canvas differed from its own persisted form for no change at all.
  */
 function toPosition(value: number): number {
   return Math.round(value) + 0

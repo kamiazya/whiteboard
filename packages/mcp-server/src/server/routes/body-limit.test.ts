@@ -43,6 +43,32 @@ describe('limitBody', () => {
   })
 })
 
+describe('limitBody and the request a later handler recognises', () => {
+  // Server mode memoises the grant that authenticated a request against the
+  // Request object itself (`membership-gate.ts`), so a ceiling that hands the
+  // handler a rebuilt Request makes the caller anonymous to the handler.
+  it.each([
+    ['a body with no declared length', undefined],
+    ['a body with a declared length', 'okay'.length],
+  ])('passes %s on in the very Request it was given', async (_name, declared) => {
+    const app = new Hono()
+    let before: Request | undefined
+    app.use('*', async (c, next) => {
+      before = c.req.raw
+      await next()
+    })
+    app.post('/x', limitBody(100, 'Upload'), async (c) =>
+      c.json({ same: c.req.raw === before, text: await c.req.text() }),
+    )
+    const headers: Record<string, string> =
+      declared === undefined ? {} : { 'content-length': String(declared) }
+
+    const res = await app.request('/x', { method: 'POST', body: 'okay', headers })
+
+    expect(await res.json()).toEqual({ same: true, text: 'okay' })
+  })
+})
+
 describe('EXPORT_OPTIONS_BODY_LIMIT_BYTES', () => {
   it('bounds an options object, not canvas content', () => {
     expect(EXPORT_OPTIONS_BODY_LIMIT_BYTES).toBe(1024 * 1024)

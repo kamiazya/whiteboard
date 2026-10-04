@@ -1,7 +1,8 @@
-import { CanvasViewer, ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
+import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, it } from 'vitest'
 import { captureDocAsset, waitForSnapshotContent } from './_helpers.js'
+import { LegendlessCanvas } from './_legendless-canvas.js'
 import { ARCHITECTURE_SCENE } from './_scenes.js'
 
 // Generates docs/assets/canvas-presentation.png — the same architecture
@@ -18,12 +19,11 @@ describe('docs snapshot — canvas presentation render', () => {
     await ensureViewerFontLoaded()
 
     const { container } = render(
-      <CanvasViewer
+      <LegendlessCanvas
         canvas={ARCHITECTURE_SCENE}
         width={1280}
         height={760}
         padding={60}
-        background="#ffffff"
         testId="canvas-presentation-scene"
       />,
     )

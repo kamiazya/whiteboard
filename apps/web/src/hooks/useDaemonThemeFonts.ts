@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
+import type { ConnectedDaemon } from '../lib/daemon-fetch.js'
 
 /**
  * Fetches the families a theme names from whichever daemon the shell talks

@@ -245,6 +245,33 @@ describe('the gate re-reads a run the API has not caught up with', () => {
     expect(stillSettling({ jobs: [], needed, gateJobName: GATE_ID })).toBe(true)
   })
 
+  it('counts the run as settling while any one needed job is unpublished', () => {
+    expect(
+      stillSettling({ jobs: settled, needed: ['verify', 'build'], gateJobName: GATE_ID }),
+    ).toBe(true)
+  })
+
+  // An undeclared skip is as settled as a failure: no later read turns it
+  // into a declared one, so a lagging job beside it is no reason to wait.
+  it('does not re-read over an undeclared skip that a lagging job sits beside', async () => {
+    const mixed: RunJob[] = [
+      { name: 'verify', status: 'completed', conclusion: 'skipped' },
+      { name: 'build', status: 'in_progress', conclusion: null },
+    ]
+    let reads = 0
+    const { problems } = await readSettledJobs({
+      fetchJobs: async () => {
+        reads += 1
+        return mixed
+      },
+      sleep: noSleep,
+      needed: ['verify', 'build'],
+      gateJobName: GATE_ID,
+    })
+    expect(problems).toHaveLength(2)
+    expect(reads).toBe(1)
+  })
+
   it('passes once the second read shows the job finished', async () => {
     const answers = [lagging, settled]
     const { problems } = await readSettledJobs({

@@ -1,10 +1,12 @@
 // The default mode of `wb_canvas_edit` stores a batch as a proposal exactly
-// when every op in it could be proposed. What the tool's description says
-// applies "whatever the mode" must be what applies, op by op.
+// when every op in it could be proposed, and an EXPLICIT propose refuses one
+// that cannot be. What the tool's description says about each must be what
+// happens, op by op.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
@@ -131,8 +133,60 @@ describe('wb_canvas_edit default mode, op by op', () => {
   })
 })
 
+describe('an explicit mode:"propose" and the verbs a proposal cannot carry', () => {
+  const direct = Object.values(ONE_OF_EACH).filter((op) => !isProposableOp(op.op))
+
+  test('covers comments, locks, tidy and region.set', () => {
+    expect(direct.map((op) => op.op).sort()).toEqual([
+      'comment.add',
+      'comment.resolve',
+      'edge.lock',
+      'node.lock',
+      'region.set',
+      'tidy',
+    ])
+  })
+
+  test.each(direct)('$op is refused by name and leaves the board as it was', async (op) => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, BOARD)
+    const deps = makeDeps(store)
+    const before = (await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)).canvas
+
+    await expect(
+      createCanvasEditTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'propose',
+        ops: [op],
+      }),
+    ).rejects.toThrow(/a proposal cannot carry this verb.*Nothing was written/s)
+
+    expect((await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)).canvas).toEqual(before)
+  })
+
+  test('the same batch with no mode applies, which is the only mode that does', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, BOARD)
+
+    const result = await createCanvasEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [ONE_OF_EACH['node.lock']],
+    })
+
+    expect(result.applied).toBe(1)
+  })
+
+  test('the description says an explicit propose refuses them, not that the mode is ignored', () => {
+    const { description } = createCanvasEditTool(makeDeps(new FakeDocumentStore()))
+    expect(description).not.toContain('whatever the mode')
+    expect(description).toContain('explicit mode:"propose" refuses')
+  })
+})
+
 describe('the tool description', () => {
-  test('names every verb family a batch applies directly whatever the mode', () => {
+  test('names every verb family a batch applies directly when no mode is given', () => {
     const { description } = createCanvasEditTool(makeDeps(new FakeDocumentStore()))
     const direct = Object.keys(ONE_OF_EACH).filter((op) => !isProposableOp(op))
     // Families, as the description words them: comment.* -> comments, *.lock -> locks.

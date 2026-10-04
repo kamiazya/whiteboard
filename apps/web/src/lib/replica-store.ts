@@ -27,7 +27,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DocumentStore } from '@kamiazya/whiteboard-ports'
 import { workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
-import { createDaemonFetch } from './daemon-auth-fetch.js'
+import { createDaemonFetch } from './daemon-fetch.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { sealedUnderSupersededKey } from './replicas.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
@@ -36,7 +36,7 @@ import { createUserSettingsStore } from './user-settings-store.js'
 
 interface ConnectedKeeper {
   baseUrl: string
-  /** The wrapped, authorized fetch — named `daemonFetch` for `keeper-parity.test.ts`'s scan. */
+  /** The daemon-addressed fetch — named `daemonFetch` for `keeper-parity.test.ts`'s scan. */
   daemonFetch: typeof globalThis.fetch
 }
 

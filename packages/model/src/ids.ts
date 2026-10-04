@@ -57,6 +57,14 @@ export const workspaceIdSchema = z
 export const DOCUMENT_PATH_SEGMENT_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
 
 /**
+ * The longest document path a request may name, separators included. A path
+ * travels in a URL, and Node refuses a request line past about 16 KiB, so a
+ * path the schema admitted past that could be stored and then never addressed
+ * over HTTP; 1024 is far past any hierarchy a person types and well inside it.
+ */
+export const DOCUMENT_PATH_MAX_LENGTH = 1024
+
+/**
  * A document's address within its workspace: segments joined by `/`.
  * Hierarchy lives in this string rather than in a parent pointer, the way a
  * filesystem stores paths rather than a tree — sibling uniqueness then falls
@@ -67,6 +75,7 @@ export const DOCUMENT_PATH_SEGMENT_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0
 export const documentPathSchema = z
   .string()
   .min(1)
+  .max(DOCUMENT_PATH_MAX_LENGTH)
   .refine(
     (path) => path.split('/').every((segment) => DOCUMENT_PATH_SEGMENT_PATTERN.test(segment)),
     'each segment must be non-empty and contain only ASCII letters, digits and interior hyphens',
@@ -87,6 +96,17 @@ export const documentPathSchema = z
 export const workspaceCanonicalIdSchema = z.string().regex(ULID_PATTERN, 'must be a canonical ULID')
 
 /**
+ * The longest workspace display name a request may carry, and the longest
+ * segment. They are one number because a segment is DERIVED from a name
+ * (`deriveWorkspaceSegment` replaces each run of characters with one hyphen, so
+ * never lengthens it): a name the schema admits then always yields a segment
+ * the segment schema admits. 200 holds any title a person writes and keeps a
+ * workspace list a screen can show; a name past it was a paste, not a name.
+ */
+export const WORKSPACE_DISPLAY_NAME_MAX_LENGTH = 200
+export const WORKSPACE_SEGMENT_MAX_LENGTH = 200
+
+/**
  * A workspace's user-facing handle (ADR-0019): unique per keeper, renameable,
  * URL-safe. Uniqueness is the keeper's registry to enforce (the daemon
  * `workspaces` table row / a browser IndexedDB registry row) — this schema
@@ -105,6 +125,7 @@ export const workspaceCanonicalIdSchema = z.string().regex(ULID_PATTERN, 'must b
  */
 export const workspaceSegmentSchema = z
   .string()
+  .max(WORKSPACE_SEGMENT_MAX_LENGTH)
   .regex(
     DOCUMENT_PATH_SEGMENT_PATTERN,
     'workspace segment must be ASCII letters, digits and interior hyphens',
@@ -126,6 +147,7 @@ export const workspaceSegmentSchema = z
 export const workspaceDisplayNameSchema = z
   .string()
   .min(1)
+  .max(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
   .refine(
     (name) => name === name.trim(),
     'workspace display name must not have leading/trailing whitespace',

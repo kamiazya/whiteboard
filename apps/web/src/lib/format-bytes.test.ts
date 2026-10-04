@@ -34,5 +34,8 @@ describe('formatBytes', () => {
   it('caps at TiB so very large values do not fall off the unit list', () => {
     const huge = 10 * 1024 ** 4
     expect(formatBytes(huge)).toBe('10.0 TiB')
+    // Past 1024 TiB the loop would divide once more if the cap let it, and
+    // the unit index would name nothing.
+    expect(formatBytes(2048 * 1024 ** 4)).toBe('2048.0 TiB')
   })
 })

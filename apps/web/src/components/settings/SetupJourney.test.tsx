@@ -86,4 +86,13 @@ describe('SetupJourney — storage evidence on the steps', () => {
     renderJourney({ daemonConnected: false, daemonStorageBytes: 108_003_328 })
     expect(document.querySelector('[data-journey-detail="daemon"]')).toBeNull()
   })
+
+  // The daemon keeps documents as rows in one database, and the browser keeps
+  // versions too, so the pitch names what connecting actually adds.
+  it('pitches the companion step by what it adds, not by files or version history', () => {
+    renderJourney({ daemonConnected: false })
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/real files|version history/i)
+    expect(text).toMatch(/AI assistants on this computer/)
+  })
 })

@@ -33,13 +33,9 @@ import type {
 } from '@kamiazya/whiteboard-facet-engine'
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, useMemo, useState } from 'react'
+import { INK, LINE, MUTED, SURFACE } from './chrome-tokens.js'
 import { glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
-
-const INK = 'var(--foreground, #171717)'
-const MUTED = 'var(--muted-foreground, #737373)'
-const LINE = 'var(--border, #e5e5e5)'
-const SURFACE = 'var(--background, #ffffff)'
 
 const STACK: CSSProperties = {
   display: 'flex',

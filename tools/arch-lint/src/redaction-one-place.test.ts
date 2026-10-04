@@ -21,6 +21,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -31,7 +32,7 @@ const ESCAPED_MARKER = /\\\[REDACTED/
 function respellsMarker(source: string, name = 'source.ts'): boolean {
   // Most files never mention the word; skip parsing them.
   if (!source.includes('REDACTED')) return false
-  const file = ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true)
+  const file = parseSource(name, source)
   const names = (node: ts.Node): boolean => {
     if (ts.isRegularExpressionLiteral(node)) return ESCAPED_MARKER.test(node.text)
     if (ts.isNewExpression(node) || ts.isCallExpression(node)) {

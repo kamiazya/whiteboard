@@ -10,6 +10,7 @@
 import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 export const SRC_FILE = resolve(
@@ -34,7 +35,7 @@ export function copyWidgetIntoDist(srcFile = SRC_FILE, destFile = DEST_FILE) {
   cpSync(srcFile, destFile)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunAsScript(import.meta.url)) {
   copyWidgetIntoDist()
   console.log(`copied ${SRC_FILE} -> ${DEST_FILE}`)
 }

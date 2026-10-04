@@ -26,12 +26,7 @@
  * covered.
  */
 import { type CSSProperties, type ReactNode, useEffect, useId, useRef, useState } from 'react'
-
-const INK = 'var(--foreground, #171717)'
-const MUTED = 'var(--muted-foreground, #737373)'
-const LINE = 'var(--border, #e5e5e5)'
-const SURFACE = 'var(--popover, var(--background, #ffffff))'
-const RING = 'var(--ring, #3b82f6)'
+import { INK, LINE, MUTED, POPOVER_SURFACE, RING } from './chrome-tokens.js'
 
 /**
  * Feature-detected ONCE, at module scope, because the answer decides how
@@ -81,7 +76,7 @@ const PANEL: CSSProperties = {
   padding: '0.5rem',
   border: `1px solid ${LINE}`,
   borderRadius: '0.5rem',
-  background: SURFACE,
+  background: POPOVER_SURFACE,
   color: INK,
   boxShadow: '0 8px 24px rgb(0 0 0 / 0.12)',
   // The panel is taller than a laptop in a browser window: `maxHeight` is

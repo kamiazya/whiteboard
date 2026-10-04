@@ -36,7 +36,7 @@ export type DocumentKeeperAnswer =
       readonly model: DocumentPageModel
       /**
        * Providers the keeper mounts AROUND the page — the browser's versions
-       * backend, the daemon's authorized fetch. Rendered by the
+       * backend, the daemon-addressed fetch. Rendered by the
        * page so the keeper's hook stays a hook.
        */
       readonly wrap?: (page: ReactNode) => ReactNode

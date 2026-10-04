@@ -6,11 +6,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -19,14 +18,7 @@ const initial: SpatialCanvas = {
   edges: [],
 }
 
-function Host() {
-  const [canvas, setCanvas] = useState(initial)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({ initial })
 
 it('makes the canvas surface unselectable', () => {
   const { container } = render(<Host />)

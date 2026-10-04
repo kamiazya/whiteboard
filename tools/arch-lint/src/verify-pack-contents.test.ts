@@ -3,9 +3,12 @@
 // contents" step. Cross-package import of the .mjs matches the established
 // pattern in release-gate-matrix-schema.test.ts.
 
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
 const ROOT = REPO_ROOT
@@ -214,6 +217,10 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/size/)
   })
+
+  it('accepts a size of zero, which is non-negative', () => {
+    expect(verifyPackContents([{ ...VALID_ENTRY, size: 0 }]).ok).toBe(true)
+  })
 })
 
 describe('extractPackJsonText', () => {
@@ -351,6 +358,44 @@ describe('main() CLI', () => {
     expect(errText).toMatch(/foo\.test\.js/)
   })
 
+  it('reports only the missing files when nothing forbidden slipped in', () => {
+    const stderr = makeSink()
+    const entry = { ...VALID_ENTRY, files: VALID_ENTRY.files.slice(1) }
+    const exitCode = main({ argv: ['--stdin'], readStdin: () => JSON.stringify([entry]), stderr })
+    expect(exitCode).toBe(1)
+    expect(stderr.chunks).toEqual(['[verify-pack-contents] missing required files: README.md\n'])
+  })
+
+  it('reports only the forbidden files when every required one is present', () => {
+    const stderr = makeSink()
+    const entry = { ...VALID_ENTRY, files: [...VALID_ENTRY.files, { path: 'dist/x.test.js' }] }
+    const exitCode = main({ argv: ['--stdin'], readStdin: () => JSON.stringify([entry]), stderr })
+    expect(exitCode).toBe(1)
+    expect(stderr.chunks).toEqual([
+      '[verify-pack-contents] forbidden files in tarball: dist/x.test.js\n',
+    ])
+  })
+
+  it.each([['--help'], ['-h']])('prints usage and exits 0 on %s without packing', (flag) => {
+    const stdout = makeSink()
+    const spawn = () => {
+      throw new Error('help must not spawn npm')
+    }
+    expect(main({ argv: [flag], stdout, spawn })).toBe(0)
+    expect(stdout.chunks.join('')).toMatch(/^Usage: /)
+  })
+
+  it('refuses an unknown flag with exit 1, naming it, without packing', () => {
+    const stderr = makeSink()
+    const refuse = () => {
+      throw new Error('an unknown flag must not read a pack document')
+    }
+    expect(main({ argv: ['--stdin', '--bogus'], stderr, spawn: refuse, readStdin: refuse })).toBe(1)
+    const text = stderr.chunks.join('')
+    expect(text).toContain('[verify-pack-contents] unexpected argument(s): --bogus')
+    expect(text).toContain('Usage: ')
+  })
+
   it('writes success summary (file count + size) to stdout, not stderr', () => {
     const stdout = makeSink()
     const stderr = makeSink()
@@ -359,5 +404,42 @@ describe('main() CLI', () => {
     expect(exitCode).toBe(0)
     expect(stderr.chunks).toEqual([])
     expect(stdout.chunks.join('')).toMatch(/\d+ files/)
+  })
+})
+
+// release.yml runs the file itself, so the direct-run guard at its foot is
+// what turns the verdict into the step's exit code. A guard that stopped
+// matching would verify nothing and exit 0.
+describe('verify-pack-contents run as the release workflow runs it', () => {
+  // An empty cwd, so a run that wrongly falls through to `npm pack` fails
+  // fast on a missing package.json instead of packing whatever is here.
+  const emptyDir = mkdtempSync(join(tmpdir(), 'verify-pack-contents-'))
+  afterAll(() => rmSync(emptyDir, { recursive: true, force: true }))
+  const run = (args: string[], stdin = '') =>
+    spawnSync(process.execPath, [MODULE_PATH, ...args], {
+      cwd: emptyDir,
+      input: stdin,
+      encoding: 'utf8',
+      timeout: 30_000,
+    })
+
+  it('exits 0 for a complete pack document on stdin', () => {
+    const r = run(['--stdin'], JSON.stringify([VALID_ENTRY]))
+    expect(r.stderr).toBe('')
+    expect(r.status).toBe(0)
+    expect(r.stdout).toContain('[verify-pack-contents] OK: 10 files')
+  })
+
+  it('exits 1 when a required file is missing', () => {
+    const entry = { ...VALID_ENTRY, files: VALID_ENTRY.files.slice(1) }
+    const r = run(['--stdin'], JSON.stringify([entry]))
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('missing required files: README.md')
+  })
+
+  it('exits 1 on an unknown flag', () => {
+    const r = run(['--bogus'])
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('unexpected argument(s): --bogus')
   })
 })

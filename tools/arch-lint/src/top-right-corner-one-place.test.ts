@@ -60,6 +60,18 @@ describe('a comment on a box pins at its top-right corner, written in one place'
     }
   })
 
+  it('reports the 1-based line each corner literal starts on', () => {
+    const source = [
+      'const a = { x: n.x + n.width, y: n.y }',
+      'const b = 1',
+      'const c = {',
+      '  x: m.x + m.width,',
+      '  y: m.y,',
+      '}',
+    ].join('\n')
+    expect(topRightCornerLiterals('fixture.ts', source)).toEqual([1, 3])
+  })
+
   it('scans a tree worth scanning, and finds the model spelling it', () => {
     // An empty scan agrees with every rule; finding the owner is what keeps it honest.
     expect(production.length).toBeGreaterThan(1000)

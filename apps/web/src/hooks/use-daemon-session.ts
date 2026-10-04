@@ -3,7 +3,7 @@
  * told about it, and the stable handle the shell chrome reads it through.
  */
 import { useEffect, useMemo } from 'react'
-import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
+import type { ConnectedDaemon } from '../lib/daemon-fetch.js'
 
 /**
  * Tells `openDocumentStore` which daemon this tab is connected to, so a

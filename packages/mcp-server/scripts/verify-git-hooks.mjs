@@ -19,6 +19,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
 /** The line lefthook's generated script ends with. */
 const LEFTHOOK_CALL = /^call_lefthook run .*$/m
@@ -106,6 +107,6 @@ function main(argv) {
   return 0
 }
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (isRunAsScript(import.meta.url)) {
   process.exit(main(process.argv.slice(2)))
 }

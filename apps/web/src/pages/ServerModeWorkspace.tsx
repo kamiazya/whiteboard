@@ -2,10 +2,11 @@
  * A workspace opened in the web app a server-mode keeper serves (ADR-0047).
  *
  * The editor is the daemon's, unchanged: the keeper IS the daemon, reached at
- * this page's own origin. Three things differ from a local daemon, and
- * each is carried by what this hands the pages rather than by a branch inside
- * them: no token (the session cookie authenticates), no WebSocket (the keeper
- * serves SSE only), and no replica of the server's data in this browser.
+ * this page's own origin. What differs from a daemon reached through the
+ * extension is carried by what this hands the pages rather than by a branch
+ * inside them: the session cookie authenticates each request, where the
+ * extension's bridge authenticates the connection, and the server's data has
+ * no replica in this browser.
  */
 import { lazy, type ReactNode, Suspense } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'

@@ -14,11 +14,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -36,22 +35,7 @@ const start: SpatialCanvas = {
   ],
 }
 
-let latest: SpatialCanvas = start
-
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  latest = canvas
-  return (
-    <div style={{ width: 900, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
+const { Host, latest } = makeEditorHost({ initial: start, size: { width: 900, height: 600 } })
 
 /**
  * Presses the midpoint of the rendered a→b edge. Derived from the drawn
@@ -103,7 +87,7 @@ it('a note added while an edge was selected is what Delete then removes', async 
   // set it takes the edge the user stopped looking at three actions ago
   // and leaves the note they are looking at.
   await vi.waitFor(() => {
-    expect(latest.nodes.map((n) => n.id)).toEqual(['a', 'b'])
+    expect(latest.canvas.nodes.map((n) => n.id)).toEqual(['a', 'b'])
   })
-  expect(latest.edges.map((e) => e.id)).toEqual(['e0'])
+  expect(latest.canvas.edges.map((e) => e.id)).toEqual(['e0'])
 })

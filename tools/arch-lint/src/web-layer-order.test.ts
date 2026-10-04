@@ -43,8 +43,8 @@
 
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { directoryLoops, resolvedImportEdges, spellLoop } from './directory-loops.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
@@ -131,7 +131,7 @@ function webDirectoryLoops(sources: Sources) {
 
 /** Whether a module names React, by import or by `import()`. */
 function namesReact(key: string, source: string): boolean {
-  const file = ts.createSourceFile(key, source, ts.ScriptTarget.Latest, true)
+  const file = parseSource(key, source)
   return collectModuleSpecifiers(file).some(({ specifier }) =>
     /^react(-dom)?(\/|$)/.test(specifier),
   )

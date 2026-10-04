@@ -23,6 +23,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo } from './scan-roots.js'
 import { walkSourceFiles } from './source-scan.js'
 import { TEST_SCAN_DIRS } from './test-scan-dirs.js'
@@ -157,7 +158,7 @@ function findImplementers(source: string, text: string): Implementer[] {
     }
     ts.forEachChild(node, visit)
   }
-  visit(ts.createSourceFile(source, text, ts.ScriptTarget.Latest, true))
+  visit(parseSource(source, text))
   return found
 }
 
@@ -178,7 +179,7 @@ function runsSuiteOver(
     }
     ts.forEachChild(node, visit)
   }
-  visit(ts.createSourceFile('t.ts', text, ts.ScriptTarget.Latest, true))
+  visit(parseSource('t.ts', text))
   return { calls, builds }
 }
 

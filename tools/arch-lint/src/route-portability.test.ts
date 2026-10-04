@@ -37,10 +37,10 @@
  */
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { isAdapterSource } from './adapter-files.js'
 import { MECHANICS_NOT_SCANNED } from './architecture-map.js'
+import { parseSource } from './ast-helpers.js'
 import { type BlockerContext, blockersOf } from './route-closure.js'
 import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
 import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
@@ -80,7 +80,7 @@ function isNodeOnlyPackage(specifier: string): boolean {
 /** Why a file is node-bound; empty when it is portable. */
 function nodeBoundReasons(fileName: string, source: string): string[] {
   const reasons = new Set<string>()
-  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true)
+  const sourceFile = parseSource(fileName, source)
   for (const { specifier } of collectModuleSpecifiers(sourceFile)) {
     if (NODE_BOUND_LOCAL.test(specifier) || isNodeOnlyPackage(specifier)) {
       reasons.add(`imports ${specifier}`)

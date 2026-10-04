@@ -2,7 +2,7 @@
 // the whole way from a pointer drag to the ink: a reducer test cannot see
 // the layout, and a layout test cannot see the gesture.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { MAX_BENDS, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -119,6 +119,38 @@ it('dragging the ghost handle on a straight run stores a bend the line is drawn 
     ) as SVGPolylineElement
     expect(polyline.getAttribute('points')?.trim().split(/\s+/).length).toBeGreaterThan(2)
   })
+})
+
+// A zigzag between the two nodes, every leg long enough to be worth a ghost.
+const zigzag = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    x: 240 + (i * 240) / MAX_BENDS,
+    y: i % 2 === 0 ? 200 : 400,
+  }))
+
+it('a line one bend under the cap still offers ghosts, and one at the cap offers none', async () => {
+  const under = makeEditorHost({ initial: board(zigzag(MAX_BENDS - 1)), size: SIZE })
+  const first = render(<under.Host />)
+  await selectTheEdge(first.container)
+  await vi.waitFor(() =>
+    expect(first.container.querySelectorAll('[data-testid="edge-bend-handle"]')).toHaveLength(
+      MAX_BENDS - 1,
+    ),
+  )
+  expect(first.container.querySelector('[data-testid="edge-bend-ghost"]')).not.toBeNull()
+  first.unmount()
+
+  const full = makeEditorHost({ initial: board(zigzag(MAX_BENDS)), size: SIZE })
+  const second = render(<full.Host />)
+  await selectTheEdge(second.container)
+  // The grab handles are the subject being present; only then does the
+  // absence of a ghost say anything.
+  await vi.waitFor(() =>
+    expect(second.container.querySelectorAll('[data-testid="edge-bend-handle"]')).toHaveLength(
+      MAX_BENDS,
+    ),
+  )
+  expect(second.container.querySelector('[data-testid="edge-bend-ghost"]')).toBeNull()
 })
 
 it('a stored bend gets a grab handle, and a double press takes it back out', async () => {

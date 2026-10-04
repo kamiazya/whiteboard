@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto'
+import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import { type Client, type Config, createClient } from '@libsql/client'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import {
@@ -64,13 +65,6 @@ class DatabaseBusyError extends Error {
   }
 }
 
-/** libsql reports the primary code in `code` and any extended one in `extendedCode`. */
-function isSqliteBusy(err: unknown): boolean {
-  if (typeof err !== 'object' || err === null) return false
-  const { code, extendedCode } = err as { code?: unknown; extendedCode?: unknown }
-  return [code, extendedCode].some((c) => typeof c === 'string' && c.startsWith('SQLITE_BUSY'))
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -87,15 +81,15 @@ function sleep(ms: number): Promise<void> {
  */
 async function retryWhileBusy<T>(
   attempt: () => Promise<T>,
-  policy: BusyRetryPolicy = DEFAULT_BUSY_RETRY,
-  onBusy: () => Promise<void> = async () => {},
+  policy: BusyRetryPolicy,
+  onBusy: () => Promise<void>,
 ): Promise<T> {
   const startedAt = performance.now()
   for (let attempts = 1; ; attempts++) {
     try {
       return await attempt()
     } catch (err) {
-      if (!isSqliteBusy(err)) throw err
+      if (!isDatabaseBusy(err)) throw err
       await onBusy()
       const waitedMs = performance.now() - startedAt
       const bound = Math.min(policy.maxDelayMs, policy.baseDelayMs * 2 ** (attempts - 1))

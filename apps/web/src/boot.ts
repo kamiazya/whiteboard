@@ -79,6 +79,42 @@ function renderApp(root: HTMLElement): void {
   )
 }
 
+/**
+ * Bounded, for the same reason the font load is: an IndexedDB open can fail
+ * by never settling as easily as by rejecting — a `deleteDatabase` in
+ * another tab, a browser that leaves the request pending under storage
+ * pressure — and an unbounded await there holds the splash forever, which
+ * is the one outcome worse than rendering without the id.
+ *
+ * Bounded rather than not awaited at all: on every normal load the resolve
+ * wins this race by orders of magnitude, and awaiting it is what guarantees
+ * no consumer reads the accessor unresolved. Dropping the await to fix the
+ * hang would trade a rare stall for a routine race.
+ *
+ * The bound's timer is cleared when the race ends: left armed it fires after
+ * a healthy boot too, and reports a stall that never happened.
+ */
+async function resolveWorkspaceIdWithinBound(
+  resolveWorkspaceId: () => Promise<unknown>,
+): Promise<void> {
+  let boundTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      resolveWorkspaceId().catch((cause: unknown) => {
+        log.warn('browser workspace id resolution failed; rendering degraded', cause)
+      }),
+      new Promise<void>((resolve) => {
+        boundTimer = setTimeout(() => {
+          log.warn('browser workspace id resolution did not settle; rendering degraded')
+          resolve()
+        }, WORKSPACE_ID_RESOLVE_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    clearTimeout(boundTimer)
+  }
+}
+
 export async function startBootSequence({
   rootEl,
   // The DEFAULT is the only caller that can hand the resolver a handle, and
@@ -102,27 +138,7 @@ export async function startBootSequence({
   // and self-corrects once the font finishes loading in the background (see
   // CanvasViewer's useViewerFontReady for that path).
   await loadFont()
-  // Bounded, for the same reason the font load is: an IndexedDB open can fail
-  // by never settling as easily as by rejecting — a `deleteDatabase` in
-  // another tab, a browser that leaves the request pending under storage
-  // pressure — and an unbounded await there holds the splash forever, which
-  // is the one outcome worse than rendering without the id.
-  //
-  // Bounded rather than not awaited at all: on every normal load the resolve
-  // wins this race by orders of magnitude, and awaiting it is what guarantees
-  // no consumer reads the accessor unresolved. Dropping the await to fix the
-  // hang would trade a rare stall for a routine race.
-  await Promise.race([
-    resolveWorkspaceId().catch((cause: unknown) => {
-      log.warn('browser workspace id resolution failed; rendering degraded', cause)
-    }),
-    new Promise<void>((resolve) => {
-      setTimeout(() => {
-        log.warn('browser workspace id resolution did not settle; rendering degraded')
-        resolve()
-      }, WORKSPACE_ID_RESOLVE_TIMEOUT_MS)
-    }),
-  ])
+  await resolveWorkspaceIdWithinBound(resolveWorkspaceId)
   // Paces the index.html splash: the app is ready at this point, but the
   // splash stays up until its draw animation lands plus a beat, and fades out
   // before React's first commit replaces it.

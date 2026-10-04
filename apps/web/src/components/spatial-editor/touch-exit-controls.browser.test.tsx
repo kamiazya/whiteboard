@@ -7,13 +7,12 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 
 const BOX = { x: 20, y: 20, width: 240, height: 80 }
@@ -82,21 +81,14 @@ it('tapping Cancel on a plain text editor cancels, and never commits', async () 
 // as an overlay's, which retargets the click away from the button. The
 // strip carries `data-editor-overlay` so the root leaves the tap alone —
 // only a full editor mount can see that, which is why this test exists.
-function Host({ start }: { start: SpatialCanvas }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
-    </div>
-  )
-}
 
 it('inside the spatial editor, tapping Cancel drops the draft and closes the editor', async () => {
   const start: SpatialCanvas = {
     nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'kept' })],
     edges: [],
   }
-  const { container } = render(<Host start={start} />)
+  const { Host } = makeEditorHost({ initial: start })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())

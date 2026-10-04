@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 // The INSTRUMENT for what the byte budget is a proxy for.
 //
 // `smoke-bundle-size.mjs` counts gzipped bytes on the critical path. That is
@@ -94,10 +94,11 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 // the second set had no outlier at all. A single-shot gate would therefore
 // flake on an effect that has nothing to do with the code, which is why this
 // gates the MEDIAN of several runs and never one.
-import { createServer } from 'node:http'
-import { dirname, extname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
+import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
+import { serveDist } from '../../../tools/checks/src/serve-dist.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
@@ -196,38 +197,6 @@ const NETWORK = {
   uploadThroughput: (3 * 1024 * 1024) / 8,
 }
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.woff2': 'font/woff2',
-  '.wasm': 'application/wasm',
-}
-
-function serveDist() {
-  const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost')
-    let file = join(DIST, decodeURIComponent(url.pathname))
-    // SPA fallback: every non-asset path is the app's own route to interpret,
-    // which is the whole point of the address grammar this app uses.
-    if (!existsSync(file) || statSync(file).isDirectory()) file = join(DIST, 'index.html')
-    const body = readFileSync(file)
-    res.writeHead(200, {
-      'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
-      // No caching, so every run pays the full download the way a first
-      // visitor does. A warm cache would measure the wrong visit.
-      'Cache-Control': 'no-store',
-    })
-    res.end(body)
-  })
-  return new Promise((ok) => {
-    server.listen(0, '127.0.0.1', () => ok({ server, port: server.address().port }))
-  })
-}
-
 // Installed BEFORE any document script runs: LCP and layout-shift entries are
 // emitted during load, and an observer registered afterwards sees none of them
 // — which reads as a perfect score rather than as a measurement that missed.
@@ -319,8 +288,10 @@ async function main() {
     )
     process.exit(1)
   }
-  const { server, port } = await serveDist()
-  const url = `http://127.0.0.1:${port}/`
+  // No caching, so every run pays the full download the way a first visitor
+  // does. A warm cache would measure the wrong visit.
+  const app = await serveDist({ root: DIST, headers: { 'Cache-Control': 'no-store' } })
+  const url = `${app.origin}/`
   // `WHITEBOARD_CHROME_PATH` when the environment supplies its own Chrome,
   // exactly as `smoke-preview-origin.mjs` does. CI's `verify` job installs no
   // Playwright browsers — it sets that variable to the system Chrome — so a
@@ -344,7 +315,7 @@ async function main() {
     }
   } finally {
     await browser.close()
-    server.close()
+    await app.close()
   }
 
   console.log(`\ncritical-path measurement — ${RUNS} runs, CPU x${CPU_THROTTLE}, 10Mbps/40ms`)
@@ -388,6 +359,6 @@ async function main() {
 
 // Importable for its own tests; runs only when executed directly, exactly as
 // `smoke-bundle-size.mjs` does.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isRunAsScript(import.meta.url)) {
   await main()
 }

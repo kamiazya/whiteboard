@@ -43,14 +43,15 @@ export function unwrapExpression(node: ts.Expression): ts.Expression {
 /**
  * Parse `text` the way its file name asks. Parent pointers are on because most
  * walks read `node.parent`; a scan that never does may pass `false`, since
- * they are most of the cost of a parse.
+ * they are most of the cost of a parse. `kind` overrides the extension's
+ * answer for source whose name does not say what it is (a `.js` script, a
+ * fixture whose name hides that it carries JSX).
  */
-export function parseSource(fileName: string, text: string, setParentNodes = true): ts.SourceFile {
-  return ts.createSourceFile(
-    fileName,
-    text,
-    ts.ScriptTarget.Latest,
-    setParentNodes,
-    scriptKindOf(fileName),
-  )
+export function parseSource(
+  fileName: string,
+  text: string,
+  setParentNodes = true,
+  kind: ts.ScriptKind = scriptKindOf(fileName),
+): ts.SourceFile {
+  return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, setParentNodes, kind)
 }

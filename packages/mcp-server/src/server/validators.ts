@@ -1,4 +1,8 @@
-import { DOCUMENT_PATH_SEGMENT_PATTERN, WORKSPACE_ID_PATTERN } from '@kamiazya/whiteboard-model'
+import {
+  DOCUMENT_PATH_MAX_LENGTH,
+  DOCUMENT_PATH_SEGMENT_PATTERN,
+  WORKSPACE_ID_PATTERN,
+} from '@kamiazya/whiteboard-model'
 
 // The path-segment and workspace-id rules themselves are imported from model so
 // the shared layer and this validator cannot drift apart; what stays here is
@@ -68,6 +72,12 @@ export function validateWorkspaceId(workspaceId: string): string {
 export function validateDocumentPath(path: string): string {
   if (path === '') {
     throw new ValidationError('invalid_document_path', 'Invalid path: path is empty')
+  }
+  if (path.length > DOCUMENT_PATH_MAX_LENGTH) {
+    throw new ValidationError(
+      'invalid_document_path',
+      `Invalid path: path is ${path.length} characters, past the ${DOCUMENT_PATH_MAX_LENGTH}-character limit`,
+    )
   }
   for (const segment of path.split('/')) {
     const reason = diagnosePathSegment(segment)

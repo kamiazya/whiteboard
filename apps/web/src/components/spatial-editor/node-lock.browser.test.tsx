@@ -237,23 +237,7 @@ it('dragging a group leaves a locked member behind', () => {
     ],
     edges: [],
   }
-  const latest: { canvas: SpatialCanvas } = { canvas: grouped }
-  function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(grouped)
-    latest.canvas = canvas
-    return (
-      <div style={{ width: 800, height: 600 }}>
-        <SpatialEditor
-          defaultTool="select"
-          canvas={canvas}
-          onChange={(next) => setCanvas(next)}
-          theme="light"
-          lockedNodeIds={new Set(['child-locked'])}
-          onToggleNodeLock={() => {}}
-        />
-      </div>
-    )
-  }
+  const { Host, latest } = makeEditorHost({ initial: grouped, lockedNodes: ['child-locked'] })
   const { container } = render(<Host />)
   const root = rootOf(container)
   const r = root.getBoundingClientRect()

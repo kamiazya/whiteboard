@@ -84,6 +84,7 @@ async function admittedWorkspace(
 
 const PROMOTE_BODY: ReadJsonBodyOptions = {
   voice: 'code',
+  maxBytes: WORKSPACE_DOC_PROMOTE_LIMIT_BYTES,
   refuseShape: () =>
     errorBody(
       'invalid_body',

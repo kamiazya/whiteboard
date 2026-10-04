@@ -11,8 +11,13 @@
  * file does not own, and a blocked `deleteDatabase` would hand the next case
  * the previous one's rows. A fresh name cannot be stale.
  */
-import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
+import {
+  describeDocumentIndexConformance,
+  describeDocumentPinsConformance,
+  describeDocumentTrashConformance,
+} from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
+import { BLOBS_STORE, openWhiteboardDb } from './browser-idb.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 let caseN = 0
@@ -28,18 +33,57 @@ function deleteDb(name: string): Promise<void> {
   })
 }
 
+async function freshIndex(): Promise<{ index: FoldingBrowserIndex; dbName: string }> {
+  caseN += 1
+  const dbName = `whiteboard-folding-conformance-${caseN}`
+  await deleteDb(dbName)
+  return { index: new FoldingBrowserIndex(dbName), dbName }
+}
+
+/** Every blob the index's store holds; the trash suite only evacuates documents. */
+async function blobCount(dbName: string): Promise<number> {
+  const db = await openWhiteboardDb(dbName)
+  try {
+    return await new Promise<number>((resolve, reject) => {
+      const req = db.transaction(BLOBS_STORE, 'readonly').objectStore(BLOBS_STORE).count()
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+  } finally {
+    db.close()
+  }
+}
+
 describe('FoldingBrowserIndex', () => {
   describeDocumentIndexConformance(async () => {
-    caseN += 1
-    const dbName = `whiteboard-folding-conformance-${caseN}`
-    await deleteDb(dbName)
-    const index = new FoldingBrowserIndex(dbName)
+    const { index, dbName } = await freshIndex()
     return {
       index,
       dispose: () => deleteDb(dbName),
       // createWorkspace persists identity into the registry the class
       // resolves against, so the port's own call is the seam.
       seedWorkspace: (entry) => index.createWorkspace(entry),
+    }
+  })
+})
+
+// The class declares the pins and trash ports too, and the browser's pinned
+// list and trash are served from it — so it is held to their suites, not only
+// to the one its inner index already passes.
+describe('FoldingBrowserIndex pins', () => {
+  describeDocumentPinsConformance(async () => {
+    const { index, dbName } = await freshIndex()
+    return { index, dispose: () => deleteDb(dbName) }
+  })
+})
+
+describe('FoldingBrowserIndex trash', () => {
+  describeDocumentTrashConformance(async () => {
+    const { index, dbName } = await freshIndex()
+    return {
+      index,
+      evacuatedBlobCount: () => blobCount(dbName),
+      dispose: () => deleteDb(dbName),
     }
   })
 })

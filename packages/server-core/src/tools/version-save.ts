@@ -1,4 +1,4 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, versionLabelSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -28,7 +28,7 @@ export const versionSaveInputSchema = z
      * labels are different saves, and cost a call each; that is the honest
      * price of asking for something else.
      */
-    label: z.string().min(1).max(200).describe('Human-readable label for this checkpoint.'),
+    label: versionLabelSchema.describe('Human-readable label for this checkpoint.'),
   })
   .strict()
 export type VersionSaveInput = z.infer<typeof versionSaveInputSchema>

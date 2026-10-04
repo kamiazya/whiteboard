@@ -82,6 +82,13 @@ async function member(subject: string) {
 const documents = (headers: Record<string, string>) =>
   app.request(`/api/workspaces/${WS}/documents`, { headers })
 
+/** The handler answered, read by its body: a status alone cannot tell it from a 200 refusal. */
+const REACHED = { status: 200, body: { reached: true } }
+const answer = async (pending: Response | Promise<Response>) => {
+  const res = await pending
+  return { status: res.status, body: await res.json() }
+}
+
 describe('server mode — who is asking, and are they a member', () => {
   it('refuses a valid bearer for a workspace nobody has joined', async () => {
     const res = await documents({ authorization: 'Bearer ada' })
@@ -91,7 +98,7 @@ describe('server mode — who is asking, and are they a member', () => {
 
   it("admits a member's bearer", async () => {
     await member('ada')
-    expect((await documents({ authorization: 'Bearer ada' })).status).toBe(200)
+    expect(await answer(documents({ authorization: 'Bearer ada' }))).toEqual(REACHED)
   })
 
   it('admits a member signed in at this host, with no bearer at all', async () => {
@@ -101,7 +108,7 @@ describe('server mode — who is asking, and are they a member', () => {
       Date.now(),
       60_000,
     )
-    expect((await documents({ cookie: `${SESSION_COOKIE}=${token}` })).status).toBe(200)
+    expect(await answer(documents({ cookie: `${SESSION_COOKIE}=${token}` }))).toEqual(REACHED)
   })
 
   // A browser session is a person, not an operator: the keeper's admin
@@ -164,7 +171,7 @@ describe('server mode — a session changes nothing from another origin', () => 
   }
 
   it('accepts a write from its own pages', async () => {
-    expect((await writeAs(ORIGIN)).status).toBe(200)
+    expect(await answer(writeAs(ORIGIN))).toEqual(REACHED)
   })
 
   it.for([
@@ -211,7 +218,7 @@ describe('server mode — /mcp asks its bearer for mcp:call', () => {
   }
 
   it('lets a token carrying mcp:call through', async () => {
-    expect((await mcp('Bearer canvas:read,mcp:call')).status).toBe(200)
+    expect(await answer(mcp('Bearer canvas:read,mcp:call'))).toEqual(REACHED)
   })
 
   it('refuses a token that lacks mcp:call, whatever else it holds', async () => {

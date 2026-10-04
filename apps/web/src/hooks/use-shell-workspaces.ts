@@ -1,7 +1,7 @@
 import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
 import { useMemo } from 'react'
 import { type WorkspaceRoute, workspacePath } from '../lib/app-routes.js'
-import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
+import type { ConnectedDaemon } from '../lib/daemon-fetch.js'
 import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 
 /**

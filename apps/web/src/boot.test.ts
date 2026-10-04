@@ -5,7 +5,7 @@
  * carrying message a consumer's existing local error isolation can read.
  */
 import 'fake-indexeddb/auto'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { servedByServerKeeper, startBootSequence } from './boot.js'
 import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './lib/browser-workspace-docs.js'
@@ -139,6 +139,27 @@ describe('startBootSequence — resolver rejection does not block render', () =>
     expect(() => getBrowserWorkspaceId()).toThrow(/resolveBrowserWorkspaceId/)
     await expectLoggedFailure('browser workspace id resolution did not settle')
   }, 15_000)
+
+  it('reports nothing once a resolver that won the race has settled', async () => {
+    // The bound's timer must not outlive the race it bounds: left armed it
+    // fires on every healthy boot and reports a failure that never happened.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const warn = vi.spyOn(console, 'warn')
+    try {
+      await startBootSequence({
+        rootEl: rootEl(),
+        resolveWorkspaceId: async () => '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        loadFont: async () => undefined,
+        dismissSplash: async () => undefined,
+        render: () => undefined,
+      })
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
+    }
+  })
 
   it('refuses a sole workspace key that is not a canonical id', async () => {
     // What a rekey that silently did not run leaves behind. Caching it would

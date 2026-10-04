@@ -45,6 +45,11 @@ describe('titleFromMarkdownBody', () => {
     expect(titleFromMarkdownBody(`# ${'x'.repeat(121)}`)).toBeUndefined()
   })
 
+  it('keeps a heading of exactly 120 characters, the longest name it accepts', () => {
+    const longest = 'x'.repeat(120)
+    expect(titleFromMarkdownBody(`# ${longest}`)).toBe(longest)
+  })
+
   // A name is written into the workspace tree and rendered in a single-line
   // card, a browser tab and a search result. These are what it may never be.
   fcTest.prop([fc.string({ minLength: 1, maxLength: 100 })], withDefaults())(

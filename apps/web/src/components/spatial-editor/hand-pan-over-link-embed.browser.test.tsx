@@ -16,11 +16,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -36,20 +35,6 @@ const NODE = linkNode({
   url: 'http://127.0.0.1:1/',
 })
 const board: SpatialCanvas = { nodes: [NODE], edges: [] }
-
-function Host({ tool }: { tool: 'hand' | 'select' }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(board)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool={tool}
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
 
 function readTranslate(container: HTMLElement): { x: number; y: number } {
   const css = (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style
@@ -113,7 +98,8 @@ function expectOver(root: HTMLElement, testId: string, at: { x: number; y: numbe
 }
 
 it('hand tool pans from a press on a link node embed facade', async () => {
-  const { container } = render(<Host tool="hand" />)
+  const { Host } = makeEditorHost({ initial: board, tool: 'hand' })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await screen.findByTestId('link-embed-facade')
   expectOver(root, 'link-embed-facade', FACADE)
@@ -126,7 +112,8 @@ it('hand tool pans from a press on a link node embed facade', async () => {
 })
 
 it('hand tool pans from a press on a live link embed', async () => {
-  const { container } = render(<Host tool="select" />)
+  const { Host } = makeEditorHost({ initial: board, tool: 'select' })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.click(await screen.findByTestId('link-embed-facade'))
   await screen.findByTestId('link-embed-frame')

@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { createServer as createDocumentServer } from '@kamiazya/whiteboard-server-core'
+import {
+  answerUnhandled,
+  createServer as createDocumentServer,
+} from '@kamiazya/whiteboard-server-core'
 import { createMcpHandler } from '@modelcontextprotocol/server'
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -12,6 +15,7 @@ import { createMcpServer } from './mcp/server.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { DEFAULT_REPLICA_LEASE_TTL_MS } from './replica-env.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
+import { limitV1WriteBody } from './routes/body-limit.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
@@ -58,6 +62,8 @@ import { computeStorageReport } from './tenant/storage-report.js'
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
 
 const httpLog = getLogger('mcp-http')
+// The scope server-core's own `/api/v1` error handler logs under, so a throw reads the same wherever it came from.
+const requestLog = getLogger('http')
 
 // MCP_HTTP_DEBUG=1 historically meant "show http traces unconditionally". Keep
 // that contract: bump the logger threshold down to info so the structured
@@ -272,6 +278,15 @@ export function createApp(options: AppOptions) {
 
   const app = new Hono()
   app.notFound(answerNotFound)
+  // Sub-apps with no handler of their own inherit this one; without it Hono's
+  // default answers `text/plain` and prints the raw error with `console.error`.
+  app.onError(
+    answerUnhandled(({ busy, ...request }) =>
+      busy
+        ? requestLog.warning(request, 'request refused: database busy')
+        : requestLog.error(request, 'unhandled error'),
+    ),
+  )
 
   // The config is judged before any other option is read, so a caller with
   // an invalid server-mode config is refused for that and nothing else.
@@ -320,6 +335,7 @@ export function createApp(options: AppOptions) {
   // server-core's /api/v1 document surface (workspace tree, documentId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*
   // paths; the /api/* auth middlewares registered above already cover it.
+  app.use('/api/v1/*', limitV1WriteBody())
   app.route('/', createDocumentServer(options.serverDeps).app)
 
   const admit = membership.admit

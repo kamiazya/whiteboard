@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6'
+import { parseSource } from './ast-helpers.js'
 
 /**
  * The types a credential-gating surface holds, and the modules that export
@@ -101,7 +102,7 @@ function destructuredGateNames(file: ts.SourceFile): Set<string> {
  * `node:path` elsewhere is never a finding.
  */
 export function credentialGateCalls(fileName: string, source: string): string[] {
-  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true)
+  const file = parseSource(fileName, source)
   let handed = false
   const findGate = (node: ts.Node): void => {
     if (isGateImport(node) || declaresGateType(node)) handed = true

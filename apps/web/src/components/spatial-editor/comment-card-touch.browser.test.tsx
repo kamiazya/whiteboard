@@ -6,11 +6,10 @@
 // shipped unreachable on the one device where Escape does not exist.
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -33,20 +32,7 @@ const start: SpatialCanvas = {
   comments: [FREE],
 }
 
-function Host() {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        threads={[THREAD]}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
+const { Host } = makeEditorHost({ initial: start, editorProps: { threads: [THREAD] } })
 
 async function openCard(container: HTMLElement): Promise<void> {
   await vi.waitFor(() =>

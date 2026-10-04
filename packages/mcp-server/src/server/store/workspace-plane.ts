@@ -36,10 +36,34 @@ import {
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
+import { isEngineTrap } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
+import { evictDoc } from './doc-cache.js'
 import { getDoc, openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
+
+/**
+ * Runs work on one document's cached projection and drops that projection when
+ * the CRDT engine traps inside it. A trap leaves the instance holding a lock it
+ * never released, so every later call on it traps too; evicting is what lets
+ * the next operation rebuild the document from storage instead of the daemon
+ * serving a dead copy until it restarts. Only a trap evicts: any other failure
+ * leaves the projection sound.
+ */
+async function evictingOnEngineTrap<T>(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await work()
+  } catch (err) {
+    if (isEngineTrap(err)) evictDoc(workspaceId, path, scope)
+    throw err
+  }
+}
 
 /**
  * `DocumentStore` whose `document:` refs read and write THROUGH the
@@ -82,14 +106,16 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // round-trips through one lineage and its save is a real CRDT
         // merge (tombstones included) instead of a value diff against a
         // stranger's history.
-        const doc = await getDoc(input.docRef.workspaceId, entry.path, this.scope)
-        const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
-        const { manifest, chunks } = chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
-        return {
-          manifest,
-          chunks,
-          frontier: new Uint8Array(doc.oplogVersion().encode()),
-        }
+        return evictingOnEngineTrap(input.docRef.workspaceId, entry.path, this.scope, async () => {
+          const doc = await getDoc(input.docRef.workspaceId, entry.path, this.scope)
+          const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
+          const { manifest, chunks } = chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
+          return {
+            manifest,
+            chunks,
+            frontier: new Uint8Array(doc.oplogVersion().encode()),
+          }
+        })
       }
     }
     return this.inner.loadSnapshot(input)
@@ -141,11 +167,13 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // with it (import is a CRDT merge; ops the projection already
         // has are no-ops) instead of value-diffing the other writer's
         // edit back out.
-        const live = await getDoc(workspaceId, entry.path, this.scope)
-        live.import(doc.export({ mode: 'update' }))
-        if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
-        await saveWorkspaceDoc(workspaceId, workspaceDoc, this.scope)
-        return true
+        return evictingOnEngineTrap(workspaceId, entry.path, this.scope, async () => {
+          const live = await getDoc(workspaceId, entry.path, this.scope)
+          live.import(doc.export({ mode: 'update' }))
+          if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
+          await saveWorkspaceDoc(workspaceId, workspaceDoc, this.scope)
+          return true
+        })
       })
       if (wrote) return
     }
@@ -178,8 +206,10 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // record would answer null here, silently blanking the whole
         // corpus. The stamp is per-process (a re-projection mints a new
         // lineage), which can only over-invalidate, never under.
-        const doc = await getDoc(input.docRef.workspaceId, entry.path, this.scope)
-        return { frontier: new Uint8Array(doc.oplogVersion().encode()) }
+        return evictingOnEngineTrap(input.docRef.workspaceId, entry.path, this.scope, async () => {
+          const doc = await getDoc(input.docRef.workspaceId, entry.path, this.scope)
+          return { frontier: new Uint8Array(doc.oplogVersion().encode()) }
+        })
       }
     }
     return this.inner.readFrontier(input)

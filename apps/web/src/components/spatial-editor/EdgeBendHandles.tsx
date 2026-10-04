@@ -11,6 +11,7 @@
  * moving one are the same drag. Where a point is worth inserting is
  * geometry only this side has.
  */
+import { MAX_BENDS } from '@kamiazya/whiteboard-model'
 import type { Point } from '../../lib/spatial/viewport.js'
 
 /** Radius in SCREEN pixels — divided by zoom so a handle stays grabbable. */
@@ -57,12 +58,17 @@ export interface BendPress {
  * inserted there takes index `i`. Runs the flattener produced (a rounded
  * corner's arc, a line-jump hop) are not runs a person bent, which is why
  * this reads the DRAWN path and clamps rather than trusting the count.
+ *
+ * At `MAX_BENDS` stored bends there are none: the reducer discards a press
+ * that would make one more, so a ghost there would be a handle that does
+ * nothing.
  */
 export function ghostPresses(
   path: readonly Point[],
   stored: readonly Point[],
   zoom: number,
 ): readonly (BendPress & { readonly at: Point })[] {
+  if (stored.length >= MAX_BENDS) return []
   const minRun = MIN_GHOST_RUN_PX / Math.max(zoom, 0.01)
   const out: (BendPress & { at: Point })[] = []
   for (let run = 0; run + 1 < path.length; run++) {

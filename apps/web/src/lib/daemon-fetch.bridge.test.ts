@@ -6,7 +6,7 @@
 import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
-import { createDaemonFetch } from './daemon-auth-fetch.js'
+import { createDaemonFetch } from './daemon-fetch.js'
 
 // The page keeps ONE bridge port for its life; closing it is what lets the
 // next test's stubbed extension be connected afresh, as a lost host is.

@@ -19,6 +19,7 @@
 // pins, whose survivors are true but not news.
 
 import { readFileSync } from 'node:fs'
+import { isRunAsScript } from '../../tools/checks/src/is-run-as-script.mjs'
 
 /** A glob in `mutate` cannot be intersected by string equality, and silently
  * matching nothing would look exactly like "this diff changed nothing". */
@@ -63,4 +64,4 @@ async function main(argv) {
   if (scoped.length > 0) process.stdout.write(`${scoped.join(',')}\n`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main(process.argv)
+if (isRunAsScript(import.meta.url)) await main(process.argv)

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DOCUMENT_PATH_MAX_LENGTH,
   documentIdSchema,
+  documentPathSchema,
   nodeIdSchema,
+  WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
+  WORKSPACE_SEGMENT_MAX_LENGTH,
   workspaceCanonicalIdSchema,
   workspaceDisplayNameSchema,
   workspaceIdSchema,
@@ -147,5 +151,49 @@ describe('workspaceDisplayNameSchema', () => {
 
   it('rejects an untrimmed string', () => {
     expect(workspaceDisplayNameSchema.safeParse(' x ').success).toBe(false)
+  })
+})
+
+// The bounds are spelled as numbers here, not read back from the constants: a
+// limit asserted against itself cannot fail.
+describe('length bounds on what a request can name', () => {
+  const MIB = 1024 * 1024
+
+  it('refuses a megabyte-long display name, segment and document path', () => {
+    expect(workspaceDisplayNameSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
+    expect(workspaceSegmentSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
+    expect(documentPathSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
+    expect(
+      documentPathSchema.safeParse(
+        Array(MIB / 2)
+          .fill('a')
+          .join('/'),
+      ).success,
+    ).toBe(false)
+  })
+
+  it('holds a display name and a workspace segment at 200 characters', () => {
+    expect(WORKSPACE_DISPLAY_NAME_MAX_LENGTH).toBe(200)
+    expect(WORKSPACE_SEGMENT_MAX_LENGTH).toBe(200)
+    expect(workspaceDisplayNameSchema.safeParse('x'.repeat(200)).success).toBe(true)
+    expect(workspaceDisplayNameSchema.safeParse('x'.repeat(201)).success).toBe(false)
+    expect(workspaceSegmentSchema.safeParse('a'.repeat(200)).success).toBe(true)
+    expect(workspaceSegmentSchema.safeParse('a'.repeat(201)).success).toBe(false)
+  })
+
+  it('holds a document path at 1024 characters, separators included', () => {
+    expect(DOCUMENT_PATH_MAX_LENGTH).toBe(1024)
+    const segment = 'a'.repeat(63)
+    const fits = Array(16).fill(segment).join('/')
+    expect(fits).toHaveLength(1023)
+    expect(documentPathSchema.safeParse(fits).success).toBe(true)
+    expect(documentPathSchema.safeParse(`${fits}a`).success).toBe(true)
+    expect(documentPathSchema.safeParse(`${fits}/a`).success).toBe(false)
+  })
+
+  // A segment is derived from a display name, so a name the schema admits must
+  // not derive a segment the segment schema then refuses.
+  it('admits a segment as long as the longest display name that can derive one', () => {
+    expect(WORKSPACE_SEGMENT_MAX_LENGTH).toBeGreaterThanOrEqual(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
   })
 })
