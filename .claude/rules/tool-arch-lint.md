@@ -623,7 +623,7 @@ because a copy of the mark's box drifted.
 The one part of `.claude/rules/vocabulary.md` that can be mechanical rather
 than prose: it fails on a retired word appearing anywhere under `apps/web/src`
 or `packages/*/src`. Only words with no legitimate meaning left qualify — today
-`slug` plus the three keeper-axis spellings, each with its own scan roots.
+`slug` plus four keeper-axis spellings (one puts `local` first), each with its own roots.
 `canvas` never will, because it is correct for the spatial surface and
 wrong only as the container noun, and telling those apart needs a reader.
 `migrations/` is excluded as history, and `EXEMPT_FILES` carries the one other

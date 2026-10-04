@@ -182,6 +182,9 @@ its network sense and always will be: `packages/mcp-server`'s
 daemon on this machine really is local. The quoted VALUE `'local-daemon'`
 stays banned in `apps/web/src` alone, since in mcp-server that same string is
 the auth mode.
+The browser keeper's own modules say Browser (`browser-files-source.ts`
+beside `daemon-files-source.ts`); a second pattern pins the word order that
+put `local` first.
 
 The scan is that wide because a hand grep kept missing places, three times in
 one increment: `claimIsolatedWhiteboardDb('browserlocaldocumentpage-…')` had
