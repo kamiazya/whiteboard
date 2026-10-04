@@ -393,7 +393,10 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // rows for the readable annotation layer, the snapshot's dressing and the
   // in-place rename, the node input losing `embed`, `proposals` on wb_document_get,
   // wb_viewport_set losing `animate` and describing `mode`, and the facet titles.
-  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1021,
+  // Then one audit wave's reasons beside seven re-pinned rows (proposal
+  // `author`, `follow`, the snapshot's `lineCount`, listed pins, restore's
+  // kind, viewport coordinates, `document.create`'s `name`) and the totals.
+  'packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts': 1044,
   // The not-JSON refusal's assertion carries the reason it is strict: a mutation
   // showed the loose form (`typeof title === 'string'`) stays green with the
   // refusal DELETED, so without the note the next reader loosens it again. Every
