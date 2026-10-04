@@ -24,7 +24,7 @@ function isNameSlot(node: ts.Identifier): boolean {
 }
 
 /** Local names the file binds a wanted name to, by an aliased import or an aliased destructure. */
-function aliasesOf(file: ts.SourceFile, wanted: ReadonlySet<string>): Set<string> {
+export function aliasesOf(file: ts.SourceFile, wanted: ReadonlySet<string>): Set<string> {
   const aliases = new Set<string>()
   const visit = (node: ts.Node): void => {
     if (ts.isImportSpecifier(node) || ts.isBindingElement(node)) {

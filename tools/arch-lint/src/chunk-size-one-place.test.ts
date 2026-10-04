@@ -21,7 +21,8 @@
  * EXISTING planes agreeing with each other, never about capping the helper.
  *
  * Four declarations are allowlisted, in three kinds, and none of them is a
- * writer that picked its own production value.
+ * writer that picked its own production value. A fifth is a test seed that
+ * states the production size by literal, listed as the debt it is.
  *
  * Two are frozen historical values rather than debt: a migration's numbers
  * are the ones it RAN with, and reading a live constant would retroactively
@@ -41,8 +42,9 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { chunkSizeDeclarations } from './chunk-size-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import { walkSourceFiles } from './source-scan.js'
 
 /** Every package that writes or reads a chunked snapshot row. */
 const SCAN_DIRS = [
@@ -57,25 +59,27 @@ const SCAN_DIRS = [
 const DECLARATION_SITE = 'packages/ports/src/snapshot.ts'
 
 /**
- * A chunk size DECLARED as a literal, in the three spellings it can take: a
- * binding whose name ends in `CHUNK_BYTES` assigned a number, the manifest
- * field itself given one, or a literal passed straight to `chunkSnapshot`.
+ * A chunk size DECLARED as a number, read from the syntax tree by
+ * `chunk-size-scan.ts`: a binding, field, parameter default or manifest
+ * property named for a chunk size and given a number, or a number passed as
+ * the size to `chunkSnapshot`.
  *
- * The third was missing when this scan was written, and it is the one a
- * writer in a hurry reaches for: `chunkSnapshot(bytes, 1_000_000)` declares
- * a chunk size as surely as a `const` does.
+ * The call-site spelling was missing when this scan was written, and it is
+ * the one a writer in a hurry reaches for: `chunkSnapshot(bytes, 1_000_000)`
+ * declares a chunk size as surely as a `const` does.
  * `background-work-costs.test.ts` had already learned this exact lesson one
  * level out — its third test exists because a worker could declare its
  * ceiling INLINE and pass a scan that only read the central map. This
  * file's header cites that precedent and the first version still had the
  * hole, which is the part worth recording.
  *
+ * The scan was text patterns until a typed constant, a lowercase name, a
+ * fallback after `??` and a call as the first argument each walked past it.
+ *
  * `maxChunkBytes: someConstant`, a parameter named `maxChunkBytes`, and
  * `chunkSnapshot(bytes, SOME_CONSTANT)` are hand-overs, not declarations,
- * and do not match.
+ * and are not entries.
  */
-const DECLARATION =
-  /(?:[A-Z_]*CHUNK_BYTES|maxChunkBytes)\s*[:=]\s*-?\d[\d_]*|chunkSnapshot\s*\([^,()]*,\s*-?\d[\d_]*/
 
 /**
  * Files allowed to declare their own, each pinned to the EXACT declaration
@@ -101,12 +105,19 @@ interface AllowedDeclaration {
 }
 
 const ALLOWLIST: Readonly<Record<string, AllowedDeclaration>> = {
+  'apps/web/src/test-utils/seed-sync-document.ts': {
+    declarations: [
+      { text: 'chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)', times: 1 },
+    ],
+    reason:
+      'a test seed that chunks at the production size by literal where `DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES` from ports names it; kept here until it passes the constant',
+  },
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts': {
-    declarations: [{ text: 'const IMPORT_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
+    declarations: [{ text: 'IMPORT_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
     reason: 'a migration replays with the value it originally wrote; its own comment says so',
   },
   'apps/web/src/lib/browser-idb-upgrades.ts': {
-    declarations: [{ text: 'const LEGACY_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
+    declarations: [{ text: 'LEGACY_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
     reason:
       'the same reason one level out: an already-migrated record must keep claiming the value it was migrated with',
   },
@@ -128,23 +139,23 @@ const ALLOWLIST: Readonly<Record<string, AllowedDeclaration>> = {
   },
 }
 
-/** How many times `text` appears in `source`. */
-function occurrences(source: string, text: string): number {
-  return source.split(text).length - 1
+/** How many times `text` is among the declarations found. */
+function occurrences(found: readonly string[], text: string): number {
+  return found.filter((declaration) => declaration === text).length
 }
 
 /**
- * The source with each allowed declaration removed exactly as many times as
+ * The declarations with each allowed one removed exactly as many times as
  * the entry claims, so what remains is everything the file declares BEYOND
  * its exemption.
  */
-function beyondTheExemption(source: string, allowed: AllowedDeclaration): string {
-  let rest = source
+function beyondTheExemption(found: readonly string[], allowed: AllowedDeclaration): string[] {
+  const rest = [...found]
   for (const { text, times } of allowed.declarations) {
     for (let i = 0; i < times; i += 1) {
       const at = rest.indexOf(text)
       if (at === -1) break
-      rest = rest.slice(0, at) + rest.slice(at + text.length)
+      rest.splice(at, 1)
     }
   }
   return rest
@@ -175,21 +186,37 @@ const FIXTURES: readonly { readonly source: string; readonly declares: boolean }
   // The shape review found missing: a literal at the call site.
   { source: 'chunkSnapshot(bytes, 1_000_000)', declares: true },
   { source: 'chunkSnapshot(\n  snapshot,\n  4,\n)', declares: true },
+  // Spellings a text pattern keyed past: a type annotation, a nested call or
+  // a parenthesised first argument, a lowercase name, a fallback, a default.
+  { source: 'const MAX_CHUNK_BYTES: number = 65_536', declares: true },
+  { source: 'chunkSnapshot(f(bytes), 4096)', declares: true },
+  { source: 'chunkSnapshot((a, b), 4096)', declares: true },
+  { source: 'writer.chunkSnapshot(bytes, 64 * 1024)', declares: true },
+  { source: "import { chunkSnapshot as split } from 'x'\nsplit(bytes, 4096)", declares: true },
+  { source: 'const chunkBytes = 4096', declares: true },
+  { source: 'const snapshotChunkBytes = 4096', declares: true },
+  { source: 'x = { maxChunkBytes: opts.maxChunkBytes ?? 1_000_000 }', declares: true },
+  { source: 'function put({ maxChunkBytes = 4 }: Options) {}', declares: true },
+  { source: 'function put(maxChunkBytes = 4) {}', declares: true },
+  { source: 'class W { maxChunkBytes = 4 }', declares: true },
   { source: 'chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)', declares: false },
+  { source: 'chunkSnapshot(bytes, limits[0])', declares: false },
+  { source: 'const chunkBytes = chunks[0].length', declares: false },
+  { source: 'function put(maxChunkBytes: number) {}', declares: false },
+  { source: 'const MAX_CHUNK_BYTES: number = DEFAULT_MAX_CHUNK_BYTES', declares: false },
   { source: 'chunkSnapshot(bytes, opts.maxChunkBytes)', declares: false },
   { source: 'const { maxChunkBytes } = manifest', declares: false },
   { source: 'function chunkSnapshot(bytes: Uint8Array, maxChunkBytes: number)', declares: false },
-  { source: 'maxChunkBytes: manifest.maxChunkBytes', declares: false },
-  { source: 'maxChunkBytes: opts.maxChunkBytes ?? fallback', declares: false },
-  { source: '// maxChunkBytes: 1_000_000 in prose about the old value', declares: false },
+  { source: 'x = { maxChunkBytes: manifest.maxChunkBytes }', declares: false },
+  { source: 'x = { maxChunkBytes: opts.maxChunkBytes ?? fallback }', declares: false },
+  { source: 'x = {} // maxChunkBytes: 1_000_000 in prose about the old value', declares: false },
   { source: "const s = 'maxChunkBytes: 1_000_000'", declares: false },
 ]
 
 describe('the snapshot chunk size is written in one place', () => {
   it('recognises a literal declaration and passes a hand-over through', () => {
     for (const { source, declares } of FIXTURES) {
-      const stripped = stripCommentsAndStrings(source)
-      expect(DECLARATION.test(stripped), source).toBe(declares)
+      expect(chunkSizeDeclarations('fixture.ts', source).length > 0, source).toBe(declares)
     }
   })
 
@@ -204,12 +231,11 @@ describe('the snapshot chunk size is written in one place', () => {
       const rel = relative(REPO_ROOT, path).split(sep).join('/')
       if (rel === DECLARATION_SITE) continue
       const allowed = ALLOWLIST[rel]
-      const whole = stripCommentsAndStrings(readFileSync(path, 'utf8'), path)
+      const whole = chunkSizeDeclarations(path, readFileSync(path, 'utf8'))
       // An exemption covers ONE declaration, so the rest of an allowlisted
       // file is scanned like anyone else's.
-      const source = allowed === undefined ? whole : beyondTheExemption(whole, allowed)
-      const match = DECLARATION.exec(source)
-      if (match !== null) hits.push(`${rel}: ${match[0].trim()}`)
+      const beyond = allowed === undefined ? whole : beyondTheExemption(whole, allowed)
+      for (const declaration of beyond) hits.push(`${rel}: ${declaration}`)
     }
     expect(hits).toEqual([])
     // Parses every production file, which a loaded machine stretches past the default.
@@ -222,9 +248,9 @@ describe('the snapshot chunk size is written in one place', () => {
     // classified, which is how the second `maxChunkBytes: -1` and the two
     // conformance literals were found.
     for (const [rel, allowed] of Object.entries(ALLOWLIST)) {
-      const source = stripCommentsAndStrings(
-        readFileSync(join(REPO_ROOT, rel), 'utf8'),
+      const source = chunkSizeDeclarations(
         join(REPO_ROOT, rel),
+        readFileSync(join(REPO_ROOT, rel), 'utf8'),
       )
       for (const { text, times } of allowed.declarations) {
         expect(
@@ -239,7 +265,7 @@ describe('the snapshot chunk size is written in one place', () => {
     }
   })
 
-  it('the allowlist holds exactly the four classified declarations', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
+  it('the allowlist holds exactly the five classified declarations', () => {
+    expect(Object.keys(ALLOWLIST)).toHaveLength(5)
   })
 })
