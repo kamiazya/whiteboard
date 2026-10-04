@@ -136,19 +136,36 @@ function retryingConnection(
   return connection
 }
 
-function retryingDriver(inner: Driver, client: Client, policy: BusyRetryPolicy): Driver {
-  // A statement refused as busy is left unfinished on the client's shared
-  // connection, and that connection's next explicit COMMIT then fails with
-  // "cannot commit transaction - SQL statements in progress" — measured: three
-  // refused statements, then a transaction that begins and writes fine and
-  // cannot commit, until the connection is replaced. Replacing it here, after
-  // each refusal, turns a retried write into exactly one write and not into a
-  // later transaction's failure. Safe between awaits: a statement is
-  // synchronous, and a transaction owns a connection of its own.
-  const replaceConnection = async (): Promise<void> => {
+/**
+ * A statement refused as busy is left unfinished on the client's shared
+ * connection, and that connection's next explicit COMMIT then fails with
+ * "cannot commit transaction - SQL statements in progress" — measured: three
+ * refused statements, then a transaction that begins and writes fine and
+ * cannot commit, until the connection is replaced. Replacing it after each
+ * refusal turns a retried write into exactly one write and not into a later
+ * transaction's failure. Safe between awaits: a statement is synchronous, and
+ * a transaction owns a connection of its own.
+ */
+function replacingConnection(client: Client): () => Promise<void> {
+  return async () => {
     await client.reconnect()
   }
+}
 
+async function leaveTransaction(
+  connection: DatabaseConnection,
+  finish: (inner: DatabaseConnection) => Promise<void>,
+): Promise<void> {
+  const retrying = connection as RetryingConnection
+  try {
+    await finish(retrying.inner)
+  } finally {
+    retrying.inTransaction = false
+  }
+}
+
+function retryingDriver(inner: Driver, client: Client, policy: BusyRetryPolicy): Driver {
+  const replaceConnection = replacingConnection(client)
   return {
     init: () => inner.init(),
     async acquireConnection() {
@@ -165,22 +182,10 @@ function retryingDriver(inner: Driver, client: Client, policy: BusyRetryPolicy):
       )
       retrying.inTransaction = true
     },
-    async commitTransaction(connection) {
-      const retrying = connection as RetryingConnection
-      try {
-        await inner.commitTransaction(retrying.inner)
-      } finally {
-        retrying.inTransaction = false
-      }
-    },
-    async rollbackTransaction(connection) {
-      const retrying = connection as RetryingConnection
-      try {
-        await inner.rollbackTransaction(retrying.inner)
-      } finally {
-        retrying.inTransaction = false
-      }
-    },
+    commitTransaction: (connection) =>
+      leaveTransaction(connection, (raw) => inner.commitTransaction(raw)),
+    rollbackTransaction: (connection) =>
+      leaveTransaction(connection, (raw) => inner.rollbackTransaction(raw)),
     releaseConnection: (connection) =>
       inner.releaseConnection((connection as RetryingConnection).inner),
     // The dialect was handed the client rather than building it, so it does
