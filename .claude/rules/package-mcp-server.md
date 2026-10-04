@@ -98,7 +98,11 @@ scan says.
   disabled `/api/debug` router. It is scoped to `routes/` because
   `c.notFound()` is CORRECT twice outside `routes/`: the two UI catch-alls
   in `app.ts` serve a browser. An `/api` path nothing routes is answered by
-  `createApp`'s `app.notFound` (`answerNotFound`) as JSON `not_found`.
+  `createApp`'s `app.notFound` (`answerNotFound`) as JSON `not_found`. An
+  uncaught throw is server-core's `answerUnhandled`, mounted by `createApp`
+  and `createServer` alike: JSON 500 `internal_error`, or 503 `database_busy`
+  with `Retry-After` when ports' `isDatabaseBusy` holds. The error reaches the
+  log, never the body.
 - **A page-facing write never mints.** `/api/w/:workspaceId/document/*`
   sits behind `refuseUnknownWorkspace` and `refuseTrashedDocument`
   (`routes/document.ts`'s `refuseUnaddressable`), so a fixture seeds its

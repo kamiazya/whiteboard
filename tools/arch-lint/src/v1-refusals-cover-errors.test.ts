@@ -3,10 +3,11 @@
  * `createServer`'s `/api/v1` routes or exempted here with the reason it
  * cannot reach them.
  *
- * Why: an error with no arm in `create-server.ts` escapes the handler and
- * Hono answers `500 text/plain` — `DocumentHasDescendantsError` did exactly
- * that on `DELETE …/documents/:id` while the legacy route answered 409 and the
- * MCP tool refused in words. Nothing in the type system relates "a class an
+ * Why: an error with no arm in `create-server.ts` escapes the handler to the
+ * catch-all, which answers `500 internal_error` — JSON, but a server failure
+ * where the caller should have read a refusal it could act on.
+ * `DocumentHasDescendantsError` did exactly that on `DELETE …/documents/:id`
+ * while the legacy route answered 409 and the MCP tool refused in words. Nothing in the type system relates "a class an
  * operation can throw" to "a status a route answers", so the relation is a
  * ledger: a class added anywhere in a package server-core depends on stops this test
  * until someone decides which side of it the class is on.

@@ -728,7 +728,7 @@ a file binds like an import. `inline-comparator-ban.test.ts` keeps string
 orderings on `compareCodeUnit`; this tool and facet-engine restate it once,
 since neither may import model. `v1-refusals-cover-errors.test.ts` holds every
 error class in ports, model and server-core to a `REFUSALS` row or a reasoned
-`EXEMPT` entry. `docs-tool-names.test.ts` holds every `wb_*` / `canvas_*` token
+`EXEMPT` entry. `script-entry-check` keeps a script's is-main test on `is-run-as-script.mjs` (a path needing URL-encoding made the hand form exit 0 having run nothing); `serve-dist-one-place` keeps static serving on `serve-dist.mjs`. `docs-tool-names.test.ts` holds every `wb_*` / `canvas_*` token
 in `docs/**` (minus ADRs), `skills/` and `README.md` to `registeredTools()`.
 
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
