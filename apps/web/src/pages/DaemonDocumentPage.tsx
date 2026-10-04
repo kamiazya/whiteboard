@@ -93,8 +93,8 @@ function useDaemonDocument(
   const versionsBackend = useMemo(() => createDaemonVersionsBackend(daemonFetch), [daemonFetch])
 
   // The sync stream and every route resolve against the daemon's own origin,
-  // never the page's — a hosted web app connected to a loopback daemon must not
-  // open the stream against its own page origin.
+  // never the page's — a hosted web app connected to a daemon must not open the
+  // stream against its own page origin.
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
   // ADR-0023's replica reconciliation, both directions, at the moment this
