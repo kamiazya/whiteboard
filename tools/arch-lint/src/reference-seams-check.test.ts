@@ -25,8 +25,9 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { findSeamDefinitions } from './reference-seam-definitions.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
+import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 /** Every composition root and UI package that lays documents out. */
 const SCAN_DIRS = [
@@ -34,33 +35,6 @@ const SCAN_DIRS = [
   'packages/canvas-viewer/src',
   'packages/server-core/src',
   'packages/mcp-server/src',
-]
-
-const SEAM_NAME = '(?:resolveAlias|resolveTitle|resolveEmbed|resolveReference)'
-/** The name as a bare, quoted, or computed key — all three name the same seam. */
-const SEAM = `(?:${SEAM_NAME}|['"]${SEAM_NAME}['"]|\\[\\s*['"]${SEAM_NAME}['"]\\s*\\])`
-
-/**
- * A seam DEFINED rather than passed: an object key or a binding whose
- * value is written as an arrow function or a `function`, or a method
- * shorthand. `x: someCall(...)` and `x: other.x` are not definitions and
- * do not match; neither does a page's `const resolveAlias = useMemo(...)`,
- * which is an input to the bundle, not a seam of its own.
- */
-const DEFINITION_PATTERNS: readonly { readonly pattern: RegExp; readonly shape: string }[] = [
-  {
-    pattern: new RegExp(
-      `(?:\\b|(?=\\[|['"]))${SEAM}\\s*[:=]\\s*(?:async\\s*)?(?:\\([^)]*\\)\\s*(?::[^=]*)?=>|[A-Za-z_$][\\w$]*\\s*=>|function\\b)`,
-    ),
-    shape: 'an arrow function or `function` assigned to a seam name',
-  },
-  {
-    pattern: new RegExp(
-      `^\\s*(?:async\\s+)?${SEAM}\\s*(?:<[^>]*>)?\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`,
-      'm',
-    ),
-    shape: 'a method-shorthand seam',
-  },
 ]
 
 /**
@@ -74,7 +48,7 @@ const files: string[] = []
 for (const dir of SCAN_DIRS) walkSourceFiles(join(REPO_ROOT, dir), files)
 const production = files.filter((path) => !isTestPath(path))
 
-/** What the patterns must catch, and what they must let through. */
+/** What the detector must catch, and what it must let through. */
 const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines: boolean }[] = [
   { source: 'const x = { resolveEmbed: (id) => undefined }', defines: true },
   { source: 'const x = { resolveEmbed: async (id: string): Promise<X> => y }', defines: true },
@@ -103,14 +77,38 @@ const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines:
   { source: "const note = '//'; const resolveReference = (ref) => undefined", defines: true },
   { source: "// don't\nconst resolveTitle = (id) => id", defines: true },
   { source: "const s = 'resolveEmbed: (id) => x'", defines: false },
+  { source: 'function resolveReference(ref) {\n  return undefined\n}', defines: true },
+  { source: 'export async function resolveEmbed(id) {\n  return y\n}', defines: true },
+  { source: 'export default function resolveTitle(id: string) {\n  return id\n}', defines: true },
+  { source: 'const x = { resolveEmbed: <T,>(id: T) => undefined }', defines: true },
+  { source: 'const x = { resolveEmbed: async <T,>(id: T): Promise<X> => y }', defines: true },
+  { source: 'const x = { resolveAlias: ((alias) => null) as Seam }', defines: true },
+  { source: 'const resolveTitle: Seam = (id) => id', defines: true },
+  { source: 'seams.resolveTitle = (id) => id', defines: true },
+  { source: "seams['resolveEmbed'] = function (id) { return y }", defines: true },
+  { source: 'class S {\n  resolveReference(ref) {\n    return undefined\n  }\n}', defines: true },
+  { source: 'class S {\n  resolveAlias = (alias) => null\n}', defines: true },
+  {
+    // A function declaration handed on by shorthand is still a definition, wherever it ends up.
+    source:
+      'function resolveReference(ref) {\n  return undefined\n}\nexport const zzSeams = { resolveReference }',
+    defines: true,
+  },
+  { source: 'declare function resolveEmbed(id: string): X', defines: false },
+  { source: 'function other(resolveEmbed) { return resolveEmbed }', defines: false },
+  { source: 'const { resolveEmbed } = seams', defines: false },
+  {
+    source: 'interface S { resolveEmbed: (id: string) => X; resolveTitle(id: string): string }',
+    defines: false,
+  },
+  { source: 'type S = { resolveAlias: (alias: string) => string | null }', defines: false },
+  { source: 'const x = { resolveEmbed: wrap((id) => y) }', defines: false },
 ]
 
 describe('references resolve in one place', () => {
   it('recognises a seam definition in every spelling, and passes a hand-over through', () => {
     for (const { source, defines } of DEFINITION_FIXTURES) {
-      const stripped = stripCommentsAndStrings(source)
-      const hit = DEFINITION_PATTERNS.some(({ pattern }) => pattern.test(stripped))
-      expect(hit, source).toBe(defines)
+      expect(findSeamDefinitions('fixture.ts', source).length > 0, source).toBe(defines)
     }
   })
 
@@ -124,10 +122,8 @@ describe('references resolve in one place', () => {
     for (const path of production) {
       const rel = relative(REPO_ROOT, path).split(sep).join('/')
       if (ALLOWLIST[rel] !== undefined) continue
-      const source = stripCommentsAndStrings(readFileSync(path, 'utf8'), path)
-      for (const { pattern, shape } of DEFINITION_PATTERNS) {
-        const match = pattern.exec(source)
-        if (match !== null) hits.push(`${rel}: ${shape} — \`${match[0].trim().slice(0, 80)}\``)
+      for (const { shape, text } of findSeamDefinitions(path, readFileSync(path, 'utf8'))) {
+        hits.push(`${rel}: ${shape} — \`${text}\``)
       }
     }
     expect(
@@ -139,13 +135,11 @@ describe('references resolve in one place', () => {
   it('every allowlist entry still names a file that defines one', () => {
     const stale = Object.keys(ALLOWLIST).filter((rel) => {
       const path = join(REPO_ROOT, rel)
-      let source: string
       try {
-        source = stripCommentsAndStrings(readFileSync(path, 'utf8'), path)
+        return findSeamDefinitions(path, readFileSync(path, 'utf8')).length === 0
       } catch {
         return true
       }
-      return !DEFINITION_PATTERNS.some(({ pattern }) => pattern.test(source))
     })
     expect(
       stale,
