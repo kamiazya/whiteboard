@@ -202,7 +202,6 @@ describe('.env.server.example contracts', () => {
     'WHITEBOARD_SERVER_JWT_ISSUER',
     'WHITEBOARD_SERVER_JWT_AUDIENCE',
     'WHITEBOARD_SERVER_JWKS_URI',
-    'WHITEBOARD_SERVER_ALLOWED_ORIGINS',
   ]
 
   for (const varName of REQUIRED_VARS) {
@@ -210,6 +209,28 @@ describe('.env.server.example contracts', () => {
       expect(envExample).toMatch(new RegExp(`^${varName}=`, 'm'))
     })
   }
+
+  it('sets exactly the variables the how-to lists as required, and the compose header names the same ones', () => {
+    const keysIn = (text: string) =>
+      [...text.matchAll(/WHITEBOARD_SERVER_[A-Z0-9_]+/g)].map((m) => m[0])
+    const howToRequired = docs.slice(
+      docs.indexOf('## Required environment variables'),
+      docs.indexOf('### Optional'),
+    )
+    const composeRequired = compose.slice(
+      compose.indexOf('# Required env vars'),
+      compose.indexOf('# Optional ones'),
+    )
+    const uncommented = envExample
+      .split('\n')
+      .filter((line) => /^WHITEBOARD_SERVER_[A-Z0-9_]+=/.test(line))
+      .map((line) => line.slice(0, line.indexOf('=')))
+    const required = [...new Set(keysIn(howToRequired))].sort()
+    expect(required).toEqual([...REQUIRED_VARS].sort())
+    expect([...new Set(keysIn(composeRequired))].sort()).toEqual(required)
+    expect([...uncommented].sort()).toEqual(required)
+    expect(envExample).not.toMatch(/All WHITEBOARD_SERVER_\* vars are required/)
+  })
 
   it('WHITEBOARD_SERVER_EXTERNAL_URL uses https:// placeholder', () => {
     const match = envExample.match(/^WHITEBOARD_SERVER_EXTERNAL_URL=(.+)$/m)
@@ -229,7 +250,8 @@ describe('.env.server.example contracts', () => {
   })
 
   it('WHITEBOARD_SERVER_ALLOWED_ORIGINS does not contain a wildcard', () => {
-    const match = envExample.match(/^WHITEBOARD_SERVER_ALLOWED_ORIGINS=(.+)$/m)
+    // Optional, so the example carries it commented out.
+    const match = envExample.match(/^# WHITEBOARD_SERVER_ALLOWED_ORIGINS=(.+)$/m)
     expect(match).not.toBeNull()
     expect(match![1]).not.toContain('*')
   })
