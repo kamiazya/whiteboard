@@ -46,15 +46,9 @@ export type GetAppContextInput = z.infer<typeof getAppContextInputSchema>
 // spelled out here rather than re-exported from ProviderState.kind: this is
 // a tool-facing vocabulary that agents read, so it changes on its own terms.
 //
-// Deliberately structural-only: this schema mirrors the static
-// get-app-context.schema.json literal field-for-field (see
-// tool-definitions.test.ts's fuzzed agreement check), and plain JSON Schema
-// cannot express "canvas.kind must equal provider.mode". That invariant is
-// enforced separately in create-commands.ts's getAppContext, immediately
-// after projecting the result and before this schema parses it — do not
-// re-add it here as a `.refine`, or the JSON-Schema/Zod agreement property
-// test will start failing on canvas/provider combinations the literal
-// cannot reject.
+// Deliberately structural-only: the invariant "canvas.kind must equal
+// provider.mode" is enforced in create-commands.ts's getAppContext,
+// immediately after projecting the result and before this schema parses it.
 export const getAppContextResultSchema = z
   .object({
     provider: z

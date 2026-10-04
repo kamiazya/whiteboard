@@ -81,8 +81,6 @@ const UNRESOLVED_IN_SHIPPED_SOURCE: Readonly<Record<string, string>> = {
     'an SVGR `?react` import: the component is generated from the .svg beside it',
   'apps/web/src/components/workspace-files/EmptyWorkspaceState.tsx -> ../../brand/welcome-mark.svg?react':
     'an SVGR `?react` import: the component is generated from the .svg beside it',
-  'apps/web/src/lib/webmcp/tool-definitions.ts -> ./tool-result-schemas/get-app-context.schema.json':
-    'a JSON schema file imported as data',
   'apps/extension/src/manifest.ts -> ../package.json':
     'the extension package version, imported as data so the manifest stamps the one declared version',
   'apps/web/src/main.tsx -> ./index.css': 'the global stylesheet, a side-effect import',
