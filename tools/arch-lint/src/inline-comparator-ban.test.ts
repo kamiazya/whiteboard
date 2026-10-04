@@ -101,6 +101,56 @@ describe('an order over strings is not spelled out beside the sort', () => {
       expect(count('const byKey = (a: K, b: K) => (a.key < b.key ? -1 : 1)')).toBe(1)
     })
 
+    it('sees a comparator written as a class method or an object method', () => {
+      expect(count('class C { compare(a: K, b: K) { return a.k < b.k ? -1 : 1 } }')).toBe(1)
+      expect(count('const o = { byKey(a: K, b: K) { return a.k < b.k ? -1 : 1 } }')).toBe(1)
+      expect(count('class C { size(a: K, b: K) { return a.k < b.k ? -1 : 1 } }')).toBe(0)
+    })
+
+    it('sees the statement form once per comparator, with or without a tie answer', () => {
+      expect(count('xs.sort((a, b) => { if (a < b) return -1; return 1 })')).toBe(1)
+      expect(count('xs.sort((a, b) => { if (a < b) { return -1 } return 1 })')).toBe(1)
+      expect(count('xs.sort((a, b) => { if (a.k > b.k) return 1; return -1 })')).toBe(1)
+      expect(
+        count('xs.sort((a, b) => { if (a < b) return -1; if (a > b) return 1; return 0 })'),
+      ).toBe(1)
+      expect(
+        count('xs.sort((a, b) => { if (a < b) return -1; else if (a > b) return 1; return 0 })'),
+      ).toBe(1)
+      expect(count('function byKey(a: K, b: K) { if (a.k < b.k) return -1; return 1 }')).toBe(1)
+    })
+
+    it('looks through parentheses and casts around the condition and the sign', () => {
+      expect(count('xs.sort((a, b) => ((a < b) ? -1 : 1))')).toBe(1)
+      expect(count('xs.sort((a, b) => { if (a < b) return (-1 as number); return 1 })')).toBe(1)
+    })
+
+    it('leaves a sign test in the statement form, and a function that orders nothing, alone', () => {
+      expect(count('xs.sort((a, b) => { if (a.dx < 0) return -1; return 1 })')).toBe(0)
+      expect(count('xs.sort((a, b) => { if (0 < a.dx) return 1; return -1 })')).toBe(0)
+      expect(
+        count('const pick = (a: number, b: number) => { if (a < b) return -1; return 1 }'),
+      ).toBe(0)
+      expect(count('xs.sort((a, b) => { if (a < b) return 5; return 1 })')).toBe(0)
+      expect(count('xs.sort((a, b) => { if (a < b) log(); return 0 })')).toBe(0)
+    })
+
+    it('sees an equality-first ternary as the same comparator, and counts a chain once', () => {
+      expect(count('xs.sort((a, b) => (a === b ? 0 : a < b ? -1 : 1))')).toBe(1)
+      expect(count('xs.sort((a, b) => (a.k == b.k ? 0 : a.k > b.k ? 1 : -1))')).toBe(1)
+      expect(count('xs.sort((a, b) => (a === b ? 0 : (a < b ? -1 : 1)))')).toBe(1)
+      expect(count('xs.sort((a, b) => (a === b ? 0 : b < a ? 1 : -1) as number)')).toBe(1)
+      // an equality ternary that does not lead into an order is not one
+      expect(count('xs.sort((a, b) => (a === b ? 0 : 1))')).toBe(0)
+      expect(count('xs.sort((a, b) => (a.k === 0 ? 0 : a < b ? -1 : 1))')).toBe(1)
+    })
+
+    it('leaves a ternary on a number literal alone even where the function is a comparator', () => {
+      expect(count('xs.sort((a, b) => (a.dx < 0 ? -1 : 1))')).toBe(0)
+      expect(count('const byTurn = (a: P, b: P) => (0 < a.dx ? 1 : -1)')).toBe(0)
+      expect(count('xs.sort((a, b) => (a.k < b.k ? -1 : 1))')).toBe(1)
+    })
+
     it('leaves the model comparator, a sign test and prose alone', () => {
       expect(count('xs.sort((a, b) => compareCodeUnit(a, b))')).toBe(0)
       expect(count('const sign = (x: number) => (x < 0 ? -1 : 1)')).toBe(0)
