@@ -304,6 +304,7 @@ describe('setupSwRegistration', () => {
     vi.doMock('./mount-update-toast.js', () => ({ mountUpdateToast: vi.fn() }))
     vi.doMock('./sw-idle-apply.js', () => ({ startSwIdleAutoApply: vi.fn() }))
 
+    vi.useFakeTimers()
     try {
       setupSwRegistration({
         isProd: true,
@@ -322,6 +323,51 @@ describe('setupSwRegistration', () => {
       await applyUpdate()
       expect(updateServiceWorker).toHaveBeenCalledWith(true)
     } finally {
+      // The swap deadline armed by applying is the page's, not this test's.
+      vi.clearAllTimers()
+      vi.useRealTimers()
+      vi.doUnmock('./mount-update-toast.js')
+      vi.doUnmock('./sw-idle-apply.js')
+      resetSwStatusForTests()
+    }
+  })
+
+  // The browser can leave an accepted update waiting for minutes (see
+  // apply-update.ts); what the user sees is a Reload button that does nothing.
+  it('reloads without the worker when an accepted update never takes over', async () => {
+    vi.resetModules()
+    const reloadFresh = vi.fn().mockResolvedValue(undefined)
+    vi.doMock('./reload-fresh.js', () => ({ reloadFresh }))
+    vi.doMock('./mount-update-toast.js', () => ({ mountUpdateToast: vi.fn() }))
+    vi.doMock('./sw-idle-apply.js', () => ({ startSwIdleAutoApply: vi.fn() }))
+    const { setupSwRegistration: setup } = await import('./register-sw.js')
+    const { applyUpdate, resetSwStatusForTests } = await import('./sw-status-store.js')
+    const { SWAP_DEADLINE_MS } = await import('./apply-update.js')
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    // A worker that was asked and stays waiting: the promise resolves, the page stays.
+    const updateServiceWorker = vi.fn().mockResolvedValue(undefined)
+    const registerSW = vi.fn().mockReturnValue(updateServiceWorker)
+
+    vi.useFakeTimers()
+    try {
+      setup({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister: vi.fn().mockResolvedValue({ registerSW }),
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      registerSW.mock.calls[0][0].onNeedRefresh()
+
+      await applyUpdate()
+      await vi.advanceTimersByTimeAsync(SWAP_DEADLINE_MS - 1)
+      expect(reloadFresh).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(reloadFresh).toHaveBeenCalledTimes(1)
+      await expectLoggedFailure('did not take over')
+    } finally {
+      vi.useRealTimers()
+      vi.doUnmock('./reload-fresh.js')
       vi.doUnmock('./mount-update-toast.js')
       vi.doUnmock('./sw-idle-apply.js')
       resetSwStatusForTests()

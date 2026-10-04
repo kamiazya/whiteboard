@@ -20,6 +20,34 @@ export interface SetupSwRegistrationOptions {
   importRegister: ImportRegisterModule
 }
 
+// Makes an accepted update one the page can recover when the browser loses the
+// swap (see apply-update.ts), and offers it to the settings page's App-version
+// row — the re-entry point for anyone who dismisses the toast with "Later".
+//
+// The recovery module is requested now, when the update is first offered,
+// rather than when it is accepted: a chunk requested at the moment of the swap
+// is itself the kind of request that can make the browser lose it, and a
+// recovery that must fetch its own code cannot run while the network path is
+// the thing that is stuck. Applying never rejects, so a caller with nowhere to
+// report a failure can pass the result straight on.
+function offerUpdate(updateServiceWorker: () => Promise<void>): () => void {
+  const applier = import('./apply-update.js')
+    .then(({ createUpdateApplier }) => createUpdateApplier({ apply: updateServiceWorker }))
+    .catch((err: unknown) => {
+      log.error('failed to load the update recovery module', err)
+      return updateServiceWorker
+    })
+  const applyUpdate = async (): Promise<void> => {
+    try {
+      await (await applier)()
+    } catch (err) {
+      log.error('applying the waiting service worker failed', err)
+    }
+  }
+  bindApplyUpdate(applyUpdate)
+  return () => void applyUpdate()
+}
+
 // Registration is deferred behind `window`'s 'load' event and a dynamic
 // `import('virtual:pwa-register')` so the (small) registration glue never
 // enters the eagerly-loaded entry chunk — the entry gzip budget is razor
@@ -40,15 +68,13 @@ export function setupSwRegistration({
       .then(({ registerSW }) => {
         const updateServiceWorker = registerSW({
           onNeedRefresh: () => {
-            // The settings page's App-version row is the re-entry point for
-            // anyone who dismisses the toast with "Later".
-            bindApplyUpdate(() => updateServiceWorker(true))
+            const applyUpdate = offerUpdate(() => updateServiceWorker(true))
             // The toast UI (React component + createRoot) is only needed on
             // the rare "an update is available" path, so it stays out of the
             // entry chunk via a dynamic import too.
             void import('./mount-update-toast.js')
               .then(({ mountUpdateToast }) => {
-                mountUpdateToast(updateServiceWorker)
+                mountUpdateToast(applyUpdate)
               })
               .catch((err: unknown) => {
                 log.error('failed to load the update toast module', err)
@@ -61,7 +87,7 @@ export function setupSwRegistration({
             // looking at.
             void import('./sw-idle-apply.js')
               .then(({ startSwIdleAutoApply }) => {
-                startSwIdleAutoApply({ apply: () => updateServiceWorker(true) })
+                startSwIdleAutoApply({ apply: applyUpdate })
               })
               .catch((err: unknown) => {
                 log.error('failed to load the idle auto-apply module', err)
