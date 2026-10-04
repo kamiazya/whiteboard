@@ -6,10 +6,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -18,21 +17,6 @@ const LONG = '# Plan\n\n- one\n- two\n- three\n\nA body far taller than its node
 const start: SpatialCanvas = {
   nodes: [textNode({ id: 'a', x: 100, y: 100, width: 220, height: 100, text: LONG })],
   edges: [],
-}
-
-function Host({ onOpenInEditor }: { onOpenInEditor?: (nodeId: string, text: string) => void }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={setCanvas}
-        theme="light"
-        onOpenInEditor={onOpenInEditor}
-      />
-    </div>
-  )
 }
 
 async function openNodeCatalog(container: HTMLElement): Promise<void> {
@@ -79,7 +63,11 @@ describe('open in editor (real browser)', () => {
   // itself — beside the ⋯ doorway, not inside it.
   it('is a doorway on the node, not a verb in the catalog', async () => {
     const onOpenInEditor = vi.fn()
-    const { container } = render(<Host onOpenInEditor={onOpenInEditor} />)
+    const { Host } = makeEditorHost({
+      initial: start,
+      editorProps: { onOpenInEditor: onOpenInEditor },
+    })
+    const { container } = render(<Host />)
     await selectNode(container)
 
     const handle = container.querySelector('[data-testid="open-in-editor-handle"]')
@@ -96,6 +84,7 @@ describe('open in editor (real browser)', () => {
 
   // A host that cannot open an editor must not advertise a door to one.
   it('offers no doorway when the host has no editor to open', async () => {
+    const { Host } = makeEditorHost({ initial: start })
     const { container } = render(<Host />)
     await selectNode(container)
 

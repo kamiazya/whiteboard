@@ -9,12 +9,11 @@ import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { useState } from 'react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
@@ -50,27 +49,14 @@ const DIAMOND: SpatialCanvas = {
   edges: [],
 }
 
-function Host({ start }: { start: SpatialCanvas }) {
-  const [canvas, setCanvas] = useState<SpatialCanvas>(start)
-  return (
-    <div style={{ width: 800, height: 600 }}>
-      <SpatialEditor
-        defaultTool="select"
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        theme="light"
-      />
-    </div>
-  )
-}
-
 /** The committed scene's text content — the SVG's, never the editor's. */
 function svgText(container: HTMLElement): string {
   return [...container.querySelectorAll('svg')].map((svg) => svg.textContent ?? '').join(' ')
 }
 
 it('keeps the diamond silhouette on screen while its text is being edited', async () => {
-  const { container } = render(<Host start={DIAMOND} />)
+  const { Host } = makeEditorHost({ initial: DIAMOND })
+  const { container } = render(<Host />)
   expect(container.querySelector('svg polygon')).not.toBeNull()
   expect(svgText(container)).toContain('shapefit')
 
@@ -83,7 +69,8 @@ it('keeps the diamond silhouette on screen while its text is being edited', asyn
 })
 
 it("the editor sits in the diamond's inscribed content box, not the full bbox", async () => {
-  const { container } = render(<Host start={DIAMOND} />)
+  const { Host } = makeEditorHost({ initial: DIAMOND })
+  const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 
@@ -98,7 +85,8 @@ it("the editor sits in the diamond's inscribed content box, not the full bbox", 
 })
 
 it('commit puts the committed text back into the scene', async () => {
-  const { container } = render(<Host start={DIAMOND} />)
+  const { Host } = makeEditorHost({ initial: DIAMOND })
+  const { container } = render(<Host />)
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
@@ -112,7 +100,8 @@ it('a plain rect node shows no doubled committed text under the now-transparent 
     nodes: [textNode({ id: 'r1', x: 100, y: 100, width: 200, height: 100, text: 'rectbody' })],
     edges: [],
   }
-  const { container } = render(<Host start={rect} />)
+  const { Host } = makeEditorHost({ initial: rect })
+  const { container } = render(<Host />)
   await userEvent.dblClick(rootOf(container), { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
   await vi.waitFor(() => expect(svgText(container)).not.toContain('rectbody'))
