@@ -128,6 +128,8 @@ describe('markup sinks are classified', () => {
       { source: 'stream.write(chunk)', sinks: [] },
       { source: 'Object.assign(host, { textContent: svg })', sinks: [] },
       { source: "Reflect.set(host, 'textContent', svg)", sinks: [] },
+      // Only `Reflect.set` writes its second argument as a property name.
+      { source: "cache.set(host, 'innerHTML', svg)", sinks: [] },
       { source: "host['classList']('x')", sinks: [] },
       { source: 'h({ [key]: { __html: svg } })', sinks: [] },
     ]
