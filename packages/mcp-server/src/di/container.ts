@@ -8,7 +8,6 @@ import {
   type BlobStore,
   type DocumentIndex,
   type DocumentStore,
-  hasDocumentTrash,
   TOKENS,
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
@@ -75,7 +74,6 @@ export function resolveServerDeps(
   const blobStore: BlobStore = container.get(TOKENS.BlobStore)
   const documentIndex: DocumentIndex = container.get(TOKENS.DocumentIndex)
   const scope = storeScopeOf(container)
-  const trashCapable = hasDocumentTrash(documentIndex) ? documentIndex : null
   return {
     documentStore,
     blobStore,
@@ -85,27 +83,6 @@ export function resolveServerDeps(
     // and a fresh one per tool call would rebuild every compat chain and
     // asset table on every write.
     facetRegistry: createFacetRegistry(bundledPlugins),
-    // The trash seam, present exactly when the bound index is the tree-backed
-    // one (`DocumentTrash` is its capability, not the port's).
-    // Structural rather than instanceof: the binding is this composition
-    // root's own choice, and vitest's module-graph split makes instanceof
-    // lie across realms (see ports' isWorkspaceNotFoundError).
-    ...(trashCapable === null
-      ? {}
-      : {
-          trash: {
-            list: async (input: { workspaceId: string }) =>
-              (await trashCapable.listTrash(input)).map((entry) => ({
-                documentId: entry.documentId,
-                path: entry.path,
-                deletedAt: entry.deletedAt,
-              })),
-            restore: (input: { workspaceId: string; documentId: string }) =>
-              trashCapable.restoreDocument(input),
-            purge: (input: { workspaceId: string; documentId: string }) =>
-              trashCapable.purgeTrashEntry(input),
-          },
-        }),
     // The real font metrics, so every tool that lays a scene out measures
     // text the same way an export does. Without this they fall back to a
     // constant-ratio estimate while the PNG exporter — same process, same
