@@ -7,6 +7,7 @@
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runPrepackGate } from './prepack-gate-lib.mjs'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -15,16 +16,9 @@ export function findMissingWebAppDistIndex(packageRoot = PACKAGE_ROOT) {
   return existsSync(indexPath) ? null : indexPath
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const missing = findMissingWebAppDistIndex()
-  if (missing) {
-    console.error(
-      `prepack gate: ${missing} not found — run \`pnpm build\` (apps/web's postbuild copies its build into dist/web-app) before packing.`,
-    )
-    process.exit(1)
-  }
-  // stderr, not stdout: npm interleaves lifecycle-script stdout with the
-  // `npm pack --json` payload, so anything printed here on stdout corrupts
-  // JSON consumers of the pack output (e.g. the release pack-contents check).
-  console.error('prepack gate: dist/web-app/index.html present — OK')
-}
+runPrepackGate(import.meta.url, {
+  find: findMissingWebAppDistIndex,
+  remedy:
+    "run `pnpm build` (apps/web's postbuild copies its build into dist/web-app) before packing.",
+  present: 'dist/web-app/index.html present',
+})
