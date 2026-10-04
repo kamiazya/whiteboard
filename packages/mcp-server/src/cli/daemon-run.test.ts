@@ -1,8 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
+import { captureSignalListeners } from '../shared/test-utils/signal-listeners.js'
 
 const { loadDaemonRecordMock, isPidAliveMock, startHttpServerMock } = vi.hoisted(() => ({
   loadDaemonRecordMock: vi.fn(async (): Promise<unknown> => null),
@@ -32,6 +33,37 @@ const { runDaemonRun } = await import('./daemon-run.js')
 const { LOCAL_DAEMON_TAIL_INTERVAL_MS, resolveWorkspaceTailIntervalMs } = await import(
   '../server/store/workspace-tail.js'
 )
+
+const baselineSignalListeners = {
+  sigterm: process.listenerCount('SIGTERM'),
+  sigint: process.listenerCount('SIGINT'),
+}
+let signalListeners: ReturnType<typeof captureSignalListeners>
+beforeEach(() => {
+  signalListeners = captureSignalListeners()
+})
+afterEach(() => {
+  signalListeners.restore()
+})
+
+describe('runDaemonRun signal handlers', () => {
+  it('arms one SIGTERM and one SIGINT handler per run', async () => {
+    const outcome = await runDaemonRun({
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+
+    expect(outcome.kind).toBe('running')
+    expect(process.listenerCount('SIGTERM')).toBe(baselineSignalListeners.sigterm + 1)
+    expect(process.listenerCount('SIGINT')).toBe(baselineSignalListeners.sigint + 1)
+  })
+
+  it('leaves no handler behind for the next test', () => {
+    expect(process.listenerCount('SIGTERM')).toBe(baselineSignalListeners.sigterm)
+    expect(process.listenerCount('SIGINT')).toBe(baselineSignalListeners.sigint)
+  })
+})
 
 describe('runDaemonRun listens on its socket alone', () => {
   afterEach(() => vi.clearAllMocks())
