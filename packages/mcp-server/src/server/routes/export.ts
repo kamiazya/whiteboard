@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { messageOf } from '@kamiazya/whiteboard-model'
+import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -8,6 +9,7 @@ import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { isErrnoCode } from '../../shared/errno.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
+import { getLogger } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { onDocumentAction } from './document/path-route.js'
@@ -22,7 +24,7 @@ import {
  * The render, with the one failure that belongs to the REQUEST rather than
  * to the renderer separated out: a positive scale can still size the target
  * below one pixel, and the size came from the caller — so that is a 400,
- * while everything else here is a 500.
+ * a busy database is left to the app's 503, and everything else here is a 500.
  */
 async function renderedExport(
   workspaceId: string,
@@ -42,7 +44,14 @@ async function renderedExport(
         status: 400,
       }
     }
-    return { error: { error: 'headless_export_failed', message }, status: 500 }
+    if (isDatabaseBusy(err)) throw err
+    // The renderer's message can carry a path or a statement: it goes to the
+    // log, never the body.
+    getLogger('export').error({ err, workspaceId, path }, 'headless PNG export failed')
+    return {
+      error: { error: 'headless_export_failed', message: 'The document could not be exported.' },
+      status: 500,
+    }
   }
 }
 

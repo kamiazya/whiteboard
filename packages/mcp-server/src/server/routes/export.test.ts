@@ -1,10 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core'
+import {
+  answerUnhandled,
+  apiErrorBodySchema,
+  apiErrorReason,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { exportResponseSchema } from '../../shared/api-contracts/export.js'
+import { captureLogsForTests } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
 import { testStoreScope } from './_test-helpers.js'
 
@@ -27,8 +32,7 @@ vi.mock('../sync-audience.js', () => ({
   getClientCount: (workspaceId: string, path: string) => mockGetClientCount(workspaceId, path),
 }))
 
-// Stub the headless renderer so route tests do not pull jsdom/document/resvg in
-// every run.
+// Stub the headless renderer so route tests do not pull jsdom/document/resvg in every run.
 type MockHeadlessArgs = {
   workspaceId: string
   path: string
@@ -279,14 +283,24 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
-  it('returns 500 with headless_export_failed when headless rendering throws', async () => {
-    mockExportCanvasHeadless.mockRejectedValue(new Error('boom'))
-    const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+  it('returns 500 headless_export_failed when rendering throws, logging the cause', async () => {
+    const logs = captureLogsForTests('error')
+    onTestFinished(() => logs.restore())
+    mockExportCanvasHeadless.mockRejectedValue(new Error('boom at /secret/path'))
+    const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')
-    expect(body.message).toBe('boom')
+    expect(body.message).not.toContain('/secret/path')
+    expect(JSON.stringify(logs.records)).toContain('boom at /secret/path')
+  })
+
+  it('leaves a busy database to the app, which answers 503 with Retry-After', async () => {
+    mockExportCanvasHeadless.mockRejectedValue(Object.assign(new Error(), { code: 'SQLITE_BUSY' }))
+    const app = new Hono().onError(answerUnhandled(() => {})).route('/', makeApp())
+    const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    expect(res.status).toBe(503)
+    expect(res.headers.get('Retry-After')).toBe('1')
   })
 
   // No timeout-driven failure mode exists any longer. The headless render
