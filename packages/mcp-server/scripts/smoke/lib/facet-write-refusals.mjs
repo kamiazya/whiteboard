@@ -8,7 +8,11 @@
  * Patches the smoke's `link` edge, which every step before this one leaves in
  * place.
  */
-export async function assertCanvasFacetWritesRefused(callToolExpectingError, workspaceId, documentId) {
+export async function assertCanvasFacetWritesRefused(
+  callToolExpectingError,
+  workspaceId,
+  documentId,
+) {
   const patch = (facets) =>
     callToolExpectingError('wb_canvas_edit', {
       workspaceId,
