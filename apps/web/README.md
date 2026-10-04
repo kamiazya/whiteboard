@@ -37,9 +37,9 @@ daemon base URL at startup. The app deploys to Cloudflare Pages (`wrangler.toml`
 browser extension ([ADR-0050](../../docs/contributing/adr/0050-local-daemon-trust.md));
 the seam is intentionally minimal.
 
-Local fixed-origin HTTPS development via `wrangler pages dev` is a candidate future
-option for testing Cloudflare-specific behavior locally. It is not currently implemented
-or part of any CI or production deployment flow.
+`pnpm --filter @kamiazya/whiteboard-web preview:pages` builds the app and serves `dist/` through `wrangler pages dev`, which applies
+`public/_headers` the way Cloudflare Pages does. Deployment itself is the workflows listed in
+[docs/contributing/deployment/cloudflare-pages.md](../../docs/contributing/deployment/cloudflare-pages.md).
 
 ## Source boundary rules
 

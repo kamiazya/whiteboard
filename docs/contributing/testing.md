@@ -359,7 +359,7 @@ on the run's line rather than something only the rendered SVG could show.
 | PWA update-lifecycle smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:pwa-lifecycle` | Built `dist/` served to real Chromium and one service worker walked through install, control, a waiting update the user accepts through the update toast, and the error screen's recovery (`reloadFresh` leaves no registration and no cache). `dist/` is never modified: the script's server appends a version handler to `/sw.js` to simulate a deploy. The mocks in `register-sw.test.ts` and `reload-fresh.test.ts` cannot notice a build whose worker behaves differently | Build + Playwright |
 | Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserDocumentPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
 | Origin policy | `pnpm --filter @kamiazya/whiteboard-web test` (`pages-origin-policy.test.ts`, `headers-policy.test.ts`) | `classifyPagesOrigin` keeps preview origins a distinct rejected class — a preview origin is never `production`, so it never enters a trusted/local-daemon allowlist; `_headers` CSP shape | jsdom only |
-| Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `arch-lint-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; no `.github/workflows/` file deploys `apps/web` with Cloudflare secrets; `apps/` stays out of the npm tarball | none |
+| Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `arch-lint-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; only the allowlisted workflows (`release.yml`, `deploy-preview.yml`, `preview-pr-deploy.yml`) hold the Cloudflare deploy secrets for `apps/web`; `apps/` stays out of the npm tarball | none |
 
 `web-app-boundary.test.ts` and the `web-browser` regression run as part of `pnpm test`. The two `smoke:*` artifact gates require a build, so they are **not** part of the default `pnpm test`.
 
@@ -439,7 +439,7 @@ module graph — which is the reason they are left out in the first place.
 | Contract / persistence / security / state-machine / race | Add or update nearest property/model/race test |
 | MCP tool or route change | `pnpm smoke:e2e` green; real MCP client verify |
 | Browser interaction or UI flow | `pnpm test:browser` green; manual browser verify |
-| Packaging, tarball, or binary | `pnpm test:distribution` green |
+| Packaging, tarball, or binary | `pnpm test:distribution` green, and `pnpm smoke:distribution:packaged:node` (the packaged-daemon and server-mode smokes CI's `packaged-smoke` job runs on every PR; it needs a build and, unlike `smoke:distribution:packaged`, spends no CLI API quota) |
 | Hosted web app / Cloudflare Pages artifact | `pnpm check:pages-release` (build + `smoke:artifact` + `smoke:preview-origin`); release-candidate adjacent, see [Hosted Web App Release Gates](#hosted-web-app-cloudflare-pages-release-gates) |
 | Typing or packaging impact | `pnpm --filter @kamiazya/whiteboard-mcp typecheck && pnpm build` |
 | Behavioral production change inside Stryker target set | Run `pnpm mutation:contracts`; report killed/survived in PR body |

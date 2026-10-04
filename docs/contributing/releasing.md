@@ -6,15 +6,20 @@ Operator runbook for publishing `@kamiazya/whiteboard-mcp` to npm and GHCR.
 
 ## Required GitHub Environments
 
-Two protected environments must exist before any publish run:
+Three protected environments must exist before a release run reaches its publish and deploy jobs:
 
 | Environment | Job | Purpose |
 |---|---|---|
 | `production-npm` | `publish-mcp` | npm OIDC Trusted Publishing (no token required) |
 | `production-docker` | `docker-publish-sign` | GHCR push + cosign keyless signing |
+| `production-web` | `deploy-web` | Cloudflare Pages production deploy; holds `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` |
 
-Both environments should require at least one reviewer before the job runs.
+The two publish environments should require at least one reviewer before the job runs.
 Without the environment protection, the `release.yml` publish guard is incomplete.
+`production-web` carries the Cloudflare secrets, so protect it the same way.
+`release-please` and `advance-stable` bind no environment: neither holds a registry or
+deploy credential. The PR-preview deploys use a separate `preview-web` environment, which
+is not part of a release (see [cloudflare-pages.md](deployment/cloudflare-pages.md)).
 
 ---
 
@@ -55,7 +60,20 @@ credentials are requested.
    plugin groups the plugin and `mcp-server` components into one PR, so the title names
    neither a component nor a version.
 3. A maintainer reviews and merges the Release PR.
-4. `release.yml` detects `mcp_release_created == true` and runs both publish jobs.
+4. `release.yml`'s `release-please` job reports what the merge released, and the jobs below
+   it run from those outputs:
+
+   | Job | Runs when | Does |
+   |---|---|---|
+   | `release-please` | every push to `main` | opens or updates the Release PR; creates the tags and GitHub Releases when it is merged |
+   | `advance-stable` | the root (plugin) component was released | fast-forwards the `stable` branch to the release tag |
+   | `publish-mcp` | `mcp-server` was released, or a forced re-publish with `publish_npm` | npm publish |
+   | `docker-publish-sign` | `mcp-server` was released, or a forced re-publish with `publish_docker` | image push and cosign signature |
+   | `deploy-web` | any component was released | Cloudflare Pages production deploy of `apps/web`; skips its deploy step while the Cloudflare secrets are absent |
+
+   The jobs after `release-please` are independent of one another: one failing does not stop
+   the others, so a failed `advance-stable` leaves the npm package, the image and the web
+   deploy published.
 5. `force_publish_tag` input: can re-publish a specific tag (e.g. after a transient
    OIDC failure). Must match `mcp-server-v<semver>`; rejected before checkout otherwise.
    The `publish_npm` and `publish_docker` inputs (both default on) choose which halves run.
@@ -134,6 +152,42 @@ Steps (in order):
 
 Permissions: `contents: read`, `id-token: write`, `packages: write` (job-scoped).
 Environment: `production-docker`.
+
+### `advance-stable` job (plugin channel)
+
+Git-based plugin consumers (the Claude Code marketplace source ref, Codex `@stable`
+marketplaces) resolve the `stable` branch, so plugin content ships when the Release PR
+merges rather than on every push to `main`.
+
+Steps (in order):
+
+1. Check out with full history and tags.
+2. Fetch the root release tag (`root_tag_name`) and verify it resolves to a commit.
+3. `git push origin <tag-commit>:refs/heads/stable`, with **no force flag**.
+
+Permissions: `contents: write`. No environment.
+
+**It fails on a non-fast-forward.** If `stable` holds a commit that is not an ancestor of
+the release tag (someone pushed to `stable` directly, or history on `main` was rewritten),
+git refuses the push and the job goes red; the workflow never rewrites `stable` itself.
+Plugin consumers stay on the previous `stable` until it is resolved. To recover:
+
+1. Compare the branches: `git fetch origin && git log --oneline origin/stable ^<tag>` lists
+   what `stable` has that the tag does not.
+2. Decide what those commits are. If they belong, land them on `main` through a normal PR
+   (a later release carries them); if they are stray, a maintainer resets `stable` to the
+   tag deliberately, outside the workflow.
+3. Re-run the failed job (`gh run rerun <run-id> --failed`): it re-reads the same tag and
+   pushes again.
+
+### `deploy-web` job (hosted app)
+
+Builds `apps/web` and runs `wrangler pages deploy dist --project-name=kamiazya-whiteboard`
+against production, through `cloudflare/wrangler-action`. The deploy step skips itself
+when the Cloudflare secrets are not configured in `production-web`. The other deploy
+paths for the same project are in [cloudflare-pages.md](deployment/cloudflare-pages.md).
+
+Permissions: `contents: read`. Environment: `production-web`.
 
 ---
 

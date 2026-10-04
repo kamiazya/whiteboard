@@ -29,14 +29,23 @@ We aim to acknowledge within 72 hours and to ship a patch (or coordinated disclo
 
 ## Security Model
 
-- **Local-first**: the daemon binds to `127.0.0.1` only and is not exposed externally. The trust boundary is "all processes on the local machine".
-- **Daemon token**: HTTP `/api/*` endpoints require a Bearer token issued by the daemon at startup. The token is passed to the browser via injected runtime config.
-- **Path validation**: all `sessionId` / `slug` / `fileId` URL parameters are validated against strict regexes to prevent path traversal under `~/.whiteboard/`.
-- **Body limits**: WebSocket frames are capped at 8 MiB, file uploads at 16 MiB, and `/mcp` JSON-RPC requests at 4 MiB to mitigate DoS.
-- **External fetches**: `library_install` and friends fetch user-provided HTTPS URLs but block private IPs / loopback / link-local addresses (SSRF guard).
+[docs/explanation/security-model.md](docs/explanation/security-model.md) is the single description of what Whiteboard trusts and protects against, for each runtime it ships: the browser, the local daemon (an owner-only local socket, reached by a hosted page only through the browser extension), and server mode (a shared server behind your own identity provider and TLS). It is kept in step with the code; read it rather than a summary here.
+
+## What is in scope
+
+A report is in scope when it affects the latest published `@kamiazya/whiteboard-mcp`, the container image, or the hosted web app, in any of the three runtimes above, including self-hosted server mode ([Self-host with Docker](docs/how-to/self-host-with-docker.md)).
 
 ## What is **not** in scope
 
-- Multi-tenant or remote MCP deployments are not supported. Running this server on a public host is out-of-scope.
-- The browser canvas runs in the same trust domain as the daemon. Malicious browser extensions or local processes can read/write canvas state directly.
-- The npm package is unsigned (no `npm provenance` yet — tracked as a roadmap item).
+The security model page's "Current limitations" section lists what the project does not claim. In particular:
+
+- A program running as the same operating-system user as the daemon is inside its trust boundary: it can open the socket and read the daemon's credential file exactly as the CLI does.
+- Server mode is usable with a competent operator, not zero-configuration safe: the identity provider, TLS and network exposure are the operator's to configure.
+- Reports that depend on a compromised browser, a malicious browser extension, or physical access to the machine.
+
+## Release provenance
+
+Releases are published from GitHub Actions with no stored registry credential:
+
+- The npm package is published with npm provenance (`npm publish --provenance`, OIDC trusted publishing), and each release run uploads a CycloneDX SBOM as a workflow artifact.
+- The container image is pushed with Docker provenance and SBOM attestations and is signed with cosign keyless signing (Sigstore OIDC). The verification command is in [docs/contributing/releasing.md](docs/contributing/releasing.md).
