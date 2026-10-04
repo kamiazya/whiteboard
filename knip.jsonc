@@ -186,6 +186,10 @@
     // a project dependency: nothing in the shipped product rasterises here,
     // and the figure workflow is run by a human on a machine, not in CI.
     "convert",
-    "identify"
+    "identify",
+    // pgrep (POSIX, on every runner image) lets the daemon-launch test look for
+    // processes by their command line after a launch it abandoned; nothing in
+    // the shipped product runs it.
+    "pgrep"
   ]
 }

@@ -33,10 +33,11 @@
 // (whose presence alone routes `open_generic` to a real browser launch
 // ahead of `$BROWSER` — see `has_display()`), making `$BROWSER` reach the
 // fake executable regardless of the host desktop session.
-import { spawn, spawnSync } from 'node:child_process'
+import { type ChildProcessByStdio, spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import type { Readable } from 'node:stream'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -97,6 +98,39 @@ interface LaunchResult {
   closed: Promise<unknown>
 }
 
+/** Resolves with the daemon's ready JSON line once the child's stdout shows it. */
+function readyLineFrom(
+  child: ChildProcessByStdio<null, Readable, Readable>,
+): Promise<Record<string, unknown>> {
+  let buffer = ''
+  let found = false
+  let readyResolve!: (value: Record<string, unknown>) => void
+  const readyPromise = new Promise<Record<string, unknown>>((res) => {
+    readyResolve = res
+  })
+  child.stdout.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString()
+    let newlineIndex = buffer.indexOf('\n')
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex).replace(/\r$/, '')
+      buffer = buffer.slice(newlineIndex + 1)
+      if (!found && line.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(line) as Record<string, unknown>
+          if (parsed.ok === true && typeof parsed.socketPath === 'string') {
+            found = true
+            readyResolve(parsed)
+          }
+        } catch {
+          // Not the ready line (a log line, tsx diagnostic, …) — keep scanning.
+        }
+      }
+      newlineIndex = buffer.indexOf('\n')
+    }
+  })
+  return readyPromise
+}
+
 /** Boots the real dispatcher CLI (via tsx) inside a real pty, and resolves
  * once the ready JSON line has been observed. */
 async function launchDaemonInPty(args: {
@@ -124,32 +158,7 @@ async function launchDaemonInPty(args: {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  let buffer = ''
-  let readyLine: Record<string, unknown> | null = null
-  let readyResolve!: (value: Record<string, unknown>) => void
-  const readyPromise = new Promise<Record<string, unknown>>((res) => {
-    readyResolve = res
-  })
-  child.stdout.on('data', (chunk: Buffer) => {
-    buffer += chunk.toString()
-    let newlineIndex = buffer.indexOf('\n')
-    while (newlineIndex !== -1) {
-      const line = buffer.slice(0, newlineIndex).replace(/\r$/, '')
-      buffer = buffer.slice(newlineIndex + 1)
-      if (readyLine === null && line.trim().startsWith('{')) {
-        try {
-          const parsed = JSON.parse(line) as Record<string, unknown>
-          if (parsed.ok === true && typeof parsed.socketPath === 'string') {
-            readyLine = parsed
-            readyResolve(parsed)
-          }
-        } catch {
-          // Not the ready line (a log line, tsx diagnostic, …) — keep scanning.
-        }
-      }
-      newlineIndex = buffer.indexOf('\n')
-    }
-  })
+  const readyPromise = readyLineFrom(child)
 
   const closed = new Promise((res) => child.once('close', res))
   liveChildren.push({

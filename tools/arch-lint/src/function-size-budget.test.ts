@@ -649,7 +649,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/daemon-client/src/sse-stream-hub.test.ts#createFake': 54,
   'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonRunArgs': 57,
   'packages/mcp-server/src/cli/argv.differential.test.ts#oldParseDaemonSupportBundleArgs': 54,
-  'packages/mcp-server/src/cli/daemon-run-auto-open-launch.test.ts#launchDaemonInPty': 67,
   'packages/mcp-server/src/cli/server-args.differential.test.ts#oldBackup': 64,
   'packages/mcp-server/src/server/app.routes.fuzz.property.test.ts#fillPattern': 65,
   // The hand-built deps carry the daemon's lock seam, which every mutating tool
