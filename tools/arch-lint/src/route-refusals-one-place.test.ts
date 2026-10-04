@@ -20,12 +20,13 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countNamedUses } from './named-use-scan.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 const ROUTES_DIR = 'packages/mcp-server/src/server/routes'
 
-const INLINE_HANDLE_VALIDATION = /\bvalidateWorkspaceId\s*\(/
+const HANDLE_VALIDATOR_NAMES = ['validateWorkspaceId']
 
 /** Files under routes/ that validate a handle by hand, each with why. */
 const HANDLE_VALIDATION_ALLOWLIST: Readonly<Record<string, string>> = {
@@ -39,7 +40,7 @@ const HANDLE_VALIDATION_ALLOWLIST: Readonly<Record<string, string>> = {
 
 /** The one module that may name the code; every route reaches it through `limitBody`. */
 const PAYLOAD_TOO_LARGE_HOME = 'packages/mcp-server/src/server/routes/body-limit.ts'
-const PAYLOAD_TOO_LARGE = /['"]payload_too_large['"]/
+const PAYLOAD_TOO_LARGE = /['"`]payload_too_large['"`]/
 const PAYLOAD_TOO_LARGE_SCAN_DIRS = ['packages/mcp-server/src', 'packages/server-core/src']
 
 const files: string[] = []
@@ -50,8 +51,9 @@ function rel(path: string): string {
   return relative(REPO_ROOT, path).split(sep).join('/')
 }
 
-function validatesInline(source: string): boolean {
-  return INLINE_HANDLE_VALIDATION.test(stripCommentsAndStrings(source))
+/** A use of the validator however spelled: bare, qualified, bracketed or through an aliased import. */
+function validatesInline(source: string, fileName = 'fixture.ts'): boolean {
+  return countNamedUses(fileName, source, HANDLE_VALIDATOR_NAMES) > 0
 }
 
 describe('route refusals are written in one place', () => {
@@ -59,6 +61,11 @@ describe('route refusals are written in one place', () => {
     const fixtures: readonly { readonly source: string; readonly hit: boolean }[] = [
       { source: 'try { validateWorkspaceId(handle) } catch (err) {}', hit: true },
       { source: 'refusedBy(() => validateWorkspaceId(handle))', hit: true },
+      {
+        source: "import { validateWorkspaceId as check } from '../validators.js'\ncheck(handle)",
+        hit: true,
+      },
+      { source: "validators['validateWorkspaceId'](handle)", hit: true },
       { source: 'const r = await parseWorkspaceHandle(c, handle)', hit: false },
       { source: "import { validateWorkspaceId } from '../validators.js'", hit: false },
       { source: '// validateWorkspaceId(handle) is what the helper calls', hit: false },
@@ -75,7 +82,9 @@ describe('route refusals are written in one place', () => {
     const hits = production
       .map(rel)
       .filter((path) => HANDLE_VALIDATION_ALLOWLIST[path] === undefined)
-      .filter((path) => validatesInline(readFileSync(join(REPO_ROOT, path), 'utf8')))
+      .filter((path) =>
+        validatesInline(readFileSync(join(REPO_ROOT, path), 'utf8'), join(REPO_ROOT, path)),
+      )
     expect(
       hits,
       'validate a handle through `parseWorkspaceHandle` (or `refuseMalformedHandle`) in server/workspace-handle.ts, so every route answers a malformed address with the same 400',
@@ -85,7 +94,7 @@ describe('route refusals are written in one place', () => {
   it('every allowlist entry still validates a handle by hand', () => {
     const stale = Object.keys(HANDLE_VALIDATION_ALLOWLIST).filter((path) => {
       try {
-        return !validatesInline(readFileSync(join(REPO_ROOT, path), 'utf8'))
+        return !validatesInline(readFileSync(join(REPO_ROOT, path), 'utf8'), join(REPO_ROOT, path))
       } catch {
         return true
       }
@@ -100,10 +109,11 @@ describe('route refusals are written in one place', () => {
     expect(Object.keys(HANDLE_VALIDATION_ALLOWLIST)).toHaveLength(3)
   })
 
-  it('recognises the hand-built 413 code in either quote and passes prose through', () => {
+  it('recognises the hand-built 413 code in any quote and passes prose through', () => {
     const fixtures: readonly { readonly source: string; readonly hit: boolean }[] = [
       { source: "c.json({ error: 'payload_too_large', message }, 413)", hit: true },
       { source: 'c.json({ error: "payload_too_large" }, 413)', hit: true },
+      { source: 'c.json({ error: `payload_too_large` }, 413)', hit: true },
       { source: "limitBody(MAX_FILE_UPLOAD_BYTES, 'Upload')", hit: false },
       { source: '// payload_too_large is what limitBody answers', hit: false },
     ]
