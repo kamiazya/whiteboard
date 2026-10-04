@@ -82,3 +82,53 @@ describe('a body that is not JSON, sent to an { error, message } route', () => {
     expect(apiErrorReason(answer.json)).toBe(NOT_JSON_REASON)
   })
 })
+
+// JSON that parses and does not fit is the route's own mistake to name, so
+// each route answers in its own sentence, in the voice its clients read.
+const WRONG_SHAPE: readonly [string, string, string, unknown, unknown][] = [
+  ['create a workspace', 'POST', '/api/workspaces', {}, { title: 'displayName is required' }],
+  [
+    'rename a workspace',
+    'PATCH',
+    '/api/workspaces/ws1',
+    { segment: 5 },
+    { title: 'segment or displayName must be valid' },
+  ],
+  ['move a document', 'PUT', `${DOCUMENT}/path`, {}, { title: 'path is required' }],
+  [
+    'name a workspace',
+    'PUT',
+    '/api/workspaces/ws1/name',
+    {},
+    { error: 'invalid_body', message: 'name must be a string' },
+  ],
+  [
+    'name a document',
+    'PUT',
+    `${DOCUMENT}/name`,
+    {},
+    { error: 'invalid_body', message: 'name must be a string' },
+  ],
+  [
+    'pin a document',
+    'PUT',
+    `${DOCUMENT}/pin`,
+    {},
+    { error: 'invalid_body', message: 'pinned must be boolean' },
+  ],
+  [
+    'restore a version',
+    'POST',
+    `${DOCUMENT}/versions/v1/restore`,
+    { overwrite: 'yes' },
+    { error: 'invalid_body', message: 'invalid restore options' },
+  ],
+]
+
+describe('JSON of the wrong shape, sent to a route that reads a body', () => {
+  it.each(
+    WRONG_SHAPE,
+  )("answers the route's own sentence when asked to %s", async (_what, method, path, body, expected) => {
+    expect(await send(method, path, JSON.stringify(body))).toEqual({ status: 400, json: expected })
+  })
+})
