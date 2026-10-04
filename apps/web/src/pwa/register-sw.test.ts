@@ -13,14 +13,12 @@ describe('setupSwRegistration', () => {
     originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker')
   })
 
+  // biome-ignore lint/plugin: the toast's root is module-level by design (mount-update-toast.tsx); a test that resets modules retires it, and a portal left rooted is what a fresh instance would root twice
   afterEach(() => {
     if (originalServiceWorker) {
       Object.defineProperty(navigator, 'serviceWorker', originalServiceWorker)
     }
     vi.restoreAllMocks()
-    // An offered update mounts the toast for real, and a test that resets the
-    // module graph would otherwise find that portal already rooted by the
-    // previous module instance and root it again.
     document.body.innerHTML = ''
   })
 
