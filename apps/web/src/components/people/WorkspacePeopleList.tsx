@@ -12,16 +12,8 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { type Outcome, type WorkspacePerson, workspacePeople } from '../../lib/server-people.js'
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../ui/alert-dialog.js'
 import { Button } from '../ui/button.js'
+import { PinnedConfirmDialog } from '../ui/pinned-confirm-dialog.js'
 
 type Fetch = typeof globalThis.fetch
 
@@ -130,34 +122,19 @@ function RemovePersonDialog({
   focusAfter: () => HTMLElement | null
 }) {
   return (
-    <AlertDialog
+    <PinnedConfirmDialog
       open={pending !== null}
-      onOpenChange={(open) => {
-        if (!open && !removing) onClose()
+      busy={removing}
+      title={`Remove ${pending?.displayName ?? ''}?`}
+      description={DESTRUCTIVE_COPY['remove-member'](pending?.displayName ?? '')}
+      confirmLabel="Remove"
+      onCancel={onClose}
+      onConfirm={onConfirm}
+      onCloseAutoFocus={(event) => {
+        event.preventDefault()
+        focusAfter()?.focus()
       }}
-    >
-      <AlertDialogContent
-        onCloseAutoFocus={(event) => {
-          event.preventDefault()
-          focusAfter()?.focus()
-        }}
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>{`Remove ${pending?.displayName ?? ''}?`}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {DESTRUCTIVE_COPY['remove-member'](pending?.displayName ?? '')}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
-          {/* Not AlertDialogAction: that closes on click, and the dialog
-              stays until the removal settles. */}
-          <Button type="button" variant="destructive" disabled={removing} onClick={onConfirm}>
-            Remove
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    />
   )
 }
 

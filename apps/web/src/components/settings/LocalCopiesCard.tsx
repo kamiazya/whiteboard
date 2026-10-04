@@ -31,16 +31,8 @@ import { stopReplicaReadableOffline } from '../../lib/replica-unlock.js'
 import { forgetReplicaEntry, listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { DaemonAddress } from '../connection/DaemonAddress.js'
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../ui/alert-dialog.js'
 import { Button } from '../ui/button.js'
+import { PinnedConfirmDialog } from '../ui/pinned-confirm-dialog.js'
 import { formatRelative } from '../workspace-files/format-relative.js'
 import { ReplicaOfflineControl } from './ReplicaOfflineControl.js'
 
@@ -254,46 +246,23 @@ export function LocalCopiesCard({
         </ul>
       )}
 
-      <AlertDialog
+      <PinnedConfirmDialog
         open={pending !== null}
-        onOpenChange={(open) => {
-          if (!open && deleting) return
-          if (!open) setPending(null)
+        busy={deleting}
+        title={
+          pending === null ? 'Delete this copy?' : `Delete this device's copy of ${pending.label}?`
+        }
+        description={DESTRUCTIVE_COPY['delete-replica-copy'](pending?.label ?? '')}
+        confirmLabel="Delete copy"
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          if (pending !== null) void confirmDelete(pending)
         }}
-      >
-        <AlertDialogContent
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            triggerRef.current?.focus()
-          }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pending === null
-                ? 'Delete this copy?'
-                : `Delete this device's copy of ${pending.label}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {DESTRUCTIVE_COPY['delete-replica-copy'](pending?.label ?? '')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            {/* Not AlertDialogAction: it closes on click, and the dialog has
-                to stay open until the two-step delete settles. */}
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleting}
-              onClick={() => {
-                if (pending !== null) void confirmDelete(pending)
-              }}
-            >
-              Delete copy
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          triggerRef.current?.focus()
+        }}
+      />
     </section>
   )
 }
