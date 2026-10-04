@@ -54,7 +54,7 @@ export interface ContentFacts {
   readonly texts: readonly string[]
   /**
    * Everything in the document that carries tags
-   * ([ADR-0040](../../../../docs/contributing/adr/0040-scoped-tags.md)
+   * ([ADR-0040](../../../docs/contributing/adr/0040-scoped-tags.md)
    * decision 2): the markdown document itself (OKF core tags), a board, a
    * node or an edge. A filter matches when ONE bearer carries every listed
    * tag, and the bearer's `text` is what an answer names as the excerpt.
