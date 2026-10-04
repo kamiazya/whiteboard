@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import {
   buildMinimapNodes,
+  fitLargestRects,
   fitMinimap,
   type MinimapBox,
   projectBox,
@@ -238,5 +239,55 @@ describe('buildMinimapNodes', () => {
     const n = nodes([textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hi' })])
     const boxes = indexNodeBoxes({ nodes: n, edges: [] })
     expect(buildMinimapNodes(n, boxes, SPATIAL_LIGHT_PALETTE)[0]?.symbol).toBeUndefined()
+  })
+})
+
+describe('fitLargestRects', () => {
+  const rect = (x: number, y: number, w: number, h: number, color?: string) => ({
+    x,
+    y,
+    w,
+    h,
+    color,
+  })
+
+  it('answers nothing for no rects', () => {
+    expect(fitLargestRects([], 3, SIZE)).toEqual([])
+  })
+
+  it('keeps only the largest by area, largest first, and hands back each source', () => {
+    const small = rect(0, 0, 10, 10, 'small')
+    const big = rect(20, 0, 80, 80, 'big')
+    const mid = rect(0, 50, 30, 30, 'mid')
+    const kept = fitLargestRects([small, big, mid], 2, SIZE)
+    expect(kept.map((k) => k.source)).toEqual([big, mid])
+  })
+
+  it('keeps everything when there are fewer rects than the limit', () => {
+    const rects = [rect(0, 0, 10, 10), rect(20, 20, 10, 10)]
+    expect(fitLargestRects(rects, 5, SIZE)).toHaveLength(2)
+  })
+
+  it('does not reorder or mutate its input', () => {
+    const rects = [rect(0, 0, 1, 1), rect(0, 0, 9, 9), rect(0, 0, 4, 4)]
+    const before = [...rects]
+    fitLargestRects(rects, 2, SIZE)
+    expect(rects).toEqual(before)
+  })
+
+  it('fits the kept rects inside the box, scaling down but never up', () => {
+    const [only] = fitLargestRects([rect(0, 0, 400, 200)], 1, SIZE)
+    expect(only?.box).toEqual({ x: 0, y: 25, width: 100, height: 50 })
+    const [small] = fitLargestRects([rect(0, 0, 20, 10)], 1, SIZE)
+    expect(small?.box.width).toBe(20)
+    expect(small?.box.height).toBe(10)
+  })
+
+  it('fits the KEPT rects only, so a dropped outlier does not shrink the rest', () => {
+    const near = [rect(0, 0, 50, 50), rect(50, 50, 50, 50)]
+    const outlier = rect(10000, 10000, 1, 1)
+    const without = fitLargestRects(near, 2, SIZE).map((k) => k.box)
+    const withOutlier = fitLargestRects([...near, outlier], 2, SIZE).map((k) => k.box)
+    expect(withOutlier).toEqual(without)
   })
 })

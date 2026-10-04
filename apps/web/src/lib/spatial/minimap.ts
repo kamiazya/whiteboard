@@ -123,6 +123,32 @@ export function projectBox(box: MinimapBox, fit: MinimapFit): MinimapBox {
   }
 }
 
+/**
+ * The largest `limit` rects by area, fitted together into a `size` box — what
+ * an icon-sized overview wants, where anything smaller is noise. Each answer
+ * keeps its source so the caller can carry what the geometry does not know
+ * (a colour) and apply its own minimum extent and offset.
+ *
+ * The viewport that `fitMinimap` also fits is the first kept rect: an icon
+ * has none, and `fitMinimap` never widens the bounds past the content, so
+ * the stand-in changes nothing.
+ */
+export function fitLargestRects<T extends { x: number; y: number; w: number; h: number }>(
+  rects: readonly T[],
+  limit: number,
+  size: { readonly width: number; readonly height: number },
+): { source: T; box: MinimapBox }[] {
+  const kept = [...rects].sort((a, b) => b.w * b.h - a.w * a.h).slice(0, limit)
+  const boxes = kept.map((r) => ({ x: r.x, y: r.y, width: r.w, height: r.h }))
+  const [first] = boxes
+  if (first === undefined) return []
+  const fit = fitMinimap(boxes, first, size, 0)
+  return kept.map((source, i) => ({
+    source,
+    box: projectBox(boxes[i] as MinimapBox, fit),
+  }))
+}
+
 /** The canvas-space point under a minimap-space point — for click-to-navigate. */
 export function unprojectPoint(
   point: { readonly x: number; readonly y: number },

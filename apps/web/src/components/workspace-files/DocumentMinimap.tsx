@@ -29,7 +29,7 @@ import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FaviconRect } from '../../lib/favicon.js'
-import { fitMinimap, projectBox } from '../../lib/spatial/minimap.js'
+import { fitLargestRects } from '../../lib/spatial/minimap.js'
 import type { RowOutline } from './load-row-outline.js'
 
 /**
@@ -66,21 +66,12 @@ export interface DocumentMinimapProps {
 function projectForIcon(
   rects: readonly FaviconRect[],
 ): { x: number; y: number; w: number; h: number }[] {
-  if (rects.length === 0) return []
-  const kept = [...rects].sort((a, b) => b.w * b.h - a.w * a.h).slice(0, MAX_RECTS)
-  const boxes = kept.map((r) => ({ x: r.x, y: r.y, width: r.w, height: r.h }))
-  // No viewport concept here, so the first box stands in for it — fitMinimap
-  // never widens the fitted bounds past the content.
-  const fit = fitMinimap(boxes, boxes[0] as (typeof boxes)[number], BOARD, 0)
-  return boxes.map((box) => {
-    const p = projectBox(box, fit)
-    return {
-      x: p.x,
-      y: p.y,
-      w: Math.max(MIN_EXTENT_PCT, p.width),
-      h: Math.max(MIN_EXTENT_PCT, p.height),
-    }
-  })
+  return fitLargestRects(rects, MAX_RECTS, BOARD).map(({ box }) => ({
+    x: box.x,
+    y: box.y,
+    w: Math.max(MIN_EXTENT_PCT, box.width),
+    h: Math.max(MIN_EXTENT_PCT, box.height),
+  }))
 }
 
 export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps) {
