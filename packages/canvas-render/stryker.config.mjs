@@ -63,6 +63,15 @@ export default {
   // `patches/@stryker-mutator__vitest-runner@9.6.1.patch`), which join suite
   // and test names the way vitest 5 matches them.
   coverageAnalysis: 'perTest',
+  // NOT `ignoreStatic`, though Stryker suggests it on every run: a static
+  // mutant (one its coverage cannot map to a test, so every test runs after a
+  // reload) is most of the time, and also most of what this lane is for.
+  // Measured over one whole weekly report: 1885 of 3378 mutants static,
+  // among them 453 of `edge-rules.ts`'s 457, all 228 of
+  // `edge-crossing-sweep.ts`'s and 354 of `tidy.ts`'s 378. Ignoring them
+  // would drop the cost model and the tidy heuristic from the report while
+  // its score kept looking whole. The time is met by sharding instead.
+  ignoreStatic: false,
   // A property runs 200 cases, so the default 5s budget times out on slow but
   // perfectly healthy mutants — and a timeout counts as KILLED, which flatters
   // the score instead of reporting a gap. Raised so a timeout means what it

@@ -113,20 +113,72 @@ export const MUTATED = [
 ]
 
 /**
- * The share of `files` one leg of the weekly run mutates, from a `k/n`
- * spec (1-based): `shardOf(MUTATED, '2/4')`. No spec means everything, which
- * is what a local `pnpm mutation:render` wants.
+ * What each curated file costs the lane, in minutes of one runner's mutation
+ * phase: the figure the legs are dealt by. Mutant COUNT does not predict it —
+ * per mutant, the cost is the tests it runs, and that differs by two orders of
+ * magnitude between files. Dealt by count, one run's six legs took 11 to 60
+ * minutes: `grid-route.ts` is 303 mutants and 42 minutes, `sketch.ts` 473 and
+ * under five.
  *
- * Dealt in a snake (0..n-1, then n-1..0) rather than round-robin or in
- * contiguous slices: the list is grouped by subject and the heavy files sit
- * at its ends (the edge router first, the sketch ink last), so slices put the
- * whole router on one runner and a plain round-robin pairs the two heaviest.
- * Every leg of a spec reads the same list, so the legs partition it exactly.
+ * measured: 2026-10-05, weekly run 37303929216 (dealt by file count, six
+ * legs). Each leg's log reports `N/M tested` every ten seconds, and Stryker
+ * runs a leg's mutants in a known order — the ones its coverage maps to tests
+ * first, then the STATIC ones (which run every test after a reload), each
+ * group in id order, and ids follow file path order — so a file's minutes are
+ * the stretch of the log in which its mutants were tested. Two consequences
+ * for reading the figures: they resolve to about ten seconds, and a static
+ * mutant's cost is every test the LEG selects, so a file's figure moves a
+ * little with the company it is dealt into.
+ *
+ * A file added to `MUTATED` needs a figure before a leg can be dealt —
+ * `shardOf` refuses one without. Until a run measures it, estimate from a file
+ * of similar mutant count and the same tests, and say so beside it.
+ *
+ * @type {Readonly<Record<string, number>>}
+ */
+export const MINUTES = {
+  'src/layout/edges/edge-rules.ts': 45.8,
+  'src/layout/edges/edge-ink.ts': 15.7,
+  'src/layout/edges/diagonal-ink.ts': 2,
+  'src/layout/edges/edge-crossing-sweep.ts': 23.3,
+  'src/layout/edges/grid-route.ts': 42,
+  'src/layout/edges/min-heap.ts': 5,
+  'src/tags/declared-colours.ts': 1.3,
+  'src/svg/format.ts': 3.8,
+  'src/xml-escape.ts': 6.8,
+  'src/svg/hoist.ts': 2,
+  'src/scene-bounds.ts': 12.3,
+  'src/scene-children.ts': 0.8,
+  'src/scene-digest.ts': 6.8,
+  'src/quality/rect.ts': 7.7,
+  'src/layout/nodes/truncate.ts': 1.8,
+  'src/tidy.ts': 11.3,
+  'src/tidy-units.ts': 4.2,
+  'src/tidy-axis.ts': 0.5,
+  'src/tidy-bands.ts': 1.5,
+  'src/layout/comment-placement.ts': 7,
+  'src/layout/ink/sketch.ts': 4.5,
+  'src/layout/nodes/inline-junction.ts': 2.8,
+}
+
+/**
+ * The share of `files` one leg of a sharded run mutates, from a `k/n` spec
+ * (1-based): `shardOf(MUTATED, '2/4')`. No spec means everything, which is
+ * what a local `pnpm mutation:render` wants.
+ *
+ * Dealt by `minutes`, heaviest first, each file to the leg with the least so
+ * far (ties to the earlier file and the lower leg), so the legs finish close
+ * together and the heaviest leg — the one a timeout is sized from — is as
+ * light as the files allow. A file heavier than a fair share ends up alone,
+ * which is the best any deal can do with it. Every leg of a spec computes the
+ * same deal, so the legs partition `files` exactly. The result keeps the
+ * order of `files`.
  *
  * @param {readonly string[]} files
  * @param {string | undefined} spec
+ * @param {Readonly<Record<string, number>>} [minutes]
  */
-export function shardOf(files, spec) {
+export function shardOf(files, spec, minutes = MINUTES) {
   if (spec === undefined || spec === '') return [...files]
   const match = /^(\d+)\/(\d+)$/.exec(spec)
   const shard = Number(match?.[1])
@@ -134,11 +186,23 @@ export function shardOf(files, spec) {
   if (match === null || shard < 1 || shard > total) {
     throw new Error(`shard spec must be "k/n" with 1 <= k <= n, got "${spec}"`)
   }
-  return files.filter((_, index) => {
-    const row = Math.floor(index / total)
-    const column = index % total
-    return (row % 2 === 0 ? column : total - 1 - column) === shard - 1
-  })
+  const unmeasured = files.filter((file) => !(minutes[file] > 0))
+  if (unmeasured.length > 0) {
+    throw new Error(
+      `no recorded minutes for ${unmeasured.join(', ')} — add a figure to MINUTES in stryker-targets.mjs`,
+    )
+  }
+  const load = Array.from({ length: total }, () => 0)
+  const legOf = new Map()
+  const heaviestFirst = files
+    .map((file, index) => ({ file, index }))
+    .sort((a, b) => minutes[b.file] - minutes[a.file] || a.index - b.index)
+  for (const { file } of heaviestFirst) {
+    const lightest = load.indexOf(Math.min(...load))
+    load[lightest] += minutes[file]
+    legOf.set(file, lightest)
+  }
+  return files.filter((file) => legOf.get(file) === shard - 1)
 }
 
 /**

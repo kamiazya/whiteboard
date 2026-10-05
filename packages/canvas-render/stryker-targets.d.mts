@@ -5,4 +5,9 @@ export declare const MUTATED: readonly string[]
 export declare const KNOWN_EQUIVALENT: Readonly<
   Record<string, { readonly [mutantKey: string]: number }>
 >
-export declare function shardOf(files: readonly string[], spec: string | undefined): string[]
+export declare const MINUTES: Readonly<Record<string, number>>
+export declare function shardOf(
+  files: readonly string[],
+  spec: string | undefined,
+  minutes?: Readonly<Record<string, number>>,
+): string[]

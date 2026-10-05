@@ -55,7 +55,7 @@ every gate except this loop.
 | Lane | Command | Scope | Reports |
 |---|---|---|---|
 | contracts | `pnpm mutation:contracts` | `packages/mcp-server/stryker.config.mjs`'s twelve files: redaction, path guard, security config, api contracts, two routes | local; `check:release-candidate:local` |
-| render | `pnpm mutation:render` | `packages/canvas-render/stryker-targets.mjs` — the property-covered pure modules | `mutation.yml`: on a PR, scoped by `.claude/scripts/mutation-scope.mjs` to the curated files the diff touched and posted as a sticky comment; weekly, six sharded legs merged by `weekly-report` into one `mutation-canvas-render` artifact |
+| render | `pnpm mutation:render` | `packages/canvas-render/stryker-targets.mjs` — the property-covered pure modules | `mutation.yml`: on a PR, scoped by `.claude/scripts/mutation-scope.mjs` to the curated files the diff touched, run in the weekly leg each falls in, and posted by `pr-report` as a sticky comment that also names any leg that stopped early; weekly, six legs dealt by recorded minutes (`MINUTES`) and merged by `weekly-report` into one `mutation-canvas-render` artifact |
 
 Both are **report-only** (`thresholds.break: null`): a score belongs to the whole suite, not
 to whoever pushed last. Stryker's timeout is 20s because a timeout counts as KILLED and the

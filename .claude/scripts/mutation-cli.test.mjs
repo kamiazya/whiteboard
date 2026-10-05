@@ -15,7 +15,14 @@ const run = (script, args, input) =>
 
 const dir = mkdtempSync(join(tmpdir(), 'mutation-cli-test-'))
 const targets = join(dir, 'targets.mjs')
-writeFileSync(targets, "export const MUTATED = ['src/a.ts', 'src/b.ts']\n")
+writeFileSync(
+  targets,
+  [
+    "export const MUTATED = ['src/a.ts', 'src/b.ts']",
+    'export const shardOf = (files, spec) => files.filter((_, i) => i === Number(spec[0]) - 1)',
+    '',
+  ].join('\n'),
+)
 const changed = join(dir, 'changed.txt')
 writeFileSync(changed, 'pkg/src/a.ts\npkg/src/b.ts\nother/src/c.ts\n')
 
@@ -34,6 +41,30 @@ test('mutation-scope: an empty intersection prints nothing and exits 0', () => {
   const r = run(scope, ['--targets', targets, '--prefix', 'pkg/'], 'elsewhere/x.ts\n')
   assert.equal(r.status, 0)
   assert.equal(r.stdout, '')
+})
+
+test('mutation-scope: --legs prints the matrix of legs that have a changed file', () => {
+  const r = run(scope, ['--targets', targets, '--prefix', 'pkg/', '--legs', '2'], 'pkg/src/b.ts\n')
+  assert.equal(r.status, 0)
+  assert.deepEqual(JSON.parse(r.stdout), [{ shard: 2, files: 'src/b.ts' }])
+})
+
+test('mutation-scope: --legs prints an empty matrix when the diff reaches no curated file', () => {
+  const r = run(scope, ['--targets', targets, '--prefix', 'pkg/', '--legs', '2'], 'x/y.ts\n')
+  assert.equal(r.status, 0)
+  assert.equal(r.stdout, '[]\n')
+})
+
+test('mutation-scope: a --legs that is not a positive count is a usage error, not an empty matrix', () => {
+  for (const legs of ['0', 'six', '']) {
+    const r = run(
+      scope,
+      ['--targets', targets, '--prefix', 'pkg/', '--legs', legs],
+      'pkg/src/a.ts\n',
+    )
+    assert.equal(r.status, 2, `--legs ${JSON.stringify(legs)}`)
+    assert.equal(r.stdout, '')
+  }
 })
 
 test('mutation-scope: a missing --targets or --prefix is a usage error, exit 2', () => {

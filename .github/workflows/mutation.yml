@@ -9,10 +9,11 @@
 # false case one draw in a billion could produce), and both are exactly what a
 # surviving mutant reports.
 #
-#   pr      — mutates only the curated files THIS DIFF changed, and posts the
-#             survivors as a sticky comment. Most diffs touch none of them and
-#             the job exits in under a minute having said nothing.
-#   weekly  — the whole curated list, uploaded as an artifact.
+#   pr      — mutates only the curated files THIS DIFF changed, one leg per
+#             weekly leg they fall in, and posts the survivors (and any leg
+#             that did not finish) as a sticky comment. Most diffs touch none
+#             of them and the lane stops at `pr-plan` having said nothing.
+#   weekly  — the whole curated list, in sharded legs, uploaded as an artifact.
 #
 # The PR half is not a nicety. A weekly artifact is a number nobody opens, and
 # a lane whose findings nobody reads is the same as no lane: this repo's own
@@ -37,24 +38,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr:
+  # Which curated files this diff changed, and which leg of a full run each
+  # belongs to. No install: the scoping reads a plain list module, so a PR
+  # that reaches none of the lane's files finishes here.
+  pr-plan:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    # measured: 2026-10-02 40 min
-    timeout-minutes: 60
+    # measured: 2026-10-05 1 min
+    # The old single PR job's checkout, setup and scoping took 32 s.
+    timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
+    outputs:
+      legs: ${{ steps.scope.outputs.legs }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The diff is the input, so the base branch has to be reachable.
           fetch-depth: 0
-          # This job runs untrusted PR code — an install and a mutation run —
-          # so don't leave the git credential where that tooling can read it.
           # Nothing here needs authenticated git: the diff reads objects that
-          # are already fetched, and the comment step authenticates with
-          # GH_TOKEN instead.
+          # are already fetched.
           persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
@@ -74,38 +77,168 @@ jobs:
           # curated files and three-dot reported none, and the lane attributed
           # ten survivors to a PR that never opened that file.
           git diff --name-only "$BASE"..."$HEAD" > /tmp/changed.txt
-          scoped=$(node .claude/scripts/mutation-scope.mjs \
+          # Dealt into the WEEKLY legs (the count is the weekly matrix's), so a
+          # PR leg mutates part of one weekly leg and cannot outlast it.
+          legs=$(node .claude/scripts/mutation-scope.mjs \
             --targets ./packages/canvas-render/stryker-targets.mjs \
             --prefix packages/canvas-render/ \
-            --changed-from /tmp/changed.txt)
-          echo "files=$scoped" >> "$GITHUB_OUTPUT"
-          if [ -z "$scoped" ]; then
+            --changed-from /tmp/changed.txt \
+            --legs 6)
+          echo "legs=$legs" >> "$GITHUB_OUTPUT"
+          if [ "$legs" = '[]' ]; then
             echo "No curated canvas-render module changed — nothing to mutate."
           else
-            echo "Mutating: $scoped"
+            echo "Mutating, by leg: $legs"
           fi
 
-      # Only once there is something to mutate: the scoping step reads a plain
-      # list module, so a PR that reaches none of the lane's files finishes
-      # without an install at all.
+  # One leg per weekly leg the diff reaches. A single job over every changed
+  # file did not fit: a diff touching the edge router, the grid router, tidy
+  # and the sketch ink was 1,611 mutants, hit the 60-minute limit at 711, and
+  # said nothing at all, twice.
+  #
+  # Sizing. A leg mutates a subset of one weekly leg's files, so the weekly
+  # job's measurement bounds it, and the limit is the weekly job's. No PR leg
+  # has been timed on its own yet: replace the figure with the longest one
+  # once a run has measured it. Stryker runs under its own budget, below the
+  # limit, so a leg that overruns is stopped while the job can still say how
+  # far it got; `mutation-lane.test.ts` holds that gap.
+  pr:
+    needs: pr-plan
+    if: needs.pr-plan.outputs.legs != '[]'
+    name: pr (shard ${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    # measured: 2026-10-05 60 min
+    timeout-minutes: 90
+    # Runs untrusted PR code — an install and a mutation run — so it holds no
+    # write permission; the comment is `pr-report`'s.
+    permissions:
+      contents: read
+    strategy:
+      # A leg that overruns must not cancel the others: what the rest found is
+      # still worth posting.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.pr-plan.outputs.legs) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Don't leave the git credential where install or mutation tooling
+          # can read it; nothing here performs authenticated git.
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-pnpm
+
       - name: Install dependencies
-        if: steps.scope.outputs.files != ''
         run: pnpm install --frozen-lockfile
 
-      - name: Mutate the changed files
-        if: steps.scope.outputs.files != ''
+      - name: Mutate this leg's changed files
         working-directory: packages/canvas-render
-        run: pnpm exec stryker run --mutate "${{ steps.scope.outputs.files }}"
+        env:
+          FILES: ${{ matrix.files }}
+          BUDGET_MINUTES: '80'
+        run: |
+          set -uo pipefail
+          date +%s > /tmp/mutation-start
+          status=0
+          timeout --kill-after=2m "${BUDGET_MINUTES}m" pnpm exec stryker run --mutate "$FILES" 2>&1 \
+            | tee /tmp/stryker.log || status=$?
+          echo "$status" > /tmp/mutation-status
+          exit "$status"
+
+      # Stryker writes its report only once every mutant is done, so a leg that
+      # stopped early has nothing to upload but this line, and without it the
+      # PR would hear nothing from these files.
+      - name: Record where an unfinished leg stopped
+        if: always()
+        working-directory: packages/canvas-render
+        env:
+          FILES: ${{ matrix.files }}
+          SHARD: ${{ matrix.shard }}
+          BUDGET_MINUTES: '80'
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/stryker-reports
+          if [ -f tmp/stryker-reports/mutation.json ]; then exit 0; fi
+          progress=$(grep -ao '[0-9]*/[0-9]* tested ([^)]*)' /tmp/stryker.log 2>/dev/null | tail -n 1 || true)
+          minutes=$(( ($(date +%s) - $(cat /tmp/mutation-start 2>/dev/null || date +%s)) / 60 ))
+          case "$(cat /tmp/mutation-status 2>/dev/null || echo none)" in
+            124 | 137) why="timed out at its ${BUDGET_MINUTES}-minute budget" ;;
+            none) why="never started mutating" ;;
+            *) why="failed" ;;
+          esac
+          echo "- leg ${SHARD} (\`${FILES//,/\`, \`}\`) ${why} after ${minutes} min, at ${progress:-0 tested}" \
+            > tmp/stryker-reports/stopped.md
+          cat tmp/stryker-reports/stopped.md
+
+      - name: Upload this leg's report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-canvas-render-pr-shard-${{ matrix.shard }}
+          path: packages/canvas-render/tmp/stryker-reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # One comment out of the legs': the survivors of every leg that finished,
+  # and a line for every leg that did not. Runs after a failed leg too — that
+  # line is the point — and stays quiet when a newer push cancelled the run,
+  # whose own report will replace this one.
+  pr-report:
+    needs: [pr-plan, pr]
+    if: >-
+      !cancelled() &&
+      needs.pr-plan.result == 'success' &&
+      needs.pr-plan.outputs.legs != '[]'
+    runs-on: ubuntu-24.04
+    # measured: 2026-10-05 1 min
+    # Not observed yet: the weekly merge took 8 s and the old PR job's
+    # checkout and setup 32 s, and this job is those two plus one API call.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The comment step authenticates with GH_TOKEN; git needs nothing.
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mutation-canvas-render-pr-shard-*
+          path: shards
 
       - name: Render the comment
         id: comment
-        if: steps.scope.outputs.files != ''
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          node .claude/scripts/mutation-comment.mjs \
-            packages/canvas-render/tmp/stryker-reports/mutation.json \
-            --marker '<!-- canvas-render-mutation -->' \
-            --equivalents packages/canvas-render/stryker-targets.mjs > /tmp/mutation-comment.md
+          MARKER='<!-- canvas-render-mutation -->'
+          : > /tmp/mutation-comment.md
+          if compgen -G 'shards/*/mutation.json' > /dev/null; then
+            mkdir -p report
+            # Each leg mutates a disjoint set of files, so concatenating the
+            # `files` maps is the whole merge, as in `weekly-report`.
+            jq -s '.[0] + {
+              files: (map(.files) | add),
+              testFiles: (map(.testFiles // {}) | add)
+            }' shards/*/mutation.json > report/mutation.json
+            node .claude/scripts/mutation-comment.mjs report/mutation.json \
+              --marker "$MARKER" \
+              --equivalents packages/canvas-render/stryker-targets.mjs > /tmp/mutation-comment.md
+          fi
+          stopped=$(cat shards/*/stopped.md 2>/dev/null || true)
+          if [ ! -f report/mutation.json ] && [ -z "$stopped" ]; then
+            stopped='- no leg uploaded a report, or a line saying where it stopped'
+          fi
+          if [ -n "$stopped" ]; then
+            [ -s /tmp/mutation-comment.md ] || printf '%s\n\n🧬 **Mutation**\n' "$MARKER" > /tmp/mutation-comment.md
+            printf '\n**Not every leg finished**, so these files have no result from this run ([run](%s)):\n\n%s\n' \
+              "$RUN_URL" "$stopped" >> /tmp/mutation-comment.md
+          fi
           if [ -s /tmp/mutation-comment.md ]; then echo "has=1" >> "$GITHUB_OUTPUT"; fi
 
       # Same sticky shape as the preview-URL comment: one comment per PR,
@@ -132,12 +265,12 @@ jobs:
               -F body=@/tmp/mutation-comment.md >/dev/null
           fi
 
-      - name: Upload mutation report
-        if: always() && steps.scope.outputs.files != ''
+      - name: Upload the merged mutation report
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mutation-canvas-render-pr
-          path: packages/canvas-render/tmp/stryker-reports/
+          path: report/
           if-no-files-found: warn
           retention-days: 14
 
@@ -147,21 +280,20 @@ jobs:
   # are written at the end. A report-only lane going quiet looks the same as a
   # lane with nothing to say, so each leg must finish well inside its limit.
   #
-  # Sizing. The last whole-lane run to finish took 95 minutes (2026-09-07); the
-  # next three were cancelled at 180, so 180 is a lower bound on the whole
-  # lane. The heaviest of six legs holds 836 of the 3451 mutants (24%), which
-  # makes 44 minutes its share of that bound, and the limit is 2x it for
-  # install time and for the lane's growth. `perTest` coverage (see
-  # stryker.config.mjs) takes about a quarter off that on top. Replace the
-  # `measured:` figure with the longest leg of the next scheduled run, and
-  # re-count the heaviest leg's share when MUTATED changes. The guard in
-  # tools/arch-lint/src/mutation-lane.test.ts holds the figure to 1.5x
-  # headroom.
+  # Sizing. The first sharded run (2026-10-05, run 37303929216) took 57, 39,
+  # 11, 49, 60 and 11 minutes for its six legs, dealt then by file COUNT. The
+  # legs are dealt by recorded minutes now (`MINUTES` in stryker-targets.mjs),
+  # which projects the longest leg at about 46 minutes of mutation plus 4 of
+  # install and initial run — the edge router's cost model alone, which no
+  # deal can split. The figure below stays the measured 60 until a run under
+  # the new deal replaces it with its own longest leg. Re-measure `MINUTES`
+  # when MUTATED changes. The guard in tools/arch-lint/src/mutation-lane.test.ts
+  # holds the figure to 1.5x headroom.
   weekly:
     if: github.event_name != 'pull_request'
     name: weekly (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
-    # measured: 2026-09-28 44 min
+    # measured: 2026-10-05 60 min
     timeout-minutes: 90
     strategy:
       # A leg that times out must not cancel the others: the reports of the
