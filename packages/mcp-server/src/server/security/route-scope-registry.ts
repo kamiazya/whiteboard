@@ -17,6 +17,7 @@
 // guard shape as the MCP smoke's `tools/list` vs `ALL_REGISTERED_TOOLS`
 // (`mcp/mcp-smoke-coverage.ts`).
 
+import { DOCUMENT_API_ACTIONS } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import type { AuthScope } from './auth-strategy.js'
 
 export type RouteScopeDecision =
@@ -119,6 +120,15 @@ const workspacesHandlePattern = /^\/api\/(?:v1\/)?workspaces\/([^/]+)(?:\/|$)/
 const workspacesHandle = (path: string): string | null | undefined =>
   decodeHandle(workspacesHandlePattern.exec(path)?.[1])
 
+const DOCUMENT_FILE = /^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/
+const DOCUMENT_ACTIONS: ReadonlySet<string> = new Set(DOCUMENT_API_ACTIONS)
+
+// `/?$`: the router strips one trailing slash before it reads the suffix.
+const DOCUMENT_VERSIONS_READ =
+  /^\/api\/workspaces\/[^/]+\/documents\/.+\/versions(?:\/[^/]+\/document)?\/?$/
+const DOCUMENT_VERSIONS_WRITE =
+  /^\/api\/workspaces\/[^/]+\/documents\/.+\/versions(?:\/[^/]+\/restore)?\/?$/
+
 const always =
   (...scopes: readonly AuthScope[]) =>
   (): RouteScopeDecision => ({ kind: 'scoped', scopes })
@@ -134,12 +144,27 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // other /api/runtime/* path requires a scope below.
   { name: 'runtime/ping', claims: exactly('/api/runtime/ping'), decide: publicRoute },
 
+  // A file whose id is spelled like a document action (`…/a/file/update`) is
+  // also that action on the document `a/file`, and which of the two answers
+  // is decided by which router is mounted first. It asks for both, so neither
+  // a files grant nor a canvas grant reaches the other's half alone.
+  {
+    name: 'document file/action overlap',
+    claims: (path) =>
+      DOCUMENT_FILE.test(path) && DOCUMENT_ACTIONS.has(path.slice(path.lastIndexOf('/') + 1)),
+    decide: (isWrite) => ({
+      kind: 'scoped',
+      scopes: isWrite ? ['files:write', 'canvas:write'] : ['files:read', 'canvas:read'],
+    }),
+    workspace: wHandle,
+  },
+
   // File routes: reading/writing a document's attached binary file. The
   // document path is multi-segment, so the discriminator is the mandatory
   // `/file/<fileId>` suffix — the same suffix-anchored parse the router uses.
   {
     name: 'document file',
-    claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/),
+    claims: matching(DOCUMENT_FILE),
     decide: byAccess('files:write', 'files:read'),
     workspace: wHandle,
   },
@@ -198,10 +223,19 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   },
 
   // Version history and restore — version-control operations scoped to a
-  // single document.
+  // single document. The router reads these as a suffix matched from the END
+  // of a document path of any depth (`matchDocumentsTail`), and with its verb:
+  // the same tail under another verb is a document operation, e.g. DELETE
+  // `…/documents/a/versions` deletes the document `a/versions`. Read from the
+  // front, a nested document's history would fall to the workspace rule and a
+  // document merely spelled `versions…` would answer to a versions grant.
+  // HEAD is Hono's GET with the body dropped, so it is read the same way.
   {
     name: 'document versions',
-    claims: matching(/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/versions/),
+    claims: (path, method) =>
+      method === 'GET' || method === 'HEAD'
+        ? DOCUMENT_VERSIONS_READ.test(path)
+        : method === 'POST' && DOCUMENT_VERSIONS_WRITE.test(path),
     decide: byAccess('versions:write', 'versions:read'),
     workspace: workspacesHandle,
   },
