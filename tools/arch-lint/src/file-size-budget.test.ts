@@ -191,7 +191,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // handler and its dep: a backend message the session answers is a line of
   // the handler table, and the recovery itself lives in the ledger. Raised by
   // ten for `getDocumentName`, the record's name for the open document.
-  'apps/web/src/lib/document-sync-session.ts': 1198,
+  // Raised by thirty-two for the document leaving the record under the open
+  // page: only the session knows which node it serves, so only it can see the
+  // node go, stop writing, and say so — most of it one guard per reader and
+  // writer that would otherwise throw on a node that is not there.
+  'apps/web/src/lib/document-sync-session.ts': 1230,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step

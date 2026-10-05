@@ -46,9 +46,10 @@ const fromContainer = Annotation.define<true>()
  *
  * Called per operation rather than captured once: in workspace mode the body
  * lives on the document's tree node, and `documentContainers` re-resolves it,
- * so a handle stays valid across a move.
+ * so a handle stays valid across a move. `null` once the document has left
+ * the record: there is nothing to bind, and the binding leaves the view alone.
  */
-export type ReadBoundText = (doc: LoroDoc) => LoroText
+export type ReadBoundText = (doc: LoroDoc) => LoroText | null
 
 class LoroTextSync implements PluginValue {
   private readonly unsubscribe: Subscription
@@ -82,7 +83,7 @@ class LoroTextSync implements PluginValue {
     if (this.disposed) return
     const current = this.view.state.doc.toString()
     if (this.adoptInitial !== undefined && current.length > 0) {
-      if (this.readText(this.doc).length === 0) {
+      if (this.readText(this.doc)?.length === 0) {
         this.adoptInitial(current)
         return
       }
@@ -103,7 +104,10 @@ class LoroTextSync implements PluginValue {
     // resolver is, which is why this guards the whole method rather than the
     // dispatch.
     if (this.disposed) return
-    const next = this.readText(this.doc).toString()
+    const next = this.readText(this.doc)?.toString()
+    // No container: the document left the record. The view keeps what it
+    // last showed — the page locks it — rather than emptying.
+    if (next === undefined) return
     const current = this.view.state.doc.toString()
     // The batch our own `update()` just produced lands here too, and by now
     // the two agree — so this is the whole of "don't echo yourself". An early
@@ -147,6 +151,7 @@ class LoroTextSync implements PluginValue {
    */
   private applyToContainer(transaction: Transaction): void {
     const text = this.readText(this.doc)
+    if (text === null) return
     let adj = 0
     transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
       const insert = inserted.sliceString(0, inserted.length, '\n')

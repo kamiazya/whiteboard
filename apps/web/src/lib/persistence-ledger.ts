@@ -34,6 +34,8 @@ export class PersistenceLedger {
   // take, with every later edit built on them: nothing it shows is saved
   // until the keeper's own state has replaced that copy.
   private awaitingKeeperState = false
+  // The document left the keeper's record: what is unsaved now never will be.
+  private documentGone = false
 
   constructor(
     private readonly report: Report,
@@ -98,6 +100,11 @@ export class PersistenceLedger {
     this.settle()
   }
 
+  /** The document was deleted elsewhere; nothing behind it can settle as saved. */
+  documentRemoved(): void {
+    this.documentGone = true
+  }
+
   /** Every write outstanding after a failure has now landed. */
   landed(): void {
     this.writeFailed = false
@@ -106,7 +113,7 @@ export class PersistenceLedger {
 
   /** Report saved if nothing is left behind the last edit. */
   settle(): void {
-    if (!this.unsaved || this.writeFailed || this.awaitingKeeperState) return
+    if (!this.unsaved || this.writeFailed || this.awaitingKeeperState || this.documentGone) return
     if (this.inFlightPushes > 0 || this.busy()) return
     this.unsaved = false
     this.lastSavedAt = new Date().toISOString()

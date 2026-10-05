@@ -322,11 +322,15 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // `DocumentBackend`, so that port is not what is left to do.
   // Raised by five for `getDocumentName`: the record's name for the open
   // document is a read of the session's own doc, the one place that holds it.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 869,
+  // Raised by twenty-six for `documentRemoved`: the open document deleted
+  // elsewhere is seen by the session alone, which stops writing and says so.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 895,
   // Both raised for the refused write: one more backend message in the
-  // handler table, and the snapshot that answers it ending the wait.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 193,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 88,
+  // handler table, and the snapshot that answers it ending the wait. Both
+  // raised by one more for a reconnect whose snapshot no longer holds the
+  // document, which is the same delete rather than unreadable bytes.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 194,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 89,
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
