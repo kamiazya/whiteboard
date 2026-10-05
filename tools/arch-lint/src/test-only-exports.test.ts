@@ -200,7 +200,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/plugin-visual/src/data.ts#VisualShapeFacet',
   'packages/plugin-visual/src/data.ts#visualPlugin',
   'packages/plugin-visual/src/emoji/shortcode.ts#emojiForShortcode',
-  'packages/ports/src/document-index.ts#createDocumentInputSchema',
   'packages/ports/src/tokens.ts#defineToken',
   'packages/reference-graph/src/linkify.ts#linkMarkupFor',
   'packages/reference-graph/src/reference-aggregate.ts#ReferenceAggregate',
@@ -360,7 +359,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 157
+const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 25
