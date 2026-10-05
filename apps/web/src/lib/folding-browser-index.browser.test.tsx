@@ -1,7 +1,7 @@
 /**
  * The PRODUCTION browser index composition (App.tsx's): the workspace-tree
  * index behind the startup fold, with content seeded into and read back from
- * the tree. The page suites inject the legacy IdbDocumentIndex to keep the
+ * the tree. Page suites that seed legacy rows (`seedIdbDocument`) keep the
  * fold path covered; this file is where the tree-backed composition itself
  * is pinned — real IndexedDB, because that is what it composes over.
  */

@@ -1,7 +1,15 @@
 /**
- * `DocumentIndex` over IndexedDB — the browser's twin of the daemon's
- * `LoroWorkspaceDocumentIndex` (wrapped by `CacheCoherentDocumentIndex`), held
- * to the same conformance suite.
+ * The browser's workspace registry and its legacy document rows, over
+ * IndexedDB.
+ *
+ * Production reaches two roles. The REGISTRY — create, list, resolve and
+ * rename a workspace — which `FoldingBrowserIndex` and the shell switcher
+ * (`browser-workspaces.ts`) both keep here. And the legacy ROWS older builds
+ * wrote one per document, which the startup fold lists and retires
+ * (`fold-workspace.ts`). A document this build creates lives in the
+ * workspace tree, never here. The rest of the port — create, move, rename,
+ * delete by path — has no production caller; it stays implemented, and held
+ * to the port's conformance suite, because tests seed legacy rows through it.
  *
  * The port's heavy invariant is that a mutating operation "takes effect as one
  * indivisible operation or has no effect at all". The daemon buys that with an
