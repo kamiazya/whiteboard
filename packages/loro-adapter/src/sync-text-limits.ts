@@ -104,36 +104,44 @@ function readWrites(json: JsonSchema): UpdateWrites {
     longNodeText: new Map(),
     touchesNodeMeta: false,
   }
-  const grow = (container: ContainerID, by: number) =>
-    writes.net.set(container, (writes.net.get(container) ?? 0) + by)
   for (const change of json.changes) {
     const peer = change.id.slice(change.id.indexOf('@') + 1)
     for (const op of change.ops) {
       writes.touchesNodeMeta ||= touchesMeta(op)
-      if (op.container.endsWith(':Map')) {
-        const content = op.content as MapOp
-        if (content.type === 'insert' && nodeTextLength(content.value) > NODE_TEXT_MAX_CHARS) {
-          const at = { container: op.container, key: content.key }
-          writes.longNodeText.set(`${op.container} ${content.key}`, at)
-        }
-        continue
-      }
-      if (!op.container.endsWith(':Text')) continue
-      const content = op.content as TextOp
-      if (content.type === 'insert') {
-        const key = `${op.container} ${peer}`
-        const run = extendRun(runs.get(key), op.counter, content.pos, content.text)
-        runs.set(key, run)
-        if (run.units > writes.longestRun.units) {
-          writes.longestRun = { units: run.units, container: op.container }
-        }
-        grow(op.container, scalarLength(content.text))
-      } else if (content.type === 'delete') {
-        grow(op.container, -Math.abs(content.len))
-      }
+      if (op.container.endsWith(':Map')) readMapWrite(writes, op)
+      else if (op.container.endsWith(':Text')) readTextWrite(writes, runs, peer, op)
     }
   }
   return writes
+}
+
+/** A map value long enough to be node text past its limit, kept for the judgement after the import. */
+function readMapWrite(writes: UpdateWrites, op: Op): void {
+  const content = op.content as MapOp
+  if (content.type !== 'insert' || nodeTextLength(content.value) <= NODE_TEXT_MAX_CHARS) return
+  writes.longNodeText.set(`${op.container} ${content.key}`, {
+    container: op.container,
+    key: content.key,
+  })
+}
+
+/** An insert extends its peer's run and grows its container; a delete shrinks it. */
+function readTextWrite(writes: UpdateWrites, runs: Map<string, Run>, peer: string, op: Op): void {
+  const content = op.content as TextOp
+  const grow = (by: number) =>
+    writes.net.set(op.container, (writes.net.get(op.container) ?? 0) + by)
+  if (content.type === 'delete') {
+    grow(-Math.abs(content.len))
+    return
+  }
+  if (content.type !== 'insert') return
+  const key = `${op.container} ${peer}`
+  const run = extendRun(runs.get(key), op.counter, content.pos, content.text)
+  runs.set(key, run)
+  if (run.units > writes.longestRun.units) {
+    writes.longestRun = { units: run.units, container: op.container }
+  }
+  grow(scalarLength(content.text))
 }
 
 /**

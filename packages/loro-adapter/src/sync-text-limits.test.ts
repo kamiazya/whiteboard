@@ -226,11 +226,12 @@ describe('importWithinTextLimits on update shapes', () => {
 
   it('reads a positional continuation after another op as a new run', () => {
     const half = Math.floor(MARKDOWN_MAX_CHARS / 2) + 10
-    const doc = seeded('')
+    // Seeded, because into an empty document no run is judged at all.
+    const doc = seeded('s')
     const update = editOf(doc, (client, body) => {
-      body.insert(0, 'a'.repeat(half))
+      body.insert(1, 'a'.repeat(half))
       client.getMap('m').set('k', 1)
-      body.insert(half, 'b'.repeat(half))
+      body.insert(1 + half, 'b'.repeat(half))
     })
     expect(importWithinTextLimits(doc, update).breach).toMatchObject({ shape: 'body' })
   })
