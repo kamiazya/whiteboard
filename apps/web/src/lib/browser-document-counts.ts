@@ -17,43 +17,34 @@
  * (`check-pwa-precache.mjs` asserts exactly that). This rides a cost the
  * product already pays rather than adding one.
  */
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { foldWorkspaceDocuments } from './fold-workspace.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 const log = getAppLogger('browser-document-counts')
 
 /** `dbName`: only tests pass this, exactly as the stores it opens do. */
 export async function browserDocumentCounts(dbName?: string): Promise<ReadonlyMap<string, number>> {
-  // The shell can be a session's FIRST surface — someone deep-links to a page
-  // and opens the switcher without ever opening a document — and nothing
-  // folds unconditionally at startup: `FoldingBrowserIndex` folds lazily on
-  // its first read, and that read has not happened. Without this, a document
-  // written by an older build is still in the legacy row plane, absent from
-  // the tree this counts, and the row would quietly read low.
-  //
-  // Its own catch, and non-fatal, for the reason the Settings surface gives:
-  // a fold failure is a storage-side problem that degrades to a pre-fold
-  // (undercounted) view, not a reason to answer nothing.
-  try {
-    await foldWorkspaceDocuments(dbName)
-  } catch (err) {
-    log.warn('fold before counting failed; counting the tree as it stands', err)
-  }
-
-  const docs = new BrowserWorkspaceDocs(dbName)
+  // Counted by the LISTING, not by the tree it mostly reads: the listing also
+  // serves a document the fold left behind, and a count of tree nodes alone
+  // read one lower than the list the same workspace opens to. The index also
+  // folds before its first read, which this needs because the shell can be a
+  // session's FIRST surface — someone deep-links to a page and opens the
+  // switcher before anything else has read, and a document an older build
+  // wrote is not in the tree until then. A fold that fails degrades to the
+  // tree as it stands, which the index logs.
+  const index = new FoldingBrowserIndex(dbName)
   const counts = new Map<string, number>()
-  for (const workspace of await new IdbDocumentIndex(dbName).listWorkspaces()) {
+  for (const workspace of await index.listWorkspaces()) {
     // Per workspace, so one unreadable record costs its own row and not the
     // whole popover. A workspace with no record yet is 0 rather than absent:
     // it exists and holds nothing, which is the row a person needs to see.
     try {
-      const record = await docs.open(workspace.workspaceId)
-      counts.set(workspace.workspaceId, record === null ? 0 : readWorkspaceDocuments(record).length)
+      const rows = await index.listDocuments({ workspaceId: workspace.workspaceId })
+      counts.set(workspace.workspaceId, rows.length)
     } catch (err) {
-      log.warn('could not count a workspace', workspace.workspaceId, err)
+      if (isWorkspaceNotFoundError(err)) counts.set(workspace.workspaceId, 0)
+      else log.warn('could not count a workspace', workspace.workspaceId, err)
     }
   }
   return counts

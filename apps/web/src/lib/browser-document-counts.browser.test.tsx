@@ -9,13 +9,16 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { browserDocumentCounts } from './browser-document-counts.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
 } from './browser-workspace-id.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
@@ -108,4 +111,25 @@ it('answers 0 for a workspace that exists and holds nothing', async () => {
   const counts = await browserDocumentCounts(DB_NAME)
 
   expect(counts.get(ACTIVE)).toBe(0)
+})
+
+it('counts a document the fold left behind, as the list does', async () => {
+  const logged = expectLoggedFailures()
+  await seedLegacy(ACTIVE, ['readable'])
+  // An envelope from a build this one does not know: the fold skips it and
+  // the legacy row keeps serving it, so the list still shows it.
+  const index = new IdbDocumentIndex(DB_NAME)
+  const damaged = await index.createDocument({
+    workspaceId: ACTIVE,
+    path: 'damaged',
+    kind: 'spatial',
+  })
+  await seedSyncDocument(damaged.documentId, { raw: { v: 99 } }, DB_NAME)
+
+  const counts = await browserDocumentCounts(DB_NAME)
+  const listed = await new FoldingBrowserIndex(DB_NAME).listDocuments({ workspaceId: ACTIVE })
+
+  expect(listed.map((row) => row.path)).toEqual(['damaged', 'readable'])
+  expect(counts.get(ACTIVE)).toBe(listed.length)
+  expect(logged.join('\n')).toContain('startup fold left documents behind')
 })
