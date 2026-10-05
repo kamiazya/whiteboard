@@ -105,7 +105,9 @@ describe('syncTextLimitJudge', () => {
     ).toMatchObject({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 500 })
     // A refusal leaves the judge usable, and the record untouched.
     expect(judge(updateFrom(base, DOC_ID, (body) => body.insert(0, 'd'.repeat(1_400))))).toBeNull()
-    expect(documentContainers(base, DOC_ID).getText('body').length).toBe(MARKDOWN_MAX_CHARS - 1_500)
+    expect(documentContainers(base, DOC_ID).getText('body')).toHaveLength(
+      MARKDOWN_MAX_CHARS - 1_500,
+    )
   })
 
   it('answers a short update by a body that grew since it last looked, whoever grew it', () => {

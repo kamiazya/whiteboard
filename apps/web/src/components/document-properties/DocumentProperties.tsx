@@ -172,7 +172,7 @@ export function DocumentProperties({
 }
 
 /** Why the last rename was refused, beside the box it was typed into. */
-function TitleRefusal({ id, refusal }: { id: string; refusal: string }) {
+function TitleRefusal({ id, refusal }: { readonly id: string; readonly refusal: string }) {
   return (
     <span
       id={id}

@@ -68,7 +68,10 @@ describe('floorIsFed', () => {
 // must not fail the file. If it ran, the throw below would. The feeder skips
 // itself at run time, which leaves it in the state a name filter leaves it in.
 describe('a floor whose feeder is skipped', () => {
-  it('feeds', ({ skip }) => skip())
+  it('feeds', ({ skip }) => {
+    expect(skip).toBeTypeOf('function')
+    skip()
+  })
   it('runs beside it', () => {
     expect(true).toBe(true)
   })
