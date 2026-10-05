@@ -4,7 +4,6 @@ import type { ProviderState } from '../provider.js'
 interface WhiteboardCommandDocumentIdentity {
   workspaceId?: string
   documentId: string
-  name: string
 }
 
 // Runtime dependencies a command needs at call time. Never captured by

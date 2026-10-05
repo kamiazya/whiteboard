@@ -189,7 +189,7 @@ export function documentLabels(
     documentKey: documentId ?? 'no-canvas',
     overlayTitle: documentName ?? 'Untitled',
     exportFilenameBase: documentName ?? 'canvas',
-    commandCanvas: documentId === null ? null : { documentId, name: documentName ?? '' },
+    commandCanvas: documentId === null ? null : { documentId },
   }
 }
 
