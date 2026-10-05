@@ -35,9 +35,10 @@ import { applyPassages, MARKDOWN_MAX_CHARS, resolveTextAnchor } from '@kamiazya/
  *
  * An adoption that would leave the body past `MARKDOWN_MAX_CHARS` and longer
  * than it is writes NOTHING and answers with the length it would have made:
- * both keepers refuse that body, and a daemon-kept workspace's sync worker
- * retries a refused write without end, so the caller must leave the whole
- * decision unmade rather than stamp the change adopted.
+ * both keepers refuse that body, and the page then goes back to what the
+ * keeper holds — so a change stamped adopted would be undone with the body,
+ * and anything typed after it with them. The caller leaves the whole
+ * decision unmade instead.
  */
 export function applyAdoptedPassages(
   doc: DocumentContainers,

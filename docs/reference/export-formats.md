@@ -76,9 +76,12 @@ already over the limit is accepted.
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — hold the same bound: an update that adds a node with
 more than 8,192 characters of text, or grows a node's text past that, answers
-`413` with `{"error":"node_text_too_large"}` and stores nothing. A node stored
-longer before the limit can still be moved, restyled or shortened. A
-browser-kept workspace does not check a canvas node's text.
+`413` with `{"error":"node_text_too_large"}` and stores nothing; `promote`
+names the canvas that holds the node. A node stored longer before the limit
+can still be moved, restyled or shortened. A browser-kept workspace holds the
+same bound: it does not save a change that adds or grows a node's text past
+it — the page goes back to what is stored, undoing that change and anything
+typed after it, and a notice at the top says the change was not saved and why.
 
 A label — of an edge, a line or a group — carries at most **1,024
 characters**, and one comment message at most **4,096**. Each is laid out
@@ -89,8 +92,11 @@ again on every render of its board, at a cost that grows with its length.
 `message.add`. The editor's label and comment boxes refuse a longer edit and
 say why. The daemon's sync routes refuse an update that adds or grows one past
 its bound with `413` and `{"error":"label_too_large"}` or
-`{"error":"comment_too_large"}`, storing nothing. A label or message stored
-longer before the limit still reads, and can still be shortened.
+`{"error":"comment_too_large"}`, storing nothing; `promote` names the canvas
+that holds it. A browser-kept workspace refuses the same change the way it
+refuses an over-long node: nothing is saved, the page goes back to what is
+stored, and the notice says why. A label or message stored longer before the
+limit still reads, and can still be shortened.
 
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`

@@ -7,13 +7,14 @@
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { NODE_TEXT_MAX_CHARS, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeTextEditRefusal } from '../../lib/node-text-refusal.js'
 import { textLengthLimit } from '../../lib/text-length-limit.js'
 
 const COUNT = new Intl.NumberFormat('en-US')
 
 /**
- * The node editor's limit. The notice is short and set small because it
- * shares the node's own box with the text, which may be a few lines tall.
+ * The node editor's limit. The notice is set small because it shares the
+ * node's own box with the text.
  */
 export const nodeTextLengthLimit: Extension = [
   // FIRST, and that order is the override: CodeMirror mounts the earliest
@@ -21,11 +22,7 @@ export const nodeTextLengthLimit: Extension = [
   EditorView.theme({
     '.cm-length-limit-notice': { padding: '2px 4px', fontSize: '11px', lineHeight: '1.3' },
   }),
-  textLengthLimit(
-    NODE_TEXT_MAX_CHARS,
-    (length) =>
-      `Not added: the node would be ${COUNT.format(length)} characters, past its ${COUNT.format(NODE_TEXT_MAX_CHARS)}-character limit.`,
-  ),
+  textLengthLimit(NODE_TEXT_MAX_CHARS, nodeTextEditRefusal),
 ]
 
 /**

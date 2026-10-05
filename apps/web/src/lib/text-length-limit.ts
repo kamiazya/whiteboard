@@ -1,8 +1,10 @@
-// A size limit where a person makes the edit. A keeper refuses a write past
-// its bound, and a daemon-kept document's sync worker retries a refused write
-// without end, so an edit that would cross a limit must never be made rather
-// than be refused after it is. One shape for every bounded text a CodeMirror
-// view edits: a markdown body, a canvas node's text.
+// A size limit where a person makes the edit. Either keeper refuses a write
+// past its bound, and the page then goes back to what the keeper holds —
+// undoing that edit and everything typed after it, since each later edit is
+// built on the refused one. So an edit that would cross a limit is never
+// made, rather than refused after it is and taking more with it. One shape
+// for every bounded text a CodeMirror view edits: a markdown body, a canvas
+// node's text.
 import {
   Annotation,
   EditorState,
