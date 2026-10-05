@@ -22,7 +22,7 @@ skill (`resources/*.md`, one per situation).
 | E2E | real routes, server composition, websocket timing, persistence order, multi-step page flows | promote only when needed |
 
 Notes:
-- Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser` + `canvas-render-browser` + `web-browser-window-state`); traces land under `<package>/tmp/vitest-traces` and are kept for FAILING tests only. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 23GB over a whole run). `pnpm run test:browser:trace <one failing file>` turns it on, and traces every test including passing ones, so it refuses a run that names no file.
+- Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser` + `canvas-render-browser` + `web-browser-window-state`); traces land under `<package>/tmp/vitest-traces` and are kept for FAILING tests only. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 23GB over a whole run). `pnpm run test:browser:trace <one failing file>` turns it on, and traces every test including passing ones, so it asks `vitest list --filesOnly` what the arguments select and refuses more than ten files.
 - **A PACKAGE is not one project, and nothing warns you.** `plugin-visual` and `canvas-viewer`
   split `*.test.ts` (node) from `*.test.tsx` (jsdom) into two projects, so
   `--project plugin-visual-node` runs, reports a plausible count, and never loads a `.tsx` file.

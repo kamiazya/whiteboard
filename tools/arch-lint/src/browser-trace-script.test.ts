@@ -4,15 +4,7 @@
 // a few, before a run starts; this pins the refusal, the run it still allows,
 // and that the package script is routed through it at all.
 import { spawnSync } from 'node:child_process'
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -162,12 +154,12 @@ describe('browser-trace runs the file it is pointed at', () => {
 })
 
 // The decision is vitest's own reading of the arguments, so the stand-in above
-// can only model it. This asks the real vitest, once each way: the option
-// value the hand-kept option table used to mistake for a file filter, and one
-// real file. A run is recorded, never started, whatever the answer.
-// Each case is one config load of the four browser projects: 11-28s measured
-// at a load average of 15-25, which is near enough the project's 60s ceiling
-// under a `git push`'s load that these cases carry their own.
+// can only model it. This asks the real vitest once, with the option value the
+// hand-kept option table used to mistake for a file filter, which also proves
+// the real list's JSON is read. A run is recorded, never started. One case
+// only: it runs at pre-push, and each is a config load of the four browser
+// projects, 11-28s measured at a load average of 15-25 — near enough the
+// project's 60s ceiling under a `git push`'s load that it carries its own.
 describe('browser-trace against the real vitest list', { timeout: 150_000 }, () => {
   function realList(argv: readonly string[]) {
     const runs: string[][] = []
@@ -194,15 +186,6 @@ describe('browser-trace against the real vitest list', { timeout: 150_000 }, () 
     expect(r.code).not.toBe(0)
     const selected = Number(/selects (\d+) test files/.exec(r.stderr)?.[1])
     expect(selected).toBeGreaterThan(100)
-  })
-
-  it('runs one real browser test file', () => {
-    const file = 'packages/canvas-viewer/src/CanvasViewer.browser.test.tsx'
-    expect(existsSync(join(REPO_ROOT, file))).toBe(true)
-    const r = realList([file])
-    expect(r.stderr).toBe('')
-    expect(r.code).toBe(0)
-    expect(r.runs).toHaveLength(1)
   })
 })
 

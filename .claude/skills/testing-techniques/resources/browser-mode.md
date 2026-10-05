@@ -156,7 +156,7 @@ and its arithmetic was re-measured against a real 5.0.0 attachment name (repo-ro
   through Playwright's `snapshots` means recording every resource vite served: 302MB against
   7.5MB on 16 page files, 22–23GB over a run, and the disk runs out MID-RUN with `774 passed`
   reported against a true 929. `pnpm test:browser:trace <file>` turns snapshots on for ONE failing
-  file; it traces every test, so it refuses a run that names no file. The switch is the
+  file; it traces every test, so it asks `vitest list --filesOnly` what the arguments select and refuses more than ten files. The switch is the
   `WHITEBOARD_TRACE_SNAPSHOTS` env var because `--browser.trace=on` merges into the config
   object and cannot re-enable what the config turned off (measured).
 
