@@ -1154,10 +1154,9 @@ plugin adding a silhouette adds it to its own rather than widening
   survivor list — a list goes stale and sends the next reader chasing the same
   fourteen every time the weekly report runs.
   **The list is a BUDGET, and `src/mutation-lane-coverage.test.ts` is what
-  keeps it honest.** Mutating every production source file is 9089 mutants
-  against the list's 2225 — near two hours at this package's measured ~3s per
-  mutant, and most of a working day for the whole package —
-  so the lane covers 9 of 47 modules. A list's failure mode is silence: a
+  keeps it honest.** A module's cost per run is `stryker-targets.mjs`'s
+  `MINUTES`; the list is a small share of the production files, and the test
+  pins both counts — read them there, not restated here. A list's failure mode is silence: a
   module added next month is not covered, the report still looks healthy, and
   nothing says the lane has been looking at less and less of the code. So both
   numbers are pinned EXACTLY, the same instrument shape as the scoreboards
