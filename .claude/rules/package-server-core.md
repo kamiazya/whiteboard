@@ -213,6 +213,11 @@ survived because only the `undefined` half was exercised).
 What no write check can reach is a CRDT update: `applyWorkspaceDocumentUpdate`
 imports state, not an intent, so the editor's own tag row is where that one
 is held (`.claude/rules/app-web.md`).
+Two things ARE checked on a CRDT update, by reading its operations before
+applying them (`importWithinSyncLimits`): a text insert run or a markdown body
+past `MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), and a document
+moved onto a path `documentPathSchema` refuses (`OffGrammarPathError`, 400).
+Both are measured in `mcp-server/scripts/measure/sync-update-body-cost.mjs`.
 
 ## Common mistakes (append as review finds them)
 
