@@ -1,3 +1,4 @@
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
@@ -22,6 +23,17 @@ vi.mock('../../lib/layout-worker-pool.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/layout-worker-pool.js')>()),
   sharedLayoutWorkerPool: () => pool,
 }))
+
+const GREEN: TagLibrary = { health: { values: { ok: { color: '4' } } } }
+const RED: TagLibrary = { health: { values: { ok: { color: '1' } } } }
+
+/** A source whose workspace declares `library` — `fakeFilesSource` leaves the optional read out. */
+function declaring(library: TagLibrary | (() => Promise<TagLibrary>)) {
+  return {
+    ...fakeFilesSource(),
+    readTagLibrary: vi.fn(typeof library === 'function' ? library : async () => library),
+  }
+}
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'
 const BOUNDS = { x: 0, y: 0, w: 640, h: 200 }
@@ -135,14 +147,14 @@ describe('createRowRenderLoader', () => {
     expect(d.source.loadSpatialSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'deep/one' }),
     )
-    expect(d.renderSpatial).toHaveBeenCalledWith(expect.any(Uint8Array), 'light', undefined)
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.any(Uint8Array), 'light', {}, undefined)
     expect(d.source.loadMarkdown).not.toHaveBeenCalled()
   })
 
   it('carries the theme, so a dark row is not drawn in light ink', async () => {
     const d = deps({ theme: 'dark' })
     await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
-    expect(d.renderSpatial).toHaveBeenCalledWith(expect.anything(), 'dark', undefined)
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.anything(), 'dark', {}, undefined)
   })
 
   // An empty body lays out to nothing; asking the pool for it spends a slot
@@ -196,8 +208,71 @@ describe('createRowRenderLoader', () => {
       source: fakeFilesSource({ loadSpatialSnapshot: async () => snapshot }),
     })
     await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
-    expect(d.renderSpatial).toHaveBeenCalledWith(snapshot, 'light', undefined)
+    expect(d.renderSpatial).toHaveBeenCalledWith(snapshot, 'light', {}, undefined)
   })
+  // A board's uncoloured boxes take the colour its workspace's tag library
+  // declares for their tags. The editor has always drawn by it; a row that
+  // does not is the same board in grey beside its own colourful preview.
+  it('hands the workspace tag library to a spatial render', async () => {
+    const d = deps({ source: declaring(GREEN) })
+    await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.anything(), 'light', GREEN, undefined)
+  })
+
+  // The library is a workspace's, not a document's: a folder of fifty
+  // boards is one read, not fifty.
+  it('reads the library once for every row the loader draws', async () => {
+    const source = declaring(GREEN)
+    const load = createRowRenderLoader(deps({ source }))
+    await Promise.all([
+      load({ documentId: 'd1', path: 'a', kind: 'spatial' }),
+      load({ documentId: 'd2', path: 'b', kind: 'spatial' }),
+    ])
+    await load({ documentId: 'd3', path: 'c', kind: 'spatial' })
+    expect(source.readTagLibrary).toHaveBeenCalledTimes(1)
+  })
+
+  // Total like every other read here: a library that cannot be read leaves
+  // the boxes in their own colours, never the row without a picture.
+  it('draws without a library when the library cannot be read', async () => {
+    const d = deps({
+      source: declaring(async () => {
+        throw new Error('503')
+      }),
+    })
+    expect(
+      await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' }),
+    ).toEqual({ svg: SVG, bounds: BOUNDS })
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.anything(), 'light', {}, undefined)
+  })
+
+  // The picture is keyed by the library it was drawn with, so the memo — and
+  // the worker's disk store behind it — cannot answer a recoloured library
+  // with the old colour. Markdown draws no box, so its picture survives.
+  it('draws a spatial row again after the library changes, and leaves a markdown row alone', async () => {
+    const broker = createInTabRenderBroker()
+    const stamped = { contentDigest: 'c0ffee0000000010' }
+    const note = { documentId: 'n10', path: 'n', kind: 'markdown' as const, ...stamped }
+    const board = { documentId: 'b10', path: 'b', kind: 'spatial' as const, ...stamped }
+
+    const before = deps({
+      broker,
+      source: { ...declaring(GREEN), loadMarkdown: vi.fn(async () => ({ body: '# Hi' })) },
+    })
+    await createRowRenderLoader(before)(note)
+    await createRowRenderLoader(before)(board)
+
+    const after = deps({
+      broker,
+      source: { ...declaring(RED), loadMarkdown: vi.fn(async () => ({ body: '# Hi' })) },
+    })
+    await createRowRenderLoader(after)(note)
+    await createRowRenderLoader(after)(board)
+
+    expect(after.renderSpatial).toHaveBeenCalledTimes(1)
+    expect(after.renderMarkdown).not.toHaveBeenCalled()
+  })
+
   // The persistent tier's gate, at the only place that decides it. A row whose
   // keeper reports its content can be remembered on disk; one without must not,
   // because a re-read produces the identical key and the entry would answer
@@ -278,6 +353,23 @@ describe('the theme face a row needs', () => {
 
     expect(fonts.loadThemeFontFromSource).toHaveBeenCalledTimes(1)
     expect(fonts.loadThemeFontFromSource).toHaveBeenCalledWith('Yomogi')
+  })
+
+  // The worker already draws by a library it is handed; this is the seam
+  // that hands it one.
+  it('posts the workspace tag library on the layout request', async () => {
+    pool.run.mockResolvedValue({ type: 'laid-out', id: 1, svg: SVG, bounds: BOUNDS })
+
+    await createRowRenderLoader({
+      source: declaring(GREEN),
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+    })(board)
+
+    expect(pool.run).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'layout', tagLibrary: GREEN }),
+      'background',
+    )
   })
 
   // The fetch is on USE: a folder of boards that name no theme costs no

@@ -101,13 +101,15 @@ What the library changes:
   uses, on notes, boards, boxes and edges alike.
 - **Colour by intent.** A box or an edge that carries a value with a
   declared colour, and has no colour of its own, is drawn in that colour —
-  on the board, in the minimap, in a past version's preview, in an SVG or
+  on the board, in the minimap, in a past version's preview, in the
+  document browser's cards, its preview pane and Peek, in an SVG or
   PNG export, by `wb_scene_render`, and in the inline view `canvas_view`
   shows in chat — so the legend lists the key because the library said so
   rather than because someone coloured every box by hand. A colour set on the
   box itself always wins, and a box carrying two declared colours under two keys gets
-  neither. The board reads the library when it opens; after editing the
-  `tags` document, reopen the board to see the change.
+  neither. The board reads the library when it opens, and the document
+  browser when it is shown; after editing the `tags` document, reopen the
+  board, or return to the browser, to see the change.
 - **The declaration is discoverable.** `wb_facet_list` with a
   `workspaceId` answers the library under `tagLibrary` beside the tags in
   use, so an agent can read the vocabulary it will be held to.
