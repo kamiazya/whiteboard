@@ -17,7 +17,7 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { browserDocumentCounts } from './browser-document-counts.js'
-import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
+import { CONTENT_TIMESTAMPS_STORE, DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
@@ -235,8 +235,15 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     const documentId = await seedLegacyDocument('from-before', 'legacy content')
     const index = new FoldingBrowserIndex()
     await index.deleteDocument({ workspaceId, path: 'from-before' })
+    const listingClock = () =>
+      inTransaction(undefined, [CONTENT_TIMESTAMPS_STORE], 'readonly', (tx) =>
+        request(tx.objectStore(CONTENT_TIMESTAMPS_STORE).get(documentId)),
+      )
+    // The trashed document keeps its clock for a restore to list it by.
+    expect(await listingClock()).toBeTypeOf('string')
 
     expect(await index.purgeTrashEntry({ workspaceId, documentId })).toBe(true)
+    expect(await listingClock()).toBeUndefined()
 
     const fresh = new FoldingBrowserIndex()
     expect(await listedIds(fresh)).toEqual([])

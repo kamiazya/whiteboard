@@ -53,7 +53,7 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldOrServeTheTree, retireLegacyDocument } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { touchContentTimestamp } from './loro-store.js'
+import { forgetContentTimestamp, touchContentTimestamp } from './loro-store.js'
 import { indexWritesSettled } from './pending-index-writes.js'
 import {
   announceDocumentCreated,
@@ -314,6 +314,7 @@ export class FoldingBrowserIndex
     const purged = await this.inner.purgeTrashEntry(input)
     if (purged) {
       await deleteVersionRowsOfDocument(input.workspaceId, input.documentId, this.dbName)
+      await forgetContentTimestamp(input.documentId, this.dbName)
     }
     return purged
   }
