@@ -198,6 +198,23 @@ function finerSegments(segment: string): readonly string[] {
   return finer.length > 1 ? finer : [...segment]
 }
 
+const SPLICE_CHUNK = 8192
+
+/**
+ * Replace `segments[index]` with a finer breakdown of it — phrase -> UAX #14 segments -> code
+ * points — answering false when there is no finer level, which makes the segment irreducible.
+ * The pieces go in `SPLICE_CHUNK` at a time: each is a call argument, and an unbroken run as
+ * long as the body has more of them than the stack holds.
+ */
+function splitFiner(segments: string[], index: number, segment: string): boolean {
+  const finer = finerSegments(segment)
+  if (finer.length <= 1) return false
+  for (let at = 0; at < finer.length; at += SPLICE_CHUNK) {
+    segments.splice(index + at, at === 0 ? 1 : 0, ...finer.slice(at, at + SPLICE_CHUNK))
+  }
+  return true
+}
+
 /**
  * A block's declared width. Normally the wrap width, but widened to cover an
  * atomic run that could not be split — the bbox has to describe what is
@@ -205,18 +222,6 @@ function finerSegments(segment: string): readonly string[] {
  * and nothing else. A non-finite wrap width (wrapping disabled) is passed
  * through unchanged rather than turned into a number.
  */
-/**
- * Replace `segments[index]` with a finer breakdown of it — phrase -> UAX #14
- * segments -> code points — answering false when there is no finer level,
- * which makes the segment irreducible.
- */
-function splitFiner(segments: string[], index: number, segment: string): boolean {
-  const finer = finerSegments(segment)
-  if (finer.length <= 1) return false
-  segments.splice(index, 1, ...finer)
-  return true
-}
-
 function blockWidth(maxWidth: number, inkWidth: number): number {
   return Number.isFinite(maxWidth) ? Math.max(maxWidth, inkWidth) : maxWidth
 }

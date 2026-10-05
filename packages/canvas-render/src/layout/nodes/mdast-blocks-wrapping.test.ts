@@ -1,3 +1,4 @@
+import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { ParagraphBlockNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
@@ -164,4 +165,42 @@ describe('line breaking without spaces', () => {
     const inkRight = Math.max(...block.runs.map((run) => run.bbox.x + run.bbox.w))
     expect(block.bbox.x + block.bbox.w).toBeGreaterThanOrEqual(inkRight)
   })
+})
+
+describe('a paragraph as long as one write admits', () => {
+  // A run with no break opportunity in it reaches the code-point floor as ONE
+  // segment, so the longest such run a body can hold is the longest the
+  // typesetter has to survive — and a document that fails here fails whole:
+  // the scene render refuses it and the preview draws nothing. A word after
+  // the run is what shows its pieces kept their place among the segments
+  // around them.
+  const TAIL = ' tail'
+  const room = MARKDOWN_MAX_CHARS - TAIL.length
+  const cases = [
+    ['an unbroken token', 'x'.repeat(room)],
+    ['Thai prose, which UAX #14 never breaks', 'สวัสดีครับ'.repeat(Math.floor(room / 10))],
+  ] as const
+
+  for (const [name, run] of cases) {
+    it(`lays out ${name} of the full length`, () => {
+      const root: MdastRoot = {
+        type: 'root',
+        children: [
+          { type: 'paragraph', children: [{ type: 'text', value: run + TAIL }] },
+          { type: 'paragraph', children: [{ type: 'text', value: 'Outro.' }] },
+        ],
+      }
+      // A space between runs is a cursor advance rather than text, while one
+      // inside a run is kept, so the comparison is of everything else.
+      const paragraphs = layout(root).nodes.flatMap((node) =>
+        node.kind === 'paragraph'
+          ? [node.runs.map((r) => r.text.replaceAll(' ', '')).join('')]
+          : [],
+      )
+      expect(paragraphs).toHaveLength(2)
+      expect(paragraphs[0]).toHaveLength(run.length + TAIL.trimStart().length)
+      expect(paragraphs[0] === run + TAIL.trimStart()).toBe(true)
+      expect(paragraphs[1]).toBe('Outro.')
+    })
+  }
 })

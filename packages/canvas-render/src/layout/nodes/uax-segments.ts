@@ -20,8 +20,21 @@ import { LineBreaker } from 'css-line-break'
 export function uaxSegments(text: string): readonly string[] {
   const breaker = LineBreaker(text, { lineBreak: 'strict', wordBreak: 'normal' })
   const segments: string[] = []
+  // A break reports code-point indices; its own `slice()` rebuilds the text
+  // through one `String.fromCodePoint.apply` over the whole segment, which
+  // overflows the stack past ~64K code points — a length one paragraph with
+  // no break opportunity (an unbroken token, Thai prose) reaches well inside
+  // the write limit. Slicing `text` at the matching UTF-16 offsets yields the
+  // same string at any length: the library splits code points exactly as
+  // `codePointAt` does, a lone surrogate standing as one unit.
+  let codePoint = 0
+  let offset = 0
   for (let entry = breaker.next(); entry.done !== true; entry = breaker.next()) {
-    segments.push(entry.value.slice())
+    const start = offset
+    for (; codePoint < entry.value.end; codePoint += 1) {
+      offset += (text.codePointAt(offset) ?? 0) > 0xffff ? 2 : 1
+    }
+    segments.push(text.slice(start, offset))
   }
   return segments
 }
