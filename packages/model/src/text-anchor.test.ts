@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { TEXT_ANCHOR_CONTEXT_MAX_CHARS, type TextAnchor } from './annotation.js'
-import { resolveTextAnchor } from './text-anchor.js'
+import { placeTextAnchor, resolveTextAnchor } from './text-anchor.js'
 
 function anchorAt(
   body: string,
@@ -135,5 +135,27 @@ describe('the cost of a long quote', () => {
     expect(occurrences).toBeGreaterThan(1000)
     expect(exact.reads()).toBeGreaterThan(0)
     expect(exact.reads()).toBeLessThanOrEqual(4 * (body.length + 2048))
+  })
+})
+
+describe('placeTextAnchor', () => {
+  const anchor = (start: number, end: number): TextAnchor => ({
+    kind: 'text',
+    quote: { exact: 'echo' },
+    start,
+    end,
+  })
+
+  test('re-states miscounted offsets at where the quote is', () => {
+    expect(placeTextAnchor('say echo once', anchor(0, 4))).toEqual(anchor(4, 8))
+  })
+
+  test('keeps offsets that already select one of several occurrences', () => {
+    const second = anchor(10, 14)
+    expect(placeTextAnchor('echo one, echo two', second)).toBe(second)
+  })
+
+  test('answers nothing for a passage the text does not hold', () => {
+    expect(placeTextAnchor('no such words', anchor(0, 4))).toBeUndefined()
   })
 })

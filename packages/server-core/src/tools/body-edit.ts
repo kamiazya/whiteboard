@@ -21,6 +21,7 @@ import {
   type PassageOverlap,
   type PlacedPassage,
   type Proposal,
+  placeTextAnchor,
   proposalSchema,
   resolveTextAnchor,
   textAnchorInputSchema,
@@ -136,11 +137,16 @@ function placeAll(
         `a markdown document has no node "${op.anchor.nodeId}"; omit nodeId to quote its body`,
       )
     }
-    const resolved = resolveTextAnchor(body, op.anchor)
-    if (resolved.kind !== 'placed') {
+    // Stored at where its quote resolved, so every later reader of the
+    // proposal takes the offsets' shortcut rather than searching the body.
+    const anchor = placeTextAnchor(body, op.anchor)
+    if (anchor === undefined) {
       throw new PassageNotApplicableError(op.id, 'its passage is no longer in the body')
     }
-    placed.push({ change: { ...op, status: 'open' }, at: resolved })
+    placed.push({
+      change: { ...op, anchor, status: 'open' },
+      at: { start: anchor.start, end: anchor.end },
+    })
   }
   return placed
 }
