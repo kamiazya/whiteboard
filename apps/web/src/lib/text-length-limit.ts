@@ -14,6 +14,7 @@ import {
   Transaction,
 } from '@codemirror/state'
 import { EditorView, type Panel, showPanel } from '@codemirror/view'
+import { growsPast } from '@kamiazya/whiteboard-model'
 
 /**
  * Marks a dispatch that carries a value from outside the editor — the
@@ -67,7 +68,7 @@ export function textLengthLimit(limit: number, describe: (length: number) => str
     EditorState.transactionFilter.of((tr) => {
       if (!tr.docChanged || arrivedFromOutside(tr)) return tr
       const length = tr.newDoc.length
-      if (length <= limit || length <= tr.startState.doc.length) return tr
+      if (!growsPast(limit, tr.startState.doc.length, length)) return tr
       return { effects: refused.of(length) }
     }),
   ]

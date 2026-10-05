@@ -6,6 +6,7 @@
 // browser-kept workspace to the daemon would otherwise trip over.
 import {
   COMMENT_MESSAGE_MAX_CHARS,
+  growsPast,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
@@ -296,7 +297,7 @@ function valueBreach(
   for (const [id, value] of long) {
     if (!value.bound.holds(doc, value.container)) continue
     const length = lengthIn(doc, value)
-    if (length > value.bound.max && length > (before.get(id) ?? 0)) {
+    if (growsPast(value.bound.max, before.get(id) ?? 0, length)) {
       return value.bound.breach(length, value.key, value.container)
     }
   }

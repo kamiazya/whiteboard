@@ -1,7 +1,12 @@
 import type { DocumentContainers } from '@kamiazya/whiteboard-loro-adapter'
 import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { PlacedPassage, ProposedChange } from '@kamiazya/whiteboard-model'
-import { applyPassages, MARKDOWN_MAX_CHARS, resolveTextAnchor } from '@kamiazya/whiteboard-model'
+import {
+  applyPassages,
+  growsPast,
+  MARKDOWN_MAX_CHARS,
+  resolveTextAnchor,
+} from '@kamiazya/whiteboard-model'
 
 /**
  * Rewrites the body for every `body.replace` change in an adopted decision.
@@ -80,5 +85,5 @@ export interface AdoptionRefusal {
  * body written before the limit existed stays editable toward it.
  */
 export function adoptionRefusal(before: number, after: number): AdoptionRefusal | undefined {
-  return after > MARKDOWN_MAX_CHARS && after > before ? { length: after } : undefined
+  return growsPast(MARKDOWN_MAX_CHARS, before, after) ? { length: after } : undefined
 }

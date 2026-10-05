@@ -12,6 +12,7 @@ import {
   bodyReplaceChangeSchema,
   documentIdSchema,
   findPassageOverlap,
+  growsPast,
   MARKDOWN_MAX_CHARS,
   mintProposalId,
   type PassageOverlap,
@@ -206,7 +207,7 @@ function applyPlaced(body: string, placed: readonly PlacedPassage[]): string {
  * the change named is the largest grower among `placed` alone.
  */
 function assertWithinLimit(body: string, placed: readonly PlacedPassage[], result: string): void {
-  if (result.length <= MARKDOWN_MAX_CHARS || result.length <= body.length) return
+  if (!growsPast(MARKDOWN_MAX_CHARS, body.length, result.length)) return
   const growth = (entry: PlacedPassage): number =>
     entry.change.text.length - (entry.at.end - entry.at.start)
   const largest = placed.reduce((a, b) => (growth(b) > growth(a) ? b : a))
