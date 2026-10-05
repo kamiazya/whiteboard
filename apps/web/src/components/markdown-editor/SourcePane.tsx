@@ -18,6 +18,7 @@ import {
   followCaret,
   markdownEditingBase,
 } from './markdown-editing-base.js'
+import { externalValue } from './markdown-length-limit.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
@@ -422,7 +423,7 @@ export function SourcePane({
     // Confining the range keeps every position outside it untouched, and is
     // what makes a remote CRDT update land without yanking the local caret
     // out of the word being typed.
-    view.dispatch({ changes: minimalChange(current, value) })
+    view.dispatch({ changes: minimalChange(current, value), annotations: externalValue.of(true) })
   }, [value, reconcileExternalValue])
 
   return (

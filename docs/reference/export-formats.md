@@ -34,6 +34,24 @@ character count: the limit is where one write still finishes in about a second.
 longer than that is refused, though an edit that shrinks an already-longer
 body is accepted. Split longer content across documents.
 
+The editor's own writes are bounded too, by the same number and the same
+rule — growing a body past it is refused, shrinking one already past it is
+not:
+
+- **The markdown editor** refuses a paste or keystroke that would take the
+  document past 262,144 characters, leaves the document as it was, and says
+  so in a notice at the top of the editor.
+- **A browser-kept workspace** does not save a body past the limit; the editor
+  shows the save as failed.
+- **The daemon's sync routes** — a document's `update`, the workspace
+  document's `update` and `promote` — answer `413` with
+  `{"error":"markdown_too_large"}` and store nothing. They also refuse, in
+  milliseconds, an update that inserts more than 262,144 characters in one
+  piece, before applying it. The same `update` and `promote` refuse, with
+  `400 {"error":"invalid_path"}`, an update or record that would put a document
+  at a path outside the path grammar; a document already at such a path can
+  still be moved to a valid one.
+
 ## How large a text node and a document name may be
 
 A text node's text — the `text` of a `wb_canvas_edit` `node.add` or
