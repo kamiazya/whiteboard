@@ -4,6 +4,7 @@
  * row was stored before it refused it. Split from the main suite by size only;
  * it runs as part of that suite and is not called on its own.
  */
+import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type { DocumentIndex, WorkspaceEntry } from '../index.js'
 import { documentEntrySchema, workspaceEntrySchema } from '../index.js'
@@ -18,6 +19,7 @@ type WithIndex = (
 /** The suite's input cases, over the main suite's fixture and its workspace `ws`. */
 export function describeRefusedInput(withIndex: WithIndex, ws: string): void {
   describeOffGrammarPaths(withIndex, ws)
+  describeBoundedDocumentName(withIndex, ws)
   describeRefusedWorkspaceIdentity(withIndex)
   describePreBoundWorkspaceRow(withIndex)
 }
@@ -56,6 +58,77 @@ function describeOffGrammarPaths(withIndex: WithIndex, WS: string): void {
         expect(listed.map((entry) => entry.path)).toEqual(['plan'])
         for (const entry of listed) expect(documentEntrySchema.safeParse(entry).success).toBe(true)
       })
+    })
+  })
+}
+
+/**
+ * A document's display name past `DOCUMENT_NAME_MAX_LENGTH`. Refused by the
+ * keeper itself rather than only at the request edges, because the keeper is
+ * the one place every writer — a dialog, a tool, a frontmatter `title` —
+ * passes through, so an edge that forgets the bound cannot store a name
+ * every listing would then carry.
+ */
+const OVER_BOUND_NAME = 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1)
+const AT_BOUND_NAME = 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH)
+
+function describeBoundedDocumentName(withIndex: WithIndex, WS: string): void {
+  describe('a document name past the bound', () => {
+    describeRefusedDocumentName(withIndex, WS)
+    describeDocumentNameAtBound(withIndex, WS)
+  })
+}
+
+function describeRefusedDocumentName(withIndex: WithIndex, WS: string): void {
+  it('is refused on create, and nothing is created', async () => {
+    await withIndex(async (index) => {
+      await expect(
+        index.createDocument({
+          workspaceId: WS,
+          path: 'long',
+          kind: 'spatial',
+          name: OVER_BOUND_NAME,
+        }),
+      ).rejects.toMatchObject({ name: 'ZodError' })
+      expect(await index.listDocuments({ workspaceId: WS })).toEqual([])
+    })
+  })
+
+  it('is refused on rename, and the name stays as it was', async () => {
+    await withIndex(async (index) => {
+      const { documentId } = await index.createDocument({
+        workspaceId: WS,
+        path: 'kept',
+        kind: 'spatial',
+        name: 'Kept',
+      })
+      await expect(
+        index.setDocumentName({ workspaceId: WS, documentId, name: OVER_BOUND_NAME }),
+      ).rejects.toMatchObject({ name: 'ZodError' })
+      expect((await index.resolveDocumentById({ workspaceId: WS, documentId }))?.name).toBe('Kept')
+    })
+  })
+}
+
+function describeDocumentNameAtBound(withIndex: WithIndex, WS: string): void {
+  it('is taken at exactly the bound, on create and on rename', async () => {
+    await withIndex(async (index) => {
+      const created = await index.createDocument({
+        workspaceId: WS,
+        path: 'at-bound',
+        kind: 'spatial',
+        name: AT_BOUND_NAME,
+      })
+      expect(created.name).toBe(AT_BOUND_NAME)
+      const { documentId } = await index.createDocument({
+        workspaceId: WS,
+        path: 'renamed',
+        kind: 'markdown',
+      })
+      await index.setDocumentName({ workspaceId: WS, documentId, name: AT_BOUND_NAME })
+      expect((await index.resolveDocumentById({ workspaceId: WS, documentId }))?.name).toBe(
+        AT_BOUND_NAME,
+      )
     })
   })
 }

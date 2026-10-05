@@ -15,7 +15,7 @@
  * IS in the tree over a fold hiccup would be worse than a briefly
  * incomplete list.
  */
-import { documentKindSchema, documentNameSchema } from '@kamiazya/whiteboard-model'
+import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import {
   type CreateDocumentInput,
   type CreateWorkspaceInput,
@@ -228,14 +228,6 @@ export class FoldingBrowserIndex implements DocumentIndex, DocumentPins, Documen
   }
 
   async setDocumentName(input: SetDocumentNameInput): Promise<void> {
-    // The one writer of a document's name in this keeper — the rename dialog
-    // and the page title both arrive here — so the bound the daemon's route
-    // and the tools hold is held here too. Thrown as the issue's own sentence,
-    // because the rename dialog shows a refusal's message as it stands.
-    const bounded = documentNameSchema.safeParse(input.name ?? '')
-    if (!bounded.success) {
-      throw new Error(bounded.error.issues.map((issue) => issue.message).join('; '))
-    }
     await this.ensureFolded()
     return this.inner.setDocumentName(input)
   }

@@ -69,6 +69,7 @@ import {
   moveDocumentInputSchema,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
+  setDocumentNameInputSchema,
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
@@ -352,7 +353,8 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
     })
   }
 
-  async setDocumentName(input: SetDocumentNameInput): Promise<void> {
+  async setDocumentName(raw: SetDocumentNameInput): Promise<void> {
+    const input = setDocumentNameInputSchema.parse(raw)
     return this.#serialise(input.workspaceId, async () => {
       const doc = await this.#open(input.workspaceId)
       if (resolveWorkspaceDocumentById(doc, input.documentId) === null) {

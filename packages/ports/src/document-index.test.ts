@@ -1,6 +1,8 @@
+import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   compareDocumentPaths,
+  createDocumentInputSchema,
   createWorkspaceInputSchema,
   documentEntrySchema,
   workspaceEntrySchema,
@@ -78,6 +80,25 @@ describe('documentEntrySchema', () => {
       kind: 'spatial',
     })
     expect(parsed.success).toBe(false)
+  })
+})
+
+describe('a document name past the bound', () => {
+  const entry = {
+    documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    path: 'plan',
+    kind: 'markdown' as const,
+    name: 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1),
+  }
+
+  // The bound is a WRITE's: a name stored before it existed must still list,
+  // or one such row would make the whole workspace's listing unreadable.
+  it('is refused on the write, and still read from a stored row', () => {
+    const { documentId: _minted, ...create } = entry
+    expect(createDocumentInputSchema.safeParse({ workspaceId: 'ws', ...create }).success).toBe(
+      false,
+    )
+    expect(documentEntrySchema.safeParse(entry).success).toBe(true)
   })
 })
 

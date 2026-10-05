@@ -2,6 +2,7 @@ import {
   compareCodeUnit,
   documentIdSchema,
   documentKindSchema,
+  documentNameSchema,
   documentPathSchema,
   workspaceDisplayNameSchema,
   workspaceIdSchema,
@@ -65,12 +66,18 @@ export const documentEntrySchema = z
   .strict()
 export type DocumentEntry = z.infer<typeof documentEntrySchema>
 
+/**
+ * `name` is bounded HERE, on the write every keeper parses, rather than only
+ * at the request edges: the keeper is the one place a dialog, a tool and a
+ * frontmatter `title` all pass through. `documentEntrySchema` stays
+ * unbounded, so a name stored before the bound still lists.
+ */
 export const createDocumentInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     path: documentPathSchema,
     kind: documentKindSchema,
-    name: z.string().min(1).optional(),
+    name: documentNameSchema.min(1).optional(),
   })
   .strict()
 export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
@@ -227,11 +234,16 @@ export const moveDocumentInputSchema = z
   .strict()
 export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
 
-const setDocumentNameInputSchema = z
+/**
+ * Bounded for the reason `createDocumentInputSchema`'s `name` is. A blank
+ * name is not refused: every keeper reads it as "clear", the same state as
+ * an absent one, and the rename dialog and the tools rely on that.
+ */
+export const setDocumentNameInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    name: z.string().min(1).optional(),
+    name: documentNameSchema.optional(),
   })
   .strict()
 export type SetDocumentNameInput = z.infer<typeof setDocumentNameInputSchema>

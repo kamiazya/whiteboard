@@ -27,6 +27,7 @@ import {
   moveDocumentInputSchema,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
+  setDocumentNameInputSchema,
   storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
@@ -166,7 +167,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     return null
   }
 
-  async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
+  async setDocumentName(input: SetDocumentNameInput): Promise<void> {
+    const { workspaceId, documentId, name } = setDocumentNameInputSchema.parse(input)
     const documents = this.#inWorkspace(workspaceId)
     for (const [path, entry] of documents) {
       if (entry.documentId !== documentId) continue
