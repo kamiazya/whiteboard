@@ -33,7 +33,7 @@ afterEach(async () => {
   await clearWhiteboardDb()
 })
 
-function saveState(container: HTMLElement): string | null | undefined {
+function persistStateOf(container: HTMLElement): string | null | undefined {
   return container
     .querySelector('[data-testid="persistence-state"]')
     ?.getAttribute('data-save-state')
@@ -53,7 +53,7 @@ async function openSavedNote() {
   const page = renderInRouter(<BrowserDocumentPage store={store} />, { height: '50vh' })
   await focusEditable(() => editorIn(page.container))
   await userEvent.keyboard('# Before the delete')
-  await waitFor(() => expect(saveState(page.container)).toBe('saved'), WAIT)
+  await waitFor(() => expect(persistStateOf(page.container)).toBe('saved'), WAIT)
   return { page, documentId }
 }
 
@@ -97,5 +97,5 @@ it('a note restored from the trash elsewhere is editable again, and saves', asyn
     () => expect(editorIn(page.container)?.textContent).toBe('# Before the delete again'),
     WAIT,
   )
-  await waitFor(() => expect(saveState(page.container)).toBe('saved'), WAIT)
+  await waitFor(() => expect(persistStateOf(page.container)).toBe('saved'), WAIT)
 })
