@@ -22,13 +22,12 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 /**
  * The tree index, with this composition root's doc-cache kept coherent
  * around the moves and deletes the port performs. The cache is keyed by
- * (workspaceId, path); a move leaves every touched path holding a doc filed
- * under a name that no longer means what it did — the SOURCE half merely
- * stales, while the DESTINATION half corrupts: `getDoc` lazily creates an
- * empty doc for any path, so a read that arrived before the move left a
- * phantom cached there, and the next write through it would persist the
- * phantom over the moved document's real content. The shared index cannot
- * know this cache exists, so the composition root wraps it.
+ * (workspaceId, path), so a path a document LEAVES keeps a doc filed under a
+ * name that no longer means what it did, and is evicted here. A path a
+ * document ARRIVES at needs nothing: the cache never holds an entry for a
+ * path the tree places nothing at (`getOrLoad`), so there is no empty
+ * stand-in for a restore, a duplicate or a create to displace. The shared
+ * index cannot know this cache exists, so the composition root wraps it.
  *
  * The automatic-checkpoint scheduler's pending work is path-keyed state of the
  * same kind, so the same wrapper tells it.
@@ -93,20 +92,10 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     return withWorkspaceWriteLock(input.workspaceId, () => super.createDocument(input))
   }
 
-  /**
-   * The copy's path may already hold a phantom in the doc cache — an empty
-   * document a read at that path lazily cached — and the next save through it
-   * would write the phantom over the copy. Evicted once the copy exists,
-   * since only then is its path known.
-   */
   override async duplicateDocument(
     input: Parameters<LoroWorkspaceDocumentIndex['duplicateDocument']>[0],
   ): ReturnType<LoroWorkspaceDocumentIndex['duplicateDocument']> {
-    return withWorkspaceWriteLock(input.workspaceId, async () => {
-      const copy = await super.duplicateDocument(input)
-      evictDoc(input.workspaceId, copy.path, this.scope)
-      return copy
-    })
+    return withWorkspaceWriteLock(input.workspaceId, () => super.duplicateDocument(input))
   }
 
   override async setDocumentName(

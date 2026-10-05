@@ -13,9 +13,15 @@ import {
   purgeTrashEntryResponseSchema,
   restoreTrashResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+  hasDocumentTrash,
+  reassembleSnapshot,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../../../shared/test-utils/store-memory.module.js'
@@ -54,15 +60,69 @@ function canvasDoc(text: string): LoroDoc {
   return doc
 }
 
-async function appWithRealDeps() {
+async function realDeps() {
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
-  const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
+  return resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
+}
+
+async function appWithRealDeps(deps?: Awaited<ReturnType<typeof realDeps>>) {
+  const served = deps ?? (await realDeps())
   // The store-local composition is the trash-capable one — pinned here so a
   // regression in the DI's structural capability detection fails loudly,
   // rather than as a cascade of 501s in the tests below.
-  expect(hasDocumentTrash(deps.documentIndex)).toBe(true)
-  return createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
+  expect(hasDocumentTrash(served.documentIndex)).toBe(true)
+  return createDocumentRouter(testDocumentRouterOptions({ serverDeps: served }))
+}
+
+type App = Awaited<ReturnType<typeof appWithRealDeps>>
+
+/** The node texts of the canvas a page opening `path` would be served. */
+async function servedTexts(app: App, WS: string, path: string): Promise<string[]> {
+  const snap = await app.request(`/api/w/${WS}/document/${path}/snapshot`)
+  expect(snap.status).toBe(200)
+  const doc = new LoroDoc()
+  doc.import(new Uint8Array(await snap.arrayBuffer()))
+  return readSpatialCanvas(doc).nodes.map((node) => nodeText(node) ?? node.id)
+}
+
+/**
+ * What a tab left open on a document deleted elsewhere does next: act on the
+ * path it still shows. Each call is refused, and a refusal must leave nothing
+ * behind that a later restore of the same path would be served as.
+ */
+const STALE_TAB_CALLS = {
+  'saves a version': async (app: App, WS: string) =>
+    app.request(`/api/workspaces/${WS}/documents/doomed/versions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }),
+  'restores a version': async (app: App, WS: string, versionId: string) =>
+    app.request(`/api/workspaces/${WS}/documents/doomed/versions/${versionId}/restore`, {
+      method: 'POST',
+    }),
+}
+
+async function trashBehindAStaleTab(staleCall: keyof typeof STALE_TAB_CALLS) {
+  const WS = `ws-trash-stale-${staleCall.replaceAll(' ', '-')}`
+  await saveDocument(WS, 'doomed', canvasDoc('precious'), { kind: 'spatial' })
+  const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
+  const deps = await realDeps()
+  const app = await appWithRealDeps(deps)
+  const saved = await app.request(`/api/workspaces/${WS}/documents/doomed/versions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  const versionId = ((await saved.json()) as { version: { id: string } }).version.id
+  await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+  expect((await STALE_TAB_CALLS[staleCall](app, WS, versionId)).status).toBe(404)
+  const restored = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
+    method: 'POST',
+  })
+  expect(restored.status).toBe(200)
+  return { WS, app, deps, documentId: documentId as string }
 }
 
 describe('trash routes', () => {
@@ -99,6 +159,34 @@ describe('trash routes', () => {
       await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
     )
     expect(after.entries).toEqual([])
+  })
+
+  it.each(
+    Object.keys(STALE_TAB_CALLS) as (keyof typeof STALE_TAB_CALLS)[],
+  )('a restored document is served with its content after a stale tab %s on its path', async (staleCall) => {
+    const { WS, app } = await trashBehindAStaleTab(staleCall)
+
+    expect(await servedTexts(app, WS, 'doomed')).toEqual(['precious'])
+  })
+
+  it("an agent's load-modify-save after the restore keeps the restored content", async () => {
+    const { WS, app, deps, documentId } = await trashBehindAStaleTab('saves a version')
+    const docRef = { kind: 'document' as const, workspaceId: WS, documentId }
+    const loaded = await deps.documentStore.loadSnapshot({ docRef })
+    const agentDoc = new LoroDoc()
+    if (loaded !== null) agentDoc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    const canvas = readSpatialCanvas(agentDoc)
+    const note = textNode({ id: 'n2', x: 100, y: 0, width: 80, height: 40, text: 'agent note' })
+    writeSpatialCanvas(agentDoc, { ...canvas, nodes: [...canvas.nodes, note] })
+    const bytes = new Uint8Array(agentDoc.export({ mode: 'snapshot' }))
+    await deps.documentStore.saveSnapshot({
+      docRef,
+      ...chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES),
+      frontier: new Uint8Array(agentDoc.oplogVersion().encode()),
+    })
+    clearDocCacheForTests()
+
+    expect(await servedTexts(app, WS, 'doomed')).toEqual(['precious', 'agent note'])
   })
 
   it('purging a trashed document removes it from the trash for good, and it cannot be restored', async () => {

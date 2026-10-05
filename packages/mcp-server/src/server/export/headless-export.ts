@@ -46,10 +46,10 @@ async function readCanvas(
 /**
  * The workspace's tag library, for a board that can read one (ADR-0040
  * decision 5): what the document at `tags` declares, or nothing. Probes
- * existence FIRST — `getDoc` answers a missing path with an empty document
- * it then keeps, so asking without the probe would mint a `tags` document
- * on every export of every workspace. Asked only for a tagged board, so an
- * untagged one costs neither the probe nor the read.
+ * existence FIRST — `getDoc` answers a missing path with an empty document,
+ * which would read as a library declaring nothing rather than as no library.
+ * Asked only for a tagged board, so an untagged one costs neither the probe
+ * nor the read.
  */
 async function libraryFor(
   workspaceId: string,
