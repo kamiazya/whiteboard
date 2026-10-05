@@ -12,7 +12,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
@@ -60,13 +60,14 @@ async function connected(body: string) {
   } as never)
   await vi.waitFor(() => expect(snapshot).not.toBeNull())
   const session = LoroDoc.fromSnapshot(snapshot as unknown as Uint8Array)
-  const push = (text: string) => {
+  const pushEdit = (edit: (body: LoroText) => void) => {
     const from = session.oplogVersion()
-    documentContainers(session, TARGET.documentId).getText('body').insert(0, text)
+    edit(documentContainers(session, TARGET.documentId).getText('body'))
     session.commit()
     return backend.pushLocalUpdate(session.export({ mode: 'update', from }))
   }
-  return { saved, reasons, push, record }
+  const push = (text: string) => pushEdit((body) => body.insert(0, text))
+  return { saved, reasons, push, pushEdit, record }
 }
 
 describe('a browser-kept markdown body pushed past the limit', () => {
@@ -90,5 +91,55 @@ describe('a browser-kept markdown body pushed past the limit', () => {
 
     expect(saved).toEqual(['a short'])
     expect(reasons).toEqual([])
+  })
+})
+
+/**
+ * The same four edits `apply-document-update-limit.test.ts` sends through the
+ * daemon's sync operation, with the same verdicts: both keepers judge a write
+ * by what it does to the text, so a write one keeper takes the other takes.
+ */
+describe.each([
+  {
+    edit: 'a select-all replace that shrinks the body',
+    before: 200_000,
+    change: (body: LoroText) => {
+      body.delete(0, body.length)
+      body.insert(0, 'z'.repeat(100_000))
+    },
+    after: 100_000,
+  },
+  {
+    edit: 'a delete from a body already past the limit',
+    before: MARKDOWN_MAX_CHARS + 10,
+    change: (body: LoroText) => body.delete(0, 5),
+    after: MARKDOWN_MAX_CHARS + 5,
+  },
+  {
+    edit: 'a small insert growing the body past the limit',
+    before: MARKDOWN_MAX_CHARS - 3,
+    change: (body: LoroText) => body.insert(0, 'four'),
+    after: null,
+  },
+  {
+    edit: 'one run past the limit',
+    before: 5,
+    change: (body: LoroText) => body.insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
+    after: null,
+  },
+])('$edit, pushed to the browser keeper', ({ before, change, after }) => {
+  it(after === null ? 'is refused' : 'is persisted', async () => {
+    const { saved, reasons, pushEdit } = await connected('y'.repeat(before))
+
+    await pushEdit(change)
+
+    if (after === null) {
+      await expectLoggedFailure('refused a body past the markdown size limit')
+      expect(saved).toEqual([])
+      expect(reasons).toEqual(['storage-failure'])
+    } else {
+      expect(saved.map((body) => body.length)).toEqual([after])
+      expect(reasons).toEqual([])
+    }
   })
 })

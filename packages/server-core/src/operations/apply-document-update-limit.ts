@@ -1,20 +1,11 @@
 import {
+  importWithinTextLimits,
   isEngineTrap,
-  MARKDOWN_BODY_KEY,
   readWorkspaceDocuments,
-  WORKSPACE_TREE_KEY,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { documentPathSchema, MARKDOWN_MAX_CHARS, messageOf } from '@kamiazya/whiteboard-model'
-import type {
-  ContainerID,
-  Frontiers,
-  JsonSchema,
-  LoroDoc,
-  LoroText,
-  MapOp,
-  TextOp,
-} from 'loro-crdt'
-import { DocumentEngineTrapError, importEvictingOnEngineTrap } from '../document-io.js'
+import type { Frontiers, LoroDoc } from 'loro-crdt'
+import { DocumentEngineTrapError } from '../document-io.js'
 import { getLogger } from '../log.js'
 
 const log = getLogger('sync-write-limit')
@@ -69,89 +60,6 @@ interface CachedTarget {
   evict(): void
 }
 
-/** What an update's new operations do to each text container it touches. */
-interface TextGrowth {
-  /** The longest contiguous insert, in UTF-16 units — the length `MARKDOWN_MAX_CHARS` counts. */
-  longestRun: number
-  /** Characters inserted minus characters deleted, per container. */
-  net: Map<ContainerID, number>
-  /** Whether any operation can move a document's path: a tree op, or a node's segment set. */
-  touchesPaths: boolean
-}
-
-/** The tree op, or the segment write, that can change where a document's path points. */
-function movesPaths(op: JsonSchema['changes'][number]['ops'][number]): boolean {
-  if (op.container === `cid:root-${WORKSPACE_TREE_KEY}:Tree`) return true
-  if (!op.container.endsWith(':Map')) return false
-  const content = op.content as MapOp
-  return content.type === 'insert' && content.key === 'segment'
-}
-
-/** Unicode scalar values, the unit Loro's counters and text positions advance by. */
-function scalarLength(text: string): number {
-  let length = 0
-  for (const _ of text) length += 1
-  return length
-}
-
-type Run = { counter: number; pos: number; units: number }
-
-/**
- * Reads the inserts and deletes out of an update's JSON form.
- *
- * A run is what the engine charges for: adjacent inserts by one peer join
- * into one run however many changes carried them (measured: one 256 Ki
- * insert and the same characters appended over 16 changes cost the same,
- * while 16 inserts at scattered positions cost 1/30 of it), so the same rule
- * (next counter, next position, same container) joins them here.
- */
-function textGrowth(json: JsonSchema): TextGrowth {
-  const runs = new Map<string, Run>()
-  const net = new Map<ContainerID, number>()
-  const grow = (container: ContainerID, by: number) =>
-    net.set(container, (net.get(container) ?? 0) + by)
-  let longestRun = 0
-  let touchesPaths = false
-  for (const change of json.changes) {
-    const peer = change.id.slice(change.id.indexOf('@') + 1)
-    for (const op of change.ops) {
-      touchesPaths ||= movesPaths(op)
-      if (!op.container.endsWith(':Text')) continue
-      const content = op.content as TextOp
-      if (content.type === 'insert') {
-        const key = `${op.container} ${peer}`
-        const run = extendRun(runs.get(key), op.counter, content.pos, content.text)
-        runs.set(key, run)
-        longestRun = Math.max(longestRun, run.units)
-        grow(op.container, scalarLength(content.text))
-      } else if (content.type === 'delete') {
-        grow(op.container, -Math.abs(content.len))
-      }
-    }
-  }
-  return { longestRun, net, touchesPaths }
-}
-
-/** The run an insert at `counter`/`pos` belongs to: `previous` extended when it is adjacent, else its own. */
-function extendRun(previous: Run | undefined, counter: number, pos: number, text: string): Run {
-  const scalars = scalarLength(text)
-  const adjacent = previous?.counter === counter && previous.pos === pos
-  return {
-    counter: counter + scalars,
-    pos: pos + scalars,
-    units: adjacent ? previous.units + text.length : text.length,
-  }
-}
-
-/** A markdown body: the root `body` text of a document, or the one under a workspace-tree node. */
-function isMarkdownBody(doc: LoroDoc, container: ContainerID): boolean {
-  const path = doc.getPathToContainer(container)
-  if (path === undefined) return false
-  const last = path.at(-1)
-  if (last !== MARKDOWN_BODY_KEY) return false
-  return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
-}
-
 function refuse(
   target: CachedTarget,
   error: MarkdownBodyTooLargeError | OffGrammarPathError,
@@ -188,16 +96,16 @@ function newOffGrammarPaths(
   if (offGrammar.length === 0) return []
   doc.checkout(before)
   const earlier = pathsById(doc)
-  attachEvictingOnEngineTrap(doc, update, target)
+  evictingOnEngineTrap(target, update, () => doc.attach())
   return offGrammar
     .filter(([documentId, path]) => earlier.get(documentId) !== path)
     .map(([, path]) => path)
 }
 
-/** Brings a detached doc's state up to its oplog: the costly half of an import. */
-function attachEvictingOnEngineTrap(doc: LoroDoc, update: Uint8Array, target: CachedTarget): void {
+/** Runs `work` on a cached doc, dropping the instance when the engine traps inside it. */
+function evictingOnEngineTrap<T>(target: CachedTarget, update: Uint8Array, work: () => T): T {
   try {
-    doc.attach()
+    return work()
   } catch (err) {
     if (!isEngineTrap(err)) throw err
     target.evict()
@@ -215,29 +123,15 @@ function attachEvictingOnEngineTrap(doc: LoroDoc, update: Uint8Array, target: Ca
  * markdown size limit or, for a workspace record, the document-path grammar —
  * in which case nothing of it is kept.
  *
- * The limit is judged on what the bytes DO, before the costly half of the
- * import runs. Loro applies a contiguous insert to a non-empty document in
- * time quadratic in its length, and that cost is in bringing the document's
- * STATE up to the new operations, not in taking the operations in: with the
- * document detached, the import only appends to the oplog (2 ms for a
- * 512 Ki-character insert whose attached import costs 3.4 s), and the
- * operations can be read back as JSON at a cost linear in the update. So the
- * update is taken in detached, its inserts measured, and the state brought
- * up only once no single insert is past the limit — which caps the blocking
- * half at the cost the limit was sized to (about a second).
- *
- * A body the update grows past the limit is refused after the state is
- * brought up, since only the state knows the resulting length. Shrinking a
- * body already past it is allowed, as `wb_body_edit` allows it: refusing the
- * edit that makes a document smaller would leave it stuck.
- *
- * Paths are checked only for an update carrying a tree op or a segment write,
- * and then by one walk of the tree (`newOffGrammarPaths`); a body edit pays
- * nothing for them.
+ * What the update does to text is `importWithinTextLimits`'s judgement, the
+ * one the browser keeper takes too; this adds what only the daemon's sync
+ * surface owes, the path grammar. Paths are checked only for an update that
+ * writes a workspace node's meta or moves one, and then by one walk of the
+ * tree (`newOffGrammarPaths`); a body edit pays nothing for them.
  *
  * Every refusal drops the cached instance instead of saving, so the next
  * read rebuilds it from storage and nothing of the write survives.
- * Everything from the detach to the refusal is synchronous, so no other
+ * Everything from the import to the refusal is synchronous, so no other
  * request sees the half-taken state.
  */
 export function importWithinSyncLimits(
@@ -246,29 +140,12 @@ export function importWithinSyncLimits(
   target: CachedTarget,
   options: { readonly workspaceRecord: boolean },
 ): void {
-  const from = doc.oplogVersion()
-  const fromFrontiers = doc.oplogFrontiers()
-  doc.detach()
-  try {
-    importEvictingOnEngineTrap(doc, update, target)
-  } catch (err) {
-    // A refused import left the oplog as it was; a trapped instance was
-    // dropped and is never touched again.
-    if (!(err instanceof DocumentEngineTrapError)) doc.attach()
-    throw err
-  }
-  // Uncompressed peers, so a container id in the JSON is one the document resolves.
-  const growth = textGrowth(doc.exportJsonUpdates(from, doc.oplogVersion(), false))
-  if (growth.longestRun > MARKDOWN_MAX_CHARS) {
-    refuse(target, new MarkdownBodyTooLargeError('run', growth.longestRun))
-  }
-  attachEvictingOnEngineTrap(doc, update, target)
-  for (const [container, net] of growth.net) {
-    if (net <= 0 || !isMarkdownBody(doc, container)) continue
-    const length = (doc.getContainerById(container) as LoroText).length
-    if (length > MARKDOWN_MAX_CHARS) refuse(target, new MarkdownBodyTooLargeError('body', length))
-  }
-  if (!(options.workspaceRecord && growth.touchesPaths)) return
-  const offGrammar = newOffGrammarPaths(doc, fromFrontiers, update, target)
+  const before = doc.oplogFrontiers()
+  const { breach, touchesNodeMeta } = evictingOnEngineTrap(target, update, () =>
+    importWithinTextLimits(doc, update),
+  )
+  if (breach !== null) refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars))
+  if (!(options.workspaceRecord && touchesNodeMeta)) return
+  const offGrammar = newOffGrammarPaths(doc, before, update, target)
   if (offGrammar.length > 0) refuse(target, new OffGrammarPathError(offGrammar))
 }

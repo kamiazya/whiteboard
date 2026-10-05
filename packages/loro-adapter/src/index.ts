@@ -52,6 +52,12 @@ export {
 } from './proposals.js'
 export { countSpatialNodes } from './spatial-node-count.js'
 export {
+  importWithinTextLimits,
+  type SyncTextBreach,
+  type SyncTextJudgement,
+  syncTextLimitBreach,
+} from './sync-text-limits.js'
+export {
   markThreadPassages,
   type PassageRange,
   readThreadMarks,

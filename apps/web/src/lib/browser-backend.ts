@@ -6,6 +6,7 @@ import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
+  syncTextLimitBreach,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -17,7 +18,6 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
-import { overfilledBody } from './markdown-body-limit.js'
 import { seedNameFromTitle } from './seed-name-from-title.js'
 import {
   listenToWorkspace,
@@ -253,11 +253,11 @@ export class BrowserBackend implements DocumentBackend {
       // Refused before it lands: once imported, the bytes would ride the next
       // save whatever this one decided.
       if (this.target.kind === 'markdown') {
-        const overfilled = overfilledBody(workspaceDoc, this.target.documentId, bytes)
-        if (overfilled !== null) {
+        const breach = syncTextLimitBreach(workspaceDoc, bytes)
+        if (breach !== null) {
           getAppLogger('browser-backend').warn('refused a body past the markdown size limit', {
             documentId: this.target.documentId,
-            chars: overfilled,
+            ...breach,
           })
           this.handlers?.onError?.('storage-failure')
           return

@@ -265,6 +265,63 @@ describe('a per-document sync update', () => {
   })
 })
 
+/**
+ * The same four edits `browser-backend.body-limit.test.ts` pushes to the
+ * browser keeper, with the same verdicts: both keepers judge a write by what
+ * it does to the text, so a write one keeper takes the other takes.
+ */
+describe.each([
+  {
+    edit: 'a select-all replace that shrinks the body',
+    before: 200_000,
+    change: (body: LoroText) => {
+      body.delete(0, body.length)
+      body.insert(0, 'z'.repeat(100_000))
+    },
+    after: 100_000,
+  },
+  {
+    edit: 'a delete from a body already past the limit',
+    before: MARKDOWN_MAX_CHARS + 10,
+    change: (body: LoroText) => body.delete(0, 5),
+    after: MARKDOWN_MAX_CHARS + 5,
+  },
+  {
+    edit: 'a small insert growing the body past the limit',
+    before: MARKDOWN_MAX_CHARS - 3,
+    change: (body: LoroText) => body.insert(0, 'four'),
+    after: null,
+  },
+  {
+    edit: 'one run past the limit',
+    before: 5,
+    change: (body: LoroText) => body.insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
+    after: null,
+  },
+])('$edit, sent to the daemon', ({ before, change, after }) => {
+  it(`as a workspace-record update ${after === null ? 'is refused' : 'is applied'}`, async () => {
+    const store = new StoredDoc(workspaceSeed('y'.repeat(before)))
+    const update = updateFrom(store.get(), (doc) => change(workspaceBody(doc)))
+
+    const applied = applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update })
+
+    if (after === null) await expect(applied).rejects.toBeInstanceOf(MarkdownBodyTooLargeError)
+    else await expect(applied).resolves.toBe('applied')
+    expect(storedWorkspaceBody(store)).toHaveLength(after ?? before)
+  })
+
+  it(`as a per-document update ${after === null ? 'is refused' : 'is applied'}`, async () => {
+    const store = new StoredDoc(liveSeed('y'.repeat(before)))
+    const update = updateFrom(store.get(), (doc) => change(doc.getText('body')))
+
+    const applied = applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update })
+
+    if (after === null) await expect(applied).rejects.toBeInstanceOf(MarkdownBodyTooLargeError)
+    else await expect(applied).resolves.toBeDefined()
+    expect(readMarkdownBody(store.get())).toHaveLength(after ?? before)
+  })
+})
+
 describe('a promoted record', () => {
   it('holding a body past the limit is refused and nothing is merged', async () => {
     const target = new StoredDoc(workspaceSeed('the daemon copy'))
