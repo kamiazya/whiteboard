@@ -197,9 +197,11 @@ through the page. Two ways to get one:
 - `test:browser:trace` records Playwright's own DOM snapshots, which means
   every resource vite served — 302MB against 7.5MB on 16 page files and 22GB
   over a whole `web-browser` run. Use it for ONE failing file when the
-  network log or the provider's screenshots are what you need; it refuses a
-  run that names no file (`tools/checks/src/browser-trace.mjs`) rather than
-  start one that can fill the disk.
+  network log or the provider's screenshots are what you need. Before it
+  starts, it asks `vitest list --filesOnly` what the same arguments select and
+  refuses more than ten files (`tools/checks/src/browser-trace.mjs`) rather
+  than start a run that can fill the disk — so `--testTimeout 60000` alone or
+  a bare `apps/web` is refused, however the options are spelled.
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
