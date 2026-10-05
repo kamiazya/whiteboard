@@ -42,6 +42,12 @@ implementations live in the composition roots.
   (mcp-server's `writeDocumentContent`), `seedNamesFromTitles(since)`
   for the daemon's workspace update, which reads the touched nodes off the
   update's operations rather than walking the tree (135 ms at 1000 documents).
+  A name somebody CHOSE carries `nameChosen: true` in the node meta, written
+  only by `workspace-tree.ts`'s name writers (`setChosenName`) and cleared with
+  the name; the seeder never writes it nor replaces a marked name. Without it
+  "Weekly" under `# Weekly review` read as a half-typed heading. Unmarked names
+  keep the prefix-follow, old records are not migrated, and an OKF `title`
+  equal to the stored name is not a choice (server-core's `applyOkfTitle`).
 - **A stored plane key is skipped, never read.** The branch's `plane:` child map
   on a document's node is gone with the branch (ADR-0029), but a record
   written then still carries it, so `projectWorkspaceDocument` and
