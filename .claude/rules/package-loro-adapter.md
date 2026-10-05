@@ -40,7 +40,9 @@ implementations live in the composition roots.
   `title-from-body.ts`): the one judgement both keepers run —
   `seedNameFromTitle` by id for the browser store's pushes,
   `writeDocumentContentAndName` for every whole-content write either keeper
-  makes (the daemon's tools, `/api/v1` and restore, and the browser's restore),
+  makes outside this package (the daemon's saves, tools, `/api/v1` and restore,
+  and the browser's restore — `document-content-write-one-place.test.ts` keeps
+  the bare write inside; duplicate and adopt supply the name themselves),
   `seedNamesFromTitles(since)`
   for the daemon's workspace update, which reads the touched nodes off the
   update's operations rather than walking the tree (135 ms at 1000 documents).
