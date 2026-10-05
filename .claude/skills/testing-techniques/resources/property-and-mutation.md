@@ -57,6 +57,19 @@ every gate except this loop.
 | contracts | `pnpm mutation:contracts` | `packages/mcp-server/stryker.config.mjs`'s twelve files: redaction, path guard, security config, api contracts, two routes | local; `check:release-candidate:local` |
 | render | `pnpm mutation:render` | `packages/canvas-render/stryker-targets.mjs` — the property-covered pure modules | `mutation.yml`: on a PR, scoped by `.claude/scripts/mutation-scope.mjs` to the curated files the diff touched, run in the weekly leg each falls in, and posted by `pr-report` as a sticky comment that also names any leg that stopped early; weekly, six legs dealt by recorded minutes (`MINUTES`) and merged by `weekly-report` into one `mutation-canvas-render` artifact |
 
+**Locally, scope the run to the file you changed.** The bare `pnpm mutation:render` is the
+WHOLE weekly lane: 3,378 mutants over 22 files, about 209 minutes of mutation by the recorded
+`MINUTES` (227 runner-minutes across the six legs of the 2026-10-05 weekly run), so on one
+machine it does not finish in a working session. The PR leg runs exactly this instead, and
+`--mutate` overrides the config's list in both lanes (comma-separated, package-relative):
+
+```bash
+pnpm --filter @kamiazya/whiteboard-canvas-render exec stryker run --mutate src/<file>.ts
+pnpm --filter @kamiazya/whiteboard-mcp exec stryker run --mutate src/<file>.ts
+```
+
+A file's figure in `MINUTES` (`stryker-targets.mjs`) is what its scoped run costs on a runner.
+
 Both are **report-only** (`thresholds.break: null`): a score belongs to the whole suite, not
 to whoever pushed last. Stryker's timeout is 20s because a timeout counts as KILLED and the
 default 5s flattered the score on healthy-but-slow property mutants.
