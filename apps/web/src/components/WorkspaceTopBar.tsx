@@ -11,10 +11,11 @@ export interface DocumentIdentity {
   /** The workspace's display name, falling back to the path when none is stored. */
   readonly name: string
   /**
-   * Commits a new display name. Absent for a browser-kept workspace, where the host page
-   * owns renaming through its own store rather than through `/names`.
+   * Commits a new display name, answering null once it is saved or why it was
+   * refused. Absent for a browser-kept workspace, where the host page owns
+   * renaming through its own store rather than through `/names`.
    */
-  readonly onRename?: (next: string) => void
+  readonly onRename?: (next: string) => Promise<string | null>
 }
 
 /**
@@ -193,7 +194,7 @@ export default function WorkspaceTopBar({
 
         {titleSlot?.({
           name: canvasCustomName ?? path,
-          ...(keptByBrowser ? {} : { onRename: (next: string) => void renameDocument(path, next) }),
+          ...(keptByBrowser ? {} : { onRename: (next: string) => renameDocument(path, next) }),
         })}
       </div>
     </header>

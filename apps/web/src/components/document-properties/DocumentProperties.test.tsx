@@ -11,8 +11,8 @@
  * belongs to the workspace (ADR-0009 decision 2), so it arrives as its own
  * prop and leaves through its own callback.
  */
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentFacetsEditor, DocumentProperties } from './DocumentProperties.js'
 
@@ -310,6 +310,61 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     fireEvent.blur(box)
 
     expect(textboxValue(/title/i)).toBe('Release plan')
+  })
+})
+
+describe('DocumentProperties title bound and refusal', () => {
+  it('holds the title to the bound every keeper enforces on a name', () => {
+    render(<DocumentProperties {...titleProps()} />)
+    expect(screen.getByRole('textbox', { name: /title/i }).getAttribute('maxlength')).toBe(
+      String(DOCUMENT_NAME_MAX_LENGTH),
+    )
+  })
+
+  it('says beside the box why a rename was refused, and keeps saying it after blur', async () => {
+    const onTitleChange = vi.fn(async () => 'You may not rename documents in this workspace')
+    render(<DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i })
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Launch plan' } })
+    })
+    fireEvent.blur(box)
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'You may not rename documents in this workspace',
+    )
+    expect(box.getAttribute('aria-invalid')).toBe('true')
+    expect(textboxValue(/title/i)).toBe('Release plan')
+  })
+
+  it('clears the refusal once a later keystroke is saved', async () => {
+    const outcomes = ['Refused', null]
+    const onTitleChange = vi.fn(async () => outcomes.shift() ?? null)
+    render(<DocumentProperties {...titleProps({ title: 'Plan', onTitleChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i })
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Plan!' } })
+    })
+    expect(screen.getByRole('alert').textContent).toBe('Refused')
+
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Plan' } })
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('answers with the outcome of the LATEST keystroke when an earlier one settles last', async () => {
+    const settle: Array<(refusal: string | null) => void> = []
+    const onTitleChange = vi.fn(() => new Promise<string | null>((resolve) => settle.push(resolve)))
+    render(<DocumentProperties {...titleProps({ title: 'Plan', onTitleChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i })
+    fireEvent.change(box, { target: { value: 'Plan A' } })
+    fireEvent.change(box, { target: { value: 'Plan AB' } })
+
+    await act(async () => settle[1]?.(null))
+    await act(async () => settle[0]?.('A stale refusal'))
+
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 

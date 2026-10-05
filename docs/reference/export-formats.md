@@ -96,8 +96,11 @@ A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
 `document.create` and `document.move` and of
 `POST /api/v1/workspaces/{id}/documents`,
-`PUT /api/workspaces/{id}/documents/{path}/name`, the web app's Name field,
-and a markdown document's frontmatter `title`, which becomes its name. An
+`PUT /api/workspaces/{id}/documents/{path}/name`, the web app's Name field
+in the new-document and rename dialogs and its title box above an open
+document — both stop taking characters at the limit, and the title box says
+beside itself why a rename was refused — and a markdown document's
+frontmatter `title`, which becomes its name. An
 over-long `title` is refused before anything is written — `document.create`
 creates nothing, and through `/api/v1` the answer is
 `400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A

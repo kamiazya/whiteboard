@@ -11,6 +11,7 @@ vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.f
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { DocumentProperties } from './document-properties/DocumentProperties.js'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {
@@ -180,6 +181,37 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
       )
     })
     expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it("shows the daemon's reason beside the title when it refuses a rename", async () => {
+    const daemonFetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        return jsonResponse({ error: 'forbidden', message: 'You may not rename this' }, 403)
+      }
+      return mkNamesOk()
+    })
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <WorkspaceTopBar
+          workspaceId="ws_1"
+          path="canvas-a"
+          titleSlot={(identity) => (
+            <DocumentProperties
+              inline
+              title={identity.name}
+              {...(identity.onRename === undefined ? {} : { onTitleChange: identity.onRename })}
+            />
+          )}
+        />
+      </DaemonApiContext.Provider>,
+      { container: document.body },
+    )
+
+    fireEvent.change(screen.getByRole('textbox', { name: /title/i }), {
+      target: { value: 'renamed' },
+    })
+
+    expect((await screen.findByRole('alert')).textContent).toBe('You may not rename this')
   })
 })
 

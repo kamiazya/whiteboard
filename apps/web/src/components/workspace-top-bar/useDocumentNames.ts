@@ -5,6 +5,7 @@ import {
   workspaceNamesApiUrl,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { useCallback, useEffect, useState } from 'react'
 import type { z } from 'zod'
 import { parseDaemonResponse } from '../../lib/daemon-contract-error.js'
@@ -15,6 +16,9 @@ async function readNames(route: string, res: Response): Promise<WorkspaceNames> 
 }
 
 const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
+
+/** What a refused rename says when the daemon could not be asked or gave no reason. */
+const RENAME_REFUSED = 'Could not rename it.'
 
 interface UseDocumentNamesOptions {
   workspaceId: string
@@ -62,10 +66,10 @@ export function useDocumentNames({
 
   const effectiveNames = keptByBrowser ? EMPTY_NAMES : names
 
-  // Daemon-mode rename commit. Returns whether the PUT succeeded so the
-  // caller can decide how to react; a browser-kept workspace never reaches it.
+  // Daemon-mode rename commit: null once saved, else why not (the daemon's own
+  // reason when it gave one). A browser-kept workspace never reaches it.
   const renameDocument = useCallback(
-    async (targetPath: string, name: string): Promise<boolean> => {
+    async (targetPath: string, name: string): Promise<string | null> => {
       try {
         const res = await daemonFetch(documentNameApiUrl(workspaceId, targetPath), {
           method: 'PUT',
@@ -74,11 +78,11 @@ export function useDocumentNames({
         })
         if (res.ok) {
           setNames(await readNames(documentNameApiUrl(workspaceId, targetPath), res))
-          return true
+          return null
         }
-        return false
+        return (await refusalReasonOf(res, RENAME_REFUSED)).reason
       } catch {
-        return false
+        return RENAME_REFUSED
       }
     },
     [workspaceId, daemonFetch],

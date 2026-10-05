@@ -32,10 +32,10 @@ export interface RenameDocument {
 /**
  * A keeper refuses a name past the bound with the port's own parse, and a
  * ZodError's message is its issue list as JSON — so the issues' own words are
- * what the dialog shows. Anything else is shown as it stands: the server
+ * what a rename surface shows. Anything else is shown as it stands: the server
  * names the produced path that collided.
  */
-function refusalMessage(err: unknown): string {
+export function refusalMessage(err: unknown): string {
   if (err instanceof z.ZodError) return err.issues.map((issue) => issue.message).join('; ')
   return messageOf(err, 'Could not rename it.')
 }
