@@ -214,6 +214,32 @@ describe('a daemon note at a generated path is named after its heading', () => {
     expect(await nameOf(deps, id)).toBe('Weekly')
   })
 
+  // An agent reads a note (its title is the name) and writes it back with a
+  // longer heading. The title it carried back says nothing new, so it must not
+  // turn a name the heading gave into one somebody chose.
+  it('when document.set carries back the title it read under a longer heading', async () => {
+    const { deps, client } = await daemon()
+    const id = await createNote(client, { path: 'untitled', markdown: '# Weekly\n\nbody' })
+    expect(await nameOf(deps, id)).toBe('Weekly')
+
+    const set = await client.callTool({
+      name: 'wb_workspace_edit',
+      arguments: {
+        workspaceId: WS,
+        ops: [
+          {
+            op: 'document.set',
+            documentId: id,
+            markdown: '---\ntype: note\ntitle: Weekly\n---\n# Weekly review\n\nbody',
+          },
+        ],
+      },
+    })
+    expect(set.isError, JSON.stringify(set.content)).not.toBe(true)
+
+    expect(await nameOf(deps, id)).toBe('Weekly review')
+  })
+
   it('nor over a name the writer gave it', async () => {
     const { deps, client } = await daemon()
     const id = await createNote(client, {

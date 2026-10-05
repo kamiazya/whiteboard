@@ -88,8 +88,8 @@ The display name can come from the document instead. A note still at a
 generated path (`untitled`, `untitled-2`, …) that nobody has named takes its
 name from a level-1 heading on its first line, and keeps following that
 heading while it is being typed. It stops for good once someone names the
-note — when creating it, by renaming it, or through the `title` of a document
-they import — or gives it an address of their own in place of `untitled`. A
+note — when creating it, by renaming it, or through a `title` a document they
+import carries (one equal to the name it already has says nothing new) — or gives it an address of their own in place of `untitled`. A
 name you choose is kept even when the heading starts with it: "Weekly" stays
 "Weekly" under a `# Weekly review` heading. Both keepers do this, and neither
 touches the path.
