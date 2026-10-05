@@ -3,3 +3,4 @@ export { ContentFactsCache, type DocumentContentSource } from './content-facts-c
 export { type ContentFacts, splitBearerTags, tagBearersOf } from './extract.js'
 export { linkifyMentionsIn } from './linkify.js'
 export { backlinksIn } from './reference-aggregate.js'
+export { rewriteDocumentReferences } from './rewrite.js'
