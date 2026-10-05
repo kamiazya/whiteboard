@@ -13,8 +13,11 @@
  * again, and the shape that betrays one is the order it has to apply in: a
  * comparator putting the LATER start first (`(a, b) => b.….start -
  * a.….start`). Read off the syntax tree, any parameter names, through `sort`
- * or `toSorted`, an arrow or a function. Not seen: an ascending sort followed
- * by `reverse()`, a negated comparator, or one passed by name.
+ * or `toSorted`, an arrow or a function, a parameter destructured
+ * (`({ at: a }, { at: b }) => b.start - a.start`, or down to the start
+ * itself), and a difference that leads a tie-break (`… || 0`, `… ?? 0`). Not
+ * seen: an ascending sort followed by `reverse()`, a negated comparator, or
+ * one passed by name.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -34,13 +37,43 @@ const production = files
   .filter((path) => !isTestPath(path))
   .map((path) => ({ path, rel: relative(REPO_ROOT, path).split(sep).join('/') }))
 
-/** The identifier a `x.y.start` chain is rooted at, when it ends in `.start`. */
-function startRoot(raw: ts.Expression): string | undefined {
+/**
+ * What one comparator parameter binds: `roots`, the names a `x.….start` chain
+ * may be rooted at (the parameter itself, or any name destructured out of
+ * it), and `starts`, the names destructured straight from a `start` key.
+ */
+interface Bound {
+  readonly roots: ReadonlySet<string>
+  readonly starts: ReadonlySet<string>
+}
+
+function boundBy(name: ts.BindingName): Bound {
+  const roots = new Set<string>()
+  const starts = new Set<string>()
+  const visit = (binding: ts.BindingName, key: string | undefined): void => {
+    if (ts.isIdentifier(binding)) {
+      roots.add(binding.text)
+      if (key === 'start') starts.add(binding.text)
+      return
+    }
+    for (const element of binding.elements) {
+      if (ts.isOmittedExpression(element)) continue
+      const property = element.propertyName ?? element.name
+      visit(element.name, ts.isIdentifier(property) ? property.text : undefined)
+    }
+  }
+  visit(name, undefined)
+  return { roots, starts }
+}
+
+/** Whether `raw` reads a start out of what `bound` binds: `x.….start`, or a destructured `start`. */
+function readsStart(raw: ts.Expression, bound: Bound): boolean {
   const node = unwrapExpression(raw)
-  if (!ts.isPropertyAccessExpression(node) || node.name.text !== 'start') return undefined
+  if (ts.isIdentifier(node)) return bound.starts.has(node.text)
+  if (!ts.isPropertyAccessExpression(node) || node.name.text !== 'start') return false
   let root: ts.Expression = node.expression
   while (ts.isPropertyAccessExpression(root)) root = root.expression
-  return ts.isIdentifier(root) ? root.text : undefined
+  return ts.isIdentifier(root) && bound.roots.has(root.text)
 }
 
 /** The expression a comparator answers with, for an arrow body or a lone `return`. */
@@ -52,6 +85,19 @@ function answerOf(fn: ts.ArrowFunction | ts.FunctionExpression): ts.Expression |
     : undefined
 }
 
+/** The difference that decides the order: the answer itself, or what leads its tie-breaks. */
+function leadingTerm(raw: ts.Expression): ts.Expression {
+  let node = unwrapExpression(raw)
+  while (
+    ts.isBinaryExpression(node) &&
+    (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+      node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+  ) {
+    node = unwrapExpression(node.left)
+  }
+  return node
+}
+
 function isDescendingStartSort(node: ts.Node): boolean {
   if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false
   if (!['sort', 'toSorted'].includes(node.expression.name.text)) return false
@@ -61,19 +107,21 @@ function isDescendingStartSort(node: ts.Node): boolean {
   if (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn)) return false
   const [first, second] = fn.parameters
   if (first === undefined || second === undefined) return false
-  if (!ts.isIdentifier(first.name) || !ts.isIdentifier(second.name)) return false
   const answer = answerOf(fn)
   if (answer === undefined) return false
-  const body = unwrapExpression(answer)
+  const body = leadingTerm(answer)
   return (
     ts.isBinaryExpression(body) &&
     body.operatorToken.kind === ts.SyntaxKind.MinusToken &&
-    startRoot(body.left) === second.name.text &&
-    startRoot(body.right) === first.name.text
+    readsStart(body.left, boundBy(second.name)) &&
+    readsStart(body.right, boundBy(first.name))
   )
 }
 
+/** Sorts in a source, read off the syntax tree only when the text could hold one. */
 function descendingStartSorts(source: string, fileName = 'fixture.ts'): number {
+  // `start`, not `.start`: a destructured start is spelled without the dot.
+  if (!source.includes('start')) return 0
   const file = parseSource(fileName, source)
   let count = 0
   const visit = (node: ts.Node): void => {
@@ -84,11 +132,8 @@ function descendingStartSorts(source: string, fileName = 'fixture.ts'): number {
   return count
 }
 
-/** Sorts in a file, read off the syntax tree only when the text could hold one. */
 function sortsIn(path: string): number {
-  const source = readFileSync(path, 'utf8')
-  if (!source.includes('.start')) return 0
-  return descendingStartSorts(source, path)
+  return descendingStartSorts(readFileSync(path, 'utf8'), path)
 }
 
 const FIXTURES: readonly { readonly source: string; readonly sorts: number }[] = [
@@ -100,6 +145,16 @@ const FIXTURES: readonly { readonly source: string; readonly sorts: number }[] =
   { source: 'placed.sort((a, b) => b.at.end - a.at.end)', sorts: 0 },
   { source: 'placed.sort((a, b) => b.at.start - other.start)', sorts: 0 },
   { source: '// placed.sort((a, b) => b.at.start - a.at.start)', sorts: 0 },
+  { source: 'placed.sort(({ at: a }, { at: b }) => b.start - a.start)', sorts: 1 },
+  { source: 'placed.sort(({ at }, { at: other }) => other.start - at.start)', sorts: 1 },
+  { source: 'placed.sort(({ at: { start: a } }, { at: { start: b } }) => b - a)', sorts: 1 },
+  { source: 'placed.sort(({ start: a }, { start: b }) => b - a)', sorts: 1 },
+  { source: 'placed.sort((a, b) => b.at.start - a.at.start || 0)', sorts: 1 },
+  { source: 'placed.sort((a, b) => (b.at.start - a.at.start) ?? b.at.end - a.at.end)', sorts: 1 },
+  { source: 'placed.sort(({ at: a }, { at: b }) => a.start - b.start)', sorts: 0 },
+  { source: 'placed.sort(({ end: a }, { end: b }) => b - a)', sorts: 0 },
+  { source: 'placed.sort((a, b) => b.at.end - a.at.end || b.at.start - a.at.start)', sorts: 0 },
+  { source: 'placed.sort((a, b) => b.at.start - a.at.start && 0)', sorts: 0 },
 ]
 
 describe('a batch of passages is applied in one place', () => {
