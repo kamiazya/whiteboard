@@ -12,6 +12,7 @@
  * the previous one's rows. A fresh name cannot be stale.
  */
 import {
+  createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
   resolveWorkspaceDocument,
@@ -98,6 +99,12 @@ describe('FoldingBrowserIndex trash', () => {
     return {
       index,
       evacuatedBlobCount: () => blobCount(dbName),
+      placeDocument: async ({ workspaceId, documentId, path }) => {
+        const docs = new BrowserWorkspaceDocs(dbName)
+        const record = await docs.create(workspaceId)
+        createWorkspaceDocumentAtPath(record, { path, documentId, kind: 'markdown' })
+        await docs.save(workspaceId, record)
+      },
       dispose: () => deleteDb(dbName),
     }
   })

@@ -180,6 +180,11 @@ describe('LoroWorkspaceDocumentIndex trash', () => {
     return {
       index: new LoroWorkspaceDocumentIndex(docs, blobs, docs),
       evacuatedBlobCount: async () => blobs.size(),
+      placeDocument: async ({ workspaceId, documentId, path }) => {
+        const doc = await docs.create(workspaceId)
+        createWorkspaceDocumentAtPath(doc, { path, documentId, kind: 'markdown' })
+        await docs.save(workspaceId, doc)
+      },
       dispose: async () => {},
     }
   })

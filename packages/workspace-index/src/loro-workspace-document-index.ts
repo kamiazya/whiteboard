@@ -188,6 +188,9 @@ export class LoroWorkspaceDocumentIndex
       const doc = await this.#open(input.workspaceId)
       const entry = readTrashEntries(doc).find((row) => row.documentId === input.documentId)
       if (entry === undefined) return null
+      // A second node under one id lists twice and contests its path. The row
+      // stays: the trashed copy may hold what the live one lacks.
+      if (resolveWorkspaceDocumentById(doc, input.documentId) !== null) return null
       const stored = await this.blobs.get({ ref: entry.blob })
       // The row survives a missing blob rather than being swept: it is the
       // only record that the document existed, and a listing that dropped it

@@ -13,6 +13,14 @@ type MakeTrashingIndex = () => Promise<{
    * only ever trashes documents, so every blob counted is an evacuation.
    */
   evacuatedBlobCount: () => Promise<number>
+  /**
+   * Places a live document under `documentId` at `path` without touching the
+   * trash. The port has no operation that does this, and a keeper's own
+   * placement paths can: a migration adopting an old record, a page opening a
+   * document somebody deleted a moment before. REQUIRED for the reason the
+   * blob count is.
+   */
+  placeDocument: (input: { workspaceId: string; documentId: string; path: string }) => Promise<void>
   dispose: () => Promise<void>
 }>
 
@@ -20,8 +28,14 @@ const WS = 'ws-trash-conformance'
 // A well-formed id the trash never held.
 const ABSENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
+type Seams = Omit<Awaited<ReturnType<MakeTrashingIndex>>, 'index' | 'dispose'>
+
 type WithIndex = (
-  body: (index: TrashingIndex, evacuatedBlobCount: () => Promise<number>) => Promise<void>,
+  body: (
+    index: TrashingIndex,
+    evacuatedBlobCount: Seams['evacuatedBlobCount'],
+    seams: Seams,
+  ) => Promise<void>,
 ) => Promise<void>
 
 /** Creates a document and deletes it, answering the id the trash will hold. */
@@ -42,11 +56,11 @@ const trashIds = async (index: TrashingIndex, workspaceId = WS) =>
  */
 export function describeDocumentTrashConformance(makeIndex: MakeTrashingIndex): void {
   const withIndex: WithIndex = async (body) => {
-    const { index, evacuatedBlobCount, dispose } = await makeIndex()
+    const { index, dispose, ...seams } = await makeIndex()
     try {
       await index.createWorkspace({ workspaceId: WS })
       await index.createWorkspace({ workspaceId: 'ws-other' })
-      await body(index, evacuatedBlobCount)
+      await body(index, seams.evacuatedBlobCount, seams)
     } finally {
       await dispose()
     }
@@ -62,6 +76,22 @@ export function describeDocumentTrashConformance(makeIndex: MakeTrashingIndex): 
 
         expect(restored?.documentId).toBe(documentId)
         await expect(trashIds(index)).resolves.toEqual([])
+      })
+    })
+
+    // Two nodes under one id list twice, and deleting either contests the
+    // path. Refused rather than answered with the live one: the trashed copy
+    // may hold what the live one lacks, and forgetting its row would lose it.
+    it('refuses to restore an id the workspace already places, and adds no node', async () => {
+      await withIndex(async (index, _count, { placeDocument }) => {
+        const documentId = await trashed(index, 'a')
+        await placeDocument({ workspaceId: WS, documentId, path: 'a' })
+
+        await expect(index.restoreDocument({ workspaceId: WS, documentId })).resolves.toBeNull()
+
+        const listed = await index.listDocuments({ workspaceId: WS })
+        expect(listed.filter((entry) => entry.documentId === documentId)).toHaveLength(1)
+        await expect(trashIds(index)).resolves.toEqual([documentId])
       })
     })
 
