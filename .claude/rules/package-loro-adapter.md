@@ -50,6 +50,9 @@ implementations live in the composition roots.
   "Weekly" under `# Weekly review` read as a half-typed heading. Unmarked names
   keep the prefix-follow, old records are not migrated, and an OKF `title`
   equal to the stored name is not a choice (server-core's `applyOkfTitle`).
+- **A duplicate is one record change** (`workspace-duplicate.ts`), written
+  through the projection rather than `copyNodeData`, so the source's id,
+  segment, name, timestamps and plane keys stay behind.
 - **A stored plane key is skipped, never read.** The branch's `plane:` child map
   on a document's node is gone with the branch (ADR-0029), but a record
   written then still carries it, so `projectWorkspaceDocument` and
