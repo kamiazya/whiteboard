@@ -181,7 +181,7 @@ The real-browser Vitest projects are below. The root `vitest.config.ts` owns the
 ```bash
 pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state
 pnpm run test:browser:replay  # same, plus a step-by-step DOM replay of EVERY test in .vitest/index.html
-pnpm run test:browser:trace   # same, plus a Playwright trace for EVERY test and its DOM snapshots
+pnpm run test:browser:trace <one failing file>  # same projects, a Playwright trace for EVERY test and its DOM snapshots
 ```
 
 The default run retains a Playwright trace only for a FAILING test, and that
@@ -197,7 +197,9 @@ through the page. Two ways to get one:
 - `test:browser:trace` records Playwright's own DOM snapshots, which means
   every resource vite served — 302MB against 7.5MB on 16 page files and 22GB
   over a whole `web-browser` run. Use it for ONE failing file when the
-  network log or the provider's screenshots are what you need.
+  network log or the provider's screenshots are what you need; it refuses a
+  run that names no file (`tools/checks/src/browser-trace.mjs`) rather than
+  start one that can fill the disk.
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
