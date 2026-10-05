@@ -211,6 +211,66 @@ describe('readJsonBody: the size ceiling', () => {
     expect(pulled).toBeLessThan(20)
   })
 
+  // A real upload past a few kilobytes reaches the reader as several chunks;
+  // `app.request` with a string body hands it over as one.
+  it('reassembles a body that arrives in several unequal chunks, in order', async () => {
+    const pad = 'a'.repeat(5) + 'b'.repeat(300) + 'c'.repeat(17) + 'd'.repeat(4000)
+    const json = bodyOf(0).replace('""', JSON.stringify(pad))
+    const cuts = [3, 11, 340, 345, 1200, json.length]
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        cuts.forEach((end, i) =>
+          controller.enqueue(encoder.encode(json.slice(cuts[i - 1] ?? 0, end))),
+        )
+        controller.close()
+      },
+    })
+    const app = new Hono()
+    app.post('/', async (c) => {
+      const read = await readJsonBody(c, lenient, {
+        voice: 'code',
+        refuseShape: () => ({ error: 'invalid_body', message: 'shape' }),
+      })
+      return 'refusal' in read ? read.refusal : c.json(read.data)
+    })
+
+    const res = await app.request('/', {
+      method: 'POST',
+      body,
+      // @ts-expect-error: `duplex` is required by the fetch spec for a stream body and absent from the DOM lib types
+      duplex: 'half',
+    })
+
+    expect(await res.json()).toEqual({ pad })
+  })
+
+  it('reads a body whose declared length is exactly the ceiling', async () => {
+    const body = bodyOf(4)
+
+    const res = await appCapped(body.length).request('/', {
+      method: 'POST',
+      headers: { 'content-length': String(body.length) },
+      body,
+    })
+
+    expect(await res.json()).toEqual({ read: 4 })
+  })
+
+  // RFC 9112 section 6.3: a Transfer-Encoding overrides any Content-Length, so the
+  // declared length is no ground for refusing; the body is counted as it is read.
+  it('counts a body sent with a transfer coding instead of trusting its declared length', async () => {
+    const body = bodyOf(4)
+
+    const res = await appCapped(body.length).request('/', {
+      method: 'POST',
+      headers: { 'transfer-encoding': 'chunked', 'content-length': String(body.length + 1) },
+      body,
+    })
+
+    expect(await res.json()).toEqual({ read: 4 })
+  })
+
   it('takes the ceiling a route names over the default', async () => {
     const res = await appCapped(2 * MIB).request('/', { method: 'POST', body: bodyOf(MIB) })
 
