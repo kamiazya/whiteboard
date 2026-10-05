@@ -9,15 +9,22 @@
  * suite lives beside the port (ports/test-utils) precisely so this file is
  * one wiring, not a second copy of 38 cases.
  */
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  readMarkdownBody,
+  writeDocumentKind,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
+  describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
-import { describe, vi } from 'vitest'
+import { LoroDoc } from 'loro-crdt'
+import { describe, expect, it, vi } from 'vitest'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
@@ -31,9 +38,13 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { CacheCoherentDocumentIndex, cacheBackedWorkspaceDocs, workspaceRegistry } = await import(
-  './document-store.js'
-)
+const {
+  CacheCoherentDocumentIndex,
+  cacheBackedWorkspaceDocs,
+  getDoc,
+  saveDocument,
+  workspaceRegistry,
+} = await import('./document-store.js')
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
 const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -86,7 +97,46 @@ async function makeProductionIndex() {
   }
 }
 
+/** Every file under the tenant's blob root: the trash suite trashes documents only, so each is an evacuation. */
+async function blobFileCount(): Promise<number> {
+  try {
+    const entries = await readdir(blobsRoot(tempDir, SELF_HOST_TENANT_ID), {
+      recursive: true,
+      withFileTypes: true,
+    })
+    return entries.filter((entry) => entry.isFile()).length
+  } catch {
+    return 0
+  }
+}
+
 describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   describeDocumentIndexConformance(makeProductionIndex)
   describeDocumentPinsConformance(makeProductionIndex)
+  describeDocumentTrashConformance(async () => {
+    const { index, dispose } = await makeProductionIndex()
+    return { index, dispose, evacuatedBlobCount: blobFileCount }
+  })
+
+  // The doc cache is keyed by path, so the document a delete leaves behind in
+  // it would be served as the next document created at that path.
+  it('serves a document recreated at a deleted path as itself, not as the one deleted', async () => {
+    const { index, dispose } = await makeProductionIndex()
+    try {
+      const workspaceId = 'ws-recreate'
+      await index.createWorkspace({ workspaceId })
+      const first = new LoroDoc()
+      writeDocumentKind(first, 'markdown')
+      writeMarkdownBody(first, 'the deleted document')
+      await saveDocument(workspaceId, 'note', first, { kind: 'markdown' })
+      expect(readMarkdownBody(await getDoc(workspaceId, 'note'))).toBe('the deleted document')
+
+      await index.deleteDocument({ workspaceId, path: 'note' })
+      await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
+
+      expect(readMarkdownBody(await getDoc(workspaceId, 'note'))).toBe('')
+    } finally {
+      await dispose()
+    }
+  })
 })
