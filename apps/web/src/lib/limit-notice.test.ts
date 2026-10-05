@@ -5,6 +5,7 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
@@ -13,6 +14,7 @@ import {
   copiedLabelNotice,
   copiedLocationNotice,
   copiedNodeTextNotice,
+  copiedTagsNotice,
   KEEPER_LIMIT_REASON,
   labelNotice,
   markdownBodyNotice,
@@ -73,6 +75,12 @@ const COUNTED = [
     max: LABEL_MAX_CHARS,
     one: 'label',
   },
+  {
+    name: 'tag paste',
+    notice: (n: number) => copiedTagsNotice('pasted', 'chars', n),
+    max: TAG_MAX_CHARS,
+    one: 'tag',
+  },
   { name: 'label edit', notice: labelNotice, max: LABEL_MAX_CHARS, one: 'label' },
   {
     name: 'comment edit',
@@ -97,6 +105,13 @@ describe('limit notices', () => {
 
   it('the tag count notice names the count and its own bound', () => {
     const said = tagCountNotice(TAGS_PER_ELEMENT_MAX + 1)
+    expect(said).toContain(`${enUs(TAGS_PER_ELEMENT_MAX + 1)} tags`)
+    expect(said).toContain(`past the ${enUs(TAGS_PER_ELEMENT_MAX)}-tag limit`)
+  })
+
+  it('the copied tag count notice names the count, its own bound and the verb', () => {
+    const said = copiedTagsNotice('duplicated', 'count', TAGS_PER_ELEMENT_MAX + 1)
+    expect(said).toMatch(/^Not duplicated: /)
     expect(said).toContain(`${enUs(TAGS_PER_ELEMENT_MAX + 1)} tags`)
     expect(said).toContain(`past the ${enUs(TAGS_PER_ELEMENT_MAX)}-tag limit`)
   })

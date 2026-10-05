@@ -4,7 +4,8 @@
 // is never made here — not typed or pasted into the node editor, nor
 // pasted onto the canvas as a new node, nor copied from a node written
 // before the bound. A copy is held to the keeper's other canvas bounds here
-// too — a node's location and an element's label — for the same reason.
+// too — a node's location, an element's label and its tags — for the same
+// reason.
 import type { Extension } from '@codemirror/state'
 import {
   type ClipboardFragment,
@@ -14,12 +15,15 @@ import {
   nodeText,
   nodeUrl,
   type SpatialNode,
+  TAG_MAX_CHARS,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import {
   type CopyVerb,
   copiedLabelNotice,
   copiedLocationNotice,
   copiedNodeTextNotice,
+  copiedTagsNotice,
   type LocationPart,
   nodeTextEditNotice,
   pastedTextNotice,
@@ -69,11 +73,33 @@ function locationParts(node: SpatialNode): { part: LocationPart; length: number 
 }
 
 /**
+ * Why a paste or duplicate making these nodes and edges would breach a tag
+ * bound, or null when every element's tags fit. Stored tags are read
+ * leniently, so a copy can carry tags written past either bound.
+ */
+function copiedTagsRefusal(
+  tagged: readonly { readonly tags?: readonly string[] }[],
+  verb: CopyVerb,
+): string | null {
+  const lists = tagged.map((element) => element.tags ?? [])
+  const most = longestOf(lists)
+  if (most !== undefined && most.length > TAGS_PER_ELEMENT_MAX) {
+    return copiedTagsNotice(verb, 'count', most.length)
+  }
+  const tag = longestOf(lists.flat())
+  if (tag !== undefined && tag.length > TAG_MAX_CHARS) {
+    return copiedTagsNotice(verb, 'chars', tag.length)
+  }
+  return null
+}
+
+/**
  * Why a paste or duplicate of this fragment makes nothing, or null when all
  * of it fits. Judged against every bound the keeper holds a canvas write to —
  * a node's text, a link's URL or a file's path or subpath, an edge's, line's
- * or frame's label — since a copy past any of them would be drawn here and
- * then refused by the keeper, and vanish again.
+ * or frame's label, and a node's or edge's tags, their count and the longest —
+ * since a copy past any of them would be drawn here and then refused by the
+ * keeper, and vanish again.
  *
  * An element written before a bound still reads and still takes an edit that
  * shortens it, but a copy is a new element, and the bound is on making one.
@@ -91,15 +117,12 @@ export function copiedFragmentRefusal(fragment: CopiedFragment, verb: CopyVerb):
   if (location !== undefined && location.length > NODE_LOCATION_MAX_CHARS) {
     return copiedLocationNotice(verb, location.part, location.length)
   }
-  const labelled = [
-    ...nodes,
-    ...fragment.edges,
-    ...(fragment.lines ?? []),
-    ...(fragment.cut?.boundaryEdges ?? []),
-  ]
+  const edges = [...fragment.edges, ...(fragment.cut?.boundaryEdges ?? [])]
+  const labelled = [...nodes, ...edges, ...(fragment.lines ?? [])]
   const label = longestOf(labelled.map((element) => element.label ?? ''))
   if (label !== undefined && label.length > LABEL_MAX_CHARS) {
     return copiedLabelNotice(verb, label.length)
   }
-  return null
+  // A line carries no tags: ink makes no claim to classify.
+  return copiedTagsRefusal([...nodes, ...edges], verb)
 }

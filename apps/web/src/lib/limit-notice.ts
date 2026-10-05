@@ -10,6 +10,7 @@ import {
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
+  TAG_MAX_CHARS,
   TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 
@@ -75,6 +76,20 @@ export function copiedLabelNotice(verb: CopyVerb, length: number): string {
   return `Not ${verb}: a label is ${pastLimit(length, LABEL_MAX_CHARS, 'label')}. Shorten it first.`
 }
 
+/** Which of a tag bound a notice names: how many tags one element carries, or one tag's length. */
+export type TagMeasure = 'count' | 'chars'
+
+/**
+ * A paste or duplicate that made nothing, naming the most tags one node or
+ * edge it carried, or its longest tag.
+ */
+export function copiedTagsNotice(verb: CopyVerb, measure: TagMeasure, amount: number): string {
+  if (measure === 'chars') {
+    return `Not ${verb}: a tag is ${pastLimit(amount, TAG_MAX_CHARS, 'tag')}. Shorten it first.`
+  }
+  return `Not ${verb}: a node or edge carries ${pastTagCount(amount)}. Remove some first.`
+}
+
 /** An edit to an edge, line or group label that was not made. */
 export function labelNotice(length: number): string {
   return `Not added: the label would be ${pastLimit(length, LABEL_MAX_CHARS, 'label')}.`
@@ -85,9 +100,14 @@ export function commentMessageNotice(length: number): string {
   return `Not added: the comment would be ${pastLimit(length, COMMENT_MESSAGE_MAX_CHARS, 'comment')}. ${COMMENT_MESSAGE_ADVICE}`
 }
 
+/** "N tags, past the M-tag limit for one …" — the clause a tag count notice ends on. */
+function pastTagCount(count: number): string {
+  return `${COUNT.format(count)} tags, past the ${COUNT.format(TAGS_PER_ELEMENT_MAX)}-tag limit for one document, board, node or edge`
+}
+
 /** A tag the tag editor did not add, because the thing it tags already carries the most it may. */
 export function tagCountNotice(count: number): string {
-  return `Not added: that would be ${COUNT.format(count)} tags, past the ${COUNT.format(TAGS_PER_ELEMENT_MAX)}-tag limit for one document, board, node or edge. Remove one first.`
+  return `Not added: that would be ${pastTagCount(count)}. Remove one first.`
 }
 
 /**
