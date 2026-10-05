@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { stopDevDaemon } from './stop-http-dev-daemon-lib.mjs'
 
-/** Processes that die when signalled, after `dieAfterPolls` sleeps (never, when null). */
+const STARTED_AT = '2026-01-01T00:00:00.000Z'
+const RECORDED_AT = Date.parse(STARTED_AT)
+
+/**
+ * Processes that die when signalled, after `dieAfterPolls` sleeps (never, when
+ * null). Each started before the record was written unless `startedAfter`
+ * names it.
+ */
 function world({
   daemon = 100 as number | null,
   wrapper = null as number | null,
   dieAfterPolls = 0 as number | null,
+  startedAfter = [] as number[],
 } = {}) {
   const alive = new Set<number>([daemon, wrapper].filter((pid): pid is number => pid !== null))
   const signalled: Array<[number, string]> = []
@@ -15,7 +23,11 @@ function world({
     signalled,
     input: {
       dataDir: '/data',
-      readRecord: () => (daemon === null ? null : { pid: daemon }),
+      readRecord: () =>
+        daemon === null ? null : { pid: daemon, socketPath: '/gone.sock', startedAt: STARTED_AT },
+      answers: async () => false,
+      startMs: (pid: number) =>
+        startedAfter.includes(pid) ? RECORDED_AT + 60_000 : RECORDED_AT - 1,
       readWrapperPid: () => wrapper,
       isAlive: (pid: number) => {
         if (
@@ -63,6 +75,31 @@ describe('stopDevDaemon', () => {
     const deadWrapper = { ...dead.input, readWrapperPid: () => 7 }
     expect((await stopDevDaemon(deadWrapper)).kind).toBe('stopped')
     expect(dead.signalled).toEqual([[100, 'SIGTERM']])
+  })
+
+  it('signals nothing when the recorded pid is alive but is not the daemon', async () => {
+    const w = world({ wrapper: 50, startedAfter: [100] })
+    expect(await stopDevDaemon(w.input)).toEqual({
+      kind: 'stale',
+      pid: 100,
+      reason: expect.stringContaining('started after'),
+    })
+    expect(w.signalled).toEqual([])
+  })
+
+  it('signals the daemon, not a wrapper pid some later process has taken', async () => {
+    const w = world({ wrapper: 50, startedAfter: [50] })
+    expect(await stopDevDaemon(w.input)).toEqual({ kind: 'stopped', via: 'daemon', pid: 100 })
+    expect(w.signalled).toEqual([[100, 'SIGTERM']])
+  })
+
+  it('stops a daemon too busy to answer its ping', async () => {
+    const w = world()
+    expect(await stopDevDaemon({ ...w.input, answers: async () => false })).toEqual({
+      kind: 'stopped',
+      via: 'daemon',
+      pid: 100,
+    })
   })
 
   it('reports a process that outlives the timeout rather than claiming it stopped', async () => {

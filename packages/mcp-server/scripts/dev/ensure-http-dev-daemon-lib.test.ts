@@ -7,6 +7,7 @@ import {
   buildMcpHttpDevSpawnArgs,
   DEFAULT_READY_TIMEOUT_MS,
   describeTokenConflict,
+  refusalLine,
   resolveDevBearerToken,
   resolveReadyTimeoutMs,
   waitForDaemon,
@@ -57,6 +58,73 @@ describe('HTTP dev daemon startup', () => {
     expect(result).toBe(false)
     // The loop exits before any probe fires because now()-startedAt >= timeoutMs
     expect(probe).not.toHaveBeenCalled()
+  })
+})
+
+describe('waitForDaemon gives up', () => {
+  it('stops polling as soon as `gaveUp` holds, without waiting out the timeout', async () => {
+    const probe = vi.fn().mockResolvedValue(false)
+    let polls = 0
+    const result = await waitForDaemon({
+      isUp: probe,
+      sleep: async () => {
+        polls += 1
+        if (polls > 50) throw new Error('kept polling after it gave up')
+      },
+      timeoutMs: 1_000_000,
+      pollIntervalMs: 10,
+      gaveUp: () => polls >= 2,
+      now: () => 0,
+    })
+    expect(result).toBe(false)
+    expect(probe).toHaveBeenCalledTimes(3)
+  })
+})
+
+// The SessionStart hook prints why the dev server it started exited, rather
+// than pointing at a log: this is what `pnpm mcp:http:dev` writes there when
+// it refuses (captured from a real run), pnpm's own report included.
+describe('refusalLine', () => {
+  it("picks the dev server's own last line out of pnpm's report around it", () => {
+    const log = [
+      '[WARN] Unsupported engine: wanted: {"node":"^24"} (current: {"node":"v22.22.0","pnpm":"11.12.0"})',
+      '$ pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev',
+      '.                                        | [WARN] Unsupported engine: wanted: {"node":"^24"} (current: {"node":"v22.22.0","pnpm":"11.12.0"})',
+      '$ node scripts/dev/with-dev-data-dir.mjs --token=whiteboard-dev --idle-timeout-ms=0',
+      '[with-dev-data-dir] failed to spawn dev server: spawn ENOENT',
+      '/home/user/whiteboard/packages/mcp-server:',
+      '[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @kamiazya/whiteboard-mcp@0.0.20 mcp:http:dev: `node scripts/dev/with-dev-data-dir.mjs --token=whiteboard-dev --idle-timeout-ms=0`',
+      'Exit status 1',
+      '[ELIFECYCLE] Command failed with exit code 1.',
+      '',
+    ].join('\n')
+    expect(refusalLine(log)).toBe('[with-dev-data-dir] failed to spawn dev server: spawn ENOENT')
+  })
+
+  it("picks a crash's error line out of the source excerpt, stack and dump around it", () => {
+    const log = [
+      'node:net:1918',
+      "      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);",
+      '                    ^',
+      '',
+      'Error: listen EADDRINUSE: address already in use /repo/.dev-data/daemon.sock',
+      '    at Server.setupListenHandle [as _listen2] (node:net:1918:21)',
+      '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5) {',
+      "  code: 'EADDRINUSE',",
+      '  port: -1',
+      '}',
+      '',
+      'Node.js v22.22.0',
+      'Exit status 1',
+    ].join('\n')
+    expect(refusalLine(log)).toBe(
+      'Error: listen EADDRINUSE: address already in use /repo/.dev-data/daemon.sock',
+    )
+  })
+
+  it('answers null when the dev server said nothing of its own', () => {
+    expect(refusalLine('Exit status 1\n[ELIFECYCLE] Command failed with exit code 1.\n')).toBe(null)
+    expect(refusalLine('')).toBe(null)
   })
 })
 

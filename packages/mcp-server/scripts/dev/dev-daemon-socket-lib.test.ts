@@ -1,5 +1,5 @@
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { daemonRecordSchema } from '../../src/daemon/daemon-record-schema.js'
 import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.js'
 import { fc, fcTest, withDefaults } from '../../src/shared/test-utils/fast-check.js'
-import { isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import {
+  assessRecordedDaemon,
+  isPidAlive,
+  readDaemonRecord,
+  readProcessStartMs,
+} from './dev-daemon-socket-lib.mjs'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -64,4 +69,113 @@ describe("isPidAlive against the daemon's own", () => {
     expect(isPidAlive(process.pid)).toBe(true)
     expect(isPidAlive(0)).toBe(false)
   })
+})
+
+describe('readProcessStartMs', () => {
+  /** A /proc whose stat line for pid 42 has a command name built to trip a naive split. */
+  function fakeProc(startTicks: number, btimeSeconds: number) {
+    const files: Record<string, string> = {
+      '/proc/42/stat': `42 (a) b c) S 1 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 ${startTicks} 1000 10 18446744073709551615`,
+      '/proc/stat': `cpu  1 2 3\nbtime ${btimeSeconds}\nprocesses 9\n`,
+    }
+    return (path: string) => {
+      const text = files[path]
+      if (text === undefined) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+      return text
+    }
+  }
+
+  it('reads field 22 after the command name, in clock ticks past the boot time', () => {
+    expect(readProcessStartMs(42, { readFile: fakeProc(12_345, 1_700_000_000) })).toBe(
+      1_700_000_000_000 + 123_450,
+    )
+  })
+
+  it('answers null where there is no /proc entry to read', () => {
+    expect(readProcessStartMs(43, { readFile: fakeProc(1, 1) })).toBeNull()
+  })
+
+  it.skipIf(!existsSync('/proc/self/stat'))('places a real process between boot and now', () => {
+    const start = readProcessStartMs(process.pid)
+    expect(start).not.toBeNull()
+    expect(start).toBeLessThanOrEqual(Date.now())
+    expect(start).toBeGreaterThan(Date.now() - process.uptime() * 1000 - 2_000)
+  })
+})
+
+// "This checkout's daemon is running" is decided here, once, for the wrapper's
+// refusal, `pnpm mcp:http:stop` and the SessionStart hook. A record outlives
+// its daemon, and its pid can come back as somebody else's process: that must
+// read as no daemon, while a daemon too busy to answer a ping still must not.
+describe('assessRecordedDaemon', () => {
+  const startedAt = '2026-01-01T00:00:00.000Z'
+  const recordedAt = Date.parse(startedAt)
+  const record = { pid: 42, socketPath: '/s', startedAt }
+  const seams = (over: Partial<Parameters<typeof assessRecordedDaemon>[1]> = {}) => ({
+    answers: async () => false,
+    isAlive: () => true,
+    startMs: () => recordedAt - 5_000,
+    ...over,
+  })
+
+  it('is running when the socket answers', async () => {
+    expect(await assessRecordedDaemon(record, seams({ answers: async () => true }))).toEqual({
+      running: true,
+      answering: true,
+      process: 'daemon',
+    })
+  })
+
+  it('is running, not answering, when the recorded pid is the daemon but the ping times out', async () => {
+    expect(await assessRecordedDaemon(record, seams())).toEqual({
+      running: true,
+      answering: false,
+      process: 'daemon',
+    })
+  })
+
+  it('is not running when the recorded pid started after the record was written', async () => {
+    expect(
+      await assessRecordedDaemon(record, seams({ startMs: () => recordedAt + 60_000 })),
+    ).toEqual({ running: false, answering: false, process: 'foreign' })
+  })
+
+  it('is not running when the recorded pid is gone', async () => {
+    expect(await assessRecordedDaemon(record, seams({ isAlive: () => false }))).toEqual({
+      running: false,
+      answering: false,
+      process: 'dead',
+    })
+  })
+
+  it('takes a live pid as the daemon when the start time or the record cannot say otherwise', async () => {
+    expect((await assessRecordedDaemon(record, seams({ startMs: () => null }))).running).toBe(true)
+    const { startedAt: _absent, ...undated } = record
+    const late = seams({ startMs: () => Date.now() })
+    expect((await assessRecordedDaemon(undated, late)).running).toBe(true)
+    expect((await assessRecordedDaemon({ ...record, startedAt: 'never' }, late)).running).toBe(true)
+  })
+
+  it.skipIf(!existsSync('/proc/self/stat'))(
+    'reads a real process that took over a stale record’s pid as not the daemon',
+    async () => {
+      const standIn = spawn('sleep', ['30'], { stdio: 'ignore' })
+      try {
+        const stale = {
+          pid: standIn.pid as number,
+          socketPath: join(dataDirWith(null), 'gone.sock'),
+          startedAt: new Date(Date.now() - 60_000).toISOString(),
+        }
+        expect(await assessRecordedDaemon(stale)).toEqual({
+          running: false,
+          answering: false,
+          process: 'foreign',
+        })
+        const current = { ...stale, startedAt: new Date(Date.now() + 1_000).toISOString() }
+        expect((await assessRecordedDaemon(current)).process).toBe('daemon')
+      } finally {
+        standIn.kill('SIGKILL')
+      }
+    },
+  )
 })

@@ -7,16 +7,23 @@
 // socket, and /api/runtime/ping answers on it (ADR-0050 decision 2). The
 // socket path hashes the data dir and every checkout has its own data dir, so
 // whatever answers there is this checkout's own daemon — no derived port is
-// consulted.
+// consulted. A daemon that is running (assessRecordedDaemon) but too busy to
+// answer is waited for, never doubled.
 //
 // Wired into client `SessionStart` hooks so opening this repo auto-launches
 // the dev daemon. Re-running this script is safe.
 
 import { spawn } from 'node:child_process'
-import { mkdir, open } from 'node:fs/promises'
+import { mkdir, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
-import { isPidAlive, readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
+import {
+  answersPing,
+  assessRecordedDaemon,
+  isPidAlive,
+  PING_TIMEOUT_MS,
+  readDaemonRecord,
+} from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
   releaseSpawnLock,
@@ -25,6 +32,7 @@ import {
 import {
   buildMcpHttpDevSpawnArgs,
   describeTokenConflict,
+  refusalLine,
   resolveDevBearerToken,
   resolveReadyTimeoutMs,
   waitForDaemon,
@@ -53,7 +61,6 @@ const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOAR
 // tests can exercise the timeout path without waiting 30s.
 const READY_TIMEOUT_MS = resolveReadyTimeoutMs(process.env)
 const READY_POLL_INTERVAL_MS = 200
-const PING_TIMEOUT_MS = 3_000
 // The token this checkout's clients (the stdio proxy) send. Set
 // WHITEBOARD_TOKEN in the shell to use a custom token; when a custom value is
 // set the spawned daemon receives an explicit --token flag that overrides the
@@ -67,28 +74,18 @@ function info(message) {
   if (!QUIET) console.log(message)
 }
 
-async function answersPing(record) {
-  try {
-    const { status } = await requestDaemon(record, {
-      path: '/api/runtime/ping',
-      timeoutMs: PING_TIMEOUT_MS,
-    })
-    return status === 200
-  } catch {
-    return false
-  }
-}
-
 // Returns a verdict instead of acting on it, so the same assessment can run
 // twice: once unlocked (the fast path — "is our daemon already up?") and once
 // again under the spawn lock (the decisive assessment a winner makes right
 // before choosing to spawn). Neither pass ever mutates state.
 //
-// A record whose daemon does not answer is what a daemon that died without
+// A record whose daemon is not running is what a daemon that died without
 // cleaning up leaves behind, so it reads as no daemon at all.
 async function assessDaemon() {
   const record = readDaemonRecord(EXPECTED_DATA_DIR)
-  if (record === null || !(await answersPing(record))) return { kind: 'free' }
+  if (record === null) return { kind: 'free' }
+  const daemon = await assessRecordedDaemon(record, { answers: answersPing })
+  if (!daemon.running) return { kind: 'free' }
   // The ping is unauthenticated. A daemon started with another token (say,
   // `whiteboard daemon start` against this data dir) would refuse every
   // request the clients send, which is worth saying here rather than there.
@@ -96,6 +93,12 @@ async function assessDaemon() {
     return {
       kind: 'conflict',
       message: describeTokenConflict({ pid: record.pid, dataDir: EXPECTED_DATA_DIR }),
+    }
+  }
+  if (!daemon.answering) {
+    return {
+      kind: 'busy',
+      message: `daemon pid ${record.pid} is running but did not answer its socket within ${PING_TIMEOUT_MS}ms`,
     }
   }
   return { kind: 'healthy', message: `daemon pid ${record.pid} already answering on its socket` }
@@ -142,10 +145,40 @@ function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
 }
 
-function failReadyTimeout(detail = '') {
+function failReadyTimeout() {
   console.error(
-    `[ensure-http-dev-daemon] timed out waiting for the dev daemon to answer on its socket after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}. ` +
+    `[ensure-http-dev-daemon] timed out waiting for the dev daemon to answer on its socket after ${READY_TIMEOUT_MS}ms — see ${LOG_PATH}. ` +
       'MCP tools will be unavailable for this session.',
+  )
+  process.exit(1)
+}
+
+async function failSpawnedExit(how, logOffset) {
+  const log = await readFile(LOG_PATH).catch(() => Buffer.alloc(0))
+  const why = refusalLine(log.subarray(logOffset).toString('utf8'))
+  console.error(
+    `[ensure-http-dev-daemon] the dev server exited (${how}) before its daemon answered${why === null ? '' : `: ${why}`} — full log: ${LOG_PATH}. ` +
+      'MCP tools will be unavailable for this session.',
+  )
+  process.exit(1)
+}
+
+// The record's daemon is running, so starting another would only be refused:
+// wait for it to answer instead, within the same budget.
+async function waitForRunningDaemon(busyMessage) {
+  const ready = await waitForDaemon({
+    isUp: async () => (await assessDaemon()).kind === 'healthy',
+    sleep,
+    timeoutMs: READY_TIMEOUT_MS,
+    pollIntervalMs: READY_POLL_INTERVAL_MS,
+  })
+  if (ready) {
+    info('[ensure-http-dev-daemon] the running dev daemon answered')
+    process.exit(0)
+  }
+  console.error(
+    `[ensure-http-dev-daemon] ${busyMessage}, and still had not after ${READY_TIMEOUT_MS}ms; no second daemon was started. ` +
+      'MCP tools will be unavailable for this session — `pnpm mcp:http:stop` and reopen the session to restart it.',
   )
   process.exit(1)
 }
@@ -163,9 +196,14 @@ async function runAsWinner() {
     console.error(`[ensure-http-dev-daemon] ${assessment.message}`)
     process.exit(1)
   }
+  if (assessment.kind === 'busy') {
+    await waitForRunningDaemon(assessment.message)
+    return
+  }
 
   await mkdir(LOG_DIR, { recursive: true })
   const logFile = await open(LOG_PATH, 'a')
+  const logOffset = (await logFile.stat()).size
   const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
   const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN), {
@@ -182,22 +220,23 @@ async function runAsWinner() {
 
   // Wait for the daemon to actually answer before letting the hook return.
   // Without this, an MCP client started right after the hook can race the
-  // daemon's startup while the script reports success.
-  let exitedEarly = false
-  let exitCode = null
-  child.once('exit', (code) => {
-    exitedEarly = true
-    exitCode = code
+  // daemon's startup while the script reports success. An exit of 0 is the
+  // dev server handing over to a daemon that came up in the meantime, which
+  // the wait then finds; any other exit is a refusal, and nothing will answer
+  // however long this waits.
+  let failedExit = null
+  child.once('exit', (code, signal) => {
+    if (code !== 0) failedExit = signal ?? `code ${code}`
   })
   const ready = await waitForDaemon({
     isUp: async () => (await assessDaemon()).kind === 'healthy',
     sleep,
     timeoutMs: READY_TIMEOUT_MS,
     pollIntervalMs: READY_POLL_INTERVAL_MS,
+    gaveUp: () => failedExit !== null,
   })
-  if (!ready) {
-    failReadyTimeout(exitedEarly ? `; spawned process exited with code ${exitCode}` : '')
-  }
+  if (!ready && failedExit !== null) await failSpawnedExit(failedExit, logOffset)
+  if (!ready) failReadyTimeout()
 
   // Detach now that we know the daemon is up — keeps the parent shell free
   // to disconnect without taking the child down with it.

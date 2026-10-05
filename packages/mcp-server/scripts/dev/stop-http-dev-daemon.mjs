@@ -42,8 +42,17 @@ const result = await stopDevDaemon({
   sleep,
 })
 
+// No dev daemon of this checkout is running in either of the first two cases,
+// which is what a stop is asked to bring about, so both succeed.
 if (result.kind === 'none') {
   console.log(`no dev daemon is running for ${dataDir}`)
+} else if (result.kind === 'stale') {
+  console.log(
+    `no dev daemon is running for ${dataDir}: ${result.reason} — not signalled; the next dev daemon replaces the stale record`,
+  )
+} else if (result.kind === 'unsignallable') {
+  console.error(`cannot stop the dev daemon for ${dataDir}: ${result.reason}`)
+  process.exit(1)
 } else if (result.kind === 'stopped') {
   console.log(
     `stopped the dev daemon for ${dataDir} (signalled the ${result.via}, pid ${result.pid})`,

@@ -23,14 +23,57 @@ export function resolveReadyTimeoutMs(env) {
   return parsed
 }
 
-/** Polls `isUp` until it answers true, or the timeout elapses. */
-export async function waitForDaemon({ isUp, sleep, timeoutMs, pollIntervalMs, now = Date.now }) {
+/**
+ * Polls `isUp` until it answers true, the timeout elapses, or `gaveUp` holds —
+ * the last so that a dev server which has already exited is not waited out.
+ */
+export async function waitForDaemon({
+  isUp,
+  sleep,
+  timeoutMs,
+  pollIntervalMs,
+  gaveUp = () => false,
+  now = Date.now,
+}) {
   const startedAt = now()
   while (now() - startedAt < timeoutMs) {
     if (await isUp()) return true
+    if (gaveUp()) return false
     await sleep(pollIntervalMs)
   }
   return false
+}
+
+// What pnpm writes around a script's own output: its engine warning (bare or
+// behind a `--filter` column), the command it runs, the package directory,
+// and its report of the failure.
+const PNPM_REPORT_LINE =
+  /^(?:\.\s+\|\s+)?(?:\[WARN\]|\[ERR_PNPM_|\[ELIFECYCLE\]|\$ |Exit status )|^\/\S*:$/
+// What node writes around an uncaught error's own line: the runtime version
+// after it, and before it the source position, excerpt and caret.
+const NODE_CRASH_FRAME = /^Node\.js v\d|^node:\S+:\d+$|^\S+:\/\/\S+:\d+$|^\s*\^+$|^[{}]$/
+
+/**
+ * The last line the dev server itself wrote in `logText`, or null when there
+ * is none: pnpm's report and the frame node puts around an uncaught error are
+ * skipped, and so is every indented line — a stack frame, an error's property
+ * dump, a source excerpt.
+ *
+ * @param {string} logText
+ * @returns {string | null}
+ */
+export function refusalLine(logText) {
+  const own = logText
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter(
+      (line) =>
+        line !== '' &&
+        !/^\s/.test(line) &&
+        !PNPM_REPORT_LINE.test(line) &&
+        !NODE_CRASH_FRAME.test(line),
+    )
+  return own.at(-1) ?? null
 }
 
 const PACKAGE_SCRIPT_DEFAULT_TOKEN = 'whiteboard-dev'
