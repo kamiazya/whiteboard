@@ -17,9 +17,14 @@
  * only changes by a `saved`.
  *
  * The settling commands are the ones the session settles after: a push
- * resolving, a landing, and the post-commit check. Everything else must
- * produce no `saved`, which is what keeps "pending forever" and "saved too
- * early" from cancelling each other out.
+ * resolving, a landing, the post-commit check, the keeper's state replacing a
+ * refused copy, and the document coming back from the trash. Everything else
+ * must produce no `saved`, which is what keeps "pending forever" and "saved
+ * too early" from cancelling each other out.
+ *
+ * A refusal and a removal each hold `saved` off on their own, whatever the
+ * pushes are doing: a refused copy until the keeper's state replaces it, a
+ * removed document until it is restored.
  */
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
@@ -37,6 +42,7 @@ type Entry =
   | { event: 'resolve'; startedAt: number }
   | { event: 'failure' }
   | { event: 'landed' }
+  | { event: 'refused' }
 
 interface Model {
   log: Entry[]
@@ -49,6 +55,10 @@ interface Model {
   /** A failure re-opened a document that had settled, and no `saved` has followed. */
   reopened: boolean
   busy: boolean
+  /** The keeper refused a write and its state has not replaced the copy yet. */
+  awaitingKeeperState: boolean
+  /** The document is out of the keeper's record. */
+  gone: boolean
 }
 
 interface Real {
@@ -73,6 +83,11 @@ const emptyTally = () => ({
   blockedByInFlight: 0,
   droppedPushes: 0,
   overlappingPushes: 0,
+  refusedOverFailure: 0,
+  blockedByRefusal: 0,
+  savedOnKeeperState: 0,
+  blockedByRemoval: 0,
+  savedOnRestore: 0,
 })
 let tally = emptyTally()
 
@@ -82,11 +97,14 @@ function failureOutstanding(log: readonly Entry[]): boolean {
     if (entry.event === 'failure') last = index
   })
   if (last < 0) return false
-  return !log
-    .slice(last + 1)
-    .some(
-      (entry) => entry.event === 'landed' || (entry.event === 'resolve' && entry.startedAt > last),
-    )
+  return !log.slice(last + 1).some(
+    (entry) =>
+      entry.event === 'landed' ||
+      // A refusal drops what was outstanding with the copy that held it,
+      // so the failure is no longer one a later write could answer.
+      entry.event === 'refused' ||
+      (entry.event === 'resolve' && entry.startedAt > last),
+  )
 }
 
 function newSession(): { model: Model; real: Real } {
@@ -108,6 +126,8 @@ function newSession(): { model: Model; real: Real } {
     dirty: false,
     reopened: false,
     busy: false,
+    awaitingKeeperState: false,
+    gone: false,
   }
   return { model, real }
 }
@@ -116,7 +136,12 @@ const kindsSince = (real: Real, from: number): BrowserPersistenceState['kind'][]
   real.reports.slice(from).map((report) => report.kind)
 
 /** Judged on the reports themselves, whatever the prediction says. */
-function judgeSafety(model: Model, real: Real, from: number): void {
+function judgeSafety(
+  model: Model,
+  real: Real,
+  from: number,
+  pendingMayFollowDegraded: boolean,
+): void {
   const lastSavedBefore = real.reports
     .slice(0, from)
     .reverse()
@@ -128,6 +153,8 @@ function judgeSafety(model: Model, real: Real, from: number): void {
       expect(model.open, 'saved while a push was in flight').toEqual([])
       expect(model.busy, 'saved while the session was busy').toBe(false)
       expect(failureOutstanding(model.log), 'saved with a failure unanswered').toBe(false)
+      expect(model.awaitingKeeperState, 'saved over a copy the keeper refused').toBe(false)
+      expect(model.gone, 'saved while the document is out of the record').toBe(false)
       expect(previousKind, 'saved straight after saved: nothing was edited').not.toBe('saved')
       expect(report.lastSavedAt).not.toBeNull()
       lastSavedAt = report.lastSavedAt
@@ -135,8 +162,12 @@ function judgeSafety(model: Model, real: Real, from: number): void {
       expect(report.lastSavedAt, `${report.kind} must carry the last saved time`).toBe(lastSavedAt)
     }
     if (report.kind === 'pending') {
+      // A refusal is the one exception: it turns an unanswered failure into
+      // a wait for the keeper's state, which no later write can answer.
       expect(
-        previousKind === undefined || previousKind === 'saved',
+        previousKind === undefined ||
+          previousKind === 'saved' ||
+          (pendingMayFollowDegraded && previousKind === 'degraded'),
         'pending is the first report after quiet, never after another unsaved report',
       ).toBe(true)
     }
@@ -148,6 +179,8 @@ abstract class Step implements fc.Command<Model, Real> {
   abstract readonly label: string
   /** Whether the session settles after this step, so a `saved` may follow. */
   protected readonly settles: boolean = false
+  /** Whether this step may turn a `degraded` into a `pending`. */
+  protected readonly replacesFailure: boolean = false
   check(_model: Readonly<Model>): boolean {
     return true
   }
@@ -158,12 +191,23 @@ abstract class Step implements fc.Command<Model, Real> {
     const expected = this.apply(model, real)
     if (this.settles) expected.push(...this.settleExpectation(model))
     expect(kindsSince(real, from), `after ${this.label}`).toEqual(expected)
-    judgeSafety(model, real, from)
+    judgeSafety(model, real, from, this.replacesFailure)
     for (const kind of expected) tally[kind]++
   }
-  /** The post-commit check: saved iff dirty, quiet, and no failure unanswered. */
-  private settleExpectation(model: Model): Kind[] {
+  /**
+   * The post-commit check: saved iff dirty, quiet, no failure unanswered, no
+   * refused copy still held, and the document in the record.
+   */
+  protected settleExpectation(model: Model): Kind[] {
     if (!model.dirty || failureOutstanding(model.log)) return []
+    if (model.awaitingKeeperState) {
+      tally.blockedByRefusal++
+      return []
+    }
+    if (model.gone) {
+      tally.blockedByRemoval++
+      return []
+    }
     if (model.open.length > 0) {
       tally.blockedByInFlight++
       return []
@@ -317,6 +361,57 @@ class ToggleBusy extends Step {
   }
 }
 
+class Refused extends Step {
+  readonly label = 'refused'
+  protected readonly replacesFailure = true
+  protected apply(model: Model, real: Real): Kind[] {
+    const outstanding = failureOutstanding(model.log)
+    if (outstanding) tally.refusedOverFailure++
+    real.ledger.refused()
+    model.log.push({ event: 'refused' })
+    model.awaitingKeeperState = true
+    // Already reading as pending, with no failure on top of it: nothing new to say.
+    const pendingAlready = model.dirty && !outstanding
+    model.dirty = true
+    return pendingAlready ? [] : ['pending']
+  }
+}
+
+class TookKeeperState extends Step {
+  readonly label = 'tookKeeperState'
+  protected apply(model: Model, real: Real): Kind[] {
+    real.ledger.tookKeeperState()
+    // Only a session holding a refused copy settles on the keeper's state.
+    if (!model.awaitingKeeperState) return []
+    model.awaitingKeeperState = false
+    const kinds = this.settleExpectation(model)
+    if (kinds.includes('saved')) tally.savedOnKeeperState++
+    return kinds
+  }
+}
+
+class DocumentRemoved extends Step {
+  readonly label = 'documentRemoved'
+  protected apply(model: Model, real: Real): Kind[] {
+    real.ledger.documentRemoved()
+    model.gone = true
+    return []
+  }
+}
+
+class DocumentRestored extends Step {
+  readonly label = 'documentRestored'
+  protected apply(model: Model, real: Real): Kind[] {
+    real.ledger.documentRestored()
+    const wasGone = model.gone
+    model.gone = false
+    // The restore settles on its own: no write follows it to do so.
+    const kinds = this.settleExpectation(model)
+    if (wasGone && kinds.includes('saved')) tally.savedOnRestore++
+    return kinds
+  }
+}
+
 const steps = fc.commands(
   [
     ...Array<fc.Arbitrary<Step>>(3).fill(fc.constant(new Edit())),
@@ -328,6 +423,10 @@ const steps = fc.commands(
     ...Array<fc.Arbitrary<Step>>(2).fill(fc.constant(new Landed())),
     ...Array<fc.Arbitrary<Step>>(2).fill(fc.constant(new Settle())),
     fc.constant(new ToggleBusy()),
+    fc.constant(new Refused()),
+    ...Array<fc.Arbitrary<Step>>(3).fill(fc.constant(new TookKeeperState())),
+    fc.constant(new DocumentRemoved()),
+    ...Array<fc.Arbitrary<Step>>(3).fill(fc.constant(new DocumentRestored())),
   ],
   { maxCommands: 40, size: 'max' },
 )
