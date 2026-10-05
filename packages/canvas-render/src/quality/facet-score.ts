@@ -309,7 +309,12 @@ function declaredPartitions(
   // `multi` half is reported by `scoreFacets`, since a key one box carries
   // twice partitions nothing.
   out.push(...tagPartitions(boxes, (b) => b.tags).partitions)
-  for (const key of declaredAxisKeys(canvas)) {
+  // A declared key no box carries puts every box in one class, which the
+  // filter below drops — so it is skipped before a pass over every box
+  // rather than after, or a long stored declaration costs axes × boxes on
+  // every layout.
+  const carried = new Set(boxes.flatMap((b) => Object.keys(b.facets ?? {})))
+  for (const key of declaredAxisKeys(canvas).filter((k) => carried.has(k))) {
     // Named by the facet KEY, which is what the canvas itself wrote — so a
     // reading points at the declaration rather than at a position in a list.
     out.push({ name: key, partition: new Map(boxes.map((b) => [b.id, facetPayloadKeyOf(b, key)])) })

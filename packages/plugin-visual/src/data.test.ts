@@ -15,6 +15,8 @@ import {
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
+  VISUAL_AXES_KEY,
+  VISUAL_AXES_MAX,
   VISUAL_EDGES_KEY,
   VISUAL_INK_KEY,
   VISUAL_SHAPE_KEY,
@@ -56,6 +58,20 @@ describe('visualPlugin', () => {
     expect(registry.validateFacetWrite(VISUAL_EDGES_KEY, { routing: 'curved' }).ok).toBe(true)
     expect(registry.validateFacetWrite(VISUAL_EDGES_KEY, { routing: 'spiral' }).ok).toBe(false)
     expect(registry.validateFacetWrite(VISUAL_EDGES_KEY, { lineJumps: 'arc' }).ok).toBe(true)
+  })
+})
+
+describe('visual.axes/v0', () => {
+  const axes = (count: number) => Array.from({ length: count }, (_, i) => `x.k${i}/v0`)
+
+  it('holds one board to 64 declared axes on write', () => {
+    // A literal, not the constant: every other case reads the limit back
+    // from itself, so a changed limit would pass them all.
+    expect(VISUAL_AXES_MAX).toBe(64)
+    expect(registry.validateFacetWrite(VISUAL_AXES_KEY, { axes: axes(64) }).ok).toBe(true)
+    const over = registry.validateFacetWrite(VISUAL_AXES_KEY, { axes: axes(65) })
+    expect(over.ok).toBe(false)
+    expect(over.ok ? '' : over.message).toContain('64-axis limit')
   })
 })
 

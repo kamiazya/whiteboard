@@ -41,4 +41,26 @@ describe('facet scoring cost', () => {
     )
     expect(msToScore(nodes) / boxes).toBeLessThan(0.15)
   })
+
+  it('scores a board declaring many axes no box carries in time linear in the axes', () => {
+    // Stored before the write bound, or written by another tool: a declared
+    // key no box carries partitions nothing, so it must not cost a pass over
+    // every box. Per-key passes made this axes × boxes — seconds here.
+    const axes = 20_000
+    const nodes = Array.from({ length: 400 }, (_, i) =>
+      box(`n${i}`, [i % 2 === 0 ? 'team:core' : 'team:edge']),
+    )
+    const declared = Array.from({ length: axes }, (_, i) => `x.k${i}/v0`)
+    const canvas = {
+      nodes,
+      edges: [],
+      facets: { 'visual.axes/v0': { axes: declared } },
+    } as SpatialCanvas
+    const started = performance.now()
+    const score = scoreFacets(canvas)
+    const elapsed = performance.now() - started
+    // The subject is present: the board's own tag key still partitions.
+    expect(score.partitions).toBeGreaterThan(0)
+    expect(elapsed / axes).toBeLessThan(0.01)
+  })
 })

@@ -86,6 +86,20 @@ const visualInkFacetSchema = z.object({
 export const VISUAL_INK_KEY = 'visual.ink/v0'
 
 /**
+ * The most semantic axes one board may declare when it is written.
+ *
+ * A board declares a handful — the two-axis case above is the one the
+ * design names, and colour and silhouette are the only two channels an axis
+ * competes for — so 64 is an order of magnitude over any board a reader
+ * could follow, and still small. What it bounds is a payload: every layout
+ * scores the declaration for the legend, and an unbounded list let one
+ * write of a few megabytes cost a render tens of seconds. A stored
+ * declaration past it still reads, because the scorer reads the stored
+ * payload itself and skips a key no box carries.
+ */
+export const VISUAL_AXES_MAX = 64
+
+/**
  * `visual.axes/v0` — which of its own facets a canvas treats as SEMANTIC
  * AXES, so a reader can tell a distinction it means from a distinction it
  * merely draws.
@@ -108,7 +122,9 @@ export const VISUAL_INK_KEY = 'visual.ink/v0'
  * the stray key does. A key no box carries simply contributes no partition.
  */
 const visualAxesFacetSchema = z.object({
-  axes: z.array(z.string().regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"')),
+  axes: z
+    .array(z.string().regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"'))
+    .max(VISUAL_AXES_MAX, `more axes than the ${VISUAL_AXES_MAX}-axis limit for one board`),
 })
 
 export const VISUAL_AXES_KEY = 'visual.axes/v0'
