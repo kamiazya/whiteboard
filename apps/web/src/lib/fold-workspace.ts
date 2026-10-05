@@ -23,7 +23,7 @@
 import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
-import { Loro, type LoroDoc } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -65,7 +65,7 @@ async function adoptRow(
   // record stays where it is, still reported by the old path as
   // damaged-but-present, which is a recoverable answer.
   if (loaded.kind !== 'ok') return false
-  const source = new Loro()
+  const source = new LoroDoc()
   source.import(loaded.snapshot)
   for (const delta of loaded.deltas ?? []) source.import(delta)
   const { path, documentId, name } = entry

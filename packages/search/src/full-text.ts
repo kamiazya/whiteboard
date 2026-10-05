@@ -168,14 +168,12 @@ export function fullTextSearch(
   }
   // Excerpts only for what is answered: they cost a scan of every text per
   // query token, and ranking never reads them.
-  return scored
-    .sort((a, b) => b.score - a.score || compareCodeUnit(a.doc.documentId, b.doc.documentId))
-    .slice(0, limit)
-    .map(({ doc, score }) => ({
-      documentId: doc.documentId,
-      score,
-      contexts: contextsFor(doc, query),
-    }))
+  scored.sort((a, b) => b.score - a.score || compareCodeUnit(a.doc.documentId, b.doc.documentId))
+  return scored.slice(0, limit).map(({ doc, score }) => ({
+    documentId: doc.documentId,
+    score,
+    contexts: contextsFor(doc, query),
+  }))
 }
 
 interface Match {
