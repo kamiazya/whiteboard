@@ -87,21 +87,6 @@ export const canvasViewOutputSchema = z
 export type CanvasViewOutput = z.infer<typeof canvasViewOutputSchema>
 
 /**
- * The MCP Apps (SEP-1865) inline canvas view. Its result is linked to the
- * `ui://whiteboard/canvas-view` widget resource by the registration's
- * `_meta.ui.resourceUri`, so a host that supports the extension renders it
- * rather than showing JSON.
- *
- * References are resolved UNCONDITIONALLY here, unlike `wb_scene_render`'s
- * opt-in `embedReferences`. That flag exists because the render tool shares
- * its scene builder with `wb_canvas_snapshot`'s layout analysis, whose
- * usefulness depends on a
- * canvas's digest not moving when a different document is edited. This tool
- * has no such sibling: its one consumer is a viewer for a human, which
- * always wants the reference resolved, and it has no store of its own to
- * resolve them with.
- */
-/**
  * One `[target, wire]` pair for a reference the graph actually resolved, or
  * nothing. The wire shape is canvas-render's, which the widget parses with
  * the same schema this tool declares.
@@ -129,6 +114,21 @@ async function declaredColoursOf(
   return withDeclaredColours(canvas, await workspaceTagLibrary(deps, workspaceId, 'deployment'))
 }
 
+/**
+ * The MCP Apps (SEP-1865) inline canvas view. Its result is linked to the
+ * `ui://whiteboard/canvas-view` widget resource by the registration's
+ * `_meta.ui.resourceUri`, so a host that supports the extension renders it
+ * rather than showing JSON.
+ *
+ * References are resolved UNCONDITIONALLY here, unlike `wb_scene_render`'s
+ * opt-in `embedReferences`. That flag exists because the render tool shares
+ * its scene builder with `wb_canvas_snapshot`'s layout analysis, whose
+ * usefulness depends on a
+ * canvas's digest not moving when a different document is edited. This tool
+ * has no such sibling: its one consumer is a viewer for a human, which
+ * always wants the reference resolved, and it has no store of its own to
+ * resolve them with.
+ */
 export function createCanvasViewTool(deps: ServerDeps) {
   return {
     name: 'canvas_view' as const,

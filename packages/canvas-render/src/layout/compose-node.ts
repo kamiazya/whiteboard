@@ -46,13 +46,6 @@ import { collectTextRuns, composePassageHighlights, type NodePassage } from './p
 export { mdastOptionsFor, nodeContentBounds, sketchInkFor } from './node-box.js'
 
 /**
- * Composes a `text` node's chrome plus its laid-out markdown body. A
- * malformed body (one whose parsed mdast falls outside the caller's
- * accepted subset) degrades to a single literal text run rather than
- * aborting the canvas — this is the layer's own totality addition on top
- * of canvas-render's already-total layout functions.
- */
-/**
  * The text node's own fit: the blocks that fit, but never fewer than one.
  *
  * A text node has no lower-ranked rendering to degrade to, so dropping
@@ -75,6 +68,13 @@ function fitTextBody(
   return fitSceneInNode(scene, node, options) ?? firstLineOfBlocks(scene.nodes)
 }
 
+/**
+ * Composes a `text` node's chrome plus its laid-out markdown body. A
+ * malformed body (one whose parsed mdast falls outside the caller's
+ * accepted subset) degrades to a single literal text run rather than
+ * aborting the canvas — this is the layer's own totality addition on top
+ * of canvas-render's already-total layout functions.
+ */
 function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   // The editor overlay owns this node's text: draw the chrome alone, with
   // no truncation mark — there is no drawn text for the mark to be about.

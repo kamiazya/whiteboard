@@ -48,16 +48,6 @@ interface Props {
    */
   keeper?: 'daemon' | 'browser'
   /**
-   * Opens and closes the document's history. The PAGE owns both the state and
-   * the panel: history is a column of the editor row, not a popover hanging
-   * off this bar, so the bar carries only the control that asks for it.
-   *
-   * Omitted for a document with no history to open, which hides the control
-   * rather than rendering it inert. It is deliberately NOT gated on the
-   * document's kind — a markdown document's history is its keeper's business,
-   * and gating it here is what left one unreachable.
-   */
-  /**
    * A past version on screen in place of the document, and the two things to
    * do about it.
    *

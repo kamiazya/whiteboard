@@ -130,11 +130,6 @@ export interface SpatialLayoutOptions {
    */
   readonly suppressedBodyNodeIds?: readonly string[]
   /**
-   * Silhouettes by namespaced id, merged OVER the built-in table — the same
-   * shape as `SvgDocumentOptions.icons`. The backend must be handed the same
-   * table, or a contributed shape lays out correctly and paints as a rect.
-   */
-  /**
    * What plugins contribute to rendering: silhouettes, how they read the
    * facets that select them, where they want a node's text, and what they
    * draw on top. Defaults to the bundled `visual` plugin's.

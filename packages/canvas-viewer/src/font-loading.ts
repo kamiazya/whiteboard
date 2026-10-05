@@ -95,13 +95,6 @@ const registeredByBytes = new Map<string, Promise<ViewerFontStatus>>()
 const loadedByBytes = new Set<string>()
 
 /**
- * Registers a face from its bytes in this realm's face set — the document's
- * on a window, the worker global's on a worker — and resolves once it is
- * usable, so `hasLoadedFace(family)` answers true from then on. Never
- * rejects: a realm without `FontFace`, or bytes that are not a font, answer
- * `'degraded'` and the layout keeps declaring the bundled family.
- */
-/**
  * The bytes inside a `data:` URI, so a face can be constructed from a buffer
  * rather than from a `url()` source.
  *
@@ -138,6 +131,13 @@ export function dataUriToBytes(dataUri: string): Uint8Array<ArrayBuffer> {
   return bytes
 }
 
+/**
+ * Registers a face from its bytes in this realm's face set — the document's
+ * on a window, the worker global's on a worker — and resolves once it is
+ * usable, so `hasLoadedFace(family)` answers true from then on. Never
+ * rejects: a realm without `FontFace`, or bytes that are not a font, answer
+ * `'degraded'` and the layout keeps declaring the bundled family.
+ */
 export function registerFontBytes(family: string, bytes: ArrayBuffer): Promise<ViewerFontStatus> {
   const existing = registeredByBytes.get(family)
   if (existing !== undefined) return existing

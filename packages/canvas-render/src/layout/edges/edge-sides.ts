@@ -175,24 +175,6 @@ export interface EdgeAnchorPair {
   readonly toSide?: EdgeSide
 }
 
-/**
- * Deterministic anchor positions for every edge end, spreading the ends
- * that share one (node, side) instead of stacking them all on the side's
- * midpoint. JSON Canvas authors a side but never a position along it, so
- * the position is the renderer's to choose — and a stack of ends at one
- * point makes edges with different colors or arrowheads read as a single
- * line until they diverge.
- *
- * Within a shared side, ends sit at fractions 1/(n+1) … n/(n+1), ordered
- * by where the FAR endpoint's center lies along the side's tangent axis so
- * routes leave in the order of their destinations and never cross right at
- * the node; ties (same far node, e.g. a bidirectional pair) fall back to
- * edge document order, then from-before-to. A side with a single end keeps
- * its midpoint, so documents without shared sides render exactly as before.
- *
- * Edges with a missing endpoint get no entry — `routeEdge` already
- * degrades those to a zero-length path on its own.
- */
 /** A resolved side pair for one edge, as consumed by `edgeSideOverrides`. */
 export type EdgeSides = SidePair
 

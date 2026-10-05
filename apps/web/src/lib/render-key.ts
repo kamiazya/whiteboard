@@ -213,13 +213,6 @@ function segment(value: string): string {
 }
 
 /**
- * The key as a path, build id first (ADR-0027 decision 5).
- *
- * Today it is the in-memory map's key; it is shaped as a path because that is
- * what the OPFS store will address, and a leading build id makes retiring a
- * build's whole cache one directory removal rather than a scan.
- */
-/**
  * What a stored entry's bytes are — JSON for every family, and that is a
  * correction to this key's first sketch rather than an oversight.
  *
@@ -240,6 +233,13 @@ const EXTENSION: Readonly<Record<BrokeredPipeline, string>> = {
   outline: 'json',
 }
 
+/**
+ * The key as a path, build id first (ADR-0027 decision 5).
+ *
+ * Today it is the in-memory map's key; it is shaped as a path because that is
+ * what the OPFS store will address, and a leading build id makes retiring a
+ * build's whole cache one directory removal rather than a scan.
+ */
 export function renderKeyPath(key: RenderKey): string {
   const version = key.version ?? ''
   // Every axis that is set, in one leaf. The font set is encoded like any

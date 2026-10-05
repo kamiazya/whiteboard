@@ -72,26 +72,6 @@ const PLUGIN_UIS: readonly PluginUi[] = [visualUi]
 
 // --- visual.edges/v0 -------------------------------------------------------
 
-/**
- * The one canvas row this vessel still draws itself, and the reason it does:
- * what the row must show is the EFFECTIVE value — the facet, else the
- * theme's default, else the built-in — which is a resolution only a surface
- * holding the canvas AND the registry can make. Under neon, nothing stored
- * means Orthogonal is pressed, not Straight.
- *
- * `DerivedFacetForm` cannot answer that. Its `stored` IS the payload, so
- * seeding it with a resolved value would make every control claim something
- * is written that is not, and its whole-draft write would then record both
- * axes on a pick that touched one. The commands here canonicalise instead:
- * picking the value the theme already has stores nothing, which is what
- * lets the row go back to following the theme.
- *
- * What it does NOT draw itself is the row's VOCABULARY. Labels, order and
- * glyphs come from the facet's own declared editor spec, read through the
- * registry — the same derivation every other row is drawn from, so this
- * surface names no routing style and cannot drift from the plugin.
- */
-
 /** The declared segments for one field of the edges facet, or none. */
 function edgeSegments(
   registry: FacetRegistry,
@@ -155,6 +135,25 @@ function EdgeSegmentRow({
   )
 }
 
+/**
+ * The one canvas row this vessel still draws itself, and the reason it does:
+ * what the row must show is the EFFECTIVE value — the facet, else the
+ * theme's default, else the built-in — which is a resolution only a surface
+ * holding the canvas AND the registry can make. Under neon, nothing stored
+ * means Orthogonal is pressed, not Straight.
+ *
+ * `DerivedFacetForm` cannot answer that. Its `stored` IS the payload, so
+ * seeding it with a resolved value would make every control claim something
+ * is written that is not, and its whole-draft write would then record both
+ * axes on a pick that touched one. The commands here canonicalise instead:
+ * picking the value the theme already has stores nothing, which is what
+ * lets the row go back to following the theme.
+ *
+ * What it does NOT draw itself is the row's VOCABULARY. Labels, order and
+ * glyphs come from the facet's own declared editor spec, read through the
+ * registry — the same derivation every other row is drawn from, so this
+ * surface names no routing style and cannot drift from the plugin.
+ */
 const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) => {
   const current = resolveEffectiveCanvasEdgeStyle(canvas, facetRegistry)
   return (
@@ -175,19 +174,6 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) 
   )
 }
 
-/**
- * The `contextMenu.node.properties` point resolved to menu items: a
- * separator fencing the region off from the core rows, then one band group
- * per contributing namespace under the plugin's displayName, then the
- * doorway to the full panel. Group order is namespace-id lexicographic —
- * display wording never moves it.
- *
- * The heading is unconditional. An earlier rule dropped it while only one
- * namespace contributed, on the reasoning that a lone heading says nothing
- * — but what it actually says is WHERE THE CORE MENU ENDS, and without it
- * a facet row is indistinguishable from Color or Order. Reported from a
- * phone once a third band landed.
- */
 /**
  * The node context menu's entire facet surface: one doorway, and nothing
  * that edits a facet.

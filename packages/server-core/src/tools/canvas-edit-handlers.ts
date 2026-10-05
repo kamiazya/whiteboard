@@ -50,19 +50,6 @@ type CanvasOp = CanvasEditInput['ops'][number]
 type OpNamed<K extends CanvasOp['op']> = Extract<CanvasOp, { op: K }>
 
 /**
- * One handler per op, keyed by the verb the schema declares.
- *
- * The mapped type is the point: a verb added to `canvasEditInputSchema` and
- * not to this table does not compile, where the switch it replaced would
- * simply fall through and apply nothing — the batch would report success
- * having ignored an op. Each handler also gets its op NARROWED, so
- * `op.patch` on a `node.patch` needs no re-check.
- *
- * Each applies its op to `ctx.s` and returns nothing. Refusal is a throw
- * (`fail`), which is what makes the batch all-or-nothing: no op reaches the
- * document until every one of them has applied.
- */
-/**
  * How big a node the caller sized only partly, or not at all, comes out.
  *
  * Each fallback is its own rule, and they were three nested conditionals deep
@@ -408,6 +395,19 @@ function elementIds(ctx: CanvasEditContext): Set<string> {
   return new Set([...ctx.s.edges, ...ctx.s.lines].map((element) => element.id))
 }
 
+/**
+ * One handler per op, keyed by the verb the schema declares.
+ *
+ * The mapped type is the point: a verb added to `canvasEditInputSchema` and
+ * not to this table does not compile, where the switch it replaced would
+ * simply fall through and apply nothing — the batch would report success
+ * having ignored an op. Each handler also gets its op NARROWED, so
+ * `op.patch` on a `node.patch` needs no re-check.
+ *
+ * Each applies its op to `ctx.s` and returns nothing. Refusal is a throw
+ * (`fail`), which is what makes the batch all-or-nothing: no op reaches the
+ * document until every one of them has applied.
+ */
 const CANVAS_EDIT_HANDLERS: {
   [K in CanvasOp['op']]: (ctx: CanvasEditContext, op: OpNamed<K>, index: number) => void
 } = {

@@ -11,35 +11,33 @@ import {
 } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
-/**
- * The proposal layer (ADR-0029): a change somebody wants made, carried on the
- * live document until a person adopts or dismisses it.
- *
- * A proposal is an ANCHORED CHANGE rather than a point in time, and the ADR
- * derives that rather than asserting it. Following the document as it moves
- * rules out a frontier — a fixed point in the oplog does not carry a proposal
- * along, so an edit elsewhere would strand it at a state that is no longer
- * anyone's. Adopting part of a batch rules out one indivisible thing — a
- * frontier is checked out whole or not at all. What is left is the shape the
- * annotation layer already has for a different payload: keyed to identity,
- * following edits, opened and closed.
- *
- * Four parts, and each earns its place:
- *
- * - **anchor** — the element id, or a passage selector. What the change is
- *   ABOUT, so it survives the document moving underneath it.
- * - **intended change** — the edit itself. Not new: `wb_canvas_edit`'s op
- *   union is already an anchored intended change, and proposing is storing
- *   the op instead of applying it.
- * - **assumed** — what the anchor held when the proposal was made. ONE field
- *   doing two jobs: drawing the change needs the previous value, to strike
- *   through beside the new one; detecting a conflict needs the previous
- *   value, to compare against what the anchor holds now. They are the same
- *   value, so storing it twice would be storing a disagreement.
- * - **provenance** — who proposed it and when. Optional for the reason a
- *   comment message's is: identity and time are keeper concerns, and a
- *   browser-kept workspace has no signed-in author to record.
- */
+// The proposal layer (ADR-0029): a change somebody wants made, carried on the
+// live document until a person adopts or dismisses it.
+//
+// A proposal is an ANCHORED CHANGE rather than a point in time, and the ADR
+// derives that rather than asserting it. Following the document as it moves
+// rules out a frontier — a fixed point in the oplog does not carry a proposal
+// along, so an edit elsewhere would strand it at a state that is no longer
+// anyone's. Adopting part of a batch rules out one indivisible thing — a
+// frontier is checked out whole or not at all. What is left is the shape the
+// annotation layer already has for a different payload: keyed to identity,
+// following edits, opened and closed.
+//
+// Four parts, and each earns its place:
+//
+// - **anchor** — the element id, or a passage selector. What the change is
+//   ABOUT, so it survives the document moving underneath it.
+// - **intended change** — the edit itself. Not new: `wb_canvas_edit`'s op
+//   union is already an anchored intended change, and proposing is storing
+//   the op instead of applying it.
+// - **assumed** — what the anchor held when the proposal was made. ONE field
+//   doing two jobs: drawing the change needs the previous value, to strike
+//   through beside the new one; detecting a conflict needs the previous
+//   value, to compare against what the anchor holds now. They are the same
+//   value, so storing it twice would be storing a disagreement.
+// - **provenance** — who proposed it and when. Optional for the reason a
+//   comment message's is: identity and time are keeper concerns, and a
+//   browser-kept workspace has no signed-in author to record.
 
 /**
  * What `node.patch` may change: the geometry and style every node type
@@ -101,8 +99,7 @@ export type NodePatchFields = z.infer<typeof nodePatchFieldsSchema>
  * What `edge.patch` may change: everything an edge has except its identity.
  * Derived from the stored schema rather than restated beside it, so a field
  * added to an edge reaches this for free.
- */
-/**
+ *
  * `tags` is omitted along with the id: an inline tag field on a canvas op is
  * priced before it is published
  * ([ADR-0040](../../../docs/contributing/adr/0040-scoped-tags.md)
@@ -172,24 +169,6 @@ const PRIOR_SCOPE_MESSAGE = {
 } as const
 
 /**
- * One anchored change. The union is CLOSED, so every renderer's switch over
- * it stays exhaustive and a new verb cannot arrive without someone deciding
- * what its prior value is.
- *
- * The verbs are `wb_canvas_edit`'s anchored ones plus prose. What is
- * deliberately absent is as much of the design as what is here: `tidy` has no
- * anchor (it is about the whole board), and `region.set` is declarative — it
- * deletes what it was not told about, so it can be neither drawn as a set of
- * struck-through priors nor adopted in part. Both fail decisions 4 and 5 on
- * their face. `comment.*` is the annotation layer rather than content, and a
- * lock is a claim on a document rather than a change to it.
- *
- * A proposed node or edge is stored RESOLVED — real id, real geometry — not
- * as the draft the tool accepts. The renderer has to draw it dashed, in
- * place, before anyone adopts it, and a draft with its geometry left out has
- * no box to draw.
- */
-/**
  * Prose (ADR-0029 decision 6): a range of body text and the text intended to
  * replace it. `text` and `assumed` are both allowed to be empty — an
  * insertion replaces nothing, a deletion replaces with nothing — so neither
@@ -215,6 +194,24 @@ export const bodyReplaceChangeSchema = z
   })
   .strict()
 
+/**
+ * One anchored change. The union is CLOSED, so every renderer's switch over
+ * it stays exhaustive and a new verb cannot arrive without someone deciding
+ * what its prior value is.
+ *
+ * The verbs are `wb_canvas_edit`'s anchored ones plus prose. What is
+ * deliberately absent is as much of the design as what is here: `tidy` has no
+ * anchor (it is about the whole board), and `region.set` is declarative — it
+ * deletes what it was not told about, so it can be neither drawn as a set of
+ * struck-through priors nor adopted in part. Both fail decisions 4 and 5 on
+ * their face. `comment.*` is the annotation layer rather than content, and a
+ * lock is a claim on a document rather than a change to it.
+ *
+ * A proposed node or edge is stored RESOLVED — real id, real geometry — not
+ * as the draft the tool accepts. The renderer has to draw it dashed, in
+ * place, before anyone adopts it, and a draft with its geometry left out has
+ * no box to draw.
+ */
 export const proposedChangeSchema = z.discriminatedUnion('op', [
   z.object({ ...changeIdentity, op: z.literal('node.add'), node: spatialNodeSchema }).strict(),
   z

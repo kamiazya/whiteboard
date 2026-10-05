@@ -405,13 +405,6 @@ export function createDocumentSyncSession(
   }
 
   /**
-   * Where this session's content containers live: the doc's roots, or — when
-   * a content scope is set — the workspace tree node carrying
-   * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
-   * the node under a NEW TreeID for the same documentId, and a cached handle
-   * would keep pointing at the deleted node.
-   */
-  /**
    * Where each conversation's passage is now, and — once per body — the
    * marks a document arrived without.
    *
@@ -451,6 +444,13 @@ export function createDocumentSyncSession(
     }
   }
 
+  /**
+   * Where this session's content containers live: the doc's roots, or — when
+   * a content scope is set — the workspace tree node carrying
+   * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
+   * the node under a NEW TreeID for the same documentId, and a cached handle
+   * would keep pointing at the deleted node.
+   */
   function contentOf(targetDoc: LoroDoc): DocumentContainers {
     return deps.contentDocumentId === undefined
       ? targetDoc

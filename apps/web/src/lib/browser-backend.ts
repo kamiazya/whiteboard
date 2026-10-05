@@ -42,32 +42,6 @@ export interface BrowserBackendTarget {
 }
 
 /**
- * BrowserBackend: DocumentBackend implementation for fully offline, browser
- * use — backed by the WORKSPACE document.
- *
- * The bytes this backend delivers and persists are one Loro document holding
- * every document the browser keeps, each as a workspace-tree node
- * (`docRefKey({kind:'workspace-tree'})` in the same IndexedDB stores). The
- * sync session edits it through its content scope
- * (`SessionDeps.contentDocumentId`), so a local update's ops land on this
- * document's tree node. Persistence is the shared incremental shape
- * (`DocumentStoreWorkspaceDocs.save`): append a delta per push, fold when the
- * log passes the budget, never write when nothing changed.
- *
- * connect() runs the startup fold first, so per-document records written by
- * older builds (or seeded by tests through the old stores) are in the tree
- * before the snapshot is delivered. A record the fold deliberately left
- * behind is handled here, where the page's own knowledge fills the gap:
- * a pre-kind row is adopted under the kind the page opened it as, and an
- * unreadable record surfaces its load failure instead of being shadowed by
- * an empty tree node — the old record stays the damaged document's home.
- *
- *
- * TOCTOU safety: all writes are serialized through a per-instance promise
- * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
- * order.
- */
-/**
  * A record this session must not place an empty node over. The first three
  * know the record is unreadable; `read-unavailable` refuses from the opposite
  * knowledge — it knows NOTHING, and falling through would take the "there is
@@ -135,6 +109,32 @@ function importFromAnotherTab(workspaceDoc: LoroDoc, bytes: Uint8Array): boolean
  */
 const WHOLE_RECORD: WorkspaceDocCursor = { generation: Number.NaN, afterSeq: null }
 
+/**
+ * BrowserBackend: DocumentBackend implementation for fully offline, browser
+ * use — backed by the WORKSPACE document.
+ *
+ * The bytes this backend delivers and persists are one Loro document holding
+ * every document the browser keeps, each as a workspace-tree node
+ * (`docRefKey({kind:'workspace-tree'})` in the same IndexedDB stores). The
+ * sync session edits it through its content scope
+ * (`SessionDeps.contentDocumentId`), so a local update's ops land on this
+ * document's tree node. Persistence is the shared incremental shape
+ * (`DocumentStoreWorkspaceDocs.save`): append a delta per push, fold when the
+ * log passes the budget, never write when nothing changed.
+ *
+ * connect() runs the startup fold first, so per-document records written by
+ * older builds (or seeded by tests through the old stores) are in the tree
+ * before the snapshot is delivered. A record the fold deliberately left
+ * behind is handled here, where the page's own knowledge fills the gap:
+ * a pre-kind row is adopted under the kind the page opened it as, and an
+ * unreadable record surfaces its load failure instead of being shadowed by
+ * an empty tree node — the old record stays the damaged document's home.
+ *
+ *
+ * TOCTOU safety: all writes are serialized through a per-instance promise
+ * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
+ * order.
+ */
 export class BrowserBackend implements DocumentBackend {
   private readonly target: BrowserBackendTarget
   private readonly docs: WorkspaceDocs

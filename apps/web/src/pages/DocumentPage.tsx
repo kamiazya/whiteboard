@@ -101,11 +101,6 @@ export function DocumentPage<Props>({
 }
 
 /**
- * Renders the shell, the history column, the merged header row, the editor
- * surface and the comments rail from a `DocumentPageModel`. Nothing in here
- * asks which keeper built the model.
- */
-/**
  * The page's own hold on the spatial editor, so an inspector row can reach
  * back into the board (ADR-0029 decision 1: the panel is an index, and a row
  * press takes you to where the change is already drawn).
@@ -306,6 +301,11 @@ function agentTouchProps(spatial: DocumentPageModel['spatial']) {
   }
 }
 
+/**
+ * Renders the shell, the history column, the merged header row, the editor
+ * surface and the comments rail from a `DocumentPageModel`. Nothing in here
+ * asks which keeper built the model.
+ */
 function DocumentPageBody({
   model,
   versionRefreshSignal,

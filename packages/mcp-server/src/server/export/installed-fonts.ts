@@ -1,13 +1,11 @@
 import { readdir } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 
-/**
- * A font the user installed lives in a plain directory (`DataLayout.fontsDir`)
- * rather than behind a manifest, deliberately. Dropping a TTF in is the
- * simplest possible answer to "my exports are tofu", and a mechanism that
- * recognised only its own downloads would refuse it. The download path
- * (ADR-0012) writes there; it does not own the directory.
- */
+// A font the user installed lives in a plain directory (`DataLayout.fontsDir`)
+// rather than behind a manifest, deliberately. Dropping a TTF in is the
+// simplest possible answer to "my exports are tofu", and a mechanism that
+// recognised only its own downloads would refuse it. The download path
+// (ADR-0012) writes there; it does not own the directory.
 
 /**
  * `.ttc` is a collection rather than a single face; both resvg's fontdb and

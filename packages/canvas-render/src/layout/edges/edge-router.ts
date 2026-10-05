@@ -49,20 +49,6 @@ const ROUTE_MARGIN_PX = 8
 const OBSTACLE_CLEARANCE_PX = 16
 
 /**
- * A path from `start` to `end` that steps around everything in `obstacles`.
- *
- * Four candidates — over, under, left of, right of the blocking region — each
- * a pair of waypoints on one side of it. The shortest candidate that is
- * itself clear wins; if none is clear the shortest is used anyway, because
- * layout has to return SOMETHING and a route that still crosses is better
- * than a thrown error or a straight line through everything.
- *
- * Deliberately not a visibility graph or A*: this runs per edge on every
- * layout, and four candidates against a union box handles the arrangements
- * that actually occur (a node or two sitting between two others). A denser
- * search belongs behind the routing-style setting, not in the default path.
- */
-/**
  * The best candidate by a two-tier clearance ranking, shortest first:
  * clear of the inflated obstacles (full margin kept), else clear of the
  * RAW node bodies (an anchor boxed inside a neighbour's margin band has
@@ -104,7 +90,6 @@ function bestCandidate(
   )
 }
 
-/** Ways past a blocking region: over it, under it, left of it, right of it. */
 /**
  * How far past the region a detour waypoint is placed. `routeOrthogonal`
  * prunes its obstacle set to the box a candidate path can reach, and that
@@ -114,6 +99,7 @@ function bestCandidate(
  */
 export const DETOUR_REACH_PX = OBSTACLE_CLEARANCE_PX
 
+/** Ways past a blocking region: over it, under it, left of it, right of it. */
 export function detourCandidates(start: Point, end: Point, region: Rect): Point[][] {
   const above = region.y - OBSTACLE_CLEARANCE_PX
   const below = region.y + region.h + OBSTACLE_CLEARANCE_PX
@@ -132,6 +118,20 @@ function blockingRegion(start: Point, end: Point, obstacles: readonly Rect[]): R
   return unionRect(obstacles.filter((rect) => segmentCrossesRect(start, end, rect)))
 }
 
+/**
+ * A path from `start` to `end` that steps around everything in `obstacles`.
+ *
+ * Four candidates — over, under, left of, right of the blocking region — each
+ * a pair of waypoints on one side of it. The shortest candidate that is
+ * itself clear wins; if none is clear the shortest is used anyway, because
+ * layout has to return SOMETHING and a route that still crosses is better
+ * than a thrown error or a straight line through everything.
+ *
+ * Deliberately not a visibility graph or A*: this runs per edge on every
+ * layout, and four candidates against a union box handles the arrangements
+ * that actually occur (a node or two sitting between two others). A denser
+ * search belongs behind the routing-style setting, not in the default path.
+ */
 function routeStraight(
   start: Point,
   end: Point,
@@ -143,6 +143,10 @@ function routeStraight(
   return bestCandidate(detourCandidates(start, end, region), inflated, raw)
 }
 
+/** Below this outward-to-tangential ratio (~14°), an approach reads as
+ * running along the side rather than into it. */
+const SIDEWAYS_RATIO = 0.25
+
 /**
  * Whether a straight run from `anchor` toward `other` would leave through
  * the anchor side's outward half-plane. When it would not (the direction
@@ -151,10 +155,6 @@ function routeStraight(
  * first, or it draws sliding along the node's own border and the arrowhead
  * meets the side edge-on.
  */
-/** Below this outward-to-tangential ratio (~14°), an approach reads as
- * running along the side rather than into it. */
-const SIDEWAYS_RATIO = 0.25
-
 function approachesSideways(anchor: Point, other: Point, side: EdgeSide): boolean {
   const vx = other.x - anchor.x
   const vy = other.y - anchor.y
@@ -236,19 +236,6 @@ function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_
   }
 }
 
-/**
- * Right angles only, whether or not anything is in the way — that is what the
- * style asks for, so a clear path bends too.
- *
- * Both ends leave along their side's outward normal before turning. Without
- * that stub an edge attached to a node's right side can start by running
- * vertically, tracing the node's own border for its first segment so the two
- * read as one line rather than as an edge meeting a box.
- *
- * The elbows come first and the detours join them only when something blocks,
- * which keeps the common case to a single corner instead of routing every
- * edge around a region that is not there.
- */
 /**
  * Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can often
  * share one tangent coordinate — anchors are renderer-chosen defaults, so
@@ -396,6 +383,19 @@ function deepenedCorridor(
   return arrivalOvershoot + MIN_APPROACH_PX
 }
 
+/**
+ * Right angles only, whether or not anything is in the way — that is what the
+ * style asks for, so a clear path bends too.
+ *
+ * Both ends leave along their side's outward normal before turning. Without
+ * that stub an edge attached to a node's right side can start by running
+ * vertically, tracing the node's own border for its first segment so the two
+ * read as one line rather than as an edge meeting a box.
+ *
+ * The elbows come first and the detours join them only when something blocks,
+ * which keeps the common case to a single corner instead of routing every
+ * edge around a region that is not there.
+ */
 function routeOrthogonal(
   {
     start: startAnchor,

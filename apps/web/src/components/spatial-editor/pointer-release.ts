@@ -179,11 +179,6 @@ export function releaseDrawing(
 }
 
 /**
- * The release nothing above claimed: the reducer commits it, a double
- * press on a node that never moved opens its editor instead, and a move on
- * a multi-selection member carries the rest with it.
- */
-/**
  * A double press on a node that never moved runs the object's PRIMARY action.
  *
  * Each arm asks what the node HOLDS rather than narrowing on the stored
@@ -240,6 +235,11 @@ function runPrimaryAction(
   return false
 }
 
+/**
+ * The release nothing above claimed: the reducer commits it, a double
+ * press on a node that never moved opens its editor instead, and a move on
+ * a multi-selection member carries the rest with it.
+ */
 export function commitRelease(
   e: React.PointerEvent<HTMLDivElement>,
   screenPoint: Point,

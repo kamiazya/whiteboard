@@ -138,13 +138,6 @@ export interface TrashRow {
 }
 
 /**
- * The workspace this source points at does not exist.
- *
- * Named here so the panel can show its not-found state without knowing which
- * implementation it is talking to: the daemon adapter maps its 404 onto this,
- * the local adapter maps the port's `WorkspaceNotFoundError`.
- */
-/**
  * One search result: the document, plus why it is here.
  *
  * `contexts` are excerpts around the match, one per text source that
@@ -177,6 +170,13 @@ export interface DocumentSearchHit {
   readonly semanticRank?: number
 }
 
+/**
+ * The workspace this source points at does not exist.
+ *
+ * Named here so the panel can show its not-found state without knowing which
+ * implementation it is talking to: the daemon adapter maps its 404 onto this,
+ * the local adapter maps the port's `WorkspaceNotFoundError`.
+ */
 export class WorkspaceMissingError extends Error {
   constructor(workspaceId: string) {
     super(`Workspace not found: "${workspaceId}"`)

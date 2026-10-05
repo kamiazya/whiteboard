@@ -3,30 +3,28 @@ import type { EditorView } from '@codemirror/view'
 import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
 import { searchIconShortcodes } from '@kamiazya/whiteboard-plugin-visual/icons/shortcode'
 
-/**
- * `:` completion for BOTH shortcode vocabularies — emoji and vendored icons
- * — the typing half of the `:name:` syntax canvas-render draws.
- *
- * It inserts the SHORTCODE, not the character — `:rocket:`, which is what
- * the document stores (user decision, 2026-09-11) and what every body-drawing
- * surface resolves to 🚀. Inserting the character instead would make this a
- * different feature with the same gesture. For an icon there is no character
- * to insert at all, which is half of why the two are separate vocabularies.
- *
- * Shaped after `wiki-link-completion.ts`, and the two load-bearing parts are
- * the same for the same reasons: `from` points AFTER the trigger so the
- * plugin's own filter has the query to score against, and `apply` re-derives
- * the trigger's position from the `from` the plugin passes rather than from
- * anything captured when the source ran — the document can change in between
- * (mobile autocorrect, a CRDT remote echo), and a stale offset writes into
- * the middle of a word.
- *
- * ASYNC, unlike that one. The search index is `catalog-ja.ts` as well as the
- * rows — 190KB whose whole point is to stay out of graphs that do not open a
- * picker — so it arrives through a dynamic import on first use. A person who
- * never types a colon never loads it. CodeMirror accepts a promise from a
- * completion source, so nothing else has to know.
- */
+// `:` completion for BOTH shortcode vocabularies — emoji and vendored icons
+// — the typing half of the `:name:` syntax canvas-render draws.
+//
+// It inserts the SHORTCODE, not the character — `:rocket:`, which is what
+// the document stores (user decision, 2026-09-11) and what every body-drawing
+// surface resolves to 🚀. Inserting the character instead would make this a
+// different feature with the same gesture. For an icon there is no character
+// to insert at all, which is half of why the two are separate vocabularies.
+//
+// Shaped after `wiki-link-completion.ts`, and the two load-bearing parts are
+// the same for the same reasons: `from` points AFTER the trigger so the
+// plugin's own filter has the query to score against, and `apply` re-derives
+// the trigger's position from the `from` the plugin passes rather than from
+// anything captured when the source ran — the document can change in between
+// (mobile autocorrect, a CRDT remote echo), and a stale offset writes into
+// the middle of a word.
+//
+// ASYNC, unlike that one. The search index is `catalog-ja.ts` as well as the
+// rows — 190KB whose whole point is to stay out of graphs that do not open a
+// picker — so it arrives through a dynamic import on first use. A person who
+// never types a colon never loads it. CodeMirror accepts a promise from a
+// completion source, so nothing else has to know.
 
 /**
  * At least two characters after the colon. The character class is exactly

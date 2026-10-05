@@ -240,8 +240,7 @@ export function completionEnterKeymap(sources: readonly CompletionSource[]) {
  * generated classes and wins by the same mechanism the defaults do. CSS
  * custom properties resolve at runtime, so the popover tokens (and theme
  * switches) keep covering this surface.
- */
-/**
+ *
  * The popup's chrome, for EVERY completion source the editors install — the
  * `[[` one this module owns and the `:` one beside it. It lives here because
  * that is where the first source was; a reader looking for why a shortcode

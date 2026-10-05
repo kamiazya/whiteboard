@@ -92,27 +92,6 @@ export interface PermutationResult {
 }
 
 /**
- * Paired sign-flip randomization test over per-query differences.
- *
- * Chosen over the alternatives on evidence rather than taste: comparing
- * significance tests for IR evaluation finds the randomization, bootstrap
- * and paired t tests practically indistinguishable, while the Wilcoxon
- * signed-rank and sign tests both detect poorly AND report significance
- * that is not there. The randomization test additionally assumes nothing
- * about the distribution of a metric like nDCG, which is bounded, skewed,
- * and full of ties — none of which a t-test is entitled to ignore.
- *
- * The null hypothesis is that the two systems are interchangeable for each
- * query, so flipping the sign of any difference is equally likely; the
- * p-value is the share of sign assignments whose mean difference is at
- * least as extreme as the observed one.
- *
- * `(1 + count) / (1 + trials)` rather than `count / trials`: a sampled test
- * has not observed every assignment, so it can never license p = 0. The
- * floor it CAN reach is about 2/2^n, which is why a handful of queries
- * cannot produce a significant result however large the effect.
- */
-/**
  * The smallest p-value the EXACT test could report for these differences,
  * `2^(1 - m)` where m is the number of queries that differ at all.
  *
@@ -133,6 +112,27 @@ export function permutationFloor(deltas: readonly number[]): number {
   return differing === 0 ? 1 : 2 ** (1 - differing)
 }
 
+/**
+ * Paired sign-flip randomization test over per-query differences.
+ *
+ * Chosen over the alternatives on evidence rather than taste: comparing
+ * significance tests for IR evaluation finds the randomization, bootstrap
+ * and paired t tests practically indistinguishable, while the Wilcoxon
+ * signed-rank and sign tests both detect poorly AND report significance
+ * that is not there. The randomization test additionally assumes nothing
+ * about the distribution of a metric like nDCG, which is bounded, skewed,
+ * and full of ties — none of which a t-test is entitled to ignore.
+ *
+ * The null hypothesis is that the two systems are interchangeable for each
+ * query, so flipping the sign of any difference is equally likely; the
+ * p-value is the share of sign assignments whose mean difference is at
+ * least as extreme as the observed one.
+ *
+ * `(1 + count) / (1 + trials)` rather than `count / trials`: a sampled test
+ * has not observed every assignment, so it can never license p = 0. The
+ * floor it CAN reach is about 2/2^n, which is why a handful of queries
+ * cannot produce a significant result however large the effect.
+ */
 export function pairedPermutationTest(
   deltas: readonly number[],
   options: { trials?: number; seed?: number } = {},

@@ -134,30 +134,6 @@ export function composeRegionOutlines(options: ResolvedLayoutOptions): readonly 
 }
 
 /**
- * The comment annotation layer (ADR-0024 decision 4): one pin (a circle on
- * the anchor) plus one bubble (rounded rect holding the text, floating
- * offset from the anchor) per unresolved comment, composed from existing
- * scene kinds so no consumer of the closed union changes. Resolved comments
- * stay in the document and are drawn only when `options.showResolved` is set
- * (ADR-0025 decision 2), muted via the resolver's `resolvedOverlay`.
- * Appearance comes from the resolver's optional `resolveComment` — assigned,
- * never invented — so a resolver that predates the layer still lays
- * comments out, bare.
- *
- * The pin and bubble carry ids (`${comment.id}/pin`, `${comment.id}/bubble`,
- * mirroring the leader's `${comment.id}/leader`) so the editor can hit-test
- * them, and `commentChrome: true` so `sceneDigest` can tell them apart from
- * an addressable document node despite carrying an id of their own (see
- * `ShapeSceneNode.commentChrome`).
- *
- * Bubbles are placed by `placeCommentBubble`: down-right of the anchor
- * unless that would cover a node or an earlier comment's bubble, then the
- * least-covered quadrant. Group frames are not obstacles — a comment inside
- * a group is about its members, and pushing the bubble out of the frame
- * would carry it away from them. Document order decides who yields:
- * a later comment fans out around an earlier one.
- */
-/**
  * What a bubble must not cover. Nodes and whatever the caller adds, plus
  * EVERY pin up front — not each one as its comment is drawn. A pin is what
  * its comment is about, so a bubble covering one hides exactly what a reader
@@ -246,6 +222,30 @@ function pinCountRun(
   }
 }
 
+/**
+ * The comment annotation layer (ADR-0024 decision 4): one pin (a circle on
+ * the anchor) plus one bubble (rounded rect holding the text, floating
+ * offset from the anchor) per unresolved comment, composed from existing
+ * scene kinds so no consumer of the closed union changes. Resolved comments
+ * stay in the document and are drawn only when `options.showResolved` is set
+ * (ADR-0025 decision 2), muted via the resolver's `resolvedOverlay`.
+ * Appearance comes from the resolver's optional `resolveComment` — assigned,
+ * never invented — so a resolver that predates the layer still lays
+ * comments out, bare.
+ *
+ * The pin and bubble carry ids (`${comment.id}/pin`, `${comment.id}/bubble`,
+ * mirroring the leader's `${comment.id}/leader`) so the editor can hit-test
+ * them, and `commentChrome: true` so `sceneDigest` can tell them apart from
+ * an addressable document node despite carrying an id of their own (see
+ * `ShapeSceneNode.commentChrome`).
+ *
+ * Bubbles are placed by `placeCommentBubble`: down-right of the anchor
+ * unless that would cover a node or an earlier comment's bubble, then the
+ * least-covered quadrant. Group frames are not obstacles — a comment inside
+ * a group is about its members, and pushing the bubble out of the frame
+ * would carry it away from them. Document order decides who yields:
+ * a later comment fans out around an earlier one.
+ */
 export function composeComments(
   canvas: SpatialCanvas,
   options: ResolvedLayoutOptions,

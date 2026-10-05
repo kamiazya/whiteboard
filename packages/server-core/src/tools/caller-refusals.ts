@@ -5,17 +5,15 @@ import {
   WorkspaceNotFoundForCallerError,
 } from './document-crud.errors.js'
 
-/**
- * What a tool tells a caller whose address names nothing, decided once for the
- * whole tool record instead of per tool.
- *
- * A mistyped workspace or document is the commonest failure a model has, and
- * the refusal is the only place the next step can reach it. Left to each tool
- * it came out as five different sentences — advice to ADD a document given to
- * a read, the id a caller never typed, a "no saved snapshot" for a document
- * that never existed — because each tool reached the condition through
- * whichever seam it happened to call first.
- */
+// What a tool tells a caller whose address names nothing, decided once for the
+// whole tool record instead of per tool.
+//
+// A mistyped workspace or document is the commonest failure a model has, and
+// the refusal is the only place the next step can reach it. Left to each tool
+// it came out as five different sentences — advice to ADD a document given to
+// a read, the id a caller never typed, a "no saved snapshot" for a document
+// that never existed — because each tool reached the condition through
+// whichever seam it happened to call first.
 
 /** Where the list of workspaces that do exist comes from; absent says nothing about them. */
 export type KnownWorkspaceHandles = () => Promise<readonly string[]>

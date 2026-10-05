@@ -5,26 +5,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/too
 import { cn } from '../../lib/utils.js'
 
 /**
- * Mark the current state as a point worth coming back to.
- *
- * The header has no save dot: it would mean "you have edits no version holds
- * yet" and pressing it would take a version, and with checkpoints taken
- * automatically that state does not exist and there is nothing to press it
- * for. What is left is a different act — naming a point — and it belongs beside the list of points rather
- * than in the document's chrome.
- *
- * The NAME is the whole value, which is why this opens a field instead of
- * saving on the press: rows are titled by their label, or by their time
- * when they have none, so an unnamed bookmark is indistinguishable from the
- * automatic checkpoint above it. An empty field is refused for that reason
- * rather than silently accepted.
- *
- * Icon-only, per DESIGN.md's object-action rule. `aria-disabled` rather
- * than the native attribute: a disabled button inside a Radix TooltipTrigger
- * swallows the pointer events the tooltip needs.
- */
-
-/**
  * The name field's fixed attributes. `maxLength` is the ceiling a saved
  * version's label is accepted at, so a name that would be refused after the
  * field has closed cannot be typed in the first place.
@@ -49,6 +29,25 @@ export interface BookmarkActionProps {
   readonly onSave: (label: string) => void
 }
 
+/**
+ * Mark the current state as a point worth coming back to.
+ *
+ * The header has no save dot: it would mean "you have edits no version holds
+ * yet" and pressing it would take a version, and with checkpoints taken
+ * automatically that state does not exist and there is nothing to press it
+ * for. What is left is a different act — naming a point — and it belongs beside the list of points rather
+ * than in the document's chrome.
+ *
+ * The NAME is the whole value, which is why this opens a field instead of
+ * saving on the press: rows are titled by their label, or by their time
+ * when they have none, so an unnamed bookmark is indistinguishable from the
+ * automatic checkpoint above it. An empty field is refused for that reason
+ * rather than silently accepted.
+ *
+ * Icon-only, per DESIGN.md's object-action rule. `aria-disabled` rather
+ * than the native attribute: a disabled button inside a Radix TooltipTrigger
+ * swallows the pointer events the tooltip needs.
+ */
 export function BookmarkAction({
   saving,
   outcome,

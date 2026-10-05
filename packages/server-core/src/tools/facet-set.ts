@@ -33,13 +33,6 @@ import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 /**
- * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
- * pattern (model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
- * never use this tool to set a core facet (`type`/`title`/`tags`/`view`) or
- * the raw `facets` root key itself — those don't match the pattern and are
- * rejected at parse time rather than needing a separate namespace guard.
- */
-/**
  * A ceiling on one request. Facet payloads are small, so this is not about
  * size; it is about a batch big enough that a caller cannot read what it
  * just did.
@@ -93,6 +86,13 @@ const tagsChangeSchema = z
     { message: 'name at least one tag to add, remove or rename' },
   )
 
+/**
+ * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
+ * pattern (model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
+ * never use this tool to set a core facet (`type`/`title`/`tags`/`view`) or
+ * the raw `facets` root key itself — those don't match the pattern and are
+ * rejected at parse time rather than needing a separate namespace guard.
+ */
 export const facetSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema.describe('The workspace the documents belong to.'),
@@ -284,20 +284,18 @@ async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetS
   return { updated }
 }
 
-/**
- * This tool refuses in PHASES, and the order is the contract: everything that
- * can refuse the batch runs before the first document is written.
- *
- * Each document is its own Loro doc with its own snapshot and there is no
- * transaction across them, so a refusal discovered while writing leaves a
- * PREFIX of the batch applied — and the caller reading that error has no way
- * to learn which documents it got. The phases below are each a refusal, and
- * `execute` is the sequence; a new check belongs in one of them rather than
- * beside the write loop.
- *
- * `facet-set.test.ts` pins it: deleting the document-existence pre-pass fails
- * two cases that assert nothing was written.
- */
+// This tool refuses in PHASES, and the order is the contract: everything that
+// can refuse the batch runs before the first document is written.
+//
+// Each document is its own Loro doc with its own snapshot and there is no
+// transaction across them, so a refusal discovered while writing leaves a
+// PREFIX of the batch applied — and the caller reading that error has no way
+// to learn which documents it got. The phases below are each a refusal, and
+// `execute` is the sequence; a new check belongs in one of them rather than
+// beside the write loop.
+//
+// `facet-set.test.ts` pins it: deleting the document-existence pre-pass fails
+// two cases that assert nothing was written.
 
 /**
  * Which SITE a write targets: an element on the board, the board's own

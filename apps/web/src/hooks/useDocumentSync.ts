@@ -82,12 +82,6 @@ export interface UseDocumentSyncResult {
   lockedNodeIds: ReadonlySet<string>
   setNodeLock: (nodeId: string, locked: boolean) => void
   /**
-   * The doc's `body` text container — a markdown document's whole body, and
-   * the ONE place it is stored (`wb_workspace_edit`'s `document.set` writes here too). Empty
-   * string before the first snapshot; a caller that also needs to know
-   * whether the document has hydrated reads `loaded`.
-   */
-  /**
    * This document's conversations (ADR-0026), published on their own channel
    * because a reply changes no node and no edge — a consumer watching only
    * `canvas` would never learn of one.
@@ -108,6 +102,12 @@ export interface UseDocumentSyncResult {
    * so a consumer cannot pair one with a stale reading of the other.
    */
   threadMarks: ReadonlyMap<string, PassageRange>
+  /**
+   * The doc's `body` text container — a markdown document's whole body, and
+   * the ONE place it is stored (`wb_workspace_edit`'s `document.set` writes here too). Empty
+   * string before the first snapshot; a caller that also needs to know
+   * whether the document has hydrated reads `loaded`.
+   */
   markdownBody: string
   /**
    * What an editor binds the body through — the session's live doc, its
@@ -173,6 +173,26 @@ function isEditingText(target: EventTarget | null): boolean {
 }
 
 /**
+ * Undo/redo from the keyboard — SpatialEditor has no buttons of its own, so
+ * this is the only entry point. The event is only swallowed when the step was
+ * actually taken: with nothing to undo the keystroke belongs to the browser.
+ */
+function handleUndoRedoKey(ev: KeyboardEvent, undo: () => boolean, redo: () => boolean): void {
+  if (!(ev.ctrlKey || ev.metaKey)) return
+  if (isEditingText(ev.target)) return
+  const key = ev.key.toLowerCase()
+  const step =
+    key === 'z' && !ev.shiftKey
+      ? undo
+      : (key === 'z' && ev.shiftKey) || key === 'y'
+        ? redo
+        : undefined
+  if (step === undefined || !step()) return
+  ev.preventDefault()
+  ev.stopPropagation()
+}
+
+/**
  * useDocumentSync — canonical sync hook for both the browser backend and
  * a daemon-backed connection.
  *
@@ -210,26 +230,6 @@ function isEditingText(target: EventTarget | null): boolean {
  * into the session, precisely so staleness detection can span a session
  * teardown + the next session's construction.
  */
-/**
- * Undo/redo from the keyboard — SpatialEditor has no buttons of its own, so
- * this is the only entry point. The event is only swallowed when the step was
- * actually taken: with nothing to undo the keystroke belongs to the browser.
- */
-function handleUndoRedoKey(ev: KeyboardEvent, undo: () => boolean, redo: () => boolean): void {
-  if (!(ev.ctrlKey || ev.metaKey)) return
-  if (isEditingText(ev.target)) return
-  const key = ev.key.toLowerCase()
-  const step =
-    key === 'z' && !ev.shiftKey
-      ? undo
-      : (key === 'z' && ev.shiftKey) || key === 'y'
-        ? redo
-        : undefined
-  if (step === undefined || !step()) return
-  ev.preventDefault()
-  ev.stopPropagation()
-}
-
 export function useDocumentSync(
   backend: DocumentBackend | null,
   options?: UseDocumentSyncOptions,

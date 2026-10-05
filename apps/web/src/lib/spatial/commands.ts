@@ -592,18 +592,6 @@ function createLine(canvas: SpatialCanvas, line: CanvasLine): SpatialCanvas {
 }
 
 /**
- * Removes the line with `id`. A no-op when the canvas holds no such line, and
- * deliberately does NOT introduce an empty `lines` array on a canvas that had
- * none — the model says an absent `lines` and an empty one mean the same, so
- * writing one would make a no-op look like an edit to every value comparison
- * downstream.
- */
-/**
- * Replaces the line with `id` by `update(line)`, or returns the input canvas
- * when there is no such line — `updateNode`'s sibling, and the same totality
- * contract.
- */
-/**
  * The input canvas when no edge carries the id, the way `deleteNode` and
  * `deleteLine` already answer. Written inline as a bare `filter` until now,
  * so a delete of an id nothing holds built a NEW canvas — nothing changed
@@ -632,6 +620,11 @@ function updateEdge(
   return { ...canvas, edges: canvas.edges.map((edge) => (edge.id === id ? update(edge) : edge)) }
 }
 
+/**
+ * Replaces the line with `id` by `update(line)`, or returns the input canvas
+ * when there is no such line — `updateNode`'s sibling, and the same totality
+ * contract.
+ */
 function updateLine(
   canvas: SpatialCanvas,
   id: string,
@@ -848,6 +841,13 @@ function setLineColor(
   })
 }
 
+/**
+ * Removes the line with `id`. A no-op when the canvas holds no such line, and
+ * deliberately does NOT introduce an empty `lines` array on a canvas that had
+ * none — the model says an absent `lines` and an empty one mean the same, so
+ * writing one would make a no-op look like an edit to every value comparison
+ * downstream.
+ */
 function deleteLine(canvas: SpatialCanvas, id: string): SpatialCanvas {
   const lines = canvas.lines
   if (lines === undefined || !lines.some((line) => line.id === id)) return canvas
@@ -867,8 +867,6 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
   return withoutNodes(canvas, new Set([id]))
 }
 
-/** An empty label removes the field: the model's `label` is optional and an
- * empty string would serialize as an authored-but-blank label. */
 /** Ends equal to the JSON Canvas defaults (fromEnd none, toEnd arrow) are
  * removed rather than written, keeping the stored document canonical. */
 function setEdgeEnds(
@@ -890,13 +888,6 @@ function setEdgeEnds(
   })
 }
 
-/** `color: undefined` removes the field — the theme default, canonically. */
-/**
- * `straight` is the default, so choosing it REMOVES the setting rather than
- * recording it. A canvas that never chose a style and one that chose and
- * changed its mind then serialize identically — otherwise every canvas anyone
- * opened the menu on would carry a redundant extension forever.
- */
 /**
  * Rebuilds the canvas envelope from the CANONICAL form of the visual.edges
  * facet: values equal to the canvas's DEFAULTS are omitted, an empty
@@ -1098,6 +1089,7 @@ function setNodeUrl(canvas: SpatialCanvas, id: string, url: string): SpatialCanv
   )
 }
 
+/** `color: undefined` removes the field — the theme default, canonically. */
 function setEdgeColor(
   canvas: SpatialCanvas,
   id: string,
@@ -1125,6 +1117,10 @@ function setEdgeSide(
   })
 }
 
+/**
+ * An empty label removes the field: the model's `label` is optional and an
+ * empty string would serialize as an authored-but-blank label.
+ */
 function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
   return updateEdge(canvas, id, (edge) => {
     if (label === '') {

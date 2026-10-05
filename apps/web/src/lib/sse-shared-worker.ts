@@ -20,19 +20,6 @@ import { createDaemonFetch } from './daemon-fetch.js'
 import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
 /**
- * The worker's own replica of each subscribed document.
- *
- * It exists so the consistency question — what has arrived, in what order — is
- * answered where the daemon stream is read, once, instead of separately in
- * every tab. A tab forks from this rather than adopting it: Loro scopes undo
- * to a peer and will not revert another peer's operations, so tabs sharing one
- * peer would share one undo stack.
- *
- * Nothing here interprets the document. The replica merges opaque update bytes
- * and answers with opaque update bytes, which is why this file needs no
- * workspace and stays as light as the stream multiplexer it grew from.
- */
-/**
  * Loro is imported DYNAMICALLY, and that is load-bearing rather than a style
  * choice. It is a WASM module, so a static import makes this whole module's
  * evaluation asynchronous — and a shared worker's `onconnect` must be
@@ -97,6 +84,19 @@ function queueReplicaWork(work: () => unknown): void {
  */
 const replicaKey = (baseUrl: string, doc: string) => `${baseUrl}\n${doc}`
 
+/**
+ * The worker's own replica of each subscribed document.
+ *
+ * It exists so the consistency question — what has arrived, in what order — is
+ * answered where the daemon stream is read, once, instead of separately in
+ * every tab. A tab forks from this rather than adopting it: Loro scopes undo
+ * to a peer and will not revert another peer's operations, so tabs sharing one
+ * peer would share one undo stack.
+ *
+ * Nothing here interprets the document. The replica merges opaque update bytes
+ * and answers with opaque update bytes, which is why this file needs no
+ * workspace and stays as light as the stream multiplexer it grew from.
+ */
 const replicas = new Map<string, InstanceType<LoroModule['LoroDoc']>>()
 
 function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['LoroDoc']> | undefined {

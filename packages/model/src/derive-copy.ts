@@ -1,18 +1,16 @@
 import { DOCUMENT_NAME_MAX_LENGTH, DOCUMENT_PATH_MAX_LENGTH } from './ids.js'
 
-/**
- * What a duplicate is called and where it goes, decided once for both keepers:
- * a copy lands BESIDE its source, so a person who keeps a folder tidy finds
- * the copy in that folder whichever keeper holds the workspace.
- *
- * Both fill the first free number rather than advancing past the highest one
- * seen, so a sequence with a renamed or deleted copy in it stays dense.
- *
- * Both hold the result to the bound its schema writes with. A base already at
- * the bound is SHORTENED to make room for the suffix rather than refused: the
- * title box lets a person type a name of exactly the bound, and a copy of it
- * must not be the one write that then fails.
- */
+// What a duplicate is called and where it goes, decided once for both keepers:
+// a copy lands BESIDE its source, so a person who keeps a folder tidy finds
+// the copy in that folder whichever keeper holds the workspace.
+//
+// Both fill the first free number rather than advancing past the highest one
+// seen, so a sequence with a renamed or deleted copy in it stays dense.
+//
+// Both hold the result to the bound its schema writes with. A base already at
+// the bound is SHORTENED to make room for the suffix rather than refused: the
+// title box lets a person type a name of exactly the bound, and a copy of it
+// must not be the one write that then fails.
 
 /** "Foo" -> "Foo (copy)" -> "Foo (copy 2)" -> ... */
 export function deriveCopyName(

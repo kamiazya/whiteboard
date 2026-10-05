@@ -196,39 +196,6 @@ const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
 const LENGTH_LIMIT = markdownLengthLimit()
 
 /**
- * A controlled markdown editor: one source-of-truth `value` string, edited
- * through a CodeMirror 6 source pane and previewed through
- * `renderMarkdownPreview` — the same parse -> layout -> SVG path the
- * spatial canvas's text node and export use, so there is no second
- * markdown-to-HTML renderer to drift from it.
- *
- * Three view modes (Write / Split / Read), persisted per browser. Read
- * HIDES the source pane instead of unmounting it, so the CodeMirror undo
- * history survives a Read -> Write round trip. Split needs room for two
- * columns; a container narrower than `SPLIT_MIN_WIDTH` falls back to Write
- * without overwriting the stored preference.
- *
- * Deliberately out of scope, each for a specific reason:
- * - CRDT binding (`loro-codemirror`) is the HOST's concern, wired through
- *   `sourceExtensions`: this component stays a plain controlled
- *   `value`/`onChange` pair, and a bound host disables the value-reconcile
- *   path because the binding owns editor<->document sync.
- * - Inline `$math$` renders as plain text runs: the layout's phrasing path
- *   has no fragment seam, and a sized inline fragment inside a wrapped
- *   line is its own layout problem. Block math and mermaid fences render
- *   through useMarkdownFragments (async MathJax/mermaid behind
- *   cache-backed sync seams); until a source's first render lands, math
- *   shows the escaped-source placeholder and a fence the plain code block.
- * - `[[wikiLink]]` / `![[embed]]` resolution needs a workspace-index-backed
- *   resolver for `resolveReferences`, which does not exist at this
- *   component's boundary; without one they stay literal bracket text.
- *
- * Preview recomputation is trailing-edge debounced so a keystroke does not
- * synchronously re-parse and re-layout the whole document — the debounce
- * always settles on the latest value, never a stale intermediate one.
- */
-
-/**
  * Below this container width the catalog opens as a bottom sheet instead of
  * a point-anchored popover — the same breakpoint (and the same reasoning:
  * thumb reach, not screen size) the spatial canvas uses for its own ⋯.
@@ -260,6 +227,38 @@ function isDocumentIdHref(href: string): boolean {
   return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
 }
 
+/**
+ * A controlled markdown editor: one source-of-truth `value` string, edited
+ * through a CodeMirror 6 source pane and previewed through
+ * `renderMarkdownPreview` — the same parse -> layout -> SVG path the
+ * spatial canvas's text node and export use, so there is no second
+ * markdown-to-HTML renderer to drift from it.
+ *
+ * Three view modes (Write / Split / Read), persisted per browser. Read
+ * HIDES the source pane instead of unmounting it, so the CodeMirror undo
+ * history survives a Read -> Write round trip. Split needs room for two
+ * columns; a container narrower than `SPLIT_MIN_WIDTH` falls back to Write
+ * without overwriting the stored preference.
+ *
+ * Deliberately out of scope, each for a specific reason:
+ * - CRDT binding (`loro-codemirror`) is the HOST's concern, wired through
+ *   `sourceExtensions`: this component stays a plain controlled
+ *   `value`/`onChange` pair, and a bound host disables the value-reconcile
+ *   path because the binding owns editor<->document sync.
+ * - Inline `$math$` renders as plain text runs: the layout's phrasing path
+ *   has no fragment seam, and a sized inline fragment inside a wrapped
+ *   line is its own layout problem. Block math and mermaid fences render
+ *   through useMarkdownFragments (async MathJax/mermaid behind
+ *   cache-backed sync seams); until a source's first render lands, math
+ *   shows the escaped-source placeholder and a fence the plain code block.
+ * - `[[wikiLink]]` / `![[embed]]` resolution needs a workspace-index-backed
+ *   resolver for `resolveReferences`, which does not exist at this
+ *   component's boundary; without one they stay literal bracket text.
+ *
+ * Preview recomputation is trailing-edge debounced so a keystroke does not
+ * synchronously re-parse and re-layout the whole document — the debounce
+ * always settles on the latest value, never a stale intermediate one.
+ */
 export function MarkdownEditor({
   value,
   onChange,
@@ -511,15 +510,6 @@ export function MarkdownEditor({
   // the very edge the rail is drawn on.
 
   /**
-   * Keeps the rail in step with the preview it maps.
-   *
-   * Both halves are read from the SAME element on the same tick: the blocks
-   * live in the SVG's pixel space, so the visible slice has to be expressed
-   * there too, which means subtracting the SVG's own offset inside the
-   * scroll content. Measured live rather than cached, because the document
-   * column's padding and header change it.
-   */
-  /**
    * Write mode has no preview, so nothing lays the document out — and the
    * rail would otherwise show whatever the last preview produced, going
    * stale with every keystroke. The shared hook lays it out in the pool
@@ -575,6 +565,15 @@ export function MarkdownEditor({
     // layout until the user happens to scroll.
   }, [effectiveMode, value, debouncedValue, writeModeOutline])
 
+  /**
+   * Keeps the rail in step with the preview it maps.
+   *
+   * Both halves are read from the SAME element on the same tick: the blocks
+   * live in the SVG's pixel space, so the visible slice has to be expressed
+   * there too, which means subtracting the SVG's own offset inside the
+   * scroll content. Measured live rather than cached, because the document
+   * column's padding and header change it.
+   */
   useEffect(() => {
     const preview = previewScrollRef.current
     if (preview === null) return

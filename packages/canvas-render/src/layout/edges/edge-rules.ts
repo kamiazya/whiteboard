@@ -545,6 +545,27 @@ const borderTracing: PenaltyRule = {
 }
 
 /**
+ * Length of `path` running STRICTLY between a rect's two borders — ink laid
+ * over content rather than over an existing stroke. A rect that fully
+ * contains another in the same list is dropped: a group frame is drawn
+ * around its members, and a route legitimately inside it is not tunnelling
+ * through anything a reader would notice.
+ *
+ * Exported because `spatial-edges.ts` asks the same question of a candidate
+ * path directly, rather than through the whole cost tuple: inside a single
+ * side pair it is choosing between paths, so the inter-edge terms do not
+ * apply. Two producers of "how much ink is inside a box" is exactly the
+ * drift this package has a one-producer-per-geometry rule about.
+ */
+export function interiorInkThrough(path: readonly Point[], rects: readonly Rect[]): number {
+  const bodies = rects.filter(
+    (r) =>
+      !rects.some((other) => other !== r && fullyContains(r, other) && !fullyContains(other, r)),
+  )
+  return inkAlongRects(path, bodies, (fixed, near, far) => near < fixed && fixed < far)
+}
+
+/**
  * endpoint-body-ink: ink drawn STRICTLY INSIDE an edge's OWN endpoint
  * node's body — the departure/arrival stub cutting through the near or far
  * endpoint's interior, which overlapping nodes provoke (a stub leaving one
@@ -582,33 +603,6 @@ const borderTracing: PenaltyRule = {
  * pass budget is a matter of candidate ORDER, not more passes: see
  * `u-hook-span-exposed-first` above.
  */
-/**
- * Exported because `bestCandidate` (`spatial-edges.ts`) ranks by this ONE
- * term directly rather than the whole cost tuple: inside a single side pair
- * it is choosing between paths, so the inter-edge terms do not apply and
- * the foreign-body ones are already the clearance tiers it sorts within.
- */
-/**
- * Length of `path` running STRICTLY between a rect's two borders — ink laid
- * over content rather than over an existing stroke. A rect that fully
- * contains another in the same list is dropped: a group frame is drawn
- * around its members, and a route legitimately inside it is not tunnelling
- * through anything a reader would notice.
- *
- * Exported because `spatial-edges.ts` asks the same question of a candidate
- * path directly, rather than through the whole cost tuple: inside a single
- * side pair it is choosing between paths, so the inter-edge terms do not
- * apply. Two producers of "how much ink is inside a box" is exactly the
- * drift this package has a one-producer-per-geometry rule about.
- */
-export function interiorInkThrough(path: readonly Point[], rects: readonly Rect[]): number {
-  const bodies = rects.filter(
-    (r) =>
-      !rects.some((other) => other !== r && fullyContains(r, other) && !fullyContains(other, r)),
-  )
-  return inkAlongRects(path, bodies, (fixed, near, far) => near < fixed && fixed < far)
-}
-
 const endpointBodyInk: PenaltyRule = {
   name: 'endpoint-body-ink',
   tier: 3,

@@ -48,12 +48,12 @@ import {
 
 const resourceIdFor = (nodeId: string) => `${nodeId}/content`
 
-/** An extension of ours, or nothing when there is nothing to carry. */
 /** `fields` without its undefined entries, key order kept — absence is how a payload says "not set". */
 function definedFields(fields: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined))
 }
 
+/** An extension of ours, or nothing when there is nothing to carry. */
 function ours(type: string, payload: Record<string, unknown>): OcifExtension | undefined {
   return Object.keys(payload).length === 0 ? undefined : { type, ...payload }
 }

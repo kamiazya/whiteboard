@@ -1,10 +1,8 @@
 import { z } from 'zod'
 
-/**
- * ADR-0046/0047: what a server-mode keeper tells the web app it serves about
- * signing in. The keeper answers these under `/auth`, on its own origin, so
- * the session they describe is the host-only cookie the browser already holds.
- */
+// ADR-0046/0047: what a server-mode keeper tells the web app it serves about
+// signing in. The keeper answers these under `/auth`, on its own origin, so
+// the session they describe is the host-only cookie the browser already holds.
 
 /** A provider a person can sign in with in a browser. Bearer-only providers
  *  have no browser client and are not listed. */

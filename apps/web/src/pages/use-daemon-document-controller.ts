@@ -69,13 +69,6 @@ export interface DaemonDocumentController {
 const DAEMON_REQUEST_FAILED = 'The daemon request failed.'
 
 /**
- * Resolves workspace/canvas defaults and owns the canvas-switcher list state
- * for DaemonDocumentPage. Deliberately does NOT create or own the
- * DocumentBackend/useDocumentSync connection — that stays in the page component,
- * mirroring BrowserDocumentPage's own useMemo(backend, [documentId]) plus
- * useDocumentSync ownership split.
- */
-/**
  * How a failed resolve is reported.
  *
  * A refusal names the workspace it refused, when one is known — the page can
@@ -96,6 +89,13 @@ function reportResolveFailure(
   setLoadError(messageOf(err, DAEMON_REQUEST_FAILED))
 }
 
+/**
+ * Resolves workspace/canvas defaults and owns the canvas-switcher list state
+ * for DaemonDocumentPage. Deliberately does NOT create or own the
+ * DocumentBackend/useDocumentSync connection — that stays in the page component,
+ * mirroring BrowserDocumentPage's own useMemo(backend, [documentId]) plus
+ * useDocumentSync ownership split.
+ */
 export function useDaemonDocumentController(
   options: UseDaemonDocumentControllerOptions,
 ): DaemonDocumentController {

@@ -38,12 +38,6 @@ function measureWithContext(
 }
 
 /**
- * The browser half of canvas-render's injected MeasureText seam
- * (D3: canvas-render stays DOM-free, canvas-viewer supplies the browser
- * implementation). Lazily creates a single offscreen <canvas> 2D context
- * and reuses it across calls.
- */
-/**
  * A 2D context to measure in: `<canvas>` on a window, `OffscreenCanvas` on a
  * worker, which has no `document`.
  *
@@ -95,6 +89,12 @@ function createMeasuringContext(): MeasuringContext | null {
   return null
 }
 
+/**
+ * The browser half of canvas-render's injected MeasureText seam
+ * (D3: canvas-render stays DOM-free, canvas-viewer supplies the browser
+ * implementation). Lazily creates a single offscreen <canvas> 2D context
+ * and reuses it across calls.
+ */
 export function createBrowserMeasureText(): MeasureText {
   let context: MeasuringContext | null | undefined
 

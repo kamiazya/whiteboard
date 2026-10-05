@@ -2,6 +2,13 @@ import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { LoadedFileDocument } from './document-file-contract.js'
 
+/** The daemon list's row, by the three fields this choice reads. */
+export interface ListedDocument {
+  readonly documentId: string
+  readonly path: string
+  readonly kind?: DocumentKind
+}
+
 /**
  * What a daemon-loaded document is AS a reference: its canvas when the
  * workspace lists it as anything but markdown, its body otherwise. The
@@ -10,13 +17,6 @@ import type { LoadedFileDocument } from './document-file-contract.js'
  * alias table knew one, else by the path the reference was written as,
  * which is how a legacy path reference to a canvas still draws a canvas.
  */
-/** The daemon list's row, by the three fields this choice reads. */
-export interface ListedDocument {
-  readonly documentId: string
-  readonly path: string
-  readonly kind?: DocumentKind
-}
-
 export function loadedReferenceOf(
   loaded: LoadedFileDocument,
   entries: readonly ListedDocument[],

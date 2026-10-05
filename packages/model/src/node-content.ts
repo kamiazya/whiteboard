@@ -19,23 +19,21 @@ import { RESOURCE_KINDS, type ResourceKind, resourceKind } from './node-resource
 import type { NodePatchFields } from './proposal.js'
 import type { SpatialNode } from './spatial.js'
 
-/**
- * What these accessors COST, recorded because the ADR does not weigh it.
- *
- * A `switch (node.type)` over the union is exhaustive: `searchable-texts.ts`
- * says so in as many words — "a fifth node kind has to answer this question
- * rather than fall through it" — and `canvas-snapshot.ts`, `loro-bridge.ts`,
- * the two projections and the layout all lean on the same guard. Reading
- * through an accessor gives that up: four independent questions, each
- * answerable `undefined`, and nothing that fails when a fifth kind of content
- * arrives unanswered.
- *
- * Dissolving the union removes the concept the guard is over, so this is a
- * cost of decision 3 rather than of these functions. It is written here
- * because the call sites are where someone will notice it, and because the
- * alternative — a discriminant on the resource itself, which would keep an
- * exhaustive switch — is a design decision nobody has taken.
- */
+// What these accessors COST, recorded because the ADR does not weigh it.
+//
+// A `switch (node.type)` over the union is exhaustive: `searchable-texts.ts`
+// says so in as many words — "a fifth node kind has to answer this question
+// rather than fall through it" — and `canvas-snapshot.ts`, `loro-bridge.ts`,
+// the two projections and the layout all lean on the same guard. Reading
+// through an accessor gives that up: four independent questions, each
+// answerable `undefined`, and nothing that fails when a fifth kind of content
+// arrives unanswered.
+//
+// Dissolving the union removes the concept the guard is over, so this is a
+// cost of decision 3 rather than of these functions. It is written here
+// because the call sites are where someone will notice it, and because the
+// alternative — a discriminant on the resource itself, which would keep an
+// exhaustive switch — is a design decision nobody has taken.
 
 /** The markdown a node shows inline, or `undefined` if it shows none. */
 export const nodeText = (node: SpatialNode): string | undefined =>

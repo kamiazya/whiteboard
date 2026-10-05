@@ -27,8 +27,9 @@ const MAX_LIVE_IFRAMES = 3
 
 export interface LinkEmbedLayerProps {
   readonly canvas: SpatialCanvas
-  /** The LOD gate: only link nodes this returns true for offer the facade. */
   /**
+   * The LOD gate: only link nodes this returns true for offer the facade.
+   *
    * Takes any node, not the link arm. The arm type is what ADR-0038 decision
    * 3 removes, and a prop declaring it is a prop the flip has to visit; the
    * layer has already established this node has a url before it asks.

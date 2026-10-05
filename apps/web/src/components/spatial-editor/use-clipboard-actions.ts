@@ -67,12 +67,6 @@ export interface ClipboardActionsInputs {
   readonly viewportCenterScreen: () => Point
 }
 
-/**
- * The clipboard family — copy/cut/paste/duplicate plus the foreign-text
- * fallback note. Every canvas mutation goes through applyCommand and out
- * through `onChange`; every selection write goes through `selectNodes`.
- * Plain per-render closures, exactly as they were inside the editor body.
- */
 /** One batch that moves every held element, so the whole cut undoes as one step. */
 function moveHeldCommand(
   held: readonly SpatialNode[],
@@ -158,6 +152,12 @@ function selectCreatedBy(
   if (lines.length > 0) selectInk(lines)
 }
 
+/**
+ * The clipboard family — copy/cut/paste/duplicate plus the foreign-text
+ * fallback note. Every canvas mutation goes through applyCommand and out
+ * through `onChange`; every selection write goes through `selectNodes`.
+ * Plain per-render closures, exactly as they were inside the editor body.
+ */
 export function useClipboardActions({
   canvasRef,
   primaryId,

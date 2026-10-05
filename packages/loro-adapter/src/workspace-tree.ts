@@ -347,16 +347,6 @@ export function readWorkspaceNodes(doc: LoroDoc): WorkspaceNode[] {
 }
 
 /**
- * Every document this workspace holds, in TREE order, with its derived path.
- *
- * Deliberately not sorted by path. Ordering a listing is the `DocumentIndex`
- * port's contract (`compareDocumentPaths`), and importing that here would give
- * this package a dependency on `ports` for one comparator — while the
- * shadowing rule below needs tree order and nothing else, since "an earlier
- * sibling owns this path" is a statement about the order every peer already
- * agrees on. The composition root that implements the port sorts.
- */
-/**
  * The one place an entry is assembled from a read node, so every path that
  * answers one — the listing, the two resolvers, the creators — names the
  * content the same way. A second spelling would be a second key.
@@ -383,6 +373,16 @@ function entryOfNode(node: LoroTreeNode, path: string): WorkspaceDocumentEntry {
   return entryOf(read, path)
 }
 
+/**
+ * Every document this workspace holds, in TREE order, with its derived path.
+ *
+ * Deliberately not sorted by path. Ordering a listing is the `DocumentIndex`
+ * port's contract (`compareDocumentPaths`), and importing that here would give
+ * this package a dependency on `ports` for one comparator — while the
+ * shadowing rule below needs tree order and nothing else, since "an earlier
+ * sibling owns this path" is a statement about the order every peer already
+ * agrees on. The composition root that implements the port sorts.
+ */
 export function readWorkspaceDocuments(doc: LoroDoc): WorkspaceDocumentEntry[] {
   const seen = new Set<string>()
   const out: WorkspaceDocumentEntry[] = []
@@ -893,14 +893,6 @@ export function deleteWorkspaceNodeAtPath(doc: LoroDoc, path: string): boolean {
 }
 
 /**
- * A document's containers, addressed by id, for the content bridge.
- *
- * `getOrCreateContainer` and not `setContainer`: the latter REPLACES what is
- * at the key, so a second write of the same document would silently wipe
- * everything the first one put there. Measured — `setContainer` on an
- * occupied key leaves `{}`.
- */
-/**
  * The inverse of `adoptWorkspaceDocument`: one document's containers, copied
  * out of its tree node into a standalone Loro document with root containers —
  * the shape every pre-workspace consumer (the daemon import, a duplicate
@@ -955,6 +947,14 @@ export function reconcileDocContent(target: LoroDoc, past: LoroDoc): void {
   target.commit()
 }
 
+/**
+ * A document's containers, addressed by id, for the content bridge.
+ *
+ * `getOrCreateContainer` and not `setContainer`: the latter REPLACES what is
+ * at the key, so a second write of the same document would silently wipe
+ * everything the first one put there. Measured — `setContainer` on an
+ * occupied key leaves `{}`.
+ */
 export function documentContainers(doc: LoroDoc, documentId: string): DocumentContainers {
   const node = nodeById(doc, documentId)
   if (node === null) throw new Error(`No document "${documentId}" in this workspace`)

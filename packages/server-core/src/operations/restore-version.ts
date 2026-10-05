@@ -53,6 +53,22 @@ export type RestoreVersionResult =
   | { kind: 'restored-subtree'; restoredCount: number }
 
 /**
+ * What all three modes have in hand once the version is resolved: the live
+ * document, the past state, and how to narrate the write.
+ */
+interface RestoreContext {
+  readonly workspaceId: string
+  /** The SOURCE document, whose history holds the version. */
+  readonly path: string
+  readonly versionId: string
+  /** The live doc at `path`, loaded before the version is resolved. */
+  readonly doc: LoroDoc
+  readonly past: LoroDoc
+  readonly label: string | undefined
+  readonly progress: RestoreProgress
+}
+
+/**
  * Restores a document (or its whole subtree) to a saved version from the
  * FILE-BACKED history behind `deps.versions`. Three modes share it:
  *
@@ -89,22 +105,6 @@ export type RestoreVersionResult =
  * backstop no surface can skip; an adapter with richer per-segment
  * diagnostics may still run its own validation for the message.
  */
-/**
- * What all three modes have in hand once the version is resolved: the live
- * document, the past state, and how to narrate the write.
- */
-interface RestoreContext {
-  readonly workspaceId: string
-  /** The SOURCE document, whose history holds the version. */
-  readonly path: string
-  readonly versionId: string
-  /** The live doc at `path`, loaded before the version is resolved. */
-  readonly doc: LoroDoc
-  readonly past: LoroDoc
-  readonly label: string | undefined
-  readonly progress: RestoreProgress
-}
-
 export async function restoreVersion(
   deps: Pick<ServerDeps, 'versions' | 'liveDocuments'>,
   input: RestoreVersionInput,

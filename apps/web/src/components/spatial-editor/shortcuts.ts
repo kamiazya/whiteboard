@@ -276,7 +276,6 @@ export function findShortcut(e: KeyEventLike, tool: EditorTool): ShortcutSpec | 
   return findShortcutIn(EDITOR_SHORTCUTS, e, tool)
 }
 
-/** `findShortcut` over an explicit spec list — the testable pure core. */
 /**
  * Whether one spec matches this key event.
  *
@@ -308,6 +307,7 @@ function matchesSpec(
   return spec.codes !== undefined || spec.keys !== undefined
 }
 
+/** `findShortcut` over an explicit spec list — the testable pure core. */
 export function findShortcutIn(
   specs: readonly ShortcutSpec[],
   e: KeyEventLike,

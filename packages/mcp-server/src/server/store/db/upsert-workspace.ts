@@ -2,14 +2,6 @@ import { WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import type { TenantDatabase } from './tenant-database.js'
 
 /**
- * `segment`/`displayName` are ADR-0019's identity layers, claimed only on
- * the INITIAL insert — the `onConflict('id').doNothing()` below means a
- * bare call on an already-existing workspace (every `wbDocumentCreate
- * createWorkspace: true` call, for one) never touches them, so a name or
- * segment set elsewhere is never clobbered by a follow-up child write.
- */
-
-/**
  * Did this write violate the `workspaces_segment_unique` index (migration
  * 0018) rather than fail for some other reason?
  *
@@ -40,9 +32,13 @@ export interface WorkspaceIdentity {
   displayName?: string
 }
 
-// A no-op when the workspace row already exists; displayName/segment are
-// left untouched so a name set elsewhere does not get clobbered by a
-// follow-up child write.
+/**
+ * `segment`/`displayName` are ADR-0019's identity layers, claimed only on
+ * the INITIAL insert — the `onConflict('id').doNothing()` below means a
+ * bare call on an already-existing workspace (every `wbDocumentCreate
+ * createWorkspace: true` call, for one) never touches them, so a name or
+ * segment set elsewhere is never clobbered by a follow-up child write.
+ */
 export async function upsertWorkspaceRow(
   db: TenantDatabase,
   workspaceId: string,

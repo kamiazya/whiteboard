@@ -559,22 +559,6 @@ function renderBackgroundRect(box: BoundingBox, background: string): SvgChild {
 const SVG_XMLNS = 'http://www.w3.org/2000/svg'
 
 /**
- * Serializes a decorated scene to an SVG string. Pure, no DOM — the same
- * implementation runs on Node, in the browser, and on Workers. Output
- * follows the canonical serialization rules (fixed attribute order,
- * consistent escaping, single root `xmlns`, one number formatter) so the
- * same scene produces byte-identical SVG everywhere.
- *
- * With no `options` (or an options object with no fields set), the root
- * element carries only `xmlns` — the exact string this function has always
- * produced. Passing any `SvgDocumentOptions` field activates the document
- * envelope: fixed root-attribute order `xmlns width height viewBox fill`
- * (`fill` only when `textFill` is set), plus a
- * leading `role="presentation"` background rect (document chrome, not a
- * per-node visual attribute — the one exemption to this package's
- * no-visual-attributes rule) when `background` is set.
- */
-/**
  * The document's assembled pieces, shared by `renderSceneToSvg` and the
  * keyed renderer (svg/keyed.ts) so the two can never disagree on root
  * attributes, defs, background, or per-entry bodies. `body` holds exactly
@@ -654,6 +638,22 @@ export function buildSvgDocumentParts(
   }
 }
 
+/**
+ * Serializes a decorated scene to an SVG string. Pure, no DOM — the same
+ * implementation runs on Node, in the browser, and on Workers. Output
+ * follows the canonical serialization rules (fixed attribute order,
+ * consistent escaping, single root `xmlns`, one number formatter) so the
+ * same scene produces byte-identical SVG everywhere.
+ *
+ * With no `options` (or an options object with no fields set), the root
+ * element carries only `xmlns` — the exact string this function has always
+ * produced. Passing any `SvgDocumentOptions` field activates the document
+ * envelope: fixed root-attribute order `xmlns width height viewBox fill`
+ * (`fill` only when `textFill` is set), plus a
+ * leading `role="presentation"` background rect (document chrome, not a
+ * per-node visual attribute — the one exemption to this package's
+ * no-visual-attributes rule) when `background` is set.
+ */
 export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
   const parts = buildSvgDocumentParts(scene, options)
   return serializeSvg(

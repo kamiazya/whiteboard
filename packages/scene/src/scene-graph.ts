@@ -174,17 +174,6 @@ export interface TextRunNode {
 }
 
 /**
- * The box chrome of a spatial canvas node: a rectangle with an optional
- * uniform corner radius. Deliberately minimal — a rect covers every
- * spatial node kind today, so ellipse/polygon/path are not added
- * speculatively (see package-canvas-render.md).
- */
-/**
- * Non-rect node silhouettes. `rect` is deliberately unrepresentable: an
- * absent `shape` field IS the rect, so a second spelling of it cannot
- * exist. Geometry derives from the bbox via `layout/nodes/node-outline.ts`.
- */
-/**
  * A silhouette's NAMESPACED id (`visual.diamond`), resolved against the shape
  * table both layout and the SVG backend are handed. A name rather than the
  * geometry, because outlines derive from bbox + id — so `translateScene` needs

@@ -26,10 +26,6 @@ export interface DocumentPreviewProps {
   readonly document: WorkspaceDocumentEntry | null
   readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
   readonly onOpen?: (document: WorkspaceDocumentEntry) => void
-  /**
-   * Move the document, and everything under it, to a new path. Absent means
-   * the pane shows no way to move — reading still works.
-   */
   /** Opens the shared Rename dialog (name + path together). */
   readonly onRename?: (document: WorkspaceDocumentEntry) => void
   /** Copy it. Absent means the pane offers no copy. */

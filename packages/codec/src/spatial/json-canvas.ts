@@ -14,24 +14,22 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
-/**
- * JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/) as this package writes and
- * reads it: the specified document, plus the single `x-whiteboard` extension
- * key at three sites.
- *
- * It lives in the codec because it is a WIRE shape —
- * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md). Until
- * now it was the product's model, and this declaration is that model's schema
- * LIFTED here rather than a second one written beside it. Two equivalence
- * tests held the wire shape and the model structurally identical while they
- * were meant to be; the model has since diverged and both were deleted,
- * exactly as they said they would be. The round-trip property carries the
- * claim now.
- *
- * What the schemas below reuse from the model is vocabulary the two genuinely
- * share — an id, a colour, a comment, the facet key grammar. What they declare
- * is the DOCUMENT: which fields the format states, and where it leaves room.
- */
+// JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/) as this package writes and
+// reads it: the specified document, plus the single `x-whiteboard` extension
+// key at three sites.
+//
+// It lives in the codec because it is a WIRE shape —
+// [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md). Until
+// now it was the product's model, and this declaration is that model's schema
+// LIFTED here rather than a second one written beside it. Two equivalence
+// tests held the wire shape and the model structurally identical while they
+// were meant to be; the model has since diverged and both were deleted,
+// exactly as they said they would be. The round-trip property carries the
+// claim now.
+//
+// What the schemas below reuse from the model is vocabulary the two genuinely
+// share — an id, a colour, a comment, the facet key grammar. What they declare
+// is the DOCUMENT: which fields the format states, and where it leaves room.
 
 /**
  * A facets-only `x-whiteboard`: the payload bucket and nothing else — the

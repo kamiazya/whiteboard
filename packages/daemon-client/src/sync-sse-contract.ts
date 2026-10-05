@@ -10,14 +10,12 @@
 import { z } from 'zod'
 import { clientTextMessageSchema } from './sync-frames.js'
 
-/**
- * These are deliberately NOT `.strict()`, unlike the request DTOs elsewhere in
- * this codebase. The producer is a locally-installed daemon and the consumer is
- * an auto-updating hosted page, so their versions skew by design. A strict
- * parser would make a field added to a frame drop that frame entirely on every
- * older client — silently stopping sync — where ignoring the unknown key costs
- * nothing. Requests travel the other way and stay strict.
- */
+// These are deliberately NOT `.strict()`, unlike the request DTOs elsewhere in
+// this codebase. The producer is a locally-installed daemon and the consumer is
+// an auto-updating hosted page, so their versions skew by design. A strict
+// parser would make a field added to a frame drop that frame entirely on every
+// older client — silently stopping sync — where ignoring the unknown key costs
+// nothing. Requests travel the other way and stay strict.
 
 /**
  * The stream's first frame. The id is minted by the daemon and announced here,

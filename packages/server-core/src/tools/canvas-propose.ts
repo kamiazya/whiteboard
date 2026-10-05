@@ -18,24 +18,22 @@ import { saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { CanvasEditInput } from './canvas-edit-ops.js'
 
-/**
- * Turning one `wb_canvas_edit` batch into a proposal (ADR-0029 decision 7).
- *
- * The batch is resolved exactly as an applied one is — ids minted, geometry
- * placed, every op validated — and then, instead of the resulting board being
- * saved, the DIFFERENCE between the board and that result is stored as the
- * proposal's changes.
- *
- * Diffing rather than carrying the ops through is not a shortcut around
- * decision 2. A proposed node has to be stored RESOLVED, because the renderer
- * draws it in place before anyone adopts it — so the op as the caller wrote
- * it (id-less, geometry-less) was never what would be stored. The resolved
- * result IS the resolved op, and reading it off the diff is how the tool
- * avoids saying the same thing twice.
- *
- * It also collapses a batch that touches one element twice into the one net
- * change a person decides on, which is what adoption needs.
- */
+// Turning one `wb_canvas_edit` batch into a proposal (ADR-0029 decision 7).
+//
+// The batch is resolved exactly as an applied one is — ids minted, geometry
+// placed, every op validated — and then, instead of the resulting board being
+// saved, the DIFFERENCE between the board and that result is stored as the
+// proposal's changes.
+//
+// Diffing rather than carrying the ops through is not a shortcut around
+// decision 2. A proposed node has to be stored RESOLVED, because the renderer
+// draws it in place before anyone adopts it — so the op as the caller wrote
+// it (id-less, geometry-less) was never what would be stored. The resolved
+// result IS the resolved op, and reading it off the diff is how the tool
+// avoids saying the same thing twice.
+//
+// It also collapses a batch that touches one element twice into the one net
+// change a person decides on, which is what adoption needs.
 
 /**
  * The verbs a proposal can carry: the stored change vocabulary, plus
@@ -85,13 +83,6 @@ class UnrepresentableChangeError extends Error {
 type Fields = Record<string, unknown>
 
 /**
- * The patchable fields that differ, and what they held before.
- *
- * A prior OMITS a field the element did not have — "the anchor held nothing
- * there" — which is exactly the asymmetry `proposedChangeSchema` allows and
- * the opposite one it refuses.
- */
-/**
  * Whether two field values are the same VALUE, not the same object.
  *
  * The diff's two sides come from different places — one read from storage,
@@ -139,6 +130,13 @@ const NODE_CONTENT: PatchView = {
   expressed: ['resource'],
 }
 
+/**
+ * The patchable fields that differ, and what they held before.
+ *
+ * A prior OMITS a field the element did not have — "the anchor held nothing
+ * there" — which is exactly the asymmetry `proposedChangeSchema` allows and
+ * the opposite one it refuses.
+ */
 function patchBetween(
   before: Fields,
   after: Fields,
