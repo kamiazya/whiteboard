@@ -4,7 +4,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { clearActiveMarkdownEditor, setActiveMarkdownEditor } from './active-markdown-editor.js'
 import { VERB_BAR_ORDER, verb } from './editor-verbs.js'
-import { layoutVerbBar, TOUCH_BAR_METRICS, touchFormattingBarShown } from './verb-bar-layout.js'
+import {
+  DESKTOP_BAR_HEIGHT_PX,
+  DESKTOP_BAR_METRICS,
+  layoutVerbBar,
+  TOUCH_BAR_HEIGHT_PX,
+  TOUCH_BAR_METRICS,
+  touchFormattingBarShown,
+} from './verb-bar-layout.js'
 
 const items = VERB_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
 
@@ -32,6 +39,20 @@ describe('layoutVerbBar', () => {
     const layout = layoutVerbBar(60, items, TOUCH_BAR_METRICS)
     expect(layout.visible).toEqual([])
     expect(layout.overflow).toEqual([...VERB_BAR_ORDER])
+  })
+})
+
+describe('bar heights', () => {
+  // Literals: the bars and the keyboard-avoidance tests read these constants
+  // back, so a changed height would move every one of them together.
+  it('docks the touch bar at 44px, one coarse-pointer control tall', () => {
+    expect(TOUCH_BAR_HEIGHT_PX).toBe(44)
+    expect(TOUCH_BAR_HEIGHT_PX).toBe(TOUCH_BAR_METRICS.slotPx)
+  })
+
+  it('gives the desktop bar the 40px toolbar row, which holds its slot', () => {
+    expect(DESKTOP_BAR_HEIGHT_PX).toBe(40)
+    expect(DESKTOP_BAR_HEIGHT_PX).toBeGreaterThanOrEqual(DESKTOP_BAR_METRICS.slotPx)
   })
 })
 

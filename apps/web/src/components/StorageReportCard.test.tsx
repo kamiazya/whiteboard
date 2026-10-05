@@ -601,6 +601,57 @@ describe('StorageReportCard', () => {
     })
   })
 
+  /** A daemon whose storage report shrinks once an optimize has run; `list` answers the workspace list. */
+  function optimizingDaemon(list: () => Response) {
+    let optimized = false
+    const storageReads = { count: 0 }
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        storageReads.count += 1
+        return Promise.resolve(jsonResponse(optimized ? { ...PAYLOAD, totalBytes: 1024 } : PAYLOAD))
+      }
+      if (url === '/api/workspaces') return Promise.resolve(list())
+      if (init?.method === 'POST' && url.endsWith('/documents/optimize-all')) {
+        optimized = true
+        return Promise.resolve(
+          jsonResponse({ compacted: true, beforeBytes: 2048, afterBytes: 1024, reason: 'ok' }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+    return storageReads
+  }
+
+  it('re-reads the report after an optimize that ran, so the total shows what it freed', async () => {
+    optimizingDaemon(() => jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }] }))
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => expect(container.textContent).toContain('Total 2.0 KiB'))
+
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
+
+    await waitFor(() => expect(dbActions.textContent).toContain('Saved 1.0 KiB'))
+    await waitFor(() => expect(container.textContent).toContain('Total 1.0 KiB'))
+  })
+
+  it('does not re-read the report after an optimize that never ran', async () => {
+    const storageReads = optimizingDaemon(() => new Response(null, { status: 500 }))
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => expect(container.textContent).toContain('Total 2.0 KiB'))
+    expect(storageReads.count).toBe(1)
+
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
+
+    await waitFor(() => expect(dbActions.textContent ?? '').toMatch(/Optimize failed/i))
+    expect(storageReads.count).toBe(1)
+  })
+
   it('humanises the "Updated …" line and ticks across humanise boundaries without per-second flicker', async () => {
     const { container } = render(<StorageReportCard />)
     // Settle the initial fetch + min-refresh delay. The fresh fetch lands

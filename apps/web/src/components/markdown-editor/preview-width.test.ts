@@ -42,6 +42,35 @@ describe('the preview column never asks for more width than the pane has', () =>
   })
 })
 
+describe('in split mode the preview typesets to its own side of the divider', () => {
+  const split = (containerWidth: number, splitRatio: number, railWidth = RAIL_WIDTH_PX) =>
+    previewWidth({ containerWidth, maxWidth: 720, railWidth, splitRatio, mode: 'split' })
+
+  it('takes the share the divider leaves it, not the whole container', () => {
+    // 1200 × (1 − 0.5) = 600, less the 56px rail, the 48px column padding and
+    // the SVG's 8px each side: 480, floored to the 64px step.
+    expect(split(1200, 0.5)).toBe(448)
+    expect(read(1200)).toBe(720)
+  })
+
+  it('narrows as the divider moves toward it', () => {
+    expect(split(1200, 0.25)).toBeGreaterThan(split(1200, 0.75))
+  })
+
+  it('fits its pane at every width and divider position', () => {
+    for (const splitRatio of [0.2, 0.5, 0.8]) {
+      for (let width = 200; width <= 2400; width += 7) {
+        const railWidth = railFits(width) ? RAIL_WIDTH_PX : 0
+        const pane = width * (1 - splitRatio) - railWidth
+        expect(
+          split(width, splitRatio, railWidth),
+          `${width}px at ${splitRatio}`,
+        ).toBeLessThanOrEqual(Math.max(0, pane - PREVIEW_COLUMN_PADDING_PX))
+      }
+    }
+  })
+})
+
 describe('the rail is affordable only beside a document at its measure', () => {
   it('is hidden on a phone and shown on a desktop', () => {
     expect(railFits(390)).toBe(false)

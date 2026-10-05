@@ -87,6 +87,35 @@ describe('lineForDocumentY', () => {
   })
 })
 
+// A document whose first block starts below the top — leading blank lines, or
+// frontmatter the preview does not lay out — so lines 1 and 2 sit above every
+// anchor and take the eased branch the fixture above never reaches.
+const indented = [
+  { line: 3, y: 60 },
+  { line: 7, y: 200 },
+]
+
+describe('above the first block', () => {
+  it('eases a line toward the first block in proportion, rather than pinning it', () => {
+    expect(documentYForLine(indented, 1, TAIL)).toBeCloseTo(20)
+    expect(documentYForLine(indented, 2, TAIL)).toBeCloseTo(40)
+  })
+
+  it('eases a press toward the first line in proportion, never above line 1', () => {
+    expect(lineForDocumentY(indented, 40, TAIL)).toBeCloseTo(2)
+    expect(lineForDocumentY(indented, 10, TAIL)).toBe(1)
+  })
+
+  it('returns to the line it started from', () => {
+    expect(lineForDocumentY(indented, documentYForLine(indented, 2, TAIL), TAIL)).toBeCloseTo(2)
+  })
+
+  it('maps a first block reported at line 0 to the top and to line 1, never NaN or line 0', () => {
+    expect(documentYForLine([{ line: 0, y: 50 }], 0, TAIL)).toBe(0)
+    expect(lineForDocumentY([{ line: 0, y: 50 }], 50, TAIL)).toBe(1)
+  })
+})
+
 describe('round trip', () => {
   // The two directions have to agree about where the LAST band ends, or a
   // press in it lands on an earlier line than the marker showed. They did
