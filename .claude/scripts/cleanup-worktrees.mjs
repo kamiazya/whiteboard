@@ -14,6 +14,10 @@
 //
 // Safety: a worktree with uncommitted changes or an unmerged branch is always
 // left alone and reported — nothing here ever discards work.
+//
+// A worktree's dev daemon is stopped before the worktree is removed: it runs
+// with no idle timeout, and its record lives in the worktree's own data dir,
+// so once the directory is gone nothing can find it to stop it.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
@@ -70,6 +74,35 @@ const storePrune = flags.has('--store-prune')
 const includeFresh = flags.has('--include-fresh')
 // Resolved once: a worktree containing this path is never a removal candidate.
 const cwd = resolve(process.cwd())
+
+// The stop is the one `pnpm mcp:http:stop` runs, so a pid that is not the
+// daemon its record describes is never signalled.
+const stopDevDaemonScript = resolve(
+  __dirname,
+  '../../packages/mcp-server/scripts/dev/stop-http-dev-daemon.mjs',
+)
+
+/**
+ * Stops the dev daemon recorded in `<wt>/.dev-data`, if any. Answers why the
+ * worktree has to stay when it could not, or null.
+ */
+function stopWorktreeDevDaemon(wt) {
+  const dataDir = join(wt, '.dev-data')
+  if (!existsSync(dataDir)) return null
+  if (!existsSync(stopDevDaemonScript)) return `no stop script at ${stopDevDaemonScript}`
+  try {
+    const said = execFileSync(process.execPath, [stopDevDaemonScript], {
+      cwd: wt,
+      encoding: 'utf-8',
+      env: { ...process.env, WHITEBOARD_DATA_DIR: dataDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    process.stdout.write(said)
+    return null
+  } catch (error) {
+    return String(error.stderr || error.message).trim()
+  }
+}
 
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf-8', ...opts }).trim()
@@ -201,6 +234,13 @@ for (const entry of entries) {
   if (dryRun) {
     console.log(`would remove ${entry.name} (branch '${branch}')`)
     removed++
+    continue
+  }
+
+  const daemonStays = stopWorktreeDevDaemon(wt)
+  if (daemonStays !== null) {
+    console.log(`keep ${entry.name}: its dev daemon could not be stopped (${daemonStays})`)
+    kept++
     continue
   }
 
