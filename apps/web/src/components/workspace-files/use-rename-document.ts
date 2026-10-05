@@ -1,5 +1,6 @@
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useState } from 'react'
+import { z } from 'zod'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 
@@ -26,6 +27,17 @@ export interface RenameDocument {
     name: string | undefined,
     newPath: string,
   ) => Promise<void>
+}
+
+/**
+ * A keeper refuses a name past the bound with the port's own parse, and a
+ * ZodError's message is its issue list as JSON — so the issues' own words are
+ * what the dialog shows. Anything else is shown as it stands: the server
+ * names the produced path that collided.
+ */
+function refusalMessage(err: unknown): string {
+  if (err instanceof z.ZodError) return err.issues.map((issue) => issue.message).join('; ')
+  return messageOf(err, 'Could not rename it.')
 }
 
 export function useRenameDocument({
@@ -71,7 +83,7 @@ export function useRenameDocument({
       } catch (err) {
         // The server names the PRODUCED path that collided, which on a
         // subtree move is often not the one typed here.
-        setError(messageOf(err, 'Could not rename it.'))
+        setError(refusalMessage(err))
         // A rename applies two writes; the first may have landed before the
         // second was refused. Re-reading here is what stops the panel from
         // showing a name the store no longer holds — the refusal is about

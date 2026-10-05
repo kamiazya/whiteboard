@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+
+import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
+import { setDocumentNameInputSchema } from '@kamiazya/whiteboard-ports'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
@@ -118,6 +121,28 @@ describe('rename dialog', () => {
     const alert = await within(dialog).findByRole('alert')
     expect(alert.textContent).toContain('archive/login/notes')
     expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  // The browser keeper refuses an over-long name with the port's own parse,
+  // whose message is the issue list as JSON. The field caps what can be
+  // typed, but a name stored before the bound opens the dialog already past
+  // it, so the refusal is reachable and has to read as a sentence.
+  it("shows a keeper's schema refusal in the schema's own words", async () => {
+    const tooLong = 'x'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1)
+    renderPanel({
+      setDocumentName: async () => {
+        setDocumentNameInputSchema.parse({
+          workspaceId: 'ws',
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          name: tooLong,
+        })
+      },
+    })
+    const dialog = await openDialog()
+    fireEvent.change(within(dialog).getByLabelText(/^Name/), { target: { value: tooLong } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const alert = await within(dialog).findByRole('alert')
+    expect(alert.textContent).toBe('a display name is at most 200 characters')
   })
 
   // A name that reached the store but not the screen is the worst of both:
