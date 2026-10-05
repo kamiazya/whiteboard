@@ -306,11 +306,7 @@ function useBrowserDocument(
     readOutlineSource,
     persistence: syncPersistence,
   } = sync
-  // The keeper names a note after its heading inside the record, and another
-  // tab's import may carry a rename; the title follows either without a reload.
-  useEffect(() => {
-    if (sync.documentName !== undefined) followRecordedName(sync.documentName)
-  }, [sync.documentName, followRecordedName])
+  useFollowRecordedName(sync.documentName, followRecordedName)
   // A note's body, read and written through the same session as a board: the
   // editor bound to the session's body text (each change at its own
   // position, committed on the session's debounce), `setBody` the whole-text
@@ -577,4 +573,26 @@ export const browserKeeper: DocumentKeeper<BrowserDocumentPageProps> = {
 /** The shared page, bound to the browser keeper — what App mounts under the browser keeper's routes. */
 export function BrowserDocumentPage(props: BrowserDocumentPageProps) {
   return <DocumentPage keeper={browserKeeper} props={props} />
+}
+
+/**
+ * The keeper names a note after its heading inside the record, and another
+ * tab's import may carry a rename; the title follows either without a reload.
+ *
+ * A `null` is followed only as a CHANGE from a name the record held: a record
+ * that has never held one (a row-backed index keeps names in its rows, not in
+ * the record) says nothing about the name, and following it would clear a
+ * name the page just saved.
+ */
+function useFollowRecordedName(
+  recorded: string | null | undefined,
+  follow: (name: string | null) => void,
+): void {
+  const previous = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    const before = previous.current
+    previous.current = recorded
+    if (recorded === undefined || (recorded === null && before == null)) return
+    follow(recorded)
+  }, [recorded, follow])
 }
