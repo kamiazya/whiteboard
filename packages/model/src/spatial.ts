@@ -5,7 +5,7 @@ import { integerSchema } from './integer.js'
 import { commentMessageInputSchema } from './label-and-comment-text.js'
 import { nodeResourceSchema } from './node-resource.js'
 import { storedTagsSchema } from './tags.js'
-import { okfActorSchema, okfTimestampSchema } from './trust.js'
+import { okfActorInputSchema, okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
 // six numbered presets or a 6-digit hex string.
@@ -618,9 +618,9 @@ export type CanvasComment = z.infer<typeof canvasCommentSchema>
  * comment in the document unreadable.
  */
 export const canvasCommentDraftSchema = canvasCommentFieldsSchema
-  // The text is held to the write bound here and not on the stored shape,
-  // which must still read a comment written before the bound.
-  .extend({ text: commentMessageInputSchema })
+  // The text and the author are held to their write bounds here and not on
+  // the stored shape, which must still read a comment written before them.
+  .extend({ text: commentMessageInputSchema, author: okfActorInputSchema.optional() })
   .strict()
   .partial({ id: true, x: true, y: true })
   .refine(namesOneTarget, ONE_TARGET)
