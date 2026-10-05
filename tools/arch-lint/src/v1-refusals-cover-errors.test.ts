@@ -90,6 +90,10 @@ const EXEMPT: Readonly<Record<string, string>> = {
   SubtreeTakesNoTargetError: VERSION_TOOLS,
   WorkspaceEditError: WORKSPACE_EDIT,
   DocumentKindUnknownError: 'raised by wb_document_get reading a document of no known kind',
+  MarkdownBodyTooLargeError:
+    'raised by the sync operations (document and workspace-document update, promote), whose routes are the daemon’s, not /api/v1; /api/v1 writes markdown through markdownInputSchema',
+  OffGrammarPathError:
+    'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and validates paths through its schemas',
   OkfNotYamlSafeError:
     'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }

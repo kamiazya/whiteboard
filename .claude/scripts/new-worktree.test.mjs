@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { isolatedGitEnv } from './git-test-utils.mjs'
 import { runWireStep } from './new-worktree.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -134,8 +135,9 @@ test('a copy failure is reported and swallowed', () => {
 // and `foo --bogus` used to ask git for a base ref called `--bogus`.
 test('--help, an unknown option and a missing name print usage and create no worktree or branch', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'new-worktree-flags-'))
+  const env = isolatedGitEnv()
   try {
-    execFileSync('git', ['init', '--quiet', scratch])
+    execFileSync('git', ['init', '--quiet', scratch], { env })
     for (const args of [
       ['--help'],
       ['--bogus'],
@@ -146,6 +148,7 @@ test('--help, an unknown option and a missing name print usage and create no wor
     ]) {
       const result = spawnSync('node', [scriptPath, ...args], {
         cwd: scratch,
+        env,
         encoding: 'utf-8',
         timeout: 20_000,
       })
@@ -162,7 +165,7 @@ test('--help, an unknown option and a missing name print usage and create no wor
         `${label} created a worktree directory`,
       )
       assert.equal(
-        execFileSync('git', ['branch', '--list'], { cwd: scratch, encoding: 'utf-8' }).trim(),
+        execFileSync('git', ['branch', '--list'], { cwd: scratch, env, encoding: 'utf-8' }).trim(),
         '',
         `${label} created a branch`,
       )

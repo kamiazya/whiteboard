@@ -11,6 +11,7 @@
  * `[mark] ALPHA <spacer> gear`.
  */
 
+import { WORKSPACE_DISPLAY_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useCreateWorkspace } from '../../hooks/use-create-workspace.js'
@@ -129,11 +130,10 @@ export function WorkspaceMenu({
               key={w.workspaceId}
               type="button"
               role="menuitem"
-              // `aria-current` rather than a disabled item: the current
-              // workspace belongs in the list (it is what tells a reader
-              // which one they are on), and a disabled control announces
-              // "unavailable", which is the wrong story about the place you
-              // already are.
+              // `aria-current` rather than a disabled item: the current workspace belongs in
+              // the list (it is what tells a reader which one they are on), and a disabled
+              // control announces "unavailable", which is the wrong story about the place
+              // you already are.
               {...(isCurrent ? { 'aria-current': 'true' } : {})}
               onClick={() => {
                 if (!isCurrent) onSwitch(handle)
@@ -171,6 +171,7 @@ export function WorkspaceMenu({
                 enterKeyHint="done"
                 ref={newNameRef}
                 value={newName}
+                maxLength={WORKSPACE_DISPLAY_NAME_MAX_LENGTH}
                 onChange={(event) => setNewName(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter' || isImeComposingKeydown(event.nativeEvent)) return

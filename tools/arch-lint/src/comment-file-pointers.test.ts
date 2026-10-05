@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, join, posix } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
@@ -430,5 +430,88 @@ describe('a flake shape is cited by the name of its heading in flake-shapes.md',
     // every name as resolving.
     expect(citations).toBeGreaterThan(10)
     expect(unknown).toEqual([])
+  })
+})
+
+// A relative Markdown link in a comment (an ADR cited by its file) is a pointer the
+// scans above never read: it is neither backticked nor a bare file name, and
+// it resolves RELATIVE TO THE FILE it sits in, so a link with one `../` too
+// few or too many names a path that does not exist (or one above the repo)
+// while reading exactly like the links beside it that work. Resolved the way a
+// Markdown viewer would: against the commenting file's directory, with any
+// `#anchor` dropped. Only a target written as `./` or `../` is a path: a URL,
+// an anchor, and the link syntax a comment quotes as an example are not.
+// Only comment lines are read, so a Markdown link a source file builds as a
+// STRING — a document it renders, with links relative to where that document
+// lands — is not judged against the source file's directory.
+const MARKDOWN_LINK = /\]\((\.{1,2}\/[^)\s]*)\)/g
+const LINK_SOURCE = /\.(?:tsx?|mts|mjs|cjs|js)$/
+
+/** Every relative Markdown link on a comment line of `text` that resolves to nothing. */
+function brokenRelativeLinks(
+  file: string,
+  text: string,
+  exists: (repoPath: string) => boolean,
+): string[] {
+  const broken: string[] = []
+  for (const line of text.split('\n')) {
+    if (!/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue
+    for (const match of line.matchAll(MARKDOWN_LINK)) {
+      const target = (match[1] ?? '').replace(/#.*$/, '')
+      const resolved = posix.normalize(posix.join(posix.dirname(file), target))
+      if (resolved.startsWith('../') || !exists(resolved)) broken.push(`${file}: ${match[1]}`)
+    }
+  }
+  return broken
+}
+
+describe('a Markdown link in a comment resolves from the file it sits in', () => {
+  const tracked = trackedFiles()
+  const paths = new Set(tracked)
+  const exists = (repoPath: string): boolean =>
+    paths.has(repoPath) ||
+    tracked.some((path) => path.startsWith(`${repoPath.replace(/\/$/, '')}/`))
+  const sources = tracked.filter((file) => LINK_SOURCE.test(file))
+  let links = 0
+  const broken = sources.flatMap((file) => {
+    const text = readFileSync(join(REPO_ROOT, file), 'utf8')
+    links += [...text.matchAll(MARKDOWN_LINK)].length
+    return brokenRelativeLinks(file, text, exists)
+  })
+
+  it('judges a link by the depth of the file it is written in', () => {
+    const adr = 'docs/contributing/adr/0038-ocif-projection.md'
+    const fixture = (link: string) => ` * [ADR-0038](${link}) decision 3:`
+    const real = (path: string) => path === adr
+    expect(
+      brokenRelativeLinks('packages/model/src/spatial.ts', fixture(`../../../${adr}`), real),
+    ).toEqual([])
+    // One `../` short lands inside `packages/`; one too many leaves the repo.
+    expect(
+      brokenRelativeLinks('packages/model/src/spatial.ts', fixture(`../../${adr}`), real),
+    ).toHaveLength(1)
+    expect(
+      brokenRelativeLinks('packages/model/src/spatial.ts', fixture(`../../../../${adr}`), real),
+    ).toHaveLength(1)
+    expect(
+      brokenRelativeLinks(
+        'packages/model/src/spatial.ts',
+        [
+          ' * [spec](https://jsoncanvas.org/spec/1.0/) and [below](#anchor)',
+          `const doc = '[ADR](../contributing/adr/0037-model-and-format.md)'`,
+        ].join('\n'),
+        real,
+      ),
+    ).toEqual([])
+  })
+
+  it('reads the links source comments carry', () => {
+    // Seventy-odd when written. A pattern that matched nothing would report
+    // every link as resolving, which reads like a clean tree.
+    expect(links).toBeGreaterThan(50)
+  })
+
+  it('finds no relative link that resolves to nothing', () => {
+    expect(broken).toEqual([])
   })
 })

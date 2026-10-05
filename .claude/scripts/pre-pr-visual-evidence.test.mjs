@@ -15,6 +15,8 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'pre-pr-visual-evidence.mjs')
 
@@ -23,7 +25,9 @@ after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
-const git = (cwd, args) => execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+/** Scratch-repo git, and the hook's own, run without the contributor's global config. */
+const gitEnv = isolatedGitEnv()
+const git = (cwd, args) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf-8' }).trim()
 
 function commitFile(repo, name, content, message) {
   mkdirSync(dirname(join(repo, name)), { recursive: true })
@@ -38,11 +42,11 @@ function makeRepoPair(changed) {
   scratchDirs.push(dir)
   const origin = join(dir, 'origin')
   const work = join(dir, 'work')
-  execFileSync('git', ['init', '-b', 'main', origin], { encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', 'main', origin], { env: gitEnv, encoding: 'utf-8' })
   git(origin, ['config', 'user.email', 'test@example.com'])
   git(origin, ['config', 'user.name', 'test'])
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], { env: gitEnv, encoding: 'utf-8' })
   git(work, ['config', 'user.email', 'test@example.com'])
   git(work, ['config', 'user.name', 'test'])
   git(work, ['checkout', '-b', 'feat'])
@@ -51,7 +55,7 @@ function makeRepoPair(changed) {
 }
 
 /** Runs the hook against a `gh pr create` command; returns {status, stderr}. */
-function runHook(cwd, command, env = process.env) {
+function runHook(cwd, command, env = gitEnv) {
   const stdin = JSON.stringify({ tool_input: { command } })
   try {
     execFileSync('node', [scriptPath], {
@@ -208,7 +212,7 @@ function envWithGh({ hasImageExtension }) {
       : '#!/bin/sh\necho \'unknown command "image" for "gh"\' >&2\nexit 1\n',
     { mode: 0o755 },
   )
-  return { ...process.env, PATH: `${dir}:${process.env.PATH}` }
+  return isolatedGitEnv({ PATH: `${dir}:${process.env.PATH}` })
 }
 
 test('with no gh image extension, the remedy leads with the stated-reason escape and names the install', () => {
@@ -236,4 +240,57 @@ test('with the extension present, the remedy is the upload instruction as before
   )
   assert.match(stderr, /upload it with `gh image tmp\/screenshots\/figure\.png`/)
   assert.doesNotMatch(stderr, /not installed/)
+})
+
+// The REST call a web session makes instead of the GraphQL-backed
+// `gh pr create`, carrying its body in the forms `gh api` accepts.
+const restCreate = (rest) =>
+  `gh api -X POST repos/{owner}/{repo}/pulls -f head=feat -f base=main ${rest}`
+
+test('a REST create blocks a UI diff with no figure exactly as gh pr create does', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const { status, stderr } = runHook(work, restCreate("-f title=x -f body='## What'"))
+  assert.equal(status, 2)
+  assert.match(stderr, /apps\/web\/src\/components\/Thing\.tsx/)
+  // A create that sends no body makes a PR with an empty one, which carries no figure either.
+  assert.equal(runHook(work, restCreate('-f title=x')).status, 2)
+})
+
+test('a REST create passes with a figure or a stated reason, from a field, a file or a heredoc', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  writeFileSync(join(work, 'body.md'), '## Visual repro\n\n![f.png](https://example.invalid/f.png)')
+  writeFileSync(
+    join(work, 'pr.json'),
+    JSON.stringify({ head: 'feat', body: 'Visual evidence: none — n/a' }),
+  )
+  for (const command of [
+    restCreate("-f body='Visual evidence: none — renames a prop.'"),
+    restCreate('-F body=@body.md'),
+    'gh api -X POST repos/{owner}/{repo}/pulls --input pr.json',
+    `${restCreate('-F body=@-')} <<'EOF'\nVisual evidence: none — a hook, output pasted.\nEOF`,
+  ]) {
+    assert.equal(runHook(work, command).status, 0, command)
+  }
+})
+
+test('a REST body this hook cannot read blocks a UI diff and says how to pass it', () => {
+  // Unlike `gh pr create --fill`, a REST create in a web session has no other
+  // gate behind it, so an unreadable body is not a pass.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  const { status, stderr } = runHook(work, `cat body.md | ${restCreate('-F body=@-')}`)
+  assert.equal(status, 2)
+  assert.match(stderr, /could not read/)
+  assert.match(stderr, /-F body=@<file>/)
+  assert.match(stderr, /--input <file\.json>/)
+})
+
+test('an unreadable REST body on a diff no human looks at passes', () => {
+  const work = makeRepoPair('packages/server-core/src/routes/thing.ts')
+  assert.equal(runHook(work, `cat body.md | ${restCreate('-F body=@-')}`).status, 0)
+})
+
+test('a REST edit or read of a PR is not a creation', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, 'gh api -X PATCH repos/{owner}/{repo}/pulls/3 -f body=x').status, 0)
+  assert.equal(runHook(work, 'gh api repos/{owner}/{repo}/pulls').status, 0)
 })

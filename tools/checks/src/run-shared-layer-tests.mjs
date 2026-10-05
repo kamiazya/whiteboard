@@ -19,6 +19,7 @@
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from './is-run-as-script.mjs'
 import { buildVitestArgv, deriveSharedLayerProjectNames } from './vitest-projects.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -72,6 +73,6 @@ export function main(options = {}) {
 
 // Direct-run guard: execute only when this file is the CLI entry point,
 // never when imported by a test.
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isRunAsScript(import.meta.url)) {
   process.exit(main())
 }

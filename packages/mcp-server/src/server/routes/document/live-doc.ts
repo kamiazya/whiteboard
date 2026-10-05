@@ -2,9 +2,12 @@ import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/
 import {
   type ApiErrorBody,
   applyDocumentUpdate,
+  DocumentEngineTrapError,
+  errorBody,
+  MarkdownBodyTooLargeError,
   type ServerDeps,
 } from '@kamiazya/whiteboard-server-core'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
 import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { onDocumentAction } from './path-route.js'
@@ -14,6 +17,28 @@ export interface LiveDocRouterOptions {
   // The live-document seam the routes read and write through, handed down
   // from document.ts.
   serverDeps: ServerDeps
+}
+
+/**
+ * Runs the update, answering an engine abort as `document_engine_trap` — the
+ * code `/api/v1` answers it with. The operation has already dropped the doc it
+ * poisoned, so the caller is told what failed rather than the catch-all's
+ * anonymous 500, and the next request is served. A body past the markdown
+ * size limit is 413 `markdown_too_large`, with nothing of the update kept.
+ */
+async function answeringWriteRefusal(
+  c: Context,
+  run: () => Promise<LoroDoc>,
+): Promise<LoroDoc | Response> {
+  try {
+    return await run()
+  } catch (err) {
+    if (err instanceof MarkdownBodyTooLargeError) {
+      return c.json(errorBody('markdown_too_large', err.message), 413)
+    }
+    if (!(err instanceof DocumentEngineTrapError)) throw err
+    return c.json(errorBody('document_engine_trap', err.message), 500)
+  }
 }
 
 // GET /api/w/:workspaceId/document/*/snapshot
@@ -60,7 +85,10 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       } catch {
         return c.json({ error: 'invalid_body', message: 'Malformed document update' }, 400)
       }
-      const doc = await applyDocumentUpdate(deps, { workspaceId, path, update: bytes })
+      const doc = await answeringWriteRefusal(c, () =>
+        applyDocumentUpdate(deps, { workspaceId, path, update: bytes }),
+      )
+      if (doc instanceof Response) return doc
 
       // No explicit broadcast: the save persisted through the workspace
       // record, whose funnel already fanned the persisted bytes to every

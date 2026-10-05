@@ -194,8 +194,16 @@ gh image tmp/screenshots/figure.png
 ```
 
 Put that line under a `## Visual repro` heading in the body file, with the alt
-text rewritten to say what the figure shows, and pass the body with
-`--body-file` to `gh pr create` (or `gh pr edit` on an existing PR):
+text rewritten to say what the figure shows, and pass the body file with the
+PR — over REST, since `gh pr create` and `gh pr edit` are GraphQL-backed and
+answer HTTP 403 in a web session:
+
+```bash
+gh api -X POST repos/{owner}/{repo}/pulls -f head=<branch> -f base=main -f title='…' -F body=@<file>
+gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -F body=@<file>    # an existing PR
+```
+
+The body file holds:
 
 ```markdown
 ## Visual repro
@@ -216,9 +224,10 @@ the throwaway test and the intermediate `.svg` files; keep the PNG in
 `tmp/screenshots/` until the PR merges (the GitHub upload is the durable
 copy).
 
-`gh pr create` is gated on this: a diff touching a surface a human looks at
-needs a figure in the body, or one line saying why a picture is the wrong
-evidence — `Visual evidence: none — <reason>`. The hook
+Creating a PR is gated on this (`gh pr create` and the REST form of it
+alike): a diff touching a surface a human looks at needs a figure in the
+body, or one line saying why a picture is the wrong evidence —
+`Visual evidence: none — <reason>`. The hook
 (`.claude/scripts/hooks/pre-pr-visual-evidence.mjs`) exists because this rule
 spent a long time as prose and stopped being followed; it only checks that
 SOMETHING is there, so everything above is still yours to get right.

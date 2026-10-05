@@ -51,6 +51,40 @@ function merged(parts: readonly Part[]): Part[] {
   return out
 }
 
+const constStringsByFile = new WeakMap<ts.SourceFile, ReadonlyMap<string, string>>()
+
+/**
+ * Every `const NAME = '…'` in a file, so a piece held in a constant reads as
+ * the text it holds: `const WS = 'workspace'` then `[WS, id].join(':')` is the
+ * prefix spelled by hand one rename away. A name declared with two different
+ * texts is dropped rather than guessed at.
+ */
+function constStrings(file: ts.SourceFile): ReadonlyMap<string, string> {
+  const cached = constStringsByFile.get(file)
+  if (cached !== undefined) return cached
+  const found = new Map<string, string | null>()
+  const visit = (node: ts.Node): void => {
+    if (ts.isVariableDeclarationList(node) && (node.flags & ts.NodeFlags.Const) !== 0) {
+      for (const declaration of node.declarations) {
+        const init = declaration.initializer && unwrapExpression(declaration.initializer)
+        if (!ts.isIdentifier(declaration.name) || init === undefined) continue
+        if (!ts.isStringLiteralLike(init)) continue
+        const seen = found.get(declaration.name.text)
+        found.set(
+          declaration.name.text,
+          seen === undefined || seen === init.text ? init.text : null,
+        )
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  const strings = new Map<string, string>()
+  for (const [name, text] of found) if (text !== null) strings.set(name, text)
+  constStringsByFile.set(file, strings)
+  return strings
+}
+
 /**
  * The pieces a string-building expression is made of, whichever way it is
  * spelled: a template, a `+` chain, or `[a, b].join('/')`. The three are one
@@ -59,6 +93,10 @@ function merged(parts: readonly Part[]): Part[] {
 function partsOf(file: ts.SourceFile, raw: ts.Expression): Part[] {
   const node = unwrapExpression(raw)
   if (ts.isStringLiteralLike(node)) return [literalPart(node.text)]
+  if (ts.isIdentifier(node)) {
+    const held = constStrings(file).get(node.text)
+    if (held !== undefined) return [literalPart(held)]
+  }
   if (ts.isTemplateExpression(node)) {
     return merged([
       literalPart(node.head.text),
@@ -92,7 +130,9 @@ function partsOf(file: ts.SourceFile, raw: ts.Expression): Part[] {
 }
 
 const WORKSPACE_PREFIX = 'workspace:'
-const HANDLE_NAME = /^[\w.]*(?:[wW]orkspaceId|[hH]andle)$/
+// `ws` and `wsId` only as a whole name or a camel-cased word, so `views` and
+// `rows` are not handles.
+const HANDLE_NAME = /^(?:[\w.]*(?:[wW]orkspace(?:Id)?|[hH]andle|Ws(?:Id)?)|(?:[\w.]*\.)?ws(?:Id)?)$/
 const PATH_NAME = /^[\w.]*[pP]ath$/
 
 /**
@@ -220,6 +260,17 @@ describe('the sync wire doc key is spelled in one place', () => {
     expect(spellings(`const k = \`workspace:read:${HOLE}\``)).toBe(0)
   })
 
+  it('reads a constant holding part of the prefix as the text it holds', () => {
+    expect(spellings("const WS = 'workspace'\nconst k = [WS, id].join(':')")).toBe(1)
+    expect(spellings("const WS = 'workspace'\nconst k = WS + ':' + id")).toBe(1)
+    expect(spellings("const SEP = ':'\nconst k = 'workspace' + SEP + id")).toBe(1)
+    expect(spellings("const WS = 'workspace'\nconst k = [WS, 'read'].join(':')")).toBe(0)
+    // A name the file gives two texts is not guessed at.
+    expect(
+      spellings("{ const WS = 'tab' }\n{ const WS = 'workspace' }\nconst k = WS + ':' + id"),
+    ).toBe(0)
+  })
+
   it('recognises a handle-and-path join under every name in use, and passes messages and URLs through', () => {
     const hole = (name: string) => ['$', `{${name}}`].join('')
     const join = (a: string, b: string) => `${hole(a)}/${hole(b)}`
@@ -227,6 +278,11 @@ describe('the sync wire doc key is spelled in one place', () => {
     expect(documentJoins(`const k = \`${join('handle', 'path')}\``)).toBe(1)
     expect(documentJoins(`const k = \`${join('canvas.workspaceId', 'canvas.path')}\``)).toBe(1)
     expect(documentJoins(`key = \`${join('this.workspaceId', 'documentPath')}\``)).toBe(1)
+    expect(documentJoins(`const k = \`${join('ws', 'docPath')}\``)).toBe(1)
+    expect(documentJoins(`const k = \`${join('target.wsId', 'path')}\``)).toBe(1)
+    expect(documentJoins(`const k = \`${join('workspace', 'path')}\``)).toBe(1)
+    expect(documentJoins(`const k = \`${join('views', 'path')}\``)).toBe(0)
+    expect(documentJoins(`const k = \`${join('rows', 'path')}\``)).toBe(0)
     expect(
       documentJoins(`throw new Error(\`Document "${join('workspaceId', 'path')}" exists\`)`),
     ).toBe(0)
@@ -284,12 +340,13 @@ describe('the sync wire doc key is spelled in one place', () => {
   })
 
   it('the declaration site spells it exactly as often as the grammar needs', () => {
-    // The constant's declaration counts twice (identifier and literal), then
-    // one use each in the builder, `workspaceIdOfSyncKey` (two) and
+    // The constant's declaration counts twice (identifier and literal), the
+    // builder twice (the identifier, and the template that reads through it to
+    // the prefix), then `workspaceIdOfSyncKey` (two) and
     // `workspaceHandleOfSyncKey`. A count that fell to zero would mean the
     // grammar moved and this scan guards a file that no longer holds it.
     expect(
       spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'), DECLARATION_SITE),
-    ).toBe(6)
+    ).toBe(7)
   })
 })

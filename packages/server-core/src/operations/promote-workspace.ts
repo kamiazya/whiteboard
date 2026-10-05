@@ -1,5 +1,7 @@
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { documentPathSchema } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
+import { DocumentEngineTrapError, importEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
@@ -16,6 +18,11 @@ export interface PromoteWorkspaceInput {
 
 export type PromoteWorkspaceResult =
   | { kind: 'malformed-snapshot' }
+  /**
+   * The record holds documents at paths outside the document-path grammar,
+   * which this keeper's readers refuse; nothing was merged.
+   */
+  | { kind: 'invalid-paths'; paths: readonly string[] }
   | {
       kind: 'promoted'
       /** The documents the record carried, each now with an explicit checkpoint. */
@@ -28,6 +35,18 @@ export type PromoteWorkspaceResult =
        */
       shadowed: readonly string[]
     }
+
+/**
+ * The paths in a promoted record that the document-path grammar refuses.
+ * The record is refused whole rather than merged around them: a document at
+ * such a path, once in the target's record, fails every listing and search of
+ * the workspace, and a merge cannot be taken back.
+ */
+function offGrammarPaths(entries: readonly { readonly path: string }[]): string[] {
+  return entries
+    .map((entry) => entry.path)
+    .filter((path) => !documentPathSchema.safeParse(path).success)
+}
 
 /**
  * Promotion (ADR-0023): a browser-kept workspace record merged into a daemon
@@ -43,6 +62,13 @@ export type PromoteWorkspaceResult =
  * document has once merged — a checkpoint records the state a person moved
  * the document INTO, which for a document the target already held is the
  * merge of both, exactly as the History panel will show it.
+ *
+ * An engine trap — on the incoming record or in the merge — is thrown as
+ * `DocumentEngineTrapError`, never answered as a malformed snapshot: the
+ * bytes may be well-formed, and the merge has already dropped the target's
+ * poisoned record so the workspace keeps serving. A record that would leave a
+ * body past the markdown size limit is `MarkdownBodyTooLargeError`, thrown by
+ * the merge with nothing of it kept.
  */
 export async function promoteWorkspace(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions'>,
@@ -50,11 +76,20 @@ export async function promoteWorkspace(
 ): Promise<PromoteWorkspaceResult> {
   const incoming = new LoroDoc()
   try {
-    incoming.import(input.snapshot)
-  } catch {
+    importEvictingOnEngineTrap(incoming, input.snapshot, {
+      subject: 'the promoted workspace record',
+      fields: { workspaceId: input.workspaceId },
+      // A throwaway instance: no cache holds it, so there is nothing to drop.
+      evict() {},
+    })
+  } catch (err) {
+    if (err instanceof DocumentEngineTrapError) throw err
     return { kind: 'malformed-snapshot' }
   }
-  const promoted = readWorkspaceDocuments(incoming).map((entry) => entry.documentId)
+  const incomingEntries = readWorkspaceDocuments(incoming)
+  const invalidPaths = offGrammarPaths(incomingEntries)
+  if (invalidPaths.length > 0) return { kind: 'invalid-paths', paths: invalidPaths }
+  const promoted = incomingEntries.map((entry) => entry.documentId)
 
   const applied = await applyWorkspaceDocumentUpdate(deps, {
     workspaceId: input.workspaceId,

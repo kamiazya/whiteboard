@@ -200,7 +200,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/plugin-visual/src/data.ts#VisualShapeFacet',
   'packages/plugin-visual/src/data.ts#visualPlugin',
   'packages/plugin-visual/src/emoji/shortcode.ts#emojiForShortcode',
-  'packages/ports/src/document-index.ts#createDocumentInputSchema',
   'packages/ports/src/tokens.ts#defineToken',
   'packages/reference-graph/src/linkify.ts#linkMarkupFor',
   'packages/reference-graph/src/reference-aggregate.ts#ReferenceAggregate',
@@ -243,7 +242,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/codec/src/references/markup.ts#referenceMarkup',
   'packages/codec/src/spatial/census.ts#CensusFacet',
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
-  'packages/loro-adapter/src/workspace-tree.ts#WORKSPACE_TREE_KEY',
   'packages/mcp-server/src/server/app-types.ts#ServerModeAppOptions',
   'packages/ports/src/stored-document-unreadable-error.ts#StoredDocumentUnreadableCode',
   'packages/scene/src/scene-graph.ts#ShapeId',
@@ -360,10 +358,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 157
+const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 25
+const PUBLISHED_CEILING = 24
 
 const DIRS = [
   'apps',

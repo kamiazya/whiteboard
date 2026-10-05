@@ -218,7 +218,7 @@ pnpm smoke:distribution:packaged:node   # CI's packaged-smoke job minus the CLI 
 A change with a user-visible effect ships its verification figure in the PR body, so a reviewer
 sees the bug and the fix without cloning. For a FIX that means two panels — the same case before
 and after — not one capture of the result. **Say so when you skip**: `Visual evidence: none —
-<reason>` in the body, with a real reason; a PreToolUse hook blocks `gh pr create` otherwise, so
+<reason>` in the body, with a real reason; a PreToolUse hook blocks a PR creation (`gh pr create` or its REST form) otherwise, so
 the skip is a decision on the record rather than an omission. The hook reads the body from
 `--body`/`--body-file` and fails open when it cannot — stdin, an editor, `--fill` — so it is a
 net under the rule, not the rule. Other real evidence goes there too

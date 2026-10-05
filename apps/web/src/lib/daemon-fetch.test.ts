@@ -36,6 +36,14 @@ describe('the daemon-addressed fetch', () => {
     expect(lastCall()).toMatchObject({ url, auth: null })
   })
 
+  // A Request is already absolute; resolving it as if it were a path would
+  // send it to the daemon whatever host it named.
+  it('sends a Request to the URL it carries, on any host', async () => {
+    const { daemonFetch, lastCall } = setup()
+    await daemonFetch(new Request('https://example.com/elsewhere?q=1'))
+    expect(lastCall().url).toBe('https://example.com/elsewhere?q=1')
+  })
+
   it('adds no Authorization header to a Request object and keeps its method and headers', async () => {
     const { daemonFetch, lastCall } = setup()
     await daemonFetch(

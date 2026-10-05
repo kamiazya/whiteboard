@@ -6,6 +6,7 @@
  * current workspace. What used to be asserted here about a trigger label
  * now lives in `AppShell.test.tsx`, on the mark.
  */
+import { WORKSPACE_DISPLAY_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -109,6 +110,15 @@ describe('WorkspaceMenu — creating', () => {
     for (const menu of screen.getAllByRole('menu')) {
       expect(menu.textContent).not.toMatch(/\\u[0-9a-f]{4}/i)
     }
+  })
+
+  it('caps the new name at the length the model accepts', () => {
+    renderMenu([{ workspaceId: DESIGN, segment: 'design' }], {
+      create: () => Promise.reject(new Error('not expected')),
+    })
+    fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
+    const input = screen.getByLabelText(/new workspace name/i) as HTMLInputElement
+    expect(input.maxLength).toBe(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
   })
 
   it('offers creation even with a single workspace, since that is the only way to a second', () => {

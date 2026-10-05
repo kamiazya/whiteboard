@@ -91,23 +91,17 @@ export const JSON_BODY_LIMIT_BYTES = 1024 * 1024
 
 /**
  * The most a route that takes STORED CONTENT accepts in one request body: an
- * uploaded file, a Loro update for a document, and the same for a workspace's
- * record. A Loro update embeds any attachment-affecting deltas since the
- * client's last sync, so it can approach the largest file an upload may carry;
- * one number keeps the three from drifting apart, each refusing at its own
- * ceiling. The number itself is the per-file ceiling the editor checks a pick
- * against (`api-contracts/files`), so the browser and the daemon refuse the
- * same file. Loro thumbnails run around 2 MiB and pasted assets normally fit.
+ * uploaded file, a Loro update for a document and for a workspace's record,
+ * and an `/api/v1` document created from the content it carries. A Loro
+ * update embeds any attachment-affecting deltas since the client's last sync,
+ * so it can approach the largest file an upload may carry; one number keeps
+ * those routes from drifting apart, and workspace promotion, which carries a
+ * whole record, takes a ceiling derived from it rather than a second number.
+ * The number itself is the per-file ceiling the editor checks a pick against
+ * (`api-contracts/files`), so the browser and the daemon refuse the same
+ * file. Loro thumbnails run around 2 MiB and pasted assets normally fit.
  */
 export const CONTENT_BODY_LIMIT_BYTES = MAX_FILE_UPLOAD_BYTES
-
-/**
- * The export routes take a small JSON options object (padding, scale, theme,
- * style, outputPath, overwrite), never canvas content — the render is always
- * made server-side from the persisted document. 1 MiB is a generous ceiling
- * for that shape while still bounding an adversarial request.
- */
-export const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 
 /**
  * A request body's text, or the 413 that refuses one past `maxSize`.

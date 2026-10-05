@@ -58,15 +58,41 @@ export const SCAN_ROOTS: readonly string[] = [
 ]
 
 /**
- * The plain-Node script trees the size ledgers scan beside `SCAN_ROOTS`: the
- * distribution and end-to-end smokes under `tests/`, and each package's
- * `scripts/`. They are `.mjs` rather than TypeScript, run only on a release
- * path or in CI, and were outside every budget while they grew past 2600 lines.
+ * The trees that hold plain-Node scripts: package and app `scripts/`, the
+ * distribution and end-to-end smokes under `tests/`, the gates under `tools/`
+ * and the dev tooling under `.claude/scripts`. Walked whole rather than as
+ * one `scripts/` directory per workspace, because a script also lives at
+ * `tools/*.mjs` and in a tool's `src`.
  */
-export const SCRIPT_SCAN_ROOTS: readonly string[] = [
-  'tests',
-  ...groupSubdirs('packages', 'scripts'),
-]
+const SCRIPT_ROOTS: readonly string[] = ['apps', 'packages', 'tests', 'tools', '.claude/scripts']
+
+/** Directories under those roots that hold no script of this repo's own. */
+const SCRIPT_SKIPPED_DIRS: ReadonlySet<string> = new Set([
+  'node_modules',
+  'dist',
+  'tmp',
+  '.git',
+  'public',
+])
+
+/**
+ * Every plain-Node script (`.mjs`, `.cjs`, `.js`, tests included), as sorted
+ * repo-relative paths. The one list the script guards share — the entry-module
+ * check, the serve-dist check and the `.mjs` size ledger — so a script cannot
+ * sit inside one guard's roots and outside another's; each guard narrows it by
+ * its own filter. Kept as separate lists, the size ledger's roots left every
+ * app's `scripts/`, `tools/*.mjs` and `.claude/scripts` outside the budget.
+ */
+export function scriptFiles(): string[] {
+  return SCRIPT_ROOTS.flatMap((root) =>
+    walk(join(REPO_ROOT, root), {
+      include: (path) => /\.(mjs|cjs|js)$/.test(path) && !isExcludedPath(path),
+      skip: (_path, name) => SCRIPT_SKIPPED_DIRS.has(name),
+    }),
+  )
+    .map((path) => relativeToRepo(path))
+    .sort()
+}
 
 /**
  * Directories excluded WHOLE, each as its path from the repo root, with the

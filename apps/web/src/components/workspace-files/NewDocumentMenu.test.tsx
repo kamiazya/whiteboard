@@ -165,6 +165,21 @@ describe('NewDocumentMenu — the dialog survives a refusal', () => {
     expect(onCreate).not.toHaveBeenCalled()
     expect((await screen.findByRole('alert')).textContent).toMatch(/path/i)
   })
+
+  // The keeper refuses an off-grammar path too, but its refusal is a schema
+  // failure written for a log; the form says why beside the field instead.
+  it('refuses a path the model refuses, in words, before asking the keeper', async () => {
+    const onCreate = vi.fn()
+    await openDialogWith(onCreate)
+
+    fireEvent.change(screen.getByLabelText(/^Path/), { target: { value: 'Meeting notes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(onCreate).not.toHaveBeenCalled()
+    const alert = (await screen.findByRole('alert')).textContent ?? ''
+    expect(alert).toMatch(/segment/i)
+    expect(alert).not.toMatch(/[{[]/)
+  })
 })
 
 describe('NewDocumentDialog — an open form is not reset underneath the user', () => {

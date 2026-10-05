@@ -137,9 +137,7 @@ export const workspaceSegmentSchema = z
 
 /**
  * A workspace's display name (ADR-0019): free text, no uniqueness, no
- * identity duties. Model has no equivalent schema for a document's display
- * name today (a document's name is workspace-tree metadata, not modelled
- * here), so this stays deliberately minimal: mirrors the one invariant the
+ * identity duties. Deliberately minimal: mirrors the one invariant the
  * daemon's names-store actually enforces on write — trimmed, non-empty
  * (empty-after-trim means "unset", stored as no value at all, not the empty
  * string) — rather than inventing a stronger rule nothing enforces today.
@@ -152,6 +150,25 @@ export const workspaceDisplayNameSchema = z
     (name) => name === name.trim(),
     'workspace display name must not have leading/trailing whitespace',
   )
+
+/**
+ * The longest document display name a write may carry. A sibling of
+ * `WORKSPACE_DISPLAY_NAME_MAX_LENGTH` rather than the same constant: that one
+ * is also bound to the segment derived from it, and a document's name derives
+ * nothing. The number is the same for the same reason — 200 holds any title a
+ * person writes, and a name past it was a paste, not a name.
+ */
+export const DOCUMENT_NAME_MAX_LENGTH = 200
+
+/**
+ * A document's display name as a WRITE carries it. Only the length is checked:
+ * the blank that clears a name and the trimming are each writer's existing
+ * contract, and a name stored before the bound must still list, so readers do
+ * not take this schema.
+ */
+export const documentNameSchema = z
+  .string()
+  .max(DOCUMENT_NAME_MAX_LENGTH, `a display name is at most ${DOCUMENT_NAME_MAX_LENGTH} characters`)
 
 export type DocumentId = z.infer<typeof documentIdSchema>
 export type NodeId = z.infer<typeof nodeIdSchema>

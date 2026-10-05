@@ -85,7 +85,8 @@ in AGENTS.md). `gh stack submit` re-run later updates existing PRs and their bas
 
 In a non-interactive session (no editor), `gh stack submit` behaves like `--auto`:
 it creates the PR with a generated, non-Conventional title (the branch name with
-hyphens as spaces). Fix it immediately with `gh pr edit <n> --title "feat(...): ..."`
+hyphens as spaces). Fix it immediately over REST (`gh pr edit` is GraphQL-backed, HTTP 403
+in a web session): `gh api -X PATCH repos/{owner}/{repo}/pulls/<n> -f title='feat(...): ...'`
 — the `pr-title` check listens for the `edited` event, so the corrected title
 re-validates on its own; nothing else re-runs. Do NOT `gh run rerun` a failed title
 check: reruns re-read the ORIGINAL event payload and can never see the new title.
@@ -141,9 +142,9 @@ Two limits of the preview, both verified against `gh stack merge --help`:
 
 ## Repo-specific notes
 
-**The `gh pr create` guard does not fire on `gh stack submit`** — its matcher is
-`/\bgh\s+pr\s+create\b/`. That is correct rather than a gap: the guard blocks a branch
-that is behind `origin/main`, and every layer above the bottom of a stack is
+**The PR-creation guard does not fire on `gh stack submit`** — it reads only
+`gh pr create` and the REST form of it (`gh api -X POST …/pulls`). That is correct rather than
+a gap: the guard blocks a branch that is behind `origin/main`, and every layer above the bottom of a stack is
 legitimately behind main because it is based on the layer below. Keep the *bottom* of
 the stack current with `gh stack sync`; the rest follows.
 

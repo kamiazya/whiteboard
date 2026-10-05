@@ -16,8 +16,7 @@
  * document, every reference the pass can repair is one fewer silently broken
  * link, and one it cannot is not a reason to call the move failed. A pass
  * that could not run at all is reported as its error, since the caller is
- * the one with a logger (this package has none) and the one who knows
- * whether a surface should say so.
+ * the one who knows whether a surface should say so.
  */
 import { movesForPathChange } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'

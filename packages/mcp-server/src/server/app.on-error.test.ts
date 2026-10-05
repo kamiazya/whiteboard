@@ -102,6 +102,8 @@ describe('an unhandled throw', () => {
     expect(res.headers.get('retry-after')).toBe('1')
     expect(apiErrorBodySchema.parse(await res.json())).toMatchObject({ error: 'database_busy' })
     expect(consoleError).not.toHaveBeenCalled()
+    // A refusal the caller is told to retry is not a fault: warning, never error.
+    expect(capture.records.map((r) => [r.level, r.data?.path])).toEqual([['warning', path]])
   })
 
   it('still carries the baseline security headers', async () => {

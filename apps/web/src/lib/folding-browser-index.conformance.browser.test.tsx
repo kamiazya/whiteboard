@@ -17,8 +17,9 @@ import {
   describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
-import { BLOBS_STORE, openWhiteboardDb } from './browser-idb.js'
+import { BLOBS_STORE, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
+import { inTransaction, request } from './idb-tx.js'
 
 let caseN = 0
 
@@ -60,9 +61,15 @@ describe('FoldingBrowserIndex', () => {
     return {
       index,
       dispose: () => deleteDb(dbName),
-      // createWorkspace persists identity into the registry the class
-      // resolves against, so the port's own call is the seam.
-      seedWorkspace: (entry) => index.createWorkspace(entry),
+      // The workspace record through the port's own call, then the registry
+      // row as stored: `createWorkspace` refuses a layer the model refuses,
+      // and the seam stands for whatever a registry already holds.
+      seedWorkspace: async (entry) => {
+        await index.createWorkspace({ workspaceId: entry.workspaceId })
+        await inTransaction(dbName, [WORKSPACES_STORE], 'readwrite', async (tx) => {
+          await request(tx.objectStore(WORKSPACES_STORE).put(entry, entry.workspaceId))
+        })
+      },
     }
   })
 })

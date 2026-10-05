@@ -1,15 +1,16 @@
 # Integrator Flow (git / CI mechanics)
 
-Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, PreToolUse hooks block `gh pr create` while the branch is behind origin/main and when a diff a human can see ships with no figure in the body, block the FIRST `gh pr merge` on a head carrying inline review comments (printing their bodies, so the findings arrive before the decision), and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
+Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every merge, PreToolUse hooks block a PR creation while the branch is behind origin/main and when a diff a human can see ships with no figure in the body, block the FIRST merge on a head carrying inline review comments (printing their bodies before the decision), and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause, not the symptom.
 
 ## Read GitHub over REST
 
-`gh pr view|checks|list|status|ready|comment` and `gh repo view` are
+`gh pr view|checks|list|status|ready|comment|create|merge|edit` and `gh repo view` are
 GraphQL-backed and answer HTTP 403 in a Claude Code web session, where the
 `ci-triage` watch loop once read that as "settled" and the pre-merge hook
 exited 0. Read GitHub with `gh api repos/{owner}/{repo}/…` (check-runs,
 pulls, comments), and treat a failed or empty read as unknown, never as
-settled — `ci-triage` carries the loops.
+settled — `ci-triage` carries the loops. Create/merge over REST
+(`gh api -X POST …/pulls`, `-X PUT …/merge`); hooks read both.
 
 ## pnpm-lock.yaml conflict recipe
 
@@ -26,7 +27,7 @@ Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "
 
 ## The merge gate shows the comments before you decide
 
-`pre-merge-show-comments.mjs` blocks the first `gh pr merge` on a head with
+`pre-merge-show-comments.mjs` blocks the first merge on a head with
 inline review comments and prints their bodies; the second attempt on the same
 head goes through, and a new commit re-arms it. The prose rule did not hold
 because the comment count and the merge kept landing in the SAME shell call,

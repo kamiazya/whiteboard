@@ -13,7 +13,11 @@
  * address it derives has to be unique — within this browser, since the
  * registry is IndexedDB and cannot collide with anyone else's.
  */
-import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
+import {
+  deriveWorkspaceSegment,
+  generateDocumentId,
+  workspaceDisplayNameSchema,
+} from '@kamiazya/whiteboard-model'
 import type { DocumentIndex, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { firstFreeSegment } from '@kamiazya/whiteboard-workspace-index'
 
@@ -40,6 +44,12 @@ export async function createBrowserWorkspace(
   // that collected the name is where a person can still fix it.
   const name = displayName.trim()
   if (name === '') throw new Error('a workspace needs a name')
+  // Checked before anything is minted or a segment looked for, and worded
+  // here: the keeper refuses the same name, but with its schema's failure.
+  const checked = workspaceDisplayNameSchema.safeParse(name)
+  if (!checked.success) {
+    throw new Error(`This workspace name cannot be used: ${checked.error.issues[0]?.message}`)
+  }
 
   const workspaceId = generateDocumentId()
   const base = deriveWorkspaceSegment(name)

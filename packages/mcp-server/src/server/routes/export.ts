@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { messageOf } from '@kamiazya/whiteboard-model'
+import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -8,9 +9,9 @@ import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { isErrnoCode } from '../../shared/errno.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
+import { getLogger } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
-import { EXPORT_OPTIONS_BODY_LIMIT_BYTES, limitBody } from './body-limit.js'
 import { onDocumentAction } from './document/path-route.js'
 import {
   defaultExportPath,
@@ -23,7 +24,7 @@ import {
  * The render, with the one failure that belongs to the REQUEST rather than
  * to the renderer separated out: a positive scale can still size the target
  * below one pixel, and the size came from the caller — so that is a 400,
- * while everything else here is a 500.
+ * a busy database is left to the app's 503, and everything else here is a 500.
  */
 async function renderedExport(
   workspaceId: string,
@@ -43,7 +44,14 @@ async function renderedExport(
         status: 400,
       }
     }
-    return { error: { error: 'headless_export_failed', message }, status: 500 }
+    if (isDatabaseBusy(err)) throw err
+    // The renderer's message can carry a path or a statement: it goes to the
+    // log, never the body.
+    getLogger('export').error({ err, workspaceId, path }, 'headless PNG export failed')
+    return {
+      error: { error: 'headless_export_failed', message: 'The document could not be exported.' },
+      status: 500,
+    }
   }
 }
 
@@ -68,51 +76,45 @@ export function createExportRouter(options: ExportRouterOptions) {
     options.liveDocuments.exists(workspaceId, path)
 
   // POST /api/w/:workspaceId/document/<path>/export
-  onDocumentAction(
-    app,
-    'post',
-    'export',
-    async (c, workspaceId, path) => {
-      const parsedBody = await readExportBody(c, exportRequestSchema)
-      if ('refusal' in parsedBody) return parsedBody.refusal
-      const body = parsedBody.data
+  onDocumentAction(app, 'post', 'export', async (c, workspaceId, path) => {
+    const parsedBody = await readExportBody(c, exportRequestSchema)
+    if ('refusal' in parsedBody) return parsedBody.refusal
+    const body = parsedBody.data
 
-      // Validated up front, before rendering, so the caller does not waste a
-      // render on a write that will fail.
-      const resolved = await resolveRequestedOutputPath(
-        body,
-        workspaceId,
-        options.scope.layout.exportsDir(workspaceId),
-      )
-      if ('error' in resolved) return c.json(resolved.error, resolved.status)
-      const outputPath = resolved.outputPath
+    // Validated up front, before rendering, so the caller does not waste a
+    // render on a write that will fail.
+    const resolved = await resolveRequestedOutputPath(
+      body,
+      workspaceId,
+      options.scope.layout.exportsDir(workspaceId),
+    )
+    if ('error' in resolved) return c.json(resolved.error, resolved.status)
+    const outputPath = resolved.outputPath
 
-      // The headless path operates directly on the LoroDoc and does NOT
-      // verify that the canvas actually exists — getDoc / loadDocument return
-      // an empty doc on cache miss, so a typoed path would otherwise emit a
-      // blank PNG. Reject up front with 404 so callers learn about the typo
-      // instead of shipping the silently-empty file.
-      if (!(await documentExists(workspaceId, path))) {
-        return c.json(documentMissingBody(workspaceId, path), 404)
-      }
+    // The headless path operates directly on the LoroDoc and does NOT
+    // verify that the canvas actually exists — getDoc / loadDocument return
+    // an empty doc on cache miss, so a typoed path would otherwise emit a
+    // blank PNG. Reject up front with 404 so callers learn about the typo
+    // instead of shipping the silently-empty file.
+    if (!(await documentExists(workspaceId, path))) {
+      return c.json(documentMissingBody(workspaceId, path), 404)
+    }
 
-      const rendered = await renderedExport(workspaceId, path, body, options.scope)
-      if ('error' in rendered) return c.json(rendered.error, rendered.status)
-      const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
+    const rendered = await renderedExport(workspaceId, path, body, options.scope)
+    if ('error' in rendered) return c.json(rendered.error, rendered.status)
+    const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
 
-      const filePath =
-        outputPath !== undefined
-          ? await writeExplicitOutput(outputPath, pngBuffer)
-          : await writeDefaultOutput(options.scope.layout, workspaceId, path, pngBuffer)
-      const response: ExportResponse = {
-        filePath,
-        undrawable: [...undrawable],
-        unresolvedFamilies: [...unresolvedFamilies],
-      }
-      return c.json(response)
-    },
-    limitBody(EXPORT_OPTIONS_BODY_LIMIT_BYTES, 'Request body'),
-  )
+    const filePath =
+      outputPath !== undefined
+        ? await writeExplicitOutput(outputPath, pngBuffer)
+        : await writeDefaultOutput(options.scope.layout, workspaceId, path, pngBuffer)
+    const response: ExportResponse = {
+      filePath,
+      undrawable: [...undrawable],
+      unresolvedFamilies: [...unresolvedFamilies],
+    }
+    return c.json(response)
+  })
 
   return app
 }

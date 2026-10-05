@@ -4,13 +4,17 @@ import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 import { trackedFiles } from './tracked-files.js'
 
-// `gh pr view|checks|list|status|ready|comment` and `gh repo view` are
-// GraphQL-backed and answer `HTTP 403: GitHub GraphQL is not available` in a
-// Claude Code web session — a normal contributor path. A skill that tells an
-// agent to run one is an instruction that fails there, and a watch loop built
-// on it can read the failure as "nothing pending". Skills read GitHub over
-// `gh api` (REST); `ci-triage`'s opening paragraph carries the forms.
-const GRAPHQL_BACKED = /\bgh\s+(?:pr\s+(?:view|checks|list|status|ready|comment)|repo\s+view)\b/
+// `gh pr view|checks|list|status|ready|comment|create|merge|edit` and `gh repo
+// view` are GraphQL-backed and answer `HTTP 403: GitHub GraphQL is not
+// available` in a Claude Code web session — a normal contributor path
+// (create, merge and edit measured with gh 2.89: each POSTs to /graphql). A
+// skill that tells an agent to run one is an instruction that fails there, and
+// a watch loop built on it can read the failure as "nothing pending". Skills
+// read and write GitHub over `gh api` (REST); `ci-triage`'s opening paragraph
+// carries the read forms, and the PR hooks' reader (hook-command-lib.mjs) the
+// create/merge/edit ones.
+const GRAPHQL_BACKED =
+  /\bgh\s+(?:pr\s+(?:view|checks|list|status|ready|comment|create|merge|edit)|repo\s+view)\b/
 
 // A line that NAMES the form as the broken one is the one place it may appear:
 // it says GraphQL, quotes the 403, or points at the REST form that replaces it.
@@ -46,10 +50,19 @@ describe('skills read GitHub over REST', () => {
       'gh pr ready <PR>',
       'gh pr comment <n> --body x',
       'gh repo view',
+      'gh pr create --title x --body-file b.md',
+      'gh pr merge 12 --squash',
+      'gh pr edit 12 --title x',
     ]) {
       expect(GRAPHQL_BACKED.test(form), form).toBe(true)
     }
-    expect(GRAPHQL_BACKED.test('gh api repos/{owner}/{repo}/pulls/1')).toBe(false)
-    expect(GRAPHQL_BACKED.test('gh pr merge 12 --squash')).toBe(false)
+    for (const form of [
+      'gh api repos/{owner}/{repo}/pulls/1',
+      'gh api -X PUT repos/{owner}/{repo}/pulls/12/merge -f merge_method=squash',
+      'gh stack submit',
+      'gh pr mergeable',
+    ]) {
+      expect(GRAPHQL_BACKED.test(form), form).toBe(false)
+    }
   })
 })

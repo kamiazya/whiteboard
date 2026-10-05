@@ -8,7 +8,7 @@ import { REPO_ROOT } from './scan-roots.js'
  * spatial document. Each must name codec's wire schema
  * (`jsonCanvasDocumentSchema`), never the product's own model.
  *
- * The distinction is invisible today — [ADR-0037](../../../../../docs/contributing/adr/0037-model-and-format.md)
+ * The distinction is invisible today — [ADR-0037](../../../docs/contributing/adr/0037-model-and-format.md)
  * slice 1 left the wire schema an alias of the model's — and that is exactly
  * why it is pinned now rather than later. The moment the model gains a field
  * the format cannot hold, a surface still pointing at the model starts

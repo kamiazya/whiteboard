@@ -4,7 +4,12 @@
 // reading of what adopting means cannot disagree with the first.
 import { describe, expect, it } from 'vitest'
 import type { BodyProposedChange } from './proposal.js'
-import { applyBodyChange, bodyChangeConflicts } from './proposal-apply.js'
+import {
+  applyPassages,
+  bodyChangeConflicts,
+  findPassageOverlap,
+  type PlacedPassage,
+} from './proposal-apply.js'
 
 const BODY = 'The plan is to ship on Friday.\n\nThe risk is the migration.'
 
@@ -26,10 +31,17 @@ function at(exact: string) {
   return { start, end: start + exact.length }
 }
 
-describe('applyBodyChange', () => {
+/** One passage adopted on its own: a batch of one. */
+function adoptOne(body: string, change: BodyProposedChange, place: PlacedPassage['at']): string {
+  const outcome = applyPassages(body, [{ change, at: place }])
+  if (outcome.kind !== 'applied') throw new Error('a single passage cannot overlap')
+  return outcome.body
+}
+
+describe('applying one passage', () => {
   it('replaces exactly the resolved passage and nothing around it', () => {
     const change = replace('ship on Friday', 'ship on Monday')
-    expect(applyBodyChange(BODY, change, at('ship on Friday'))).toBe(
+    expect(adoptOne(BODY, change, at('ship on Friday'))).toBe(
       'The plan is to ship on Monday.\n\nThe risk is the migration.',
     )
   })
@@ -43,28 +55,27 @@ describe('applyBodyChange', () => {
       text: '# Heading\n\n',
       assumed: '',
     }
-    expect(applyBodyChange(BODY, insertion, { start: 0, end: 0 })).toBe(`# Heading\n\n${BODY}`)
+    expect(adoptOne(BODY, insertion, { start: 0, end: 0 })).toBe(`# Heading\n\n${BODY}`)
 
     const deletion = replace('The risk is the migration.', '')
-    expect(applyBodyChange(BODY, deletion, at('The risk is the migration.'))).toBe(
+    expect(adoptOne(BODY, deletion, at('The risk is the migration.'))).toBe(
       'The plan is to ship on Friday.\n\n',
     )
   })
 
   it('is idempotent: adopting the same change twice is adopting it once', () => {
     const change = replace('ship on Friday', 'ship on Monday')
-    const once = applyBodyChange(BODY, change, at('ship on Friday'))
+    const once = adoptOne(BODY, change, at('ship on Friday'))
     // Re-resolved against the NEW body, which is where the passage now is.
-    const again = applyBodyChange(once, change, {
+    const again = adoptOne(once, change, {
       start: once.indexOf('ship on Monday'),
       end: once.indexOf('ship on Monday') + 'ship on Monday'.length,
     })
     expect(again).toBe(once)
   })
 
-  it('leaves the body alone when the passage could not be placed', () => {
-    const change = replace('ship on Friday', 'ship on Monday')
-    expect(applyBodyChange(BODY, change, undefined)).toBe(BODY)
+  it('leaves the body alone when no passage was placed', () => {
+    expect(applyPassages(BODY, [])).toEqual({ kind: 'applied', body: BODY })
   })
 })
 
@@ -130,5 +141,57 @@ describe('bodyChangeConflicts', () => {
         end: edited.indexOf('ship on Friday') + 'ship on Friday'.length,
       }),
     ).toBe(false)
+  })
+})
+
+/** A passage placed where `exact` first occurs in `body`, proposing `text` instead. */
+function placedIn(body: string, id: string, exact: string, text: string) {
+  const start = body.indexOf(exact)
+  const change: BodyProposedChange = {
+    id,
+    op: 'body.replace',
+    status: 'open',
+    anchor: { kind: 'text', quote: { exact }, start, end: start + exact.length },
+    text,
+    assumed: exact,
+  }
+  return { change, at: { start, end: start + exact.length } }
+}
+
+describe('applyPassages', () => {
+  it('applies every passage from one read, whatever order they arrive in', () => {
+    const body = 'Ship on Thursday. Review on Thursday too.'
+    const first = placedIn(body, 'c1', 'Ship on Thursday', 'Ship on Monday')
+    const second = placedIn(body, 'c2', 'Review on Thursday', 'Review on Wednesday')
+    const expected = { kind: 'applied', body: 'Ship on Monday. Review on Wednesday too.' }
+    expect(applyPassages(body, [first, second])).toEqual(expected)
+    expect(applyPassages(body, [second, first])).toEqual(expected)
+  })
+
+  it('applies passages that only touch, since they share no character', () => {
+    const body = 'abcdef'
+    const left = placedIn(body, 'L', 'abc', 'X')
+    const right = placedIn(body, 'R', 'def', 'Y')
+    expect(applyPassages(body, [left, right])).toEqual({ kind: 'applied', body: 'XY' })
+  })
+
+  it('refuses passages proposed apart that an edit has since made overlap', () => {
+    // Proposed against `xx abc yy cde`, where the two are disjoint. Somebody
+    // then deleted ` yy c`, so `cde` now starts inside `abc`. Applied
+    // back-to-front anyway, the pair writes `xx 11122` — text neither change
+    // proposed, and nothing downstream could tell it from an edit somebody meant.
+    const body = 'xx abcde'
+    const a = placedIn(body, 'A', 'abc', '111')
+    const b = placedIn(body, 'B', 'cde', '222')
+    const outcome = applyPassages(body, [a, b])
+    expect(outcome).toEqual({ kind: 'overlap', passage: b, overlaps: a })
+    expect(findPassageOverlap([b, a])).toEqual({ passage: b, overlaps: a })
+  })
+
+  it('finds a passage nested inside another, not only one that straddles its end', () => {
+    const body = 'one two three'
+    const outer = placedIn(body, 'outer', 'one two three', 'all of it')
+    const inner = placedIn(body, 'inner', 'two', '2')
+    expect(findPassageOverlap([inner, outer])).toEqual({ passage: inner, overlaps: outer })
   })
 })

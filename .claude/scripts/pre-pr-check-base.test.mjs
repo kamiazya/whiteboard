@@ -18,6 +18,8 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'pre-pr-check-base.mjs')
 
@@ -26,8 +28,11 @@ after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
+/** Scratch-repo git, and the hook's own, run without the contributor's global config. */
+const env = isolatedGitEnv()
+
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, { cwd, env, encoding: 'utf-8' }).trim()
 }
 
 function commitFile(repo, name, content, message) {
@@ -42,11 +47,11 @@ function makeRepoPair() {
   scratchDirs.push(dir)
   const origin = join(dir, 'origin')
   const work = join(dir, 'work')
-  execFileSync('git', ['init', '-b', 'main', origin], { encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', 'main', origin], { env, encoding: 'utf-8' })
   git(origin, ['config', 'user.email', 'test@example.com'])
   git(origin, ['config', 'user.name', 'test'])
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], { env, encoding: 'utf-8' })
   git(work, ['config', 'user.email', 'test@example.com'])
   git(work, ['config', 'user.name', 'test'])
   git(work, ['checkout', '-b', 'feat'])
@@ -60,6 +65,7 @@ function runHook(cwd, command = 'gh pr create --title x') {
   try {
     execFileSync('node', [scriptPath], {
       cwd,
+      env,
       input: stdin,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -119,4 +125,36 @@ test('a leading `cd <checkout> &&` selects that checkout even when the hook runs
   const result = runHook(elsewhere, `cd ${work} && gh pr create --title x`)
   assert.equal(result.status, 2, result.stderr)
   assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+})
+
+// The REST call a web session makes instead of the GraphQL-backed
+// `gh pr create`: the same check, with the branch read from its `head` field.
+const restCreate = (fields) => `gh api -X POST repos/{owner}/{repo}/pulls -f base=main ${fields}`
+
+test('the REST create blocks on an overlapping advance exactly as gh pr create does', () => {
+  const { origin, work } = makeRepoPair()
+  commitFile(origin, 'feat.txt', 'conflicting\n', 'overlapping advance')
+  const result = runHook(work, restCreate('-f head=feat -f title=x'))
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+  assert.match(result.stderr, /gh api -X POST/)
+})
+
+test("the REST create's head field names the branch, whatever the checkout is on", () => {
+  const { origin, work } = makeRepoPair()
+  git(work, ['push', 'origin', 'feat'])
+  commitFile(origin, 'feat.txt', 'main moved it\n', 'advance touching feat.txt')
+  git(work, ['checkout', 'main'])
+  const result = runHook(work, restCreate('-f head=kamiazya:feat -f title=x'))
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+})
+
+test('a REST create of an up-to-date branch passes, and a REST read is not looked at', () => {
+  const { origin, work } = makeRepoPair()
+  assert.equal(runHook(work, restCreate('-f head=feat')).status, 0)
+  commitFile(origin, 'feat.txt', 'conflicting\n', 'overlapping advance')
+  const read = runHook(work, 'gh api repos/{owner}/{repo}/pulls --jq ".[].number"')
+  assert.deepEqual(read, { status: 0, stderr: '' })
+  assert.equal(git(work, ['rev-list', '--count', 'feat..origin/main']), '0')
 })

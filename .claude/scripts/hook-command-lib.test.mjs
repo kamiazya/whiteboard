@@ -2,9 +2,22 @@
 // Coverage for hook-command-lib.mjs. Run with: pnpm test:scripts.
 
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { after, test } from 'node:test'
 
-import { prNumberFromMerge, runsGh, runsGitPush } from './hook-command-lib.mjs'
+import { prActionFromHookInput, runsGitPush } from './hook-command-lib.mjs'
+
+const scratch = mkdtempSync(join(tmpdir(), 'hook-command-lib-'))
+after(() => rmSync(scratch, { recursive: true, force: true }))
+
+/** The action a Bash call carries, read the way a hook reads its stdin. */
+const fromCommand = (command, options = {}) =>
+  prActionFromHookInput(
+    { tool_name: 'Bash', tool_input: { command } },
+    { cwd: scratch, ...options },
+  )
 
 test('a gh subcommand is matched at a command position', () => {
   for (const command of [
@@ -17,7 +30,7 @@ test('a gh subcommand is matched at a command position', () => {
     'a\ngh pr merge 12',
     'gh   pr   merge',
   ]) {
-    assert.equal(runsGh(command, 'pr merge'), true, command)
+    assert.equal(fromCommand(command)?.action, 'merge', command)
   }
 })
 
@@ -30,18 +43,176 @@ test('text that merely mentions a gh subcommand is not a command', () => {
     'gh pr mergeable',
     'gh pr view 12',
   ]) {
-    assert.equal(runsGh(command, 'pr merge'), false, command)
+    assert.equal(fromCommand(command), null, command)
   }
-  assert.equal(runsGh("git commit -m 'gh pr create later'", 'pr create'), false)
-  assert.equal(runsGh('gh pr create --title x', 'pr create'), true)
+  assert.equal(fromCommand("git commit -m 'gh pr create later'"), null)
+  assert.equal(fromCommand('gh pr create --title x')?.action, 'create')
 })
 
 test('the PR number is read from the command only where it is a command', () => {
-  assert.equal(prNumberFromMerge('gh pr merge 1751 --squash --delete-branch'), 1751)
-  assert.equal(prNumberFromMerge('cd /x && gh pr merge 42 --squash'), 42)
-  assert.equal(prNumberFromMerge('gh pr merge --squash'), null)
-  assert.equal(prNumberFromMerge('gh pr create --title x'), null)
-  assert.equal(prNumberFromMerge("git commit -m 'gh pr merge 9'"), null)
+  assert.equal(fromCommand('gh pr merge 1751 --squash --delete-branch')?.pr, 1751)
+  assert.equal(fromCommand('cd /x && gh pr merge 42 --squash')?.pr, 42)
+  assert.equal(fromCommand('gh pr merge --squash')?.pr, null)
+  assert.equal(fromCommand('gh pr create --title x')?.pr, null)
+  assert.equal(fromCommand("git commit -m 'gh pr merge 9'"), null)
+})
+
+test('the gh pr create form reads its body, branch and checkout as the hooks always have', () => {
+  const quoted = fromCommand(`cd /x && gh pr create --head feat --title x --body "a \\"b\\""`)
+  assert.equal(quoted?.form, 'gh-pr')
+  assert.equal(quoted?.cd, '/x')
+  assert.equal(quoted?.head, 'feat')
+  assert.deepEqual(quoted?.body, { text: 'a "b"' })
+  writeFileSync(join(scratch, 'gh-body.md'), 'from a file')
+  assert.deepEqual(fromCommand('gh pr create --body-file gh-body.md')?.body, {
+    text: 'from a file',
+  })
+  // An editor, --fill or stdin: nothing here can read it, and the form fails open.
+  assert.equal(fromCommand('gh pr create --fill')?.body, null)
+})
+
+test('the REST calls behind gh pr create, merge and edit are recognised', () => {
+  const create = fromCommand(
+    "gh api -X POST repos/{owner}/{repo}/pulls -f title=x -f head=feat -f base=main -f body='Visual evidence: none — n/a'",
+  )
+  assert.equal(create?.action, 'create')
+  assert.equal(create?.form, 'rest')
+  assert.equal(create?.repo, '{owner}/{repo}')
+  assert.equal(create?.head, 'feat')
+  assert.deepEqual(create?.body, { text: 'Visual evidence: none — n/a' })
+
+  for (const command of [
+    'gh api --method=POST /repos/kamiazya/whiteboard/pulls -f head=kamiazya:feat',
+    'gh api repos/kamiazya/whiteboard/pulls -f head=feat -f base=main -f title=x',
+    'gh api -XPOST https://api.github.com/repos/kamiazya/whiteboard/pulls --raw-field=head=feat',
+    'cd /x && gh api --method post repos/kamiazya/whiteboard/pulls -F head=feat',
+  ]) {
+    const action = fromCommand(command)
+    assert.equal(action?.action, 'create', command)
+    assert.equal(action?.head, 'feat', command)
+    assert.equal(action?.repo, 'kamiazya/whiteboard', command)
+  }
+
+  const merge = fromCommand(
+    'gh api -X PUT repos/{owner}/{repo}/pulls/12/merge -f merge_method=squash',
+  )
+  assert.equal(merge?.action, 'merge')
+  assert.equal(merge?.pr, 12)
+  assert.equal(merge?.form, 'rest')
+  const mergeNamed = fromCommand('gh api --method PUT repos/kamiazya/whiteboard/pulls/2041/merge')
+  assert.deepEqual([mergeNamed?.pr, mergeNamed?.repo], [2041, 'kamiazya/whiteboard'])
+  // The head check a careful merge makes first is a read, not a merge.
+  const chained = fromCommand(
+    'sha=$(gh api repos/{owner}/{repo}/pulls/5 --jq .head.sha) && gh api -X PUT repos/{owner}/{repo}/pulls/5/merge -f sha="$sha"',
+  )
+  assert.deepEqual([chained?.action, chained?.pr], ['merge', 5])
+
+  const edit = fromCommand("gh api -X PATCH repos/{owner}/{repo}/pulls/12 -f title='feat: x'")
+  assert.deepEqual([edit?.action, edit?.pr], ['edit', 12])
+})
+
+test('a hook guarding one action finds it behind another in the same command', () => {
+  const both = 'gh pr create --title x && gh pr merge 5 --squash'
+  assert.equal(fromCommand(both)?.action, 'create')
+  assert.equal(fromCommand(both, { action: 'merge' })?.pr, 5)
+  const rest =
+    'gh api -X PATCH repos/{owner}/{repo}/pulls/5 -f title=x && gh api -X PUT repos/{owner}/{repo}/pulls/5/merge'
+  assert.equal(fromCommand(rest, { action: 'merge' })?.form, 'rest')
+  assert.equal(fromCommand(rest, { action: 'create' }), null)
+  const mcpMerge = {
+    tool_name: 'mcp__github__merge_pull_request',
+    tool_input: { owner: 'o', repo: 'r', pullNumber: 1 },
+  }
+  assert.equal(prActionFromHookInput(mcpMerge, { action: 'create' }), null)
+})
+
+test('a REST read, another endpoint, or a mention is not a PR action', () => {
+  for (const command of [
+    'gh api repos/{owner}/{repo}/pulls/12 --jq .head.sha',
+    'gh api repos/{owner}/{repo}/pulls/12/comments --paginate',
+    "gh api 'repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open'",
+    'gh api -X GET repos/{owner}/{repo}/pulls -f state=open',
+    'gh api repos/{owner}/{repo}/pulls/12/merge',
+    'gh api -X POST repos/{owner}/{repo}/issues/12/comments -f body=x',
+    'gh api -X POST repos/{owner}/{repo}/pulls/12/reviews -f event=COMMENT',
+    'echo gh api -X PUT repos/o/r/pulls/1/merge',
+    "git commit -m 'gh api -X PUT repos/o/r/pulls/1/merge'",
+  ]) {
+    assert.equal(fromCommand(command), null, command)
+  }
+})
+
+test('a REST body is read from wherever gh api takes it', () => {
+  writeFileSync(join(scratch, 'pr.md'), '## Visual repro\n![f](https://example.invalid/f.png)')
+  writeFileSync(join(scratch, 'pr.json'), JSON.stringify({ head: 'lane', body: 'from json' }))
+  const create = 'gh api -X POST repos/{owner}/{repo}/pulls -f head=feat'
+
+  assert.match(fromCommand(`${create} -F body=@pr.md`)?.body?.text ?? '', /Visual repro/)
+  assert.deepEqual(fromCommand(`${create} -f body=@pr.md`)?.body, { text: '@pr.md' })
+  assert.deepEqual(
+    fromCommand(create)?.body,
+    { text: '' },
+    'a create with no body has an empty one',
+  )
+
+  const input = fromCommand('gh api -X POST repos/{owner}/{repo}/pulls --input pr.json')
+  assert.deepEqual([input?.body, input?.head], [{ text: 'from json' }, 'lane'])
+
+  const heredoc = fromCommand(`${create} -F body=@- <<'EOF'\nVisual evidence: none — a hook\nEOF`)
+  assert.deepEqual(heredoc?.body, { text: 'Visual evidence: none — a hook' })
+  const jsonHeredoc = fromCommand(
+    `gh api -X POST repos/{owner}/{repo}/pulls --input - <<EOF\n${JSON.stringify({ head: 'x', body: 'b' })}\nEOF`,
+  )
+  assert.deepEqual([jsonHeredoc?.body, jsonHeredoc?.head], [{ text: 'b' }, 'x'])
+  const ansi = fromCommand(`${create} -f body=$'line one\\nline two'`)
+  assert.deepEqual(ansi?.body, { text: 'line one\nline two' })
+})
+
+test('a REST body nothing here can read says why instead of reading as empty', () => {
+  const create = 'gh api -X POST repos/{owner}/{repo}/pulls -f head=feat'
+  for (const command of [
+    `cat pr.md | ${create} -F body=@-`,
+    `${create} -F body=@missing.md`,
+    'gh api -X POST repos/{owner}/{repo}/pulls --input missing.json',
+    `printf x | gh api -X POST repos/{owner}/{repo}/pulls --input -`,
+  ]) {
+    const body = fromCommand(command)?.body
+    assert.equal(typeof body?.unreadable, 'string', command)
+    assert.equal(body?.text, undefined, command)
+  }
+})
+
+test('a GitHub MCP tool call reads as the same action, with no command string', () => {
+  const create = prActionFromHookInput({
+    tool_name: 'mcp__github__create_pull_request',
+    tool_input: { owner: 'o', repo: 'r', title: 'x', head: 'o:feat', base: 'main', body: 'b' },
+  })
+  assert.deepEqual(
+    [create?.action, create?.form, create?.repo, create?.head, create?.body],
+    ['create', 'mcp', 'o/r', 'feat', { text: 'b' }],
+  )
+  const merge = prActionFromHookInput({
+    tool_name: 'mcp__github__merge_pull_request',
+    tool_input: { owner: 'o', repo: 'r', pullNumber: 12, merge_method: 'squash' },
+  })
+  assert.deepEqual([merge?.action, merge?.pr, merge?.repo], ['merge', 12, 'o/r'])
+  const edit = prActionFromHookInput({
+    tool_name: 'mcp__github__update_pull_request',
+    tool_input: { owner: 'o', repo: 'r', pullNumber: 3 },
+  })
+  assert.deepEqual([edit?.action, edit?.pr], ['edit', 3])
+  assert.deepEqual(
+    prActionFromHookInput({
+      tool_name: 'mcp__github__create_pull_request',
+      tool_input: { owner: 'o', repo: 'r', head: 'feat' },
+    })?.body,
+    { text: '' },
+  )
+  assert.equal(
+    prActionFromHookInput({ tool_name: 'mcp__github__get_pull_request', tool_input: {} }),
+    null,
+  )
+  assert.equal(prActionFromHookInput(undefined), null)
 })
 
 test('git push is matched through global flags, and not inside a message', () => {

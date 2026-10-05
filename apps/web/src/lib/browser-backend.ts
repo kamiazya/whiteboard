@@ -17,6 +17,7 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { overfilledBody } from './markdown-body-limit.js'
 import { seedNameFromTitle } from './seed-name-from-title.js'
 import {
   listenToWorkspace,
@@ -249,6 +250,19 @@ export class BrowserBackend implements DocumentBackend {
     // session cannot produce one, since its doc exists only after onSnapshot.
     if (workspaceDoc === null || workspaceId === null) return
     try {
+      // Refused before it lands: once imported, the bytes would ride the next
+      // save whatever this one decided.
+      if (this.target.kind === 'markdown') {
+        const overfilled = overfilledBody(workspaceDoc, this.target.documentId, bytes)
+        if (overfilled !== null) {
+          getAppLogger('browser-backend').warn('refused a body past the markdown size limit', {
+            documentId: this.target.documentId,
+            chars: overfilled,
+          })
+          this.handlers?.onError?.('storage-failure')
+          return
+        }
+      }
       workspaceDoc.import(bytes)
       // A note is named after its body's heading while nobody has named it —
       // before the save, so the name rides the same write. No kind check: a

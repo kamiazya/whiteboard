@@ -14,6 +14,8 @@ import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { isolatedGitEnv } from './git-test-utils.mjs'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'hooks', 'post-push-pr-sync.mjs')
 
@@ -28,32 +30,14 @@ function scratch(prefix) {
   return dir
 }
 
-/**
- * The environment the fixtures run git in. A caller inside a git hook has
- * GIT_DIR and its siblings exported, and a git run with those set operates on
- * THAT repository whatever its cwd says — so the throwaway repos here would be
- * the caller's own.
- */
-function gitEnv(extra = {}) {
-  const env = { ...process.env, ...extra }
-  for (const key of Object.keys(env))
-    if (
-      /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/.test(
-        key,
-      )
-    )
-      delete env[key]
-  return env
-}
-
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, env: gitEnv(), encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, { cwd, env: isolatedGitEnv(), encoding: 'utf-8' }).trim()
 }
 
 /** A repo on `branch` holding one commit per subject, oldest first. */
 function makeRepo(branch, subjects) {
   const repo = join(scratch('post-push-pr-sync-repo-'), 'repo')
-  execFileSync('git', ['init', '-b', branch, repo], { env: gitEnv(), encoding: 'utf-8' })
+  execFileSync('git', ['init', '-b', branch, repo], { env: isolatedGitEnv(), encoding: 'utf-8' })
   git(repo, ['config', 'user.email', 'test@example.com'])
   git(repo, ['config', 'user.name', 'test'])
   for (const subject of subjects) {
@@ -78,7 +62,7 @@ function makeGhStub() {
 
 function runHook({ cwd, command, pr, ghFails = false }) {
   const gh = makeGhStub()
-  const env = gitEnv({
+  const env = isolatedGitEnv({
     PATH: `${gh.dir}:${process.env.PATH}`,
     GH_STUB_JSON: JSON.stringify(pr ? [pr] : []),
   })
@@ -123,7 +107,8 @@ test('a push on a branch with an open PR prompts a title check', () => {
   assert.match(out, /PR title: "feat\(x\): the title"/)
   assert.match(out, /- "second change"/)
   assert.match(out, /- "first change"/)
-  assert.match(out, /gh pr edit 77/)
+  // The REST form, which a web session can run: `gh pr edit` is GraphQL-backed there.
+  assert.match(out, /gh api -X PATCH repos\/\{owner\}\/\{repo\}\/pulls\/77 -f title=/)
   assert.match(
     calls,
     /^api repos\/\{owner\}\/\{repo\}\/pulls\?head=\{owner\}:\{branch\}&state=open/m,

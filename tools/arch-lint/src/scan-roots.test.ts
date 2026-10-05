@@ -7,7 +7,7 @@ import {
   isExcludedPath,
   REPO_ROOT,
   SCAN_ROOTS,
-  SCRIPT_SCAN_ROOTS,
+  scriptFiles,
   WORKTREES_PATH,
   walk,
   workspaceDirs,
@@ -32,10 +32,22 @@ describe('scan roots', () => {
     expect(unreached).toEqual([])
   })
 
-  it('reaches the end-to-end tree and every package scripts directory', () => {
-    expect(SCRIPT_SCAN_ROOTS).toContain('tests')
-    expect(SCRIPT_SCAN_ROOTS).toContain(join('packages', 'mcp-server', 'scripts'))
-    expect(SCRIPT_SCAN_ROOTS.length).toBeGreaterThan(2)
+  it('lists the scripts of every tree that holds one, and no dependency or build output', () => {
+    // The one list the entry-module check, the serve-dist check and the size
+    // ledger read: an app's scripts, the smokes, a tool's top-level script and
+    // the dev tooling were each outside one of the three when they kept their own.
+    const scripts = scriptFiles()
+    expect(scripts).toEqual(
+      expect.arrayContaining([
+        'apps/web/scripts/smoke-pwa-lifecycle.mjs',
+        'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs',
+        'tests/e2e/distribution/smoke-helpers.mjs',
+        'tools/check-pr-title.mjs',
+        'tools/checks/src/is-run-as-script.mjs',
+        '.claude/scripts/new-worktree.mjs',
+      ]),
+    )
+    expect(scripts.filter((path) => /(^|\/)(node_modules|dist)\//.test(path))).toEqual([])
   })
 
   it('excludes history, vendored and worktree directories by their path inside the repo', () => {

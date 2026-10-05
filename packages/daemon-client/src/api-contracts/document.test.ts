@@ -351,14 +351,14 @@ describe('workspaceSummarySchema', () => {
 
   // The refinement is model's, not a restated copy — this only proves the
   // widened field actually delegates to workspaceSegmentSchema rather than a
-  // bare z.string().
-  it('rejects a ULID-shaped segment', () => {
+  // bare z.string(): a bare string would keep the segment.
+  it('reads a ULID-shaped segment as absent, keeping the workspace', () => {
     expect(
-      workspaceSummarySchema.safeParse({
+      workspaceSummarySchema.parse({
         workspaceId: 'ws-abc',
         segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-      }).success,
-    ).toBe(false)
+      }),
+    ).toEqual({ workspaceId: 'ws-abc' })
   })
 
   it('accepts a tier when the daemon threads a resolver', () => {
@@ -388,6 +388,21 @@ describe('listWorkspacesResponseSchema', () => {
 
   it('rejects missing workspaces', () => {
     expect(listWorkspacesResponseSchema.safeParse({}).success).toBe(false)
+  })
+
+  // A daemon may hold a name stored before the bound. Failing the whole
+  // answer over it emptied the switcher of every workspace, not just that one.
+  it('lists every workspace when one holds a name past the bound, reading that name as absent', () => {
+    const parsed = listWorkspacesResponseSchema.parse({
+      workspaces: [
+        { workspaceId: 'ws-1', segment: 'one', displayName: 'n'.repeat(201) },
+        { workspaceId: 'ws-2', segment: 'two', displayName: 'Two' },
+      ],
+    })
+    expect(parsed.workspaces).toEqual([
+      { workspaceId: 'ws-1', segment: 'one' },
+      { workspaceId: 'ws-2', segment: 'two', displayName: 'Two' },
+    ])
   })
 })
 

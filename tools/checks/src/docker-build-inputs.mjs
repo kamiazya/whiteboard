@@ -17,6 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isRunAsScript } from './is-run-as-script.mjs'
 
 // Root-level files reach the build unconditionally: `COPY . .` puts the root
 // tsconfigs, .npmrc and the lockfile into the context, and the install stage
@@ -248,7 +249,7 @@ export function affectsDockerBuild(changedPaths, closureDirs) {
 // a needless image build is minutes and the cost of a silently skipped one is
 // a broken Dockerfile reaching a release tag.
 
-if (process.argv[1]?.endsWith('docker-build-inputs.mjs')) {
+if (isRunAsScript(import.meta.url)) {
   const { execFileSync } = await import('node:child_process')
   const { appendFileSync } = await import('node:fs')
 

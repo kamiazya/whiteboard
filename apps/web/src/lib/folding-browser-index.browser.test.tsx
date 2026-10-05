@@ -7,7 +7,7 @@
  */
 
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { DOCUMENT_NAME_MAX_LENGTH, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -228,6 +228,27 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect(await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
     // Deleted from the tree means unreadable through the content path too.
     expect(await loadDocumentContent(entry.documentId)).toBeNull()
+  })
+
+  it('refuses a document name past the declared bound and keeps the old one', async () => {
+    const index = new FoldingBrowserIndex()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'named',
+      kind: 'spatial',
+    })
+    await index.setDocumentName({ workspaceId, documentId, name: 'Kept' })
+
+    await expect(
+      index.setDocumentName({
+        workspaceId,
+        documentId,
+        name: 'x'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1),
+      }),
+    ).rejects.toThrow(/at most 200 characters/)
+    expect((await index.resolveDocumentById({ workspaceId, documentId }))?.name).toBe('Kept')
   })
 
   it('refuses a document past the declared capacity, and takes one again once there is room', async () => {

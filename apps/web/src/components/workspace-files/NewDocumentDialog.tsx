@@ -11,6 +11,7 @@ import {
 import { DocumentNameField } from './DocumentNameField.js'
 import { DocumentPathField } from './DocumentPathField.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
+import { documentPathRefusal } from './document-path-refusal.js'
 
 /**
  * The long way to create a document, for the person who already knows what
@@ -102,6 +103,11 @@ export function NewDocumentDialog({
               // one field with no default a person could fall back on is the
               // one that has to say why it was refused.
               setPathIssue('A path is required — it is where the document lives.')
+              return
+            }
+            const refusal = documentPathRefusal(trimmedPath)
+            if (refusal !== null) {
+              setPathIssue(refusal)
               return
             }
             setPathIssue(null)

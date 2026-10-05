@@ -21,7 +21,8 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isolatedGitEnv } from '../../../.claude/scripts/git-test-utils.mjs'
 import { repoRoot } from '../src/shared/test-utils/repo-root.js'
 import { findCommandsAfterLefthook, gitHooksDir } from './verify-git-hooks.mjs'
 
@@ -56,11 +57,20 @@ describe('findCommandsAfterLefthook', () => {
 })
 
 describe('gitHooksDir', () => {
+  // gitHooksDir runs git in this process's environment, so the scratch repos
+  // are read the way they are built: a contributor's global `core.hooksPath`
+  // would otherwise answer for every repository here.
+  beforeEach(() => {
+    const isolated = isolatedGitEnv()
+    for (const key of Object.keys(process.env)) if (!(key in isolated)) vi.stubEnv(key, undefined)
+    for (const [key, value] of Object.entries(isolated)) vi.stubEnv(key, value)
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   const git = (cwd: string, ...args: string[]): string =>
-    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], {
-      cwd,
-      encoding: 'utf8',
-    })
+    execFileSync('git', args, { cwd, env: isolatedGitEnv(), encoding: 'utf8' })
 
   it('answers the shared hooks directory from inside a linked worktree, where .git is a file', () => {
     const base = realpathSync(mkdtempSync(join(tmpdir(), 'wb-hooks-dir-')))

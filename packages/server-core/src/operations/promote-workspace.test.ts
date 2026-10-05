@@ -2,10 +2,12 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  readWorkspaceDocuments,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DocumentEngineTrapError } from '../document-io.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
@@ -90,6 +92,10 @@ function fakes(peer = 1n) {
   }
 }
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe('promoteWorkspace', () => {
   it('merges the record and writes one explicit human checkpoint per promoted document, carrying the attestation', async () => {
     const fake = fakes()
@@ -167,6 +173,79 @@ describe('promoteWorkspace', () => {
     )
     expect(result).toEqual({ kind: 'malformed-snapshot' })
     expect(fake.saves()).toBe(0)
+    expect(fake.versions.saves).toEqual([])
+  })
+
+  it('an engine trap in the merge drops the target record and is not called malformed', async () => {
+    const fake = fakes()
+    vi.spyOn(fake.workspaceDoc, 'import').mockImplementation(() => {
+      throw Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
+    })
+    const dropped: string[] = []
+    const failure = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: {
+          ...fake.workspaceDocuments,
+          evict: () => dropped.push('record'),
+          evictProjections: () => dropped.push('projections'),
+        },
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: browserRecord(), operator },
+    ).catch((err: unknown) => err)
+    expect(failure).toBeInstanceOf(DocumentEngineTrapError)
+    expect(dropped).toEqual(['record', 'projections'])
+    expect(fake.saves()).toBe(0)
+    expect(fake.versions.saves).toEqual([])
+  })
+
+  it('an engine trap on the incoming record is not called malformed either', async () => {
+    const fake = fakes()
+    // The first import promote makes is into its own throwaway copy of the record.
+    vi.spyOn(LoroDoc.prototype, 'import').mockImplementationOnce(() => {
+      throw Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
+    })
+    const failure = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: browserRecord(), operator },
+    ).catch((err: unknown) => err)
+    expect(failure).toBeInstanceOf(DocumentEngineTrapError)
+    expect(fake.saves()).toBe(0)
+  })
+
+  it('refuses a record holding a path outside the document-path grammar before merging any of it', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'sketch',
+      documentId: SKETCH_ID,
+      kind: 'spatial',
+    })
+    createWorkspaceDocumentAtPath(record, {
+      path: 'Meeting notes',
+      documentId: ROADMAP_ID,
+      kind: 'markdown',
+    })
+    record.commit()
+    const result = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
+    )
+    expect(result).toEqual({ kind: 'invalid-paths', paths: ['Meeting notes'] })
+    expect(fake.saves()).toBe(0)
+    expect(readWorkspaceDocuments(fake.workspaceDoc).map((entry) => entry.path)).toEqual([
+      'contested',
+    ])
     expect(fake.versions.saves).toEqual([])
   })
 })

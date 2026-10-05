@@ -117,7 +117,7 @@ export const sharedNodeFieldsSchema = z.object({
 /**
  * A node is a BOX that may SHOW something.
  *
- * [ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md) decision 3:
+ * [ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md) decision 3:
  * the `text | file | link | group` union is inherited from JSON Canvas and
  * dissolves under OCIF's decomposition. What a node shows is a RESOURCE — a
  * media type plus inline content or a location — and the kind is DERIVED from

@@ -37,6 +37,45 @@ function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
 }
 
 /**
+ * Code points per opentype call. opentype.js's `getAdvanceWidth` is QUADRATIC
+ * in the string it is handed — its ccmp pass slices the whole context once per
+ * glyph — and layout hands this measurer whole paragraphs, so one unbroken
+ * 16 Ki-character paragraph cost ~47 CPU-seconds measured in a single call
+ * (`scripts/measure/text-node-layout-cost.mjs`). Bounded segments make the
+ * cost linear in the run.
+ */
+const SEGMENT_CODE_POINTS = 64
+
+/**
+ * A code point the font's ccmp substitutes together with what PRECEDES it — a
+ * combining mark, a joiner, a variation selector. A run is only cut before a
+ * code point that is none of these, so no substitution spans a cut and the
+ * segments sum to the whole run's width. `measure-text.long-run.test.ts`
+ * holds that sum to one whole-run call over an alphabet dense in exactly
+ * these.
+ */
+const JOINS_PRECEDING = /[\p{M}\p{Cf}]/u
+
+/**
+ * One call into the font for a short run, bounded segments summed for a long
+ * one. Kerning is off, which is what makes the sum exact (see
+ * `measureWithFont`).
+ */
+function measureCarriedRun(font: opentype.Font, run: string, sizePx: number): number {
+  const advanceOf = (text: string): number => font.getAdvanceWidth(text, sizePx, { kerning: false })
+  if (run.length <= SEGMENT_CODE_POINTS) return advanceOf(run)
+  const codePoints = Array.from(run)
+  let advance = 0
+  let start = 0
+  for (let i = SEGMENT_CODE_POINTS; i < codePoints.length; i++) {
+    if (i - start < SEGMENT_CODE_POINTS || JOINS_PRECEDING.test(codePoints[i] ?? '')) continue
+    advance += advanceOf(codePoints.slice(start, i).join(''))
+    start = i
+  }
+  return advance + advanceOf(codePoints.slice(start).join(''))
+}
+
+/**
  * The vendored face is Latin-only, and `opentype.js` does not report that: a
  * code point it has no glyph for is measured as `.notdef`, a flat ~0.44 em
  * that is not a measurement of anything. Left alone it understates Japanese
@@ -60,8 +99,6 @@ function measureAdvance(
   sizePx: number,
 ): number {
   const carried = (char: string): boolean => font.charToGlyphIndex(char) !== 0
-  // Nothing missing is the common case and stays exactly one call into the
-  // font, so a Latin canvas measures no differently than before.
   let allCarried = true
   for (const char of text) {
     if (!carried(char)) {
@@ -69,13 +106,13 @@ function measureAdvance(
       break
     }
   }
-  if (allCarried) return font.getAdvanceWidth(text, sizePx, { kerning: false })
+  if (allCarried) return measureCarriedRun(font, text, sizePx)
 
   let advance = 0
   let run = ''
   const flush = (): void => {
     if (run === '') return
-    advance += font.getAdvanceWidth(run, sizePx, { kerning: false })
+    advance += measureCarriedRun(font, run, sizePx)
     run = ''
   }
   for (const char of text) {

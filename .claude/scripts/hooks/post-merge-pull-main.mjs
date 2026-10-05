@@ -1,5 +1,6 @@
-// PostToolUse(Bash) hook: after a successful `gh pr merge`, fast-forward the
-// main checkout to origin/main so the next branch/worktree never starts from a
+// PostToolUse(Bash) hook: after a successful merge — `gh pr merge`, or the
+// REST `gh api -X PUT …/pulls/<n>/merge` a web session uses
+// (hook-command-lib.mjs) — fast-forward the main checkout to origin/main so the next branch/worktree never starts from a
 // stale base. Deterministic enforcement of what used to be a prompt-level rule
 // (see .claude/rules/integrator-flow.md).
 //
@@ -9,7 +10,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
-import { runsGh } from '../hook-command-lib.mjs'
+import { prActionFromHookInput } from '../hook-command-lib.mjs'
 
 /** A few concurrent lanes are the normal working shape; a pile is debris. */
 const LANE_NOTICE_THRESHOLD = 5
@@ -30,8 +31,7 @@ try {
   process.exit(0)
 }
 
-const command = input?.tool_input?.command ?? ''
-if (!runsGh(command, 'pr merge')) process.exit(0)
+if (prActionFromHookInput(input, { action: 'merge' }) === null) process.exit(0)
 
 /** Set by the sync block below so the lane notice can reuse it. */
 let mainCheckout

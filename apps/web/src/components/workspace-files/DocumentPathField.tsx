@@ -1,3 +1,4 @@
+import { DOCUMENT_PATH_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { useId } from 'react'
 import { documentPathPrefix, workspacePath } from '../../lib/app-routes.js'
 
@@ -75,12 +76,12 @@ export function DocumentPathField({
           type="text"
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          maxLength={DOCUMENT_PATH_MAX_LENGTH}
           // The prefix is DESCRIBED, not aria-hidden. It is the only thing on
           // the form saying a path is an address, so hiding it would leave
           // that fact available to sighted readers alone.
           aria-describedby={prefix === null ? hintId : `${prefixId} ${hintId}`}
-          // A floor, so a long handle cannot squeeze the box people type in
-          // down to nothing: past this the handle truncates instead.
+          // A floor: a long handle truncates rather than squeezing the box people type in.
           className="min-w-[10ch] flex-1 bg-transparent outline-none"
         />
       </div>

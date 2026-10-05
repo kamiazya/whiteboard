@@ -9,6 +9,7 @@ import {
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '../index.js'
+import { describeRefusedInput } from './document-index-input-conformance.js'
 
 type SeedWorkspace = (entry: WorkspaceEntry) => Promise<void>
 
@@ -412,12 +413,17 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
   })
 
   describeDocumentNaming(withIndex)
-  describeListWorkspaces(makeIndex, withIndex)
+  describeWorkspacesAndInput(makeIndex, withIndex)
 }
 
 function describeDocumentNaming(withIndex: WithIndex): void {
   describeSetDocumentName(withIndex)
   describeBlankDocumentName(withIndex)
+}
+
+function describeWorkspacesAndInput(makeIndex: MakeIndex, withIndex: WithIndex): void {
+  describeListWorkspaces(makeIndex, withIndex)
+  describeRefusedInput(withIndex, WS)
 }
 
 function describeBlankDocumentName(withIndex: WithIndex): void {

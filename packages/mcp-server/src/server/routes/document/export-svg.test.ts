@@ -1,10 +1,15 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core'
+import {
+  answerUnhandled,
+  apiErrorBodySchema,
+  apiErrorReason,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { exportResponseSchema } from '../../../shared/api-contracts/export.js'
+import { captureLogsForTests } from '../../log.js'
 import { testStoreScope } from '../_test-helpers.js'
 
 let tempDir: string
@@ -320,27 +325,54 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     await expect(readFile(outputPath, 'utf-8')).resolves.toBe('<svg><rect/></svg>')
   })
 
-  it('rejects an oversized request body with 413 payload_too_large', async () => {
+  // Declared or counted as it streams, an oversized body is refused in the
+  // one sentence every JSON route speaks, before anything is rendered.
+  it.each([
+    ['declares its length', true],
+    ['declares no length', false],
+  ])('rejects an oversized request body that %s with 413 payload_too_large', async (_name, declared) => {
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
     const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(declared ? { 'Content-Length': String(oversized.length) } : {}),
+      },
       body: oversized,
     })
     expect(res.status).toBe(413)
-    const body: unknown = await res.json()
-    expect(body).toMatchObject({ error: 'payload_too_large' })
+    expect(await res.json()).toEqual({
+      error: 'payload_too_large',
+      message: 'Request body exceeds 1048576 bytes limit.',
+    })
   })
 
-  it('returns 500 headless_export_failed when rendering throws', async () => {
-    mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom'))
+  it('returns 500 headless_export_failed when rendering throws, logging the cause', async () => {
+    const logs = captureLogsForTests('error')
+    onTestFinished(() => logs.restore())
+    mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom at /secret/path'))
     const app = makeApp()
     const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')
-    expect(body.message).toBe('boom')
+    // The renderer's message can carry a path or a statement: it goes to the
+    // log, never the body.
+    expect(body.message).not.toContain('/secret/path')
+    expect(JSON.stringify(logs.records)).toContain('boom at /secret/path')
+  })
+
+  it('leaves a busy database to the app, which answers 503 with Retry-After', async () => {
+    mockExportCanvasHeadlessSvg.mockRejectedValue(
+      Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' }),
+    )
+    const app = new Hono()
+    app.onError(answerUnhandled(() => {}))
+    app.route('/', makeApp())
+    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
+    expect(res.status).toBe(503)
+    expect(res.headers.get('Retry-After')).toBe('1')
   })
 
   // One contract for every refusal: a body that `apiErrorBodySchema` refuses

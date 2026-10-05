@@ -22,22 +22,23 @@ behavioural, not textual — the point is what the session *does*.
 canvas-render helper, then the mcp-server tool change. Split it into reviewable PRs."
 
 **Baseline failure without the skill:** opens two independent PRs both targeting
-`main`, or targets the second at the first with `gh pr create --base` — which
+`main`, or targets the second at the first with `gh pr create --base` (or the REST form of
+it) — which
 produces two linked PRs but *no GitHub stack*: no stack map, no atomic merge, and
 the upper PR's diff shows the lower PR's commits too.
 
 **Expected with the skill:**
 - Orders the branches bottom-up by the `architecture-map.md` dependency direction
   (canvas-render below mcp-server), never the reverse.
-- Uses `gh stack init` / `gh stack add`, then `gh stack submit` — not bare
-  `gh pr create`.
+- Uses `gh stack init` / `gh stack add`, then `gh stack submit` — not a bare
+  PR creation, whether `gh pr create` or the REST form of it.
 - Each PR title is a Conventional Commit, because each is squash-merged later.
 
 ## 2. Land a stack
 
 **Query:** "The bottom two PRs of the stack are approved and green. Land them."
 
-**Baseline failure without the skill:** merges the bottom PR with `gh pr merge`,
+**Baseline failure without the skill:** merges the bottom PR alone (the REST form of `gh pr merge`),
 then hand-retargets the next PR's base and rebases it — several steps, each a
 chance to force-push over someone, and the stack on GitHub is left inconsistent.
 

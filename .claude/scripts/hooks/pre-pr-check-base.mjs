@@ -1,15 +1,17 @@
-// PreToolUse(Bash) hook: before `gh pr create`, verify the branch being
-// published is not behind a freshly fetched origin/main. Catching up BEFORE
-// the PR exists avoids the create-then-immediately-BEHIND churn (extra CI
-// runs, stale review context). Blocking instead of auto-merging is deliberate:
-// catching up may need the pnpm-lock conflict recipe, which requires judgment.
+// PreToolUse(Bash) hook: before a PR is created — `gh pr create`, or the REST
+// `gh api -X POST …/pulls` a web session uses (hook-command-lib.mjs) — verify
+// the branch being published is not behind a freshly fetched origin/main.
+// Catching up BEFORE the PR exists avoids the create-then-immediately-BEHIND
+// churn (extra CI runs, stale review context). Blocking instead of
+// auto-merging is deliberate: catching up may need the pnpm-lock conflict
+// recipe, which requires judgment.
 //
 // Fail-open: if the target branch cannot be determined, exit 0 silently.
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { runsGh } from '../hook-command-lib.mjs'
+import { prActionFromHookInput } from '../hook-command-lib.mjs'
 
 let input
 try {
@@ -18,23 +20,22 @@ try {
   process.exit(0)
 }
 
-const command = input?.tool_input?.command ?? ''
-if (!runsGh(command, 'pr create')) process.exit(0)
+const create = prActionFromHookInput(input, { action: 'create' })
+if (create === null) process.exit(0)
 
 const git = (args, cwd) =>
   execFileSync('git', args, { encoding: 'utf8', ...(cwd ? { cwd } : {}) }).trim()
 
 try {
-  // Determine which branch is being published: --head wins; otherwise the
-  // current branch of a leading `cd <path> && ...`; otherwise this process cwd.
-  const headMatch = command.match(/--head[= ]([^\s'"]+)/)
-  const cdMatch = command.match(/(?:^|&&|;)\s*cd\s+([^\s'";&|]+)/)
+  // Determine which branch is being published: --head (or the REST `head`
+  // field) wins; otherwise the current branch of a leading `cd <path> && ...`;
+  // otherwise this process cwd.
   let branch
   let where
-  if (headMatch) {
-    branch = headMatch[1]
+  if (create.head) {
+    branch = create.head
   } else {
-    where = cdMatch ? cdMatch[1] : process.cwd()
+    where = create.cd ?? process.cwd()
     branch = git(['branch', '--show-current'], where)
   }
   if (!branch || branch === 'main') process.exit(0)
@@ -58,13 +59,13 @@ try {
       console.error(
         `[pre-pr-check-base] branch '${branch}' is ${behind} commit(s) behind origin/main, ` +
           `and the advance touches file(s) this branch also touches: ${overlapping.join(', ')}. ` +
-          `Merge origin/main into it first (use the pnpm-lock recipe in .claude/rules/integrator-flow.md if the lockfile conflicts), then re-run gh pr create.`,
+          `Merge origin/main into it first (use the pnpm-lock recipe in .claude/rules/integrator-flow.md if the lockfile conflicts), then re-run the same ${create.via} call.`,
       )
       process.exit(2)
     }
     console.error(
       `[pre-pr-check-base] branch '${branch}' is ${behind} commit(s) behind origin/main, ` +
-        `but the advance touches no file this branch touches — allowing gh pr create.`,
+        `but the advance touches no file this branch touches — allowing ${create.via}.`,
     )
   }
 } catch {

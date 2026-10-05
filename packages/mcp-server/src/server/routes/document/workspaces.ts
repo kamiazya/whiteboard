@@ -10,7 +10,11 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
-import { type DocumentIndex, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  type DocumentIndex,
+  isDatabaseBusy,
+  isWorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
   type ServerDeps,
@@ -93,9 +97,11 @@ export interface WorkspacesRouterOptions {
 // POST /api/workspaces/:workspaceId/documents  body: { path: string }
 /**
  * The move is `wbDocumentMove`'s; what this surface adds is saying so when
- * the follow pass could not repair every reference, since the operation
- * reports rather than logs (server-core has no logger). The move stands
- * either way, so neither case changes the answer.
+ * the follow pass could not repair every reference. The operation returns
+ * that outcome instead of logging it, because only the surface knows how it
+ * reports — `wb_workspace_edit` answers it in the result row, this route
+ * has only the log. The move stands either way, so neither case changes the
+ * answer.
  */
 function logFollowOutcome(workspaceId: string, moved: WbDocumentMoveResult): void {
   const { from, path: to } = moved
@@ -340,6 +346,9 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         // retired SQL index answered null; both are a 404.
         const owned = firstOwned(err, [workspaceNotFound, hasDescendants, corruptStored])
         if (owned) return c.json(owned.body, owned.status)
+        // A busy database is the app's to answer (503 with Retry-After): the
+        // one failure here a caller can act on by retrying.
+        if (isDatabaseBusy(err)) throw err
         getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
         return c.json({ title: 'Failed to delete document.' } satisfies ApiErrorBody, 500)
       }
@@ -405,6 +414,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
           corruptStored,
         ])
         if (owned) return c.json(owned.body, owned.status)
+        if (isDatabaseBusy(err)) throw err
         getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
         return c.json({ title: 'Failed to rename document.' } satisfies ApiErrorBody, 500)
       }

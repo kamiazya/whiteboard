@@ -13,10 +13,11 @@
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. browser-document-summary.test.tsx.
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
-import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
+import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 
@@ -26,6 +27,13 @@ import { inTransaction, request } from './idb-tx.js'
 // did nothing wrong. Measured: it did exactly that to
 // `browser-idb-migration.browser.test.tsx`.
 const DB_NAME = 'whiteboard-document-index-conformance'
+
+/** A registry row as stored, bypassing the class's own validated write. */
+async function putRegistryRow(entry: WorkspaceEntry): Promise<void> {
+  await inTransaction(DB_NAME, [WORKSPACES_STORE], 'readwrite', async (tx) => {
+    await request(tx.objectStore(WORKSPACES_STORE).put(entry, entry.workspaceId))
+  })
+}
 
 describe('IdbDocumentIndex row hydration', () => {
   it('a malformed stored row fails the read loudly instead of flowing into the UI as a DocumentEntry', async () => {
@@ -61,9 +69,10 @@ describe('IdbDocumentIndex', () => {
     return {
       index,
       dispose: () => clearNamedDb(DB_NAME),
-      // This index IS its own registry — one IndexedDB store holding the row
-      // `createWorkspace` writes — so the seam is that call.
-      seedWorkspace: async (entry) => index.createWorkspace(entry),
+      // This index IS its own registry, one IndexedDB store, so the seam
+      // writes that store's row directly: `createWorkspace` refuses a layer
+      // the model refuses, and the seam stands for whatever a registry holds.
+      seedWorkspace: (entry) => putRegistryRow(entry),
     }
   })
 })

@@ -8,10 +8,13 @@
  * suite says so rather than a comment claiming it does.
  */
 
+import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { BlobStore, RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
   blobRefKey,
   DocumentPathTakenError,
+  documentEntrySchema,
   WorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
@@ -217,5 +220,33 @@ describe('LoroWorkspaceDocumentIndex folders', () => {
       'a/x',
       'a/y',
     ])
+  })
+})
+
+// The port parses only a move's DESTINATION, so a placement some writer stored
+// off the grammar stays movable — renaming it is the one repair a listing that
+// cannot read it leaves open. Written into the tree directly, since every
+// index write now refuses that path.
+describe('LoroWorkspaceDocumentIndex, a path stored off the grammar', () => {
+  it('moves to a path the grammar accepts, and lists again', async () => {
+    const WS = 'ws-off-grammar'
+    const docs = inMemoryWorkspaceDocs()
+    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
+    await index.createWorkspace({ workspaceId: WS })
+    const doc = await docs.open(WS)
+    if (doc === null) throw new Error('the workspace record was not stored')
+    const placed = createWorkspaceDocumentAtPath(doc, {
+      path: 'Meeting notes',
+      documentId: generateDocumentId(),
+      kind: 'markdown',
+    })
+    expect(placed).not.toBeNull()
+    await docs.save(WS, doc)
+
+    await index.moveDocument({ workspaceId: WS, from: 'Meeting notes', to: 'meeting-notes' })
+
+    const listed = await index.listDocuments({ workspaceId: WS })
+    expect(listed.map((entry) => entry.path)).toEqual(['meeting-notes'])
+    expect(listed.every((entry) => documentEntrySchema.safeParse(entry).success)).toBe(true)
   })
 })

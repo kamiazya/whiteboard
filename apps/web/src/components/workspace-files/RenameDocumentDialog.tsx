@@ -10,6 +10,16 @@ import {
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentNameField } from './DocumentNameField.js'
 import { DocumentPathField } from './DocumentPathField.js'
+import { documentPathRefusal } from './document-path-refusal.js'
+
+/**
+ * An UNCHANGED path is never refused: one stored before the grammar was
+ * enforced must still let its document be renamed, and moving it is how it
+ * gets repaired.
+ */
+function pathRefusal(path: string, current: string | undefined): string | null {
+  return path === current ? null : documentPathRefusal(path)
+}
 
 /**
  * The one place a document's two addresses are edited together, each field
@@ -42,13 +52,17 @@ export function RenameDocumentDialog({
 }) {
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
+  // The form's own refusal, apart from the host's `error`, as in NewDocumentDialog.
+  const [pathIssue, setPathIssue] = useState<string | null>(null)
 
   // Re-prime the fields for each newly targeted document; edits in a
   // cancelled dialog must not leak into the next one.
   useEffect(() => {
     setName(document?.name ?? '')
     setPath(document?.path ?? '')
+    setPathIssue(null)
   }, [document])
+  const shownError = pathIssue ?? error
 
   return (
     <Dialog open={document !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
@@ -67,6 +81,9 @@ export function RenameDocumentDialog({
             const trimmedName = name.trim()
             const trimmedPath = path.trim()
             if (trimmedPath === '') return
+            const refusal = pathRefusal(trimmedPath, document?.path)
+            setPathIssue(refusal)
+            if (refusal !== null) return
             onSubmit(trimmedName === '' ? undefined : trimmedName, trimmedPath)
           }}
         >
@@ -84,9 +101,9 @@ export function RenameDocumentDialog({
               onChange={setPath}
               hint="Where it lives in the workspace. Moving it takes everything under it along."
             />
-            {error !== null && (
+            {shownError !== null && (
               <p role="alert" className="text-destructive text-sm">
-                {error}
+                {shownError}
               </p>
             )}
           </div>

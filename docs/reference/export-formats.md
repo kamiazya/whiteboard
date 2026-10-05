@@ -34,6 +34,38 @@ character count: the limit is where one write still finishes in about a second.
 longer than that is refused, though an edit that shrinks an already-longer
 body is accepted. Split longer content across documents.
 
+The editor's own writes are bounded too, by the same number and the same
+rule — growing a body past it is refused, shrinking one already past it is
+not:
+
+- **The markdown editor** refuses a paste or keystroke that would take the
+  document past 262,144 characters, leaves the document as it was, and says
+  so in a notice at the top of the editor.
+- **A browser-kept workspace** does not save a body past the limit; the editor
+  shows the save as failed.
+- **The daemon's sync routes** — a document's `update`, the workspace
+  document's `update` and `promote` — answer `413` with
+  `{"error":"markdown_too_large"}` and store nothing. They also refuse, in
+  milliseconds, an update that inserts more than 262,144 characters in one
+  piece, before applying it. The same `update` and `promote` refuse, with
+  `400 {"error":"invalid_path"}`, an update or record that would put a document
+  at a path outside the path grammar; a document already at such a path can
+  still be moved to a valid one.
+
+## How large a text node and a document name may be
+
+A text node's text — the `text` of a `wb_canvas_edit` `node.add` or
+`node.patch`, and what a `node.splice` leaves — carries at most **8,192
+characters**; a longer one is refused with "node text is longer than the
+8192-character limit for one node". Laying text out is what that costs, and at
+the limit one node still finishes in about a second. A splice that shrinks text
+already over the limit is accepted.
+
+A document's display name — `wb_workspace_edit` `document.create` and
+`document.move`, `POST /api/v1/workspaces/{id}/documents`, and
+`PUT /api/workspaces/{id}/documents/{path}/name` — carries at most **200
+characters**, as a workspace name does. A blank name still clears it.
+
 ## OKF frontmatter this server does not model
 
 OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))

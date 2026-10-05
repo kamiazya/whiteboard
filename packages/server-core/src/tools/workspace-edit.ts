@@ -1,5 +1,6 @@
 import {
   documentIdSchema,
+  documentNameSchema,
   documentPathSchema,
   markdownInputSchema,
   messageOf,
@@ -64,8 +65,7 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
       op: z.literal('document.create'),
       path: documentPathSchema,
       kind: z.literal('markdown'),
-      name: z
-        .string()
+      name: documentNameSchema
         .optional()
         .describe(
           'Display name, free text (`path` places the document). A frontmatter `title` is the same name: omit it or match it.',
@@ -86,7 +86,9 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
       op: z.literal('document.create'),
       path: documentPathSchema,
       kind: z.literal('spatial'),
-      name: z.string().optional().describe('Display name, free text (`path` places the document).'),
+      name: documentNameSchema
+        .optional()
+        .describe('Display name, free text (`path` places the document).'),
     })
     .strict(),
 ])
@@ -119,8 +121,7 @@ const workspaceOpSchema = z.discriminatedUnion('op', [
         .describe(
           'The new path. Documents below the old path move with it, and `[[old/path]]` references in other documents are rewritten to follow. Omit it to rename in place.',
         ),
-      name: z
-        .string()
+      name: documentNameSchema
         .optional()
         .describe(
           'The new display name, which is how a spatial document is renamed. Blank clears it. Give `path`, `name`, or both.',

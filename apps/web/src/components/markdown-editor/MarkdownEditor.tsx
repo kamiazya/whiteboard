@@ -46,6 +46,7 @@ import { PreviewColumn, SourceColumn } from './editor-columns.js'
 import { editorLayout } from './editor-layout.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
+import { markdownLengthLimit } from './markdown-length-limit.js'
 import { PassageProposalCard } from './PassageProposalCard.js'
 import { previewDocumentSvg, railContentHeight, totalSourceLines } from './preview-geometry.js'
 import { railScrollable } from './preview-width.js'
@@ -192,6 +193,7 @@ const NO_MARKS: ReadonlyMap<string, LivePassage> = new Map()
 
 const DEFAULT_MAX_WIDTH = 720
 const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
+const LENGTH_LIMIT = markdownLengthLimit()
 
 /**
  * A controlled markdown editor: one source-of-truth `value` string, edited
@@ -340,6 +342,7 @@ export function MarkdownEditor({
   )
   const paneExtensions = useMemo(
     () => [
+      LENGTH_LIMIT,
       completionExtension,
       annotationExtension,
       passageProposals.extension,

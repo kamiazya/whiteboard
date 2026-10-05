@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Dependency-free: pr-title.yml runs this with no install step. The functions
 // are exported so the test exercises the very file CI executes.
-import { resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { isRunAsScript } from './checks/src/is-run-as-script.mjs'
 
 const CONVENTIONAL_PR_TITLE_RE =
   /^(feat|fix|chore|docs|refactor|test|perf|build|ci|revert)(\([^)]+\))?!?: .+\S$/
@@ -34,6 +33,6 @@ function main(argv) {
 }
 
 // Importing this file must not run the check.
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isRunAsScript(import.meta.url)) {
   main(process.argv.slice(2))
 }

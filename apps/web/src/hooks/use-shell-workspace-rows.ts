@@ -1,8 +1,11 @@
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useState } from 'react'
+import { getAppLogger } from '../lib/app-logger.js'
 import { parseWorkspaceRoute } from '../lib/app-routes.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import type { KeeperWorkspaces, WorkspaceRow } from '../lib/workspace-switcher-source.js'
+
+const log = getAppLogger('shell-workspace-rows')
 
 export interface ShellWorkspaceRows {
   /** Every workspace this keeper holds, as the switcher lists them. */
@@ -59,10 +62,11 @@ export function useShellWorkspaceRows(
       .then((loaded) => {
         if (!cancelled) setRows(loaded)
       })
-      // A list that will not load leaves the mark naming the handle the
-      // address carries, which is still true. Failing the whole shell over
-      // it would take the settings gear down with it.
-      .catch(() => {})
+      // A list that will not load leaves the mark naming the address's
+      // handle, which is still true; failing the shell would take the gear
+      // down too. Info, not warn: a shell with no keeper to ask (offline,
+      // server mode before sign-in) reaches this by design.
+      .catch((cause: unknown) => log.info('could not list the workspaces', cause))
     return () => {
       cancelled = true
     }

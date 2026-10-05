@@ -18,6 +18,15 @@ describe('markdownDocumentSchema', () => {
   })
 })
 
+describe('MARKDOWN_MAX_CHARS', () => {
+  // Published as a number in docs/reference/export-formats.md, and every test
+  // above it reads the constant rather than the value, so a change to the
+  // value would otherwise pass them all.
+  it('is 262,144 characters, the limit the reference docs state', () => {
+    expect(MARKDOWN_MAX_CHARS).toBe(262_144)
+  })
+})
+
 describe('markdownInputSchema', () => {
   it('accepts a write of exactly the limit and refuses one character more', () => {
     expect(markdownInputSchema.safeParse('x'.repeat(MARKDOWN_MAX_CHARS)).success).toBe(true)
