@@ -319,6 +319,37 @@ describe('a session whose document a peer deletes', () => {
     expect(s.session.getAnnotations()).toEqual([])
   })
 
+  // The table above calls undo and redo with an empty history, which answers
+  // false whether or not the removal is checked. A history that still holds
+  // a step is the case that reaches the gone document.
+  it('refuses an undo it still holds a step for, writing nothing', async () => {
+    const s = openSession()
+    s.session.onChange(...added(s.session.getCanvas(), 'mine'))
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(s.session.canUndo()).toBe(true)
+    s.deleteByPeer()
+    const pushesBefore = s.pushed.length
+
+    expect(s.session.undo()).toBe(false)
+    expect(s.pushed).toHaveLength(pushesBefore)
+    expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept', 'mine'])
+  })
+
+  it('refuses a redo it still holds a step for, writing nothing', async () => {
+    const s = openSession()
+    s.session.onChange(...added(s.session.getCanvas(), 'mine'))
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    s.session.undo()
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(s.session.canRedo()).toBe(true)
+    s.deleteByPeer()
+    const pushesBefore = s.pushed.length
+
+    expect(s.session.redo()).toBe(false)
+    expect(s.pushed).toHaveLength(pushesBefore)
+    expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept'])
+  })
+
   // A reconnect hands the session the record as it now stands, which no
   // longer holds the document; that is the same delete, not damaged bytes.
   it('keeps saying removed when a reconnect brings the record without it', () => {
