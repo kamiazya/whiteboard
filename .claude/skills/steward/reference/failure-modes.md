@@ -17,6 +17,7 @@ order effects.
 | 9 `web-jsdom` tests fail on `object.stream is not a function` | Wrong Node major. `.node-version` pins 24; on 22 undici's `new Response(blobLike)` reaches for `.stream()`. Not a regression, and the diff is unrelated. The same major also fails `packages/search`'s "honours a Prepend" (Unicode table) |
 | 2–3 failures in one browser file | Triage the **earliest** only. A timed-out browser test keeps typing into the next one — observed as one test's text shuffled into another's. Re-measure before believing the later failures |
 | a character is missing from typed text (an em dash, both spaces present) | Same overrun. Type ASCII in browser tests; a keycode-less character is synthesized separately and is the one that drops |
+| a CI browser failure prints `❯ traces ↳ tmp/vitest-traces/<name>.trace.zip` and no source frame | The stack is in that trace, and the failed job uploaded it: `gh run download <run-id> --pattern 'browser-traces-*'` (kept 7 days), then `playwright show-trace` on the file. Read it before re-running with instrumentation. Artifact names: `docs/contributing/testing.md` |
 | `Re-optimizing dependencies` anywhere in the log | The tree moved under the running suite. Re-run on a quiet tree |
 | every test PASSED and the file exits 1, `NotFoundError: removeChild` | A teardown doing `document.body.innerHTML = ''` while React roots are mounted. Use `cleanup()` |
 | "the list does not contain this item" | No list was opened — the trigger was clicked while a menu was still dismissing. Wait for `[role="menu"]` to be gone |

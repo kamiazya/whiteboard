@@ -203,6 +203,8 @@ through the page. Two ways to get one:
 
 Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-render/tmp/vitest-traces` for `canvas-render-browser`, `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
 
+In CI the runner is discarded with those files, so a browser job that fails uploads them as an artifact, kept for 7 days: `browser-traces-test-browser-<shard>-attempt-<n>` from `test-browser`, and `browser-traces-stress-changed-tests-attempt-<n>` from the browser leg of `stress-changed-tests`. A CI-only failure often prints nothing but the trace's path, with no source frame; the stack is in the trace. Fetch it with `gh run download <run-id> --pattern 'browser-traces-*'` and open the `.trace.zip` with `pnpm --filter @kamiazya/whiteboard-web exec playwright show-trace <file>`.
+
 Prefer `web-browser` over apps/web jsdom whenever the scenario involves:
 - Focus, pointer, keyboard, or scroll behavior
 - Popover or dialog lifecycle (opening, closing, trap focus)
