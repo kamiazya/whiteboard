@@ -69,19 +69,19 @@ it('the node editor refuses a paste past the node text limit, keeps the text, an
   expect(textOf(latest.canvas.nodes[0])).toBe('short')
 })
 
-it('a canvas paste of plain text past the node text limit makes no node and says why', async () => {
+it('a canvas paste of plain text past the node text limit makes no node and says why until dismissed', async () => {
   const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
   const { container } = render(<Host />)
+  const notice = () => container.querySelector('[data-testid="clipboard-notice"]')
 
   paste(rootOf(container), 'x'.repeat(NODE_TEXT_MAX_CHARS + 1))
 
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
-      '8,192',
-    ),
-  )
+  await vi.waitFor(() => expect(notice()?.textContent).toContain('8,192'))
   expect(latest.canvas.nodes).toHaveLength(0)
   expect(latest.commands).toHaveLength(0)
+
+  fireEvent.click(notice()?.querySelector('button[aria-label="Dismiss"]') as HTMLElement)
+  await vi.waitFor(() => expect(notice()?.textContent).toBe(''))
 })
 
 it('a canvas paste of plain text at the node text limit still makes the node', () => {
