@@ -22,7 +22,7 @@ import {
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { screenToCanvas } from '../../lib/spatial/viewport.js'
 import { textNodeDefaults } from './node-factories.js'
-import { copiedTextRefusal, pastedTextRefusal } from './node-text-limit.js'
+import { copiedFragmentRefusal, pastedTextRefusal } from './node-text-limit.js'
 
 /**
  * The deferred half of a cut: the originals stay on the canvas as a ghost
@@ -196,7 +196,7 @@ export function useClipboardActions({
     if (!hasSelection()) return false
     const current = canvasRef.current
     const fragment = extractClipboardFragment(current, selectedIds())
-    if (notice.refused(copiedTextRefusal(fragment.nodes, 'duplicated'))) return true
+    if (notice.refused(copiedFragmentRefusal(fragment, 'duplicated'))) return true
     const command = buildFragmentInsertCommand(
       current,
       fragment,
@@ -323,7 +323,7 @@ export function useClipboardActions({
     const current = canvasRef.current
     const moved = pasteAsMove(fragment, at)
     if (moved !== undefined) return moved
-    if (notice.refused(copiedTextRefusal(fragment.nodes, 'pasted'))) return true
+    if (notice.refused(copiedFragmentRefusal(fragment, 'pasted'))) return true
 
     // The cut surface reconnects while the document shows no trace of a
     // previous reconnection: as long as any edge a prior paste of this cut

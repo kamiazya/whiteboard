@@ -4,17 +4,24 @@
 // text into a node — typing or pasting into the node editor, and pasting
 // plain text onto the canvas — and neither may make a node past that bound.
 // A copy — a pasted fragment or a duplicate — of a node written before the
-// bound is refused the same way, since it would make one more. Each refusal
+// bound is refused the same way, since it would make one more — and so is a
+// copy of a link or a label past the keeper's bound on it. Each refusal
 // says why, or a paste that did nothing reads as a broken
 // clipboard.
 
-import { NODE_TEXT_MAX_CHARS, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import {
+  NODE_LOCATION_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+  nodeText,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
 import {
+  copiedLocationNotice,
   copiedNodeTextNotice,
   nodeTextEditNotice,
   pastedTextNotice,
@@ -124,6 +131,25 @@ it('pasting a fragment holding a node past the node text limit makes nothing and
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
       copiedNodeTextNotice('pasted', NODE_TEXT_MAX_CHARS + 1),
+    ),
+  )
+  expect(latest.canvas.nodes).toHaveLength(0)
+  expect(latest.commands).toHaveLength(0)
+})
+
+it('pasting a fragment holding a link past the location limit makes nothing and says why', async () => {
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
+  const origin = 'https://example.com/'
+  const url = origin + 'a'.repeat(NODE_LOCATION_MAX_CHARS + 1 - origin.length)
+  const link = linkNode({ id: 'old', x: 40, y: 40, width: 160, height: 80, url })
+  const fragment = { type: 'whiteboard/clipboard', version: 1, nodes: [link], edges: [] }
+
+  paste(rootOf(container), JSON.stringify(fragment))
+
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
+      copiedLocationNotice('pasted', 'URL', NODE_LOCATION_MAX_CHARS + 1),
     ),
   )
   expect(latest.canvas.nodes).toHaveLength(0)
