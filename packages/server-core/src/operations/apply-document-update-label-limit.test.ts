@@ -27,11 +27,7 @@ import type { LiveDocuments } from '../server-deps.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
-import {
-  CommentMessageTooLargeError,
-  LabelTooLargeError,
-  syncWriteAnswer,
-} from './sync-write-refusals.js'
+import { syncWriteAnswer } from './sync-write-refusals.js'
 
 const edge = (label: string): CanvasEdge => ({
   id: 'e1',
@@ -84,7 +80,7 @@ describe('a document sync update', () => {
       writeSpatialEdge(doc, edge('x'.repeat(LABEL_MAX_CHARS + 1))),
     ).catch((err: unknown) => err)
 
-    expect(refusal).toBeInstanceOf(LabelTooLargeError)
+    expect(refusal).toMatchObject({ name: 'LabelTooLargeError' })
     expect(refusal).toMatchObject({ breach: { elementId: 'e1', chars: LABEL_MAX_CHARS + 1 } })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'label_too_large', status: 413 })
     expect(store.saves).toBe(0)
@@ -107,7 +103,7 @@ describe('a document sync update', () => {
       writeThreadMessage(doc, 't1', { id: 'm2', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }),
     ).catch((err: unknown) => err)
 
-    expect(refusal).toBeInstanceOf(CommentMessageTooLargeError)
+    expect(refusal).toMatchObject({ name: 'CommentMessageTooLargeError' })
     expect(refusal).toMatchObject({
       breach: { messageId: 'm2', chars: COMMENT_MESSAGE_MAX_CHARS + 1 },
     })

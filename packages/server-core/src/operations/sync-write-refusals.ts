@@ -90,7 +90,7 @@ export abstract class TextBreachRefusalError extends SyncWriteRefusalError {
  * A run longer than `MARKDOWN_MAX_CHARS` inserted in one piece, or a markdown
  * body left longer than that and longer than it was.
  */
-export class MarkdownBodyTooLargeError extends TextBreachRefusalError {
+class MarkdownBodyTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES.body
 
   constructor(
@@ -107,7 +107,7 @@ export class MarkdownBodyTooLargeError extends TextBreachRefusalError {
  * tool write already holds, since each read of the canvas lays that text out
  * again.
  */
-export class NodeTextTooLargeError extends TextBreachRefusalError {
+class NodeTextTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES['node-text']
 
   constructor(
@@ -132,7 +132,7 @@ export class NodeTextTooLargeError extends TextBreachRefusalError {
  * `NODE_LOCATION_MAX_CHARS` — the bound every tool write holds, since each
  * render of the board lays it out again as the node's label.
  */
-export class NodeLocationTooLargeError extends TextBreachRefusalError {
+class NodeLocationTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES['node-location']
 
   constructor(
@@ -152,7 +152,7 @@ export class NodeLocationTooLargeError extends TextBreachRefusalError {
  * `LABEL_MAX_CHARS` — the bound every tool write holds, since each render of
  * the board lays the label out again.
  */
-export class LabelTooLargeError extends TextBreachRefusalError {
+class LabelTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES.label
 
   constructor(
@@ -170,7 +170,7 @@ export class LabelTooLargeError extends TextBreachRefusalError {
  * bound every tool write holds, since each render of the board and the rail
  * lays the message out again.
  */
-export class CommentMessageTooLargeError extends TextBreachRefusalError {
+class CommentMessageTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES['comment-message']
 
   constructor(
