@@ -299,9 +299,9 @@ export class BrowserBackend implements DocumentBackend {
       seedNameFromTitle(workspaceDoc, this.target.documentId)
       const named = workspaceDoc.oplogVersion().compare(before) !== 0
       this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
-      // The session never READS the name, but it must HOLD those ops: every
-      // later edit anywhere depends on them, and a doc missing a dependency
-      // keeps that edit pending — another tab's typing never appeared here.
+      // The session reads the name (the open page's title follows it), and it
+      // must HOLD those ops either way: every later edit anywhere depends on
+      // them, and a doc missing a dependency keeps that edit pending.
       if (named && handlers !== null && !this.isStale(handlers)) {
         handlers.onRemoteUpdate(workspaceDoc.export({ mode: 'update', from: before }))
       }
