@@ -422,7 +422,7 @@ test('the report ends by telling the session what to DO, not only what happened'
   assert.match(report, /root-cause fix lane/)
 })
 
-import { failedLegFrom, formatReport, pathFromTestId } from './flake-watch-lib.mjs'
+import { failedLegFrom, formatIdleLine, formatReport, pathFromTestId } from './flake-watch-lib.mjs'
 
 // A flake that was root-caused keeps being reported for the rest of the
 // window — context charged to every session start, naming a file whose fix
@@ -511,6 +511,33 @@ test('when every recurrence is retired the report is silent', () => {
       () => true,
     ),
     '',
+  )
+})
+
+// Silence is the quiet hook's job; an explicit run is asked a question and
+// owes an answer that does not erase what the window held. "No recurring test
+// failure" over a window whose recurrences were all retired sends the reader
+// to the wrong conclusion — that nothing failed twice.
+test('an explicit run over an all-retired window says so, and why, instead of "no recurrence"', () => {
+  const clusters = clusterFailures(settledWindow('src/a.test.ts', 'src/b.test.ts'))
+  const line = formatIdleLine(
+    clusters,
+    14,
+    4,
+    () => changedAt('2026-09-22T00:00:00Z'),
+    () => true,
+  )
+  assert.match(
+    line,
+    /^\[flake-watch\] 2 recurrence\(s\) on main in 14 days, all retired \(changed since its last failure and a later main run passed\) \(4 failed run\(s\) examined\)$/,
+  )
+})
+
+test('an explicit run over a window with no recurrence at all keeps saying exactly that', () => {
+  const line = formatIdleLine(clusterFailures([]), 14, 0)
+  assert.equal(
+    line,
+    '[flake-watch] no recurring test failure on main in 14 days (0 failed run(s) examined)',
   )
 })
 

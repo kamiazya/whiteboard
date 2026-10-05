@@ -290,6 +290,32 @@ function unattributedLegLines(unattributedRuns) {
   ]
 }
 
+/** Splits recurrences into the ones still worth a lane and the retired ones, keyed id -> why. */
+function partitionRecurrences(recurrences, inspect, passedAfter) {
+  const inspected = recurrences.map((entry) => ({ entry, status: inspectEntry(entry, inspect) }))
+  const retired = new Map()
+  for (const { entry, status } of inspected) {
+    const why = whyRetired(status, passedAfter)
+    if (why !== null) retired.set(entry.id, why)
+  }
+  return { live: inspected.filter(({ entry }) => !retired.has(entry.id)), retired }
+}
+
+/**
+ * What an explicit (non-quiet) run prints when `formatReport` is silent. Silence covers two
+ * different windows — one where nothing failed twice, and one where everything that did has
+ * been retired — and only the quiet hook may treat them alike.
+ */
+export function formatIdleLine({ recurrences }, windowDays, examined, inspect, passedAfter) {
+  const { retired } = partitionRecurrences(recurrences, inspect, passedAfter)
+  const tail = `(${examined} failed run(s) examined)`
+  if (retired.size === 0) {
+    return `[flake-watch] no recurring test failure on main in ${windowDays} days ${tail}`
+  }
+  const reasons = [...new Set(retired.values())].join('; ')
+  return `[flake-watch] ${retired.size} recurrence(s) on main in ${windowDays} days, all retired (${reasons}) ${tail}`
+}
+
 /**
  * One line per recurrence; silence when there is none is the caller's job.
  *
@@ -302,13 +328,7 @@ export function formatReport(
   inspect,
   passedAfter,
 ) {
-  const inspected = recurrences.map((entry) => ({ entry, status: inspectEntry(entry, inspect) }))
-  const retired = new Map()
-  for (const { entry, status } of inspected) {
-    const why = whyRetired(status, passedAfter)
-    if (why !== null) retired.set(entry.id, why)
-  }
-  const live = inspected.filter(({ entry }) => !retired.has(entry.id))
+  const { live, retired } = partitionRecurrences(recurrences, inspect, passedAfter)
   if (live.length === 0) return ''
   const lines = [
     `[flake-watch] ${live.length} test(s) failed main CI more than once in ${windowDays} days — the second occurrence is the promotion signal (integrator-flow.md):`,
