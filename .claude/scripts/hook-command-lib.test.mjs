@@ -166,6 +166,10 @@ test('a REST read, another endpoint, or a mention is not a PR action', () => {
     'gh api repos/{owner}/{repo}/pulls/12/comments --paginate',
     "gh api 'repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open'",
     'gh api -X GET repos/{owner}/{repo}/pulls -f state=open',
+    // Only a field sends parameters; a filter or header holding `=` is still a GET.
+    "gh api repos/{owner}/{repo}/pulls --jq '.[] | select(.draft == false) | .number'",
+    'gh api repos/{owner}/{repo}/pulls -q \'.[] | select(.head.ref == "x")\'',
+    "gh api repos/{owner}/{repo}/pulls -H 'X-Probe=1'",
     'gh api repos/{owner}/{repo}/pulls/12/merge',
     'gh api -X POST repos/{owner}/{repo}/issues/12/comments -f body=x',
     'gh api -X POST repos/{owner}/{repo}/pulls/12/reviews -f event=COMMENT',
@@ -235,6 +239,22 @@ test('a GitHub MCP tool call reads as the same action, with no command string', 
     tool_input: { owner: 'o', repo: 'r', pullNumber: 3 },
   })
   assert.deepEqual([edit?.action, edit?.pr], ['edit', 3])
+  // A number GitHub could never have issued names no PR, and a repo missing
+  // either half names no repo.
+  for (const pullNumber of [0, -1, 1.5, 'x', undefined]) {
+    const odd = prActionFromHookInput({
+      tool_name: 'mcp__github__merge_pull_request',
+      tool_input: { owner: 'o', repo: 'r', pullNumber },
+    })
+    assert.equal(odd?.pr, null, String(pullNumber))
+  }
+  for (const halves of [{ owner: 'o' }, { repo: 'r' }]) {
+    const half = prActionFromHookInput({
+      tool_name: 'mcp__github__merge_pull_request',
+      tool_input: { ...halves, pullNumber: 1 },
+    })
+    assert.equal(half?.repo, '{owner}/{repo}', JSON.stringify(halves))
+  }
   assert.deepEqual(
     prActionFromHookInput({
       tool_name: 'mcp__github__create_pull_request',
