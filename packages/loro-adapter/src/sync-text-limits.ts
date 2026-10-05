@@ -25,6 +25,7 @@ import type {
 } from 'loro-crdt'
 import { EDGES_KEY, LINES_KEY, MARKDOWN_BODY_KEY, NODES_KEY, THREADS_KEY } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
+import { liftStoredNode } from './legacy-lifts.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
@@ -88,35 +89,29 @@ export interface SyncTextJudgement {
   /** The first limit the update breaks, or `null` when it may be kept. */
   readonly breach: SyncTextBreach | null
   /**
-   * Whether any operation can change what a workspace node says about the
-   * document it holds — a tree op, or a write of a key a node's meta carries.
-   * A keeper that checks placement checks it only then.
+   * Whether any operation can change what a workspace node says about itself
+   * — a tree op, or any write to a node's own map. A keeper that checks
+   * placement checks it only then.
    */
   readonly touchesNodeMeta: boolean
 }
-
-/**
- * The keys a workspace-tree node's own meta carries; a write of one can change
- * a path, a kind or a name, or leave the node unreadable.
- */
-const NODE_META_KEYS: ReadonlySet<string> = new Set([
-  'documentId',
-  'segment',
-  'kind',
-  'name',
-  'nameChosen',
-])
 
 type Op = JsonSchema['changes'][number]['ops'][number]
 type LongValue = { container: ContainerID; key: string; bound: BoundedValue }
 type Run = { counter: number; pos: number; units: number }
 
-/** A node value's text as every reader lifts it: the resource's inline content, or the legacy `text` field. */
+/**
+ * A node value's text as the reader lifts it (`liftStoredNode`): a value
+ * carrying a legacy kind is read from its `text` whatever `resource` it also
+ * holds, so the judge measures the lifted value rather than guessing which
+ * field wins. The longer of the two, since a value the lift leaves holding
+ * both is one the reader drops anyway.
+ */
 function nodeTextLength(value: unknown): number {
-  if (typeof value !== 'object' || value === null) return 0
-  const { resource, text } = value as { resource?: { content?: unknown }; text?: unknown }
-  if (typeof resource?.content === 'string') return resource.content.length
-  return typeof text === 'string' ? text.length : 0
+  const lifted = liftStoredNode(value)
+  if (typeof lifted !== 'object' || lifted === null) return 0
+  const resource = (lifted as { resource?: unknown }).resource
+  return Math.max(fieldLength(resource, 'content'), fieldLength(lifted, 'text'))
 }
 
 /**
@@ -232,10 +227,23 @@ interface UpdateWrites {
   touchesNodeMeta: boolean
 }
 
-function touchesMeta(op: Op): boolean {
+/**
+ * Whether `op` writes a workspace-tree node's OWN map — the map the node meta
+ * schemas read every key of, so a write of any key there can move, rename or
+ * hide a node. Decided by where the map sits rather than by which key is
+ * written: a page edit writes the content containers below that map and
+ * never the map itself, so it pays nothing for the check this answer gates.
+ */
+function touchesMeta(doc: LoroDoc, op: Op, nodeMaps: Map<ContainerID, boolean>): boolean {
   if (op.container === `cid:root-${WORKSPACE_TREE_KEY}:Tree`) return true
   if (!op.container.endsWith(':Map')) return false
-  return NODE_META_KEYS.has((op.content as MapOp).key)
+  let known = nodeMaps.get(op.container)
+  if (known === undefined) {
+    const path = doc.getPathToContainer(op.container)
+    known = path?.length === 2 && path[0] === WORKSPACE_TREE_KEY
+    nodeMaps.set(op.container, known)
+  }
+  return known
 }
 
 /**
@@ -247,8 +255,9 @@ function touchesMeta(op: Op): boolean {
  * while 16 inserts at scattered positions cost 1/30 of it), so the same rule
  * (next counter, next position, same container) joins them here.
  */
-function readWrites(json: JsonSchema): UpdateWrites {
+function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
   const runs = new Map<string, Run>()
+  const nodeMaps = new Map<ContainerID, boolean>()
   const writes: UpdateWrites = {
     longestRun: { units: 0, container: null },
     net: new Map(),
@@ -258,7 +267,7 @@ function readWrites(json: JsonSchema): UpdateWrites {
   for (const change of json.changes) {
     const peer = change.id.slice(change.id.indexOf('@') + 1)
     for (const op of change.ops) {
-      writes.touchesNodeMeta ||= touchesMeta(op)
+      writes.touchesNodeMeta ||= touchesMeta(doc, op, nodeMaps)
       if (op.container.endsWith(':Map')) readMapWrite(writes, op)
       else if (op.container.endsWith(':Text')) readTextWrite(writes, runs, peer, op)
     }
@@ -385,7 +394,7 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
     throw err
   }
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
-  const writes = readWrites(doc.exportJsonUpdates(from, doc.oplogVersion(), false))
+  const writes = readWrites(doc, doc.exportJsonUpdates(from, doc.oplogVersion(), false))
   const judged = (breach: SyncTextBreach | null): SyncTextJudgement => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,

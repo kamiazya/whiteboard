@@ -24,6 +24,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments } from '../server-deps.js'
+import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
 import {
@@ -31,31 +32,6 @@ import {
   LabelTooLargeError,
   syncWriteAnswer,
 } from './sync-write-refusals.js'
-
-/** A cache over a stored snapshot: `evict` drops the instance, `get` rebuilds from what was saved. */
-class StoredDoc {
-  private stored: Uint8Array
-  private cached: LoroDoc | null = null
-  saves = 0
-
-  constructor(seed: LoroDoc) {
-    this.stored = seed.export({ mode: 'snapshot' })
-  }
-
-  get(): LoroDoc {
-    if (this.cached === null) this.cached = LoroDoc.fromSnapshot(this.stored)
-    return this.cached
-  }
-
-  save(doc: LoroDoc): void {
-    this.saves += 1
-    this.stored = doc.export({ mode: 'snapshot' })
-  }
-
-  evict(): void {
-    this.cached = null
-  }
-}
 
 const edge = (label: string): CanvasEdge => ({
   id: 'e1',
