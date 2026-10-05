@@ -13,7 +13,9 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  COMMENT_MESSAGE_MAX_CHARS,
   type DocumentKind,
+  LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
@@ -107,18 +109,32 @@ function placeDocumentNode(
 
 /** A text limit the keeper holds an update to, in the words the daemon refuses it with. */
 function refusalOf(breach: SyncTextBreach): SyncWriteRefusal {
-  if (breach.shape === 'node-text') {
-    return {
-      code: 'node_text_too_large',
-      message: `This update would give a node ${breach.chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node`,
-    }
-  }
-  return {
-    code: 'markdown_too_large',
-    message:
-      breach.shape === 'run'
-        ? `This update inserts ${breach.chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write`
-        : `This update would make a document body ${breach.chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document`,
+  switch (breach.shape) {
+    case 'node-text':
+      return {
+        code: 'node_text_too_large',
+        message: `This update would give a node ${breach.chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node`,
+      }
+    case 'label':
+      return {
+        code: 'label_too_large',
+        message: `This update would give a label ${breach.chars} characters, past the ${LABEL_MAX_CHARS}-character limit for one label`,
+      }
+    case 'comment-message':
+      return {
+        code: 'comment_too_large',
+        message: `This update would make a comment message ${breach.chars} characters long, past the ${COMMENT_MESSAGE_MAX_CHARS}-character limit for one message`,
+      }
+    case 'run':
+      return {
+        code: 'markdown_too_large',
+        message: `This update inserts ${breach.chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write`,
+      }
+    case 'body':
+      return {
+        code: 'markdown_too_large',
+        message: `This update would make a document body ${breach.chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document`,
+      }
   }
 }
 

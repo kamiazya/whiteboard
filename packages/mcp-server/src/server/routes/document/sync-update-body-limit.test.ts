@@ -20,9 +20,16 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   readWorkspaceDocuments,
+  writeCommentThread,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  COMMENT_MESSAGE_MAX_CHARS,
+  LABEL_MAX_CHARS,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
@@ -254,5 +261,51 @@ describe('a workspace-document update making a document unreadable', () => {
     expect(syncWriteRefusalOf(await refused.json()).code).toBe('unreadable_document_meta')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['notes'])
+  })
+})
+
+describe('an editor sync write giving a label or a comment message past its bound', () => {
+  it.each([
+    {
+      code: 'label_too_large',
+      edit: (doc: LoroDoc) =>
+        writeSpatialNode(
+          doc,
+          groupNode({
+            id: 'g',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 200,
+            label: 'x'.repeat(LABEL_MAX_CHARS + 1),
+          }),
+        ),
+    },
+    {
+      code: 'comment_too_large',
+      edit: (doc: LoroDoc) =>
+        writeCommentThread(doc, {
+          id: 't',
+          anchor: { kind: 'document' },
+          status: 'open',
+          messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }],
+        }),
+    },
+  ])('answers 413 $code, a code the client contract reads', async ({ code, edit }) => {
+    const { post, snapshot } = await setup()
+    const url = `/api/w/${WS}/document/board`
+    expect(
+      (
+        await post(
+          `${url}/update`,
+          updateFrom(new LoroDoc(), () => {}),
+        )
+      ).status,
+    ).toBe(200)
+
+    const refused = await post(`${url}/update`, updateFrom(await snapshot(`${url}/snapshot`), edit))
+
+    expect(refused.status).toBe(413)
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe(code)
   })
 })

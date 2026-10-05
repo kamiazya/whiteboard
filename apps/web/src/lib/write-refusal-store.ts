@@ -37,6 +37,10 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
     'It would make this note longer than one document may be. Split long content across documents.',
   node_text_too_large:
     'It would give a card more text than one card may hold. Split it across cards, or put it in a note and embed that.',
+  label_too_large:
+    'It would give a label more text than one label may hold. Put longer text in a card.',
+  comment_too_large:
+    'It would make a comment longer than one message may be. Split it across replies.',
   document_name_too_long: 'It would give a document a name longer than a name may be.',
   invalid_path: 'It would put a document at a path that may hold only letters, digits and hyphens.',
   unreadable_document_meta:
