@@ -7,6 +7,7 @@
  * is what stops the second call site re-opening it.
  */
 import { describe, expect, it } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { duplicateDaemonDocument } from './duplicate-daemon-document.js'
 
 interface Call {
@@ -15,7 +16,17 @@ interface Call {
   readonly body?: unknown
 }
 
-function stubDaemon(): { fetch: typeof globalThis.fetch; calls: Call[] } {
+interface StubOptions {
+  /** Answers the copy's snapshot write instead of the default success. */
+  readonly update?: () => Response
+  /** Answers the clean-up DELETE instead of the default success. */
+  readonly remove?: () => Response
+}
+
+function stubDaemon(options: StubOptions = {}): {
+  fetch: typeof globalThis.fetch
+  calls: Call[]
+} {
   const calls: Call[] = []
   const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -45,6 +56,8 @@ function stubDaemon(): { fetch: typeof globalThis.fetch; calls: Call[] } {
       )
     }
     if (/\/name$/.test(url)) return Response.json({ documents: {}, pinned: [] })
+    if (url.endsWith('/update') && options.update !== undefined) return options.update()
+    if (method === 'DELETE' && options.remove !== undefined) return options.remove()
     return Response.json({ ok: true })
   }) as typeof globalThis.fetch
   return { fetch, calls }
@@ -100,4 +113,46 @@ describe('duplicating a daemon-kept document', () => {
     expect(named?.name).toBeDefined()
     expect(['Notes', 'Notes (copy)']).not.toContain(named?.name)
   })
+
+  it('takes the empty copy back down when the keeper refuses its contents', async () => {
+    const { fetch, calls } = stubDaemon({
+      update: () =>
+        Response.json({ type: 'about:blank', title: 'Too large', status: 413 }, { status: 413 }),
+    })
+
+    const attempt = duplicateDaemonDocument({ ...REQUEST, fetch })
+
+    await expect(attempt).rejects.toMatchObject({ status: 413 })
+    const created = calls.find((call) => call.method === 'POST' && call.url.endsWith('/documents'))
+    const createdPath = (created?.body as { path?: string } | undefined)?.path
+    expect(createdPath).toBeDefined()
+    const removed = calls.filter((call) => call.method === 'DELETE')
+    expect(removed).toHaveLength(1)
+    expect(removed[0]?.url).toMatch(new RegExp(`/documents/${createdPath}$`))
+    // Nothing is named after the failure: the copy is gone, not half-made.
+    expect(calls.some((call) => call.method === 'PUT')).toBe(false)
+  })
+
+  it('still reports the original failure when the clean-up fails too', async () => {
+    const { fetch } = stubDaemon({
+      update: () => new Response('down', { status: 503 }),
+      remove: () => new Response('gone wrong', { status: 500 }),
+    })
+
+    const attempt = duplicateDaemonDocument({ ...REQUEST, fetch })
+
+    // The write's failure, not the clean-up's: it is what the person asked about.
+    await expect(attempt).rejects.toMatchObject({ status: 503 })
+    await expectLoggedFailure('could not remove the copy')
+  })
 })
+
+const REQUEST = {
+  daemonBaseUrl: 'http://127.0.0.1:3099',
+  workspaceId: 'ws',
+  sourcePath: 'notes',
+  kind: 'markdown',
+  displayName: 'Notes',
+  existingPaths: ['notes'],
+  existingNames: ['Notes'],
+} as const

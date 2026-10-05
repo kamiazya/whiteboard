@@ -17,14 +17,18 @@
  * of a list-loading policy.
  */
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { getAppLogger } from './app-logger.js'
 import {
   createDocument,
+  deleteDocument,
   getDocumentSnapshot,
   setDocumentDisplayName,
   updateDocument,
 } from './daemon-api-client.js'
 import { deriveCopyName } from './derive-copy-name.js'
 import { deriveCopyPath } from './derive-copy-path.js'
+
+const log = getAppLogger('duplicate-daemon-document')
 
 export interface DuplicateDaemonDocumentRequest {
   readonly fetch: typeof globalThis.fetch
@@ -56,8 +60,23 @@ export async function duplicateDaemonDocument(
     deriveCopyPath(sourcePath, request.existingPaths),
     request.kind,
   )
-  await updateDocument(fetch, daemonBaseUrl, workspaceId, created.path, snapshot)
-  const name = deriveCopyName(request.displayName, request.existingNames)
-  await setDocumentDisplayName(fetch, daemonBaseUrl, workspaceId, created.path, name)
-  return { path: created.path, name }
+  // A copy is all or nothing: a write the keeper refuses (a snapshot over its
+  // size limit) or a name it cannot set would otherwise leave an empty
+  // "-copy-N" document behind on every attempt.
+  try {
+    await updateDocument(fetch, daemonBaseUrl, workspaceId, created.path, snapshot)
+    const name = deriveCopyName(request.displayName, request.existingNames)
+    await setDocumentDisplayName(fetch, daemonBaseUrl, workspaceId, created.path, name)
+    return { path: created.path, name }
+  } catch (error) {
+    await deleteDocument(fetch, daemonBaseUrl, workspaceId, created.path).catch(
+      (cleanupError: unknown) =>
+        log.warn('could not remove the copy a failed duplicate left behind', {
+          workspaceId,
+          path: created.path,
+          cleanupError,
+        }),
+    )
+    throw error
+  }
 }
