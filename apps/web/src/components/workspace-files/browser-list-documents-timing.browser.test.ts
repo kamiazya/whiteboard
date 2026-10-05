@@ -20,6 +20,7 @@ import { writeCoreFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-a
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { commands } from 'vitest/browser'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
@@ -32,6 +33,14 @@ import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 
 claimIsolatedWhiteboardDb('browser-list-documents-timing')
+
+// Registered by `sharedBrowserTestConfig`: a passing test's console output is
+// dropped by the reporter an agent session gets, and the reading is the point.
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    printReading: (line: string) => Promise<void>
+  }
+}
 
 // Spied, not replaced: every document a listing opens is one projection of the
 // workspace record, so the call count is the number of documents it read.
@@ -99,5 +108,5 @@ it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 
     expect(opened).not.toHaveBeenCalled()
   }
 
-  console.info(`listDocuments, ms: ${JSON.stringify(readings)}`)
+  await commands.printReading(`listDocuments, ms: ${JSON.stringify(readings)}`)
 })

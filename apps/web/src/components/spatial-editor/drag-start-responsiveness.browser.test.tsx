@@ -26,10 +26,19 @@ import { endNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
+import { commands } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
+
+// Registered by `sharedBrowserTestConfig`: a passing test's console output is
+// dropped by the reporter an agent session gets, and the reading is the point.
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    printReading: (line: string) => Promise<void>
+  }
+}
 
 const NODES = 45
 const EDGES = 90
@@ -129,5 +138,5 @@ it('measures the main-thread block at drag start on a heavy canvas', async () =>
     `maxGapMs=${Math.max(...gaps).toFixed(1)} gapsOver50ms=${gaps.filter((g) => g > 50).length}`
   const report = `[drag-start-instrument] nodes=${NODES} edges=${EDGES} first: ${summarize(first)} second: ${summarize(second)}`
   // The instrument's output IS the point
-  console.log(report)
+  await commands.printReading(report)
 }, 30_000)

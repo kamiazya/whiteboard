@@ -11,6 +11,8 @@ import { typesetMdastBlocks } from './mdast-blocks.js'
  * runs on the editor's drag path, so a breaking strategy that fits every line
  * by measuring far more often has to show what that costs in time, not only
  * in the scoreboard's `measure` count.
+ *
+ * Run with `pnpm bench`.
  */
 test('typesetMdastBlocks', { timeout: 0 }, async ({ bench }) => {
   const measure = createCorpusMeasure().measure
