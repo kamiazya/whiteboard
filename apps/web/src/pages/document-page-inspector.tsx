@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useState } from 'react'
 import { CommentsRailAside } from '../components/annotations/CommentsRailChrome.js'
 import { ConnectionsPanel } from '../components/connections/ConnectionsPanel.js'
+import { documentRemoved } from '../components/document-editor/EditorLock.js'
 import { InspectorPanel } from '../components/document-editor/InspectorPanel.js'
 import { InspectorSegment } from '../components/document-editor/InspectorSegment.js'
 import { DocumentFacetsEditor } from '../components/document-properties/DocumentProperties.js'
@@ -101,6 +102,10 @@ export function DocumentRowActions({
   onBookmark: () => void
   versionsEnabled: boolean
 }) {
+  // A document deleted elsewhere keeps the menu's export and loses what would
+  // write: a bookmark, and the page's own rows — duplicate and delete of a
+  // document no longer there, with the JSON copy that shares their slot.
+  const removed = documentRemoved(model.sync)
   return (
     <>
       {inspectorSegment}
@@ -118,12 +123,12 @@ export function DocumentRowActions({
       )}
       <DocumentMenu
         onExport={(format) => void onExport(format)}
-        {...(versionsEnabled ? { onBookmark } : {})}
+        {...(versionsEnabled && !removed ? { onBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
           ? {}
           : { triggerRef: model.slots.menuTriggerRef })}
       >
-        {model.slots.menuItems}
+        {removed ? null : model.slots.menuItems}
       </DocumentMenu>
       {model.slots.afterMenu}
     </>

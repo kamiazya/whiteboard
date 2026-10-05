@@ -13,7 +13,7 @@ import {
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
@@ -112,6 +112,16 @@ it('a note deleted on the daemon says so, offers the way back, and stops taking 
   await waitFor(() => expect(document.body.textContent).toContain('Before the delete'))
   const editor = () => screen.getByTestId('markdown-source-wrap')
   expect(editor().closest('[inert]')).toBeNull()
+  // The comments rail beside the editor, with a document comment being
+  // composed: a write surface the lock has to reach as well as the editor.
+  fireEvent.click(await screen.findByRole('button', { name: /^Comments/ }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Comment on the document' }))
+  // Read from the DOM, not by role: an inert subtree is outside the accessibility tree.
+  const send = () => document.querySelector('button[aria-label="Send comment"]')
+  await waitFor(() => expect(send()).not.toBeNull())
+  expect(send()?.closest('[inert]')).toBeNull()
+  const title = () => screen.getByLabelText<HTMLInputElement>('Title')
+  expect(title().readOnly).toBe(false)
 
   await act(async () => {
     const record = daemon.record as LoroDoc
@@ -127,6 +137,10 @@ it('a note deleted on the daemon says so, offers the way back, and stops taking 
   // assistive technology, so a notice inside it would never be read.
   expect(status.closest('[inert]')).toBeNull()
   expect(editor().closest('[inert]')).not.toBeNull()
+  // A comment sent now would leave its box and be dropped by a session that
+  // no longer writes, and a rename would be refused by nobody.
+  expect(send()?.closest('[inert]')).not.toBeNull()
+  expect(title().readOnly).toBe(true)
   within(status).getByRole('button', { name: 'Back to documents' }).click()
   expect(onNavigateBack).toHaveBeenCalledTimes(1)
 })

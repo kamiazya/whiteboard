@@ -12,7 +12,11 @@ import {
 } from 'react'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
-import { EditorLock } from '../components/document-editor/EditorLock.js'
+import {
+  documentRemoved,
+  EditorLock,
+  lockedInspector,
+} from '../components/document-editor/EditorLock.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -166,9 +170,7 @@ function DocumentHeader({
                     inline
                     key={documentKey}
                     title={model.title === 'top-bar' ? identity.name : model.title.value}
-                    onTitleChange={
-                      model.title === 'top-bar' ? identity.onRename : model.title.onChange
-                    }
+                    onTitleChange={titleWriter(model, identity.onRename)}
                     // No save state in the row: the shell mark answers
                     // for the keeper, and only when there is a condition.
                     {...(model.properties.status === undefined
@@ -192,6 +194,19 @@ function DocumentHeader({
       )}
     </>
   )
+}
+
+type TitleWriter = ComponentProps<typeof DocumentProperties>['onTitleChange']
+
+/**
+ * Who takes a rename typed into the title field: the bar's own rename when
+ * the workspace names the document, else the keeper's. None for a document
+ * deleted elsewhere — nothing is left to carry the name, so the field only
+ * reads it.
+ */
+function titleWriter(model: DocumentPageModel, onRename: TitleWriter): TitleWriter {
+  if (documentRemoved(model.sync)) return undefined
+  return model.title === 'top-bar' ? onRename : model.title.onChange
 }
 
 /**
@@ -558,7 +573,7 @@ function DocumentPageBody({
   return (
     <DocumentPageShell
       srTitle={model.srTitle}
-      aside={inspector === null ? undefined : inspectorPanels[inspector]()}
+      aside={inspector === null ? undefined : lockedInspector(sync, inspectorPanels[inspector]())}
       header={
         <DocumentHeader
           topBar={topBar}
