@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { registeredTools } from './registered-tools.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { trackedFiles } from './tracked-files.js'
 
@@ -374,5 +375,110 @@ describe('the ledgers hold nothing that has stopped being true', () => {
     const unresolvedNames = new Set(UNRESOLVED_PROSE.map(({ name }) => name))
     const obsolete = [...FOREIGN_REASON.keys()].filter((name) => !unresolvedNames.has(name))
     expect(obsolete).toEqual([])
+  })
+})
+
+// A tool name is the same pointer in snake_case, which neither shape above
+// can see, and it is judged against a different list: not "does the code
+// name it" but "does the server register it", read from the list the live
+// `tools/list` is held to. A retired tool keeps appearing in code long after
+// it is gone — as a string a test asserts is refused, as a schema field — so
+// "the code names it" would clear exactly the names that rotted.
+//
+// Product comments only. A test's comment most often narrates the regression
+// it pins, and that regression is usually the retired tool's own: measured
+// when this arm was written, test comments named an unregistered tool 41
+// times against product code's 14, and those 14 split into 6 stale pointers
+// and the 8 history sentences ledgered below.
+const TOOL_NAME = /\bwb_[a-z]+(?:_[a-z]+)*\b/g
+/** A tool's own declaration: the `name` a definition hands the MCP registration. */
+const TOOL_DECLARATION = /\bname:\s*'((?:wb|canvas)_[a-z]+(?:_[a-z]+)*)'/g
+
+const isProductSource = (path: string): boolean =>
+  isCommentSource(path) && !/\.test\.tsx?$/.test(path)
+
+/** Retired tools a product comment names as history, each with the sentence that makes it so. */
+const RETIRED_TOOL_HISTORY: Readonly<Record<string, string>> = {
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#wb_scene_digest':
+    'narrates what an agent reading the digest tool was told while the defect this closes was open',
+  'packages/mcp-server/src/server/mcp/document-tools.ts#wb_document_create':
+    'says which standalone tools the batch tool replaced, and why',
+  'packages/mcp-server/src/server/mcp/document-tools.ts#wb_document_set': 'same sentence',
+  'packages/mcp-server/src/server/mcp/document-tools.ts#wb_document_delete': 'same sentence',
+  'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#wb_body_patch':
+    'the tool that shipped registered and dead, named as the reason the smoke parity check exists',
+  'packages/mcp-server/src/shared/test-utils/mcp-errand-corpus.ts#wb_document_create':
+    'says why a create is priced through the batch tool rather than its retired standalone one',
+  'packages/model/src/proposal.ts#wb_body_patch':
+    'the separate content verb whose escape from the proposal layer is why content is a node patch',
+  'packages/server-core/src/tools/canvas-edit-ops.ts#wb_body_patch':
+    'the tool this op replaced, named to say what moving it into the batch bought',
+}
+
+const REGISTERED = new Set(registeredTools())
+const PRODUCT_SOURCES = tracked.filter(isProductSource)
+
+function toolMentions(): Mention[] {
+  const found: Mention[] = []
+  for (const file of PRODUCT_SOURCES) {
+    for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
+      if (!isComment(line)) continue
+      for (const match of line.matchAll(TOOL_NAME)) {
+        found.push({ key: `${file}#${match[0]}`, file, name: match[0] })
+      }
+    }
+  }
+  return found
+}
+
+function toolDeclarations(): Mention[] {
+  const found: Mention[] = []
+  for (const file of PRODUCT_SOURCES) {
+    for (const line of readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')) {
+      if (isComment(line)) continue
+      for (const match of line.matchAll(TOOL_DECLARATION)) {
+        const name = match[1] ?? ''
+        found.push({ key: `${file}#${name}`, file, name })
+      }
+    }
+  }
+  return found
+}
+
+const TOOL_MENTIONS = toolMentions()
+const UNREGISTERED_MENTIONS = TOOL_MENTIONS.filter(({ name }) => !REGISTERED.has(name))
+const TOOL_DECLARATIONS = toolDeclarations()
+
+describe('a tool a product comment or definition names is one the server registers', () => {
+  it('reads a real registry and a real set of tool mentions', () => {
+    expect(REGISTERED.size).toBeGreaterThan(10)
+    expect(TOOL_MENTIONS.length).toBeGreaterThan(100)
+    expect(TOOL_DECLARATIONS.length).toBeGreaterThan(15)
+    expect(TOOL_MENTIONS.some(({ file }) => file.startsWith('packages/server-core/'))).toBe(true)
+  })
+
+  it('names no retired tool outside the recorded history', () => {
+    const stale = [
+      ...new Set(
+        UNREGISTERED_MENTIONS.filter(({ key }) => !(key in RETIRED_TOOL_HISTORY)).map(
+          ({ file, name }) => `${file}: \`${name}\` is not a registered tool`,
+        ),
+      ),
+    ]
+    expect(stale).toEqual([])
+  })
+
+  it('declares no tool identity the server does not register', () => {
+    // A definition that keeps a `name` and a model-facing description after
+    // its tool was retired reads, to the next maintainer, like a tool.
+    const dead = TOOL_DECLARATIONS.filter(({ name }) => !REGISTERED.has(name)).map(
+      ({ file, name }) => `${file}: declares \`${name}\`, which is not registered`,
+    )
+    expect(dead).toEqual([])
+  })
+
+  it('holds no history entry for a sentence that no longer names the tool', () => {
+    const named = new Set(UNREGISTERED_MENTIONS.map(({ key }) => key))
+    expect(Object.keys(RETIRED_TOOL_HISTORY).filter((key) => !named.has(key))).toEqual([])
   })
 })

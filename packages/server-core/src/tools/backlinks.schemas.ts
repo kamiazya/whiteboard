@@ -1,8 +1,9 @@
 /**
- * wb_document_backlinks's input and output contracts, and nothing else.
+ * The input and output contracts of the route
+ * `GET /api/v1/workspaces/:workspaceId/documents/:documentId/backlinks`, and nothing else.
  *
  * Schemas only, so `../contracts.ts` can publish them to a BROWSER without
- * the tool's own graph coming with them. See that file for why the split
+ * the operation's own graph coming with them. See that file for why the split
  * exists rather than being a matter of taste.
  */
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'

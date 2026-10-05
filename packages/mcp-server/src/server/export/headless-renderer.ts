@@ -378,7 +378,7 @@ async function reportUndrawable(
 }
 
 // Pre-warm the exporter during daemon startup so the first user-facing
-// `export_canvas` call does not pay the font-parse + resvg-import cost.
+// export, PNG or SVG, does not pay the font-parse + resvg-import cost.
 // Errors are swallowed because pre-warming is best-effort: the actual
 // export path will still surface a descriptive failure.
 //

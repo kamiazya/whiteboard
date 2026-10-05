@@ -1,8 +1,9 @@
 /**
- * wb_document_tags's input and output contracts, and nothing else.
+ * The input and output contracts of the route
+ * `GET /api/v1/workspaces/:workspaceId/document-tags`, and nothing else.
  *
  * Schemas only, so `../contracts.ts` can publish them to a BROWSER without
- * the tool's own graph coming with them. See that file for why the split
+ * the operation's own graph coming with them. See that file for why the split
  * exists rather than being a matter of taste.
  */
 import { documentIdSchema, tagInUseSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'

@@ -97,9 +97,9 @@ export function carriesATag(canvas: SpatialCanvas): boolean {
 }
 
 /**
- * The library check for a writer that takes a whole OKF BODY — `document.set`
- * and `wb_document_create`'s markdown arm, and the `POST /documents` route
- * behind it. Such a write replaces the document's tags wholesale, so the
+ * The library check for a writer that takes a whole OKF BODY — `wb_workspace_edit`'s
+ * `document.set` and the markdown arm of its `document.create`, and the
+ * `POST /documents` route behind them. Such a write replaces the document's tags wholesale, so the
  * frontmatter's own list IS the set it would end up carrying and there is no
  * merge to compute (`tagSetsAfter` is what does that on the tag-op path).
  *
