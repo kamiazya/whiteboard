@@ -215,7 +215,8 @@ imports state, not an intent, so the editor's own tag row is where that one
 is held (`.claude/rules/app-web.md`).
 What a CRDT update does to TEXT is judged once, by loro-adapter's
 `importWithinTextLimits`, which both keepers take (the browser through
-`syncTextLimitBreach`): an insert run or markdown body past
+`syncTextLimitJudge`, which keeps a copy of the record in step rather than
+forking it per update): an insert run or markdown body past
 `MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), node text added or
 grown past `NODE_TEXT_MAX_CHARS` (`NodeTextTooLargeError`), a label past
 `LABEL_MAX_CHARS` (`LabelTooLargeError`) and a thread message past
