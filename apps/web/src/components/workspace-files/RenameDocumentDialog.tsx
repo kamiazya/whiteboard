@@ -1,4 +1,3 @@
-import { documentPathSchema } from '@kamiazya/whiteboard-model'
 import { useEffect, useState } from 'react'
 import {
   Dialog,
@@ -11,20 +10,15 @@ import {
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentNameField } from './DocumentNameField.js'
 import { DocumentPathField } from './DocumentPathField.js'
+import { documentPathRefusal } from './document-path-refusal.js'
 
 /**
- * Why the dialog will not ask for this path, or null when it may.
- *
- * Checked against the model before the move is requested, so the refusal is
- * worded beside the field. The keeper refuses the same path, but a keeper's
- * refusal is a schema failure written for a log. An UNCHANGED path is never
- * refused: one stored before the grammar was enforced must still let its
- * document be renamed, and moving it is how it gets repaired.
+ * An UNCHANGED path is never refused: one stored before the grammar was
+ * enforced must still let its document be renamed, and moving it is how it
+ * gets repaired.
  */
 function pathRefusal(path: string, current: string | undefined): string | null {
-  if (path === current) return null
-  const checked = documentPathSchema.safeParse(path)
-  return checked.success ? null : (checked.error.issues[0]?.message ?? 'Not a valid path.')
+  return path === current ? null : documentPathRefusal(path)
 }
 
 /**
