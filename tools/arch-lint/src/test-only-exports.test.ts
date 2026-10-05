@@ -242,7 +242,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/codec/src/references/markup.ts#referenceMarkup',
   'packages/codec/src/spatial/census.ts#CensusFacet',
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
-  'packages/loro-adapter/src/workspace-tree.ts#WORKSPACE_TREE_KEY',
   'packages/mcp-server/src/server/app-types.ts#ServerModeAppOptions',
   'packages/ports/src/stored-document-unreadable-error.ts#StoredDocumentUnreadableCode',
   'packages/scene/src/scene-graph.ts#ShapeId',
@@ -362,7 +361,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 156
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 25
+const PUBLISHED_CEILING = 24
 
 const DIRS = [
   'apps',
