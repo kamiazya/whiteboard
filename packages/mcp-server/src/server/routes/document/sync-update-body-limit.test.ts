@@ -226,3 +226,27 @@ describe('an editor sync write giving a node text past the node limit', () => {
     expect(readSpatialCanvas(await snapshot(`${url}/snapshot`)).nodes).toEqual([])
   })
 })
+
+describe('a workspace-document update making a document unreadable', () => {
+  it('answers 400 unreadable_document_meta and the document is still listed', async () => {
+    const { post, snapshot } = await setup()
+    const url = `/api/w/${WS}/workspace-document`
+    const seeded = updateFrom(await snapshot(`${url}/snapshot`), (doc) =>
+      createWorkspaceDocumentAtPath(doc, { path: 'notes', documentId: DOC_ID, kind: 'markdown' }),
+    )
+    expect((await post(`${url}/update`, seeded)).status).toBe(200)
+
+    const refused = await post(
+      `${url}/update`,
+      updateFrom(await snapshot(`${url}/snapshot`), (doc) => {
+        const node = doc.getTree('tree').getNodes()[0]
+        node?.data.set('kind', 'bogus')
+      }),
+    )
+
+    expect(refused.status).toBe(400)
+    expect(await refused.json()).toMatchObject({ error: 'unreadable_document_meta' })
+    const stored = await snapshot(`${url}/snapshot`)
+    expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['notes'])
+  })
+})

@@ -11,9 +11,11 @@ export { DocumentEngineTrapError } from './document-io.js'
 export { getLogger, setLogSink } from './log.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export {
+  DocumentNameTooLongError,
   MarkdownBodyTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
+  UnreadableDocumentMetaError,
 } from './operations/apply-document-update-limit.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export { promoteWorkspace } from './operations/promote-workspace.js'

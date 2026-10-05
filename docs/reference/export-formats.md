@@ -50,7 +50,13 @@ not:
   piece, before applying it. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
   at a path outside the path grammar; a document already at such a path can
-  still be moved to a valid one.
+  still be moved to a valid one. The workspace document's `update` also
+  refuses, with `400 {"error":"unreadable_document_meta"}`, an update that
+  would leave a readable document with a kind, segment or id this server
+  cannot read — which would hide it and everything below it — and, with
+  `400 {"error":"document_name_too_long"}`, one that gives a document a name
+  longer than 200 characters. A name stored longer before that bound can
+  still be kept or shortened.
 
 ## How large a text node and a document name may be
 

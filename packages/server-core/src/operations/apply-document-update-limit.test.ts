@@ -19,6 +19,7 @@ import {
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  DOCUMENT_NAME_MAX_LENGTH,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SpatialNode,
@@ -32,9 +33,11 @@ import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
 import {
+  DocumentNameTooLongError,
   MarkdownBodyTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
+  UnreadableDocumentMetaError,
 } from './apply-document-update-limit.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { promoteWorkspace } from './promote-workspace.js'
@@ -632,5 +635,90 @@ describe('a sync update that writes a node', () => {
     )
 
     expect(store.saves).toBe(1)
+  })
+})
+
+/** Writes one key of a document's workspace-node meta as a skewed client could. */
+function setNodeMeta(doc: LoroDoc, documentId: string, key: string, value: string): void {
+  const node = doc
+    .getTree('tree')
+    .getNodes()
+    .find((candidate) => candidate.data.get('documentId') === documentId)
+  if (node === undefined) throw new Error(`no node holds ${documentId}`)
+  node.data.set(key, value)
+}
+
+describe('a workspace-document sync update that writes a node meta', () => {
+  const nested = () => {
+    const seed = workspaceSeed('body')
+    createWorkspaceDocumentAtPath(seed, {
+      path: 'notes/child',
+      documentId: OTHER_ID,
+      kind: 'markdown',
+    })
+    seed.commit()
+    return new StoredDoc(seed)
+  }
+  const send = (store: StoredDoc, edit: (doc: LoroDoc) => void) =>
+    applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update: updateFrom(store.get(), edit),
+    })
+
+  it.each([
+    ['a kind this keeper does not know', 'kind', 'bogus'],
+    ['an empty segment', 'segment', ''],
+  ])('making a readable document unreadable with %s is refused', async (_, key, value) => {
+    const store = nested()
+
+    const refusal = await send(store, (doc) => setNodeMeta(doc, DOC_ID, key, value)).catch(
+      (err: unknown) => err,
+    )
+
+    expect(refusal).toBeInstanceOf(UnreadableDocumentMetaError)
+    expect(store.saves).toBe(0)
+    // The document and the one below it are both still listed.
+    expect(storedPathsOf(store)).toEqual([PATH, 'notes/child'])
+  })
+
+  it('leaving a node already unreadable as it was is applied', async () => {
+    const seed = workspaceSeed('body')
+    createWorkspaceDocumentAtPath(seed, { path: 'other', documentId: OTHER_ID, kind: 'markdown' })
+    setNodeMeta(seed, OTHER_ID, 'kind', 'bogus')
+    seed.commit()
+    const store = new StoredDoc(seed)
+
+    await expect(send(store, (doc) => setNodeMeta(doc, DOC_ID, 'name', 'Renamed'))).resolves.toBe(
+      'applied',
+    )
+    expect(readWorkspaceDocuments(store.get()).map((entry) => entry.name)).toEqual(['Renamed'])
+  })
+
+  it('a name past the length a name may have is refused', async () => {
+    const store = nested()
+    const name = 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1)
+
+    const refusal = await send(store, (doc) => setNodeMeta(doc, DOC_ID, 'name', name)).catch(
+      (err: unknown) => err,
+    )
+
+    expect(refusal).toBeInstanceOf(DocumentNameTooLongError)
+    expect(store.saves).toBe(0)
+  })
+
+  it('a name stored longer before the bound, left or shortened, is applied', async () => {
+    const seed = workspaceSeed('body')
+    setNodeMeta(seed, DOC_ID, 'name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 50))
+    seed.commit()
+    const store = new StoredDoc(seed)
+
+    await expect(send(store, (doc) => workspaceBody(doc).insert(0, 'more '))).resolves.toBe(
+      'applied',
+    )
+    await expect(
+      send(store, (doc) =>
+        setNodeMeta(doc, DOC_ID, 'name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 10)),
+      ),
+    ).resolves.toBe('applied')
   })
 })

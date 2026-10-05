@@ -1,5 +1,10 @@
-import { importWithinTextLimits, readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  importWithinTextLimits,
+  readWorkspaceDocuments,
+  unreadableWorkspaceNodes,
+} from '@kamiazya/whiteboard-loro-adapter'
+import {
+  DOCUMENT_NAME_MAX_LENGTH,
   documentPathSchema,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
@@ -67,63 +72,120 @@ export class OffGrammarPathError extends Error {
   }
 }
 
+/**
+ * A sync write refused because it would leave workspace nodes this keeper
+ * cannot read — a kind it does not know, an empty segment, a missing id.
+ * Every listing, search and read skips such a node with everything below it,
+ * so the documents would vanish with no trash entry. Nothing of the write
+ * was kept; a node already unreadable before the write is left as it was.
+ */
+export class UnreadableDocumentMetaError extends Error {
+  constructor(public readonly nodes: readonly string[]) {
+    super(
+      `This update would leave workspace nodes this keeper cannot read (${nodes.join(', ')}), which hides the documents they hold and everything below them; a document needs a known kind, a segment and its id`,
+    )
+    this.name = 'UnreadableDocumentMetaError'
+  }
+}
+
+/**
+ * A sync write refused because it would give documents display names past
+ * `DOCUMENT_NAME_MAX_LENGTH`, the bound every other name write holds. A name
+ * stored longer before the bound, left or shortened, is let through.
+ */
+export class DocumentNameTooLongError extends Error {
+  constructor(public readonly paths: readonly string[]) {
+    super(
+      `This update would give ${paths.map((path) => JSON.stringify(path)).join(', ')} a display name past ${DOCUMENT_NAME_MAX_LENGTH} characters, the most a name may have`,
+    )
+    this.name = 'DocumentNameTooLongError'
+  }
+}
+
 /** A throw the sync write raises on purpose and its caller answers, not a refused import. */
 export function isSyncWriteRefusal(err: unknown): boolean {
   return (
     err instanceof DocumentEngineTrapError ||
     err instanceof MarkdownBodyTooLargeError ||
     err instanceof NodeTextTooLargeError ||
-    err instanceof OffGrammarPathError
+    err instanceof OffGrammarPathError ||
+    err instanceof UnreadableDocumentMetaError ||
+    err instanceof DocumentNameTooLongError
   )
 }
 
-function refuse(
-  target: CachedTarget,
-  error: MarkdownBodyTooLargeError | NodeTextTooLargeError | OffGrammarPathError,
-): never {
+function refuse(target: CachedTarget, error: Error): never {
   target.evict()
   log.warning('sync write refused', { ...target.fields, reason: error.message })
   throw error
 }
 
-/** Where each document of a workspace record sits, by id. */
-function pathsById(doc: LoroDoc): Map<string, string> {
-  return new Map(readWorkspaceDocuments(doc).map((entry) => [entry.documentId, entry.path]))
+/** What a workspace record's tree says about its documents, as the placement checks compare it. */
+interface Placement {
+  /** Each listed document's path, by id. */
+  readonly paths: ReadonlyMap<string, string>
+  /** Each listed document's name length, by id; 0 for no name. */
+  readonly names: ReadonlyMap<string, number>
+  /** The tree ids every listing skips, with their subtrees. */
+  readonly unreadable: ReadonlySet<string>
+}
+
+function placementOf(doc: LoroDoc): Placement {
+  const entries = readWorkspaceDocuments(doc)
+  return {
+    paths: new Map(entries.map((entry) => [entry.documentId, entry.path])),
+    names: new Map(entries.map((entry) => [entry.documentId, entry.name?.length ?? 0])),
+    unreadable: new Set(unreadableWorkspaceNodes(doc)),
+  }
 }
 
 /**
- * The paths the update MOVED a document onto that the grammar refuses. A
- * document already at such a path and left there is not the update's doing,
- * and moving it off one is how it gets repaired, so both are let through.
+ * The refusal an update's placement writes earn: a node it left unreadable, a
+ * document it MOVED onto a path the grammar refuses, or a name it grew past
+ * the bound. What was already so before the update is not its doing — and
+ * moving a document off a bad path, or shortening a long name, is how it gets
+ * repaired — so each is judged against the state before.
  *
- * One walk of the tree in the usual case — no path off the grammar at all.
- * Only when one is found is the state taken back to `before` for a second
- * walk, which costs re-applying this update: that is the rare case of a
- * workspace still holding a path written before the grammar was enforced.
+ * One walk of the tree in the usual case, where nothing is suspect. Only when
+ * something is does the state go back to `before` for a second walk, which
+ * costs re-applying this update: the rare case of a workspace still holding
+ * data written before a bound was enforced, or a write that breaks one.
  */
-function newOffGrammarPaths(doc: LoroDoc, before: Frontiers, target: CachedTarget): string[] {
-  const offGrammar = [...pathsById(doc)].filter(
+function placementRefusal(doc: LoroDoc, before: Frontiers, target: CachedTarget): Error | null {
+  const after = placementOf(doc)
+  const offGrammar = [...after.paths].filter(
     ([, path]) => !documentPathSchema.safeParse(path).success,
   )
-  if (offGrammar.length === 0) return []
+  const longNames = [...after.names].filter(([, length]) => length > DOCUMENT_NAME_MAX_LENGTH)
+  if (offGrammar.length === 0 && longNames.length === 0 && after.unreadable.size === 0) return null
   doc.checkout(before)
-  const earlier = pathsById(doc)
+  const earlier = placementOf(doc)
   runEvictingOnEngineTrap(target, 'importing an update into', () => doc.attach())
-  return offGrammar
-    .filter(([documentId, path]) => earlier.get(documentId) !== path)
-    .map(([, path]) => path)
+  const unreadable = [...after.unreadable].filter((node) => !earlier.unreadable.has(node))
+  if (unreadable.length > 0) return new UnreadableDocumentMetaError(unreadable)
+  const moved = offGrammar.filter(([documentId, path]) => earlier.paths.get(documentId) !== path)
+  if (moved.length > 0) return new OffGrammarPathError(moved.map(([, path]) => path))
+  const grown = longNames.filter(
+    ([documentId, length]) => length > (earlier.names.get(documentId) ?? 0),
+  )
+  if (grown.length > 0) {
+    return new DocumentNameTooLongError(
+      grown.map(([documentId]) => after.paths.get(documentId) ?? documentId),
+    )
+  }
+  return null
 }
 
 /**
  * Imports a client's update into a CACHED document unless it breaks the
- * markdown size limit, the node-text limit or, for a workspace record, the
- * document-path grammar — in which case nothing of it is kept.
+ * markdown size limit, the node-text limit or, for a workspace record, what
+ * the record's readers need of a node — in which case nothing of it is kept.
  *
  * What the update does to text is `importWithinTextLimits`'s judgement, the
  * one the browser keeper takes too; this adds what only the daemon's sync
- * surface owes, the path grammar. Paths are checked only for an update that
- * writes a workspace node's meta or moves one, and then by one walk of the
- * tree (`newOffGrammarPaths`); a body edit pays nothing for them.
+ * surface owes: readable node meta, the path grammar and the name bound.
+ * Those are checked only for an update that writes a workspace node's meta
+ * or moves one (`placementRefusal`); a body edit pays nothing for them.
  *
  * Every refusal drops the cached instance instead of saving, so the next
  * read rebuilds it from storage and nothing of the write survives.
@@ -148,6 +210,6 @@ export function importWithinSyncLimits(
   }
   if (breach !== null) refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars))
   if (!(options.workspaceRecord && touchesNodeMeta)) return
-  const offGrammar = newOffGrammarPaths(doc, before, trapped)
-  if (offGrammar.length > 0) refuse(target, new OffGrammarPathError(offGrammar))
+  const refusal = placementRefusal(doc, before, trapped)
+  if (refusal !== null) refuse(target, refusal)
 }

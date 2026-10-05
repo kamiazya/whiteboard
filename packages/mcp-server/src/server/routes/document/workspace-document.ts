@@ -8,6 +8,7 @@ import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyWorkspaceDocumentUpdate,
   DocumentEngineTrapError,
+  DocumentNameTooLongError,
   errorBody,
   MarkdownBodyTooLargeError,
   NodeTextTooLargeError,
@@ -15,6 +16,7 @@ import {
   type OperatorInfo,
   promoteWorkspace,
   type ServerDeps,
+  UnreadableDocumentMetaError,
 } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -104,6 +106,12 @@ function answerWriteRefusal(c: Context, err: unknown): Response {
     return c.json(errorBody('node_text_too_large', err.message), 413)
   }
   if (err instanceof OffGrammarPathError) return c.json(errorBody('invalid_path', err.message), 400)
+  if (err instanceof UnreadableDocumentMetaError) {
+    return c.json(errorBody('unreadable_document_meta', err.message), 400)
+  }
+  if (err instanceof DocumentNameTooLongError) {
+    return c.json(errorBody('document_name_too_long', err.message), 400)
+  }
   if (!(err instanceof DocumentEngineTrapError)) throw err
   return c.json(errorBody('document_engine_trap', err.message), 500)
 }
