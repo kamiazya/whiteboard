@@ -29,7 +29,7 @@ import { type AppLogger, getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore } from './loro-store.js'
+import { forgetContentTimestamp, LoroStore } from './loro-store.js'
 import { documentIdsInRecord } from './workspace-record-ids.js'
 
 const log = getAppLogger('fold-workspace')
@@ -144,12 +144,6 @@ async function foldOnce(dbName?: string): Promise<FoldReport> {
   const workspace = await docs.create(workspaceId)
   const held = documentIdsInRecord(workspace)
   const loroStore = new LoroStore(dbName)
-  const retire = async (documentId: string): Promise<void> => {
-    // The record before the row: a crash between the two leaves the row,
-    // which the next run retires again, never a record nothing names.
-    await loroStore.retire(documentId)
-    await index.retireDocument({ workspaceId, documentId })
-  }
 
   let folded = 0
   let skipped = 0
@@ -165,7 +159,36 @@ async function foldOnce(dbName?: string): Promise<FoldReport> {
       held.add(entry.documentId)
       folded += 1
     }
-    await retire(entry.documentId)
+    await retireLegacyDocument({
+      workspaceId,
+      documentId: entry.documentId,
+      keptByTree: true,
+      ...(dbName === undefined ? {} : { dbName }),
+    })
   }
   return { folded, skipped }
+}
+
+/**
+ * Retires one legacy document: its per-document record, then its row, then —
+ * when no copy is left — its listing clock. The one way it is done, by the
+ * fold and by the delete of a document the fold skipped.
+ *
+ * The record before the row: a crash between the two leaves a row whose
+ * record is gone, still listed and retired again by whoever meets it next,
+ * never a record no row names, which nothing would ever find to sweep.
+ *
+ * `keptByTree`: the workspace record answers for this id, as a document or a
+ * trash entry. The content timestamp then dates THAT copy and stays.
+ */
+export async function retireLegacyDocument(input: {
+  workspaceId: string
+  documentId: string
+  keptByTree: boolean
+  dbName?: string
+}): Promise<void> {
+  const { workspaceId, documentId, keptByTree, dbName } = input
+  await new LoroStore(dbName).retire(documentId)
+  await new IdbDocumentIndex(dbName).retireDocument({ workspaceId, documentId })
+  if (!keptByTree) await forgetContentTimestamp(documentId, dbName)
 }

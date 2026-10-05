@@ -23,10 +23,12 @@ import {
   type DeleteDocumentInput,
   type DocumentDuplicates,
   type DocumentEntry,
+  DocumentHasDescendantsError,
   type DocumentIndex,
   type DocumentPins,
   type DocumentTrash,
   type DuplicateDocumentInput,
+  findDescendantPath,
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
@@ -46,10 +48,10 @@ import {
 } from './browser-keeper-capacity.js'
 import { deleteVersionRowsOfDocument } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { foldOrServeTheTree } from './fold-workspace.js'
+import { foldOrServeTheTree, retireLegacyDocument } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { touchContentTimestamp } from './loro-store.js'
 import { indexWritesSettled } from './pending-index-writes.js'
 import {
   announceDocumentCreated,
@@ -321,11 +323,31 @@ export class FoldingBrowserIndex
     } else {
       // A fold-skipped document lives only in the legacy row; deleting it there
       // is what lets a user clear a damaged document instead of keeping an
-      // error screen forever. Its record goes too, once nothing names it: it
-      // has no trash to be restored from, and no row left to be listed by.
-      const row = await this.legacy.resolveDocument(input)
-      await this.legacy.deleteDocument(input)
-      if (row !== null) await new LoroStore(this.dbName).retire(row.documentId)
+      // error screen forever. It has no trash to be restored from, so it is
+      // retired outright — record, row and listing clock. Only a row the
+      // fallback LISTS: one whose id the tree holds is the fold's to retire.
+      const skipped = await this.foldSkippedRows(input.workspaceId)
+      const row = skipped.find((entry) => entry.path === input.path)
+      if (row !== undefined) {
+        // The port's delete refuses a parent; the retirement goes by id and
+        // would not, so the refusal is asked first.
+        const below = findDescendantPath(
+          skipped.map((entry) => ({ id: entry.documentId, path: entry.path })),
+          input.path,
+        )
+        if (below !== undefined) {
+          throw new DocumentHasDescendantsError(
+            input.path,
+            `Delete "${below}" and any others below it first.`,
+          )
+        }
+        await retireLegacyDocument({
+          workspaceId: input.workspaceId,
+          documentId: row.documentId,
+          keptByTree: false,
+          ...(this.dbName === undefined ? {} : { dbName: this.dbName }),
+        })
+      }
     }
     announceDocumentRemoved(input.workspaceId, input.path)
   }

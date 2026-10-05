@@ -118,6 +118,22 @@ export async function touchContentTimestamp(documentId: string, dbName?: string)
   }
 }
 
+/**
+ * Drops a document's listing clock once no copy of it is left to date — the
+ * last step of retiring a legacy document nothing else holds. Best-effort for
+ * the reason the stamp is: an orphan stamp is invisible, since a listing only
+ * reads the stamps of documents it lists.
+ */
+export async function forgetContentTimestamp(documentId: string, dbName?: string): Promise<void> {
+  try {
+    await inTransaction(dbName, [CONTENT_TIMESTAMPS_STORE], 'readwrite', async (tx) => {
+      await request(tx.objectStore(CONTENT_TIMESTAMPS_STORE).delete(documentId))
+    })
+  } catch {
+    // Intentionally swallowed; see above.
+  }
+}
+
 export class LoroStore {
   readonly #store: DocumentStore
 
@@ -252,9 +268,10 @@ export class LoroStore {
   }
 
   /**
-   * Drops a document's snapshot and log once the workspace tree holds its
-   * content. The listing clock stays: it is keyed by document, not by this
-   * record, and the tree's copy is still the document it dates.
+   * Drops a document's snapshot and log, and nothing else. The listing clock
+   * is keyed by document rather than by this record, so whether it goes is
+   * the caller's question: `retireLegacyDocument` keeps it when the workspace
+   * tree holds the same document and drops it when no copy is left.
    */
   async retire(documentId: string): Promise<void> {
     return this.#serialise(documentId, () => this.#store.deleteDoc({ docRef: refOf(documentId) }))
