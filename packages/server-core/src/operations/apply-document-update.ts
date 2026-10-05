@@ -1,6 +1,6 @@
 import type { LoroDoc } from 'loro-crdt'
-import { importEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
+import { importWithinMarkdownLimit } from './apply-document-update-limit.js'
 
 export interface ApplyDocumentUpdateInput {
   readonly workspaceId: string
@@ -29,7 +29,9 @@ export interface ApplyDocumentUpdateInput {
  * An engine trap in the import drops the cached doc and answers
  * `DocumentEngineTrapError`: the instance traps on every later call, so
  * keeping it would leave the document unreadable until a restart. Bytes the
- * engine refuses are rethrown as they were, with the cached doc kept.
+ * engine refuses are rethrown as they were, with the cached doc kept. An
+ * update past the markdown size limit is `MarkdownBodyTooLargeError`, with
+ * the cached doc dropped and nothing saved.
  *
  * Returns the live cached doc instance (not a copy), so a caller can feed
  * follow-up work — the HTTP route's auto-version trigger — without a second
@@ -43,7 +45,7 @@ export async function applyDocumentUpdate(
   const { workspaceId, path, update } = input
   return live.withWriteLock(workspaceId, async () => {
     const doc = await live.get(workspaceId, path)
-    importEvictingOnEngineTrap(doc, update, {
+    importWithinMarkdownLimit(doc, update, {
       subject: `the document at ${path}`,
       fields: { workspaceId, path },
       evict: () => live.evict(workspaceId, path),

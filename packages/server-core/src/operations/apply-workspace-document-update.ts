@@ -1,6 +1,10 @@
-import { DocumentEngineTrapError, importEvictingOnEngineTrap } from '../document-io.js'
+import { DocumentEngineTrapError } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
+import {
+  importWithinMarkdownLimit,
+  MarkdownBodyTooLargeError,
+} from './apply-document-update-limit.js'
 
 const log = getLogger('workspace-document')
 
@@ -25,6 +29,10 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * `DocumentEngineTrapError` is thrown. The next request reloads what was
  * stored instead of the whole workspace answering 500 until a restart.
  *
+ * Nor is an update past the markdown size limit: it is well-formed, and is
+ * thrown as `MarkdownBodyTooLargeError` with the record and its projections
+ * dropped unsaved, so nothing of it survives.
+ *
  * THE OPERATION HOLDS THE LOCK — `liveDocuments.withWriteLock`, because the
  * workspace write lock is one lock however many seams touch the workspace.
  * Import, save AND projection eviction all run inside the hold: a
@@ -41,7 +49,7 @@ export async function applyWorkspaceDocumentUpdate(
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
     try {
-      importEvictingOnEngineTrap(doc, update, {
+      importWithinMarkdownLimit(doc, update, {
         subject: `the workspace record of ${workspaceId}`,
         fields: { workspaceId },
         evict() {
@@ -50,7 +58,9 @@ export async function applyWorkspaceDocumentUpdate(
         },
       })
     } catch (err: unknown) {
-      if (err instanceof DocumentEngineTrapError) throw err
+      if (err instanceof DocumentEngineTrapError || err instanceof MarkdownBodyTooLargeError) {
+        throw err
+      }
       log.warning('workspace-document update rejected: malformed Loro import data', {
         workspaceId,
         updateBytes: update.byteLength,

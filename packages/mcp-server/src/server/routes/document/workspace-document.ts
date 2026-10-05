@@ -9,6 +9,7 @@ import {
   applyWorkspaceDocumentUpdate,
   DocumentEngineTrapError,
   errorBody,
+  MarkdownBodyTooLargeError,
   type OperatorInfo,
   promoteWorkspace,
   type ServerDeps,
@@ -84,14 +85,40 @@ async function admittedWorkspace(
 }
 
 /**
- * The CRDT engine aborted on this write. The operation has already dropped the
- * instance it poisoned, so the next request is served; what the caller is told
- * is that the engine failed, in the code `/api/v1` answers it with, and not
- * that its bytes were malformed.
+ * A write that threw one of the two refusals the operations raise rather than
+ * return. An engine trap: the operation has already dropped the instance it
+ * poisoned, so the next request is served; the caller is told the engine
+ * failed, in the code `/api/v1` answers it with, and not that its bytes were
+ * malformed. A body past the markdown size limit: 413, since the bytes are
+ * well-formed and only their size is refused, with nothing of them kept.
  */
-function answerEngineTrap(c: Context, err: unknown): Response {
+function answerWriteRefusal(c: Context, err: unknown): Response {
+  if (err instanceof MarkdownBodyTooLargeError) {
+    return c.json(errorBody('markdown_too_large', err.message), 413)
+  }
   if (!(err instanceof DocumentEngineTrapError)) throw err
   return c.json(errorBody('document_engine_trap', err.message), 500)
+}
+
+/**
+ * A promote the operation refused before merging anything: bytes that are not
+ * a Loro snapshot, or a record naming paths the document-path grammar refuses.
+ */
+function answerPromoteRefusal(
+  c: Context,
+  result: Exclude<Awaited<ReturnType<typeof promoteWorkspace>>, { kind: 'promoted' }>,
+): Response {
+  if (result.kind === 'malformed-snapshot') {
+    return c.json({ title: 'Malformed workspace record snapshot' }, 400)
+  }
+  const named = result.paths.map((path) => `"${path}"`).join(', ')
+  return c.json(
+    errorBody(
+      'invalid_path',
+      `The workspace holds documents at paths this keeper cannot store: ${named}. A path segment may hold only ASCII letters, digits and interior hyphens; rename them and promote again.`,
+    ),
+    400,
+  )
 }
 
 const PROMOTE_BODY: ReadJsonBodyOptions = {
@@ -129,7 +156,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       try {
         result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })
       } catch (err) {
-        return answerEngineTrap(c, err)
+        return answerWriteRefusal(c, err)
       }
       if (result === 'malformed-update') {
         return c.json({ title: 'Malformed workspace-document update' }, 400)
@@ -192,11 +219,9 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       try {
         result = await promoteWorkspace(deps, { workspaceId, snapshot, operator })
       } catch (err) {
-        return answerEngineTrap(c, err)
+        return answerWriteRefusal(c, err)
       }
-      if (result.kind === 'malformed-snapshot') {
-        return c.json({ title: 'Malformed workspace record snapshot' }, 400)
-      }
+      if (result.kind !== 'promoted') return answerPromoteRefusal(c, result)
       const response: PromoteWorkspaceResponse = {
         ok: true,
         attested: false,

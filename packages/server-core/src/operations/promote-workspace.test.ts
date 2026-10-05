@@ -2,6 +2,7 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  readWorkspaceDocuments,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
@@ -215,5 +216,36 @@ describe('promoteWorkspace', () => {
     ).catch((err: unknown) => err)
     expect(failure).toBeInstanceOf(DocumentEngineTrapError)
     expect(fake.saves()).toBe(0)
+  })
+
+  it('refuses a record holding a path outside the document-path grammar before merging any of it', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'sketch',
+      documentId: SKETCH_ID,
+      kind: 'spatial',
+    })
+    createWorkspaceDocumentAtPath(record, {
+      path: 'Meeting notes',
+      documentId: ROADMAP_ID,
+      kind: 'markdown',
+    })
+    record.commit()
+    const result = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
+    )
+    expect(result).toEqual({ kind: 'invalid-paths', paths: ['Meeting notes'] })
+    expect(fake.saves()).toBe(0)
+    expect(readWorkspaceDocuments(fake.workspaceDoc).map((entry) => entry.path)).toEqual([
+      'contested',
+    ])
+    expect(fake.versions.saves).toEqual([])
   })
 })
