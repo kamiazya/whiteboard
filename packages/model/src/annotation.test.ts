@@ -97,6 +97,16 @@ describe('annotationAnchorSchema', () => {
     ).toBe(false)
   })
 
+  // Only a range that ends BEFORE it starts is refused: the quote is what
+  // finds the passage, so a range shorter than it — empty included — is
+  // ordinary rather than malformed (`resolveTextAnchor` falls back to the quote).
+  it('accepts a text anchor whose range is empty', () => {
+    const quote = { prefix: '', exact: 'x', suffix: '' }
+    expect(
+      annotationAnchorSchema.safeParse({ kind: 'text', quote, start: 4, end: 4 }).success,
+    ).toBe(true)
+  })
+
   it('lets a spatial anchor name an edge, the way it names a node — but never both', () => {
     // An edge is as much an object of the canvas as a node: the surface is
     // the arm, the reference names an object on it.

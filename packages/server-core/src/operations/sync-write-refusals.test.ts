@@ -197,3 +197,20 @@ describe('a refused tag count', () => {
     )
   })
 })
+
+describe('a refused run found in a resolved document', () => {
+  // A run lives in the history, so the body a person opens may be short; the
+  // refusal says how long it is today only when the caller measured it.
+  const run = (at: refusals.RefusedIn) =>
+    textBreachRefusal({ shape: 'run', chars: 300_000, container: MAP }, at).message
+
+  it('says how long the body is now when the caller measured it', () => {
+    expect(run({ path: 'notes/a', bodyChars: 12 })).toContain(
+      ', though its body is 12 characters now',
+    )
+  })
+
+  it('says nothing of the body today when the caller did not measure it', () => {
+    expect(run({ path: 'notes/a' })).not.toContain('though its body is')
+  })
+})
