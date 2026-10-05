@@ -98,4 +98,6 @@ export const KEEPER_LIMIT_REASON = {
   comment_too_large: `It would make a comment longer than one comment may be. ${COMMENT_MESSAGE_ADVICE}`,
   node_location_too_large:
     'It would give a link node a URL, or a file node a path, longer than one may be.',
+  tags_too_large:
+    'It would give a node, an edge or the board more tags, or a longer tag, than one may carry.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>

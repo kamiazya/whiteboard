@@ -25,6 +25,7 @@ import {
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   nodeText,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
@@ -287,6 +288,12 @@ const linkTo = (length: number) => (board: DocumentContainers) =>
     }),
   )
 
+const tagNodeA = (count: number) => (board: DocumentContainers) =>
+  writeSpatialNode(board, {
+    ...textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' }),
+    tags: Array.from({ length: count }, (_, i) => `t${i}`),
+  })
+
 describe.each([
   {
     edit: "a node's text",
@@ -357,6 +364,12 @@ describe.each([
         status: 'open',
         messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS) }],
       }),
+  },
+  {
+    edit: "a node's tags",
+    code: 'tags_too_large',
+    past: tagNodeA(TAGS_PER_ELEMENT_MAX + 1),
+    within: tagNodeA(TAGS_PER_ELEMENT_MAX),
   },
 ])('$edit on a browser-kept canvas', ({ code, past, within }) => {
   it(`past its bound is refused as ${code}, and nothing is kept`, async () => {

@@ -66,7 +66,7 @@ not:
   longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened.
 
-## How large a text node, a label, a comment and a document name may be
+## How large a text node, a label, a comment, a tag and a document name may be
 
 A text node's text — the `text` of a `wb_canvas_edit` `node.add` or
 `node.patch`, and what a `node.splice` leaves — carries at most **8,192
@@ -110,6 +110,20 @@ grows one past it with `413` and `{"error":"node_location_too_large"}`, storing
 nothing; `promote` names the canvas that holds it. A browser-kept workspace
 refuses the same change the way it refuses an over-long node. A URL or path
 stored longer before the limit still reads, and can still be shortened.
+
+One tag carries at most **1,024 characters**, and one document, board, node
+or edge at most **1,024 tags**. Every layout of a board reads each tag its
+boxes and edges carry to draw its legend. `wb_facet_set` refuses a longer tag
+in `tags.add` or `tags.rename`, more than 1,024 tags in one `tags.add`, and a
+change that would leave something carrying more than 1,024 — writing nothing
+for any document named. `wb_workspace_edit`'s `document.set` and
+`document.create` refuse a frontmatter `tags` list past either bound the same
+way. The daemon's sync routes refuse an update that adds a tag past the length
+or grows a node's, edge's or board's tags past the count with `413` and
+`{"error":"tags_too_large"}`, storing nothing; `promote` names the canvas that
+holds them. A browser-kept workspace refuses the same change the way it
+refuses an over-long node. Tags stored past either bound before it existed
+still read, and still take a change that does not add to them.
 
 A text anchor's `prefix` and `suffix` — the context either side of a quoted
 passage — each carry at most **32 characters**. They tell one occurrence of a

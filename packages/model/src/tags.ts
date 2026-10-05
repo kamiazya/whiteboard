@@ -32,6 +32,33 @@ export function parseScopedTag(tag: string): ScopedTag | undefined {
 }
 
 /**
+ * The most characters (UTF-16 code units) one tag may carry, and the most
+ * tags one document, board, node or edge may carry, when they are written.
+ *
+ * Both are generous by two orders of magnitude over what tags are used for —
+ * the longest tag in the docs, skills and fixtures is 18 characters, and no
+ * element there carries more than a handful — because what they bound is a
+ * payload, not a habit: every layout scores a board's tags for its legend,
+ * and without a bound one write of half a megabyte puts 48,000 tags on a
+ * node. Scoring is linear in the tags, so a node at both bounds costs a
+ * render milliseconds.
+ *
+ * Neither sits below `LABEL_MAX_CHARS`, on purpose. The keepers' sync judge
+ * answers an update no longer than its smallest bound without applying it;
+ * a routine node move is a few hundred bytes (median 412 measured on a
+ * 200-node board), and a bound below 1 Ki would send each one through the
+ * full judgement — about 1.8 ms against 0.2 ms, per move.
+ */
+export const TAG_MAX_CHARS = 1024
+export const TAGS_PER_ELEMENT_MAX = 1024
+
+/** The length bound as every refusal of it ends. */
+export const TAG_LENGTH_LIMIT_PHRASE = `the ${TAG_MAX_CHARS}-character limit for one tag`
+
+/** The count bound as every refusal of it ends. */
+export const TAG_COUNT_LIMIT_PHRASE = `the ${TAGS_PER_ELEMENT_MAX}-tag limit for one document, board, node or edge`
+
+/**
  * The grammar, checked on WRITE and for scoped tags only: a tag with a colon
  * in it has to be a scoped tag, and is refused with the rule when it is not.
  * A tag without one is plain and passes verbatim. Strict where this codebase
@@ -42,6 +69,7 @@ export function parseScopedTag(tag: string): ScopedTag | undefined {
 export const tagWriteSchema = z
   .string()
   .min(1)
+  .max(TAG_MAX_CHARS, `a tag is longer than ${TAG_LENGTH_LIMIT_PHRASE}`)
   .superRefine((tag, ctx) => {
     if (!tag.includes(':') || parseScopedTag(tag) !== undefined) return
     ctx.addIssue({
@@ -49,6 +77,14 @@ export const tagWriteSchema = z
       message: `tag "${tag}" is not a scoped tag: ${SCOPED_TAG_RULE}`,
     })
   })
+
+/**
+ * A list of tags one write carries, held to both bounds. Stored tags stay
+ * unbounded (below): a set written before the bounds must still read.
+ */
+export const tagListWriteSchema = z
+  .array(tagWriteSchema)
+  .max(TAGS_PER_ELEMENT_MAX, `more tags than ${TAG_COUNT_LIMIT_PHRASE}`)
 
 /**
  * The STORED shape at every site that carries tags: a list of strings, read

@@ -1,3 +1,4 @@
+import { TAG_COUNT_LIMIT_PHRASE, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -40,5 +41,22 @@ describe('wbDocumentCreate and the scoped-tag grammar (ADR-0040 decision 1)', ()
     })
 
     expect(created.path).toBe('services/api')
+  })
+
+  it('refuses frontmatter carrying more tags than one document may, and mints nothing', async () => {
+    const deps = await makeDeps()
+    const tags = Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `  - t${i}`)
+
+    await expect(
+      wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'services/api',
+        kind: 'markdown',
+        markdown: `---\ntype: note\ntags:\n${tags.join('\n')}\n---\nBody.`,
+      }),
+    ).rejects.toThrow(TAG_COUNT_LIMIT_PHRASE)
+
+    const listed = await wbDocumentList(deps, { workspaceId: WS })
+    expect(listed.documents).toEqual([])
   })
 })
