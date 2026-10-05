@@ -217,6 +217,25 @@ four days. Wait for the LAST write of the flow (here the pointer naming the
 row) and assert what the next step opened, not only that it rendered.
 Mutation: without the pointer wait, the stronger final assertion failed 4 of 6.
 
+### waitfor-passes-on-a-transient
+
+**A browser test that cannot fail: its `waitFor` is satisfied by the FIRST
+poll, read before the layout it is about has happened.** Not a flake in the
+red-sometimes sense — the opposite, green always — but it is the same timing
+error, and it hides in exactly the files a flake hunt reads. The split view's
+scroll-sync test waited for a 600 px diagram fragment to be in the DOM, then
+scrolled the source and asserted the marker heading sat near the preview top.
+With anchored sync switched off (`preview-geometry.ts`'s anchored branch
+forced to `undefined`), the first poll read `markerY 20` — the heading still
+sat ABOVE the diagram's laid-out height — and passed; the settled value was
+`568.25`. On the real code the polls read `-564`, then `-96`. So the mutant
+that disables the feature the test is named for survived it and four sibling
+files. Fix: before acting, wait for the precondition the assertion depends on
+(here the marker more than 600 px down the preview), so the final `waitFor`
+starts from the settled layout. The mutant then fails `expected 568.25 to be
+less than 150` every run. The tell is a mutation check, never a red run:
+nothing about this shape ever fails on its own.
+
 ### skip-waiting-ignored-on-the-runner
 
 **The PWA update-lifecycle smoke (`verify`) timed out at "the page to reload

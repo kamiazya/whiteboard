@@ -180,6 +180,17 @@ describe('MarkdownEditor split & scroll sync (real browser)', () => {
       return el as SVGGraphicsElement
     })
 
+    // The fragment lands before the layout under it settles: until the
+    // diagram's 600px is laid out, the marker sits near the preview top, and
+    // the assertion below would pass on that transient with anchored sync
+    // switched off (flake-shapes.md's `waitfor-passes-on-a-transient`). So
+    // wait until the marker sits below the diagram first.
+    await vi.waitFor(() => {
+      expect(
+        markerText.getBoundingClientRect().top - preview.getBoundingClientRect().top,
+      ).toBeGreaterThan(600)
+    })
+
     // Scroll the SOURCE so the marker heading is the top visible line.
     const markerLine = doc.split('\n').findIndex((l) => l.includes('Marker')) + 1
     const lineCount = doc.split('\n').length
