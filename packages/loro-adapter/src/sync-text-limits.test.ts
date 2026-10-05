@@ -42,7 +42,7 @@ describe('syncTextLimitBreach', () => {
         base,
         updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab')),
       ),
-    ).toEqual({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 1 })
+    ).toMatchObject({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 1 })
     expect(
       syncTextLimitBreach(
         base,
@@ -131,7 +131,9 @@ describe('syncTextLimitBreach', () => {
     applied.import(update)
     const after = documentContainers(applied, DOC_ID).getText('body').length
     const expected =
-      after > MARKDOWN_MAX_CHARS && after > before ? { shape: 'body', chars: after } : null
+      after > MARKDOWN_MAX_CHARS && after > before
+        ? { shape: 'body', chars: after, container: expect.any(String) }
+        : null
 
     expect(importWithinTextLimits(base.fork(), update).breach).toEqual(expected)
     expect(syncTextLimitBreach(base, update)).toEqual(expected)
@@ -188,6 +190,7 @@ describe('importWithinTextLimits on update shapes', () => {
     expect(importWithinTextLimits(doc, update).breach).toEqual({
       shape: 'body',
       chars: MARKDOWN_MAX_CHARS + 1,
+      container: doc.getText('body').id,
     })
   })
 
@@ -236,5 +239,56 @@ describe('importWithinTextLimits on update shapes', () => {
     const doc = seeded('short')
     expect(() => importWithinTextLimits(doc, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow()
     expect(doc.isDetached()).toBe(false)
+  })
+})
+
+describe('importWithinTextLimits into an empty document', () => {
+  /** A record whose history once held one insert past the limit, since cut back. */
+  function shrunkAfterLongPaste(): LoroDoc {
+    const doc = record({ [DOC_ID]: 'intro\n' })
+    const body = documentContainers(doc, DOC_ID).getText('body')
+    body.insert(body.length, 'z'.repeat(MARKDOWN_MAX_CHARS + 10))
+    doc.commit()
+    body.delete(6, MARKDOWN_MAX_CHARS + 10)
+    doc.commit()
+    return doc
+  }
+
+  it('takes a record whose history held a run past the limit, since cut back', () => {
+    const empty = new LoroDoc()
+    const judged = importWithinTextLimits(
+      empty,
+      shrunkAfterLongPaste().export({ mode: 'snapshot' }),
+    )
+    expect(judged.breach).toBeNull()
+    expect(empty.isDetached()).toBe(false)
+    expect(documentContainers(empty, DOC_ID).getText('body').toString()).toBe('intro\n')
+  })
+
+  it('refuses the same record into a document that already holds something', () => {
+    const held = record({ [OTHER_ID]: 'already here' })
+    expect(
+      importWithinTextLimits(held, shrunkAfterLongPaste().export({ mode: 'snapshot' })).breach,
+    ).toMatchObject({ shape: 'run' })
+  })
+
+  it('still refuses a body or a node text the record holds past its limit', () => {
+    const long = record({ [DOC_ID]: 'y'.repeat(MARKDOWN_MAX_CHARS + 1) })
+    expect(
+      importWithinTextLimits(new LoroDoc(), long.export({ mode: 'snapshot' })).breach,
+    ).toMatchObject({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 1 })
+
+    const board = new LoroDoc()
+    writeSpatialNode(board, {
+      id: 'n1',
+      resource: { mimeType: 'text/markdown', content: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1) },
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+    })
+    expect(
+      importWithinTextLimits(new LoroDoc(), board.export({ mode: 'snapshot' })).breach,
+    ).toMatchObject({ shape: 'node-text', nodeId: 'n1' })
   })
 })

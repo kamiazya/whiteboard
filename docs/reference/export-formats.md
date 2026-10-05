@@ -47,7 +47,11 @@ not:
   document's `update` and `promote` — answer `413` with
   `{"error":"markdown_too_large"}` and store nothing. They also refuse, in
   milliseconds, an update that inserts more than 262,144 characters in one
-  piece, before applying it. The same `update` and `promote` refuse, with
+  piece, before applying it. A promoted workspace is judged by its whole
+  history: if a note once took one paste past the limit, even one cut back
+  since, a workspace that already holds documents refuses it, naming the
+  document, while a workspace with no documents yet takes it whole, since
+  nothing is replayed there. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
   at a path outside the path grammar; a document already at such a path can
   still be moved to a valid one. The workspace document's `update` also

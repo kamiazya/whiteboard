@@ -9,7 +9,7 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
-import type { Frontiers, LoroDoc } from 'loro-crdt'
+import type { ContainerID, Frontiers, LoroDoc } from 'loro-crdt'
 import {
   type CachedTarget,
   DocumentEngineTrapError,
@@ -19,21 +19,41 @@ import { getLogger } from '../log.js'
 
 const log = getLogger('sync-write-limit')
 
+/** The document a refused run or body belongs to, when the caller could tell. */
+export interface RefusedBody {
+  readonly path: string
+  /** The body's length today, which for a run found only in history is short. */
+  readonly chars: number
+}
+
+function bodyRefusalMessage(shape: 'run' | 'body', chars: number, at?: RefusedBody): string {
+  if (at === undefined) {
+    return shape === 'run'
+      ? `This update inserts ${chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`
+      : `This update would make a document body ${chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split the content across documents`
+  }
+  const where = JSON.stringify(at.path)
+  return shape === 'run'
+    ? `The document at ${where} holds in its history one insert of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one write, though its body is ${at.chars} characters now. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
+    : `The document at ${where} has a body of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split it across documents`
+}
+
 /**
  * A sync write refused because of what its bytes would do to a body: insert
  * one piece longer than `MARKDOWN_MAX_CHARS`, or leave a markdown body longer
  * than that and longer than it was. Nothing of the write was kept.
+ *
+ * `container` is the text container that broke it, for a caller that can
+ * resolve it to a document; `at` is that document, once resolved.
  */
 export class MarkdownBodyTooLargeError extends Error {
   constructor(
     public readonly shape: 'run' | 'body',
     public readonly chars: number,
+    public readonly container?: ContainerID,
+    public readonly at?: RefusedBody,
   ) {
-    super(
-      shape === 'run'
-        ? `This update inserts ${chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`
-        : `This update would make a document body ${chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split the content across documents`,
-    )
+    super(bodyRefusalMessage(shape, chars, at))
     this.name = 'MarkdownBodyTooLargeError'
   }
 }
@@ -208,7 +228,8 @@ export function importWithinSyncLimits(
   if (breach?.shape === 'node-text') {
     refuse(target, new NodeTextTooLargeError(breach.nodeId, breach.chars))
   }
-  if (breach !== null) refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars))
+  if (breach !== null)
+    refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars, breach.container))
   if (!(options.workspaceRecord && touchesNodeMeta)) return
   const refusal = placementRefusal(doc, before, trapped)
   if (refusal !== null) refuse(target, refusal)

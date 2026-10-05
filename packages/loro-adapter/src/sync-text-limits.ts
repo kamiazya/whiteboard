@@ -15,7 +15,12 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * (`node-text`). Counts are UTF-16 units, the length both limits count.
  */
 export type SyncTextBreach =
-  | { readonly shape: 'run' | 'body'; readonly chars: number }
+  | {
+      readonly shape: 'run' | 'body'
+      readonly chars: number
+      /** The text container that broke it, so a caller can name the document. */
+      readonly container: ContainerID
+    }
   | { readonly shape: 'node-text'; readonly chars: number; readonly nodeId: string }
 
 export interface SyncTextJudgement {
@@ -64,7 +69,7 @@ function extendRun(previous: Run | undefined, counter: number, pos: number, text
 /** What an update's new operations write, read off its JSON form. */
 interface UpdateWrites {
   /** The longest contiguous insert, in UTF-16 units — the length `MARKDOWN_MAX_CHARS` counts. */
-  longestRun: number
+  longestRun: { units: number; container: ContainerID | null }
   /** Characters inserted minus characters deleted, per text container. */
   net: Map<ContainerID, number>
   /**
@@ -94,7 +99,7 @@ function touchesMeta(op: Op): boolean {
 function readWrites(json: JsonSchema): UpdateWrites {
   const runs = new Map<string, Run>()
   const writes: UpdateWrites = {
-    longestRun: 0,
+    longestRun: { units: 0, container: null },
     net: new Map(),
     longNodeText: new Map(),
     touchesNodeMeta: false,
@@ -119,7 +124,9 @@ function readWrites(json: JsonSchema): UpdateWrites {
         const key = `${op.container} ${peer}`
         const run = extendRun(runs.get(key), op.counter, content.pos, content.text)
         runs.set(key, run)
-        writes.longestRun = Math.max(writes.longestRun, run.units)
+        if (run.units > writes.longestRun.units) {
+          writes.longestRun = { units: run.units, container: op.container }
+        }
         grow(op.container, scalarLength(content.text))
       } else if (content.type === 'delete') {
         grow(op.container, -Math.abs(content.len))
@@ -168,7 +175,7 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
   for (const [container, grew] of net) {
     if (grew <= 0 || !isContentContainer(doc, container, MARKDOWN_BODY_KEY)) continue
     const length = (doc.getContainerById(container) as LoroText).length
-    if (length > MARKDOWN_MAX_CHARS) return { shape: 'body', chars: length }
+    if (length > MARKDOWN_MAX_CHARS) return { shape: 'body', chars: length, container }
   }
   return null
 }
@@ -191,9 +198,7 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
  * only the state knows the resulting length. Shrinking either when it is
  * already past its limit is allowed, as `wb_body_edit` allows it: refusing
  * the edit that makes a document smaller would leave it stuck, and data
- * stored before a bound must still take an edit that does not grow it. A
- * node's earlier text is read while the document is still detached, which is
- * the state before the update.
+ * stored before a bound must still take an edit that does not grow it.
  *
  * On a breach `doc` holds operations it must not keep, possibly still
  * detached: the caller discards the instance. Bytes the engine refuses are
@@ -202,12 +207,18 @@ function bodyBreach(doc: LoroDoc, net: ReadonlyMap<ContainerID, number>): SyncTe
  */
 export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTextJudgement {
   const from = doc.oplogVersion()
-  doc.detach()
+  // Into an EMPTY document the engine loads state rather than replaying runs
+  // (measured: a 4 Mi-character insert in 26 ms, and a record whose history
+  // once held a 300 Ki insert in 3 ms against 1.6 s replayed), so no run
+  // costs anything there and none is judged — a long paste deleted long ago
+  // does not bar a record from a fresh workspace.
+  const replays = from.length() > 0
+  if (replays) doc.detach()
   try {
     doc.import(update)
   } catch (err) {
     // A refused import left the oplog as it was; a trapped instance is never touched again.
-    if (!isEngineTrap(err)) doc.attach()
+    if (replays && !isEngineTrap(err)) doc.attach()
     throw err
   }
   // Uncompressed peers, so a container id in the JSON is one the document resolves.
@@ -216,13 +227,18 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
   })
-  if (writes.longestRun > MARKDOWN_MAX_CHARS) {
-    return judged({ shape: 'run', chars: writes.longestRun })
+  const { units, container } = writes.longestRun
+  if (replays && units > MARKDOWN_MAX_CHARS && container !== null) {
+    return judged({ shape: 'run', chars: units, container })
   }
+  // While detached, the state read is the one before the update; an empty
+  // document had no node before it.
   const before = new Map(
-    [...writes.longNodeText].map(([id, at]) => [id, nodeTextIn(doc, at.container, at.key)]),
+    replays
+      ? [...writes.longNodeText].map(([id, at]) => [id, nodeTextIn(doc, at.container, at.key)])
+      : [],
   )
-  doc.attach()
+  if (replays) doc.attach()
   return judged(bodyBreach(doc, writes.net) ?? nodeTextBreach(doc, writes.longNodeText, before))
 }
 

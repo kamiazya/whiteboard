@@ -1,9 +1,9 @@
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
-import { documentPathSchema } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
+import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
+import { LoroDoc, type LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
+import { MarkdownBodyTooLargeError } from './apply-document-update-limit.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 
 export interface PromoteWorkspaceInput {
@@ -18,11 +18,6 @@ export interface PromoteWorkspaceInput {
 
 export type PromoteWorkspaceResult =
   | { kind: 'malformed-snapshot' }
-  /**
-   * The record holds documents at paths outside the document-path grammar,
-   * which this keeper's readers refuse; nothing was merged.
-   */
-  | { kind: 'invalid-paths'; paths: readonly string[] }
   | {
       kind: 'promoted'
       /** The documents the record carried, each now with an explicit checkpoint. */
@@ -37,15 +32,25 @@ export type PromoteWorkspaceResult =
     }
 
 /**
- * The paths in a promoted record that the document-path grammar refuses.
- * The record is refused whole rather than merged around them: a document at
- * such a path, once in the target's record, fails every listing and search of
- * the workspace, and a merge cannot be taken back.
+ * A size refusal from the merge, re-raised naming the promoted document it is
+ * about. The merge sees only a text container; the promoted record is what
+ * can say whose body it is, and how long that body is now — which, for a run
+ * found only in the history, is what tells a person the document they see is
+ * not the problem.
  */
-function offGrammarPaths(entries: readonly { readonly path: string }[]): string[] {
-  return entries
-    .map((entry) => entry.path)
-    .filter((path) => !documentPathSchema.safeParse(path).success)
+function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
+  if (!(err instanceof MarkdownBodyTooLargeError) || err.container === undefined) return err
+  const path = incoming.getPathToContainer(err.container)
+  if (path?.length !== 3 || path[0] !== WORKSPACE_TREE_KEY) return err
+  const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
+  const documentId = node?.data.get('documentId')
+  const entry = readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)
+  if (entry === undefined) return err
+  const body = incoming.getContainerById(err.container) as LoroText
+  return new MarkdownBodyTooLargeError(err.shape, err.chars, err.container, {
+    path: entry.path,
+    chars: body.length,
+  })
 }
 
 /**
@@ -91,9 +96,10 @@ function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
  * An engine trap — on the incoming record or in the merge — is thrown as
  * `DocumentEngineTrapError`, never answered as a malformed snapshot: the
  * bytes may be well-formed, and the merge has already dropped the target's
- * poisoned record so the workspace keeps serving. A record that would leave a
- * body past the markdown size limit is `MarkdownBodyTooLargeError`, thrown by
- * the merge with nothing of it kept.
+ * poisoned record so the workspace keeps serving. A record that breaks a
+ * limit or the path grammar is refused by the merge — the same judgement, and
+ * the same answer, as the sync surface's — with nothing of it kept; a size
+ * refusal is re-raised naming the promoted document.
  */
 export async function promoteWorkspace(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions'>,
@@ -101,14 +107,13 @@ export async function promoteWorkspace(
 ): Promise<PromoteWorkspaceResult> {
   const incoming = readIncoming(input)
   if (incoming === null) return { kind: 'malformed-snapshot' }
-  const incomingEntries = readWorkspaceDocuments(incoming)
-  const invalidPaths = offGrammarPaths(incomingEntries)
-  if (invalidPaths.length > 0) return { kind: 'invalid-paths', paths: invalidPaths }
-  const promoted = incomingEntries.map((entry) => entry.documentId)
+  const promoted = readWorkspaceDocuments(incoming).map((entry) => entry.documentId)
 
   const applied = await applyWorkspaceDocumentUpdate(deps, {
     workspaceId: input.workspaceId,
     update: input.snapshot,
+  }).catch((err: unknown) => {
+    throw namedInRecord(incoming, err)
   })
   if (applied === 'malformed-update') return { kind: 'malformed-snapshot' }
 

@@ -116,27 +116,6 @@ function answerWriteRefusal(c: Context, err: unknown): Response {
   return c.json(errorBody('document_engine_trap', err.message), 500)
 }
 
-/**
- * A promote the operation refused before merging anything: bytes that are not
- * a Loro snapshot, or a record naming paths the document-path grammar refuses.
- */
-function answerPromoteRefusal(
-  c: Context,
-  result: Exclude<Awaited<ReturnType<typeof promoteWorkspace>>, { kind: 'promoted' }>,
-): Response {
-  if (result.kind === 'malformed-snapshot') {
-    return c.json({ title: 'Malformed workspace record snapshot' }, 400)
-  }
-  const named = result.paths.map((path) => `"${path}"`).join(', ')
-  return c.json(
-    errorBody(
-      'invalid_path',
-      `The workspace holds documents at paths this keeper cannot store: ${named}. A path segment may hold only ASCII letters, digits and interior hyphens; rename them and promote again.`,
-    ),
-    400,
-  )
-}
-
 const PROMOTE_BODY: ReadJsonBodyOptions = {
   voice: 'code',
   maxBytes: WORKSPACE_DOC_PROMOTE_LIMIT_BYTES,
@@ -237,7 +216,9 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       } catch (err) {
         return answerWriteRefusal(c, err)
       }
-      if (result.kind !== 'promoted') return answerPromoteRefusal(c, result)
+      if (result.kind === 'malformed-snapshot') {
+        return c.json({ title: 'Malformed workspace record snapshot' }, 400)
+      }
       const response: PromoteWorkspaceResponse = {
         ok: true,
         attested: false,

@@ -366,6 +366,61 @@ describe('a promoted record', () => {
 const storedPathsOf = (store: StoredDoc) =>
   readWorkspaceDocuments(store.get()).map((entry) => entry.path)
 
+describe('a promoted record whose history once held a run past the limit', () => {
+  /** A browser record whose note took one long paste, later cut back. */
+  function shrunkRecord(): LoroDoc {
+    const record = new LoroDoc()
+    createWorkspaceDocumentAtPath(record, { path: 'big', documentId: OTHER_ID, kind: 'markdown' })
+    const body = documentContainers(record, OTHER_ID).getText('body')
+    body.insert(0, 'intro\n')
+    record.commit()
+    body.insert(body.length, 'p'.repeat(MARKDOWN_MAX_CHARS + 1))
+    record.commit()
+    body.delete(6, MARKDOWN_MAX_CHARS + 1)
+    record.commit()
+    return record
+  }
+  const promote = (target: StoredDoc, record: LoroDoc) =>
+    promoteWorkspace(workspaceDeps(target), {
+      workspaceId: WS,
+      snapshot: record.export({ mode: 'snapshot' }),
+      operator: { kind: 'human', displayName: 'Yuki' },
+    })
+
+  it('into a workspace that holds documents is refused, naming the document and its history', async () => {
+    const target = new StoredDoc(workspaceSeed('the daemon copy'))
+
+    const refusal = await promote(target, shrunkRecord()).catch((err: unknown) => err)
+
+    expect(refusal).toBeInstanceOf(MarkdownBodyTooLargeError)
+    expect(refusal).toMatchObject({ shape: 'run', at: { path: 'big', chars: 6 } })
+    expect((refusal as Error).message).toMatch(
+      /^The document at "big" holds in its history one insert/,
+    )
+    expect(target.saves).toBe(0)
+  })
+
+  it('into an empty workspace is merged, since nothing is replayed there', async () => {
+    const target = new StoredDoc(new LoroDoc())
+    const deps = workspaceDeps(target)
+    const checkpointed: string[] = []
+    deps.liveDocuments.get = async (_workspaceId, path) => {
+      checkpointed.push(path)
+      return new LoroDoc()
+    }
+
+    await expect(
+      promoteWorkspace(deps, {
+        workspaceId: WS,
+        snapshot: shrunkRecord().export({ mode: 'snapshot' }),
+        operator: { kind: 'human', displayName: 'Yuki' },
+      }),
+    ).resolves.toMatchObject({ kind: 'promoted', recorded: [OTHER_ID] })
+    expect(readMarkdownBody(documentContainers(target.get(), OTHER_ID))).toBe('intro\n')
+    expect(checkpointed).toEqual(['big'])
+  })
+})
+
 describe('a workspace-document sync update that moves a path', () => {
   it('onto a path outside the document-path grammar is refused and nothing is imported', async () => {
     const store = new StoredDoc(workspaceSeed('body'))
