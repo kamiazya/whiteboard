@@ -31,7 +31,7 @@ import {
   idbContentClock,
   listBrowserDocuments,
 } from '../lib/browser-document-summary.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
@@ -71,7 +71,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 // The address bar names a document by PATH; the store's default pointer names
 // it by id. Every URL assertion below goes through this so the two are never
 // silently conflated.
-async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<string> {
+async function pathOf(store: FoldingBrowserIndex, documentId: string): Promise<string> {
   const found = (await listBrowserDocuments(store)).find((row) => row.documentId === documentId)
   if (found === undefined) throw new Error(`no document ${documentId}`)
   return found.path
@@ -102,7 +102,7 @@ describe('BrowserDocumentPage browser Back/Forward (browser — real IndexedDB)'
   })
 
   it('Back returns to the first canvas and Forward returns to the second', async () => {
-    const store = new IdbDocumentIndex()
+    const store = new FoldingBrowserIndex()
     // Seeded before mount, the way the document browser creates them: the
     // editor creates nothing itself any more, and an in-place switch resolves
     // the URL against the documents the controller has already listed.

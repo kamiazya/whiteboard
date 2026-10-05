@@ -351,6 +351,21 @@ export class IdbDocumentIndex implements DocumentIndex {
     })
   }
 
+  /**
+   * Drops the row naming `documentId`, whatever sits below its path. Not the
+   * port's delete, which refuses a parent: this retires a row whose document
+   * the workspace tree now answers for, and a row below it is retired on its
+   * own turn. Absent is fine — a retirement interrupted after this ran
+   * repeats it.
+   */
+  async retireDocument({ workspaceId, documentId }: ResolveDocumentByIdInput): Promise<void> {
+    await this.tx([DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
+      const store = tx.objectStore(DOCUMENT_INDEX_STORE)
+      const key = await request(store.index('byId').getKey([workspaceId, documentId]))
+      if (key !== undefined) await request(store.delete(key))
+    })
+  }
+
   async deleteDocument({ workspaceId, path }: DeleteDocumentInput): Promise<void> {
     await this.tx([DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
       const rows = await rowsIn(tx, workspaceId)

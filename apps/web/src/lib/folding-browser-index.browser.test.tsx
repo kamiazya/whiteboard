@@ -16,6 +16,7 @@ import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { browserDocumentCounts } from './browser-document-counts.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -41,6 +42,54 @@ async function stripKindInPlace(documentId: string): Promise<void> {
     }
   })
 }
+
+/** One stored index row, raw, so a test can put it back the way a crash would leave it. */
+async function readRawRow(documentId: string): Promise<unknown> {
+  return inTransaction(undefined, [DOCUMENT_INDEX_STORE], 'readonly', async (tx) => {
+    const rows = (await request(tx.objectStore(DOCUMENT_INDEX_STORE).getAll())) as {
+      documentId: string
+    }[]
+    return rows.find((row) => row.documentId === documentId)
+  })
+}
+
+async function putRawRow(row: unknown): Promise<void> {
+  await inTransaction(undefined, [DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
+    await request(tx.objectStore(DOCUMENT_INDEX_STORE).put(row))
+  })
+}
+
+/** A document as an older build left it: an index row and a per-document record. */
+async function seedLegacyDocument(path: string, text: string): Promise<string> {
+  const legacyIndex = new IdbDocumentIndex()
+  await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
+  const entry = await legacyIndex.createDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path,
+    kind: 'spatial',
+  })
+  const doc = new Loro()
+  writeSpatialCanvas(doc, canvasWith(text))
+  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+  return entry.documentId
+}
+
+async function editInTree(documentId: string, text: string): Promise<void> {
+  const edited = new Loro()
+  writeSpatialCanvas(edited, canvasWith(text))
+  expect(await seedWorkspaceDocumentContent(documentId, edited.export({ mode: 'snapshot' }))).toBe(
+    true,
+  )
+}
+
+async function textOf(documentId: string): Promise<string | null | undefined> {
+  const content = await loadDocumentContent(documentId)
+  const node = content === null ? null : readSpatialCanvas(content).nodes[0]
+  return node === null || node === undefined ? null : nodeText(node)
+}
+
+const listedIds = async (index: FoldingBrowserIndex) =>
+  (await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).map((e) => e.documentId)
 
 function canvasWith(text: string) {
   return {
@@ -127,9 +176,88 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect(
       (await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).map((row) => row.path),
     ).toEqual(['readable'])
+    // Its record goes with it: nothing lists, opens or folds it any more.
+    expect((await new LoroStore().load(unreadable.documentId)).kind).toBe('not-found')
     expect(logged.join('\n')).toContain(
       '[folding-browser-index] startup fold left documents behind',
     )
+  })
+
+  it('retires the legacy row and record once the fold has the document in the tree', async () => {
+    const documentId = await seedLegacyDocument('from-before', 'legacy content')
+
+    expect(await listedIds(new FoldingBrowserIndex())).toEqual([documentId])
+
+    const workspaceId = getBrowserWorkspaceId()
+    expect(await new IdbDocumentIndex().resolveDocumentById({ workspaceId, documentId })).toBeNull()
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect(await textOf(documentId)).toBe('legacy content')
+  })
+
+  it('keeps a deleted legacy document deleted: same index, the switcher, a fresh index', async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    const documentId = await seedLegacyDocument('from-before', 'legacy content')
+    const index = new FoldingBrowserIndex()
+    await index.listDocuments({ workspaceId })
+    await editInTree(documentId, 'edited after the fold')
+
+    await index.deleteDocument({ workspaceId, path: 'from-before' })
+
+    expect(await listedIds(index)).toEqual([])
+    // The switcher folds before counting; it must not bring the document back.
+    expect((await browserDocumentCounts()).get(workspaceId)).toBe(0)
+    expect(await listedIds(new FoldingBrowserIndex())).toEqual([])
+    expect((await index.listTrash({ workspaceId })).map((e) => e.documentId)).toEqual([documentId])
+  })
+
+  it('restores a deleted legacy document as one node carrying its post-fold edit', async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    const documentId = await seedLegacyDocument('from-before', 'legacy content')
+    const first = new FoldingBrowserIndex()
+    await first.listDocuments({ workspaceId })
+    await editInTree(documentId, 'edited after the fold')
+    await first.deleteDocument({ workspaceId, path: 'from-before' })
+    await browserDocumentCounts()
+
+    const second = new FoldingBrowserIndex()
+    const restored = await second.restoreDocument({ workspaceId, documentId })
+
+    expect(restored?.documentId).toBe(documentId)
+    expect(await listedIds(second)).toEqual([documentId])
+    expect(await textOf(documentId)).toBe('edited after the fold')
+    // And it can be deleted again — a second node under the id would contest the path.
+    await second.deleteDocument({ workspaceId, path: 'from-before' })
+    expect(await listedIds(second)).toEqual([])
+  })
+
+  it('a purged legacy document is gone for a fresh index too', async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    const documentId = await seedLegacyDocument('from-before', 'legacy content')
+    const index = new FoldingBrowserIndex()
+    await index.deleteDocument({ workspaceId, path: 'from-before' })
+
+    expect(await index.purgeTrashEntry({ workspaceId, documentId })).toBe(true)
+
+    const fresh = new FoldingBrowserIndex()
+    expect(await listedIds(fresh)).toEqual([])
+    expect(await fresh.listTrash({ workspaceId })).toEqual([])
+  })
+
+  it('a legacy row left behind after its fold is never re-adopted once the document is trashed', async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    const documentId = await seedLegacyDocument('from-before', 'legacy content')
+    const row = await readRawRow(documentId)
+    const index = new FoldingBrowserIndex()
+    await index.deleteDocument({ workspaceId, path: 'from-before' })
+    // What a crash between the fold's save and its retirement leaves behind.
+    await putRawRow(row)
+    const legacy = new Loro()
+    writeSpatialCanvas(legacy, canvasWith('legacy content'))
+    await new LoroStore().save(documentId, legacy.export({ mode: 'snapshot' }))
+
+    expect(await listedIds(index)).toEqual([])
+    expect(await listedIds(new FoldingBrowserIndex())).toEqual([])
+    expect(await new IdbDocumentIndex().resolveDocumentById({ workspaceId, documentId })).toBeNull()
   })
 
   it('a kindless legacy row stays invisible — our own pre-kind data defect', async () => {

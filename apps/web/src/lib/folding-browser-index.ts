@@ -49,13 +49,15 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { touchContentTimestamp } from './loro-store.js'
+import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { indexWritesSettled } from './pending-index-writes.js'
 import {
   announceDocumentMoved,
   announceDocumentRemoved,
   announceDocumentRenamed,
   announceDocumentRestored,
 } from './workspace-broadcast.js'
+import { documentIdsInRecord } from './workspace-record-ids.js'
 
 const log = getAppLogger('folding-browser-index')
 
@@ -108,16 +110,14 @@ export class FoldingBrowserIndex
       if (isWorkspaceNotFoundError(error)) return []
       throw error
     }
-    const skipped: DocumentEntry[] = []
-    for (const row of rows) {
-      if (!documentKindSchema.safeParse(row.kind).success) continue
-      if (
-        (await this.inner.resolveDocumentById({ workspaceId, documentId: row.documentId })) !== null
-      )
-        continue
-      skipped.push(row)
-    }
-    return skipped
+    const kinded = rows.filter((row) => documentKindSchema.safeParse(row.kind).success)
+    if (kinded.length === 0) return []
+    // One read of the record for every row, not one per row: a listing pays
+    // for this on every call.
+    const record = await new BrowserWorkspaceDocs(this.dbName).open(workspaceId)
+    if (record === null) return kinded
+    const held = documentIdsInRecord(record)
+    return kinded.filter((row) => !held.has(row.documentId))
   }
 
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
@@ -137,6 +137,18 @@ export class FoldingBrowserIndex
    */
   async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
     return this.inner.renameWorkspace(input)
+  }
+
+  /**
+   * What a document read waits for: the fold, and every index write this tab
+   * has issued or queued (`pending-index-writes.ts`). Without the second, the
+   * listing taken as a page closes answers from before its last rename. Reads
+   * only: the save loop registered there calls `setDocumentName`, and a write
+   * that waited here would wait on itself.
+   */
+  private async settledForRead(): Promise<void> {
+    await indexWritesSettled()
+    await this.ensureFolded()
   }
 
   private ensureFolded(): Promise<void> {
@@ -217,7 +229,7 @@ export class FoldingBrowserIndex
   }
 
   async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
-    await this.ensureFolded()
+    await this.settledForRead()
     const fromTree = await this.inner.resolveDocument(input)
     if (fromTree !== null) return fromTree
     const skipped = await this.foldSkippedRows(input.workspaceId)
@@ -225,7 +237,7 @@ export class FoldingBrowserIndex
   }
 
   async resolveDocumentById(input: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
-    await this.ensureFolded()
+    await this.settledForRead()
     const fromTree = await this.inner.resolveDocumentById(input)
     if (fromTree !== null) return fromTree
     const skipped = await this.foldSkippedRows(input.workspaceId)
@@ -233,7 +245,7 @@ export class FoldingBrowserIndex
   }
 
   async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
-    await this.ensureFolded()
+    await this.settledForRead()
     const fromTree = await this.inner.listDocuments(input)
     const skipped = await this.foldSkippedRows(input.workspaceId)
     if (skipped.length === 0) return fromTree
@@ -304,8 +316,11 @@ export class FoldingBrowserIndex
     } else {
       // A fold-skipped document lives only in the legacy row; deleting it there
       // is what lets a user clear a damaged document instead of keeping an
-      // error screen forever.
+      // error screen forever. Its record goes too, once nothing names it: it
+      // has no trash to be restored from, and no row left to be listed by.
+      const row = await this.legacy.resolveDocument(input)
       await this.legacy.deleteDocument(input)
+      if (row !== null) await new LoroStore(this.dbName).retire(row.documentId)
     }
     announceDocumentRemoved(input.workspaceId, input.path)
   }
