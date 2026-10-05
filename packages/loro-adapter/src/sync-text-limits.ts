@@ -2,17 +2,24 @@
 // sync routes and the browser keeper's own store take or refuse the same
 // bytes, so a document cannot hold text one keeper accepted and the other
 // would refuse.
-import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  COMMENT_MESSAGE_MAX_CHARS,
+  LABEL_MAX_CHARS,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import type { ContainerID, JsonSchema, LoroDoc, LoroMap, LoroText, MapOp, TextOp } from 'loro-crdt'
-import { MARKDOWN_BODY_KEY, NODES_KEY } from './containers.js'
+import { EDGES_KEY, LINES_KEY, MARKDOWN_BODY_KEY, NODES_KEY, THREADS_KEY } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
 /**
  * Why a sync update was refused: one insert longer than `MARKDOWN_MAX_CHARS`
  * (`run`), a markdown body it left past that limit and longer than it was
- * (`body`), or a node's text it added or grew past `NODE_TEXT_MAX_CHARS`
- * (`node-text`). Counts are UTF-16 units, the length both limits count.
+ * (`body`), a node's text it added or grew past `NODE_TEXT_MAX_CHARS`
+ * (`node-text`), an edge's, line's or group's label past `LABEL_MAX_CHARS`
+ * (`label`), or a comment message past `COMMENT_MESSAGE_MAX_CHARS`
+ * (`comment-message`). Counts are UTF-16 units, the length every limit counts.
  */
 export type SyncTextBreach =
   | {
@@ -22,6 +29,8 @@ export type SyncTextBreach =
       readonly container: ContainerID
     }
   | { readonly shape: 'node-text'; readonly chars: number; readonly nodeId: string }
+  | { readonly shape: 'label'; readonly chars: number; readonly elementId: string }
+  | { readonly shape: 'comment-message'; readonly chars: number; readonly messageId: string }
 
 export interface SyncTextJudgement {
   /** The first limit the update breaks, or `null` when it may be kept. */
@@ -38,6 +47,7 @@ export interface SyncTextJudgement {
 const NODE_META_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'kind', 'name'])
 
 type Op = JsonSchema['changes'][number]['ops'][number]
+type LongValue = { container: ContainerID; key: string; bound: BoundedValue }
 type Run = { counter: number; pos: number; units: number }
 
 /** A node value's text as every reader lifts it: the resource's inline content, or the legacy `text` field. */
@@ -47,6 +57,62 @@ function nodeTextLength(value: unknown): number {
   if (typeof resource?.content === 'string') return resource.content.length
   return typeof text === 'string' ? text.length : 0
 }
+
+/** The length of a value's string field, 0 when it has none. */
+function fieldLength(value: unknown, field: string): number {
+  if (typeof value !== 'object' || value === null) return 0
+  const held = (value as Record<string, unknown>)[field]
+  return typeof held === 'string' ? held.length : 0
+}
+
+/**
+ * Whether `container` is a thread's message map — under a document's root or
+ * a workspace-tree node, `threads` > thread > `messages`.
+ */
+function isThreadMessages(doc: LoroDoc, container: ContainerID): boolean {
+  const path = doc.getPathToContainer(container)
+  if (path === undefined || path.at(-1) !== 'messages' || path.at(-3) !== THREADS_KEY) return false
+  return path.length === 3 || (path.length === 5 && path[0] === WORKSPACE_TREE_KEY)
+}
+
+/**
+ * Text a write bound holds that lives in a map VALUE rather than a text
+ * container — a node, an edge, a line, a message is each one value — so no
+ * insert run ever sees it. Each says how long a value's text is, which maps
+ * hold such values, and how a breach of it is named.
+ */
+interface BoundedValue {
+  readonly max: number
+  readonly length: (value: unknown) => number
+  readonly holds: (doc: LoroDoc, container: ContainerID) => boolean
+  readonly breach: (chars: number, key: string) => SyncTextBreach
+}
+
+const BOUNDED_VALUES: readonly BoundedValue[] = [
+  {
+    max: NODE_TEXT_MAX_CHARS,
+    length: nodeTextLength,
+    holds: (doc, container) => isContentContainer(doc, container, NODES_KEY),
+    breach: (chars, nodeId) => ({ shape: 'node-text', chars, nodeId }),
+  },
+  {
+    // A group's label is a node field; an edge's and a line's their own.
+    max: LABEL_MAX_CHARS,
+    length: (value) => fieldLength(value, 'label'),
+    holds: (doc, container) =>
+      [NODES_KEY, EDGES_KEY, LINES_KEY].some((key) => isContentContainer(doc, container, key)),
+    breach: (chars, elementId) => ({ shape: 'label', chars, elementId }),
+  },
+  {
+    max: COMMENT_MESSAGE_MAX_CHARS,
+    length: (value) => fieldLength(value, 'body'),
+    holds: isThreadMessages,
+    breach: (chars, messageId) => ({ shape: 'comment-message', chars, messageId }),
+  },
+]
+
+/** No map value shorter than this can breach any bound above. */
+const SMALLEST_VALUE_BOUND = Math.min(...BOUNDED_VALUES.map((bound) => bound.max))
 
 /** Unicode scalar values, the unit Loro's counters and text positions advance by. */
 function scalarLength(text: string): number {
@@ -73,11 +139,10 @@ interface UpdateWrites {
   /** Characters inserted minus characters deleted, per text container. */
   net: Map<ContainerID, number>
   /**
-   * Map entries this update set to a value whose text is past
-   * `NODE_TEXT_MAX_CHARS`, by `container key`. A node is one map VALUE, not
-   * a text container, so no insert run ever sees its text.
+   * Map entries this update set to a value whose text is past one of
+   * `BOUNDED_VALUES`' bounds, by `container key bound`.
    */
-  longNodeText: Map<string, { container: ContainerID; key: string }>
+  longValues: Map<string, LongValue>
   touchesNodeMeta: boolean
 }
 
@@ -101,7 +166,7 @@ function readWrites(json: JsonSchema): UpdateWrites {
   const writes: UpdateWrites = {
     longestRun: { units: 0, container: null },
     net: new Map(),
-    longNodeText: new Map(),
+    longValues: new Map(),
     touchesNodeMeta: false,
   }
   for (const change of json.changes) {
@@ -115,13 +180,17 @@ function readWrites(json: JsonSchema): UpdateWrites {
   return writes
 }
 
-/** A map value long enough to be node text past its limit, kept for the judgement after the import. */
+/** A map value long enough to break a bound if it is where that bound applies, kept for the judgement after the import. */
 function readMapWrite(writes: UpdateWrites, op: Op): void {
   const content = op.content as MapOp
-  if (content.type !== 'insert' || nodeTextLength(content.value) <= NODE_TEXT_MAX_CHARS) return
-  writes.longNodeText.set(`${op.container} ${content.key}`, {
-    container: op.container,
-    key: content.key,
+  if (content.type !== 'insert') return
+  BOUNDED_VALUES.forEach((bound, index) => {
+    if (bound.length(content.value) <= bound.max) return
+    writes.longValues.set(`${op.container} ${content.key} ${index}`, {
+      container: op.container,
+      key: content.key,
+      bound,
+    })
   })
 }
 
@@ -154,26 +223,26 @@ function isContentContainer(doc: LoroDoc, container: ContainerID, key: string): 
   return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
 }
 
-/** The text of the node a map holds at `key` in the doc's current state; 0 when there is none. */
-function nodeTextIn(doc: LoroDoc, container: ContainerID, key: string): number {
+/** The bounded text of the value a map holds at `key` in the doc's current state; 0 when there is none. */
+function lengthIn(doc: LoroDoc, { container, key, bound }: LongValue): number {
   try {
-    return nodeTextLength((doc.getContainerById(container) as LoroMap | undefined)?.get(key))
+    return bound.length((doc.getContainerById(container) as LoroMap | undefined)?.get(key))
   } catch {
     // A container the update itself creates does not exist in the earlier state.
     return 0
   }
 }
 
-function nodeTextBreach(
+function valueBreach(
   doc: LoroDoc,
-  long: UpdateWrites['longNodeText'],
+  long: UpdateWrites['longValues'],
   before: ReadonlyMap<string, number>,
 ): SyncTextBreach | null {
-  for (const [id, { container, key }] of long) {
-    if (!isContentContainer(doc, container, NODES_KEY)) continue
-    const length = nodeTextIn(doc, container, key)
-    if (length > NODE_TEXT_MAX_CHARS && length > (before.get(id) ?? 0)) {
-      return { shape: 'node-text', chars: length, nodeId: key }
+  for (const [id, value] of long) {
+    if (!value.bound.holds(doc, value.container)) continue
+    const length = lengthIn(doc, value)
+    if (length > value.bound.max && length > (before.get(id) ?? 0)) {
+      return value.bound.breach(length, value.key)
     }
   }
   return null
@@ -242,12 +311,10 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
   // While detached, the state read is the one before the update; an empty
   // document had no node before it.
   const before = new Map(
-    replays
-      ? [...writes.longNodeText].map(([id, at]) => [id, nodeTextIn(doc, at.container, at.key)])
-      : [],
+    replays ? [...writes.longValues].map(([id, value]) => [id, lengthIn(doc, value)]) : [],
   )
   if (replays) doc.attach()
-  return judged(bodyBreach(doc, writes.net) ?? nodeTextBreach(doc, writes.longNodeText, before))
+  return judged(bodyBreach(doc, writes.net) ?? valueBreach(doc, writes.longValues, before))
 }
 
 /**
@@ -272,15 +339,16 @@ function longestBody(doc: LoroDoc): number {
  * was — for a keeper with no cached instance to discard.
  *
  * An update's bytes hold every string it writes uncompressed, and a UTF-16
- * unit never takes less than one byte, so no insert, body growth or node
- * text it carries is longer than its byte length (`sync-text-limits.test.ts` pins
- * that encoding). An update short enough that no limit can be reached is
+ * unit never takes less than one byte, so no insert, body growth, node text,
+ * label or message it carries is longer than its byte length
+ * (`sync-text-limits.test.ts` pins that encoding). An update short enough that
+ * no limit can be reached — no longer than the smallest bound, a label's — is
  * therefore answered without being applied; only one that might is judged on
  * a fork. A fork copies the whole record — 6 to 74 ms for records of 0.1 to
  * 5 M characters — which a keystroke must not pay.
  */
 export function syncTextLimitBreach(record: LoroDoc, update: Uint8Array): SyncTextBreach | null {
   const most = update.byteLength
-  if (most <= NODE_TEXT_MAX_CHARS && longestBody(record) + most <= MARKDOWN_MAX_CHARS) return null
+  if (most <= SMALLEST_VALUE_BOUND && longestBody(record) + most <= MARKDOWN_MAX_CHARS) return null
   return importWithinTextLimits(record.fork(), update).breach
 }

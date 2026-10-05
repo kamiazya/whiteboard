@@ -1,6 +1,7 @@
 import {
   importWithinTextLimits,
   readWorkspaceDocuments,
+  type SyncTextBreach,
   unreadableWorkspaceNodes,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from '@kamiazya/whiteboard-model'
@@ -8,7 +9,9 @@ import type { Frontiers, LoroDoc } from 'loro-crdt'
 import { type CachedTarget, runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import {
+  CommentMessageTooLargeError,
   DocumentNameTooLongError,
+  LabelTooLargeError,
   MarkdownBodyTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
@@ -22,6 +25,21 @@ function refuse(target: CachedTarget, error: SyncWriteRefusalError): never {
   target.evict()
   log.warning('sync write refused', { ...target.fields, reason: error.message })
   throw error
+}
+
+/** The one refusal each way an update can break a text bound is answered with. */
+function breachRefusal(breach: SyncTextBreach): SyncWriteRefusalError {
+  switch (breach.shape) {
+    case 'node-text':
+      return new NodeTextTooLargeError(breach.nodeId, breach.chars)
+    case 'label':
+      return new LabelTooLargeError(breach.elementId, breach.chars)
+    case 'comment-message':
+      return new CommentMessageTooLargeError(breach.messageId, breach.chars)
+    case 'run':
+    case 'body':
+      return new MarkdownBodyTooLargeError(breach.shape, breach.chars, breach.container)
+  }
 }
 
 /** What a workspace record's tree says about its documents, as the placement checks compare it. */
@@ -113,11 +131,7 @@ export function importWithinSyncLimits(
     'importing an update into',
     () => importWithinTextLimits(doc, update),
   )
-  if (breach?.shape === 'node-text') {
-    refuse(target, new NodeTextTooLargeError(breach.nodeId, breach.chars))
-  }
-  if (breach !== null)
-    refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars, breach.container))
+  if (breach !== null) refuse(target, breachRefusal(breach))
   if (!(options.workspaceRecord && touchesNodeMeta)) return
   const refusal = placementRefusal(doc, before, trapped)
   if (refusal !== null) refuse(target, refusal)

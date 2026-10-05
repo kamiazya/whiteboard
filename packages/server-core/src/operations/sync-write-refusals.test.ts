@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import * as refusals from './sync-write-refusals.js'
 import {
+  CommentMessageTooLargeError,
   DocumentNameTooLongError,
+  LabelTooLargeError,
   MarkdownBodyTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
@@ -15,6 +17,8 @@ import {
 const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   MarkdownBodyTooLargeError: () => new MarkdownBodyTooLargeError('run', 300_000),
   NodeTextTooLargeError: () => new NodeTextTooLargeError('n1', 9_000),
+  LabelTooLargeError: () => new LabelTooLargeError('e1', 2_000),
+  CommentMessageTooLargeError: () => new CommentMessageTooLargeError('m1', 5_000),
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),

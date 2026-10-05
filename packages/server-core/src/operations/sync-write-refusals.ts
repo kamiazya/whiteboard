@@ -3,7 +3,9 @@
 // document's update and promote — answers them through `syncWriteAnswer`, so
 // a refusal added here reaches each surface with the same code and status.
 import {
+  COMMENT_MESSAGE_MAX_CHARS,
   DOCUMENT_NAME_MAX_LENGTH,
+  LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
@@ -81,6 +83,50 @@ export class NodeTextTooLargeError extends SyncWriteRefusalError {
       `This update would give node ${JSON.stringify(nodeId)} ${chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node; split it across nodes, or put it in a markdown document and embed that`,
     )
     this.name = 'NodeTextTooLargeError'
+  }
+}
+
+/**
+ * A sync write refused because it would add or grow an edge's, a line's or a
+ * group's label past `LABEL_MAX_CHARS` — the bound every tool write holds,
+ * since each render of the board lays the label out again. Nothing of the
+ * write was kept; a label stored longer before the bound still takes an edit
+ * that does not grow it.
+ */
+export class LabelTooLargeError extends SyncWriteRefusalError {
+  readonly code = 'label_too_large'
+  readonly status = 413
+
+  constructor(
+    public readonly elementId: string,
+    public readonly chars: number,
+  ) {
+    super(
+      `This update would give ${JSON.stringify(elementId)} a label of ${chars} characters, past the ${LABEL_MAX_CHARS}-character limit for one label; a longer text belongs in a text node`,
+    )
+    this.name = 'LabelTooLargeError'
+  }
+}
+
+/**
+ * A sync write refused because it would add or grow a comment message past
+ * `COMMENT_MESSAGE_MAX_CHARS` — the bound every tool write holds, since each
+ * render of the board and the rail lays the message out again. Nothing of the
+ * write was kept; a message stored longer before the bound still takes an
+ * edit that does not grow it.
+ */
+export class CommentMessageTooLargeError extends SyncWriteRefusalError {
+  readonly code = 'comment_too_large'
+  readonly status = 413
+
+  constructor(
+    public readonly messageId: string,
+    public readonly chars: number,
+  ) {
+    super(
+      `This update would make comment message ${JSON.stringify(messageId)} ${chars} characters long, past the ${COMMENT_MESSAGE_MAX_CHARS}-character limit for one message; split it across replies`,
+    )
+    this.name = 'CommentMessageTooLargeError'
   }
 }
 
