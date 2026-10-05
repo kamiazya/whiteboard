@@ -85,7 +85,10 @@ function SourceList({
               )}
               {entry.name ?? entry.path}
             </span>
-            {entry.contexts.slice(0, 2).map((context) => (
+            {/* Distinct excerpts: one source can reference this document twice
+                in the same words, and a repeated line adds nothing — it also
+                keeps the excerpt usable as its own key. */}
+            {[...new Set(entry.contexts)].slice(0, 2).map((context) => (
               <span key={context} className="text-muted-foreground truncate text-xs">
                 {context}
               </span>
