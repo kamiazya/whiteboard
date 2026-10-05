@@ -220,9 +220,11 @@ describe('readJsonBody: the size ceiling', () => {
     const encoder = new TextEncoder()
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        cuts.forEach((end, i) =>
-          controller.enqueue(encoder.encode(json.slice(cuts[i - 1] ?? 0, end))),
-        )
+        let from = 0
+        for (const end of cuts) {
+          controller.enqueue(encoder.encode(json.slice(from, end)))
+          from = end
+        }
         controller.close()
       },
     })
