@@ -113,3 +113,27 @@ describe('the cost of a remembered context', () => {
     expect(prefix.reads() + suffix.reads()).toBeLessThanOrEqual(budget)
   })
 })
+
+describe('the cost of a long quote', () => {
+  test('a long quote on a periodic body reads it a bounded number of times', () => {
+    // Every position of a one-character body starts an occurrence of a run
+    // of that character, so a search that re-verifies the whole quote at
+    // each overlapping occurrence reads `occurrences x exact.length`
+    // characters — measured at 9.7 s for a 64 Ki quote on a 256 Ki body.
+    const body = 'a'.repeat(8192)
+    const exact = countingString('a'.repeat(2048))
+    const occurrences = body.length - 2048 + 1
+
+    const resolved = resolveTextAnchor(body, {
+      kind: 'text',
+      quote: { exact: exact.text },
+      start: 4000,
+      end: 4000,
+    })
+
+    expect(resolved).toEqual({ kind: 'placed', start: 4000, end: 4000 + 2048 })
+    expect(occurrences).toBeGreaterThan(1000)
+    expect(exact.reads()).toBeGreaterThan(0)
+    expect(exact.reads()).toBeLessThanOrEqual(4 * (body.length + 2048))
+  })
+})

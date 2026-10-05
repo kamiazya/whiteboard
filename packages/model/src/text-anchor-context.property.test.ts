@@ -1,13 +1,15 @@
 /**
- * Bounding how much context resolution compares must not move any anchor a
- * writer is allowed to store.
+ * Making resolution cheap must not move any anchor a writer is allowed to
+ * store: neither the bounded context window nor the linear search for a long
+ * quote.
  *
- * The oracle is the resolver as it stood before the bound, kept here
- * verbatim: comparing against the module under test would be the same code
- * twice. Bodies are built from two lines, one of them rare, so occurrences
- * of a quote share long runs of context and differ only where the rare line
- * falls — the arrangement where characters far from the passage decide the
- * winner, and the one a random body almost never reaches.
+ * The oracle is the resolver as it stood before either, kept here verbatim
+ * — unbounded context, `indexOf` for every quote: comparing against the
+ * module under test would be the same code twice. Bodies are built from two
+ * lines, one of them rare, so occurrences of a quote share long runs of
+ * context and differ only where the rare line falls — the arrangement where
+ * characters far from the passage decide the winner, and the one a random
+ * body almost never reaches.
  */
 import { describe, expect } from 'vitest'
 import { TEXT_ANCHOR_CONTEXT_MAX_CHARS, type TextAnchor } from './annotation.js'
@@ -114,14 +116,54 @@ interface Case {
   readonly anchor: TextAnchor
 }
 
-function anchorCase(maxContext: number): fc.Arbitrary<Case> {
+/**
+ * A body of many short lines, one in eight the rare one: occurrences of a
+ * short quote are plentiful and their contexts diverge where a rare line
+ * falls.
+ */
+const shortQuoteBody = fc
+  .record({
+    common: line,
+    rare: line,
+    picks: fc.array(fc.nat({ max: 7 }), { minLength: 4, maxLength: 70 }),
+  })
+  .map(({ common, rare, picks }) => picks.map((pick) => (pick === 0 ? rare : common)).join(''))
+
+/**
+ * One line repeated hundreds of times with at most two rare lines in it, so a
+ * quote far longer than a line still occurs many times, overlapping: the case
+ * a search that resumes past a match instead of inside it gets wrong. Drawn
+ * from a few scalars rather than a line per element, because the oracle is
+ * quadratic on exactly these bodies and shrinking an array of hundreds of
+ * picks against it runs for minutes.
+ */
+const longQuoteBody = fc
+  .record({
+    common: line,
+    rare: line,
+    count: fc.integer({ min: 300, max: 600 }),
+    rareAt: fc.array(fc.nat(), { maxLength: 2 }),
+  })
+  .map(({ common, rare, count, rareAt }) => {
+    const lines = Array.from({ length: count }, () => common)
+    for (const at of rareAt) lines[at % count] = rare
+    return lines.join('')
+  })
+
+interface Shape {
+  readonly body: fc.Arbitrary<string>
+  readonly maxContext: number
+  /** The shortest and longest quote drawn. */
+  readonly minWidth: number
+  readonly maxWidth: number
+}
+
+function anchorCase({ body: bodies, maxContext, minWidth, maxWidth }: Shape): fc.Arbitrary<Case> {
   return fc
     .record({
-      common: line,
-      rare: line,
-      picks: fc.array(fc.nat({ max: 7 }), { minLength: 4, maxLength: 70 }),
+      body: bodies,
       site: fc.nat(),
-      width: fc.integer({ min: 1, max: 10 }),
+      width: fc.integer({ min: minWidth, max: maxWidth }),
       before: contextLength(maxContext),
       after: contextLength(maxContext),
       flipBefore: flip,
@@ -130,7 +172,7 @@ function anchorCase(maxContext: number): fc.Arbitrary<Case> {
       storedWidth: fc.nat({ max: 3 }),
     })
     .map((drawn) => {
-      const body = drawn.picks.map((pick) => (pick === 0 ? drawn.rare : drawn.common)).join('')
+      const { body } = drawn
       const at = drawn.site % body.length
       const exact = body.slice(at, Math.min(body.length, at + drawn.width))
       const prefix = body.slice(Math.max(0, at - drawn.before), at)
@@ -154,38 +196,73 @@ function anchorCase(maxContext: number): fc.Arbitrary<Case> {
     })
 }
 
-const tally = { scored: 0, decidedPastHalf: 0 }
+const SHORT_QUOTES = { body: shortQuoteBody, minWidth: 1, maxWidth: 10 }
+
+/** Lengths straddle every plausible switch between a native and a linear search. */
+const LONG_QUOTES = {
+  body: longQuoteBody,
+  maxContext: TEXT_ANCHOR_CONTEXT_MAX_CHARS,
+  minWidth: 200,
+  maxWidth: 900,
+}
+
+const tally = { scored: 0, decidedPastHalf: 0, longOverlapping: 0 }
 
 describe('the bounded context window', () => {
-  fcTest.prop([anchorCase(TEXT_ANCHOR_CONTEXT_MAX_CHARS)], withDefaults())(
-    'resolves a context within the bound exactly as the unbounded resolver',
-    ({ body, anchor }) => {
-      const expected = referenceResolve(body, anchor)
-      expect(resolveTextAnchor(body, anchor)).toEqual(expected)
+  fcTest.prop(
+    [anchorCase({ maxContext: TEXT_ANCHOR_CONTEXT_MAX_CHARS, ...SHORT_QUOTES })],
+    withDefaults(),
+  )('resolves a context within the bound exactly as the unbounded resolver', ({ body, anchor }) => {
+    const expected = referenceResolve(body, anchor)
+    expect(resolveTextAnchor(body, anchor)).toEqual(expected)
 
-      // Reachability: the cases where context past half the bound changed the
-      // winner are the ones that would catch a window set too small.
-      if (referenceOccurrences(body, anchor.quote.exact).length > 1) tally.scored += 1
-      const half = Math.floor(TEXT_ANCHOR_CONTEXT_MAX_CHARS / 2)
-      if (
-        JSON.stringify(referenceResolve(body, nearest(anchor, half))) !== JSON.stringify(expected)
-      ) {
-        tally.decidedPastHalf += 1
-      }
-    },
-  )
+    // Reachability: the cases where context past half the bound changed the
+    // winner are the ones that would catch a window set too small.
+    if (referenceOccurrences(body, anchor.quote.exact).length > 1) tally.scored += 1
+    const half = Math.floor(TEXT_ANCHOR_CONTEXT_MAX_CHARS / 2)
+    if (
+      JSON.stringify(referenceResolve(body, nearest(anchor, half))) !== JSON.stringify(expected)
+    ) {
+      tally.decidedPastHalf += 1
+    }
+  })
 
-  fcTest.prop([anchorCase(3 * TEXT_ANCHOR_CONTEXT_MAX_CHARS)], withDefaults())(
-    'judges a longer context on its characters nearest the passage',
-    ({ body, anchor }) => {
-      expect(resolveTextAnchor(body, anchor)).toEqual(
-        referenceResolve(body, nearest(anchor, TEXT_ANCHOR_CONTEXT_MAX_CHARS)),
-      )
-    },
-  )
+  fcTest.prop(
+    [anchorCase({ maxContext: 3 * TEXT_ANCHOR_CONTEXT_MAX_CHARS, ...SHORT_QUOTES })],
+    withDefaults(),
+  )('judges a longer context on its characters nearest the passage', ({ body, anchor }) => {
+    expect(resolveTextAnchor(body, anchor)).toEqual(
+      referenceResolve(body, nearest(anchor, TEXT_ANCHOR_CONTEXT_MAX_CHARS)),
+    )
+  })
 
   afterAllFloor(['resolves a context within the bound exactly as the unbounded resolver'], () => {
     expect(tally.scored).toBeGreaterThan(120)
     expect(tally.decidedPastHalf).toBeGreaterThan(12)
   })
+})
+
+describe('finding every occurrence of a long quote', () => {
+  fcTest.prop([anchorCase(LONG_QUOTES)], withDefaults({ numRuns: 100 }))(
+    'places a long quote exactly as the unbounded resolver, overlapping occurrences included',
+    ({ body, anchor }) => {
+      expect(resolveTextAnchor(body, anchor)).toEqual(referenceResolve(body, anchor))
+
+      const { exact } = anchor.quote
+      const found = referenceOccurrences(body, exact)
+      if (
+        exact.length > 512 &&
+        found.some((at, i) => i > 0 && at - (found[i - 1] as number) < exact.length)
+      ) {
+        tally.longOverlapping += 1
+      }
+    },
+  )
+
+  afterAllFloor(
+    ['places a long quote exactly as the unbounded resolver, overlapping occurrences included'],
+    () => {
+      expect(tally.longOverlapping).toBeGreaterThan(5)
+    },
+  )
 })
