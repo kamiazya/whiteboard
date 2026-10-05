@@ -458,7 +458,6 @@ function useBrowserDocument(
     canvas: documentKind === 'spatial' ? canvas : null,
     duplicateDocument,
     deleteDocument,
-    deleteCopyId: 'delete-document-browser',
   })
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)

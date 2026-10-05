@@ -31,10 +31,8 @@
 
 /** A destructive confirmation this app shows. */
 export type DestructiveActionId =
-  | 'delete-document-browser'
-  | 'delete-document-daemon'
-  | 'delete-documents-browser'
-  | 'delete-documents-daemon'
+  | 'delete-document'
+  | 'delete-documents'
   | 'remove-member'
   | 'delete-person'
   | 'delete-replica-copy'
@@ -51,33 +49,22 @@ export const DESTRUCTIVE_COPY = {
   // The delete evacuates into the trash before removing anything
   // (loro-workspace-document-index's "EVACUATE FIRST"), and the Trash
   // section restores it. Older copy said "There is no undo", which talks a
-  // reader out of tidying up. A browser delete removes no version rows, and a
-  // restore brings the document back under the documentId they are keyed by
-  // (browser-version-store.trash.test.ts), so the trash is the whole story
-  // and the copy says the history returns with it.
-  'delete-document-browser': (noun) =>
+  // reader out of tidying up. Neither keeper deletes version rows on a delete
+  // — they go with the purge — and a restore brings the document back under
+  // the documentId they are keyed by (browser-version-store.trash.test.ts,
+  // the daemon's routes/document/trash.test.ts), so one sentence serves both
+  // keepers and says the history returns with it.
+  'delete-document': (noun) =>
     `The ${noun} moves to the Trash, where you can restore it with its saved versions.`,
 
-  // Recoverable in the same way: document-store.ts routes the delete through
-  // the index, which evacuates into the trash and keeps the same
-  // recoverability promise the agent-facing port makes. What genuinely does
-  // NOT come back is the saved versions — documentTeardown deletes those
-  // rows, and the trash holds only the tree subtree — so that is the half
-  // worth warning about, rather than a blanket "no undo" that is false.
-  'delete-document-daemon': (noun) =>
-    `The ${noun} moves to the Trash, where you can restore it. Its saved versions are deleted, and restoring does not bring them back.`,
-
-  // The bulk pair. Separate entries rather than one number-aware sentence,
+  // The bulk form. A separate entry rather than one number-aware sentence,
   // because English agreement ("moves"/"move", "it"/"them") would put a
   // conditional inside the one place this module exists to keep
   // conditional-free — and a selection of ONE never reaches here anyway: the
   // panel routes it to the singular confirmation above, which can name the
   // document.
-  'delete-documents-browser': (noun) =>
+  'delete-documents': (noun) =>
     `The selected ${noun} move to the Trash, where you can restore them with their saved versions.`,
-
-  'delete-documents-daemon': (noun) =>
-    `The selected ${noun} move to the Trash, where you can restore them. Their saved versions are deleted, and restoring does not bring them back.`,
 
   // The subject here is a PERSON'S NAME, not a kind noun — `DestructiveDescription`'s
   // parameter still fits, since a name is just the string it is handed.
@@ -102,11 +89,13 @@ export const DESTRUCTIVE_COPY = {
   'delete-replica-copy': (name) =>
     `This device's copy of ${name} is removed. Anything in it that has not reached the daemon yet is lost; the daemon keeps the workspace, so a copy can be pulled again.`,
 
-  // The one confirmation with no way back: the document leaves the Trash and
-  // the bytes the Trash kept for it are destroyed, so a restore is no longer
-  // possible. Says "cannot be undone" outright, which the other delete
+  // The one confirmation with no way back: the document leaves the Trash, and
+  // the bytes the Trash kept for it and its saved versions are destroyed, so
+  // a restore is no longer possible. Names the versions because the delete
+  // sentences promise they come back with a restore; this is where that
+  // promise ends. Says "cannot be undone" outright, which the other delete
   // sentences must not (they move to the Trash). The subject is the
   // document's path, as the Trash row shows it.
   'purge-trash-entry': (name) =>
-    `Delete "${name}" permanently? It leaves the Trash and cannot be restored. This cannot be undone.`,
+    `Delete "${name}" permanently? It leaves the Trash, its saved versions are deleted with it, and it cannot be restored. This cannot be undone.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>

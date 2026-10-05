@@ -86,6 +86,33 @@ async function servedTexts(app: App, WS: string, path: string): Promise<string[]
   return readSpatialCanvas(doc).nodes.map((node) => nodeText(node) ?? node.id)
 }
 
+async function saveVersion(app: App, WS: string, path: string): Promise<string> {
+  const saved = await app.request(`/api/workspaces/${WS}/documents/${path}/versions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  expect(saved.status).toBe(200)
+  return ((await saved.json()) as { version: { id: string } }).version.id
+}
+
+async function listedVersionIds(app: App, WS: string, path: string): Promise<string[]> {
+  const listed = await app.request(`/api/workspaces/${WS}/documents/${path}/versions`)
+  expect(listed.status).toBe(200)
+  return ((await listed.json()) as { versions: { id: string }[] }).versions.map((v) => v.id)
+}
+
+/** The stored rows themselves, so a row no listing can reach still counts. */
+async function versionRowDocumentIds(WS: string): Promise<string[]> {
+  const db = await getDb(tmp.dir)
+  const rows = await db
+    .selectFrom('versions')
+    .select(['documentId'])
+    .where('workspaceId', '=', WS)
+    .execute()
+  return rows.map((row) => row.documentId).sort()
+}
+
 /**
  * What a tab left open on a document deleted elsewhere does next: act on the
  * path it still shows. Each call is refused, and a refusal must leave nothing
@@ -220,6 +247,49 @@ describe('trash routes', () => {
       method: 'POST',
     })
     expect(keptRestore.status).toBe(200)
+  })
+
+  it('a restore from the trash brings the saved versions back with the document', async () => {
+    const WS = 'ws-trash-versions-restore'
+    await saveDocument(WS, 'doomed', canvasDoc('versioned'), { kind: 'spatial' })
+    const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
+    const app = await appWithRealDeps()
+    const versionId = await saveVersion(app, WS, 'doomed')
+
+    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    const restored = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
+      method: 'POST',
+    })
+
+    expect(restored.status).toBe(200)
+    expect(await listedVersionIds(app, WS, 'doomed')).toEqual([versionId])
+    // Listed AND openable: the version still reads the state it saved.
+    const past = await app.request(
+      `/api/workspaces/${WS}/documents/doomed/versions/${versionId}/document`,
+    )
+    expect(past.status).toBe(200)
+    expect(JSON.stringify(await past.json())).toContain('versioned')
+  })
+
+  it("purging a trashed document drops its saved versions, and only that document's", async () => {
+    const WS = 'ws-trash-versions-purge'
+    await saveDocument(WS, 'doomed', canvasDoc('to destroy'), { kind: 'spatial' })
+    await saveDocument(WS, 'kept', canvasDoc('stays'), { kind: 'spatial' })
+    const doomedId = await resolveDocumentIdAtPath(WS, 'doomed')
+    const keptId = await resolveDocumentIdAtPath(WS, 'kept')
+    const app = await appWithRealDeps()
+    await saveVersion(app, WS, 'doomed')
+    await saveVersion(app, WS, 'kept')
+    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    // Kept through the delete, so the purge below is what has to remove them.
+    expect(await versionRowDocumentIds(WS)).toEqual([doomedId, keptId].sort())
+
+    const purged = await app.request(`/api/workspaces/${WS}/trash/${doomedId}`, {
+      method: 'DELETE',
+    })
+
+    expect(purged.status).toBe(200)
+    expect(await versionRowDocumentIds(WS)).toEqual([keptId])
   })
 
   it('refuses to purge a live document, or an entry already purged, with a 404', async () => {

@@ -19,7 +19,7 @@ describe('useDeleteDocuments', () => {
       }),
     )
     expect(result.current.dialog.pending).toBeNull()
-    expect(result.current.dialog.action).toBe('delete-document-daemon')
+    expect(result.current.dialog.action).toBe('delete-document')
 
     act(() => {
       result.current.requestDelete({
@@ -44,7 +44,7 @@ describe('useDeleteDocuments', () => {
       result.current.requestDelete({ paths: ['alpha', 'beta'], displayName: '2 documents' })
     })
     expect(result.current.dialog.pending).toEqual({ displayName: '2 documents', count: 2 })
-    expect(result.current.dialog.action).toBe('delete-documents-browser')
+    expect(result.current.dialog.action).toBe('delete-documents')
   })
 
   it('deletes what was pending, refreshes, and closes when everything went', async () => {
@@ -113,7 +113,7 @@ describe('useDeleteDocuments', () => {
     // the dialog stays open.
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(result.current.dialog.pending).toEqual({ displayName: 'Beta board', kind: 'spatial' })
-    expect(result.current.dialog.action).toBe('delete-document-daemon')
+    expect(result.current.dialog.action).toBe('delete-document')
     expect(result.current.dialog.error).toBe('1 of 2 could not be deleted.')
 
     // Pressing Delete again retries only the survivor.

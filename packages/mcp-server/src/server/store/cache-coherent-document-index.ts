@@ -116,10 +116,22 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     return withWorkspaceWriteLock(input.workspaceId, () => super.restoreDocument(input))
   }
 
+  /**
+   * Destroys a trashed document for good, saved versions included: the
+   * delete kept them so a restore could rejoin them (`createDocumentTeardown`),
+   * and after a purge nothing can.
+   */
   override async purgeTrashEntry(
     input: Parameters<LoroWorkspaceDocumentIndex['purgeTrashEntry']>[0],
   ): ReturnType<LoroWorkspaceDocumentIndex['purgeTrashEntry']> {
-    return withWorkspaceWriteLock(input.workspaceId, () => super.purgeTrashEntry(input))
+    return withWorkspaceWriteLock(input.workspaceId, async () => {
+      const purged = await super.purgeTrashEntry(input)
+      if (purged) {
+        const db = await this.scope.db()
+        await db.deleteFrom('versions').where('documentId', '=', input.documentId).execute()
+      }
+      return purged
+    })
   }
 
   override async moveDocument(input: {

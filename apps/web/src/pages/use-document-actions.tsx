@@ -12,7 +12,7 @@
  * business (the daemon's is one DELETE and a list refresh; the browser's is a
  * cleanup with its own terminal state), and what a refusal SAYS is
  * `destructive-copy.ts`'s. This holds only the shape that is the same either
- * way — which is why `copyId` is a parameter rather than a constant.
+ * way.
  */
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -20,7 +20,6 @@ import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useRef } from 'react'
 import { DeleteOpenDocumentDialog } from '../components/document-editor/DeleteOpenDocumentDialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import type { DestructiveActionId } from '../lib/destructive-copy.js'
 import { useDeleteDocument } from './use-delete-document.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
 
@@ -38,11 +37,6 @@ export interface UseDocumentActionsOptions {
    * not arrived, which is the same answer either way: no row.
    */
   readonly canvas: SpatialCanvas | null
-  /** Which keeper's delete sentence the confirmation shows. */
-  readonly deleteCopyId: Extract<
-    DestructiveActionId,
-    'delete-document-browser' | 'delete-document-daemon'
-  >
 }
 
 export interface DocumentActionSlots {
@@ -59,7 +53,6 @@ export function useDocumentActions({
   canvas,
   duplicateDocument,
   deleteDocument,
-  deleteCopyId,
 }: UseDocumentActionsOptions): DocumentActionSlots {
   // The document on screen NOW, for an async handler that started under a
   // different one: a page switches documents in place rather than remounting,
@@ -117,7 +110,6 @@ export function useDocumentActions({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         documentKind={documentKind}
-        copyId={deleteCopyId}
         triggerRef={documentOpsButtonRef}
         onConfirm={() => void handleDelete()}
       />

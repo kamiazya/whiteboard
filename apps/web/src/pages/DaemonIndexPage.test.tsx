@@ -1206,18 +1206,14 @@ describe('DaemonIndexPage', () => {
     // A daemon delete is recoverable — document-store.ts routes it through
     // the index's evacuate-first path — so the dialog names the Trash. What
     // it still warns about is the half that really is destroyed.
-    expect(
-      within(dialog).getByText(DESTRUCTIVE_COPY['delete-document-daemon']('note')),
-    ).toBeTruthy()
+    expect(within(dialog).getByText(DESTRUCTIVE_COPY['delete-document']('note'))).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 
     await selectCard('Trip plan')
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     dialog = await screen.findByRole('alertdialog')
-    expect(
-      within(dialog).getByText(DESTRUCTIVE_COPY['delete-document-daemon']('canvas')),
-    ).toBeTruthy()
+    expect(within(dialog).getByText(DESTRUCTIVE_COPY['delete-document']('canvas'))).toBeTruthy()
   })
 
   // State that NAMES A DOCUMENT must not outlive the workspace it names.
@@ -1802,9 +1798,7 @@ describe('the workspace names the page', () => {
 
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText('Delete 2 documents?')).toBeTruthy()
-    expect(
-      within(dialog).getByText(DESTRUCTIVE_COPY['delete-documents-daemon']('documents')),
-    ).toBeTruthy()
+    expect(within(dialog).getByText(DESTRUCTIVE_COPY['delete-documents']('documents'))).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
