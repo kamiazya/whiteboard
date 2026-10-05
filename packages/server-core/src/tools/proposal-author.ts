@@ -1,4 +1,4 @@
-import { okfActorSchema } from '@kamiazya/whiteboard-model'
+import { okfActorInputSchema } from '@kamiazya/whiteboard-model'
 
 /**
  * The `author` a proposing call may name, one declaration for both tools that
@@ -6,7 +6,7 @@ import { okfActorSchema } from '@kamiazya/whiteboard-model'
  * `wb_thread_edit`'s: server-core carries no operator identity, so who is
  * speaking is the caller's to say.
  */
-export const proposalAuthorSchema = okfActorSchema
+export const proposalAuthorSchema = okfActorInputSchema
   .optional()
   .describe(
     'Who is proposing, e.g. "claude-code/1.0". Set when this call opens the proposal; a call continuing one (proposalId) keeps its existing author.',

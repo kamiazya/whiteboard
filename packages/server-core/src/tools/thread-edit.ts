@@ -14,7 +14,7 @@ import {
   commentThreadSchema,
   documentIdSchema,
   nodeText,
-  okfActorSchema,
+  okfActorInputSchema,
   resolveTextAnchor,
   type SpatialAnchor,
   type TextAnchor,
@@ -61,7 +61,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
       threadId: annotationIdSchema.optional(),
       anchor: annotationAnchorInputSchema,
       body: commentMessageInputSchema,
-      author: okfActorSchema.optional(),
+      author: okfActorInputSchema.optional(),
     })
     .strict(),
   z
@@ -69,7 +69,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
       op: z.literal('message.add'),
       threadId: annotationIdSchema,
       body: commentMessageInputSchema,
-      author: okfActorSchema.optional(),
+      author: okfActorInputSchema.optional(),
     })
     .strict(),
   z

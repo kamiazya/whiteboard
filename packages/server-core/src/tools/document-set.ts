@@ -22,7 +22,7 @@ import {
   EXTENSION_FACET_KEY_PATTERN,
   type ExtensionFacets,
   markdownInputSchema,
-  okfActorSchema,
+  okfActorInputSchema,
   tagListWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -71,7 +71,7 @@ export const documentSetInputSchema = z
      * (ADR-0016). OKF puts the obligation on the producer for the same
      * reason — trust tiers are advisory signals, not access control (§5.3).
      */
-    actor: okfActorSchema.optional(),
+    actor: okfActorInputSchema.optional(),
   })
   .strict()
 export type DocumentSetInput = z.infer<typeof documentSetInputSchema>

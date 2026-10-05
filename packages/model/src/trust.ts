@@ -32,6 +32,33 @@ export const okfActorSchema = z
   })
 
 /**
+ * The most characters (UTF-16 code units) an actor may carry when it is
+ * written — by a tool's `actor` or `author`, or a route's.
+ *
+ * An actor is a name: `<producer>/<version>` runs to a few dozen characters
+ * (the longest in this repo's docs and fixtures is a 56-character
+ * `did:key:` id), so 256 holds any real one with room. What it bounds is an
+ * amplifier, not a habit: a batch's one `actor` is stamped as `generated.by`
+ * on every document the batch writes and kept in each one's history, so an
+ * unbounded actor multiplied a request about a hundredfold into storage —
+ * measured, a 256 Ki actor on a 50-create batch stored 26 MB.
+ */
+export const OKF_ACTOR_MAX_CHARS = 256
+
+/** The actor bound as every refusal of it ends. */
+const OKF_ACTOR_LIMIT_PHRASE = `the ${OKF_ACTOR_MAX_CHARS}-character limit`
+
+/**
+ * An actor as a tool or route accepts it. The STORED actor stays
+ * `okfActorSchema`, unbounded: a document written before the bound, or by
+ * another producer, must still read.
+ */
+export const okfActorInputSchema = okfActorSchema.max(
+  OKF_ACTOR_MAX_CHARS,
+  `an actor is longer than ${OKF_ACTOR_LIMIT_PHRASE}`,
+)
+
+/**
  * §5: "Every timestamp-valued key in OKF is an ISO 8601 datetime with an
  * explicit UTC offset." Stored in the `Z` form this codebase emits, and
  * accepted in any explicit-offset form so a document written elsewhere is

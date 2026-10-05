@@ -4,7 +4,7 @@ import {
   documentNameSchema,
   documentPathSchema,
   markdownInputSchema,
-  okfActorSchema,
+  okfActorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -56,7 +56,7 @@ export const wbDocumentCreateInputSchema = z
           .describe(
             'The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Facets go under `facets:`, never at the root of the `---` block. Omit to create it empty, which is what a caller wants when the content comes from somewhere else.',
           ),
-        actor: okfActorSchema
+        actor: okfActorInputSchema
           .optional()
           .describe(
             "Who is producing this content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` so a later reader knows what wrote the document. Identify yourself here; omitted, the write is attributed to the server rather than to you.",

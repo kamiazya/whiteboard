@@ -4,7 +4,7 @@ import {
   documentPathSchema,
   markdownInputSchema,
   messageOf,
-  okfActorSchema,
+  okfActorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -150,7 +150,7 @@ export const workspaceEditInputSchema = z
      * declares `generated` keeps its own, because that is provenance rather
      * than a field this write owns.
      */
-    actor: okfActorSchema
+    actor: okfActorInputSchema
       .optional()
       .describe(
         "Who is producing this batch's content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` on the documents this batch writes. Identify yourself here; omitted, the writes are attributed to the server rather than to you.",
