@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Lightweight, read-only investigation of a repo-hygiene / policy / portability question: fan out one investigator per concern dimension (in parallel), then synthesize a go/no-go recommendation with a risk table and the fixes required before adopting. No edits — feeds a human decision.',
   whenToUse:
-    'When a decision needs grounded evidence before committing to it (e.g. "should we track .claude/ in git", "is it safe to commit X", "what breaks for other contributors") but it is not worth a full plan-initiative. Pass args:{question, dimensions?, cwd?}. dimensions defaults to a repo-hygiene set. Read-only; returns a recommendation for the integrator to act on.',
+    'When a decision needs grounded evidence before committing to it (e.g. "should we track .claude/ in git", "is it safe to commit X", "what breaks for other contributors") but it is not worth a full plan-initiative. Pass args:{question, dimensions?, cwd?, investigatorAgent?}. dimensions defaults to a repo-hygiene set. Read-only; returns a recommendation for the integrator to act on.',
   phases: [
     { title: 'Investigate', detail: 'one repo-hygiene-investigator per concern dimension, in parallel' },
     { title: 'Synthesize', detail: 'merge findings into a go/no-go recommendation + required pre-steps' },
@@ -25,11 +25,10 @@ const A = (() => {
 const QUESTION = A.question || ''
 const CWD = A.cwd || null
 const GIT = CWD ? `git -C ${CWD}` : 'git'
-// Investigator agentType. IMPORTANT: a custom agent added mid-session (e.g. repo-hygiene-investigator)
-// is NOT in the agentType registry until a session reload — agent({agentType}) throws "not found".
-// So default to an always-registered, read-only agent (Explore: has Read/Grep/Glob/Bash, cannot Edit/Write),
-// and let callers override to the tuned custom agent once it is loaded: args.investigatorAgent.
-const INVESTIGATOR = A.investigatorAgent || 'Explore'
+// Investigator agentType: the read-only `repo-hygiene-investigator`. A session that started before
+// an agent file existed cannot resolve it (agent({agentType}) throws "not found" until a reload);
+// such a caller passes args.investigatorAgent:'Explore', read-only and always registered.
+const INVESTIGATOR = A.investigatorAgent || 'repo-hygiene-investigator'
 const cwdHint = CWD ? ` Investigate the repo under ${CWD} (run git as \`${GIT} ...\`, Read at that absolute path).` : ' Investigate the repo at the session root.'
 // Default dimensions tuned for "should we track this dir in git" questions; override via args.
 const DIMENSIONS = Array.isArray(A.dimensions) && A.dimensions.length

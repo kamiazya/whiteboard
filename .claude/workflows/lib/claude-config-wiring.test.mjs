@@ -105,6 +105,28 @@ test('every repo-owned agentType in a workflow has an agent definition', () => {
   assert.deepEqual(missing, [], `agentType with no .claude/agents/<name>.md: ${missing.join(', ')}`)
 })
 
+// A workflow whose agent is a caller's choice spells its default as `A.<x>Agent || '<name>'`, which
+// the `agentType:` scan above never reads. The audit and investigate lanes default to the agents
+// written for them: `Explore` was a stand-in from when those agents were new and a session that
+// predated them could not resolve them, and as a default it drops the tuned criteria silently.
+const AGENT_DEFAULTS = {
+  'audit-triage.workflow.mjs': 'codebase-auditor',
+  'investigate.workflow.mjs': 'repo-hygiene-investigator',
+}
+
+test('a workflow agent default names the repo-owned agent written for that lane', () => {
+  const workflowDir = path.join(repoRoot, '.claude', 'workflows')
+  for (const [file, expected] of Object.entries(AGENT_DEFAULTS)) {
+    const source = readFileSync(path.join(workflowDir, file), 'utf8')
+    const defaults = [...source.matchAll(/\bA\.\w+Agent \|\| '([^']+)'/g)].map((m) => m[1])
+    assert.deepEqual(defaults, [expected], `${file}'s agent default`)
+    assert.ok(
+      existsSync(path.join(repoRoot, '.claude', 'agents', `${expected}.md`)),
+      `${expected} has no .claude/agents/${expected}.md`,
+    )
+  }
+})
+
 // The Simplify phase must run a repo-owned agent: the plugin-provided code-simplifier carries
 // another project's coding standards in its own prompt (arrow-function bans this repo does not
 // have), so its "project standards" step applies the wrong rules here.

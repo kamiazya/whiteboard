@@ -8,7 +8,7 @@ export const meta = {
     { title: 'Design', detail: 'draft a design doc (completion criteria / scope / contracts / test scenarios / risks)' },
     { title: 'PlanReview', detail: 'gate the design for completeness; one retry on fail' },
     { title: 'Implement', detail: 'TDD red->green, lint/typecheck, commit; operates in cwd' },
-    { title: 'Simplify', detail: 'code-simplifier on changed files' },
+    { title: 'Simplify', detail: 'the repo-owned simplifier on changed files' },
     { title: 'Review', detail: 'compose the review workflow over baseRef..HEAD' },
     { title: 'Triage', detail: 'fix CRITICAL/HIGH (loop, capped), backlog the rest' },
   ],
