@@ -12,6 +12,10 @@ scan says.
 
 ## Tests
 
+- **A passing `mcp-node` run prints no log records.** `vitest.log-setup.ts`
+  mutes the default stderr destination (captures and the MCP bridge still get
+  every record); a test asserting on the stderr line itself opts back in with
+  `setStderrLogDestination(true)` and calls the restore it returns.
 - **Repo-policy guards are not tests of this package.** A test that reads
   workflows, the Dockerfile, root manifests, docs or the rule corpus and
   imports no daemon source lives in `tools/arch-lint/src` — the project
