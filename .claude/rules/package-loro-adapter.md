@@ -38,7 +38,8 @@ implementations live in the composition roots.
 
 - **A note's name from its heading** (`name-from-title.ts`, with
   `title-from-body.ts`): the one judgement both keepers run —
-  `seedNameFromTitle` by id for the browser store, `seedNamesFromTitles(since)`
+  `seedNameFromTitle` by id for the browser store and every daemon content write
+  (mcp-server's `writeDocumentContent`), `seedNamesFromTitles(since)`
   for the daemon's workspace update, which reads the touched nodes off the
   update's operations rather than walking the tree (135 ms at 1000 documents).
 - **A stored plane key is skipped, never read.** The branch's `plane:` child map
