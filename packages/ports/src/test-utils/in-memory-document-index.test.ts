@@ -1,7 +1,11 @@
 import { describe } from 'vitest'
+import { describeDocumentDuplicatesConformance } from './document-duplicates-conformance.js'
 import { describeDocumentIndexConformance } from './document-index-conformance.js'
 import { describeDocumentPinsConformance } from './document-pins-conformance.js'
-import { InMemoryDocumentIndex } from './in-memory-document-index.js'
+import {
+  DuplicatingInMemoryDocumentIndex,
+  InMemoryDocumentIndex,
+} from './in-memory-document-index.js'
 
 // The same suite the sqlite store answers to, run here so the double cannot
 // drift from the guarantees while still satisfying the interface.
@@ -23,4 +27,31 @@ describe('InMemoryDocumentIndex pins', () => {
     index: new InMemoryDocumentIndex(),
     dispose: async () => {},
   }))
+})
+
+describe('DuplicatingInMemoryDocumentIndex', () => {
+  describeDocumentDuplicatesConformance(async () => {
+    const markers = new Map<string, string>()
+    const index = new DuplicatingInMemoryDocumentIndex({
+      copy: (from, to) => {
+        const marker = markers.get(from)
+        if (marker !== undefined) markers.set(to, marker)
+      },
+    })
+    const idAt = async (workspaceId: string, path: string): Promise<string> => {
+      const entry = await index.resolveDocument({ workspaceId, path })
+      if (entry === null) throw new Error(`no document at ${path}`)
+      return entry.documentId
+    }
+    return {
+      index,
+      content: {
+        write: async (workspaceId, path, marker) => {
+          markers.set(await idAt(workspaceId, path), marker)
+        },
+        read: async (workspaceId, path) => markers.get(await idAt(workspaceId, path)) ?? '',
+      },
+      dispose: async () => {},
+    }
+  })
 })

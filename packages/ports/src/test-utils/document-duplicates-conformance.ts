@@ -90,6 +90,24 @@ function describeNumbering(withIndex: WithIndex): void {
     })
   })
 
+  // A copy placed on a folder's path would be promoted into it and arrive
+  // holding documents that were never its own. The folder takes the path and
+  // not the name: no document there is called "Roadmap (copy)".
+  it('numbers the copy past a folder standing on the first copy path', async () => {
+    await withIndex(async (index, content) => {
+      await roadmap(index, content)
+      await index.createDocument({
+        workspaceId: WS,
+        path: 'notes/roadmap-copy/minutes',
+        kind: 'markdown',
+      })
+
+      const copy = await index.duplicateDocument({ workspaceId: WS, path: 'notes/roadmap' })
+
+      expect(copy).toMatchObject({ path: 'notes/roadmap-copy-2', name: 'Roadmap (copy)' })
+    })
+  })
+
   it('lands two duplicates started together on two paths', async () => {
     await withIndex(async (index, content) => {
       await roadmap(index, content)
