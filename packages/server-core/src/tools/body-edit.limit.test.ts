@@ -122,4 +122,42 @@ describe('the size of the body a passage edit may leave', () => {
     )
     expect(result.body).toHaveLength(MARKDOWN_MAX_CHARS + 97)
   })
+
+  test('lets an edit that keeps an over-limit body the same length through', async () => {
+    const store = new FakeDocumentStore()
+    const body = await seedFilled(store, MARKDOWN_MAX_CHARS + 100)
+
+    const result = await createBodyEditTool(makeDeps(store)).execute(
+      replaceTail(body, 'TAIL', 'apply'),
+    )
+    expect(result.body).toHaveLength(MARKDOWN_MAX_CHARS + 100)
+    expect(result.body.startsWith('TAIL-')).toBe(true)
+  })
+
+  // The refusal names one change, and the one to shrink is the one that grows
+  // the body most: a long replacement of a long passage may grow it least.
+  test('names the change that grows the body most when a batch is refused', async () => {
+    const store = new FakeDocumentStore()
+    const body = `aaaa-b-${'x'.repeat(MARKDOWN_MAX_CHARS - 'aaaa-b-'.length)}`
+    await seedMarkdown(store, body)
+    const op = (id: string, exact: string, text: string) => ({
+      id,
+      op: 'body.replace' as const,
+      anchor: passage(body, exact),
+      text,
+      assumed: exact,
+    })
+
+    const refused = await createBodyEditTool(makeDeps(store))
+      .execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [op('longer-text', 'aaaa', 'zzzzzz'), op('more-growth', 'b', 'yyyyy')],
+      })
+      .catch((err: unknown) => err)
+
+    expect(refused).toBeInstanceOf(PassageNotApplicableError)
+    expect((refused as PassageNotApplicableError).changeId).toBe('more-growth')
+  })
 })
