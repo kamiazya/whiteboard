@@ -62,12 +62,10 @@ export function useShellWorkspaceRows(
       .then((loaded) => {
         if (!cancelled) setRows(loaded)
       })
-      // A list that will not load leaves the mark naming the handle the
-      // address carries, which is still true. Failing the whole shell over
-      // it would take the settings gear down with it. Recorded at info, not
-      // warn: a shell with no keeper to ask (offline, server mode before
-      // sign-in) reaches this by design, and an empty switcher should still
-      // leave a trace of why.
+      // A list that will not load leaves the mark naming the address's
+      // handle, which is still true; failing the shell would take the gear
+      // down too. Info, not warn: a shell with no keeper to ask (offline,
+      // server mode before sign-in) reaches this by design.
       .catch((cause: unknown) => log.info('could not list the workspaces', cause))
     return () => {
       cancelled = true
