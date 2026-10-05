@@ -10,6 +10,7 @@
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { markdownBodyNotice } from '../../lib/limit-notice.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
@@ -37,7 +38,9 @@ describe('pasting past the markdown size limit', () => {
     paste(editable() as HTMLElement, 'x'.repeat(MARKDOWN_MAX_CHARS))
 
     const notice = await utils.findByRole('status')
-    expect(notice.textContent).toContain('262,144')
+    expect(notice.textContent).toBe(
+      markdownBodyNotice('added', 'short'.length + MARKDOWN_MAX_CHARS),
+    )
     expect(onChange).not.toHaveBeenCalled()
     expect(editable()?.textContent).toBe('short')
   })

@@ -7,7 +7,7 @@ import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { nodeTextEditRefusal } from '../../lib/node-text-refusal.js'
+import { nodeTextEditNotice } from '../../lib/limit-notice.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { NodeTextEditorOverlay } from './NodeTextEditorOverlay.js'
 
@@ -208,7 +208,7 @@ describe('the node text overlay past the node text limit', () => {
     // In the words the node's own editor refuses the same edit with.
     await waitFor(() =>
       expect(container.querySelector('[role="status"]')?.textContent).toBe(
-        nodeTextEditRefusal(BODY.length + NODE_TEXT_MAX_CHARS),
+        nodeTextEditNotice(BODY.length + NODE_TEXT_MAX_CHARS),
       ),
     )
     await userEvent.click(getByRole('button', { name: 'Back to canvas' }))

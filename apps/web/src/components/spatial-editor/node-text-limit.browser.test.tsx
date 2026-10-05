@@ -14,6 +14,11 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
+import {
+  copiedNodeTextNotice,
+  nodeTextEditNotice,
+  pastedTextNotice,
+} from '../../lib/limit-notice.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { selectAt } from '../../test-utils/spatial-editor-pointer.js'
@@ -57,7 +62,9 @@ it('the node editor refuses a paste past the node text limit, keeps the text, an
 
   const editorBox = () => container.querySelector<HTMLElement>('[data-testid="text-node-editor"]')
   const notice = () => editorBox()?.querySelector<HTMLElement>('[role="status"]')
-  await vi.waitFor(() => expect(notice()?.textContent).toContain('8,192'))
+  await vi.waitFor(() =>
+    expect(notice()?.textContent).toBe(nodeTextEditNotice('short'.length + NODE_TEXT_MAX_CHARS)),
+  )
   // The notice shares the node's own box with the text, so it must leave
   // the text most of that box rather than cover it.
   const boxHeight = editorBox()?.getBoundingClientRect().height ?? 0
@@ -76,7 +83,9 @@ it('a canvas paste of plain text past the node text limit makes no node and says
 
   paste(rootOf(container), 'x'.repeat(NODE_TEXT_MAX_CHARS + 1))
 
-  await vi.waitFor(() => expect(notice()?.textContent).toContain('8,192'))
+  await vi.waitFor(() =>
+    expect(notice()?.textContent).toContain(pastedTextNotice(NODE_TEXT_MAX_CHARS + 1)),
+  )
   expect(latest.canvas.nodes).toHaveLength(0)
   expect(latest.commands).toHaveLength(0)
 
@@ -114,7 +123,7 @@ it('pasting a fragment holding a node past the node text limit makes nothing and
 
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
-      'Not pasted',
+      copiedNodeTextNotice('pasted', NODE_TEXT_MAX_CHARS + 1),
     ),
   )
   expect(latest.canvas.nodes).toHaveLength(0)
@@ -132,7 +141,7 @@ it('duplicating a node already past the node text limit makes no copy and says w
 
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
-      'Not duplicated',
+      copiedNodeTextNotice('duplicated', NODE_TEXT_MAX_CHARS + 1),
     ),
   )
   expect(latest.canvas.nodes).toHaveLength(1)

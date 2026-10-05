@@ -12,10 +12,11 @@
  * whole content of the decision, and a summary of them would be a worse
  * version of the thing itself.
  */
-import { MARKDOWN_MAX_CHARS, type Proposal } from '@kamiazya/whiteboard-model'
+import type { Proposal } from '@kamiazya/whiteboard-model'
 import { CircleCheck, CircleX } from 'lucide-react'
 import { useState } from 'react'
 import { type AdoptionRefusal, adoptionRefusal } from '../../lib/apply-adopted-passages.js'
+import { markdownBodyNotice } from '../../lib/limit-notice.js'
 import { ProposalAuthor } from '../proposals/ProposalAuthor.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
@@ -142,15 +143,10 @@ function useAdoptWithinLimit(
   }
 }
 
-// en-US explicitly: the editor's own size notice counts the same way, so the
-// two refusals of one limit read alike whatever the browser's locale.
-const COUNT = new Intl.NumberFormat('en-US')
-
 function LimitNotice({ refusal }: { readonly refusal: AdoptionRefusal }) {
   return (
     <output className="mb-1.5 block text-xs text-destructive">
-      Not adopted: this would make the document {COUNT.format(refusal.length)} characters long, past
-      the {COUNT.format(MARKDOWN_MAX_CHARS)}-character limit. Split the content across documents.
+      {markdownBodyNotice('adopted', refusal.length)}
     </output>
   )
 }

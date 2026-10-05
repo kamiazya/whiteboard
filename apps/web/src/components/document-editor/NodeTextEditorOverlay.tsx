@@ -2,7 +2,7 @@ import type { Extension } from '@codemirror/state'
 import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { nodeTextEditRefusal } from '../../lib/node-text-refusal.js'
+import { nodeTextEditNotice } from '../../lib/limit-notice.js'
 import { textLengthLimit } from '../../lib/text-length-limit.js'
 import { EditorExitHint } from '../EditorExitHint.js'
 import type { MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
@@ -37,7 +37,7 @@ export interface NodeTextEditorOverlayProps
  * surface does not need: its value only ever comes from the editor itself.
  */
 const NODE_TEXT_LIMIT: readonly Extension[] = [
-  textLengthLimit(NODE_TEXT_MAX_CHARS, nodeTextEditRefusal),
+  textLengthLimit(NODE_TEXT_MAX_CHARS, nodeTextEditNotice),
 ]
 
 /**

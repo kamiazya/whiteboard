@@ -42,9 +42,14 @@ function arrivedFromOutside(tr: Transaction): boolean {
  * have made.
  *
  * Each call carries its own state, so two limits installed in one editor
- * each report only the edits they refused.
+ * each report only the edits they refused. `compact` sets the notice small,
+ * for an editor that shares a node's box or a comment bubble with it.
  */
-export function textLengthLimit(limit: number, describe: (length: number) => string): Extension {
+export function textLengthLimit(
+  limit: number,
+  describe: (length: number) => string,
+  { compact = false }: { readonly compact?: boolean } = {},
+): Extension {
   const refused = StateEffect.define<number>()
   // The length of the last refused edit, until the next edit that lands.
   const refusal = StateField.define<number | null>({
@@ -63,7 +68,9 @@ export function textLengthLimit(limit: number, describe: (length: number) => str
     EditorView.theme({
       '.cm-panels': { backgroundColor: 'var(--muted)', color: 'var(--foreground)' },
       '.cm-panels-top': { borderBottom: '1px solid var(--destructive)' },
-      '.cm-length-limit-notice': { padding: '6px 24px', fontSize: '13px' },
+      '.cm-length-limit-notice': compact
+        ? { padding: '2px 4px', fontSize: '11px', lineHeight: '1.3' }
+        : { padding: '6px 24px', fontSize: '13px' },
     }),
     EditorState.transactionFilter.of((tr) => {
       if (!tr.docChanged || arrivedFromOutside(tr)) return tr

@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { commentMessageNotice } from '../../lib/limit-notice.js'
 import { CommentComposer } from './CommentComposer.js'
 
 afterEach(cleanup)
@@ -116,7 +117,9 @@ it('refuses a paste past the message limit, keeps the draft, and says why', asyn
   )
 
   await vi.waitFor(() =>
-    expect(document.querySelector('[role="status"]')?.textContent).toContain('4,096-character'),
+    expect(document.querySelector('[role="status"]')?.textContent).toBe(
+      commentMessageNotice('kept'.length + COMMENT_MESSAGE_MAX_CHARS),
+    ),
   )
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
   expect(sent).toEqual(['kept'])

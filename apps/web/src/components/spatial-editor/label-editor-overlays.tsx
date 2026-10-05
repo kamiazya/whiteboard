@@ -12,6 +12,7 @@ import {
   LABEL_MAX_CHARS,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
+import { labelNotice } from '../../lib/limit-notice.js'
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
@@ -20,8 +21,6 @@ import { type TextLengthLimit, TextNodeEditor } from './TextNodeEditor.js'
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
 const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
 
-const COUNT = new Intl.NumberFormat('en-US')
-
 /**
  * A label is held where a person writes it to the bound the agent tools hold
  * it to: it is laid out on every render of its board, at a cost linear in its
@@ -29,8 +28,7 @@ const COUNT = new Intl.NumberFormat('en-US')
  */
 const labelLengthLimit: TextLengthLimit = {
   max: LABEL_MAX_CHARS,
-  describe: (length) =>
-    `Not added: the label would be ${COUNT.format(length)} characters, past its ${COUNT.format(LABEL_MAX_CHARS)}-character limit.`,
+  describe: labelNotice,
 }
 
 /**

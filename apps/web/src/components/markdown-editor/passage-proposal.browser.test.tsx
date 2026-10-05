@@ -9,6 +9,7 @@ import { MARKDOWN_MAX_CHARS, type Proposal } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { markdownBodyNotice } from '../../lib/limit-notice.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(cleanup)
@@ -177,7 +178,7 @@ describe('a proposed passage in the body', () => {
 
     expect(onDecidePassage).not.toHaveBeenCalled()
     expect(getByTestId('passage-proposal-card').textContent).toContain(
-      'Not adopted: this would make the document 262,154 characters long, past the 262,144-character limit.',
+      markdownBodyNotice('adopted', MARKDOWN_MAX_CHARS + ' or Friday'.length),
     )
   })
 
