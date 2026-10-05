@@ -7,8 +7,8 @@ import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
-  seedNameFromTitle,
   type SyncTextBreach,
+  seedNameFromTitle,
   syncTextLimitBreach,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
