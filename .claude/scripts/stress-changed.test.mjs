@@ -97,8 +97,8 @@ test('a run executes five fresh processes then one --repeats=3 process per leg, 
   assert.equal(calls.length, 12)
   const files = 'a.test.ts b.browser.test.tsx'
   for (const [offset, project] of [
-    [0, '*-browser'],
-    [6, '!*-browser'],
+    [0, '*-browser*'],
+    [6, '!*-browser*'],
   ]) {
     for (let i = 0; i < 5; i++) {
       assert.equal(
@@ -130,7 +130,7 @@ test('--only runs a single leg', () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal(shim.calls().length, 6)
-  assert.ok(shim.calls().every((call) => call.includes('--project !*-browser')))
+  assert.ok(shim.calls().every((call) => call.includes('--project !*-browser* ')))
 })
 
 test('no changed test files is success without running anything', () => {

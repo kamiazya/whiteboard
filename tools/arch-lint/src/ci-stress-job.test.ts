@@ -20,6 +20,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
@@ -85,11 +86,19 @@ describe('stress-changed-tests cannot pass by collecting nothing', () => {
 // claimed by NEITHER leg is simply never stressed. Both directions are checked
 // here against the real project list.
 //
-// What the browser pattern rests on is that every browser project's NAME ends
-// `-browser`. That is a convention, and a convention nothing reads is one that
-// breaks quietly — a browser project named `foo-chromium` would be swept into
-// the node leg and the split would stop doing its job while both legs stayed
-// green. So the names are checked against the CONFIG each one comes from.
+// What the browser pattern rests on is a NAMING convention, and a convention
+// nothing reads is one that breaks quietly — a browser project whose name the
+// pattern misses is swept into the node leg, and the split stops doing its job
+// while both legs stay green. So the pattern is checked against what each
+// project IS: browser mode enabled in its config, read by the one inventory
+// parser every other guard uses. A config's FILENAME is not that —
+// `vitest.browser-window-state.config.ts` is a browser project whose file does
+// not end `vitest.browser.config.ts`, and it ran in the node leg unnoticed.
+
+const { readBrowserProjectNames } = (await import(
+  pathToFileURL(join(ROOT, 'tools/checks/src/vitest-projects.mjs')).href
+)) as { readBrowserProjectNames: (repoRoot: string) => string[] }
+const browserProjects = new Set(readBrowserProjectNames(ROOT))
 
 const projectConfigs = [
   ...readFileSync(join(ROOT, 'vitest.config.ts'), 'utf-8').matchAll(/'([^']+vitest[^']+)'/g),
@@ -136,13 +145,21 @@ describe('the stress lane splits the realms without losing a project', () => {
     }
   })
 
-  it('names every browser project so the browser pattern can find it', () => {
+  it('gives the browser leg exactly the browser-mode projects', () => {
+    const browserPattern = /- leg: browser\n\s+projects: '([^']+)'/.exec(
+      job('stress-changed-tests'),
+    )?.[1]
+    expect(browserPattern, 'the matrix has no browser leg to read').toBeDefined()
+    // Reached, not assumed: an inventory that found no browser project would
+    // pass the loop below for any pattern that matches nothing.
+    expect(browserProjects.size).toBeGreaterThanOrEqual(3)
     for (const { config, name } of projects) {
-      const isBrowser = config.endsWith('vitest.browser.config.ts')
+      const isBrowser = browserProjects.has(name)
       expect(
-        name.endsWith('-browser'),
-        `${config} declares '${name}': a browser project's name must end '-browser', or the ` +
-          'stress lane sweeps it into the node leg and stops separating the realms',
+        matches(name, [browserPattern ?? '']),
+        `${config} declares '${name}' (browser mode ${isBrowser ? 'on' : 'off'}): the browser ` +
+          `leg's '${browserPattern}' must claim it exactly when it runs in a browser, or the ` +
+          'stress lane runs it in the wrong leg and stops separating the realms',
       ).toBe(isBrowser)
     }
   })
