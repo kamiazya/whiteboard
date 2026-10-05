@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -62,11 +62,11 @@ function storeNames(file: ts.SourceFile): Set<string> {
   return names
 }
 
-function receiverIsStore(receiver: ts.Expression, names: ReadonlySet<string>): boolean {
+function receiverIsStore(expression: ts.Expression, names: ReadonlySet<string>): boolean {
+  const receiver = unwrapExpression(expression)
   if (ts.isNewExpression(receiver)) {
     return ts.isIdentifier(receiver.expression) && receiver.expression.text === 'LoroStore'
   }
-  if (ts.isParenthesizedExpression(receiver)) return receiverIsStore(receiver.expression, names)
   if (ts.isIdentifier(receiver)) return names.has(receiver.text)
   if (ts.isPropertyAccessExpression(receiver)) return names.has(receiver.name.text)
   return false
@@ -106,6 +106,9 @@ describe('the per-document content store has one production writer', () => {
     expect(writes('function f(loro: LoroStoreLike) { return loro.save(id, bytes) }')).toBe(true)
     expect(writes('const store = deps.loro ?? new LoroStore()\nstore.save(id, bytes)')).toBe(true)
     expect(writes('await new LoroStore().save(id, bytes)')).toBe(true)
+    expect(writes('function f(loro: LoroStoreLike) { return (loro as Store)!.save(i, b) }')).toBe(
+      true,
+    )
     expect(
       writes('class A { private readonly legacy: LoroStore\n m() { this.legacy.save(id, b) } }'),
     ).toBe(true)
