@@ -38,6 +38,7 @@ import {
   workspacePeopleResponseSchema,
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
@@ -449,5 +450,6 @@ describe('every route only server mode mounts answers or refuses with a reason, 
 
   fuzzRows(RULES, answered, async () => harnessFor(await seededApp(idp)))
 
-  afterAll(() => assertLedger(RULES, answered))
+  // Every route row `fuzzRows` registered is titled by its method and path.
+  afterAllFloor([/^[A-Z]+ \//], () => assertLedger(RULES, answered))
 })

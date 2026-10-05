@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { writeCommentThread, writeThreadMessage } from './comment-threads.js'
 import type { DocumentContainers } from './containers.js'
 import { writeSpatialCanvas, writeSpatialEdge, writeSpatialNode } from './loro-bridge.js'
-import { importWithinTextLimits, syncTextLimitBreach } from './sync-text-limits.js'
+import { importWithinTextLimits, syncTextLimitJudge } from './sync-text-limits.js'
 import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
 
 const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -59,7 +59,7 @@ function updateFrom(base: LoroDoc, edit: (board: DocumentContainers) => void): U
 /** Both keepers' verdicts, which must agree. */
 function judged(base: LoroDoc, update: Uint8Array) {
   const imported = importWithinTextLimits(base.fork(), update).breach
-  expect(syncTextLimitBreach(base, update)).toEqual(imported)
+  expect(syncTextLimitJudge(base)(update)).toEqual(imported)
   return imported
 }
 
@@ -80,6 +80,7 @@ describe('a label written through a sync update', () => {
       shape: 'label',
       chars: LABEL_MAX_CHARS + 1,
       elementId: 'e',
+      container: expect.any(String),
     })
   })
 
@@ -146,6 +147,7 @@ describe('a comment message written through a sync update', () => {
       shape: 'comment-message',
       chars: COMMENT_MESSAGE_MAX_CHARS + 1,
       messageId: 'm2',
+      container: expect.any(String),
     })
   })
 

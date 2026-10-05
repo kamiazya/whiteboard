@@ -10,6 +10,7 @@
  */
 import { lazy, type ReactNode, Suspense } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { KeeperNotices } from '../components/connection/KeeperNotices.js'
 import { LazyPageFallback } from '../components/LazyPageFallback.js'
 import { parseWorkspaceRoute, type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
 
@@ -29,6 +30,7 @@ export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {shell}
+      <KeeperNotices />
       <main className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Opening workspace…" />}>
           {view.kind === 'index' ? (

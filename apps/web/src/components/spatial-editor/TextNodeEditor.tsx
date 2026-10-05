@@ -17,6 +17,7 @@
  * alone cannot prevent either.
  */
 
+import { growsPast } from '@kamiazya/whiteboard-model'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { EditorExitHint } from '../EditorExitHint.js'
@@ -68,7 +69,7 @@ function useLimitedDraft(initialText: string, limit: TextLengthLimit | undefined
   const [value, setValue] = useState(initialText)
   const [refused, setRefused] = useState<number | null>(null)
   const offer = (next: string): boolean => {
-    if (limit !== undefined && next.length > limit.max && next.length > value.length) {
+    if (limit !== undefined && growsPast(limit.max, value.length, next.length)) {
       setRefused(next.length)
       return false
     }

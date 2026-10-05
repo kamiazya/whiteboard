@@ -21,7 +21,8 @@
  * produce no `saved`, which is what keeps "pending forever" and "saved too
  * early" from cancelling each other out.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { afterAll, beforeAll, describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { PersistenceLedger } from './persistence-ledger.js'
@@ -343,22 +344,27 @@ describe('PersistenceLedger as a state machine', () => {
     },
   )
 
-  // After the property, because floors are statements about the run it just
-  // did: a generator that never reaches the epoch rule or a failure after a
-  // settled save would pass every example above without exercising either.
-  // Counted as effects (a resolve that was held, not a resolve attempted).
+  // Floors are statements about the run the property just did: a generator
+  // that never reaches the epoch rule or a failure after a settled save would
+  // pass every example above without exercising either. Counted as effects (a
+  // resolve that was held, not a resolve attempted).
+  afterAllFloor(
+    ['reports what the event log says, and never saved while anything is unsettled'],
+    () => {
+      const census = JSON.stringify(tally)
+      for (const [name, count] of Object.entries(tally)) {
+        expect(count, `${name} never happened\ncensus: ${census}`).toBeGreaterThan(0)
+      }
+    },
+  )
+
+  // Registered after the floor so the census prints first: afterAll hooks run
+  // in reverse, and a failing floor stops the ones after it.
   afterAll(() => {
     process.stdout.write(
       `[persistence-ledger census] ${Object.entries(tally)
         .map(([name, count]) => `${name}=${count}`)
         .join(' ')}\n`,
     )
-  })
-
-  it('reached every arrangement its safety statements are about', () => {
-    const census = JSON.stringify(tally)
-    for (const [name, count] of Object.entries(tally)) {
-      expect(count, `${name} never happened\ncensus: ${census}`).toBeGreaterThan(0)
-    }
   })
 })

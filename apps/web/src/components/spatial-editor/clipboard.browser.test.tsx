@@ -137,6 +137,21 @@ it('copies a stroke and pastes it beside the original', () => {
   expect(latest.commands.at(-1)?.kind).toBe('batch')
 })
 
+it('a pasted stroke becomes the selection, so Delete removes the copy', () => {
+  const { Host, latest } = makeHost(inkBoard)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  selectAt(root, 300, 380)
+  clip(root, 'copy')
+  clip(root, 'paste')
+  const pasted = latest.canvas.lines?.[1]?.id
+  expect(pasted).not.toBe('stroke')
+
+  fireEvent.keyDown(root, { key: 'Delete' })
+
+  expect(latest.canvas.lines?.map((line) => line.id)).toEqual(['stroke'])
+})
+
 it('cuts a stroke: the board is untouched until the paste decides', () => {
   const { Host, latest } = makeHost(inkBoard)
   const { container } = render(<Host />)

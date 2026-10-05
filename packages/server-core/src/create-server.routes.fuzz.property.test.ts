@@ -18,8 +18,12 @@
  * 400 for the last two is a branch the schema-drawn body never reaches.
  */
 import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
-import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { afterAll, describe, expect, it } from 'vitest'
+import {
+  afterAllFloor,
+  arbitraryForSchema,
+  sameSchema,
+} from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import type { z } from 'zod'
 import { apiErrorBodySchema } from './api-errors.js'
 import { SEARCH_QUERY_KEYS, type SearchQueryInput, searchQueryString } from './search-query.js'
@@ -366,11 +370,14 @@ describe('every /api/v1 route answers or refuses with a reason, never a 5xx', ()
     })
   }
 
-  afterAll(() => {
-    const silent = ROUTES.map((r) => r.name).filter((name) => (answered.get(name) ?? 0) === 0)
-    expect(
-      silent,
-      `routes this lane never got a 2xx from: ${JSON.stringify([...answered])}`,
-    ).toEqual([])
-  })
+  afterAllFloor(
+    ROUTES.map((r) => r.name),
+    () => {
+      const silent = ROUTES.map((r) => r.name).filter((name) => (answered.get(name) ?? 0) === 0)
+      expect(
+        silent,
+        `routes this lane never got a 2xx from: ${JSON.stringify([...answered])}`,
+      ).toEqual([])
+    },
+  )
 })

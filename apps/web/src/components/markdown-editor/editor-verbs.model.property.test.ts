@@ -46,7 +46,8 @@
  */
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import { afterAll, describe, expect } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
@@ -516,23 +517,26 @@ describe('markdown editor verbs as a state machine over the caret line', () => {
     CEILING_MS,
   )
 
-  afterAll(() => {
-    assertLedger('editing verb', VERB_COVERAGE, drives)
-    // A FLOOR for the marks, not only the ledger's "at least once" — the
-    // same guard-of-the-guard edge-rules.properties.test.ts carries, for the
-    // same reason. Without `Type` in the pool the marks were driven 0–13
-    // times per execution against ~400+ for every structure verb, and the
-    // ledger failed only on the tail of that distribution: a red build
-    // pointing at a file nobody had changed. With `Type`, measured over five
-    // executions, every mark lands 18–46. The floor sits well below that
-    // without pinning a distribution; a generator change that thins the
-    // marks back out fails HERE, every run, naming the thin mark.
-    const MARK_DRIVE_FLOOR = 8
-    for (const id of ['bold', 'italic', 'strikethrough', 'code', 'link', 'math'] as const) {
-      expect(
-        drives[id],
-        `mark "${id}" was driven ${drives[id]} time(s); the generator has gone sparse (see Type)`,
-      ).toBeGreaterThanOrEqual(MARK_DRIVE_FLOOR)
-    }
-  })
+  afterAllFloor(
+    ['after every press the parsed document is the shape the transition table implies'],
+    () => {
+      assertLedger('editing verb', VERB_COVERAGE, drives)
+      // A FLOOR for the marks, not only the ledger's "at least once" — the
+      // same guard-of-the-guard edge-rules.properties.test.ts carries, for the
+      // same reason. Without `Type` in the pool the marks were driven 0–13
+      // times per execution against ~400+ for every structure verb, and the
+      // ledger failed only on the tail of that distribution: a red build
+      // pointing at a file nobody had changed. With `Type`, measured over five
+      // executions, every mark lands 18–46. The floor sits well below that
+      // without pinning a distribution; a generator change that thins the
+      // marks back out fails HERE, every run, naming the thin mark.
+      const MARK_DRIVE_FLOOR = 8
+      for (const id of ['bold', 'italic', 'strikethrough', 'code', 'link', 'math'] as const) {
+        expect(
+          drives[id],
+          `mark "${id}" was driven ${drives[id]} time(s); the generator has gone sparse (see Type)`,
+        ).toBeGreaterThanOrEqual(MARK_DRIVE_FLOOR)
+      }
+    },
+  )
 })

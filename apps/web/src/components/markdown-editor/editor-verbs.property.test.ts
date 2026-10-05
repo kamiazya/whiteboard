@@ -22,7 +22,8 @@
  */
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
 import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
@@ -453,7 +454,8 @@ describe('markdown editor verbs', () => {
     expect(new Set(VERB_BAR_ORDER).size).toBe(VERB_BAR_ORDER.length)
   })
 
-  afterAll(() => {
+  // Nearly every test here drives verbs through `drive`, so the tallies are the whole suite's.
+  afterAllFloor('every test', () => {
     assertLedger('editing verb', VERB_COVERAGE, drives)
 
     // The vacuity guard: being DRIVEN is not being exercised. A verb the

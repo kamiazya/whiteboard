@@ -27,6 +27,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
@@ -349,5 +350,6 @@ describe('every daemon route answers or refuses with a reason, never a 5xx', () 
 
   fuzzRows(RULES, answered, async () => daemonHarness(await seededApp()))
 
-  afterAll(() => assertLedger(RULES, answered))
+  // Every route row `fuzzRows` registered is titled by its method and path.
+  afterAllFloor([/^[A-Z]+ \//], () => assertLedger(RULES, answered))
 })

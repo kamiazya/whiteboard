@@ -776,4 +776,25 @@ describe('a workspace-document sync update that writes a node meta', () => {
       ),
     ).resolves.toBe('applied')
   })
+
+  it('a name stored longer before the bound, left as it was, while another node meta is written, is applied', async () => {
+    // A meta write reaches the placement walk, which a body insert never does.
+    const seed = workspaceSeed('body')
+    setNodeMeta(seed, DOC_ID, 'name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 50))
+    createWorkspaceDocumentAtPath(seed, { path: 'other', documentId: OTHER_ID, kind: 'markdown' })
+    seed.commit()
+    const store = new StoredDoc(seed)
+
+    await expect(send(store, (doc) => setNodeMeta(doc, OTHER_ID, 'name', 'Renamed'))).resolves.toBe(
+      'applied',
+    )
+  })
+
+  it('a name of exactly DOCUMENT_NAME_MAX_LENGTH is applied', async () => {
+    const store = nested()
+
+    await expect(
+      send(store, (doc) => setNodeMeta(doc, DOC_ID, 'name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH))),
+    ).resolves.toBe('applied')
+  })
 })

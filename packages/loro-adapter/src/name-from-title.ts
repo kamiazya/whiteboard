@@ -1,7 +1,7 @@
 // A document named after the title its body announces, judged once for every
-// keeper: the browser's store and the daemon's sync routes take the same
-// bytes, so a note typed into at `untitled` must come out named the same way
-// whichever of them keeps it.
+// keeper: the browser's store and the daemon, which names on every content
+// write, take the same bytes, so a note typed into at `untitled` must come out
+// named the same way whichever of them keeps it.
 import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
@@ -34,13 +34,15 @@ const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
  * card, the URL and every search result, and the only way to fix that is to
  * type the same words a second time into the rename dialog.
  *
- * Two gates, and the second is the load-bearing one. `name` absent means
- * "nobody named it" — but it is ALSO what the rename dialog leaves behind
- * when someone deliberately clears a name to show the path instead, and
- * re-seeding over that would be this codebase's recurring defect: state
- * keyed on something that has since changed. A still-generated path is the
- * proxy that separates them (`isGeneratedDocumentPath`). Only the node's own
- * segment is read: the predicate looks at nothing else of a path.
+ * A name somebody CHOSE (`nameChosen`) is never replaced, whatever the
+ * heading says. Past that, two gates, and the second is the load-bearing
+ * one. `name` absent means "nobody named it" — but it is ALSO what the
+ * rename dialog leaves behind when someone deliberately clears a name to
+ * show the path instead, and re-seeding over that would be this codebase's
+ * recurring defect: state keyed on something that has since changed. A
+ * still-generated path is the proxy that separates them
+ * (`isGeneratedDocumentPath`). Only the node's own segment is read: the
+ * predicate looks at nothing else of a path.
  *
  * The PATH is never touched. ADR-0008 measured deriving one from a display
  * name and found every non-Latin title collapsing to `untitled-N`; ADR-0007's
@@ -53,9 +55,10 @@ const META_KEYS = Object.keys(workspaceNodeMetaSchema.shape)
  * present was what closed its gate. Measured in a real browser: `# From` …
  * ` the list` produced a document called "From", forever. A wrong name is
  * worse than `untitled`, because it looks deliberate. So a name this
- * produced may be replaced, and the test for "this one is ours" is that the
- * title still STARTS WITH it — exactly the shape a half-typed heading leaves
- * behind. Any other name is a person's, and is never touched.
+ * produced may be replaced, and the test for "this one is ours" is that it
+ * is not marked chosen and the title still STARTS WITH it — exactly the shape
+ * a half-typed heading leaves behind. The prefix alone cannot tell a seeded
+ * name from a short one somebody gave a longer heading; the marker can.
  *
  * The body is read where it already is and never attached: attaching a
  * container on a tree node is an op, and a read that writes would make every
@@ -65,7 +68,9 @@ function nameToSeed(node: LoroTreeNode): string | null {
   const meta = workspaceNodeMetaSchema.safeParse(
     Object.fromEntries(META_KEYS.map((key) => [key, node.data.get(key)])),
   )
-  if (!meta.success || !isGeneratedDocumentPath(meta.data.segment)) return null
+  if (!meta.success || meta.data.nameChosen || !isGeneratedDocumentPath(meta.data.segment)) {
+    return null
+  }
   const body = node.data.get(MARKDOWN_BODY_KEY)
   if (!(body instanceof LoroText)) return null
   const title = titleFromMarkdownBody(body.toString())

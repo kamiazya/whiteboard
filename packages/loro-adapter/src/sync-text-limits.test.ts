@@ -1,10 +1,18 @@
-import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  LABEL_MAX_CHARS,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeSpatialNode } from './loro-bridge.js'
-import { importWithinTextLimits, syncTextLimitBreach } from './sync-text-limits.js'
+import { importWithinTextLimits, syncTextLimitJudge } from './sync-text-limits.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  WORKSPACE_TREE_KEY,
+} from './workspace-tree.js'
 
 const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
 const OTHER_ID = '01BRWAAAAAAAAAAAAAAAAAAAA6'
@@ -31,23 +39,17 @@ function updateFrom(base: LoroDoc, documentId: string, edit: (body: LoroText) =>
   return client.export({ mode: 'update', from })
 }
 
-describe('syncTextLimitBreach', () => {
+describe('syncTextLimitJudge', () => {
   it('leaves the record as it was, whatever the verdict', () => {
     const base = record({ [DOC_ID]: 'y'.repeat(MARKDOWN_MAX_CHARS - 1) })
     const version = base.oplogVersion()
     const snapshotBytes = base.export({ mode: 'snapshot' }).byteLength
 
     expect(
-      syncTextLimitBreach(
-        base,
-        updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab')),
-      ),
+      syncTextLimitJudge(base)(updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab'))),
     ).toMatchObject({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 1 })
     expect(
-      syncTextLimitBreach(
-        base,
-        updateFrom(base, DOC_ID, (body) => body.delete(0, 1)),
-      ),
+      syncTextLimitJudge(base)(updateFrom(base, DOC_ID, (body) => body.delete(0, 1))),
     ).toBeNull()
 
     expect(base.oplogVersion().compare(version)).toBe(0)
@@ -61,10 +63,7 @@ describe('syncTextLimitBreach', () => {
     // than refusing it.
     const base = record({ [DOC_ID]: 'short', [OTHER_ID]: 'y'.repeat(MARKDOWN_MAX_CHARS) })
     expect(
-      syncTextLimitBreach(
-        base,
-        updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab')),
-      ),
+      syncTextLimitJudge(base)(updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab'))),
     ).toBeNull()
   })
 
@@ -82,11 +81,48 @@ describe('syncTextLimitBreach', () => {
     })
     client.commit()
 
-    expect(syncTextLimitBreach(base, client.export({ mode: 'update', from }))).toEqual({
+    expect(syncTextLimitJudge(base)(client.export({ mode: 'update', from }))).toEqual({
       shape: 'node-text',
       chars: NODE_TEXT_MAX_CHARS + 1,
       nodeId: 'n1',
+      container: expect.any(String),
     })
+  })
+
+  it('judges each update against the record as it now stands, whoever wrote to it since', () => {
+    // Every update here is past the short-update bound, so each is judged on
+    // the judge's own copy — which must hold what the record took meanwhile,
+    // from the keeper and from anyone else.
+    const base = record({ [DOC_ID]: 'y'.repeat(MARKDOWN_MAX_CHARS - 5_000) })
+    const judge = syncTextLimitJudge(base)
+    const first = updateFrom(base, DOC_ID, (body) => body.insert(0, 'a'.repeat(1_500)))
+    expect(judge(first)).toBeNull()
+    base.import(first)
+    base.import(updateFrom(base, DOC_ID, (body) => body.insert(0, 'b'.repeat(2_000))))
+
+    expect(
+      judge(updateFrom(base, DOC_ID, (body) => body.insert(0, 'c'.repeat(2_000)))),
+    ).toMatchObject({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 500 })
+    // A refusal leaves the judge usable, and the record untouched.
+    expect(judge(updateFrom(base, DOC_ID, (body) => body.insert(0, 'd'.repeat(1_400))))).toBeNull()
+    expect(documentContainers(base, DOC_ID).getText('body')).toHaveLength(
+      MARKDOWN_MAX_CHARS - 1_500,
+    )
+  })
+
+  it('answers a short update by a body that grew since it last looked, whoever grew it', () => {
+    // A short update is answered without a judgement by how long the longest
+    // body may be; that bound must follow what the record took meanwhile.
+    const base = record({ [DOC_ID]: 'y'.repeat(MARKDOWN_MAX_CHARS - 3_000) })
+    const judge = syncTextLimitJudge(base)
+    const first = updateFrom(base, DOC_ID, (body) => body.insert(0, 'a'))
+    expect(judge(first)).toBeNull()
+    base.import(first)
+    base.import(updateFrom(base, DOC_ID, (body) => body.insert(0, 'b'.repeat(2_500))))
+
+    const past = updateFrom(base, DOC_ID, (body) => body.insert(0, 'c'.repeat(600)))
+    expect(past.byteLength).toBeLessThanOrEqual(LABEL_MAX_CHARS)
+    expect(judge(past)).toMatchObject({ shape: 'body', chars: MARKDOWN_MAX_CHARS + 101 })
   })
 
   it('takes an update whose bytes are at least as many as every string it writes', () => {
@@ -136,7 +172,7 @@ describe('syncTextLimitBreach', () => {
         : null
 
     expect(importWithinTextLimits(base.fork(), update).breach).toEqual(expected)
-    expect(syncTextLimitBreach(base, update)).toEqual(expected)
+    expect(syncTextLimitJudge(base)(update)).toEqual(expected)
   })
 })
 
@@ -153,12 +189,44 @@ describe('importWithinTextLimits', () => {
     const bodyEdit = updateFrom(base, DOC_ID, (body) => body.insert(0, 'more '))
     expect(importWithinTextLimits(base.fork(), bodyEdit).touchesNodeMeta).toBe(false)
 
+    // A canvas write is map writes too, and stays out of the placement walk.
+    const drawer = base.fork()
+    const drawnFrom = drawer.oplogVersion()
+    writeSpatialNode(documentContainers(drawer, DOC_ID), {
+      id: 'n1',
+      resource: { mimeType: 'text/markdown', content: 'note' },
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+    })
+    drawer.commit()
+    const drawn = drawer.export({ mode: 'update', from: drawnFrom })
+    expect(importWithinTextLimits(base.fork(), drawn).touchesNodeMeta).toBe(false)
+
     const client = base.fork()
     const from = client.oplogVersion()
     createWorkspaceDocumentAtPath(client, { path: 'other', documentId: OTHER_ID, kind: 'markdown' })
     client.commit()
     const created = client.export({ mode: 'update', from })
     expect(importWithinTextLimits(base.fork(), created).touchesNodeMeta).toBe(true)
+  })
+
+  // A malformed marker leaves the node unreadable, which only a keeper that
+  // looked at the meta can refuse.
+  it('counts a write of the chosen-name marker alone as touching node meta', () => {
+    const base = record({ [DOC_ID]: 'body' })
+    const client = base.fork()
+    const from = client.oplogVersion()
+    const node = client
+      .getTree(WORKSPACE_TREE_KEY)
+      .getNodes()
+      .find((each) => each.data.get('documentId') === DOC_ID)
+    node?.data.set('nameChosen', 'yes')
+    client.commit()
+    const marked = client.export({ mode: 'update', from })
+
+    expect(importWithinTextLimits(base.fork(), marked).touchesNodeMeta).toBe(true)
   })
 })
 
@@ -234,6 +302,19 @@ describe('importWithinTextLimits on update shapes', () => {
       body.insert(1 + half, 'b'.repeat(half))
     })
     expect(importWithinTextLimits(doc, update).breach).toMatchObject({ shape: 'body' })
+  })
+
+  it('keeps the longest run when a shorter one in another container follows it', () => {
+    const doc = seeded('s')
+    const update = editOf(doc, (client, body) => {
+      body.insert(1, 'a'.repeat(MARKDOWN_MAX_CHARS + 10))
+      body.delete(1, MARKDOWN_MAX_CHARS + 5)
+      client.getText('other').insert(0, 'x')
+    })
+    expect(importWithinTextLimits(doc, update).breach).toMatchObject({
+      shape: 'run',
+      chars: MARKDOWN_MAX_CHARS + 10,
+    })
   })
 
   it('leaves the document attached after bytes the engine refuses', () => {

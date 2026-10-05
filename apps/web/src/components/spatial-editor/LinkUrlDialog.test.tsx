@@ -6,6 +6,7 @@
 // invalid need different sentences — "that is not an address" and "that
 // address is one we will not open" are different problems with different
 // fixes.
+import { NODE_LOCATION_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
@@ -85,4 +86,12 @@ it('takes the message back down once the address is usable', () => {
   // nothing is worse than no description.
   expect(input.hasAttribute('aria-describedby')).toBe(false)
   expect(ok.disabled).toBe(false)
+})
+
+it('takes no more characters than a link URL may carry', () => {
+  const { input } = renderDialog()
+
+  // The field refuses what a keeper would refuse, so a long paste is cut at
+  // the field rather than lost whole at the save.
+  expect(input.maxLength).toBe(NODE_LOCATION_MAX_CHARS)
 })

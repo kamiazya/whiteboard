@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -172,15 +173,18 @@ describe('fitToWidth properties', () => {
   // sits well under the scarcest without pinning a distribution that a
   // fast-check version bump is free to shift.
   const COMBINATION_FLOOR = 5
-  afterAll(() => {
-    expect([...seenCombinations.keys()].sort()).toEqual(Object.keys(COMBINATIONS).sort())
-    for (const [combination, count] of seenCombinations) {
-      expect({ combination, atLeast: count >= COMBINATION_FLOOR }).toEqual({
-        combination,
-        atLeast: true,
-      })
-    }
-  })
+  afterAllFloor(
+    ['the two flags are independent — every combination the domain allows occurs'],
+    () => {
+      expect([...seenCombinations.keys()].sort()).toEqual(Object.keys(COMBINATIONS).sort())
+      for (const [combination, count] of seenCombinations) {
+        expect({ combination, atLeast: count >= COMBINATION_FLOOR }).toEqual({
+          combination,
+          atLeast: true,
+        })
+      }
+    },
+  )
 
   fcTest.prop([textArb, widthArb], withDefaults())(
     'the result is always a prefix of the input',
@@ -231,7 +235,7 @@ describe('fitToWidth properties', () => {
       // A guard against the split collapsing back into one flag by accident:
       // if `overflows` were only ever set alongside `truncated`, the property
       // above would still pass and nothing would have been gained. The
-      // afterAll below is what actually checks the domain reaches all four.
+      // the floor below is what actually checks the domain reaches all four.
       const { truncated, overflows } = fit(text, maxWidth)
       const combination = `${truncated === true}/${overflows === true}`
       seenCombinations.set(combination, (seenCombinations.get(combination) ?? 0) + 1)
@@ -284,7 +288,7 @@ describe('fitToWidth: cuts between characters a reader sees as one', () => {
    */
   let cutAfterACluster = 0
 
-  afterAll(() => {
+  afterAllFloor([/^keeps .+ whole at every width$/], () => {
     expect(
       cutAfterACluster,
       'no swept width cut next to a multi-code-point cluster — the sweep never reached the case',

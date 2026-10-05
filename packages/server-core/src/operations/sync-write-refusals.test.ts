@@ -1,3 +1,4 @@
+import { syncWriteRefusalCodeSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import * as refusals from './sync-write-refusals.js'
@@ -6,6 +7,7 @@ import {
   DocumentNameTooLongError,
   LabelTooLargeError,
   MarkdownBodyTooLargeError,
+  NodeLocationTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
@@ -17,6 +19,7 @@ import {
 const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   MarkdownBodyTooLargeError: () => new MarkdownBodyTooLargeError('run', 300_000),
   NodeTextTooLargeError: () => new NodeTextTooLargeError('n1', 9_000),
+  NodeLocationTooLargeError: () => new NodeLocationTooLargeError('n1', 9_000),
   LabelTooLargeError: () => new LabelTooLargeError('e1', 2_000),
   CommentMessageTooLargeError: () => new CommentMessageTooLargeError('m1', 5_000),
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
@@ -52,6 +55,14 @@ describe('syncWriteAnswer', () => {
       return answer?.code
     })
     expect(new Set(codes).size).toBe(codes.length)
+  })
+
+  it('answers with exactly the codes the shared vocabulary declares', () => {
+    // The client parses a refusal by that vocabulary: a code it does not list
+    // reaches the person as "the keeper did not say why", and one listed but
+    // never answered is copy nobody reads.
+    const codes = new Set(Object.values(SAMPLES).map((sample) => syncWriteAnswer(sample())?.code))
+    expect([...codes].sort()).toEqual([...syncWriteRefusalCodeSchema.options].sort())
   })
 
   it('answers an engine trap as the server fault /api/v1 names it', () => {

@@ -4,7 +4,8 @@
  * These are the messages that cross that bridge, and the page is the side
  * the host must not trust.
  */
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import {
   bridgeSkew,
   extensionHelloReplySchema,
@@ -77,7 +78,10 @@ describe('pageToHostSchema', () => {
   // Most generated tails are acceptable, so the property is not judging an
   // empty set; afterAll proves it.
   let accepted = 0
-  afterAll(() => expect(accepted).toBeGreaterThan(0))
+  afterAllFloor(
+    ['an accepted path is one the URL parser leaves exactly as it is, under /api/'],
+    () => expect(accepted).toBeGreaterThan(0),
+  )
 
   fcTest.prop([fc.webPath()], withDefaults())(
     'an accepted path is one the URL parser leaves exactly as it is, under /api/',

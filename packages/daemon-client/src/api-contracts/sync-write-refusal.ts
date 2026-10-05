@@ -1,22 +1,15 @@
+import { syncWriteRefusalCodeSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
  * The codes a keeper answers a sync write it refused for what its bytes
- * would do — server-core's `syncWriteAnswer`, on every sync route. A
- * narrowing of `apiErrorBodySchema`'s `{ error, message }` arm, so a client
- * can tell the person WHICH limit their change broke rather than that
- * something failed.
+ * would do — server-core's `syncWriteAnswer`, on every sync route. Declared
+ * in the model, where the daemon's refusals are typed by the same enum, so a
+ * code renamed on one side fails to compile on the other. A narrowing of
+ * `apiErrorBodySchema`'s `{ error, message }` arm, so a client can tell the
+ * person WHICH limit their change broke rather than that something failed.
  */
-const syncWriteRefusalCodeSchema = z.enum([
-  'markdown_too_large',
-  'node_text_too_large',
-  'label_too_large',
-  'comment_too_large',
-  'unreadable_document_meta',
-  'document_name_too_long',
-  'invalid_path',
-])
-export type SyncWriteRefusalCode = z.infer<typeof syncWriteRefusalCodeSchema>
+export type { SyncWriteRefusalCode } from '@kamiazya/whiteboard-model'
 
 /** A refusal body as the sync routes write it. */
 const syncWriteRefusalBodySchema = z.object({

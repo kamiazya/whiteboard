@@ -144,4 +144,22 @@ describe('SseBackend through a source that writes onward itself', () => {
     expect(r.updates).toEqual([[9]])
     backend.disconnect()
   })
+
+  it('delivers frames that arrive after the keeper state was taken', async () => {
+    const s = sourceWithHeldSnapshot()
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, s.source)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(s.listeners.length).toBeGreaterThan(0))
+    for (const l of s.listeners)
+      l.onWriteRefused?.({ code: 'node_text_too_large', message: 'too long' })
+    s.answer(new Uint8Array([2]))
+    await vi.waitFor(() => expect(r.snapshots).toEqual([[1], [2]]))
+
+    // Holding ends with the resync: a frame held past it is swallowed, and
+    // every later edit from another writer never reaches this copy.
+    for (const l of s.listeners) l.onUpdate([10] as unknown as Uint8Array)
+    expect(r.updates).toEqual([[10]])
+    backend.disconnect()
+  })
 })

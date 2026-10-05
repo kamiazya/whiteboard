@@ -68,6 +68,15 @@ The UI lives solely in `apps/web` since the MCP-UI retirement (ADR 0001); `packa
 - When an E2E catches a bug, add the nearest-layer test as well unless the root cause only exists at the composed-system boundary.
 - Prefer `web-browser` over apps/web jsdom whenever the scenario involves focus, pointer, dialog, popover, scroll, or restore behavior.
 
+**Server logs under `mcp-node`.** The suite drives refusals, corrupt rows and thrown handlers on
+purpose, so `vitest.log-setup.ts` turns off the logger's default stderr destination for the
+project: a passing run prints no pino records. Records still reach every other destination, so
+assert on them with `captureLogsForTests(level)` (and `restore()` in `afterEach`). A test that
+asserts on the line stderr itself receives opts back in with `setStderrLogDestination(true)` and
+calls the restore it returns — the same call, in the failing test, shows its records while you
+diagnose it. Only the test setup calls the switch; the daemon and the packaged entry always log to
+stderr, and a process a test spawns keeps its own stderr.
+
 ---
 
 ## Property-Based Testing

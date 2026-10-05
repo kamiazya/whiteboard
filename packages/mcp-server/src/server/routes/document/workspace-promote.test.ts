@@ -8,7 +8,13 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promoteWorkspaceResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  writeSpatialNode,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -140,4 +146,29 @@ it('answers 404 for a workspace the daemon never registered', async () => {
     body: JSON.stringify({ snapshot: b64u(browserSnapshot()) }),
   })
   expect(res.status).toBe(404)
+})
+
+it('refuses a record whose canvas holds a node past its bound, naming the canvas', async () => {
+  const { promote, documents } = harness()
+  const doc = new LoroDoc()
+  createWorkspaceDocumentAtPath(doc, { path: 'sketch', documentId: SKETCH_ID, kind: 'spatial' })
+  writeSpatialNode(
+    documentContainers(doc, SKETCH_ID),
+    textNode({
+      id: 'big',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
+    }),
+  )
+  doc.commit()
+  const res = await promote({ snapshot: b64u(new Uint8Array(doc.export({ mode: 'snapshot' }))) })
+  expect(res.status).toBe(413)
+  const body = (await res.json()) as { error: string; message: string }
+  expect(body.error).toBe('node_text_too_large')
+  // The canvas a person can open, not only a node key they never see.
+  expect(body.message).toMatch(/^The document at "sketch" /)
+  expect(await documents()).toEqual([])
 })

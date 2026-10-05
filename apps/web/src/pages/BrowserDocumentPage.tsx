@@ -1,6 +1,7 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { refusalMessage } from '../components/workspace-files/use-rename-document.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useLinkResolution } from '../hooks/use-link-resolution.js'
@@ -475,12 +476,12 @@ function useBrowserDocument(
   // document's place, not of its content (ADR-0009 decision 2), so the
   // snapshot row is the one copy and the OKF `title` is projected from it on
   // export.
-  const onTitleChange = (next: string) => {
-    void renameDocument(next).catch(() => {
-      // Surfaced through persistence state: a refused write reaches the
-      // shell mark as `failed`, and the page's degraded screen.
-    })
-  }
+  //
+  // Answers why a rename was refused, for the title box to show beside
+  // itself. A write that failed is ALSO reported through persistence state;
+  // a name refused before it was written leaves that state alone.
+  const onTitleChange = (next: string): Promise<string | null> =>
+    renameDocument(next).then(() => null, refusalMessage)
   const title = titleOf(documentName, documentPath)
   const labels = documentLabels(documentId, documentName)
 

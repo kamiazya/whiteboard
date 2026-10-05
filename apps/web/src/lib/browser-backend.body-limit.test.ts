@@ -1,16 +1,32 @@
 /**
- * The browser keeper refuses to persist a markdown body past
- * `MARKDOWN_MAX_CHARS`, as the daemon refuses to store one: a document cannot
- * hold a body one keeper accepts and the other refuses, which is what a later
+ * The browser keeper refuses to persist text past its bound — a markdown body
+ * past `MARKDOWN_MAX_CHARS`, a canvas's node text, labels and comment
+ * messages past theirs — as the daemon refuses to store it: a document cannot
+ * hold text one keeper accepts and the other refuses, which is what a later
  * promotion would otherwise trip over.
  */
 import {
   createWorkspaceDocumentAtPath,
+  type DocumentContainers,
   documentContainers,
+  readCommentThreads,
   readMarkdownBody,
+  readSpatialCanvas,
+  writeCommentThread,
   writeMarkdownBody,
+  writeSpatialCanvas,
+  writeSpatialEdge,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  COMMENT_MESSAGE_MAX_CHARS,
+  LABEL_MAX_CHARS,
+  MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+  nodeText,
+} from '@kamiazya/whiteboard-model'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
@@ -82,7 +98,7 @@ describe('a browser-kept markdown body pushed past the limit', () => {
 
     await push('ab')
 
-    await expectLoggedFailure('refused a body past the markdown size limit')
+    await expectLoggedFailure('refused an update past a text limit')
     expect(saved).toEqual([])
     expect(reasons).toEqual([])
     expect(refusals).toEqual(['markdown_too_large'])
@@ -158,7 +174,7 @@ describe.each([
 
     expect(reasons).toEqual([])
     if (after === null) {
-      await expectLoggedFailure('refused a body past the markdown size limit')
+      await expectLoggedFailure('refused an update past a text limit')
       expect(saved).toEqual([])
       expect(refusals).toEqual(['markdown_too_large'])
     } else {
@@ -184,5 +200,187 @@ describe('a browser-kept body replaced wholesale', () => {
       'zzz:150000',
       'abz:150002',
     ])
+  })
+})
+
+const BOARD = {
+  documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
+  path: 'board',
+  kind: 'spatial' as const,
+}
+
+/** A canvas record with two text nodes, an edge between them and one comment thread. */
+function boardRecord(): LoroDoc {
+  const record = new LoroDoc()
+  createWorkspaceDocumentAtPath(record, {
+    path: BOARD.path,
+    documentId: BOARD.documentId,
+    kind: 'spatial',
+  })
+  const seeded = documentContainers(record, BOARD.documentId)
+  writeSpatialCanvas(seeded, {
+    nodes: [
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' }),
+      textNode({ id: 'b', x: 300, y: 0, width: 100, height: 60, text: 'b' }),
+    ],
+    edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' }, label: 'calls' }],
+  })
+  writeCommentThread(seeded, {
+    id: 't1',
+    anchor: { kind: 'document' },
+    status: 'open',
+    messages: [{ id: 'm1', body: 'looks off' }],
+  })
+  return record
+}
+
+/** That canvas, kept by the browser and connected. */
+async function connectedBoard() {
+  const record = boardRecord()
+  let saves = 0
+  const docs = {
+    create: async () => record,
+    save: async () => {
+      saves += 1
+      return null
+    },
+  } as unknown as WorkspaceDocs
+  const backend = new BrowserBackend(BOARD, docs, {} as LoroStore)
+  const reasons: string[] = []
+  const refusals: string[] = []
+  let snapshot: Uint8Array | null = null
+  backend.connect({
+    onConnected: () => {},
+    onSnapshot: (bytes: Uint8Array) => {
+      snapshot = bytes
+    },
+    onRemoteUpdate: () => {},
+    onError: (reason: string) => reasons.push(reason),
+    onWriteRefused: (refusal: { code: string | null }) => refusals.push(String(refusal.code)),
+  } as never)
+  await vi.waitFor(() => expect(snapshot).not.toBeNull())
+  const session = LoroDoc.fromSnapshot(snapshot as unknown as Uint8Array)
+  const pushEdit = (edit: (board: DocumentContainers) => void) => {
+    const from = session.oplogVersion()
+    edit(documentContainers(session, BOARD.documentId))
+    session.commit()
+    return backend.pushLocalUpdate(session.export({ mode: 'update', from }))
+  }
+  const stored = () => documentContainers(record, BOARD.documentId)
+  return { saves: () => saves, reasons, refusals, pushEdit, stored }
+}
+
+/**
+ * The same bounds the daemon's sync operation is held to, pushed through the
+ * browser keeper.
+ */
+const linkTo = (length: number) => (board: DocumentContainers) =>
+  writeSpatialNode(
+    board,
+    linkNode({
+      id: 'k',
+      x: 0,
+      y: 200,
+      width: 200,
+      height: 60,
+      url: `https://example.com/${'a'.repeat(length - 'https://example.com/'.length)}`,
+    }),
+  )
+
+describe.each([
+  {
+    edit: "a node's text",
+    code: 'node_text_too_large',
+    past: (board: DocumentContainers) =>
+      writeSpatialNode(
+        board,
+        textNode({
+          id: 'a',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 60,
+          text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
+        }),
+      ),
+    within: (board: DocumentContainers) =>
+      writeSpatialNode(
+        board,
+        textNode({
+          id: 'a',
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 60,
+          text: 'x'.repeat(NODE_TEXT_MAX_CHARS),
+        }),
+      ),
+  },
+  {
+    edit: "a link's URL",
+    code: 'node_location_too_large',
+    past: linkTo(NODE_LOCATION_MAX_CHARS + 1),
+    within: linkTo(NODE_LOCATION_MAX_CHARS),
+  },
+  {
+    edit: "an edge's label",
+    code: 'label_too_large',
+    past: (board: DocumentContainers) =>
+      writeSpatialEdge(board, {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+        label: 'x'.repeat(LABEL_MAX_CHARS + 1),
+      }),
+    within: (board: DocumentContainers) =>
+      writeSpatialEdge(board, {
+        id: 'e1',
+        from: { node: 'a' },
+        to: { node: 'b' },
+        label: 'x'.repeat(LABEL_MAX_CHARS),
+      }),
+  },
+  {
+    edit: 'a comment message',
+    code: 'comment_too_large',
+    past: (board: DocumentContainers) =>
+      writeCommentThread(board, {
+        id: 't1',
+        anchor: { kind: 'document' },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }],
+      }),
+    within: (board: DocumentContainers) =>
+      writeCommentThread(board, {
+        id: 't1',
+        anchor: { kind: 'document' },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS) }],
+      }),
+  },
+])('$edit on a browser-kept canvas', ({ code, past, within }) => {
+  it(`past its bound is refused as ${code}, and nothing is kept`, async () => {
+    const { saves, reasons, refusals, pushEdit, stored } = await connectedBoard()
+
+    await pushEdit(past)
+
+    await expectLoggedFailure('refused an update past a text limit')
+    expect(reasons).toEqual([])
+    expect(refusals).toEqual([code])
+    expect(saves()).toBe(0)
+    const canvas = readSpatialCanvas(stored())
+    expect(canvas.nodes.map(nodeText)).toEqual(['a', 'b'])
+    expect(canvas.edges[0]?.label).toBe('calls')
+    expect(readCommentThreads(stored())[0]?.messages[0]?.body).toBe('looks off')
+  })
+
+  it('at its bound is kept', async () => {
+    const { saves, reasons, refusals, pushEdit } = await connectedBoard()
+
+    await pushEdit(within)
+
+    expect(reasons).toEqual([])
+    expect(refusals).toEqual([])
+    expect(saves()).toBe(1)
   })
 })

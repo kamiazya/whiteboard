@@ -7,4 +7,5 @@
 export * from './arbitraries.js'
 export * from './fast-check.js'
 export * from './nodes.js'
+export * from './reachability-floor.js'
 export * from './zod-arbitrary.js'

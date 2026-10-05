@@ -1,3 +1,4 @@
+import { documentNameSchema } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -359,6 +360,11 @@ export function useBrowserDocumentController(
       // agreed with neither, and it stopped matching the moment paths started
       // being numbered ('untitled-2' is an ordinary path, not a sentinel).
       const normalized = name.trim() || base.path
+      // Judged before the snapshot shows it: the index refuses the same bound
+      // only after, as a failed save that degrades persistence and so blocks
+      // Delete. The path is exempt — it is stored as no name at all.
+      const bounded = normalized === base.path ? null : documentNameSchema.safeParse(normalized)
+      if (bounded?.success === false) return Promise.reject(bounded.error)
       const updated: DocumentSnapshot = {
         ...base,
         name: normalized,

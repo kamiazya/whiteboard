@@ -7,18 +7,13 @@ import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
+  SYNC_TEXT_BREACH_CODES,
   type SyncTextBreach,
   seedNameFromTitle,
-  syncTextLimitBreach,
+  syncTextLimitJudge,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import {
-  COMMENT_MESSAGE_MAX_CHARS,
-  type DocumentKind,
-  LABEL_MAX_CHARS,
-  MARKDOWN_MAX_CHARS,
-  NODE_TEXT_MAX_CHARS,
-} from '@kamiazya/whiteboard-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro, type LoroDoc } from 'loro-crdt'
@@ -107,35 +102,13 @@ function placeDocumentNode(
   return adoptWorkspaceDocument(workspaceDoc, placement, source)
 }
 
-/** A text limit the keeper holds an update to, in the words the daemon refuses it with. */
+/**
+ * The refusal the daemon answers the same breach with. No sentence of its own:
+ * the notice says why from the code alone, so text written here would be read
+ * by nobody, and the breach itself is in the log line beside it.
+ */
 function refusalOf(breach: SyncTextBreach): SyncWriteRefusal {
-  switch (breach.shape) {
-    case 'node-text':
-      return {
-        code: 'node_text_too_large',
-        message: `This update would give a node ${breach.chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node`,
-      }
-    case 'label':
-      return {
-        code: 'label_too_large',
-        message: `This update would give a label ${breach.chars} characters, past the ${LABEL_MAX_CHARS}-character limit for one label`,
-      }
-    case 'comment-message':
-      return {
-        code: 'comment_too_large',
-        message: `This update would make a comment message ${breach.chars} characters long, past the ${COMMENT_MESSAGE_MAX_CHARS}-character limit for one message`,
-      }
-    case 'run':
-      return {
-        code: 'markdown_too_large',
-        message: `This update inserts ${breach.chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write`,
-      }
-    case 'body':
-      return {
-        code: 'markdown_too_large',
-        message: `This update would make a document body ${breach.chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document`,
-      }
-  }
+  return { code: SYNC_TEXT_BREACH_CODES[breach.shape], message: '' }
 }
 
 /**
@@ -162,6 +135,8 @@ export class BrowserBackend implements DocumentBackend {
   private disconnected = false
   /** The live workspace document — set once connect() has delivered it. */
   private workspaceDoc: LoroDoc | null = null
+  /** One judge per record this backend has written to, so its copy outlives a push. */
+  private readonly judges = new WeakMap<LoroDoc, (update: Uint8Array) => SyncTextBreach | null>()
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
   /** This connection's end of the record's channel to the other tabs. */
@@ -290,17 +265,18 @@ export class BrowserBackend implements DocumentBackend {
     if (workspaceDoc === null || workspaceId === null) return
     try {
       // Refused before it lands: once imported, the bytes would ride the next
-      // save whatever this one decided.
-      if (this.target.kind === 'markdown') {
-        const breach = syncTextLimitBreach(workspaceDoc, bytes)
-        if (breach !== null) {
-          getAppLogger('browser-backend').warn('refused a body past the markdown size limit', {
-            documentId: this.target.documentId,
-            ...breach,
-          })
-          this.refuse(refusalOf(breach), workspaceDoc, handlers)
-          return
-        }
+      // save whatever this one decided. Judged whatever the kind — a canvas's
+      // node text, labels and comment messages are bounded as a note's body
+      // is, and a record holding one past its bound is one the daemon refuses
+      // to take on promotion.
+      const breach = this.judgeOf(workspaceDoc)(bytes)
+      if (breach !== null) {
+        getAppLogger('browser-backend').warn('refused an update past a text limit', {
+          documentId: this.target.documentId,
+          ...breach,
+        })
+        this.refuse(refusalOf(breach), workspaceDoc, handlers)
+        return
       }
       workspaceDoc.import(bytes)
       // A note is named after its body's heading while nobody has named it —
@@ -339,6 +315,14 @@ export class BrowserBackend implements DocumentBackend {
     if (handlers === null || this.isStale(handlers)) return
     handlers.onWriteRefused?.(refusal)
     handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
+  }
+
+  private judgeOf(workspaceDoc: LoroDoc): (update: Uint8Array) => SyncTextBreach | null {
+    const known = this.judges.get(workspaceDoc)
+    if (known !== undefined) return known
+    const judge = syncTextLimitJudge(workspaceDoc)
+    this.judges.set(workspaceDoc, judge)
+    return judge
   }
 
   /** A workspace kept in the browser has no sync stream to announce readiness to. */

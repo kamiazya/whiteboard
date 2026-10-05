@@ -112,9 +112,12 @@ test('--head names the branch being published, whatever the checkout is on', () 
   git(work, ['push', 'origin', 'feat'])
   commitFile(origin, 'feat.txt', 'main moved it\n', 'advance touching feat.txt')
   git(work, ['checkout', 'main'])
-  const result = runHook(work, 'gh pr create --head feat --title x')
-  assert.equal(result.status, 2, result.stderr)
-  assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/)
+  // Every spelling gh accepts for the flag, and a fork's `owner:branch`.
+  for (const head of ['--head feat', '--head=feat', '-H feat', '-Hfeat', '-H=feat', '-H me:feat']) {
+    const result = runHook(work, `gh pr create ${head} --title x`)
+    assert.equal(result.status, 2, `${head}: ${result.stderr}`)
+    assert.match(result.stderr, /'feat' is 1 commit\(s\) behind origin\/main/, head)
+  }
 })
 
 test('a leading `cd <checkout> &&` selects that checkout even when the hook runs elsewhere', () => {

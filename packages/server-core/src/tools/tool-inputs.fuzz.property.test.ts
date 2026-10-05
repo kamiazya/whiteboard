@@ -33,7 +33,11 @@ import {
   nodeIdSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
-import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-utils'
+import {
+  afterAllFloor,
+  arbitraryForSchema,
+  sameSchema,
+} from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { afterAll, describe, expect, vi } from 'vitest'
 import type { z } from 'zod'
@@ -493,14 +497,8 @@ describe('every tool answers or refuses an input its own schema admits', () => {
     }
   }
 
-  afterAll(() => {
-    if (process.env.FUZZ_TALLY) {
-      for (const [name, counts] of tally) {
-        console.info(name, JSON.stringify(counts), [...(reasons.get(name) ?? [])].join(' | '))
-        console.info(`  answered-shapes ${name}`, [...(answeredShapes.get(name) ?? [])].join(' | '))
-      }
-      for (const [name, counts] of opTally) console.info('op', name, JSON.stringify(counts))
-    }
+  // Every test in this suite is a tool's or an op arm's row, and each feeds a tally.
+  afterAllFloor('every test', () => {
     // A tool this lane never got past a refusing double is unexercised, and
     // that has to be visible rather than read as green.
     const unexercised = [...tally.entries()]
@@ -529,5 +527,17 @@ describe('every tool answers or refuses an input its own schema admits', () => {
       return []
     })
     expect(wrong).toEqual([])
+  })
+
+  // Registered after the floor so it runs first: afterAll hooks run in reverse,
+  // and a failing floor stops the ones after it.
+  afterAll(() => {
+    if (process.env.FUZZ_TALLY) {
+      for (const [name, counts] of tally) {
+        console.info(name, JSON.stringify(counts), [...(reasons.get(name) ?? [])].join(' | '))
+        console.info(`  answered-shapes ${name}`, [...(answeredShapes.get(name) ?? [])].join(' | '))
+      }
+      for (const [name, counts] of opTally) console.info('op', name, JSON.stringify(counts))
+    }
   })
 })

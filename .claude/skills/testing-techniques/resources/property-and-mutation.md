@@ -29,7 +29,10 @@ every gate except this loop.
 - **Assert the subject is present**, beside the property: a reachability floor
   (`expect(reached / total).toBeGreaterThan(x)` measured, not guessed), or a count. A generator
   too sparse to reach the interesting arrangement passes vacuously, and a run that reaches
-  nothing reports green.
+  nothing reports green. Assert it in `afterAllFloor(feeders, floor)` from
+  `@kamiazya/whiteboard-model/test-utils`, naming the tests that fill the counter: a bare
+  `afterAll` fails any run that filtered them away (arch-lint's `after-all-floor-check`
+  refuses one), and a floor written as an `it` has the same defect.
 - **Surfaces that grow get a ledger** (`.claude/rules/coverage-ledger.md`, path-scoped):
   `assertLedger` in `apps/web/src/test-utils/coverage-ledger.ts` maps each member of the
   surface's own type to `covered` / `not modelled: <reason>`, so member N+1 fails the test

@@ -1,3 +1,4 @@
+import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
@@ -174,6 +175,24 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     cleanup()
     renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('untitled')
+  })
+
+  // `maxLength` stops typing and pasting at the bound; a programmatic change
+  // does not, which is what lets this reach the keeper's own refusal.
+  it('a name past the bound is refused beside the title, never as a failed save', async () => {
+    await renderLoaded()
+    const titleInput = await titleField()
+    titleInput.focus()
+    fireEvent.change(titleInput, {
+      target: { value: 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1) },
+    })
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      `a display name is at most ${DOCUMENT_NAME_MAX_LENGTH} characters`,
+    )
+    titleInput.blur()
+    await waitForTitle('untitled')
+    expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 
   it('network-negative: editing the title triggers no fetch to /api/ or daemon endpoints', async () => {

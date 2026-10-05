@@ -75,6 +75,23 @@ const STATES_NO_FIGURE = /visual evidence:\s*none\s*[—–:-][ \t]*(\S.*)/i
 const MIN_REASON_CHARS = 3
 
 /**
+ * An HTML comment, or an unclosed one running to the end: GitHub renders
+ * neither, so a figure or a reason inside one is shown to nobody. The PR
+ * template spells the escape inside exactly such a comment.
+ */
+const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g
+
+/**
+ * A template placeholder such as `<reason>`: lower-case words in angle
+ * brackets, with any code quote around it. A component name (`<Toolbar>`) is
+ * a real word of a reason and is kept; the placeholder is what an unedited
+ * template or a copied remedy line leaves behind, and counting it as three
+ * characters of reason made the literal instruction pass for the decision it
+ * asks for.
+ */
+const PLACEHOLDER = /`?<[a-z][a-z ]*>`?/g
+
+/**
  * Whether the body states a reason rather than merely the word "none".
  *
  * The length is counted over the reason with whitespace removed, which is
@@ -86,8 +103,13 @@ const MIN_REASON_CHARS = 3
  * the wording rather than about deciding.
  */
 function statesNoFigure(body) {
-  const reason = body.match(STATES_NO_FIGURE)?.[1]?.trim() ?? ''
-  return reason.replace(/\s+/g, '').length >= MIN_REASON_CHARS
+  const reason = body.match(STATES_NO_FIGURE)?.[1] ?? ''
+  return reason.replace(PLACEHOLDER, '').replace(/\s+/g, '').length >= MIN_REASON_CHARS
+}
+
+/** The body as GitHub shows it, for every check that asks what a reviewer sees. */
+function rendered(body) {
+  return body.replace(HTML_COMMENT, '')
 }
 
 let input
@@ -119,7 +141,10 @@ try {
   const { body } = create
   // A `gh pr create` body arriving by stdin, an editor, or --fill is not readable here.
   if (body === null) process.exit(0)
-  if ('text' in body && (HAS_FIGURE.test(body.text) || statesNoFigure(body.text))) process.exit(0)
+  if ('text' in body) {
+    const shown = rendered(body.text)
+    if (HAS_FIGURE.test(shown) || statesNoFigure(shown)) process.exit(0)
+  }
 
   const changed = git(['diff', '--name-only', 'origin/main...HEAD'])
     .split('\n')
@@ -141,7 +166,7 @@ try {
 
   const NO_FIGURE =
     `  • If a picture is genuinely the wrong evidence — or cannot be uploaded from here — say so in one line:\n` +
-    `    "Visual evidence: none — <reason>".`
+    `    "Visual evidence: none — <reason>", with <reason> replaced by the reason itself.`
   const HOW_TO_MAKE_ONE =
     `  • For a FIX, show the defect and the fix: render the same case both ways and compose with\n` +
     `      node .claude/scripts/compose-figure.mjs --before <a.png> --after <b.png> --out tmp/screenshots/figure.png\n` +

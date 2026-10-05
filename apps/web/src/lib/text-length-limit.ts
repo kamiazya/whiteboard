@@ -1,8 +1,10 @@
-// A size limit where a person makes the edit. A keeper refuses a write past
-// its bound, and a daemon-kept document's sync worker retries a refused write
-// without end, so an edit that would cross a limit must never be made rather
-// than be refused after it is. One shape for every bounded text a CodeMirror
-// view edits: a markdown body, a canvas node's text.
+// A size limit where a person makes the edit. Either keeper refuses a write
+// past its bound, and the page then goes back to what the keeper holds —
+// undoing that edit and everything typed after it, since each later edit is
+// built on the refused one. So an edit that would cross a limit is never
+// made, rather than refused after it is and taking more with it. One shape
+// for every bounded text a CodeMirror view edits: a markdown body, a canvas
+// node's text.
 import {
   Annotation,
   EditorState,
@@ -12,6 +14,7 @@ import {
   Transaction,
 } from '@codemirror/state'
 import { EditorView, type Panel, showPanel } from '@codemirror/view'
+import { growsPast } from '@kamiazya/whiteboard-model'
 
 /**
  * Marks a dispatch that carries a value from outside the editor — the
@@ -39,9 +42,14 @@ function arrivedFromOutside(tr: Transaction): boolean {
  * have made.
  *
  * Each call carries its own state, so two limits installed in one editor
- * each report only the edits they refused.
+ * each report only the edits they refused. `compact` sets the notice small,
+ * for an editor that shares a node's box or a comment bubble with it.
  */
-export function textLengthLimit(limit: number, describe: (length: number) => string): Extension {
+export function textLengthLimit(
+  limit: number,
+  describe: (length: number) => string,
+  { compact = false }: { readonly compact?: boolean } = {},
+): Extension {
   const refused = StateEffect.define<number>()
   // The length of the last refused edit, until the next edit that lands.
   const refusal = StateField.define<number | null>({
@@ -60,12 +68,14 @@ export function textLengthLimit(limit: number, describe: (length: number) => str
     EditorView.theme({
       '.cm-panels': { backgroundColor: 'var(--muted)', color: 'var(--foreground)' },
       '.cm-panels-top': { borderBottom: '1px solid var(--destructive)' },
-      '.cm-length-limit-notice': { padding: '6px 24px', fontSize: '13px' },
+      '.cm-length-limit-notice': compact
+        ? { padding: '2px 4px', fontSize: '11px', lineHeight: '1.3' }
+        : { padding: '6px 24px', fontSize: '13px' },
     }),
     EditorState.transactionFilter.of((tr) => {
       if (!tr.docChanged || arrivedFromOutside(tr)) return tr
       const length = tr.newDoc.length
-      if (length <= limit || length <= tr.startState.doc.length) return tr
+      if (!growsPast(limit, tr.startState.doc.length, length)) return tr
       return { effects: refused.of(length) }
     }),
   ]

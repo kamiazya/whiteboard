@@ -15,11 +15,14 @@ import {
   labelInputSchema,
   linePatchFieldsSchema,
   type NodeResource,
+  nodeFileInputSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nodePositionSchema,
   nodeSizeSchema,
+  nodeSubpathInputSchema,
   nodeTextInputSchema,
+  nodeUrlInputSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
   RESOURCE_KINDS,
@@ -117,12 +120,12 @@ const textOption = draftBase.extend({
 })
 const fileOption = draftBase.extend({
   type: z.literal('file'),
-  file: z.string(),
-  subpath: z.string().startsWith('#').optional(),
+  file: nodeFileInputSchema,
+  subpath: nodeSubpathInputSchema.optional(),
 })
 const linkOption = draftBase.extend({
   type: z.literal('link'),
-  url: z.url(),
+  url: nodeUrlInputSchema,
 })
 const groupOption = draftBase.extend({
   type: z.literal('group'),
@@ -361,14 +364,17 @@ const STENCIL_FIELD = namespacedIdSchema
  * repair costs the whole batch twice.
  */
 const nodePatchSchema = z
-  // `text` and `label` are bounded HERE and not on the stored patch shape: a
-  // proposal stores a patch and its prior, and a prior is whatever the node
-  // held, which may predate the limit.
+  // `text`, `label` and a location are bounded HERE and not on the stored
+  // patch shape: a proposal stores a patch and its prior, and a prior is
+  // whatever the node held, which may predate the limit.
   .object(
     {
       ...nodePatchFieldsSchema.shape,
       text: nodeTextInputSchema.optional(),
       ...WRITE_LABEL,
+      file: nodeFileInputSchema.optional(),
+      subpath: nodeSubpathInputSchema.optional(),
+      url: nodeUrlInputSchema.optional(),
     },
     {
       error: (issue: { code: string; keys?: readonly string[] }) =>

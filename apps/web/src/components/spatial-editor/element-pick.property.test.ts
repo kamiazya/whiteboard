@@ -29,8 +29,8 @@
  * on a guard somebody can choose not to run.
  */
 import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { deleteInkCommand } from '../../lib/spatial/ink-commands.js'
@@ -542,7 +542,7 @@ describe('every element kind, through every surface that has to know about it', 
     )
   })
 
-  afterAll(() => {
+  afterAllFloor('every test', () => {
     assertLedger('element kind x surface', flatLedger, tally)
   })
 })

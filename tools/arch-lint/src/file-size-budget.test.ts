@@ -173,7 +173,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // container instead of flattening it, and the unreadable-node report the file
   // GC fails closed on. The content-sync rule the tree write,
   // the standalone restore and the projection all apply is `content-sync.ts`.
-  'packages/loro-adapter/src/workspace-tree.ts': 959,
+  // Raised by 16 for the chosen-name mark: it has to be written by the name
+  // writers here, which are the only place every keeper's rename converges.
+  'packages/loro-adapter/src/workspace-tree.ts': 975,
   // The document session: one object serving both document pages over either
   // keeper, with the publish channels (content, annotations, proposals,
   // history, locks, body) and the ordering rules between them — the edit flush
@@ -373,7 +375,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
-  'packages/canvas-render/src/tidy.test.ts': 1176,
+  // +1: the import of `afterAllFloor`, which keeps the reach floor from failing
+  // a run that filtered the property feeding it away.
+  'packages/canvas-render/src/tidy.test.ts': 1177,
   // A referenced canvas arriving in the form canvas_view
   // sends it (JSON Canvas) reaches the viewer as the model.
   // The refresh asking for the style the last result drew, which needs the

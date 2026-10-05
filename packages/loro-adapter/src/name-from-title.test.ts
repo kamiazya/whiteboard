@@ -66,7 +66,11 @@ describe('seedNameFromTitle', () => {
   })
 
   it('grows a name it seeded from a heading still being typed', () => {
-    const workspace = workspaceWith('untitled', '# From the list\n', 'From')
+    const workspace = workspaceWith('untitled', '# From')
+    seedNameFromTitle(workspace, DOC)
+    expect(nameOf(workspace)).toBe('From')
+    documentContainers(workspace, DOC).getText(MARKDOWN_BODY_KEY).insert(6, ' the list\n')
+    workspace.commit()
 
     seedNameFromTitle(workspace, DOC)
 
@@ -107,14 +111,56 @@ describe('the generated-path gate', () => {
 })
 
 /** A second replica of `workspace` and the update typing `text` into DOC's body there. */
-function typedOnReplica(workspace: LoroDoc, documentId: string, text: string): Uint8Array {
+function typedOnReplica(workspace: LoroDoc, documentId: string, text: string, at = 0): Uint8Array {
   const replica = new LoroDoc()
   replica.import(workspace.export({ mode: 'snapshot' }))
   const from = replica.oplogVersion()
-  documentContainers(replica, documentId).getText(MARKDOWN_BODY_KEY).insert(0, text)
+  documentContainers(replica, documentId).getText(MARKDOWN_BODY_KEY).insert(at, text)
   replica.commit()
   return replica.export({ mode: 'update', from }) as Uint8Array
 }
+
+// A name somebody CHOSE is kept even when the heading starts with it: the
+// prefix that marks a half-typed heading is also exactly what a short name
+// for a longer heading looks like.
+describe('a chosen name', () => {
+  const chosenBy = {
+    'a create that names it': () => workspaceWith('untitled', '# Weekly review\n', 'Weekly'),
+    'a rename': () => {
+      const workspace = workspaceWith('untitled', '# Weekly review\n')
+      setWorkspaceDocumentName(workspace, { documentId: DOC, name: 'Weekly' })
+      return workspace
+    },
+  }
+
+  it.each(Object.entries(chosenBy))('survives seedNameFromTitle after %s', (_, chosen) => {
+    const workspace = chosen()
+
+    seedNameFromTitle(workspace, DOC)
+
+    expect(nameOf(workspace)).toBe('Weekly')
+  })
+
+  it.each(Object.entries(chosenBy))('survives seedNamesFromTitles after %s', (_, chosen) => {
+    const workspace = chosen()
+    const update = typedOnReplica(workspace, DOC, '\nmore', '# Weekly review\n'.length)
+    const since = workspace.oplogVersion()
+    workspace.import(update)
+
+    seedNamesFromTitles(workspace, since)
+
+    expect(nameOf(workspace)).toBe('Weekly')
+  })
+
+  it('is a name the seeder can take back once it is cleared', () => {
+    const workspace = chosenBy['a rename']()
+    setWorkspaceDocumentName(workspace, { documentId: DOC })
+
+    seedNameFromTitle(workspace, DOC)
+
+    expect(nameOf(workspace)).toBe('Weekly review')
+  })
+})
 
 describe('seedNamesFromTitles', () => {
   it('names a document the operations since `since` wrote to', () => {

@@ -6,6 +6,7 @@ import {
   getLogLevel,
   parseLogLevel,
   setLogLevel,
+  setStderrLogDestination,
 } from './log.js'
 
 describe('parseLogLevel', () => {
@@ -99,12 +100,17 @@ describe('getLogger (pino-backed)', () => {
 describe('redaction', () => {
   let cap: CapturedLogsHandle
   let writeSpy: ReturnType<typeof vi.spyOn> | null = null
+  let restoreStderr: () => void = () => {}
 
   beforeEach(() => {
     cap = captureLogsForTests('debug')
     writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    // The test setup turns stderr off; redaction is asserted on the line it gets.
+    restoreStderr = setStderrLogDestination(true)
   })
   afterEach(() => {
+    restoreStderr()
+    restoreStderr = () => {}
     cap.restore()
     writeSpy?.mockRestore()
   })
@@ -200,13 +206,17 @@ describe('redaction', () => {
 
 describe('default destination', () => {
   let writeSpy: ReturnType<typeof vi.spyOn> | null = null
+  let restoreStderr: () => void = () => {}
 
   beforeEach(() => {
     writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    restoreStderr = setStderrLogDestination(true)
     setLogLevel('debug')
   })
 
   afterEach(() => {
+    restoreStderr()
+    restoreStderr = () => {}
     writeSpy?.mockRestore()
     setLogLevel(parseLogLevel(process.env.WHITEBOARD_LOG_LEVEL) ?? 'warning')
   })
@@ -235,6 +245,68 @@ describe('default destination', () => {
     } finally {
       stdoutSpy.mockRestore()
     }
+  })
+})
+
+describe('the stderr destination switch', () => {
+  let writeSpy: ReturnType<typeof vi.spyOn> | null = null
+  let cap: CapturedLogsHandle
+  let restoreStderr: () => void = () => {}
+
+  beforeEach(() => {
+    cap = captureLogsForTests('debug')
+    writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+  afterEach(() => {
+    restoreStderr()
+    restoreStderr = () => {}
+    cap.restore()
+    writeSpy?.mockRestore()
+  })
+
+  // Proves `vitest.log-setup.ts` is wired into this project, not merely that
+  // the switch works when a test flips it.
+  it('starts off under the test setup, so a passing run prints no records', () => {
+    getLogger('setup').error('a refusal the test exercised on purpose')
+
+    expect(cap.records).toHaveLength(1)
+    expect(writeSpy).not.toHaveBeenCalled()
+  })
+
+  it('holds across a fresh copy of the logger, which a test gets after vi.resetModules()', async () => {
+    restoreStderr = setStderrLogDestination(false)
+    vi.resetModules()
+    const fresh = await import('./log.js')
+    fresh.getLogger('fresh-copy').error('logged through a re-evaluated module')
+
+    expect(writeSpy).not.toHaveBeenCalled()
+  })
+
+  it('switched off, a record still reaches every other destination but not stderr', () => {
+    restoreStderr = setStderrLogDestination(false)
+    getLogger('quiet').error({ path: 'a' }, 'negative path exercised on purpose')
+
+    expect(cap.records.map((r) => r.msg)).toEqual(['negative path exercised on purpose'])
+    expect(writeSpy).not.toHaveBeenCalled()
+  })
+
+  it('switched on, the record reaches stderr', () => {
+    restoreStderr = setStderrLogDestination(true)
+    getLogger('loud').error('written where an operator reads it')
+
+    expect(cap.records).toHaveLength(1)
+    const lines: string[] = writeSpy!.mock.calls.map((c: unknown[]) => String(c[0]))
+    expect(lines.some((l) => l.includes('written where an operator reads it'))).toBe(true)
+  })
+
+  it('restores the state it found, so one test cannot leave the next one muted or loud', () => {
+    restoreStderr = setStderrLogDestination(true)
+    const restoreOff = setStderrLogDestination(false)
+    restoreOff()
+    getLogger('restored').error('loud again after the restore')
+
+    const lines: string[] = writeSpy!.mock.calls.map((c: unknown[]) => String(c[0]))
+    expect(lines.some((l) => l.includes('loud again after the restore'))).toBe(true)
   })
 })
 

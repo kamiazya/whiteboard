@@ -9,7 +9,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { after, test } from 'node:test'
@@ -129,6 +129,53 @@ test('a reason of exactly three non-space characters is a stated decision; two a
   assert.equal(runHook(work, bodyArg('Visual evidence: none — a b c')).status, 0)
   assert.equal(runHook(work, bodyArg('Visual evidence: none — ok')).status, 2)
   assert.equal(runHook(work, bodyArg('Visual evidence: none — a  b')).status, 2)
+})
+
+const TEMPLATE = readFileSync(resolve(__dirname, '../../.github/PULL_REQUEST_TEMPLATE.md'), 'utf8')
+
+test('an unedited PR template is not a stated decision', () => {
+  // The template spells the escape inside an HTML comment, placeholder and all,
+  // so a body nobody filled in carried a passing line GitHub never renders.
+  assert.match(TEMPLATE, /<!--[\s\S]*?Visual evidence: none — <reason>[\s\S]*?-->/)
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  writeFileSync(join(work, 'body.md'), TEMPLATE)
+  assert.equal(runHook(work, 'gh pr create --title x --body-file body.md').status, 2)
+  const filled = TEMPLATE.replace(
+    '## Visual evidence\n',
+    '## Visual evidence\n\nVisual evidence: none — renames a prop, renders identically.\n',
+  )
+  assert.notEqual(filled, TEMPLATE)
+  writeFileSync(join(work, 'body.md'), filled)
+  assert.equal(runHook(work, 'gh pr create --title x --body-file body.md').status, 0)
+})
+
+test('the placeholder itself is not a reason, while a reason naming an element is', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  for (const body of [
+    'Visual evidence: none — <reason>',
+    'Visual evidence: none — `<reason>`.',
+    'Visual evidence: none - <why there is no figure>',
+  ]) {
+    assert.equal(runHook(work, bodyArg(body)).status, 2, body)
+  }
+  for (const body of [
+    'Visual evidence: none — renames a prop on <Toolbar>, renders identically.',
+    'Visual evidence: none — <Toolbar> only gains a test id.',
+  ]) {
+    assert.equal(runHook(work, bodyArg(body)).status, 0, body)
+  }
+})
+
+test('a figure or reason inside an HTML comment is not rendered, so it is not evidence', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  for (const body of [
+    '<!-- Visual evidence: none — renames a prop, renders identically. -->',
+    '<!-- ![f.png](https://github.com/user-attachments/assets/abc) -->',
+    // An unclosed comment hides the rest of the body on GitHub.
+    'prose\n<!--\nVisual evidence: none — renames a prop.',
+  ]) {
+    assert.equal(runHook(work, bodyArg(body)).status, 2, body)
+  }
 })
 
 test('a test-utils file under a UI package is not a rendered surface', () => {

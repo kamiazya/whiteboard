@@ -13,14 +13,13 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { commentMessageNotice, labelNotice } from '../../lib/limit-notice.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
-
-const COUNT = new Intl.NumberFormat('en-US')
 
 const board: SpatialCanvas = {
   nodes: [
@@ -48,7 +47,7 @@ it('the edge label editor refuses a label past its limit, keeps the label, and s
   await userEvent.fill(editor() as HTMLTextAreaElement, 'x'.repeat(LABEL_MAX_CHARS + 1))
 
   await vi.waitFor(() =>
-    expect(notice('edge-label-editor')?.textContent).toContain(COUNT.format(LABEL_MAX_CHARS)),
+    expect(notice('edge-label-editor')?.textContent).toBe(labelNotice(LABEL_MAX_CHARS + 1)),
   )
   expect(editor()?.value).toBe('calls')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
@@ -96,7 +95,7 @@ it('the comment bubble refuses a paste past the message limit, makes no comment,
   const status = () =>
     container.querySelector<HTMLElement>('[data-testid="comment-compose"] [role="status"]')
   await vi.waitFor(() =>
-    expect(status()?.textContent).toContain(COUNT.format(COMMENT_MESSAGE_MAX_CHARS)),
+    expect(status()?.textContent).toBe(commentMessageNotice(COMMENT_MESSAGE_MAX_CHARS + 1)),
   )
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
   await vi.waitFor(() =>

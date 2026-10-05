@@ -28,6 +28,7 @@ import {
   nodeText,
 } from '@kamiazya/whiteboard-model'
 import {
+  afterAllFloor,
   arbitraryForSchema,
   textNode,
   workspaceSegmentArbitrary,
@@ -89,9 +90,16 @@ const recordMimeType = (mimeType: string): string => {
   return mimeType
 }
 
-afterAll(() => {
-  expect(emptyTypeDraws).toBeGreaterThanOrEqual(3)
-})
+afterAllFloor(
+  [
+    'gives back the bytes and content type that were put',
+    'gives back the image that was put, typed as the browser types it',
+    'reads a v1 record and rewrites it as v2 with its bytes in the blob store',
+  ],
+  () => {
+    expect(emptyTypeDraws).toBeGreaterThanOrEqual(3)
+  },
+)
 
 /** Raw access to one object store, for seeding a legacy record and reading what a rewrite left. */
 async function raw<T>(

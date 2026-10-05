@@ -25,11 +25,13 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   COMMENT_MESSAGE_MAX_CHARS,
+  DOCUMENT_NAME_MAX_LENGTH,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
-import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
@@ -264,8 +266,48 @@ describe('a workspace-document update making a document unreadable', () => {
   })
 })
 
-describe('an editor sync write giving a label or a comment message past its bound', () => {
+describe('a workspace-document update giving a document a name past its bound', () => {
+  it('answers 400 document_name_too_long and the stored name is unchanged', async () => {
+    const { post, snapshot } = await setup()
+    const url = `/api/w/${WS}/workspace-document`
+    const seeded = updateFrom(await snapshot(`${url}/snapshot`), (doc) =>
+      createWorkspaceDocumentAtPath(doc, { path: 'notes', documentId: DOC_ID, kind: 'markdown' }),
+    )
+    expect((await post(`${url}/update`, seeded)).status).toBe(200)
+    const named = readWorkspaceDocuments(await snapshot(`${url}/snapshot`)).map((e) => e.name)
+
+    const refused = await post(
+      `${url}/update`,
+      updateFrom(await snapshot(`${url}/snapshot`), (doc) => {
+        const node = doc.getTree('tree').getNodes()[0]
+        node?.data.set('name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1))
+      }),
+    )
+
+    expect(refused.status).toBe(400)
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('document_name_too_long')
+    const stored = await snapshot(`${url}/snapshot`)
+    expect(readWorkspaceDocuments(stored).map((entry) => entry.name)).toEqual(named)
+  })
+})
+
+describe('an editor sync write giving a label, a location or a comment message past its bound', () => {
   it.each([
+    {
+      code: 'node_location_too_large',
+      edit: (doc: LoroDoc) =>
+        writeSpatialNode(
+          doc,
+          linkNode({
+            id: 'k',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 60,
+            url: `https://example.com/${'a'.repeat(NODE_LOCATION_MAX_CHARS)}`,
+          }),
+        ),
+    },
     {
       code: 'label_too_large',
       edit: (doc: LoroDoc) =>

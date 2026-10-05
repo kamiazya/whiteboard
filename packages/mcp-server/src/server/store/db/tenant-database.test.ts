@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { sql } from 'kysely'
-import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../../shared/test-utils/fast-check.js'
 import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { tenantDatabase } from './tenant-database.js'
@@ -76,7 +77,7 @@ describe('a tenant-bound handle', () => {
 
   // afterAll, not afterEach: @fast-check/vitest runs each-hooks around every
   // generated case, where the count is still zero on the first one.
-  afterAll(() => {
+  afterAllFloor(['never reads, changes or removes another tenant rows'], () => {
     // The property is vacuous unless the two tenants actually reached for
     // rows the other one held; this is the count that says they did.
     expect(crossTenantTouches).toBeGreaterThan(0)

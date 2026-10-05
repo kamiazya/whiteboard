@@ -11,8 +11,8 @@
  * belongs to the workspace (ADR-0009 decision 2), so it arrives as its own
  * prop and leaves through its own callback.
  */
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentFacetsEditor, DocumentProperties } from './DocumentProperties.js'
 
@@ -33,8 +33,10 @@ function meta(overrides: Partial<StoredCoreFacets> = {}): StoredCoreFacets {
 }
 
 /** The two title props every render needs, defaulted to an unnamed document. */
-function titleProps(overrides: { title?: string; onTitleChange?: (next: string) => void } = {}) {
-  return { title: '', onTitleChange: vi.fn(), ...overrides }
+function titleProps(
+  overrides: { title?: string; onTitleChange?: (next: string) => Promise<string | null> } = {},
+) {
+  return { title: '', onTitleChange: vi.fn(async () => null), ...overrides }
 }
 
 describe('DocumentProperties', () => {
@@ -59,7 +61,7 @@ describe('DocumentProperties', () => {
 
   it('reports an edited title through onTitleChange, and never as a facet', () => {
     const onChange = vi.fn()
-    const onTitleChange = vi.fn()
+    const onTitleChange = vi.fn(async (_next: string) => null)
     render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: /title/i }), {
@@ -72,7 +74,7 @@ describe('DocumentProperties', () => {
   })
 
   it('reports a cleared title as the empty string, which the workspace reads as unnamed', () => {
-    const onTitleChange = vi.fn()
+    const onTitleChange = vi.fn(async (_next: string) => null)
     render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: /title/i }), { target: { value: '  ' } })
@@ -203,8 +205,9 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   it('lets a space be typed in the middle of a title', () => {
     // Exactly what the workspace does with a name it is handed.
     let current = ''
-    const onTitleChange = vi.fn((next: string) => {
+    const onTitleChange = vi.fn(async (next: string) => {
       current = next.trim() || 'untitled'
+      return null
     })
     const view = () => (
       <DocumentProperties
@@ -234,8 +237,9 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // pins: no await between the change and the Escape.
   it('restores the previous name even when Escape lands in the same tick as the edit', () => {
     let current = 'Release plan'
-    const onTitleChange = vi.fn((next: string) => {
+    const onTitleChange = vi.fn(async (next: string) => {
       current = next
+      return null
     })
     const view = () => <DocumentProperties {...titleProps({ title: current, onTitleChange })} />
     render(view())
@@ -258,7 +262,9 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     render(
       // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the page chrome that wraps this row
       <div onKeyDown={onAncestorKeyDown}>
-        <DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange: vi.fn() })} />
+        <DocumentProperties
+          {...titleProps({ title: 'Release plan', onTitleChange: vi.fn(async () => null) })}
+        />
       </div>,
     )
 
@@ -273,7 +279,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // ring goes away and the save dot is the receipt. Without it the caret just
   // sits there and nothing says the name was kept.
   it('finishes the edit on Enter: the field blurs and keeps the typed name', () => {
-    const onChange = vi.fn()
+    const onChange = vi.fn(async () => null)
     render(<DocumentProperties {...titleProps({ title: 'Draft', onTitleChange: onChange })} />)
     const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
     box.focus()
@@ -301,7 +307,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   })
 
   it('drops the draft on blur so the box shows the canonical name', () => {
-    const onTitleChange = vi.fn()
+    const onTitleChange = vi.fn(async (_next: string) => null)
     render(<DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange })} />)
     const box = screen.getByRole('textbox', { name: /title/i })
     fireEvent.change(box, { target: { value: 'Release plan  ' } })
@@ -310,6 +316,61 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     fireEvent.blur(box)
 
     expect(textboxValue(/title/i)).toBe('Release plan')
+  })
+})
+
+describe('DocumentProperties title bound and refusal', () => {
+  it('holds the title to the bound every keeper enforces on a name', () => {
+    render(<DocumentProperties {...titleProps()} />)
+    expect(screen.getByRole('textbox', { name: /title/i }).getAttribute('maxlength')).toBe(
+      String(DOCUMENT_NAME_MAX_LENGTH),
+    )
+  })
+
+  it('says beside the box why a rename was refused, and keeps saying it after blur', async () => {
+    const onTitleChange = vi.fn(async () => 'You may not rename documents in this workspace')
+    render(<DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i })
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Launch plan' } })
+    })
+    fireEvent.blur(box)
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'You may not rename documents in this workspace',
+    )
+    expect(box.getAttribute('aria-invalid')).toBe('true')
+    expect(textboxValue(/title/i)).toBe('Release plan')
+  })
+
+  it('clears the refusal once a later keystroke is saved', async () => {
+    const outcomes = ['Refused', null]
+    const onTitleChange = vi.fn(async () => outcomes.shift() ?? null)
+    render(<DocumentProperties {...titleProps({ title: 'Plan', onTitleChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i })
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Plan!' } })
+    })
+    expect(screen.getByRole('alert').textContent).toBe('Refused')
+
+    await act(async () => {
+      fireEvent.change(box, { target: { value: 'Plan' } })
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('answers with the outcome of the LATEST keystroke when an earlier one settles last', async () => {
+    const settle: Array<(refusal: string | null) => void> = []
+    const onTitleChange = vi.fn(() => new Promise<string | null>((resolve) => settle.push(resolve)))
+    render(<DocumentProperties {...titleProps({ title: 'Plan', onTitleChange })} />)
+    const box = screen.getByRole('textbox', { name: /title/i })
+    fireEvent.change(box, { target: { value: 'Plan A' } })
+    fireEvent.change(box, { target: { value: 'Plan AB' } })
+
+    await act(async () => settle[1]?.(null))
+    await act(async () => settle[0]?.('A stale refusal'))
+
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 

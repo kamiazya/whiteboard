@@ -76,9 +76,12 @@ already over the limit is accepted.
 The daemon's sync routes — a document's `update`, the workspace document's
 `update` and `promote` — hold the same bound: an update that adds a node with
 more than 8,192 characters of text, or grows a node's text past that, answers
-`413` with `{"error":"node_text_too_large"}` and stores nothing. A node stored
-longer before the limit can still be moved, restyled or shortened. A
-browser-kept workspace does not check a canvas node's text.
+`413` with `{"error":"node_text_too_large"}` and stores nothing; `promote`
+names the canvas that holds the node. A node stored longer before the limit
+can still be moved, restyled or shortened. A browser-kept workspace holds the
+same bound: it does not save a change that adds or grows a node's text past
+it — the page goes back to what is stored, undoing that change and anything
+typed after it, and a notice at the top says the change was not saved and why.
 
 A label — of an edge, a line or a group — carries at most **1,024
 characters**, and one comment message at most **4,096**. Each is laid out
@@ -89,15 +92,32 @@ again on every render of its board, at a cost that grows with its length.
 `message.add`. The editor's label and comment boxes refuse a longer edit and
 say why. The daemon's sync routes refuse an update that adds or grows one past
 its bound with `413` and `{"error":"label_too_large"}` or
-`{"error":"comment_too_large"}`, storing nothing. A label or message stored
-longer before the limit still reads, and can still be shortened.
+`{"error":"comment_too_large"}`, storing nothing; `promote` names the canvas
+that holds it. A browser-kept workspace refuses the same change the way it
+refuses an over-long node: nothing is saved, the page goes back to what is
+stored, and the notice says why. A label or message stored longer before the
+limit still reads, and can still be shortened.
+
+A link node's URL, a file node's path and a file node's subpath each carry at
+most **8,192 characters**. Each is drawn as the node's label on every render,
+at the same per-character cost as a label; 8,192 leaves room for long signed or
+query-heavy URLs. `wb_canvas_edit` refuses a longer `url`, `file` or `subpath`
+on `node.add` and `node.patch`, and the web app's link dialog stops taking
+characters at the limit. The daemon's sync routes refuse an update that adds or
+grows one past it with `413` and `{"error":"node_location_too_large"}`, storing
+nothing; `promote` names the canvas that holds it. A browser-kept workspace
+refuses the same change the way it refuses an over-long node. A URL or path
+stored longer before the limit still reads, and can still be shortened.
 
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
 `document.create` and `document.move` and of
 `POST /api/v1/workspaces/{id}/documents`,
-`PUT /api/workspaces/{id}/documents/{path}/name`, the web app's Name field,
-and a markdown document's frontmatter `title`, which becomes its name. An
+`PUT /api/workspaces/{id}/documents/{path}/name`, the web app's Name field
+in the new-document and rename dialogs and its title box above an open
+document — both stop taking characters at the limit, and the title box says
+beside itself why a rename was refused — and a markdown document's
+frontmatter `title`, which becomes its name. An
 over-long `title` is refused before anything is written — `document.create`
 creates nothing, and through `/api/v1` the answer is
 `400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A

@@ -5,28 +5,23 @@
 // pasted onto the canvas as a new node, nor copied from a node written
 // before the bound.
 import type { Extension } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
 import { NODE_TEXT_MAX_CHARS, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  copiedNodeTextNotice,
+  nodeTextEditNotice,
+  pastedTextNotice,
+} from '../../lib/limit-notice.js'
 import { textLengthLimit } from '../../lib/text-length-limit.js'
 
-const COUNT = new Intl.NumberFormat('en-US')
-
 /**
- * The node editor's limit. The notice is short and set small because it
- * shares the node's own box with the text, which may be a few lines tall.
+ * The node editor's limit. The notice is set small because it shares the
+ * node's own box with the text.
  */
-export const nodeTextLengthLimit: Extension = [
-  // FIRST, and that order is the override: CodeMirror mounts the earliest
-  // theme last, so it wins over the limit's own document-sized notice.
-  EditorView.theme({
-    '.cm-length-limit-notice': { padding: '2px 4px', fontSize: '11px', lineHeight: '1.3' },
-  }),
-  textLengthLimit(
-    NODE_TEXT_MAX_CHARS,
-    (length) =>
-      `Not added: the node would be ${COUNT.format(length)} characters, past its ${COUNT.format(NODE_TEXT_MAX_CHARS)}-character limit.`,
-  ),
-]
+export const nodeTextLengthLimit: Extension = textLengthLimit(
+  NODE_TEXT_MAX_CHARS,
+  nodeTextEditNotice,
+  { compact: true },
+)
 
 /**
  * Why plain text pasted onto the canvas makes no node, or null when it fits.
@@ -37,7 +32,7 @@ export const nodeTextLengthLimit: Extension = [
  */
 export function pastedTextRefusal(text: string): string | null {
   if (text.length <= NODE_TEXT_MAX_CHARS) return null
-  return `Not pasted: the text is ${COUNT.format(text.length)} characters, past the ${COUNT.format(NODE_TEXT_MAX_CHARS)}-character limit for one node. Put it in a markdown document, or paste it in parts.`
+  return pastedTextNotice(text.length)
 }
 
 /**
@@ -53,5 +48,5 @@ export function copiedTextRefusal(
 ): string | null {
   const longest = nodes.reduce((most, node) => Math.max(most, nodeText(node)?.length ?? 0), 0)
   if (longest <= NODE_TEXT_MAX_CHARS) return null
-  return `Not ${verb}: a node's text is ${COUNT.format(longest)} characters, past the ${COUNT.format(NODE_TEXT_MAX_CHARS)}-character limit for one node. Shorten it first.`
+  return copiedNodeTextNotice(verb, longest)
 }

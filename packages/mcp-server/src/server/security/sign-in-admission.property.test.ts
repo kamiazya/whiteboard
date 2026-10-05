@@ -4,7 +4,8 @@
  * two answers of `admit` itself, or holds an answer against a fact of its
  * input, so a property here cannot agree with a bug by construction.
  */
-import { afterAll, describe, expect } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { type AdmissionInput, admit } from './sign-in-admission.js'
 import { type ProviderAdmission, providerAdmissionSchema } from './sign-in-config.js'
@@ -57,12 +58,20 @@ const usesEmail = (a: ProviderAdmission) =>
 const reached = { emailRuleAdmitted: 0, uninvited: 0, looserChecked: 0, addressless: 0 }
 
 describe('admit — invariants', () => {
-  afterAll(() => {
-    expect(reached.emailRuleAdmitted).toBeGreaterThan(0)
-    expect(reached.uninvited).toBeGreaterThan(0)
-    expect(reached.looserChecked).toBeGreaterThan(0)
-    expect(reached.addressless).toBeGreaterThan(0)
-  })
+  afterAllFloor(
+    [
+      'never admits on an unverified email when a rule reads the email',
+      'never admits a verified claim set that carries no email against a domain allowlist',
+      'an uninvited new account gets in exactly when it could sign in and the provider creates accounts',
+      'a rule set with one rule removed admits everyone the full set admits',
+    ],
+    () => {
+      expect(reached.emailRuleAdmitted).toBeGreaterThan(0)
+      expect(reached.uninvited).toBeGreaterThan(0)
+      expect(reached.looserChecked).toBeGreaterThan(0)
+      expect(reached.addressless).toBeGreaterThan(0)
+    },
+  )
 
   fcTest.prop([inputArb], withDefaults())(
     'never admits on an unverified email when a rule reads the email',

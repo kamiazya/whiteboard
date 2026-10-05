@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   DocumentStore,
   SaveCompactedSnapshotInput,
@@ -12,7 +13,7 @@ import {
   type WorkspaceDocCursor,
 } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { afterAll, describe, expect } from 'vitest'
+import { describe, expect } from 'vitest'
 import { fc, fcTest } from '../../shared/test-utils/fast-check.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
@@ -429,13 +430,19 @@ describe('multi-instance convergence (ADR-0020)', () => {
    * passing while covering only the append path, and the pass would read as
    * evidence for a fence it never touched.
    */
-  afterAll(() => {
-    expect(stats.folds).toBeGreaterThan(0)
-    expect(stats.refusals).toBeGreaterThan(0)
-    expect(stats.straddles).toBeGreaterThan(0)
-    expect(stats.catchUps).toBeGreaterThan(0)
-    expect(stats.tailCatchUps).toBeGreaterThan(0)
-  })
+  afterAllFloor(
+    [
+      'no acknowledged write is lost, whatever order instances with stale docs write in',
+      'the same holds against the real libSQL store, transactions and all',
+    ],
+    () => {
+      expect(stats.folds).toBeGreaterThan(0)
+      expect(stats.refusals).toBeGreaterThan(0)
+      expect(stats.straddles).toBeGreaterThan(0)
+      expect(stats.catchUps).toBeGreaterThan(0)
+      expect(stats.tailCatchUps).toBeGreaterThan(0)
+    },
+  )
 
   /**
    * Seeds the record from a writer that is NOT one of the instances, so every

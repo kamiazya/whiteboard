@@ -71,6 +71,8 @@ describe('a browser-kept note whose keeper refuses a change', () => {
     await vi.waitFor(async () => expect(await storedBody()).toBe('hello!'), { timeout: 10_000 })
     await vi.waitFor(() => expect(page?.persistence.kind).toBe('saved'))
     expect(page?.markdownBody).toBe('hello!')
-    expect(expectLoggedFailures().some((r) => r.includes('refused a body past'))).toBe(true)
+    expect(
+      expectLoggedFailures().some((r) => r.includes('refused an update past a text limit')),
+    ).toBe(true)
   })
 })

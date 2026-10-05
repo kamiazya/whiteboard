@@ -54,9 +54,10 @@ export {
 export { countSpatialNodes } from './spatial-node-count.js'
 export {
   importWithinTextLimits,
+  SYNC_TEXT_BREACH_CODES,
   type SyncTextBreach,
   type SyncTextJudgement,
-  syncTextLimitBreach,
+  syncTextLimitJudge,
 } from './sync-text-limits.js'
 export {
   markThreadPassages,

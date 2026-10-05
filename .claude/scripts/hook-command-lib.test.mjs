@@ -105,6 +105,33 @@ test('the gh pr and REST forms read every shell quoting of a body alike', () => 
   assert.equal(fromCommand(`gh pr create --fill && echo --body 'x'`)?.body, null)
 })
 
+test('the gh pr form reads every spelling gh accepts for its body and head flags', () => {
+  writeFileSync(join(scratch, 'short.md'), 'from -F')
+  for (const flags of ['-b x', '-bx', '-b=x', '--body x', '--body=x']) {
+    assert.deepEqual(fromCommand(`gh pr create -t t ${flags}`)?.body, { text: 'x' }, flags)
+  }
+  assert.deepEqual(fromCommand(`gh pr create -t t -b 'Visual evidence: none - a b'`)?.body, {
+    text: 'Visual evidence: none - a b',
+  })
+  for (const flags of ['-F short.md', '-Fshort.md', '-F=short.md', '--body-file=short.md']) {
+    assert.deepEqual(fromCommand(`gh pr create -t t ${flags}`)?.body, { text: 'from -F' }, flags)
+  }
+  assert.deepEqual(fromCommand('gh pr edit 5 -F short.md')?.body, { text: 'from -F' })
+  for (const flags of [
+    '-H feat',
+    '-Hfeat',
+    '-H=feat',
+    '--head feat',
+    '--head=feat',
+    '-H me:feat',
+  ]) {
+    assert.equal(fromCommand(`gh pr create -t t ${flags}`)?.head, 'feat', flags)
+  }
+  // The head, like the body, belongs to the gh pr command that carries it.
+  assert.equal(fromCommand(`gh pr create --fill && echo --head x -H y`)?.head, null)
+  assert.equal(fromCommand('gh pr create --fill')?.head, null)
+})
+
 test('the REST calls behind gh pr create, merge and edit are recognised', () => {
   const create = fromCommand(
     "gh api -X POST repos/{owner}/{repo}/pulls -f title=x -f head=feat -f base=main -f body='Visual evidence: none — n/a'",

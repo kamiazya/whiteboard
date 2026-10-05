@@ -333,6 +333,10 @@ function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
  * — while a BLANK one clears it, because a blank title is not a name and the
  * two are deliberately one state rather than a `''` a reader falls back from a
  * second time.
+ *
+ * A title EQUAL to the stored name is skipped: a read hands that title out, so
+ * an agent writing back what it read says nothing new, and setting it would
+ * mark a name the heading gave as one somebody chose.
  */
 async function applyOkfTitle(
   deps: ServerDeps,
@@ -341,6 +345,9 @@ async function applyOkfTitle(
 ): Promise<void> {
   if (title === undefined) return
   const trimmed = title.trim()
+  const { workspaceId, documentId } = input
+  const stored = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })
+  if (trimmed !== '' && trimmed === stored?.name) return
   await deps.documentIndex.setDocumentName({
     workspaceId: input.workspaceId,
     documentId: input.documentId,

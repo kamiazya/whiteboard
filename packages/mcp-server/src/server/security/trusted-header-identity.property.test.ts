@@ -4,8 +4,10 @@
  * from the reader's own claim list, so the property cannot agree with a
  * dropped requirement by construction.
  */
+
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose'
-import { afterAll, beforeAll, describe, expect } from 'vitest'
+import { beforeAll, describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { signInConfigSchema, type TrustedHeaderProvider } from './sign-in-config.js'
 import { createTrustedIdentityReader } from './trusted-header-identity.js'
@@ -60,11 +62,14 @@ describe('a signed assertion — every required claim is required', () => {
     read = createTrustedIdentityReader(provider, () => importJWK(jwk, 'ES256'))
   })
 
-  afterAll(() => {
-    expect(reached.admitted).toBeGreaterThan(0)
-    expect(reached.noExp).toBeGreaterThan(0)
-    expect(reached.noSub).toBeGreaterThan(0)
-  })
+  afterAllFloor(
+    ['is admitted exactly when it has a future exp, a sub, and the right audience and issuer'],
+    () => {
+      expect(reached.admitted).toBeGreaterThan(0)
+      expect(reached.noExp).toBeGreaterThan(0)
+      expect(reached.noSub).toBeGreaterThan(0)
+    },
+  )
 
   fcTest.prop([shapeArb], withDefaults())(
     'is admitted exactly when it has a future exp, a sub, and the right audience and issuer',

@@ -15,8 +15,8 @@ import {
   serverTextMessageSchema,
   viewportRequestParamsSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-frames'
-import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { afterAll, describe, expect, vi } from 'vitest'
+import { afterAllFloor, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 
 /** Every raw event handed to the SSE transport, whichever broadcaster carried it. */
@@ -108,7 +108,7 @@ const viaJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
 const kinds = new Map<string, number>()
 
 describe('every text event the daemon emits is one the browser reads', () => {
-  afterAll(() => {
+  afterAllFloor(['the event parses under the browser schema, equal to what was asked'], () => {
     const unreached = ['version_created', 'restore', 'agent_activity', 'viewport_request'].filter(
       (kind) => (kinds.get(kind) ?? 0) === 0,
     )

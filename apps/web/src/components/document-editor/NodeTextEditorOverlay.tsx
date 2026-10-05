@@ -2,6 +2,7 @@ import type { Extension } from '@codemirror/state'
 import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { nodeTextEditNotice } from '../../lib/limit-notice.js'
 import { textLengthLimit } from '../../lib/text-length-limit.js'
 import { EditorExitHint } from '../EditorExitHint.js'
 import type { MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
@@ -28,8 +29,6 @@ export interface NodeTextEditorOverlayProps
   readonly onClose: () => void
 }
 
-const COUNT = new Intl.NumberFormat('en-US')
-
 /**
  * The text edited here is a NODE's, so it is held to the node bound rather
  * than to the document editor's own, which is far larger. Module-level, so
@@ -38,11 +37,7 @@ const COUNT = new Intl.NumberFormat('en-US')
  * surface does not need: its value only ever comes from the editor itself.
  */
 const NODE_TEXT_LIMIT: readonly Extension[] = [
-  textLengthLimit(
-    NODE_TEXT_MAX_CHARS,
-    (length) =>
-      `Not added: this would make the node ${COUNT.format(length)} characters long, past the ${COUNT.format(NODE_TEXT_MAX_CHARS)}-character limit for one node. Put longer text in a markdown document.`,
-  ),
+  textLengthLimit(NODE_TEXT_MAX_CHARS, nodeTextEditNotice),
 ]
 
 /**

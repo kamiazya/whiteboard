@@ -1,4 +1,4 @@
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import { DOCUMENT_NAME_MAX_LENGTH, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
@@ -21,8 +21,12 @@ export interface DocumentPropertiesProps {
   /**
    * Absent when this backend cannot rename — the title then renders
    * read-only rather than accepting keystrokes it would discard.
+   *
+   * A keeper that can REFUSE a name answers with a promise of why (null once
+   * it is saved), shown beside the box: every keystroke commits, so a refusal
+   * nobody shows reads as a rename that stuck until the name snaps back.
    */
-  readonly onTitleChange?: (next: string) => void
+  readonly onTitleChange?: (next: string) => Promise<string | null>
   /**
    * The document's OKF frontmatter, or absent when the document has none to
    * hold: a facet belongs to OKF and a JSON Canvas document has nowhere to
@@ -79,6 +83,7 @@ export function DocumentProperties({
   // your mind, Escape" silently keeps the half-typed name.
   const editBaselineRef = useRef(title)
   const suggestionsId = useId()
+  const { refusal, commit } = useTitleCommit(onTitleChange)
 
   return (
     <div
@@ -109,9 +114,12 @@ export function DocumentProperties({
           onChange={(event) => {
             if (onTitleChange === undefined) return
             setDraftTitle(event.target.value)
-            onTitleChange(event.target.value)
+            commit(event.target.value)
           }}
           readOnly={onTitleChange === undefined}
+          maxLength={DOCUMENT_NAME_MAX_LENGTH}
+          aria-invalid={refusal === null ? undefined : true}
+          aria-describedby={refusal === null ? undefined : `${suggestionsId}-refusal`}
           onFocus={() => {
             editBaselineRef.current = title
           }}
@@ -141,7 +149,7 @@ export function DocumentProperties({
             // comparison to it would decide "nothing changed" while a rename
             // to the typed value is already in flight.
             if ((draftTitle ?? title) !== editBaselineRef.current) {
-              onTitleChange(editBaselineRef.current)
+              commit(editBaselineRef.current)
             }
             event.currentTarget.blur()
           }}
@@ -154,12 +162,45 @@ export function DocumentProperties({
             inline ? 'text-sm' : 'text-base'
           }`}
         />
+        {refusal !== null && <TitleRefusal id={`${suggestionsId}-refusal`} refusal={refusal} />}
         {actions !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}
       </div>
     </div>
   )
+}
+
+/** Why the last rename was refused, beside the box it was typed into. */
+function TitleRefusal({ id, refusal }: { readonly id: string; readonly refusal: string }) {
+  return (
+    <span
+      id={id}
+      role="alert"
+      className="text-destructive min-w-0 truncate text-xs"
+      title={refusal}
+    >
+      {refusal}
+    </span>
+  )
+}
+
+/**
+ * Commits a title and keeps the refusal of the LATEST commit. Keystrokes
+ * commit concurrently and may settle out of order, so an earlier keystroke's
+ * answer arriving last must not overwrite what the newest one said.
+ */
+function useTitleCommit(onTitleChange: DocumentPropertiesProps['onTitleChange']) {
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const latestRef = useRef(0)
+  const commit = (next: string) => {
+    if (onTitleChange === undefined) return
+    const ticket = ++latestRef.current
+    void onTitleChange(next).then((answer) => {
+      if (ticket === latestRef.current) setRefusal(answer)
+    })
+  }
+  return { refusal, commit }
 }
 
 /**

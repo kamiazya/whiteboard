@@ -42,8 +42,10 @@ paths:
   `document-backend-contract` types it implements. The SSE wire itself is
   `sync-sse-contract`, and `sync-frames` / `sync-frame-text` are the text
   frames that stream carries inside its `message` events.
-- The sync write refusal (`api-contracts/sync-write-refusal`): the codes
-  server-core's `syncWriteAnswer` emits, read by both the hub and the worker.
+- The sync write refusal (`api-contracts/sync-write-refusal`): the codes are
+  model's `syncWriteRefusalCodeSchema`, which also types server-core's
+  `SyncWriteRefusalError.code`, so a code renamed on one side fails typecheck
+  on the other; read by both the hub and the worker.
   A permanent 4xx on a sync push throws `SyncWriteRefusedError` and is never
   retried; the backend reports `onWriteRefused` and re-delivers the keeper's
   snapshot. The daemon's `sync-update-body-limit.test.ts` reads every refusal
