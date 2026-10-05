@@ -15,6 +15,7 @@
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
+import { refusalReasonOf } from './api-contracts/refusal-reason.js'
 import {
   isPermanentWriteRefusal,
   type SyncWriteRefusal,
@@ -390,7 +391,9 @@ export class SseStreamHub implements SseStreamSource {
     // reason: sending them again gets the same answer, so a caller that
     // retried it would keep every later edit built on them unsaved forever.
     if (isPermanentWriteRefusal(res.status)) {
-      const body: unknown = await res.json().catch(() => undefined)
+      // Read through the one reader of a refusal's body; the typed refusal,
+      // with the keeper's own sentence, is read back from it by code.
+      const { body } = await refusalReasonOf(res, '')
       throw new SyncWriteRefusedError(res.status, syncWriteRefusalOf(body))
     }
     if (!res.ok) throw new Error(`update refused: ${res.status}`)

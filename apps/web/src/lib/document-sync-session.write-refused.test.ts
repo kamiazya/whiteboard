@@ -92,7 +92,7 @@ describe('a session whose browser keeper refuses a write', () => {
     await vi.waitFor(() => expect(s.session.getMarkdownBody()).toBe('hello'))
 
     s.typed((text) => text.insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)))
-    await expectLoggedFailure('refused a body past the markdown size limit')
+    await expectLoggedFailure('refused an update past a text limit')
     await vi.waitFor(() => expect(s.refusals.map((r) => r.code)).toEqual(['markdown_too_large']))
     // The refused text is gone from the page, not kept as if it were saved.
     await vi.waitFor(() => expect(s.session.getMarkdownBody()).toBe('hello'))

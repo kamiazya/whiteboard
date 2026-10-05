@@ -1,14 +1,26 @@
-// What a sync update does to text, judged once for every keeper: the daemon's
-// sync routes and the browser keeper's own store take or refuse the same
-// bytes, so a document cannot hold text one keeper accepted and the other
-// would refuse.
+// What a sync update does to text, judged once for every keeper and every
+// kind of document: the daemon's sync routes and the browser keeper's own
+// store take or refuse the same bytes — a note's body, a canvas's node text,
+// labels and comment messages alike — so a document cannot hold text one
+// keeper accepted and the other would refuse, which is what promoting a
+// browser-kept workspace to the daemon would otherwise trip over.
 import {
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  type SyncWriteRefusalCode,
 } from '@kamiazya/whiteboard-model'
-import type { ContainerID, JsonSchema, LoroDoc, LoroMap, LoroText, MapOp, TextOp } from 'loro-crdt'
+import type {
+  ContainerID,
+  JsonSchema,
+  LoroDoc,
+  LoroMap,
+  LoroText,
+  MapOp,
+  TextOp,
+  VersionVector,
+} from 'loro-crdt'
 import { EDGES_KEY, LINES_KEY, MARKDOWN_BODY_KEY, NODES_KEY, THREADS_KEY } from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
@@ -28,9 +40,38 @@ export type SyncTextBreach =
       /** The text container that broke it, so a caller can name the document. */
       readonly container: ContainerID
     }
-  | { readonly shape: 'node-text'; readonly chars: number; readonly nodeId: string }
-  | { readonly shape: 'label'; readonly chars: number; readonly elementId: string }
-  | { readonly shape: 'comment-message'; readonly chars: number; readonly messageId: string }
+  | {
+      readonly shape: 'node-text'
+      readonly chars: number
+      readonly nodeId: string
+      /** The map holding the node, so a caller can name the document. */
+      readonly container: ContainerID
+    }
+  | {
+      readonly shape: 'label'
+      readonly chars: number
+      readonly elementId: string
+      readonly container: ContainerID
+    }
+  | {
+      readonly shape: 'comment-message'
+      readonly chars: number
+      readonly messageId: string
+      readonly container: ContainerID
+    }
+
+/**
+ * The refusal code each breach is answered with, by either keeper. One table,
+ * so the daemon's refusal and the browser keeper's cannot name the same
+ * breach differently: a run and a body are both a markdown body too large.
+ */
+export const SYNC_TEXT_BREACH_CODES = {
+  run: 'markdown_too_large',
+  body: 'markdown_too_large',
+  'node-text': 'node_text_too_large',
+  label: 'label_too_large',
+  'comment-message': 'comment_too_large',
+} as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
   /** The first limit the update breaks, or `null` when it may be kept. */
@@ -85,7 +126,7 @@ interface BoundedValue {
   readonly max: number
   readonly length: (value: unknown) => number
   readonly holds: (doc: LoroDoc, container: ContainerID) => boolean
-  readonly breach: (chars: number, key: string) => SyncTextBreach
+  readonly breach: (chars: number, key: string, container: ContainerID) => SyncTextBreach
 }
 
 const BOUNDED_VALUES: readonly BoundedValue[] = [
@@ -93,7 +134,7 @@ const BOUNDED_VALUES: readonly BoundedValue[] = [
     max: NODE_TEXT_MAX_CHARS,
     length: nodeTextLength,
     holds: (doc, container) => isContentContainer(doc, container, NODES_KEY),
-    breach: (chars, nodeId) => ({ shape: 'node-text', chars, nodeId }),
+    breach: (chars, nodeId, container) => ({ shape: 'node-text', chars, nodeId, container }),
   },
   {
     // A group's label is a node field; an edge's and a line's their own.
@@ -101,13 +142,18 @@ const BOUNDED_VALUES: readonly BoundedValue[] = [
     length: (value) => fieldLength(value, 'label'),
     holds: (doc, container) =>
       [NODES_KEY, EDGES_KEY, LINES_KEY].some((key) => isContentContainer(doc, container, key)),
-    breach: (chars, elementId) => ({ shape: 'label', chars, elementId }),
+    breach: (chars, elementId, container) => ({ shape: 'label', chars, elementId, container }),
   },
   {
     max: COMMENT_MESSAGE_MAX_CHARS,
     length: (value) => fieldLength(value, 'body'),
     holds: isThreadMessages,
-    breach: (chars, messageId) => ({ shape: 'comment-message', chars, messageId }),
+    breach: (chars, messageId, container) => ({
+      shape: 'comment-message',
+      chars,
+      messageId,
+      container,
+    }),
   },
 ]
 
@@ -242,7 +288,7 @@ function valueBreach(
     if (!value.bound.holds(doc, value.container)) continue
     const length = lengthIn(doc, value)
     if (length > value.bound.max && length > (before.get(id) ?? 0)) {
-      return value.bound.breach(length, value.key)
+      return value.bound.breach(length, value.key, value.container)
     }
   }
   return null
@@ -335,20 +381,65 @@ function longestBody(doc: LoroDoc): number {
 }
 
 /**
- * The verdict `importWithinTextLimits` gives `update`, leaving `record` as it
- * was — for a keeper with no cached instance to discard.
+ * The verdict `importWithinTextLimits` gives each update offered to `record`,
+ * leaving `record` as it was — for a keeper with no cached instance to
+ * discard. The caller imports into `record` what the judge lets through.
  *
  * An update's bytes hold every string it writes uncompressed, and a UTF-16
  * unit never takes less than one byte, so no insert, body growth, node text,
  * label or message it carries is longer than its byte length
  * (`sync-text-limits.test.ts` pins that encoding). An update short enough that
- * no limit can be reached — no longer than the smallest bound, a label's — is
- * therefore answered without being applied; only one that might is judged on
- * a fork. A fork copies the whole record — 6 to 74 ms for records of 0.1 to
- * 5 M characters — which a keystroke must not pay.
+ * no limit can be reached — no longer than the smallest bound, a label's, and
+ * not enough to take the longest body past its own — is therefore answered
+ * without being applied.
+ *
+ * The longest body is not walked for each update: every document's body
+ * would be read on every keystroke, in a workspace of hundreds of notes. It
+ * is walked once and then held as a bound, raised by the byte length of
+ * whatever `record` gained since — the same encoding argument, applied to
+ * that gain — and walked again only when the bound would let an update
+ * through no more.
+ *
+ * Any other update is judged on a copy of the record. The copy is made once
+ * and brought up to `record` before each judgement by what `record` gained
+ * since — whoever wrote it — so a judgement costs about what the update costs
+ * to import, rather than a fork of the whole record (6 to 74 ms for records
+ * of 0.1 to 5 M characters) each time: a canvas commit that moves several
+ * nodes, or edits a long one, is past the short-update bound. A copy that
+ * took a refused update holds operations it must not keep, so it is dropped
+ * and made again at the next judgement.
+ *
+ * ponytail: the copy doubles the record's memory while the keeper serves it;
+ * judging on the record itself and reloading it from storage after a refusal
+ * would not.
  */
-export function syncTextLimitBreach(record: LoroDoc, update: Uint8Array): SyncTextBreach | null {
-  const most = update.byteLength
-  if (most <= SMALLEST_VALUE_BOUND && longestBody(record) + most <= MARKDOWN_MAX_CHARS) return null
-  return importWithinTextLimits(record.fork(), update).breach
+export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => SyncTextBreach | null {
+  let copy: LoroDoc | null = null
+  let bodies: { readonly at: VersionVector; readonly longest: number } | null = null
+  /** At least the longest body `record` holds now: the held bound, or a fresh walk when `walk`. */
+  const longestBodyAtMost = (walk: boolean): number => {
+    const at = record.oplogVersion()
+    let longest: number
+    if (bodies === null || walk) longest = longestBody(record)
+    else if (at.compare(bodies.at) === 0) longest = bodies.longest
+    else longest = bodies.longest + record.export({ mode: 'update', from: bodies.at }).byteLength
+    bodies = { at, longest }
+    return longest
+  }
+  return (update) => {
+    const most = update.byteLength
+    if (most <= SMALLEST_VALUE_BOUND) {
+      const fits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
+      if (fits(false) || fits(true)) return null
+    }
+    if (copy === null) copy = record.fork()
+    else copy.import(record.export({ mode: 'update', from: copy.oplogVersion() }))
+    const judging = copy
+    // Dropped before the judgement, and kept only once it passes: a breach,
+    // refused bytes and an engine trap each leave the copy unusable.
+    copy = null
+    const { breach } = importWithinTextLimits(judging, update)
+    if (breach === null) copy = judging
+    return breach
+  }
 }

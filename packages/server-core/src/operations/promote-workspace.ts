@@ -1,10 +1,15 @@
 import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
-import { LoroDoc, type LoroText, type TreeID } from 'loro-crdt'
+import { type ContainerID, LoroDoc, type LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
-import { MarkdownBodyTooLargeError } from './sync-write-refusals.js'
+import {
+  CommentMessageTooLargeError,
+  LabelTooLargeError,
+  MarkdownBodyTooLargeError,
+  NodeTextTooLargeError,
+} from './sync-write-refusals.js'
 
 export interface PromoteWorkspaceInput {
   readonly workspaceId: string
@@ -32,23 +37,51 @@ export type PromoteWorkspaceResult =
     }
 
 /**
+ * The promoted document `container` lives under, or `undefined` when it is not
+ * inside one — a body, a canvas's node or edge map, or a thread's messages
+ * each sit below their document's workspace-tree node.
+ */
+function promotedDocumentAt(
+  incoming: LoroDoc,
+  container: ContainerID,
+): { readonly path: string } | undefined {
+  const path = incoming.getPathToContainer(container)
+  if (path === undefined || path.length < 3 || path[0] !== WORKSPACE_TREE_KEY) return undefined
+  const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
+  const documentId = node?.data.get('documentId')
+  return readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)
+}
+
+/**
  * A size refusal from the merge, re-raised naming the promoted document it is
- * about. The merge sees only a text container; the promoted record is what
- * can say whose body it is, and how long that body is now — which, for a run
- * found only in the history, is what tells a person the document they see is
+ * about. The merge sees only a container and a key; the promoted record is
+ * what can say which document holds it — a canvas a person can open, rather
+ * than a node id they never see — and, for a body, how long it is now, which
+ * for a run found only in the history tells a person the document they see is
  * not the problem.
  */
 function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
-  if (!(err instanceof MarkdownBodyTooLargeError) || err.container === undefined) return err
-  const path = incoming.getPathToContainer(err.container)
-  if (path?.length !== 3 || path[0] !== WORKSPACE_TREE_KEY) return err
-  const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
-  const documentId = node?.data.get('documentId')
-  const entry = readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)
+  const named =
+    err instanceof MarkdownBodyTooLargeError ||
+    err instanceof NodeTextTooLargeError ||
+    err instanceof LabelTooLargeError ||
+    err instanceof CommentMessageTooLargeError
+  if (!named || err.container === undefined) return err
+  const entry = promotedDocumentAt(incoming, err.container)
   if (entry === undefined) return err
+  const at = { path: entry.path }
+  if (err instanceof NodeTextTooLargeError) {
+    return new NodeTextTooLargeError(err.nodeId, err.chars, err.container, at)
+  }
+  if (err instanceof LabelTooLargeError) {
+    return new LabelTooLargeError(err.elementId, err.chars, err.container, at)
+  }
+  if (err instanceof CommentMessageTooLargeError) {
+    return new CommentMessageTooLargeError(err.messageId, err.chars, err.container, at)
+  }
   const body = incoming.getContainerById(err.container) as LoroText
   return new MarkdownBodyTooLargeError(err.shape, err.chars, err.container, {
-    path: entry.path,
+    ...at,
     chars: body.length,
   })
 }

@@ -31,11 +31,11 @@ function refuse(target: CachedTarget, error: SyncWriteRefusalError): never {
 function breachRefusal(breach: SyncTextBreach): SyncWriteRefusalError {
   switch (breach.shape) {
     case 'node-text':
-      return new NodeTextTooLargeError(breach.nodeId, breach.chars)
+      return new NodeTextTooLargeError(breach.nodeId, breach.chars, breach.container)
     case 'label':
-      return new LabelTooLargeError(breach.elementId, breach.chars)
+      return new LabelTooLargeError(breach.elementId, breach.chars, breach.container)
     case 'comment-message':
-      return new CommentMessageTooLargeError(breach.messageId, breach.chars)
+      return new CommentMessageTooLargeError(breach.messageId, breach.chars, breach.container)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach.shape, breach.chars, breach.container)

@@ -2,8 +2,17 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  writeCommentThread,
   writeMarkdownBody,
+  writeSpatialEdge,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  COMMENT_MESSAGE_MAX_CHARS,
+  LABEL_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
@@ -12,7 +21,7 @@ import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { promoteWorkspace } from './promote-workspace.js'
-import { OffGrammarPathError } from './sync-write-refusals.js'
+import { OffGrammarPathError, syncWriteAnswer } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -254,5 +263,81 @@ describe('promoteWorkspace', () => {
     expect(fake.saves()).toBe(0)
     expect(fake.evictions()).toBe(1)
     expect(fake.versions.saves).toEqual([])
+  })
+
+  /**
+   * The merge sees only a node, an element or a message by its key; the
+   * promoted record is what can say which canvas holds it, and a person
+   * fixing the record needs the canvas, not a key they never see.
+   */
+  it.each([
+    {
+      bound: "a node's text",
+      code: 'node_text_too_large',
+      write: (board: ReturnType<typeof documentContainers>) =>
+        writeSpatialNode(
+          board,
+          textNode({
+            id: 'big',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+            text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
+          }),
+        ),
+    },
+    {
+      bound: "an edge's label",
+      code: 'label_too_large',
+      write: (board: ReturnType<typeof documentContainers>) =>
+        writeSpatialEdge(board, {
+          id: 'e1',
+          from: { node: 'a' },
+          to: { node: 'b' },
+          label: 'x'.repeat(LABEL_MAX_CHARS + 1),
+        }),
+    },
+    {
+      bound: 'a comment message',
+      code: 'comment_too_large',
+      write: (board: ReturnType<typeof documentContainers>) =>
+        writeCommentThread(board, {
+          id: 't1',
+          anchor: { kind: 'document' },
+          status: 'open',
+          messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }],
+        }),
+    },
+  ])('refuses a record whose canvas holds $bound past its bound, naming the canvas', async ({
+    code,
+    write,
+  }) => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'notes/roadmap',
+      documentId: ROADMAP_ID,
+      kind: 'markdown',
+    })
+    createWorkspaceDocumentAtPath(record, {
+      path: 'sketch',
+      documentId: SKETCH_ID,
+      kind: 'spatial',
+    })
+    write(documentContainers(record, SKETCH_ID))
+    record.commit()
+    const refusal = await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
+    ).catch((err: unknown) => err)
+    expect(syncWriteAnswer(refusal)).toEqual({ code, status: 413 })
+    expect((refusal as Error).message).toMatch(/^The document at "sketch" /)
+    expect(fake.saves()).toBe(0)
   })
 })

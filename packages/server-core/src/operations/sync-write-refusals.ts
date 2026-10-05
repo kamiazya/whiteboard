@@ -2,12 +2,14 @@
 // Every surface that runs a sync write — a document's update, the workspace
 // document's update and promote — answers them through `syncWriteAnswer`, so
 // a refusal added here reaches each surface with the same code and status.
+import { SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
 import {
   COMMENT_MESSAGE_MAX_CHARS,
   DOCUMENT_NAME_MAX_LENGTH,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  type SyncWriteRefusalCode,
 } from '@kamiazya/whiteboard-model'
 import type { ContainerID } from 'loro-crdt'
 import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-io.js'
@@ -18,7 +20,7 @@ import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-
  * cannot exist without the answer every surface gives it.
  */
 export abstract class SyncWriteRefusalError extends Error {
-  abstract readonly code: string
+  abstract readonly code: SyncWriteRefusalCode
   abstract readonly status: 400 | 413
 }
 
@@ -27,6 +29,29 @@ export interface RefusedBody {
   readonly path: string
   /** The body's length today, which for a run found only in history is short. */
   readonly chars: number
+}
+
+/** The document a refused node, label or message belongs to, when the caller could tell. */
+export interface RefusedIn {
+  readonly path: string
+}
+
+/**
+ * A node, label or message refusal in the words that fit who is told: what an
+ * update would do, or — once the caller resolved the document — what that
+ * document holds, which is what a person fixing a promoted record looks for.
+ */
+function valueRefusalMessage(
+  at: RefusedIn | undefined,
+  would: string,
+  holds: string,
+  limit: string,
+): string {
+  const what =
+    at === undefined
+      ? `This update would ${would}`
+      : `The document at ${JSON.stringify(at.path)} ${holds}`
+  return `${what}, ${limit}`
 }
 
 function bodyRefusalMessage(shape: 'run' | 'body', chars: number, at?: RefusedBody): string {
@@ -50,7 +75,7 @@ function bodyRefusalMessage(shape: 'run' | 'body', chars: number, at?: RefusedBo
  * resolve it to a document; `at` is that document, once resolved.
  */
 export class MarkdownBodyTooLargeError extends SyncWriteRefusalError {
-  readonly code = 'markdown_too_large'
+  readonly code = SYNC_TEXT_BREACH_CODES.body
   readonly status = 413
 
   constructor(
@@ -70,17 +95,28 @@ export class MarkdownBodyTooLargeError extends SyncWriteRefusalError {
  * each read of the canvas lays that text out again. Nothing of the write was
  * kept; a node stored longer before the bound still takes an edit that does
  * not grow it.
+ *
+ * `container` is the map that holds it, for a caller that can resolve it to
+ * a document; `at` is that document, once resolved.
  */
 export class NodeTextTooLargeError extends SyncWriteRefusalError {
-  readonly code = 'node_text_too_large'
+  readonly code = SYNC_TEXT_BREACH_CODES['node-text']
   readonly status = 413
 
   constructor(
     public readonly nodeId: string,
     public readonly chars: number,
+    public readonly container?: ContainerID,
+    public readonly at?: RefusedIn,
   ) {
+    const node = `node ${JSON.stringify(nodeId)}`
     super(
-      `This update would give node ${JSON.stringify(nodeId)} ${chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node; split it across nodes, or put it in a markdown document and embed that`,
+      valueRefusalMessage(
+        at,
+        `give ${node} ${chars} characters of text`,
+        `has ${node} with ${chars} characters of text`,
+        `past the ${NODE_TEXT_MAX_CHARS}-character limit for one node; split it across nodes, or put it in a markdown document and embed that`,
+      ),
     )
     this.name = 'NodeTextTooLargeError'
   }
@@ -92,17 +128,28 @@ export class NodeTextTooLargeError extends SyncWriteRefusalError {
  * since each render of the board lays the label out again. Nothing of the
  * write was kept; a label stored longer before the bound still takes an edit
  * that does not grow it.
+ *
+ * `container` is the map that holds it, for a caller that can resolve it to
+ * a document; `at` is that document, once resolved.
  */
 export class LabelTooLargeError extends SyncWriteRefusalError {
-  readonly code = 'label_too_large'
+  readonly code = SYNC_TEXT_BREACH_CODES.label
   readonly status = 413
 
   constructor(
     public readonly elementId: string,
     public readonly chars: number,
+    public readonly container?: ContainerID,
+    public readonly at?: RefusedIn,
   ) {
+    const label = `${JSON.stringify(elementId)} a label of ${chars} characters`
     super(
-      `This update would give ${JSON.stringify(elementId)} a label of ${chars} characters, past the ${LABEL_MAX_CHARS}-character limit for one label; a longer text belongs in a text node`,
+      valueRefusalMessage(
+        at,
+        `give ${label}`,
+        `gives ${label}`,
+        `past the ${LABEL_MAX_CHARS}-character limit for one label; a longer text belongs in a text node`,
+      ),
     )
     this.name = 'LabelTooLargeError'
   }
@@ -114,17 +161,28 @@ export class LabelTooLargeError extends SyncWriteRefusalError {
  * render of the board and the rail lays the message out again. Nothing of the
  * write was kept; a message stored longer before the bound still takes an
  * edit that does not grow it.
+ *
+ * `container` is the map that holds it, for a caller that can resolve it to
+ * a document; `at` is that document, once resolved.
  */
 export class CommentMessageTooLargeError extends SyncWriteRefusalError {
-  readonly code = 'comment_too_large'
+  readonly code = SYNC_TEXT_BREACH_CODES['comment-message']
   readonly status = 413
 
   constructor(
     public readonly messageId: string,
     public readonly chars: number,
+    public readonly container?: ContainerID,
+    public readonly at?: RefusedIn,
   ) {
+    const message = `comment message ${JSON.stringify(messageId)} ${chars} characters long`
     super(
-      `This update would make comment message ${JSON.stringify(messageId)} ${chars} characters long, past the ${COMMENT_MESSAGE_MAX_CHARS}-character limit for one message; split it across replies`,
+      valueRefusalMessage(
+        at,
+        `make ${message}`,
+        `has ${message}`,
+        `past the ${COMMENT_MESSAGE_MAX_CHARS}-character limit for one message; split it across replies`,
+      ),
     )
     this.name = 'CommentMessageTooLargeError'
   }
@@ -185,9 +243,12 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
 }
 
 /** What a surface answers a sync write's throw with, or `undefined` for one it does not answer. */
-export function syncWriteAnswer(
-  err: unknown,
-): { readonly code: string; readonly status: 400 | 413 | 500 } | undefined {
+export function syncWriteAnswer(err: unknown):
+  | {
+      readonly code: SyncWriteRefusalCode | typeof DOCUMENT_ENGINE_TRAP_CODE
+      readonly status: 400 | 413 | 500
+    }
+  | undefined {
   if (err instanceof SyncWriteRefusalError) return { code: err.code, status: err.status }
   // The operation has already dropped the instance the engine poisoned, so
   // the caller is told the engine failed, in the code `/api/v1` answers it

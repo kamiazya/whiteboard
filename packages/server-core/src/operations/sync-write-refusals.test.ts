@@ -1,3 +1,4 @@
+import { syncWriteRefusalCodeSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import * as refusals from './sync-write-refusals.js'
@@ -52,6 +53,14 @@ describe('syncWriteAnswer', () => {
       return answer?.code
     })
     expect(new Set(codes).size).toBe(codes.length)
+  })
+
+  it('answers with exactly the codes the shared vocabulary declares', () => {
+    // The client parses a refusal by that vocabulary: a code it does not list
+    // reaches the person as "the keeper did not say why", and one listed but
+    // never answered is copy nobody reads.
+    const codes = new Set(Object.values(SAMPLES).map((sample) => syncWriteAnswer(sample())?.code))
+    expect([...codes].sort()).toEqual([...syncWriteRefusalCodeSchema.options].sort())
   })
 
   it('answers an engine trap as the server fault /api/v1 names it', () => {
