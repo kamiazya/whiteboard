@@ -57,7 +57,15 @@ vi.mock('../../export/headless-export.js', () => ({
   }) => mockExportCanvasHeadlessSvg(args),
 }))
 
+// Spies on the real implementation so most tests get genuine random suffixes,
+// while the collision test below overrides specific calls.
+vi.mock('nanoid', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('nanoid')>()
+  return { ...actual, nanoid: vi.fn(actual.nanoid) }
+})
+
 const { createDocumentSvgExportRouter } = await import('./export-svg.js')
+const { nanoid } = await import('nanoid')
 
 function makeApp() {
   const app = new Hono()
@@ -194,6 +202,30 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
       expect(bodyA.filePath).not.toBe(bodyB.filePath)
     } finally {
       vi.useRealTimers()
+    }
+  })
+
+  it('never clobbers a file already at the generated default path', async () => {
+    const exportsDir = testStoreScope(tempDir).layout.exportsDir('s1')
+    const taken = join(exportsDir, 'canvas-a-2024-01-01T00-00-00-000Z-aaaaaa.svg')
+    await mkdir(exportsDir, { recursive: true })
+    await writeFile(taken, '<svg>earlier export</svg>')
+    vi.mocked(nanoid).mockReturnValueOnce('aaaaaa')
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
+    try {
+      const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+        method: 'POST',
+      })
+
+      expect(res.status).toBe(200)
+      const { filePath } = exportResponseSchema.parse(await res.json())
+      expect(filePath).not.toBe(taken)
+      await expect(readFile(taken, 'utf-8')).resolves.toBe('<svg>earlier export</svg>')
+      await expect(readFile(filePath, 'utf-8')).resolves.toBe('<svg><rect/></svg>')
+    } finally {
+      vi.useRealTimers()
+      vi.mocked(nanoid).mockReset()
     }
   })
 

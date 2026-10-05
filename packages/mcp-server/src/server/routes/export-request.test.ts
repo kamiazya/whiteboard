@@ -1,19 +1,22 @@
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import { unknownStyleRefusal } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { z } from 'zod'
 import { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { exportSvgRequestSchema } from '../../shared/api-contracts/export-svg.js'
 import {
-  defaultExportPath,
   documentMissingBody,
   readExportBody,
   resolveRequestedOutputPath,
+  writeExportFile,
 } from './export-request.js'
+
+/** A layout whose every workspace exports into `dir`. */
+const exportsAt = (dir: string) => ({ exportsDir: () => dir })
 
 const schema = z
   .object({ scale: z.number().min(1).optional(), style: spatialRenderStyleSchema.optional() })
@@ -64,10 +67,12 @@ describe('readExportBody: the optional JSON body', () => {
 describe('resolveRequestedOutputPath', () => {
   it('reads no path or an empty one as "use the default exports directory"', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
-    await expect(resolveRequestedOutputPath({}, 'ws', dir)).resolves.toEqual({
+    await expect(resolveRequestedOutputPath({}, 'ws', exportsAt(dir))).resolves.toEqual({
       outputPath: undefined,
     })
-    await expect(resolveRequestedOutputPath({ outputPath: '' }, 'ws', dir)).resolves.toEqual({
+    await expect(
+      resolveRequestedOutputPath({ outputPath: '' }, 'ws', exportsAt(dir)),
+    ).resolves.toEqual({
       outputPath: undefined,
     })
   })
@@ -75,15 +80,17 @@ describe('resolveRequestedOutputPath', () => {
   it('accepts an absolute path inside the exports directory that nothing occupies', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
     const outputPath = join(dir, 'board.png')
-    await expect(resolveRequestedOutputPath({ outputPath }, 'ws', dir)).resolves.toEqual({
-      outputPath,
-    })
+    await expect(resolveRequestedOutputPath({ outputPath }, 'ws', exportsAt(dir))).resolves.toEqual(
+      {
+        outputPath,
+      },
+    )
   })
 
   it('refuses a path outside the exports directory with a status and a body', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
     const outside = join(tmpdir(), 'export-request-elsewhere.png')
-    const result = await resolveRequestedOutputPath({ outputPath: outside }, 'ws', dir)
+    const result = await resolveRequestedOutputPath({ outputPath: outside }, 'ws', exportsAt(dir))
     expect('error' in result).toBe(true)
     if ('error' in result) expect(result.status).toBeGreaterThanOrEqual(400)
   })
@@ -92,10 +99,10 @@ describe('resolveRequestedOutputPath', () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
     const outputPath = join(dir, 'taken.png')
     await writeFile(outputPath, 'x')
-    const refused = await resolveRequestedOutputPath({ outputPath }, 'ws', dir)
+    const refused = await resolveRequestedOutputPath({ outputPath }, 'ws', exportsAt(dir))
     expect('error' in refused).toBe(true)
     await expect(
-      resolveRequestedOutputPath({ outputPath, overwrite: true }, 'ws', dir),
+      resolveRequestedOutputPath({ outputPath, overwrite: true }, 'ws', exportsAt(dir)),
     ).resolves.toEqual({ outputPath })
   })
 
@@ -106,7 +113,7 @@ describe('resolveRequestedOutputPath', () => {
     await writeFile(join(dir, 'a-file'), 'x')
     const throughAFile = join(dir, 'a-file', 'board.png')
     await expect(
-      resolveRequestedOutputPath({ outputPath: throughAFile }, 'ws', dir),
+      resolveRequestedOutputPath({ outputPath: throughAFile }, 'ws', exportsAt(dir)),
     ).rejects.toMatchObject({ code: 'ENOTDIR' })
   })
 })
@@ -118,12 +125,50 @@ describe('the shared bodies', () => {
       message: 'Document not found: ws/notes/plan',
     })
   })
+})
 
-  it('makes two default paths taken in the same instant distinct', () => {
-    const a = defaultExportPath('/exports', 'board', 'png')
-    const b = defaultExportPath('/exports', 'board', 'png')
-    expect(a).toMatch(/^\/exports\/board-.*\.png$/)
+describe('writeExportFile', () => {
+  it('lands two default exports taken in the same instant at distinct paths', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
+    const target = {
+      outputPath: undefined,
+      layout: exportsAt(dir),
+      workspaceId: 'ws',
+      path: 'board',
+      extension: 'png',
+    }
+
+    const a = await writeExportFile('first', target)
+    const b = await writeExportFile('second', target)
+
+    expect(a.startsWith(join(dir, 'board-'))).toBe(true)
+    expect(a.endsWith('.png')).toBe(true)
     expect(a).not.toBe(b)
+    await expect(readFile(a, 'utf-8')).resolves.toBe('first')
+    await expect(readFile(b, 'utf-8')).resolves.toBe('second')
+  })
+
+  it('writes a caller-chosen path as it is, creating its directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
+    const outputPath = join(dir, 'nested', 'board.svg')
+
+    const written = await writeExportFile('<svg/>', {
+      outputPath,
+      layout: exportsAt(dir),
+      workspaceId: 'ws',
+      path: 'board',
+      extension: 'svg',
+    })
+
+    expect(written).toBe(outputPath)
+    await expect(readFile(outputPath, 'utf-8')).resolves.toBe('<svg/>')
   })
 })
 
