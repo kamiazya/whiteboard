@@ -49,14 +49,18 @@ async function connected(body: string) {
   } as unknown as WorkspaceDocs
   const backend = new BrowserBackend(TARGET, docs, {} as LoroStore)
   const reasons: string[] = []
+  const refusals: string[] = []
   let snapshot: Uint8Array | null = null
+  let snapshots = 0
   backend.connect({
     onConnected: () => {},
     onSnapshot: (bytes: Uint8Array) => {
       snapshot = bytes
+      snapshots += 1
     },
     onRemoteUpdate: () => {},
     onError: (reason: string) => reasons.push(reason),
+    onWriteRefused: (refusal: { code: string | null }) => refusals.push(String(refusal.code)),
   } as never)
   await vi.waitFor(() => expect(snapshot).not.toBeNull())
   const session = LoroDoc.fromSnapshot(snapshot as unknown as Uint8Array)
@@ -67,18 +71,22 @@ async function connected(body: string) {
     return backend.pushLocalUpdate(session.export({ mode: 'update', from }))
   }
   const push = (text: string) => pushEdit((body) => body.insert(0, text))
-  return { saved, reasons, push, pushEdit, record }
+  return { saved, reasons, refusals, snapshots: () => snapshots, push, pushEdit, record }
 }
 
 describe('a browser-kept markdown body pushed past the limit', () => {
-  it('is not persisted, and the session is told the write failed', async () => {
-    const { saved, reasons, push, record } = await connected('y'.repeat(MARKDOWN_MAX_CHARS - 1))
+  it('is not persisted, and the session is told why and handed the record again', async () => {
+    const { saved, reasons, refusals, snapshots, push, record } = await connected(
+      'y'.repeat(MARKDOWN_MAX_CHARS - 1),
+    )
 
     await push('ab')
 
     await expectLoggedFailure('refused a body past the markdown size limit')
     expect(saved).toEqual([])
-    expect(reasons).toEqual(['storage-failure'])
+    expect(reasons).toEqual([])
+    expect(refusals).toEqual(['markdown_too_large'])
+    expect(snapshots()).toBe(2)
     expect(readMarkdownBody(documentContainers(record, TARGET.documentId))).toHaveLength(
       MARKDOWN_MAX_CHARS - 1,
     )
@@ -144,24 +152,25 @@ describe.each([
   },
 ])('$edit, pushed to the browser keeper', ({ before, change, after }) => {
   it(after === null ? 'is refused' : 'is persisted', async () => {
-    const { saved, reasons, pushEdit } = await connected('y'.repeat(before))
+    const { saved, reasons, refusals, pushEdit } = await connected('y'.repeat(before))
 
     await pushEdit(change)
 
+    expect(reasons).toEqual([])
     if (after === null) {
       await expectLoggedFailure('refused a body past the markdown size limit')
       expect(saved).toEqual([])
-      expect(reasons).toEqual(['storage-failure'])
+      expect(refusals).toEqual(['markdown_too_large'])
     } else {
       expect(saved.map((body) => body.length)).toEqual([after])
-      expect(reasons).toEqual([])
+      expect(refusals).toEqual([])
     }
   })
 })
 
 describe('a browser-kept body replaced wholesale', () => {
   it('is persisted, and so is the edit after it', async () => {
-    const { saved, reasons, pushEdit } = await connected('y'.repeat(150_000))
+    const { saved, reasons, refusals, pushEdit } = await connected('y'.repeat(150_000))
 
     await pushEdit((body) => {
       body.delete(0, body.length)
@@ -170,6 +179,7 @@ describe('a browser-kept body replaced wholesale', () => {
     await pushEdit((body) => body.insert(0, 'ab'))
 
     expect(reasons).toEqual([])
+    expect(refusals).toEqual([])
     expect(saved.map((body) => `${body.slice(0, 3)}:${body.length}`)).toEqual([
       'zzz:150000',
       'abz:150002',

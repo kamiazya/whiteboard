@@ -318,8 +318,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // rather than the queue itself. Both document pages already sit behind one
   // `DocumentBackend`, so that port is not what is left to do.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 864,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
+  // Both raised for the refused write: one more backend message in the
+  // handler table, and the snapshot that answers it ending the wait.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 193,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 88,
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,

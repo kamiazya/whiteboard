@@ -1,16 +1,22 @@
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
+  SyncWriteRefusal,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
   seedNameFromTitle,
+  type SyncTextBreach,
   syncTextLimitBreach,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import {
+  type DocumentKind,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro, type LoroDoc } from 'loro-crdt'
@@ -97,6 +103,23 @@ function placeDocumentNode(
   source.import(legacy.snapshot)
   for (const delta of legacy.deltas ?? []) source.import(delta)
   return adoptWorkspaceDocument(workspaceDoc, placement, source)
+}
+
+/** A text limit the keeper holds an update to, in the words the daemon refuses it with. */
+function refusalOf(breach: SyncTextBreach): SyncWriteRefusal {
+  if (breach.shape === 'node-text') {
+    return {
+      code: 'node_text_too_large',
+      message: `This update would give a node ${breach.chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node`,
+    }
+  }
+  return {
+    code: 'markdown_too_large',
+    message:
+      breach.shape === 'run'
+        ? `This update inserts ${breach.chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write`
+        : `This update would make a document body ${breach.chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document`,
+  }
 }
 
 /**
@@ -259,7 +282,7 @@ export class BrowserBackend implements DocumentBackend {
             documentId: this.target.documentId,
             ...breach,
           })
-          this.handlers?.onError?.('storage-failure')
+          this.refuse(refusalOf(breach), workspaceDoc, handlers)
           return
         }
       }
@@ -284,6 +307,22 @@ export class BrowserBackend implements DocumentBackend {
     } catch {
       this.handlers?.onError?.('storage-failure')
     }
+  }
+
+  /**
+   * The session is told why, then handed the record as it stands. Every edit
+   * it makes after the refused one is built on the refused ops, so carrying
+   * on from its own copy would land none of them — each would import here as
+   * pending, change nothing, and still be saved as if it had.
+   */
+  private refuse(
+    refusal: SyncWriteRefusal,
+    workspaceDoc: LoroDoc,
+    handlers: DocumentBackendHandlers | null,
+  ): void {
+    if (handlers === null || this.isStale(handlers)) return
+    handlers.onWriteRefused?.(refusal)
+    handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
   }
 
   /** A workspace kept in the browser has no sync stream to announce readiness to. */
