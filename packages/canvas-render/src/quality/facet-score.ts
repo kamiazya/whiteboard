@@ -396,8 +396,8 @@ function tagPartitions<T extends { readonly id: string }>(
       const scoped = parseScopedTag(tag)
       if (scoped === undefined || BUILT_IN_PARTITIONS.has(scoped.key)) continue
       const perElement = values.get(scoped.key) ?? new Map<string, string[]>()
-      perElement.set(element.id, [...(perElement.get(element.id) ?? []), scoped.value])
       values.set(scoped.key, perElement)
+      appendTo(perElement, element.id, scoped.value)
     }
   }
   const partitions: NamedPartition[] = []
@@ -420,8 +420,20 @@ const BUILT_IN_PARTITIONS: ReadonlySet<string> = new Set(['frame', 'kind', 'sten
 
 const classesOf = (partition: Partition): Map<string, string[]> => {
   const classes = new Map<string, string[]>()
-  for (const [id, cls] of partition) classes.set(cls, [...(classes.get(cls) ?? []), id])
+  for (const [id, cls] of partition) appendTo(classes, cls, id)
   return classes
+}
+
+/**
+ * Appends into the list a grouping holds, which this module owns, rather
+ * than copying it: a copy per append is quadratic in the group, and a group
+ * here is every value one element carries under a key, or every box of one
+ * class — both as large as whatever a board was given.
+ */
+function appendTo<K, V>(groups: Map<K, V[]>, key: K, value: V): void {
+  const held = groups.get(key)
+  if (held === undefined) groups.set(key, [value])
+  else held.push(value)
 }
 
 /**

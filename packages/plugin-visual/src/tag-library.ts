@@ -197,7 +197,10 @@ export function tagLibraryObjection(
         admitted: Object.keys(declared.values).sort(),
       }
     }
-    carriedUnder.set(scoped.key, [...(carriedUnder.get(scoped.key) ?? []), tag])
+    // Appended in place: a copy per tag is quadratic in what one key carries.
+    const carried = carriedUnder.get(scoped.key)
+    if (carried === undefined) carriedUnder.set(scoped.key, [tag])
+    else carried.push(tag)
   }
   for (const [key, carried] of carriedUnder) {
     if (library[key]?.exclusive === true && carried.length > 1) {

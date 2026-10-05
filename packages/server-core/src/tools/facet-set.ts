@@ -728,15 +728,23 @@ function applyTagChange(
 ): string[] {
   // Rename first, then remove, then add — so `rename` onto a tag already
   // present MERGES (one copy survives) and a removal names the new spelling.
-  const renamed = (current ?? []).map(
-    (tag) => change.rename?.find((r) => r.from === tag)?.to ?? tag,
-  )
+  // Sets rather than list scans: the stored side may predate any bound.
+  const renameTo = new Map<string, string>()
+  for (const { from, to } of change.rename ?? []) if (!renameTo.has(from)) renameTo.set(from, to)
   const remove = new Set(change.remove ?? [])
-  const kept = renamed.filter((tag, i, all) => !remove.has(tag) && all.indexOf(tag) === i)
-  const added = (change.add ?? []).filter(
-    (tag, i, all) => !kept.includes(tag) && all.indexOf(tag) === i,
-  )
-  return [...kept, ...added]
+  const seen = new Set<string>()
+  const result: string[] = []
+  const keepFirst = (tag: string) => {
+    if (seen.has(tag)) return
+    seen.add(tag)
+    result.push(tag)
+  }
+  for (const tag of current ?? []) {
+    const renamed = renameTo.get(tag) ?? tag
+    if (!remove.has(renamed)) keepFirst(renamed)
+  }
+  for (const tag of change.add ?? []) keepFirst(tag)
+  return result
 }
 
 /** Canonical emptiness for a tag set: an empty list is no field at all. */
