@@ -34,7 +34,7 @@
  * matters — a passage one of them calls lost while the other rewrites it.
  */
 
-import type { TextAnchor } from './annotation.js'
+import { TEXT_ANCHOR_CONTEXT_MAX_CHARS, type TextAnchor } from './annotation.js'
 
 export type ResolvedTextAnchor =
   | { readonly kind: 'placed'; readonly start: number; readonly end: number }
@@ -55,23 +55,27 @@ function occurrences(haystack: string, needle: string): number[] {
   return found
 }
 
-/** How many characters of `context` the body actually has on that side. */
+/**
+ * How many characters of `prefix` the body still has just before `at`.
+ *
+ * Only the nearest `TEXT_ANCHOR_CONTEXT_MAX_CHARS` count, so one occurrence
+ * costs a bounded comparison however long the stored context is. An anchor
+ * written before tools refused a longer context still resolves, judged on its
+ * nearest characters.
+ */
 function matchedBefore(body: string, at: number, prefix: string): number {
-  const before = body.slice(Math.max(0, at - prefix.length), at)
+  const window = Math.min(prefix.length, at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (
-    shared < before.length &&
-    before[before.length - 1 - shared] === prefix[prefix.length - 1 - shared]
-  ) {
+  while (shared < window && body[at - 1 - shared] === prefix[prefix.length - 1 - shared]) {
     shared += 1
   }
   return shared
 }
 
 function matchedAfter(body: string, at: number, suffix: string): number {
-  const after = body.slice(at, at + suffix.length)
+  const window = Math.min(suffix.length, body.length - at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (shared < after.length && after[shared] === suffix[shared]) shared += 1
+  while (shared < window && body[at + shared] === suffix[shared]) shared += 1
   return shared
 }
 

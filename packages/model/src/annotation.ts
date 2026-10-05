@@ -14,6 +14,26 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
 export const annotationIdSchema = z.string().min(1, 'annotation id must not be empty')
 
 /**
+ * The most characters of `prefix` or `suffix` that count toward telling one
+ * occurrence of a quote from another, and the most a tool accepts.
+ *
+ * Resolution scores every occurrence of the quote by how much of the
+ * remembered context it still has, so the cost is occurrences times context
+ * length. On a body of repeated lines every occurrence matches the context as
+ * far back as the body goes: one resolution of a 245,000-character checklist
+ * with its whole body as a prefix took 7.7 s and 858 M character comparisons,
+ * and the same with this window 5 ms and 0.4 M. The pathological body — one
+ * character repeated 256 Ki times, quoting that character — still costs about
+ * 0.3 s at this window, and four times that at 128.
+ *
+ * Context nearest the passage is the evidence; characters further out only
+ * break ties the nearer ones left, which the distance to the stored offsets
+ * breaks anyway. The web writes 16 characters, and 32 is what annotation
+ * clients after W3C's TextQuoteSelector conventionally keep.
+ */
+export const TEXT_ANCHOR_CONTEXT_MAX_CHARS = 32
+
+/**
  * A quote-based text selector, after the W3C Web Annotation Data Model's
  * `TextQuoteSelector`: the exact string the annotation is about, plus enough
  * surrounding context to disambiguate a repeated phrase.
