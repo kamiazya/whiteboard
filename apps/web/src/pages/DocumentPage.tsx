@@ -12,7 +12,7 @@ import {
 } from 'react'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
-import { RestoreLock } from '../components/document-editor/RestoreLock.js'
+import { EditorLock } from '../components/document-editor/EditorLock.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -571,7 +571,7 @@ function DocumentPageBody({
       }
     >
       {model.slots.replaceEditor ?? (
-        <RestoreLock restoring={sync.restoreInProgress} label={sync.restoreLabel}>
+        <EditorLock sync={sync} onLeave={topBar?.onNavigateBack}>
           {preview ? (
             <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
           ) : (
@@ -632,7 +632,7 @@ function DocumentPageBody({
               )}
             />
           )}
-        </RestoreLock>
+        </EditorLock>
       )}
       {model.slots.footer}
     </DocumentPageShell>
