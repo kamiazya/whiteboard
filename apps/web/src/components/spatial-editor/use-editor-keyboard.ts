@@ -6,7 +6,7 @@
 // own, so a keyboard behavior can never disagree with the pointer path
 // about whose state is authoritative.
 
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { boundsOf, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
@@ -15,7 +15,6 @@ import {
   type ResizeHandleKind,
   resizeBoxByDelta,
   scaleBoxWithin,
-  unionBox,
 } from '../../lib/spatial/geometry.js'
 import { deleteInkCommand, moveInkCommand } from '../../lib/spatial/ink-commands.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
@@ -424,7 +423,7 @@ export function useEditorKeyboard({
     // The resize anchor is the box the HANDLES surround, not the handle's
     // own tiny hit-box `_handleBox` describes — same reasoning as
     // onHandlePointerDown's `box: selectionBox` in the editor's JSX.
-    const box = unionBox(members.map((member) => member.box))
+    const box = boundsOf(members.map((member) => member.box))
     if (box === undefined) return
     const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
     const delta = ARROW_KEY_DELTA[e.key]

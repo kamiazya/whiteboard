@@ -1,3 +1,4 @@
+import { boundsOf } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 
@@ -24,14 +25,13 @@ export function SnapGuidesOverlay({
    */
   const guideSpan = useMemo(() => {
     const GUIDE_MARGIN_PX = 40
-    if (boxes.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 }
-    const xs = boxes.flatMap((entry) => [entry.box.x, entry.box.x + entry.box.width])
-    const ys = boxes.flatMap((entry) => [entry.box.y, entry.box.y + entry.box.height])
+    const content = boundsOf(boxes.map((entry) => entry.box))
+    if (content === undefined) return { minX: 0, maxX: 0, minY: 0, maxY: 0 }
     return {
-      minX: Math.min(...xs) - GUIDE_MARGIN_PX,
-      maxX: Math.max(...xs) + GUIDE_MARGIN_PX,
-      minY: Math.min(...ys) - GUIDE_MARGIN_PX,
-      maxY: Math.max(...ys) + GUIDE_MARGIN_PX,
+      minX: content.x - GUIDE_MARGIN_PX,
+      maxX: content.x + content.width + GUIDE_MARGIN_PX,
+      minY: content.y - GUIDE_MARGIN_PX,
+      maxY: content.y + content.height + GUIDE_MARGIN_PX,
     }
   }, [boxes])
 

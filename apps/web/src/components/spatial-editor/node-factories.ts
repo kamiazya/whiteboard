@@ -16,7 +16,7 @@
  * tests.
  */
 import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-model'
-import { RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
+import { boundsOf, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { findFreeSpot } from '../../lib/spatial/geometry.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -140,10 +140,12 @@ export function groupEnclosure(
   members: readonly Box[],
   paddingPx: number = GROUP_PADDING_PX,
 ): GroupEnclosure | undefined {
-  if (members.length === 0) return undefined
-  const minX = Math.min(...members.map((m) => m.x)) - paddingPx
-  const minY = Math.min(...members.map((m) => m.y)) - paddingPx
-  const maxX = Math.max(...members.map((m) => m.x + m.width)) + paddingPx
-  const maxY = Math.max(...members.map((m) => m.y + m.height)) + paddingPx
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+  const bounds = boundsOf(members)
+  if (bounds === undefined) return undefined
+  return {
+    x: bounds.x - paddingPx,
+    y: bounds.y - paddingPx,
+    width: bounds.width + 2 * paddingPx,
+    height: bounds.height + 2 * paddingPx,
+  }
 }

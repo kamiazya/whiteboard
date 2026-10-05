@@ -11,6 +11,7 @@
  * rounding, so the no-op filter compares the value that will actually be
  * stored.
  */
+import { boundsOf } from '@kamiazya/whiteboard-model'
 import type { EditorLeafCommand } from '../../lib/spatial/commands.js'
 
 export interface AlignableBox {
@@ -98,12 +99,13 @@ function moved(box: AlignableBox, x: number, y: number): BoxMove | null {
  */
 export function alignBoxes(boxes: readonly AlignableBox[], mode: AlignMode): readonly BoxMove[] {
   const usableBoxes = usable(boxes)
-  if (usableBoxes.length < 2) return []
+  const bounds = usableBoxes.length < 2 ? undefined : boundsOf(usableBoxes)
+  if (bounds === undefined) return []
 
-  const left = Math.min(...usableBoxes.map((box) => box.x))
-  const right = Math.max(...usableBoxes.map((box) => box.x + box.width))
-  const top = Math.min(...usableBoxes.map((box) => box.y))
-  const bottom = Math.max(...usableBoxes.map((box) => box.y + box.height))
+  const left = bounds.x
+  const right = bounds.x + bounds.width
+  const top = bounds.y
+  const bottom = bounds.y + bounds.height
 
   const moves: BoxMove[] = []
   for (const box of usableBoxes) {

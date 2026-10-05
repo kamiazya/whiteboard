@@ -1,5 +1,6 @@
 export * from './annotation.js'
 export * from './asset-ref.js'
+export { boundsOf } from './bounds.js'
 export * from './clipboard.js'
 export { compareCodeUnit } from './compare.js'
 // The mdast subset is intentionally NOT re-exported here — it is
