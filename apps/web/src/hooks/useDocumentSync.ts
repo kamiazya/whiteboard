@@ -31,6 +31,7 @@ import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { themeFacesNamedBy } from '../lib/theme-fonts.js'
+import { dismissWriteRefusal, showWriteRefusal } from '../lib/write-refusal-store.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
 
@@ -345,6 +346,7 @@ export function useDocumentSync(
         setRestoreLabel(label)
       },
       onPersistenceChange: setPersistence,
+      onWriteRefused: showWriteRefusal,
       dispatchIdentityEvent,
       generations: generationsRef.current,
       // Captured once per session, deliberately: the scope names the document
@@ -417,6 +419,7 @@ export function useDocumentSync(
       unsubscribeLocks()
       unsubscribeBody()
       session.dispose()
+      dismissWriteRefusal() // it names a change to THIS document, not the next one
     }
   }, [backend])
 

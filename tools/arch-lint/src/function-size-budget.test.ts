@@ -302,7 +302,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // undecided, not foreign, while its silent renewal is outstanding.
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 362,
+  // Raised by two: the session's refused-write report and its teardown.
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 364,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
