@@ -99,7 +99,7 @@ Do this only while no dev daemon is running — an already-running old daemon ke
 
 ```bash
 claude mcp add --scope local --transport stdio whiteboard -- \
-  node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+  node "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
 ```
 
 The proxy survives daemon watch restarts and never loses the session-start connection race, which is why it is preferred over registering the HTTP URL directly (see AGENTS.md's "MCP Development Mode"). Reserve the published package's own `stdio` entrypoint for packaged-distribution checks and standalone entrypoint validation. See [mcp-debugging.md](./mcp-debugging.md) for the standard debugging workflow.
