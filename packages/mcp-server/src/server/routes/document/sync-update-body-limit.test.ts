@@ -6,7 +6,13 @@
  * schema that bounds the JSON writers cannot see them. A write that would
  * leave a body past `MARKDOWN_MAX_CHARS` answers 413 `markdown_too_large`, and
  * what the next read finds is what was stored before it.
+ *
+ * Every refusal is read through the client's contract for it, so a code the
+ * routes answer that the browser cannot name fails here rather than reaching
+ * a person as an unexplained refusal.
  */
+
+import { syncWriteRefusalOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -98,7 +104,7 @@ describe('an editor sync write past the markdown size limit', () => {
     const refused = await post(`${url}/update`, grow)
 
     expect(refused.status).toBe(413)
-    expect(await refused.json()).toMatchObject({ error: 'markdown_too_large' })
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('markdown_too_large')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readMarkdownBody(documentContainers(stored, DOC_ID))).toHaveLength(MARKDOWN_MAX_CHARS)
   })
@@ -115,7 +121,7 @@ describe('an editor sync write past the markdown size limit', () => {
     )
 
     expect(refused.status).toBe(413)
-    expect(await refused.json()).toMatchObject({ error: 'markdown_too_large' })
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('markdown_too_large')
     expect(readMarkdownBody(await snapshot(`${url}/snapshot`))).toHaveLength(MARKDOWN_MAX_CHARS)
   })
 
@@ -135,7 +141,7 @@ describe('an editor sync write past the markdown size limit', () => {
     )
 
     expect(refused.status).toBe(413)
-    expect(await refused.json()).toMatchObject({ error: 'markdown_too_large' })
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('markdown_too_large')
     const stored = await snapshot(`/api/w/${WS}/workspace-document/snapshot`)
     expect(readWorkspaceDocuments(stored)).toEqual([])
   })
@@ -161,8 +167,8 @@ describe('a promoted record holding a path outside the document-path grammar', (
     )
 
     expect(refused.status).toBe(400)
-    const body = (await refused.json()) as { error: string; message: string }
-    expect(body.error).toBe('invalid_path')
+    const body = syncWriteRefusalOf(await refused.json())
+    expect(body.code).toBe('invalid_path')
     expect(body.message).toContain('"Meeting notes"')
     const stored = await snapshot(`/api/w/${WS}/workspace-document/snapshot`)
     expect(readWorkspaceDocuments(stored)).toEqual([])
@@ -186,8 +192,8 @@ describe('a workspace-document update moving a document outside the path grammar
     )
 
     expect(refused.status).toBe(400)
-    const body = (await refused.json()) as { error: string; message: string }
-    expect(body.error).toBe('invalid_path')
+    const body = syncWriteRefusalOf(await refused.json())
+    expect(body.code).toBe('invalid_path')
     expect(body.message).toContain('"Meeting notes"')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['big'])
@@ -222,7 +228,7 @@ describe('an editor sync write giving a node text past the node limit', () => {
     )
 
     expect(refused.status).toBe(413)
-    expect(await refused.json()).toMatchObject({ error: 'node_text_too_large' })
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('node_text_too_large')
     expect(readSpatialCanvas(await snapshot(`${url}/snapshot`)).nodes).toEqual([])
   })
 })
@@ -245,7 +251,7 @@ describe('a workspace-document update making a document unreadable', () => {
     )
 
     expect(refused.status).toBe(400)
-    expect(await refused.json()).toMatchObject({ error: 'unreadable_document_meta' })
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('unreadable_document_meta')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['notes'])
   })
