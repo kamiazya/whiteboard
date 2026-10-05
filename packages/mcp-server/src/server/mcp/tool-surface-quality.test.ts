@@ -414,7 +414,7 @@ describe('what the tool table costs to read', () => {
         // for the four sites the retired composite left inline.
         // +58, wire too: a node's `embed` and a comment draft publish `additionalProperties: false` (C10, one level down).
         // +55 wire too, +9 words: explicit propose refuses comments/locks/tidy/region.set, not "whatever the mode".
-        visibleBytes: 15254, // +51 both: node text's 8192 `maxLength` at add, patch and splice
+        visibleBytes: 15373, // +51 node text's `maxLength` (3 ops); +119 a label's (6) and a comment's (1)
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -428,7 +428,7 @@ describe('what the tool table costs to read', () => {
         // here through the echo this tool's output carries.
         // +221 wire: its answer is the board it produced, and the snapshot now
         // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
-        wireBytes: 34326,
+        wireBytes: 34445, // +119: the label and comment message bounds, as visible
         descriptionWords: 178,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -692,10 +692,10 @@ describe('what the tool table costs to read', () => {
         // status, every message with author and time) where it was a count,
         // so "Returns every thread the document holds" is true. The
         // description now names the read that writes nothing.
-        visibleBytes: 3489,
+        visibleBytes: 3523, // +34 both: a message's 4096 `maxLength` at thread.add and message.add
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 6168,
+        wireBytes: 6202,
         descriptionWords: 138,
         parameters: 32,
         undescribed: 25,
@@ -983,7 +983,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 41028, // +68 for the 1024-character document path bound
+      visibleBytes: 41181, // +68 the document path bound; +153 the label and message bounds (+119, +34)
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, each the same bytes as visible.
-      wireBytes: 132374, // +119 for the 1024-character document path bound (see those rows)
+      wireBytes: 132527, // +119 the document path bound; +153 the label and message bounds, as visible
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

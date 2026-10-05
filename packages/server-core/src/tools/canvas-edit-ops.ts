@@ -12,6 +12,7 @@ import {
   documentIdSchema,
   edgePatchFieldsSchema,
   extensionFacetsSchema,
+  labelInputSchema,
   linePatchFieldsSchema,
   type NodeResource,
   nodeIdSchema,
@@ -80,6 +81,13 @@ const WRITE_EXTENSION = {
   facets: extensionFacetsSchema.optional(),
 } as const
 
+/**
+ * A label as a write accepts it. The stored edge, line and group keep an
+ * unbounded `label`, so one written before the limit still reads; only what
+ * this tool is handed is held to it.
+ */
+const WRITE_LABEL = { label: labelInputSchema.optional() } as const
+
 const draftBase = sharedNodeFieldsSchema
   .omit(STORED_EXTENSION_FIELDS)
   .partial(DRAFT_OPTIONAL)
@@ -118,7 +126,7 @@ const linkOption = draftBase.extend({
 })
 const groupOption = draftBase.extend({
   type: z.literal('group'),
-  label: z.string().optional(),
+  ...WRITE_LABEL,
   background: z.string().optional(),
   backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
 })
@@ -207,7 +215,7 @@ export function draftContent(draft: NodeDraft): {
 // does: the stored edge's `.catch` would drop a malformed bucket unseen.
 const edgeDraftSchema = canvasEdgeSchema
   .omit({ tags: true })
-  .extend(WRITE_EXTENSION)
+  .extend({ ...WRITE_EXTENSION, ...WRITE_LABEL })
   .partial({ id: true })
 
 /**
@@ -216,13 +224,15 @@ const edgeDraftSchema = canvasEdgeSchema
  * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2).
  */
-const lineDraftSchema = canvasLineSchema.extend(WRITE_EXTENSION).partial({ id: true })
+const lineDraftSchema = canvasLineSchema
+  .extend({ ...WRITE_EXTENSION, ...WRITE_LABEL })
+  .partial({ id: true })
 
 // The patches are the model's, which proposals store too, so the write-side
 // `facets` is laid over them here rather than in the model, where the
 // read-side tolerance belongs.
-const edgePatchSchema = edgePatchFieldsSchema.extend(WRITE_EXTENSION)
-const linePatchSchema = linePatchFieldsSchema.extend(WRITE_EXTENSION)
+const edgePatchSchema = edgePatchFieldsSchema.extend({ ...WRITE_EXTENSION, ...WRITE_LABEL })
+const linePatchSchema = linePatchFieldsSchema.extend({ ...WRITE_EXTENSION, ...WRITE_LABEL })
 
 /**
  * A key of the draft, written beside `op` instead of inside it, is told
@@ -351,11 +361,15 @@ const STENCIL_FIELD = namespacedIdSchema
  * repair costs the whole batch twice.
  */
 const nodePatchSchema = z
-  // `text` is bounded HERE and not on the stored patch shape: a proposal
-  // stores a patch and its prior, and a prior is whatever the node held,
-  // which may predate the limit.
+  // `text` and `label` are bounded HERE and not on the stored patch shape: a
+  // proposal stores a patch and its prior, and a prior is whatever the node
+  // held, which may predate the limit.
   .object(
-    { ...nodePatchFieldsSchema.shape, text: nodeTextInputSchema.optional() },
+    {
+      ...nodePatchFieldsSchema.shape,
+      text: nodeTextInputSchema.optional(),
+      ...WRITE_LABEL,
+    },
     {
       error: (issue: { code: string; keys?: readonly string[] }) =>
         issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
