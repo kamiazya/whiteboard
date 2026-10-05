@@ -26,6 +26,7 @@ import {
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { followBrowserWorkspaceWrites } from '../lib/follow-workspace-writes.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -242,6 +243,21 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
   ])
 }
 
+/**
+ * Every other tab writes to this record too, and a mount that only followed
+ * its own writes never listed another tab's create or rename. Bumps the same
+ * revision this page's own writes do, so the panel re-reads with the list.
+ */
+function useFollowOtherTabs(
+  workspaceId: string | null,
+  setFilesRevision: (next: (revision: number) => number) => void,
+): void {
+  useEffect(() => {
+    if (workspaceId === null) return
+    return followBrowserWorkspaceWrites(workspaceId, () => setFilesRevision((n) => n + 1))
+  }, [workspaceId, setFilesRevision])
+}
+
 interface BrowserIndexListingInput {
   index: BrowserIndexPageProps['index'] & {}
   loro: BrowserIndexPageProps['loro'] & {}
@@ -253,8 +269,8 @@ interface BrowserIndexListingInput {
  * What this page LISTS, and the reads that keep it current: the documents,
  * the trash count the onboarding decision consults, the workspace's own name,
  * and the files source the panel reads through. Held together because they
- * re-read together — on a workspace switch, on this page's own writes, and on
- * a Back that returns to this mount.
+ * re-read together — on a workspace switch, on this page's own writes, on
+ * another tab's, and on a Back that returns to this mount.
  */
 function useBrowserIndexListing(props: BrowserIndexListingInput) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
@@ -273,6 +289,7 @@ function useBrowserIndexListing(props: BrowserIndexListingInput) {
   // panel re-reads whenever this identity changes, exactly as on the daemon
   // page.
   const [filesRevision, setFilesRevision] = useState(0)
+  useFollowOtherTabs(activeWorkspace?.workspaceId ?? null, setFilesRevision)
 
   useBrowserDocumentsLoad({
     index: props.index,

@@ -52,7 +52,9 @@ import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 import { indexWritesSettled } from './pending-index-writes.js'
 import {
+  announceDocumentCreated,
   announceDocumentMoved,
+  announceDocumentPinned,
   announceDocumentRemoved,
   announceDocumentRenamed,
   announceDocumentRestored,
@@ -197,7 +199,9 @@ export class FoldingBrowserIndex
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
     await this.ensureFolded()
     await this.admitOneMore(input.workspaceId)
-    return this.inner.createDocument(input)
+    const created = await this.inner.createDocument(input)
+    announceDocumentCreated(input.workspaceId, created.path)
+    return created
   }
 
   /**
@@ -210,6 +214,7 @@ export class FoldingBrowserIndex
     await this.admitOneMore(input.workspaceId)
     const copy = await this.inner.duplicateDocument(input)
     await touchContentTimestamp(copy.documentId, this.dbName)
+    announceDocumentCreated(input.workspaceId, copy.path)
     return copy
   }
 
@@ -271,7 +276,8 @@ export class FoldingBrowserIndex
 
   async setDocumentPinned(input: SetDocumentPinnedInput): Promise<void> {
     await this.ensureFolded()
-    return this.inner.setDocumentPinned(input)
+    await this.inner.setDocumentPinned(input)
+    announceDocumentPinned(input.workspaceId, input.documentId)
   }
 
   /** What deletes evacuated; not on the port — callers hold this class. */

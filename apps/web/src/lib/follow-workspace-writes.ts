@@ -2,6 +2,7 @@ import {
   type SseStreamSource,
   workspaceDocKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { listenToWorkspace } from './workspace-broadcast.js'
 
 /**
  * One agent batch lands as several update frames in a row, and the daemon's
@@ -9,6 +10,24 @@ import {
  * frame, is what keeps a busy agent from turning the index into a polling loop.
  */
 const BURST_MS = 100
+
+/** `onMoved` once a burst has gone quiet; `cancel` drops a call still waiting. */
+function inBursts(onMoved: () => void): { soon: () => void; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  return {
+    soon() {
+      if (timer !== null) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        onMoved()
+      }, BURST_MS)
+    },
+    cancel() {
+      if (timer !== null) clearTimeout(timer)
+      timer = null
+    },
+  }
+}
 
 /**
  * Calls `onMoved` after the workspace record changes, wherever the change came
@@ -27,14 +46,7 @@ export function followWorkspaceWrites(
   workspaceId: string,
   onMoved: () => void,
 ): () => void {
-  let timer: ReturnType<typeof setTimeout> | null = null
-  const soon = () => {
-    if (timer !== null) clearTimeout(timer)
-    timer = setTimeout(() => {
-      timer = null
-      onMoved()
-    }, BURST_MS)
-  }
+  const { soon, cancel } = inBursts(onMoved)
   let everConnected = false
   let dropped = false
   const unsubscribe = source.subscribe(workspaceDocKey(workspaceId), {
@@ -51,7 +63,27 @@ export function followWorkspaceWrites(
     },
   })
   return () => {
-    if (timer !== null) clearTimeout(timer)
+    cancel()
     unsubscribe()
+  }
+}
+
+/**
+ * The browser keeper's twin: calls `onMoved` after another end of this
+ * workspace's channel — another tab, or a write this tab's index announced —
+ * says the record changed. Any message counts, because every one of them is a
+ * write the list may show: a saved edit moves a row's clock, an index write
+ * moves a row. Answers the unsubscribe, which also cancels a pending call.
+ */
+export function followBrowserWorkspaceWrites(
+  workspaceId: string,
+  onMoved: () => void,
+  listen: typeof listenToWorkspace = listenToWorkspace,
+): () => void {
+  const { soon, cancel } = inBursts(onMoved)
+  const end = listen(workspaceId, soon)
+  return () => {
+    cancel()
+    end.close()
   }
 }
