@@ -128,27 +128,43 @@ function fromGhPr(command, cwd, wanted) {
     via: `\`gh pr ${verb}\``,
     pr: verb === 'create' || !pr ? null : Number(pr[1]),
     repo: PLACEHOLDER_REPO,
-    head: command.match(/--head[= ]([^\s'"]+)/)?.[1] ?? null,
+    head: branchOf(flagValue(words, '--head', '-H')),
     body: ghPrBody(words, cd ?? cwd),
     cd,
   }
 }
 
 /**
- * Reads `--body <text>` / `--body=<text>` / `--body-file <path>` off one gh pr command's words,
- * which `shellWords` has already unquoted the way the shell would, so every quoting a reader can
- * type (`$'…'`, `a\ b`, `"x"'y'`) reaches the hook as the text gh receives.
+ * The value of one gh flag in every spelling gh's flag parser accepts —
+ * `--long v`, `--long=v`, `-s v`, `-sv`, `-s=v` — the last occurrence winning,
+ * as it does in gh. `words` are one gh pr command's, already unquoted by
+ * `shellWords`, so every quoting a reader can type (`$'…'`, `a\ b`, `"x"'y'`)
+ * reaches the hook as the text gh receives.
+ *
+ * ponytail: knows only the flag it is asked about, so another flag's value
+ * spelled like this one (`--title -bx`) reads as this one, and combined
+ * shorthands (`-db x`) are not split; a per-verb table of gh's flags is the
+ * upgrade if either is ever typed.
+ */
+function flagValue(words, long, short) {
+  let found
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]
+    if (word === long || word === short) found = words[++i]
+    else if (word.startsWith(`${long}=`)) found = word.slice(long.length + 1)
+    else if (word.startsWith(short) && word.length > short.length) {
+      found = word.slice(short.length).replace(/^=/, '')
+    }
+  }
+  return found
+}
+
+/**
+ * Reads the body (`--body`/`-b`) or body file (`--body-file`/`-F`) off one gh pr command's words;
+ * a file, when one is named, is what gets read.
  */
 function ghPrBody(words, where) {
-  const value = (flag) => {
-    let found
-    for (let i = 0; i < words.length; i++) {
-      if (words[i] === flag) found = words[++i]
-      else if (words[i].startsWith(`${flag}=`)) found = words[i].slice(flag.length + 1)
-    }
-    return found
-  }
-  const path = value('--body-file')
+  const path = flagValue(words, '--body-file', '-F')
   if (path !== undefined) {
     try {
       return { text: readFileSync(resolve(where, path), 'utf8') }
@@ -156,7 +172,7 @@ function ghPrBody(words, where) {
       return null
     }
   }
-  const text = value('--body')
+  const text = flagValue(words, '--body', '-b')
   return text === undefined ? null : { text }
 }
 
