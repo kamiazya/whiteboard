@@ -25,6 +25,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   COMMENT_MESSAGE_MAX_CHARS,
+  DOCUMENT_NAME_MAX_LENGTH,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
@@ -261,6 +262,31 @@ describe('a workspace-document update making a document unreadable', () => {
     expect(syncWriteRefusalOf(await refused.json()).code).toBe('unreadable_document_meta')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['notes'])
+  })
+})
+
+describe('a workspace-document update giving a document a name past its bound', () => {
+  it('answers 400 document_name_too_long and the stored name is unchanged', async () => {
+    const { post, snapshot } = await setup()
+    const url = `/api/w/${WS}/workspace-document`
+    const seeded = updateFrom(await snapshot(`${url}/snapshot`), (doc) =>
+      createWorkspaceDocumentAtPath(doc, { path: 'notes', documentId: DOC_ID, kind: 'markdown' }),
+    )
+    expect((await post(`${url}/update`, seeded)).status).toBe(200)
+    const named = readWorkspaceDocuments(await snapshot(`${url}/snapshot`)).map((e) => e.name)
+
+    const refused = await post(
+      `${url}/update`,
+      updateFrom(await snapshot(`${url}/snapshot`), (doc) => {
+        const node = doc.getTree('tree').getNodes()[0]
+        node?.data.set('name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1))
+      }),
+    )
+
+    expect(refused.status).toBe(400)
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('document_name_too_long')
+    const stored = await snapshot(`${url}/snapshot`)
+    expect(readWorkspaceDocuments(stored).map((entry) => entry.name)).toEqual(named)
   })
 })
 
