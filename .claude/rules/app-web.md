@@ -307,6 +307,13 @@ reports every refusal in the `ImageIntake` live notice.
 `DocumentFileAdapter.storeImage` answers `{ok, ref} | {ok: false, reason}`,
 never `undefined`, so a refused upload says why.
 
+A text node is held to `NODE_TEXT_MAX_CHARS` the same way: the node editor
+through `nodeTextLengthLimit`, the "open in editor" surface through
+`NodeTextEditorOverlay`'s `sourceExtensions`, and a plain-text paste, fragment
+paste or duplicate through `node-text-limit.ts`, each refusal said where it
+happened. The CodeMirror limit itself is `lib/text-length-limit.ts`, shared
+with the markdown body's.
+
 ### The settings migrations are total, and say so under a property
 
 `lib/user-settings-store.property.test.ts` draws whole v1, v2 and v3
