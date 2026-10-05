@@ -27,11 +27,14 @@
 //     against the hook's own exit time (happens-before assertion).
 //
 // Like the real daemon, it listens on a socket and then writes daemon.json
-// naming that socket into WHITEBOARD_DATA_DIR.
+// naming that socket into WHITEBOARD_DATA_DIR — or, when that is unset, into
+// `<checkout>/.dev-data` of the checkout it was started in, as the wrapper
+// behind the real `pnpm mcp:http:dev` resolves it.
 
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { resolveRepoRootFromGit } from '../with-dev-data-dir-lib.mjs'
 import { startFakeMcpResponder } from './fake-mcp-daemon.mjs'
 
 const TOKEN_FLAG = '--token='
@@ -39,7 +42,11 @@ const args = process.argv.slice(2)
 const token =
   args.find((arg) => arg.startsWith(TOKEN_FLAG))?.slice(TOKEN_FLAG.length) ?? 'whiteboard-dev'
 
-const dataDir = process.env.WHITEBOARD_DATA_DIR
+// Without an override the real wrapper serves the checkout it is started in,
+// so this does too: which checkout the hook started it in is then observable.
+const dataDir =
+  process.env.WHITEBOARD_DATA_DIR || join(resolveRepoRootFromGit(process.cwd()), '.dev-data')
+mkdirSync(dataDir, { recursive: true })
 const socketPath = join(dataDir, 'fake-daemon.sock')
 
 const invokedSentinel = process.env.FAKE_PNPM_INVOKED_SENTINEL
