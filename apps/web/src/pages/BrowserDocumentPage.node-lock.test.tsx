@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
@@ -66,7 +66,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 async function mountPage(): Promise<void> {
-  renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
   await waitFor(() => expect(latestOnChange).not.toBeNull())
 }

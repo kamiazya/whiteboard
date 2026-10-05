@@ -13,6 +13,7 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  createWorkspaceDocumentAtPath,
   readMarkdownBody,
   writeDocumentKind,
   writeMarkdownBody,
@@ -110,6 +111,18 @@ const liveMarkdownContent = {
   },
 }
 
+/** A live node written straight into the workspace record, past the index and its trash. */
+async function placeInRecord(input: {
+  workspaceId: string
+  documentId: string
+  path: string
+}): Promise<void> {
+  const docs = cacheBackedWorkspaceDocs()
+  const doc = await docs.create(input.workspaceId)
+  createWorkspaceDocumentAtPath(doc, { ...input, kind: 'markdown' })
+  await docs.save(input.workspaceId, doc)
+}
+
 /** Every file under the tenant's blob root: the trash suite trashes documents only, so each is an evacuation. */
 async function blobFileCount(): Promise<number> {
   try {
@@ -128,7 +141,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   describeDocumentPinsConformance(makeProductionIndex)
   describeDocumentTrashConformance(async () => {
     const { index, dispose } = await makeProductionIndex()
-    return { index, dispose, evacuatedBlobCount: blobFileCount }
+    return { index, dispose, evacuatedBlobCount: blobFileCount, placeDocument: placeInRecord }
   })
   describeDocumentDuplicatesConformance(async () => {
     const { index, dispose } = await makeProductionIndex()

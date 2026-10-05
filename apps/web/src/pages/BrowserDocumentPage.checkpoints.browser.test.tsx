@@ -258,8 +258,12 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
   // used a markdown note.
   it('leaves a checkpoint behind once a markdown document has been quiet', async () => {
     exercised.add('markdown/quiet-timer')
-    const index = new IdbDocumentIndex()
-    await seedIdbDocument(index, { path: 'note', kind: 'markdown', makeDefault: true })
+    const index = new FoldingBrowserIndex()
+    await seedIdbDocument(new IdbDocumentIndex(), {
+      path: 'note',
+      kind: 'markdown',
+      makeDefault: true,
+    })
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       renderPage(<BrowserDocumentPage store={index} />)

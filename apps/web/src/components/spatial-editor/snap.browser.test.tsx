@@ -101,6 +101,10 @@ it('draws the guide that justifies the snap while the drag is in flight', () => 
   ).toBeGreaterThanOrEqual(2)
   expect(guide).toBeTruthy()
   expect(guide?.getAttribute('x1')).toBe('137')
+  // It spans the content plus a 40px margin: `a`'s top at 113 and `b`'s
+  // bottom at 460, which `b` keeps wherever the drag has it on this axis.
+  expect(guide?.getAttribute('y1')).toBe('73')
+  expect(guide?.getAttribute('y2')).toBe('500')
 
   // A guide that outlived its gesture would be a permanent stray line.
   fireEvent.pointerUp(root, {

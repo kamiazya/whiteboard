@@ -9,6 +9,9 @@ import {
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
+  searchQueryInputSchema,
+  TAG_COUNT_LIMIT_PHRASE,
+  TAGS_PER_ELEMENT_MAX,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -16,9 +19,7 @@ import { z } from 'zod'
 export const documentSearchInputSchema = z
   .object({
     workspaceId: workspaceIdSchema.describe('The workspace to search.'),
-    query: z
-      .string()
-      .min(1)
+    query: searchQueryInputSchema
       .optional()
       .describe(
         'What to find, matched against content. Japanese matches without a dictionary. Omit it to answer every document the filters admit — a tag is frontmatter, not content, so "which documents carry this tag" is a filter alone.',
@@ -27,6 +28,9 @@ export const documentSearchInputSchema = z
     tags: z
       .array(z.string().min(1))
       .min(1)
+      // No document is written with more tags than this, so a filter that
+      // demands every one of more is not a filter anybody needs.
+      .max(TAGS_PER_ELEMENT_MAX, `more tag filters than ${TAG_COUNT_LIMIT_PHRASE}`)
       .optional()
       .describe('Restrict to documents carrying EVERY listed tag exactly.'),
     limit: z

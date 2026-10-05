@@ -1,3 +1,4 @@
+import { SEARCH_QUERY_MAX_CHARS, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import {
   DocumentNotFoundError,
   SnapshotReassemblyError,
@@ -55,6 +56,24 @@ describe('GET /api/v1 search query string', () => {
     expect(reason).toContain('`tag`')
     expect(reason).not.toContain('`query`')
     expect(reason).not.toContain('`tags`')
+  })
+
+  it('refuses words past the query bound, naming the wire parameter and the limit', async () => {
+    const atBound = await refusal(`${ws}/search?q=${'a'.repeat(SEARCH_QUERY_MAX_CHARS)}`)
+    expect(atBound.status).toBe(200)
+    const { status, reason } = await refusal(
+      `${ws}/search?q=${'a'.repeat(SEARCH_QUERY_MAX_CHARS + 1)}`,
+    )
+    expect(status).toBe(400)
+    expect(reason).toMatch(/^q: /)
+    expect(reason).toContain(`${SEARCH_QUERY_MAX_CHARS}-character limit`)
+  })
+
+  it('refuses more tag filters than one document may carry', async () => {
+    const tags = Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `tag=t${i}`)
+    const { status, reason } = await refusal(`${ws}/search?${tags.join('&')}`)
+    expect(status).toBe(400)
+    expect(reason).toContain(`${TAGS_PER_ELEMENT_MAX}-tag limit`)
   })
 
   it('names the wire parameter when the words are empty', async () => {

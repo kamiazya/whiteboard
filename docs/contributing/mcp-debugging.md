@@ -88,9 +88,10 @@ pnpm mcp:inspect
 
 ## Enable Request Logging
 
-Set `MCP_HTTP_DEBUG=1` before starting the HTTP daemon:
+Set `MCP_HTTP_DEBUG=1` before starting the HTTP daemon. The `SessionStart` hook has usually started one already without it, and a second start on the same data dir refuses rather than replacing it, so stop the running one first:
 
 ```bash
+pnpm mcp:http:stop
 MCP_HTTP_DEBUG=1 pnpm mcp:http:dev
 ```
 

@@ -28,7 +28,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
-import { createDocumentSetTool } from '../tools/document-set.js'
+import { createDocumentSetOperation } from '../tools/document-set.js'
 import { ndcgAt, recallAt } from './eval.js'
 import { CORPUS_DOCUMENTS, JUDGED_QUERIES, type QueryCategory } from './search-corpus.js'
 
@@ -51,7 +51,7 @@ let search: ReturnType<typeof createDocumentSearchTool>
 
 beforeAll(async () => {
   deps = makeTestDeps({ documentStore: new InMemoryDocumentStore() })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const edit = createCanvasEditTool(deps)
   // The workspace exists because this fixture says so, not as a side effect
   // of the first create: creating one is ADR-0019's MINT boundary, which

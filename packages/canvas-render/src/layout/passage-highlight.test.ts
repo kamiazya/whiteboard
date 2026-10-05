@@ -66,6 +66,37 @@ describe('a passage highlight picks the occurrence whose surroundings match best
     )
   })
 
+  // The context is compared with every run of whitespace read as one space,
+  // on both sides: the rendered text and the remembered prefix.
+  it('reads a run of spaces before an occurrence as one space', () => {
+    // Prose collapses its spaces; inline code keeps them, so the rendered
+    // text reads `zeta foo. beta  foo.` with two before the second `foo`.
+    const runs = typesetMdastBlocks(
+      {
+        type: 'root',
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              { type: 'text', value: 'zeta foo. ' },
+              { type: 'inlineCode', value: 'beta  ' },
+              { type: 'text', value: 'foo.' },
+            ],
+          },
+        ],
+      } as MdastRoot,
+      options,
+    ).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
+    expect(runs.map((run) => run.text)).toEqual(['zeta foo.', 'beta  ', 'foo.'])
+    const boxes = passageBoxes(runs, { exact: 'foo', prefix: 'beta ' }, options.measure)
+    expect(boxes.map((box) => box.x)).toEqual([runs[2]?.bbox.x])
+  })
+
+  it('reads a run of spaces in the remembered prefix as one space', () => {
+    const text = 'zeta foo. beta foo.'
+    expect(startOf(text, { exact: 'foo', prefix: 'beta  ' })).toBe(text.lastIndexOf('foo'))
+  })
+
   it('draws nothing for a blank or absent quote', () => {
     expect(startOf(rendered, { exact: '  ' })).toBeNull()
     expect(startOf(rendered, { exact: 'missing' })).toBeNull()
@@ -117,6 +148,25 @@ describe('a passage highlight is the occurrence the model resolves in the source
     expect(drawnAt(`<!-- follow up -->\n${text}`, text)).toBe(
       text.indexOf('follow up', sentence.length),
     )
+  })
+
+  // The highlight starts at the quote's first word, while the anchor's
+  // offsets include the whitespace the selection began with.
+  it('highlights the anchored occurrence of a quote that starts with whitespace', () => {
+    const quote = {
+      exact: ' follow up',
+      prefix: text.slice(third - 17, third - 1),
+      suffix: anchor.quote.suffix,
+    }
+    const runs = runOf(text)
+    const boxes = passageBoxes(runs, quote, options.measure, {
+      text,
+      start: third - 1,
+      end: third + 9,
+    })
+    expect(boxes).toHaveLength(1)
+    const perChar = (runs[0]?.bbox.w ?? 0) / text.length
+    expect(Math.round(((boxes[0]?.x ?? 0) - (runs[0]?.bbox.x ?? 0)) / perChar)).toBe(third)
   })
 
   it('draws nothing for a passage the source no longer holds', () => {

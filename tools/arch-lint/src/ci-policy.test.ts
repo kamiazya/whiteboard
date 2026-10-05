@@ -246,9 +246,11 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     uses?: string
     if?: string
     with?: Record<string, unknown>
+    'working-directory'?: string
   }
   interface Job {
     strategy?: { matrix?: { include?: Record<string, unknown>[]; projects?: unknown } }
+    defaults?: { run?: { 'working-directory'?: string } }
     steps?: Step[]
   }
 
@@ -331,19 +333,22 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     return pkg && { dir: pkg.dir, script: pkg.scripts[m?.[2] ?? ''] }
   }
 
-  function lineRunsBrowser(job: Job, line: string, browser: Browser): boolean {
+  /** `cwd` is where the step runs; `--filter` moves the line into its package's directory. */
+  function lineRunsBrowser(job: Job, line: string, browser: Browser, cwd: string): boolean {
     if (/\btest:browser\b/.test(line)) return true
     if (selectsBrowserProject(job, line, browser)) return true
     const pkg = filtered(line)
-    if (namesBrowserConfig(line, pkg?.dir ?? '.', browser)) return true
+    const dir = pkg?.dir ?? cwd
+    if (namesBrowserConfig(line, dir, browser)) return true
     const script = pkg?.script ?? ''
-    return /\btest:browser\b/.test(script) || namesBrowserConfig(script, pkg?.dir ?? '.', browser)
+    return /\btest:browser\b/.test(script) || namesBrowserConfig(script, dir, browser)
   }
 
   function runsBrowserProject(job: Job, browser: Browser): boolean {
-    return (job.steps ?? []).some((step) =>
-      (step.run ?? '').split('\n').some((line) => lineRunsBrowser(job, line, browser)),
-    )
+    return (job.steps ?? []).some((step) => {
+      const cwd = step['working-directory'] ?? job.defaults?.run?.['working-directory'] ?? '.'
+      return (step.run ?? '').split('\n').some((line) => lineRunsBrowser(job, line, browser, cwd))
+    })
   }
 
   function uploadsTracesOnFailure(job: Job): boolean {
@@ -397,6 +402,44 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     ).toBe(true)
     expect(runs('pnpm --filter @kamiazya/whiteboard-canvas-render test')).toBe(false)
     expect(runs('pnpm exec vitest run --config apps/web/vitest.config.ts')).toBe(false)
+  })
+
+  it("resolves a --config against the step's working-directory, or the job's default", async () => {
+    const browser = { names: await browserProjectNames(), configs: await browserConfigPaths() }
+    const run = 'pnpm exec vitest run --config vitest.browser.config.ts'
+    expect(runsBrowserProject({ steps: [{ run, 'working-directory': 'apps/web' }] }, browser)).toBe(
+      true,
+    )
+    expect(
+      runsBrowserProject(
+        { defaults: { run: { 'working-directory': 'apps/web' } }, steps: [{ run }] },
+        browser,
+      ),
+    ).toBe(true)
+    // A step's own directory overrides the job's default.
+    expect(
+      runsBrowserProject(
+        {
+          defaults: { run: { 'working-directory': 'apps/web' } },
+          steps: [{ run, 'working-directory': 'packages/model' }],
+        },
+        browser,
+      ),
+    ).toBe(false)
+    // `--filter` runs in the package's own directory whatever the step's is.
+    expect(
+      runsBrowserProject(
+        {
+          steps: [
+            {
+              run: 'pnpm --filter @kamiazya/whiteboard-web exec vitest run -c vitest.browser.config.ts',
+              'working-directory': 'packages/model',
+            },
+          ],
+        },
+        browser,
+      ),
+    ).toBe(true)
   })
 })
 

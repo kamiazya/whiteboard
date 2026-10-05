@@ -1,7 +1,7 @@
 /**
  * Removes the process signal listeners a test body added, leaving any that were already installed.
  *
- * `runDaemon` arms `process.once('SIGTERM' | 'SIGINT')` and the daemon exits before they ever fire
+ * `runDaemonRun` arms `process.once('SIGTERM' | 'SIGINT')` and the daemon exits before they ever fire
  * in production; a test file that calls it per case never exits, so listeners pile up past Node's
  * limit of 10 per event and emit a `MaxListenersExceededWarning` per signal.
  */

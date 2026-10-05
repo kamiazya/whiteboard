@@ -12,7 +12,7 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from './document-crud.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { FacetWriteRejectedError } from './errors.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -48,7 +48,7 @@ describe('whole-document writers refuse a stencil library the registry would not
     const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
 
     const refusal = await settle(
-      createDocumentSetTool(deps).execute({
+      createDocumentSetOperation(deps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         markdown: unusableLibrary,
@@ -84,7 +84,7 @@ describe('whole-document writers refuse a stencil library the registry would not
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
 
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: usableLibrary,

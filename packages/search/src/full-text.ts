@@ -112,6 +112,25 @@ function addTo(text: string, alsoIndex: AlsoIndex): string {
   return extra === '' ? text : `${text} ${extra}`
 }
 
+interface TokenBag {
+  readonly doc: SearchableDocument
+  /** How often each index token occurs across the document's path, name and texts. */
+  readonly counts: ReadonlyMap<string, number>
+  readonly length: number
+}
+
+function tokenBag(doc: SearchableDocument, alsoIndex: AlsoIndex | undefined): TokenBag {
+  const counts = new Map<string, number>()
+  let length = 0
+  for (const text of [doc.path, doc.name ?? '', ...doc.texts]) {
+    for (const token of tokenizeForIndex(alsoIndex === undefined ? text : addTo(text, alsoIndex))) {
+      counts.set(token, (counts.get(token) ?? 0) + 1)
+      length++
+    }
+  }
+  return { doc, counts, length }
+}
+
 /**
  * BM25 over the documents' token bags, name and path included as text (a
  * query naming a document should find it without the caller special-casing
@@ -125,38 +144,36 @@ export function fullTextSearch(
   const queryTokens = [...new Set(tokenize(query))]
   if (queryTokens.length === 0) return []
 
-  const bags = documents.map((doc) => {
-    const counts = new Map<string, number>()
-    let length = 0
-    for (const text of [doc.path, doc.name ?? '', ...doc.texts]) {
-      for (const token of tokenizeForIndex(
-        alsoIndex === undefined ? text : addTo(text, alsoIndex),
-      )) {
-        counts.set(token, (counts.get(token) ?? 0) + 1)
-        length++
-      }
-    }
-    return { doc, counts, length }
-  })
+  const bags = documents.map((doc) => tokenBag(doc, alsoIndex))
   const avgLength = bags.reduce((sum, bag) => sum + bag.length, 0) / Math.max(1, bags.length)
+  // Once per query token, not per (document, token) pair: counting the
+  // documents that hold a token inside the scoring loop made one query
+  // documents² × tokens, seconds on a few hundred notes.
+  const idf = queryTokens.map((token) => {
+    const containing = bags.filter((bag) => bag.counts.has(token)).length
+    return Math.log(1 + (bags.length - containing + 0.5) / (containing + 0.5))
+  })
 
-  const hits: SearchHit[] = []
+  const scored: { doc: SearchableDocument; score: number }[] = []
   for (const bag of bags) {
     let score = 0
-    for (const token of queryTokens) {
+    for (const [i, token] of queryTokens.entries()) {
       const tf = bag.counts.get(token) ?? 0
       if (tf === 0) continue
-      const containing = bags.filter((other) => (other.counts.get(token) ?? 0) > 0).length
-      const idf = Math.log(1 + (bags.length - containing + 0.5) / (containing + 0.5))
       score +=
-        (idf * tf * (K1 + 1)) / (tf + K1 * (1 - B + (B * bag.length) / Math.max(1, avgLength)))
+        ((idf[i] ?? 0) * tf * (K1 + 1)) /
+        (tf + K1 * (1 - B + (B * bag.length) / Math.max(1, avgLength)))
     }
-    if (score <= 0) continue
-    hits.push({ documentId: bag.doc.documentId, score, contexts: contextsFor(bag.doc, query) })
+    if (score > 0) scored.push({ doc: bag.doc, score })
   }
-  return hits
-    .sort((a, b) => b.score - a.score || compareCodeUnit(a.documentId, b.documentId))
-    .slice(0, limit)
+  // Excerpts only for what is answered: they cost a scan of every text per
+  // query token, and ranking never reads them.
+  scored.sort((a, b) => b.score - a.score || compareCodeUnit(a.doc.documentId, b.doc.documentId))
+  return scored.slice(0, limit).map(({ doc, score }) => ({
+    documentId: doc.documentId,
+    score,
+    contexts: contextsFor(doc, query),
+  }))
 }
 
 interface Match {

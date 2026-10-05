@@ -41,3 +41,27 @@ describe('countNamedUses reads uses of a name, not its text', () => {
     expect(countNamedUses('fixture.ts', source, names)).toBe(expected)
   })
 })
+
+// A file whose text never spells a wanted name is answered without a parse, so these are the
+// spellings that reach a name through an escape instead — each must still count.
+describe('countNamedUses counts a name an escape spells', () => {
+  it.each([
+    ['a unicode escape in an identifier', 'const p = re\\u0061lpath(target)', REALPATH, 1],
+    ['a hex escape in a string key', "await fsp['re\\x61lpath'](target)", REALPATH, 1],
+    ['an identity escape in a string key', "bridge['writeSpatial\\Canvas'](doc)", WRITE, 1],
+    ['a line continuation in a string key', "bridge['writeSpatial\\\nCanvas'](doc)", WRITE, 1],
+    [
+      'an escaped key in an aliased import',
+      "import { re\\u0061lpath as rp } from 'x'\nrp(t)",
+      REALPATH,
+      1,
+    ],
+  ])('%s', (_label, source, names, expected) => {
+    expect(countNamedUses('fixture.ts', source, names)).toBe(expected)
+  })
+
+  it('answers a source that spells nothing it wants without counting anything', () => {
+    expect(countNamedUses('fixture.ts', 'const p = other(target)', REALPATH)).toBe(0)
+    expect(countNamedUses('fixture.ts', 'const p = other(target', REALPATH)).toBe(0)
+  })
+})

@@ -9,6 +9,7 @@ import type { ReactElement } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
@@ -42,8 +43,12 @@ afterEach(async () => {
 })
 
 it('a line typed on one page shows up on the other page open on the note', async () => {
-  const store = new IdbDocumentIndex()
-  await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+  const store = new FoldingBrowserIndex()
+  await seedIdbDocument(new IdbDocumentIndex(), {
+    path: 'note',
+    kind: 'markdown',
+    makeDefault: true,
+  })
   const tabA = render(<BrowserDocumentPage store={store} />)
   const tabB = render(<BrowserDocumentPage store={store} />)
   await waitFor(() => expect(editorIn(tabB.container)).not.toBeNull(), { timeout: 10_000 })
@@ -57,8 +62,12 @@ it('a line typed on one page shows up on the other page open on the note', async
 })
 
 it('a page opened later on the note is heard by the page that was there first', async () => {
-  const store = new IdbDocumentIndex()
-  await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+  const store = new FoldingBrowserIndex()
+  await seedIdbDocument(new IdbDocumentIndex(), {
+    path: 'note',
+    kind: 'markdown',
+    makeDefault: true,
+  })
   const tabA = render(<BrowserDocumentPage store={store} />)
   await focusEditable(() => editorIn(tabA.container))
   await userEvent.keyboard('# From tab A')

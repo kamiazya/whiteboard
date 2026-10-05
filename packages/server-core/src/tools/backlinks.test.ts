@@ -6,7 +6,7 @@ import { seedEmbedNode } from '../test-utils/seed-embed-node.js'
 import { backlinksOutputSchema } from './backlinks.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 
 const WS = 'ws-1'
 
@@ -27,7 +27,7 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
       ...(name === undefined ? {} : { name }),
     })
   const target = await create('target', 'markdown', 'Release plan')
-  const setBody = createDocumentSetTool(deps)
+  const setBody = createDocumentSetOperation(deps)
   // wb_document_set takes a full OKF document; wrap the body in the minimal
   // frontmatter the parser requires.
   const writeBody = (documentId: string, body: string) =>

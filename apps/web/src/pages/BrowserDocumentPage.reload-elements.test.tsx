@@ -23,7 +23,8 @@ import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
@@ -82,7 +83,8 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
   })
 
   it('persists a node across remount and never writes a __placeholder__ row', async () => {
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    const store = new FoldingBrowserIndex()
+    renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
 
@@ -99,7 +101,10 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
     // before any edit lands — a poll on that stops retrying immediately and
     // the remount below then reads an empty canvas. Measured: the wait passed
     // and the assertion after the remount got `[]`.
-    const [documentId] = await loroDocumentsKeys()
+    // From the index, not the store's keys: a document the page created
+    // lives in the workspace record, whose key names the workspace.
+    const [created] = await store.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+    const documentId = created?.documentId
     await waitFor(
       async () => {
         act(() => {
@@ -115,7 +120,7 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
 
     cleanup()
     latestMountedCanvases = []
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     // The restored scene must include the node written before remount.

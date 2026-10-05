@@ -278,7 +278,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // can: all four are under the complexity threshold.
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 779,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
-  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 92,
+  // +1: the search box's `maxLength`, the query bound the search tool holds.
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 81,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,
@@ -305,7 +306,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   // Raised by two: the session's refused-write report and its teardown.
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 364,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 356,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
@@ -325,7 +326,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by twenty-six for `documentRemoved`: the open document deleted
   // elsewhere is seen by the session alone, which stops writing and says so.
   // Raised by two more for a trash restore bringing it back, which resumes it.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 897,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 894,
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
   // raised by one more for a reconnect whose snapshot no longer holds the
@@ -333,7 +334,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 194,
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 89,
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
-  'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
@@ -627,7 +627,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 147,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 135,
-  'packages/server-core/src/tools/document-set.ts#createDocumentSetTool': 75,
+  'packages/server-core/src/tools/document-set.ts#createDocumentSetOperation': 70,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
   // The one exported chunk-size constant is 18 characters longer than the local
   // `MAX_CHUNK_BYTES` it replaced, so the call sites that used to fit on one line

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   isHumanActor,
   normalizeOkfVerified,
+  OKF_ACTOR_MAX_CHARS,
+  okfActorInputSchema,
   okfActorSchema,
   okfTimestampSchema,
   trustFacetsSchema,
@@ -25,6 +27,25 @@ describe('okfActorSchema (OKF §7)', () => {
     for (const actor of ['', '  ', ' human:a', 'human:a ', 'human:a\nhuman:b']) {
       expect(okfActorSchema.safeParse(actor).success).toBe(false)
     }
+  })
+})
+
+describe('okfActorInputSchema, the actor a write accepts', () => {
+  const longer = `agent/${'x'.repeat(OKF_ACTOR_MAX_CHARS)}`
+
+  it('refuses an actor past the bound, naming it', () => {
+    const parsed = okfActorInputSchema.safeParse(longer)
+    expect(parsed.error?.issues[0]?.message).toBe(
+      `an actor is longer than the ${OKF_ACTOR_MAX_CHARS}-character limit`,
+    )
+  })
+
+  it('keeps the shape rule of the stored actor', () => {
+    expect(okfActorInputSchema.safeParse(' human:a').success).toBe(false)
+  })
+
+  it('leaves a stored actor past the bound readable', () => {
+    expect(okfActorSchema.safeParse(longer).success).toBe(true)
   })
 })
 

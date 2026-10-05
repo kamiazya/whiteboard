@@ -120,7 +120,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     closeListener: async () => {
       await socketListener?.close()
     },
-    afterListenerClosed: () => options.onClose?.(),
+    // Only a server that opened a listener has a stop to announce: a start refused
+    // at listen would run its root's onClose over the RUNNING daemon's record.
+    afterListenerClosed: () => (socketListener ? options.onClose?.() : undefined),
     flushCheckpoints: shared.checkpoints.flush,
   })
 

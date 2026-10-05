@@ -5,7 +5,7 @@
 // plain text onto the canvas — and neither may make a node past that bound.
 // A copy — a pasted fragment or a duplicate — of a node written before the
 // bound is refused the same way, since it would make one more — and so is a
-// copy of a link or a label past the keeper's bound on it. Each refusal
+// copy of a link, a label or tags past the keeper's bound on it. Each refusal
 // says why, or a paste that did nothing reads as a broken
 // clipboard.
 
@@ -14,6 +14,7 @@ import {
   NODE_TEXT_MAX_CHARS,
   nodeText,
   type SpatialNode,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
@@ -23,6 +24,7 @@ import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
 import {
   copiedLocationNotice,
   copiedNodeTextNotice,
+  copiedTagsNotice,
   nodeTextEditNotice,
   pastedTextNotice,
 } from '../../lib/limit-notice.js'
@@ -150,6 +152,24 @@ it('pasting a fragment holding a link past the location limit makes nothing and 
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
       copiedLocationNotice('pasted', 'URL', NODE_LOCATION_MAX_CHARS + 1),
+    ),
+  )
+  expect(latest.canvas.nodes).toHaveLength(0)
+  expect(latest.commands).toHaveLength(0)
+})
+
+it('pasting a fragment holding a node past the tag count limit makes nothing and says why', async () => {
+  const { Host, latest } = makeEditorHost({ initial: { nodes: [], edges: [] } })
+  const { container } = render(<Host />)
+  const tags = Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `t${i}`)
+  const tagged = textNode({ id: 'old', x: 40, y: 40, width: 160, height: 80, text: 'x', tags })
+  const fragment = { type: 'whiteboard/clipboard', version: 1, nodes: [tagged], edges: [] }
+
+  paste(rootOf(container), JSON.stringify(fragment))
+
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
+      copiedTagsNotice('pasted', 'count', TAGS_PER_ELEMENT_MAX + 1),
     ),
   )
   expect(latest.canvas.nodes).toHaveLength(0)

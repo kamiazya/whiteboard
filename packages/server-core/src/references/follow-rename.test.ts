@@ -6,7 +6,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
-import { createDocumentSetTool } from '../tools/document-set.js'
+import { createDocumentSetOperation } from '../tools/document-set.js'
 import { followReferencesAfterRename } from './follow-rename.js'
 
 const WS = 'ws-follow'
@@ -20,7 +20,7 @@ async function seed(deps: ServerDeps) {
       kind: 'markdown',
       ...(name === undefined ? {} : { name }),
     })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const write = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   const bodyOf = async (documentId: string) =>

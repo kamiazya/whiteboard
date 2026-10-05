@@ -19,7 +19,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { createDocumentSetTool, OkfParseError, parseWritableOkf } from './document-set.js'
+import { createDocumentSetOperation, OkfParseError, parseWritableOkf } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
 import { TAG_LIBRARY_PATH } from './tag-library.js'
@@ -48,7 +48,7 @@ describe('wb_document_set tool', () => {
   test('imports markdown with facets and body into a new LoroDoc', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     const markdown = [
       '---',
@@ -86,7 +86,7 @@ describe('wb_document_set tool', () => {
   test('imports markdown with empty body (facets only)', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     const markdown = '---\ntype: note\n---\n'
 
@@ -106,7 +106,7 @@ describe('wb_document_set tool', () => {
   test('overwrites existing doc on re-import', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     const v1 = '---\ntype: issue\nfacets:\n  example.sample/v1:\n    status: open\n---\nFirst body.'
     await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown: v1 })
@@ -128,7 +128,7 @@ describe('wb_document_set tool', () => {
   test('rejects invalid OKF markdown', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     await expect(
       tool.execute({
@@ -142,7 +142,7 @@ describe('wb_document_set tool', () => {
   test('refuses frontmatter a read could not write back out, naming the key, and keeps what was stored', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -162,7 +162,7 @@ describe('wb_document_set tool', () => {
 
   test('rejects when canvas is not in workspace', async () => {
     const store = new FakeDocumentStore()
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     const markdown = '---\ntype: note\n---\nBody.'
 
@@ -184,7 +184,7 @@ describe('wb_document_set tool', () => {
         edges: [],
       })
     })
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     await expect(
       tool.execute({
@@ -203,7 +203,7 @@ describe('wb_document_set tool', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'markdown'))
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -220,7 +220,7 @@ describe('wb_document_set tool', () => {
     // unwritable through this tool, with no path out.
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -247,7 +247,7 @@ describe('wb_document_set tool', () => {
         edges: [],
       })
     })
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -277,7 +277,7 @@ describe('wb_document_set tool', () => {
         edges: [],
       })
     })
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
 
     await expect(
       tool.execute({
@@ -304,7 +304,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeDeps(store)
 
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\ntitle: リリース計画 2026\n---\nBody.',
@@ -328,13 +328,13 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeDeps(store)
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\ntitle: Keep me\n---\nOne.',
     })
 
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\n---\nTwo.',
@@ -351,7 +351,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeDeps(store)
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\ntitle: Round trip\n---\nBody.',
@@ -371,7 +371,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeDeps(store)
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\ntitle: ""\n---\n',
@@ -386,7 +386,7 @@ describe('OKF title is a projection of the workspace name, both ways', () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeDeps(store)
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\n---\nBody.',
@@ -424,14 +424,14 @@ describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', ()
   test('refuses a frontmatter tag the library does not admit, before anything is written', async () => {
     const store = await noteUnderLibrary()
     const deps = makeDeps(store)
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\n---\nThe body as it stands.',
     })
 
     await expect(
-      createDocumentSetTool(deps).execute({
+      createDocumentSetOperation(deps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         markdown: '---\ntype: note\ntags:\n  - health:unknown\n---\nA rewritten body.',
@@ -447,7 +447,7 @@ describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', ()
     const deps = makeDeps(await noteUnderLibrary())
 
     await expect(
-      createDocumentSetTool(deps).execute({
+      createDocumentSetOperation(deps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         markdown: '---\ntype: note\ntags:\n  - health:ok\n  - health:failing\n---\nBody.',
@@ -459,7 +459,7 @@ describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', ()
     const store = await noteUnderLibrary()
     const deps = makeDeps(store)
 
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\ntags:\n  - health:ok\n  - region:eu\n  - draft\n---\nBody.',
@@ -483,7 +483,7 @@ describe('wb_document_set and a workspace tag library (ADR-0040 decision 5)', ()
     // to `undefined`, and `tags: []` survives the parse as an empty array.
     // Judging the second would cost a listing to conclude nothing.
     for (const frontmatter of ['type: note', 'type: note\ntags: []']) {
-      await createDocumentSetTool(deps).execute({
+      await createDocumentSetOperation(deps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         markdown: `---\n${frontmatter}\n---\nNo tags here.`,
@@ -501,7 +501,7 @@ describe('wb_document_set and the scoped-tag grammar (ADR-0040 decision 1)', () 
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps = makeDeps(store)
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: `---\ntype: note\n---\n${STORED}`,
@@ -517,7 +517,7 @@ describe('wb_document_set and the scoped-tag grammar (ADR-0040 decision 1)', () 
     const { store, deps } = await noteWithBody()
 
     await expect(
-      createDocumentSetTool(deps).execute({
+      createDocumentSetOperation(deps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         markdown: `---\ntype: note\ntags:\n  - "${tag}"\n---\nA rewritten body.`,
@@ -544,7 +544,7 @@ describe('wb_document_set and the scoped-tag grammar (ADR-0040 decision 1)', () 
   test('still writes a plain tag and a well-formed scoped one', async () => {
     const { deps } = await noteWithBody()
 
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       markdown: '---\ntype: note\ntags:\n  - Machine Learning\n  - v1.2\n  - region:eu\n---\nBody.',
@@ -571,7 +571,7 @@ describe('an OKF refusal names the fix', () => {
   async function refusalFor(markdown: string): Promise<string> {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createDocumentSetTool(makeDeps(store))
+    const tool = createDocumentSetOperation(makeDeps(store))
     try {
       await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
     } catch (error) {

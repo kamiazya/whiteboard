@@ -64,7 +64,7 @@ export {
   wbDocumentMove,
 } from './tools/document-move.js'
 export { createDocumentSearchTool } from './tools/document-search.js'
-export { createDocumentSetTool } from './tools/document-set.js'
+export { createDocumentSetOperation } from './tools/document-set.js'
 export { createFacetListTool } from './tools/facet-list.js'
 export { carriesATag, TAG_LIBRARY_PATH } from './tools/tag-library.js'
 export { createVersionListTool } from './tools/version-list.js'

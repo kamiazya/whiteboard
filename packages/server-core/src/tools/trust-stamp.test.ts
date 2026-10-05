@@ -4,7 +4,7 @@ import {
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { createDocumentSetTool, documentSetInputSchema } from './document-set.js'
+import { createDocumentSetOperation, documentSetInputSchema } from './document-set.js'
 import { exportOkf } from './export-okf.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -15,7 +15,7 @@ async function setup() {
   const store = new FakeDocumentStore()
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
   const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
-  return { deps, documentSet: createDocumentSetTool(deps) }
+  return { deps, documentSet: createDocumentSetOperation(deps) }
 }
 
 async function write(markdown: string, actor?: string) {

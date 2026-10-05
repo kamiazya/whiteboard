@@ -20,6 +20,7 @@ import {
   projectWorkspaceDocument,
   readSpatialCanvas,
   readWorkspaceDocumentName,
+  readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -301,6 +302,44 @@ describe('BrowserBackend', () => {
     expect(handlers.onSnapshot).not.toHaveBeenCalled()
     backend.disconnect()
     expect(logged.join('\n')).toContain('[browser-backend] another document owns the target path')
+  })
+
+  it('refuses to place an empty node under an id the trash holds', async () => {
+    const logged = expectLoggedFailures()
+    // A page that resolved the document just before somebody deleted it
+    // connects after the delete: the id is in the trash, not the tree. An
+    // empty node placed under it would list beside the trashed copy, and a
+    // restore would then put a second node under the same id.
+    const workspaceId = getBrowserWorkspaceId()
+    const index = new FoldingBrowserIndex()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'design',
+      kind: 'spatial',
+    })
+    await index.deleteDocument({ workspaceId, path: 'design' })
+
+    const handlers = makeHandlers()
+    const backend = new BrowserBackend(target(documentId, 'design'))
+    backend.connect(handlers)
+    await vi.waitFor(
+      () => {
+        expect(handlers.onError).toHaveBeenCalledWith('read-unavailable')
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
+    expect(handlers.onSnapshot).not.toHaveBeenCalled()
+    backend.disconnect()
+
+    await index.restoreDocument({ workspaceId, documentId })
+    const record = await new BrowserWorkspaceDocs().open(workspaceId)
+    expect(
+      record === null
+        ? []
+        : readWorkspaceDocuments(record).filter((entry) => entry.documentId === documentId),
+    ).toHaveLength(1)
+    expect(logged.join('\n')).toContain('[browser-backend] the trash holds this document')
   })
 
   it('disconnect() is idempotent — second call does not throw', () => {

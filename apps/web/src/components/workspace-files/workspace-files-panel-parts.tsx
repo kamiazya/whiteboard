@@ -1,3 +1,4 @@
+import { SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
   CheckCircle2,
   Columns2,
@@ -209,6 +210,7 @@ export function PanelToolbar({
           type="search"
           aria-label="Search documents"
           placeholder="Search"
+          maxLength={SEARCH_QUERY_MAX_CHARS}
           value={query}
           onChange={(event) => changeQuery(event.target.value)}
           className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"

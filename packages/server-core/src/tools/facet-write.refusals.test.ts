@@ -31,7 +31,7 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { createFacetSetTool } from './facet-set.js'
 
 const WORKSPACE_ID = 'ws-1'
@@ -291,7 +291,7 @@ const WRITERS: readonly Writer[] = [
     name: 'wb_document_set frontmatter',
     target: 'document',
     attempt: (deps, key, payload) =>
-      createDocumentSetTool(deps).execute({
+      createDocumentSetOperation(deps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: NOTE_ID,
         markdown: markdownWith(key, payload),

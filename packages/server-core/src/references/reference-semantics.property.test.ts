@@ -35,7 +35,7 @@ import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
-import { createDocumentSetTool } from '../tools/document-set.js'
+import { createDocumentSetOperation } from '../tools/document-set.js'
 import { computeDocumentTags } from '../tools/document-tags.js'
 import { factsCacheFor } from './content-source.js'
 import { followReferencesAfterRename } from './follow-rename.js'
@@ -268,7 +268,7 @@ describe('reference semantics under command sequences', () => {
       // MINT boundary, which keys it by a fresh ULID — and here that would
       // also make the identity depend on the generated command sequence.
       await deps.documentIndex.createWorkspace({ workspaceId: WS })
-      const setTool = createDocumentSetTool(deps)
+      const setTool = createDocumentSetOperation(deps)
       const editTool = createCanvasEditTool(deps)
       const model = new Model()
       // ONE cache across the whole command sequence — the differential half:

@@ -57,6 +57,25 @@ async function openSavedNote() {
   return { page, documentId }
 }
 
+/**
+ * The comments rail beside the note, with a document comment being composed —
+ * the write surface outside the editor that a delete has to lock as well.
+ */
+async function composeDocumentComment(): Promise<void> {
+  await userEvent.click(await screen.findByRole('button', { name: /^Comments/ }, WAIT))
+  await userEvent.click(await screen.findByRole('button', { name: 'Comment on the document' }))
+  await waitFor(() => expect(sendCommentButton()).not.toBeNull(), WAIT)
+}
+
+/** Read from the DOM, not by role: an inert subtree is outside the accessibility tree. */
+function sendCommentButton(): HTMLElement | null {
+  return document.querySelector('button[aria-label="Send comment"]')
+}
+
+function titleField(): HTMLInputElement {
+  return screen.getByLabelText<HTMLInputElement>('Title')
+}
+
 async function deleteElsewhere(): Promise<void> {
   await new FoldingBrowserIndex().deleteDocument({
     workspaceId: getBrowserWorkspaceId(),
@@ -66,6 +85,9 @@ async function deleteElsewhere(): Promise<void> {
 
 it('a note deleted elsewhere says so and stops taking edits', async () => {
   const { page } = await openSavedNote()
+  await composeDocumentComment()
+  expect(sendCommentButton()?.closest('[inert]')).toBeNull()
+  expect(titleField().readOnly).toBe(false)
 
   await deleteElsewhere()
 
@@ -77,12 +99,25 @@ it('a note deleted elsewhere says so and stops taking edits', async () => {
   await waitFor(() => expect(editorIn(page.container)?.closest('[inert]')).not.toBeNull(), WAIT)
   // What was on screen stays readable; only writing it stops.
   expect(editorIn(page.container)?.textContent).toBe('# Before the delete')
+  // Beside the editor too: a comment sent now would be cleared from its box
+  // and dropped by a session that no longer writes, and so would a rename.
+  expect(sendCommentButton()?.closest('[inert]')).not.toBeNull()
+  expect(titleField().readOnly).toBe(true)
+  // The menu keeps what only reads the note and drops what would write it.
+  await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  await screen.findByRole('menuitem', { name: /Export/ })
+  expect(screen.queryByRole('menuitem', { name: /Bookmark/ })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: 'Duplicate' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull()
+  await userEvent.keyboard('{Escape}')
 })
 
 it('a note restored from the trash elsewhere is editable again, and saves', async () => {
   const { page, documentId } = await openSavedNote()
+  await composeDocumentComment()
   await deleteElsewhere()
   await screen.findByTestId('document-removed-notice', undefined, WAIT)
+  await waitFor(() => expect(sendCommentButton()?.closest('[inert]')).not.toBeNull(), WAIT)
 
   await new FoldingBrowserIndex().restoreDocument({
     workspaceId: getBrowserWorkspaceId(),
@@ -91,6 +126,8 @@ it('a note restored from the trash elsewhere is editable again, and saves', asyn
 
   await waitFor(() => expect(screen.queryByTestId('document-removed-notice')).toBeNull(), WAIT)
   expect(editorIn(page.container)?.closest('[inert]')).toBeNull()
+  expect(sendCommentButton()?.closest('[inert]')).toBeNull()
+  expect(titleField().readOnly).toBe(false)
   await focusEditable(() => editorIn(page.container))
   await userEvent.keyboard('{Control>}{End}{/Control} again')
   await waitFor(

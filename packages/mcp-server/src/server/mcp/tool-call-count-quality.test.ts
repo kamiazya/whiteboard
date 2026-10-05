@@ -318,7 +318,9 @@ describe('what an errand costs in tool calls', () => {
         // snapshot used to drop them. The same bytes are the read a blind
         // agent was told to make (`wb_canvas_snapshot`'s row on rung 1);
         // the call count does not move.
-        responseBytes: 14226,
+        // Then 14,226 -> 14,256: +30 because wb_facet_list's schema for
+        // `visual.axes/v0` now states its 64-axis `maxItems`.
+        responseBytes: 14256,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

@@ -617,7 +617,7 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
       { nodes: [NOTE], edges: [] },
       baseOptions({ threads: [passage('plan', 'resolved')], showResolved: true }),
     )
-    expect(highlightsOf(shown.nodes)).toHaveLength(1)
+    expect(highlightsOf(shown.nodes).map((b) => b.appearance?.fillOpacity)).toEqual([0.1])
   })
 })
 

@@ -27,6 +27,7 @@ import {
   type WorkspaceBroadcast,
   type WorkspaceBroadcastEnd,
 } from './workspace-broadcast.js'
+import { documentIdsInRecord } from './workspace-record-ids.js'
 
 /**
  * The document a BrowserBackend serves. `path`/`kind`/`name` are what connect
@@ -550,12 +551,24 @@ export class BrowserBackend implements DocumentBackend {
    *   the same knowledge the fold lacked.
    * - there is no old record → a fresh document; place an empty node.
    *
-   * Returns false when delivery must stop (the unreadable case).
+   * Unless the record already answers for the id: then it is in the trash —
+   * deleted after the page resolved it — and a node placed here would stand
+   * beside the trashed copy and turn its restore into a second node under one
+   * id. `read-unavailable` for the reason the path collision below gives.
+   *
+   * Returns false when delivery must stop (the unreadable and trashed cases).
    */
   private async placeMissingDocument(
     workspaceDoc: LoroDoc,
     handlers: DocumentBackendHandlers,
   ): Promise<boolean> {
+    if (documentIdsInRecord(workspaceDoc).has(this.target.documentId)) {
+      getAppLogger('browser-backend').warn('the trash holds this document; not placing', {
+        documentId: this.target.documentId,
+      })
+      if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
+      return false
+    }
     const legacy = await this.legacy.load(this.target.documentId)
     if (isUnreadableLegacyRecord(legacy.kind)) {
       if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)

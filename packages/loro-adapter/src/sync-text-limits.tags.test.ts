@@ -77,13 +77,25 @@ describe('tags written through a sync update', () => {
     })
   })
 
-  it.each([
-    ['a node', tagNode, 'a'],
-    ['an edge', tagEdge, 'e'],
-    ['the board', tagBoard, null],
-  ] as const)('refuses %s carrying a tag longer than one may be', (_, write, elementId) => {
+  // Placed first as well as last: a measure that kept only the last tag's
+  // length would pass the last-placed case alone.
+  const placed = {
+    first: (long: string) => [long, 'ok'],
+    last: (long: string) => ['ok', long],
+  }
+  it.each(
+    (
+      [
+        ['a node', tagNode, 'a'],
+        ['an edge', tagEdge, 'e'],
+        ['the board', tagBoard, null],
+      ] as const
+    ).flatMap(([where, write, elementId]) =>
+      (['first', 'last'] as const).map((position) => [where, position, write, elementId] as const),
+    ),
+  )('refuses %s carrying a tag longer than one may be, placed %s', (_, position, write, elementId) => {
     const base = record()
-    const update = updateFrom(base, write(['ok', 'a'.repeat(TAG_MAX_CHARS + 1)]))
+    const update = updateFrom(base, write(placed[position]('a'.repeat(TAG_MAX_CHARS + 1))))
     expect(judged(base, update)).toEqual({
       shape: 'tags',
       measure: 'chars',

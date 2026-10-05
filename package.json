@@ -24,7 +24,7 @@
     "test:distribution": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution",
     "test:browser": "vitest run --project web-browser --project web-browser-window-state --project canvas-viewer-browser --project canvas-render-browser",
     "test:browser:replay": "vitest run --project web-browser --project web-browser-window-state --project canvas-viewer-browser --project canvas-render-browser --browser.traceView --reporter=default --reporter=html",
-    "test:browser:trace": "WHITEBOARD_TRACE_SNAPSHOTS=1 vitest run --project web-browser --project web-browser-window-state --project canvas-viewer-browser --project canvas-render-browser --browser.trace=on",
+    "test:browser:trace": "node tools/checks/src/browser-trace.mjs",
     "test:watch": "vitest --project mcp-node",
     "check:local": "pnpm lint && pnpm secretlint && pnpm test:scripts && pnpm knip && pnpm audit:prod && pnpm typecheck",
     "audit:prod": "node tools/checks/src/audit-with-retry.mjs",

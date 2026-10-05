@@ -1,3 +1,4 @@
+import { SEARCH_QUERY_MAX_CHARS, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
@@ -7,10 +8,11 @@ import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import {
   createDocumentSearchTool,
+  documentSearchInputSchema,
   documentSearchOutputSchema,
   SearchNeedsQueryOrFilterError,
 } from './document-search.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { createFacetSetTool } from './facet-set.js'
 
 const WS = 'ws-1'
@@ -31,7 +33,7 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
       kind,
       ...(name === undefined ? {} : { name }),
     })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const writeBody = (documentId: string, frontmatter: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\n${frontmatter}\n---\n${body}` })
   return { create, writeBody, edit: createCanvasEditTool(deps) }
@@ -268,6 +270,16 @@ describe('wb_document_search', () => {
     await expect(createDocumentSearchTool(deps).execute({ workspaceId: WS })).rejects.toThrow(
       SearchNeedsQueryOrFilterError,
     )
+  })
+
+  it('refuses words past the query bound and more tag filters than a document may carry', () => {
+    const atBound = { workspaceId: WS, query: 'a'.repeat(SEARCH_QUERY_MAX_CHARS) }
+    expect(documentSearchInputSchema.safeParse(atBound).success).toBe(true)
+    const words = documentSearchInputSchema.safeParse({ ...atBound, query: `${atBound.query}a` })
+    expect(words.error?.issues[0]?.message).toContain(`${SEARCH_QUERY_MAX_CHARS}-character limit`)
+    const tags = Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `t${i}`)
+    const filters = documentSearchInputSchema.safeParse({ workspaceId: WS, tags })
+    expect(filters.error?.issues[0]?.message).toContain(`${TAGS_PER_ELEMENT_MAX}-tag limit`)
   })
 
   it('serves the same shape over GET /search and answers 404 for an unknown workspace', async () => {

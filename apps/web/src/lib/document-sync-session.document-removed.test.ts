@@ -26,6 +26,7 @@ import {
   COMMIT_DEBOUNCE_MS,
   createDocumentSyncSession,
   createGenerationCounters,
+  type DocumentSyncSession,
 } from './document-sync-session.js'
 import type { EditorCommand } from './spatial/commands.js'
 
@@ -135,6 +136,114 @@ describe('a session whose deleted document is restored from the trash', () => {
   })
 })
 
+/**
+ * What each member of the session answers once its document is gone. Keyed
+ * by the session's own members, so a reader added later owes an answer here
+ * before the file compiles. `call` is for a member that takes arguments or
+ * whose answer is reached through what it returns; every other entry is
+ * called bare.
+ */
+type AfterRemoval =
+  | { readonly answers: unknown; readonly call?: (session: DocumentSyncSession) => unknown }
+  | `not called: ${string}`
+
+const AFTER_REMOVAL = {
+  getNodeLocks: { answers: new Set() },
+  getEdgeLocks: { answers: new Set() },
+  getMarkdownBody: { answers: '' },
+  getCoreFacets: { answers: undefined },
+  getFacets: { answers: {} },
+  getDocumentName: { answers: undefined },
+  getBodyBinding: {
+    answers: null,
+    call: (session) => {
+      const binding = session.getBodyBinding()
+      return binding?.readText(binding.doc)
+    },
+  },
+  // The last value published before the removal stays: it is what the page
+  // goes on showing under the removal notice.
+  getCanvas: { answers: { nodes: [before], edges: [] } },
+  getAnnotations: { answers: [] },
+  getProposals: { answers: [] },
+  getThreadMarks: { answers: new Map() },
+  getContentState: { answers: expect.any(String) },
+  exportSnapshot: { answers: expect.any(Uint8Array) },
+  canUndo: { answers: false },
+  canRedo: { answers: false },
+  undo: { answers: false },
+  redo: { answers: false },
+  clearUndo: { answers: undefined },
+  onEditorReady: { answers: undefined },
+  dispose: { answers: undefined },
+  setNodeLock: {
+    answers: new Set(),
+    call: (session) => {
+      session.setNodeLock(before.id, true)
+      return session.getNodeLocks()
+    },
+  },
+  setEdgeLock: {
+    answers: new Set(),
+    call: (session) => {
+      session.setEdgeLock('edge', true)
+      return session.getEdgeLocks()
+    },
+  },
+  onChange: {
+    answers: { nodes: [before], edges: [] },
+    call: (session) => {
+      session.onChange(...added(session.getCanvas(), 'after-delete'))
+      return session.getCanvas()
+    },
+  },
+  subscribe: { answers: expect.any(Function), call: (session) => session.subscribe(() => {}) },
+  subscribeHistory: {
+    answers: expect.any(Function),
+    call: (session) => session.subscribeHistory(() => {}),
+  },
+  subscribeLocks: {
+    answers: expect.any(Function),
+    call: (session) => session.subscribeLocks(() => {}),
+  },
+  subscribeMarkdownBody: {
+    answers: expect.any(Function),
+    call: (session) => session.subscribeMarkdownBody(() => {}),
+  },
+  subscribeAnnotations: {
+    answers: expect.any(Function),
+    call: (session) => session.subscribeAnnotations(() => {}),
+  },
+  subscribeProposals: {
+    answers: expect.any(Function),
+    call: (session) => session.subscribeProposals(() => {}),
+  },
+  connect: 'not called: the fixture has connected already, and a second connect is a new session',
+} satisfies Record<keyof DocumentSyncSession, AfterRemoval>
+
+describe('every member of a session whose document a peer deleted', () => {
+  it('is in the after-removal table', () => {
+    const s = openSession()
+
+    expect(Object.keys(s.session).sort()).toEqual(Object.keys(AFTER_REMOVAL).sort())
+  })
+
+  const called = Object.entries(AFTER_REMOVAL).flatMap(([member, entry]) =>
+    typeof entry === 'string' ? [] : [[member, entry] as const],
+  )
+  it.each(called)('%s answers its empty value without throwing', (member, entry) => {
+    const s = openSession()
+    s.deleteByPeer()
+
+    const answer =
+      'call' in entry && entry.call !== undefined
+        ? entry.call(s.session)
+        : (s.session[member as keyof DocumentSyncSession] as () => unknown)()
+
+    expect(answer).toEqual(entry.answers)
+  })
+})
+
 describe('a session whose document a peer deletes', () => {
   it('says the document was removed, once', () => {
     const s = openSession()
@@ -193,6 +302,52 @@ describe('a session whose document a peer deletes', () => {
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
 
     expect(s.persistence).toEqual(['pending'])
+  })
+
+  // The debounce has fired and the write is queued behind the commit chain
+  // when the delete lands: the queued write finds no document to write to,
+  // which is the removal the page was already told about, not a failure.
+  it('lets a commit already queued find the document gone without a failure', async () => {
+    const s = openSession()
+    s.session.onChange(...added(s.session.getCanvas(), 'queued'))
+    vi.advanceTimersByTime(COMMIT_DEBOUNCE_MS)
+
+    s.deleteByPeer()
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+
+    expect(s.errors).toEqual(['document-removed'])
+    expect(s.session.getAnnotations()).toEqual([])
+  })
+
+  // The table above calls undo and redo with an empty history, which answers
+  // false whether or not the removal is checked. A history that still holds
+  // a step is the case that reaches the gone document.
+  it('refuses an undo it still holds a step for, writing nothing', async () => {
+    const s = openSession()
+    s.session.onChange(...added(s.session.getCanvas(), 'mine'))
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(s.session.canUndo()).toBe(true)
+    s.deleteByPeer()
+    const pushesBefore = s.pushed.length
+
+    expect(s.session.undo()).toBe(false)
+    expect(s.pushed).toHaveLength(pushesBefore)
+    expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept', 'mine'])
+  })
+
+  it('refuses a redo it still holds a step for, writing nothing', async () => {
+    const s = openSession()
+    s.session.onChange(...added(s.session.getCanvas(), 'mine'))
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    s.session.undo()
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(s.session.canRedo()).toBe(true)
+    s.deleteByPeer()
+    const pushesBefore = s.pushed.length
+
+    expect(s.session.redo()).toBe(false)
+    expect(s.pushed).toHaveLength(pushesBefore)
+    expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept'])
   })
 
   // A reconnect hands the session the record as it now stands, which no

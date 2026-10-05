@@ -22,7 +22,7 @@ import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboa
 import {
   bootstrapCi,
   createDocumentSearchTool,
-  createDocumentSetTool,
+  createDocumentSetOperation,
   ndcgAt,
   pairedPermutationTest,
   permutationFloor,
@@ -69,7 +69,7 @@ async function seed() {
     blobStore: {},
     documentIndex: new InMemoryDocumentIndex(),
   }
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   for (const doc of CORPUS) {
     const created = await wbDocumentCreate(deps, {
       workspaceId: WS,

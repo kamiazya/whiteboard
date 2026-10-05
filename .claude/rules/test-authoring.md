@@ -56,7 +56,7 @@ the jsdom setup's teardown). A shape that costs a real defect twice moves up the
 - **The default trace has no DOM view** — actions, stacks and screenshots only, because
   recording the DOM records every resource vite serves: 23GB a run, filling the disk and
   reporting a test count short of the real one. Re-run the ONE failing file under
-  `pnpm run test:browser:trace` for it — that traces every test, so never point it at the suite.
+  `pnpm run test:browser:trace <file>` — it traces every test, so it refuses a run naming no file.
 - **Keep a browser test's `describe` + `it` titles under its project's budget: 166 minus the
   project name's length** (155 for `web-browser`, 145 for the canvas projects, 142 for the
   window-state one), in characters, not UTF-8 bytes: vitest turns every non-alphanumeric

@@ -69,7 +69,7 @@ Use:
 
 ```bash
 pnpm run test:browser        # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state
-pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM snapshots
+pnpm run test:browser:trace <file>  # one file: a trace for EVERY test, DOM snapshots
 ```
 
 - Failure traces are stored under `<package>/tmp/vitest-traces`.

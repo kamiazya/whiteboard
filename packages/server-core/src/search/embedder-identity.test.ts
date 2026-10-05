@@ -4,7 +4,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
-import { createDocumentSetTool } from '../tools/document-set.js'
+import { createDocumentSetOperation } from '../tools/document-set.js'
 import { DocumentVectorCache } from './document-vector-cache.js'
 import type { Embedder } from './embedder.js'
 
@@ -39,7 +39,7 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
     kind: 'markdown',
     name: 'note',
   })
-  await createDocumentSetTool(deps).execute({
+  await createDocumentSetOperation(deps).execute({
     workspaceId: WS,
     documentId: created.documentId,
     markdown: '---\ntype: note\n---\nsome body text',

@@ -8,7 +8,7 @@ import { backlinksOutputSchema } from './backlinks.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool } from './document-get.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { createFacetSetTool } from './facet-set.js'
 import { linkifyMentionsOutputSchema } from './linkify-mentions.js'
 
@@ -31,7 +31,7 @@ async function harness(deps: ReturnType<typeof makeDeps>) {
       kind,
       ...(name === undefined ? {} : { name }),
     })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const writeBody = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   const readBody = async (documentId: string) => {

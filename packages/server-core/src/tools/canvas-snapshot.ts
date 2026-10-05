@@ -357,10 +357,11 @@ export function projectCanvasSnapshot(
  * The compact, semantic read of a spatial canvas — what an agent should
  * reach for before editing one.
  *
- * It is deliberately NOT `wb_scene_digest`, which reports laid-out geometry
- * (overlaps, clusters, free regions) and carries no text, edges or node
- * types at all. The two answer different questions and neither subsumes the
- * other: digest says whether a board is tidy, this says what is on it.
+ * What is on a board and whether it is tidy are two questions, and this
+ * answers the first by default. The second — laid-out geometry from
+ * `sceneDigest`: overlaps, clusters, free regions — is the opt-in `layout`
+ * field, because it costs a full layout pass and carries no text, edges or
+ * node types of its own.
  *
  * It is also not `wb_document_get`, which returns the untruncated JSON
  * Canvas: on a large board or a node holding a whole markdown document that

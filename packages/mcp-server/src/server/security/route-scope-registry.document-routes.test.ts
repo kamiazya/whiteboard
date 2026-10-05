@@ -145,6 +145,23 @@ describe('a file whose id is spelled like a document action', () => {
     expect(resolveApiRouteScope(method, path)).toEqual(decision)
   })
 
+  // A file id is one segment, so a document filed under a `file` folder is a
+  // document, and its actions answer to the document's scope alone.
+  it.for([
+    ['POST', 'update', 'document update/export', 'canvas:write'],
+    ['POST', 'export-svg', 'document (rest)', 'canvas:write'],
+    ['GET', 'snapshot', 'document (rest)', 'canvas:read'],
+  ] as const)('%s on a document under a file folder, …/a/file/b/%s, is %s', ([
+    method,
+    action,
+    rule,
+    scope,
+  ]) => {
+    const path = `/api/w/ws1/document/a/file/b/${action}`
+    expect(ruleClaiming(method, path)).toBe(rule)
+    expect(resolveApiRouteScope(method, path)).toEqual(scoped(scope))
+  })
+
   it.for([
     ['GET', 'files:read'],
     ['PUT', 'files:write'],

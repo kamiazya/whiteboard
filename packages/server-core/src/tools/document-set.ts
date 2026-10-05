@@ -22,7 +22,7 @@ import {
   EXTENSION_FACET_KEY_PATTERN,
   type ExtensionFacets,
   markdownInputSchema,
-  okfActorSchema,
+  okfActorInputSchema,
   tagListWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -71,7 +71,7 @@ export const documentSetInputSchema = z
      * (ADR-0016). OKF puts the obligation on the producer for the same
      * reason — trust tiers are advisory signals, not access control (§5.3).
      */
-    actor: okfActorSchema.optional(),
+    actor: okfActorInputSchema.optional(),
   })
   .strict()
 export type DocumentSetInput = z.infer<typeof documentSetInputSchema>
@@ -353,13 +353,17 @@ async function applyOkfTitle(
   })
 }
 
-export function createDocumentSetTool(deps: ServerDeps) {
+/**
+ * Replaces the whole content of an existing document from an OKF Markdown
+ * string: core facets, extension facets and the body are overwritten, not
+ * merged.
+ *
+ * An operation, not a tool. Agents reach it as `wb_workspace_edit`'s
+ * `document.set` op, and `document.create` delegates a markdown body to it,
+ * so it carries no name or description a model would read.
+ */
+export function createDocumentSetOperation(deps: ServerDeps) {
   return {
-    name: 'wb_document_set' as const,
-    description:
-      'Replace the entire content of an existing document from an OKF Markdown string. The document must already exist; core facets, extension facets and the body are all overwritten rather than merged. Pass `actor` to identify yourself — it is recorded as OKF `generated.by`, so a later reader can tell what wrote the document.',
-    inputSchema: documentSetInputSchema,
-    outputSchema: documentSetOutputSchema,
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
 

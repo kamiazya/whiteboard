@@ -4,7 +4,7 @@ import {
   documentPathSchema,
   markdownInputSchema,
   messageOf,
-  okfActorSchema,
+  okfActorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -15,7 +15,7 @@ import {
 } from './document-crud.errors.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
 import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 
 /**
  * Thrown when one op in a batch cannot apply.
@@ -150,7 +150,7 @@ export const workspaceEditInputSchema = z
      * declares `generated` keeps its own, because that is provenance rather
      * than a field this write owns.
      */
-    actor: okfActorSchema
+    actor: okfActorInputSchema
       .optional()
       .describe(
         "Who is producing this batch's content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` on the documents this batch writes. Identify yourself here; omitted, the writes are attributed to the server rather than to you.",
@@ -235,8 +235,8 @@ type ResultRow = WorkspaceEditOutput['results'][number]
 /** What one op of a batch is applied against. */
 interface WorkspaceEditContext {
   readonly deps: ServerDeps
-  /** The single-document write tool, built once for the whole batch. */
-  readonly set: ReturnType<typeof createDocumentSetTool>
+  /** The single-document write operation, built once for the whole batch. */
+  readonly set: ReturnType<typeof createDocumentSetOperation>
   /**
    * The workspace ops 1..n address, which op 0 may have MINTED — see the
    * note in `execute`'s loop. A handler that changes it says so by returning it.
@@ -405,7 +405,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
     execute: async (rawInput: WorkspaceEditInput): Promise<WorkspaceEditOutput> => {
       const input = workspaceEditInputSchema.parse(rawInput)
       await refuseUnknownWorkspace(deps, input)
-      const set = createDocumentSetTool(deps)
+      const set = createDocumentSetOperation(deps)
       const results: ResultRow[] = []
       // The batch addresses ONE workspace, and a bootstrapping first op is
       // what decides which. Creating is ADR-0019's mint boundary, so after

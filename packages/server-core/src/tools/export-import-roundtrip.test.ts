@@ -12,7 +12,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { createDocumentSetTool, OkfParseError } from './document-set.js'
+import { createDocumentSetOperation, OkfParseError } from './document-set.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 
@@ -43,7 +43,7 @@ async function setupTools() {
   return {
     store,
     deps,
-    documentSet: createDocumentSetTool(deps),
+    documentSet: createDocumentSetOperation(deps),
   }
 }
 

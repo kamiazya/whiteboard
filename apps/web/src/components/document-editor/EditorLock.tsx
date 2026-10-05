@@ -24,7 +24,7 @@ export interface EditorLockProps {
  */
 export function EditorLock({ sync, onLeave, children }: EditorLockProps) {
   const restoring = sync.restoreInProgress
-  const removed = sync.backendError === 'document-removed'
+  const removed = documentRemoved(sync)
   return (
     <div className="relative h-full min-h-0 min-w-0">
       <div
@@ -56,6 +56,42 @@ export function EditorLock({ sync, onLeave, children }: EditorLockProps) {
       <div className="h-full min-h-0 min-w-0" inert={restoring || removed}>
         {children}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Whether the document was deleted somewhere else. The ONE predicate every
+ * write surface on the page locks on — the editor here, the inspector beside
+ * it, the header's rename and its menu — because the session has stopped
+ * writing, and a surface left live accepts input that goes nowhere: a comment
+ * leaves its box, a rename or a restore reports done, and none of it is kept.
+ */
+export function documentRemoved(sync: Pick<UseDocumentSyncResult, 'backendError'>): boolean {
+  return sync.backendError === 'document-removed'
+}
+
+/**
+ * The open inspector panel, locked with the editor while the document is gone.
+ * Every panel writes the live document (comments, facets, display settings, a
+ * version restore), so the slot is locked whole rather than panel by panel,
+ * which would leave the next panel added live by default.
+ *
+ * Only on removal, not while a restore runs: the History column is where a
+ * restore is watched, and that lock ends on its own.
+ *
+ * `contents` so the wrapper draws no box: the panel stays the row's flex item,
+ * and its narrow-screen sheet stays positioned against the row. An absent
+ * panel stays absent, since the shell reads "nothing to show" from it.
+ */
+export function lockedInspector(
+  sync: Pick<UseDocumentSyncResult, 'backendError'>,
+  panel: ReactNode,
+): ReactNode {
+  if (panel === undefined) return undefined
+  return (
+    <div className="contents" inert={documentRemoved(sync)}>
+      {panel}
     </div>
   )
 }

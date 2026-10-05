@@ -193,10 +193,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // ten for `getDocumentName`, the record's name for the open document.
   // Raised by thirty-two for the document leaving the record under the open
   // page: only the session knows which node it serves, so only it can see the
-  // node go, stop writing, and say so — most of it one guard per reader and
-  // writer that would otherwise throw on a node that is not there. Raised by
-  // three more for a trash restore bringing the node back, which resumes it.
-  'apps/web/src/lib/document-sync-session.ts': 1233,
+  // node go, stop writing, and say so. Raised by three more for a trash
+  // restore bringing the node back, which resumes it. Lowered by two when the
+  // per-reader guards became one content lookup that answers null meanwhile.
+  'apps/web/src/lib/document-sync-session.ts': 1231,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step

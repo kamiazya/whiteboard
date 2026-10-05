@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
 import {
   devWrapperPidPath,
   ensureDevDataDirSecured,
@@ -29,6 +30,19 @@ const env = resolveDevDataDirEnv(process.env, repoRoot)
 // resolveDataDir().
 if (!hadExplicitDataDirOverride) {
   ensureDevDataDirSecured(env.WHITEBOARD_DATA_DIR)
+}
+
+// Refused here, before a watcher exists: a second daemon cannot take the
+// socket anyway, and a wrapper started beside a running one would replace the
+// pid file `pnpm mcp:http:stop` signals and then sit under `tsx watch`
+// holding nothing. The same rule `whiteboard daemon run` applies.
+const running = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
+if (running !== null && isPidAlive(running.pid)) {
+  console.error(
+    `a dev daemon is already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid}) — ` +
+      'reuse it, or `pnpm mcp:http:stop` first.',
+  )
+  process.exit(1)
 }
 
 // Shell out to the real tsx CLI (not node's --watch + --import loader) so

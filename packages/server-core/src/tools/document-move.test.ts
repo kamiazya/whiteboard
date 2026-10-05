@@ -6,7 +6,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { wbDocumentMove } from './document-move.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 
 const WS = 'ws-move'
 
@@ -14,7 +14,7 @@ async function seed(deps: ServerDeps) {
   await deps.documentIndex.createWorkspace({ workspaceId: WS })
   const create = (path: string) =>
     wbDocumentCreate(deps, { workspaceId: WS, path, kind: 'markdown' })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const write = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   const bodyOf = async (documentId: string) =>

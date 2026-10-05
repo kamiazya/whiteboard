@@ -27,11 +27,10 @@ const SCOPE = A.scope || 'the whole repository'
 const CWD = A.cwd || null
 const GIT = CWD ? `git -C ${CWD}` : 'git'
 const cwdHint = CWD ? ` Audit the repo under ${CWD} (run git as \`${GIT} ...\`, Read at that absolute path).` : ' Audit the repo at the session root.'
-// Auditor agentType. Custom 'codebase-auditor' is NOT registered until a session reload (see the
-// workflow-authoring skill's mid-session-agent-registration gotcha), so default to the
-// always-registered read-only Explore agent and
-// let callers override once it is loaded: args.auditorAgent.
-const AUDITOR = A.auditorAgent || 'Explore'
+// Auditor agentType: the read-only `codebase-auditor`, which carries the six dimensions' criteria.
+// A session that started before an agent file existed cannot resolve it (the workflow-authoring
+// skill's mid-session-agent-registration gotcha); such a caller passes args.auditorAgent:'Explore'.
+const AUDITOR = A.auditorAgent || 'codebase-auditor'
 // verifyFloor: lowest severity that gets an adversarial verify pass (default HIGH — verify HIGH+).
 const VERIFY_FLOOR = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(A.verifyFloor) ? A.verifyFloor : 'HIGH'
 const RANK = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 }

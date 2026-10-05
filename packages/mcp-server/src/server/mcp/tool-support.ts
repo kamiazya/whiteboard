@@ -40,8 +40,9 @@ export type ToolHandlerReturn<O extends z.ZodTypeAny | undefined> = O extends z.
 
 // A tool's inputSchema is either a raw shape (`{ field: z.string() }`,
 // auto-wrapped by the SDK's z.object()) or a whole Zod schema — the latter
-// is required for a tool like wb_body_patch whose input is a
-// z.discriminatedUnion, which has no raw shape to give. Discriminate on the
+// is what keeps a `.strict()` object strict at the boundary, and is the only
+// form an input that is a z.discriminatedUnion can take, since a union has
+// no raw shape to give. Discriminate on the
 // Zod brand first: a raw shape is a plain record with no `_zod`, so it
 // never matches the `z.ZodTypeAny` branch.
 type InferToolArgs<I> = I extends z.ZodTypeAny

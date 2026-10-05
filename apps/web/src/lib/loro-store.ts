@@ -251,13 +251,12 @@ export class LoroStore {
     await touchContentTimestamp(documentId, this.dbName)
   }
 
-  /** Drop everything stored for a document — snapshot, log and timestamp. */
-  async remove(documentId: string): Promise<void> {
-    return this.#serialise(documentId, async () => {
-      await this.#store.deleteDoc({ docRef: refOf(documentId) })
-      await inTransaction(this.dbName, [CONTENT_TIMESTAMPS_STORE], 'readwrite', async (tx) => {
-        await request(tx.objectStore(CONTENT_TIMESTAMPS_STORE).delete(documentId))
-      })
-    })
+  /**
+   * Drops a document's snapshot and log once the workspace tree holds its
+   * content. The listing clock stays: it is keyed by document, not by this
+   * record, and the tree's copy is still the document it dates.
+   */
+  async retire(documentId: string): Promise<void> {
+    return this.#serialise(documentId, () => this.#store.deleteDoc({ docRef: refOf(documentId) }))
   }
 }

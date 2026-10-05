@@ -3,6 +3,8 @@ import {
   LABEL_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  TAG_MAX_CHARS,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -10,6 +12,7 @@ import {
   copiedLabelNotice,
   copiedLocationNotice,
   copiedNodeTextNotice,
+  copiedTagsNotice,
 } from '../../lib/limit-notice.js'
 import {
   type CopiedFragment,
@@ -155,6 +158,41 @@ describe('copiedFragmentRefusal', () => {
     expect(copiedFragmentRefusal(holding(labelled(LABEL_MAX_CHARS)), 'pasted')).toBeNull()
     expect(copiedFragmentRefusal(holding(labelled(LABEL_MAX_CHARS + 1)), 'pasted')).toBe(
       copiedLabelNotice('pasted', LABEL_MAX_CHARS + 1),
+    )
+  })
+
+  const tagsOf = (count: number, length = 1) =>
+    Array.from({ length: count }, (_, i) => `${i}`.padStart(length, 't'))
+  const taggedNode = (tags: string[]) => textNode({ id: 'a', ...box, text: 'x', tags })
+  const taggedEdge = (tags: string[]) =>
+    fragmentOf({ nodes: pair, edges: [{ id: 'e', ...ends, tags }] })
+
+  it('keeps a node at the tag count limit, and refuses one carrying a tag more', () => {
+    const at = fragmentOf({ nodes: [taggedNode(tagsOf(TAGS_PER_ELEMENT_MAX))] })
+    expect(copiedFragmentRefusal(at, 'pasted')).toBeNull()
+    const past = fragmentOf({ nodes: [taggedNode(tagsOf(TAGS_PER_ELEMENT_MAX + 1))] })
+    expect(copiedFragmentRefusal(past, 'pasted')).toBe(
+      copiedTagsNotice('pasted', 'count', TAGS_PER_ELEMENT_MAX + 1),
+    )
+  })
+
+  it('keeps an edge whose tag is at the tag length limit, and refuses one past it', () => {
+    expect(copiedFragmentRefusal(taggedEdge(tagsOf(2, TAG_MAX_CHARS)), 'duplicated')).toBeNull()
+    expect(copiedFragmentRefusal(taggedEdge(tagsOf(2, TAG_MAX_CHARS + 1)), 'duplicated')).toBe(
+      copiedTagsNotice('duplicated', 'chars', TAG_MAX_CHARS + 1),
+    )
+  })
+
+  it("refuses a cut's severed edge carrying more tags than the limit", () => {
+    const fragment = fragmentOf({
+      nodes: [node('a', 1)],
+      cut: {
+        id: 'cut',
+        boundaryEdges: [{ id: 'e', ...ends, tags: tagsOf(TAGS_PER_ELEMENT_MAX + 1) }],
+      },
+    })
+    expect(copiedFragmentRefusal(fragment, 'pasted')).toBe(
+      copiedTagsNotice('pasted', 'count', TAGS_PER_ELEMENT_MAX + 1),
     )
   })
 })
