@@ -8,20 +8,23 @@
  */
 
 import {
+  createWorkspaceDocumentAtPath,
   documentContainers,
   readSpatialCanvas,
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { nodeText } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
@@ -99,4 +102,34 @@ it('skips an unreadable document rather than folding an empty one', async () => 
 
 it('folds nothing in a browser that never had a workspace', async () => {
   expect(await foldWorkspaceDocuments(DB_NAME)).toEqual({ folded: 0, skipped: 0 })
+})
+
+it('skips and keeps a row whose path the tree already holds under another id', async () => {
+  const logged = expectLoggedFailures()
+  // The tree took the path while the row waited: a create on this build, or
+  // a move into a path an earlier skipped run left free.
+  const docs = new BrowserWorkspaceDocs(DB_NAME)
+  const workspace = await docs.create(getBrowserWorkspaceId())
+  const treeId = generateDocumentId()
+  createWorkspaceDocumentAtPath(workspace, { path: 'design', documentId: treeId, kind: 'spatial' })
+  await docs.save(getBrowserWorkspaceId(), workspace)
+  const rowId = await seedDocument('design', 'only copy')
+
+  expect(await foldWorkspaceDocuments(DB_NAME)).toEqual({ folded: 0, skipped: 1 })
+
+  // Nothing of the row's is retired: its record is still the only home of
+  // its content, and the row is what lists it.
+  const workspaceId = getBrowserWorkspaceId()
+  expect(
+    await new IdbDocumentIndex(DB_NAME).resolveDocumentById({ workspaceId, documentId: rowId }),
+  ).not.toBeNull()
+  expect((await new LoroStore(DB_NAME).load(rowId)).kind).toBe('ok')
+  const reopened = await new BrowserWorkspaceDocs(DB_NAME).open(workspaceId)
+  expect(
+    reopened === null ? [] : readWorkspaceDocuments(reopened).map((entry) => entry.documentId),
+  ).toEqual([treeId])
+  // ...and the index's fold-skipped fallback lists it beside the tree's.
+  const listed = await new FoldingBrowserIndex(DB_NAME).listDocuments({ workspaceId })
+  expect(listed.map((entry) => entry.documentId).sort()).toEqual([rowId, treeId].sort())
+  expect(logged.join('\n')).toContain('[fold-workspace] a legacy document met a taken path')
 })

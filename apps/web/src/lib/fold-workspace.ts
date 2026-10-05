@@ -17,23 +17,30 @@
  * A row the record answers for is RETIRED — its per-document record, then
  * the row itself — only after the tree that holds its content is saved. A
  * crash in between leaves the row naming an id the tree already has, which
- * the next run retires without adopting again. Unreadable and pre-kind rows
- * are never retired here: the old record is still their only home.
+ * the next run retires without adopting again. Unreadable and pre-kind rows,
+ * and a row whose path the tree holds under another document, are never
+ * retired here: the old record is still their only home.
  */
 import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
+import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 import { documentIdsInRecord } from './workspace-record-ids.js'
 
+const log = getAppLogger('fold-workspace')
+
 export interface FoldReport {
   /** Documents carried into the workspace document by THIS run. */
   folded: number
-  /** Rows left alone: no readable content, or no recorded kind to adopt under. */
+  /**
+   * Rows left alone: no readable content, no recorded kind to adopt under, or
+   * a path the tree already holds under another document.
+   */
   skipped: number
 }
 
@@ -69,11 +76,19 @@ async function adoptRow(
   source.import(loaded.snapshot)
   for (const delta of loaded.deltas ?? []) source.import(delta)
   const { path, documentId, name } = entry
-  adoptWorkspaceDocument(
+  const adopted = adoptWorkspaceDocument(
     workspace,
     { path, documentId, kind: kind.data, ...(name === undefined ? {} : { name }) },
     source,
   )
+  // Null when the tree already holds ANOTHER document at this path. The row
+  // is then skipped like an unreadable one: retiring it would delete the only
+  // copy of a document the tree never took, and the fold-skipped listing is
+  // what keeps it reachable beside the one that holds the path.
+  if (adopted === null) {
+    log.warn('a legacy document met a taken path; it stays where it is', { documentId, path })
+    return false
+  }
   return true
 }
 
