@@ -1,6 +1,7 @@
 import { EditorState, Transaction } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { externalValue, markdownLengthLimit } from './markdown-length-limit.js'
+import { externalValue } from '../../lib/text-length-limit.js'
+import { markdownLengthLimit } from './markdown-length-limit.js'
 
 const LIMIT = 10
 

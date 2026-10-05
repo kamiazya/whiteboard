@@ -173,7 +173,7 @@ const UPWARD_EDGES_CEILING = 0
  */
 const DIRECTORY_LOOPS: Readonly<Record<string, number>> = {
   'lib,lib/spatial': 12,
-  'components,components/annotations,components/document-editor,components/markdown-editor,components/spatial-editor,components/workspace-files,components/workspace-top-bar': 38,
+  'components,components/annotations,components/document-editor,components/markdown-editor,components/spatial-editor,components/workspace-files,components/workspace-top-bar': 37,
 }
 
 describe('apps/web layer order', () => {

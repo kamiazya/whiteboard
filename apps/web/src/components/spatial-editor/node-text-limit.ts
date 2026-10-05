@@ -7,7 +7,7 @@
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { NODE_TEXT_MAX_CHARS, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
-import { textLengthLimit } from '../markdown-editor/markdown-length-limit.js'
+import { textLengthLimit } from '../../lib/text-length-limit.js'
 
 const COUNT = new Intl.NumberFormat('en-US')
 
