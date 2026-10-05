@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { readMarkdownBody, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
-import type { ProposedChange } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, type ProposedChange } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { applyAdoptedPassages } from './apply-adopted-passages.js'
@@ -174,6 +174,43 @@ describe('applyAdoptedPassages', () => {
     applyAdoptedPassages(doc, [], write)
 
     expect(write).not.toHaveBeenCalled()
+  })
+
+  it('refuses an adoption that grows the body past the limit, writing nothing', () => {
+    // Both keepers refuse a body past the limit, and a refused write is one
+    // the sync worker retries without end — so it must never be made.
+    const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS - 'tail-'.length)}`
+    const doc = noteWithBody(body)
+    const write = vi.fn()
+
+    const refusal = applyAdoptedPassages(doc, [passageChange('c1', 'tail', 'tails', body)], write)
+
+    expect(refusal).toEqual({ length: MARKDOWN_MAX_CHARS + 1 })
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it('lets an adoption land exactly on the limit', () => {
+    const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS - 1 - 'tail-'.length)}`
+    const doc = noteWithBody(body)
+    const write = vi.fn()
+
+    const refusal = applyAdoptedPassages(doc, [passageChange('c1', 'tail', 'tails', body)], write)
+
+    expect(refusal).toBeUndefined()
+    expect(write.mock.calls[0]?.[0]).toHaveLength(MARKDOWN_MAX_CHARS)
+  })
+
+  it('lets an adoption shrink a body already past the limit', () => {
+    // A body written before the limit existed stays editable toward it, as
+    // both keepers and the editor let it.
+    const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS + 100)}`
+    const doc = noteWithBody(body)
+    const write = vi.fn()
+
+    const refusal = applyAdoptedPassages(doc, [passageChange('c1', 'tail', 't', body)], write)
+
+    expect(refusal).toBeUndefined()
+    expect(write.mock.calls[0]?.[0]).toHaveLength(body.length - 3)
   })
 
   it('writes nothing when the replacement is the text already there', () => {

@@ -12,7 +12,7 @@ import {
   writeMarkdownBody,
   writeProposal,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { ProposedChange } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, type ProposedChange } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
@@ -20,8 +20,8 @@ import { applyCommand, type EditorCommand } from './spatial/commands.js'
 
 const BODY = '# Plan\n\nThe plan is to ship on Thursday.\n'
 
-function passageChange(id: string, exact: string, text: string): ProposedChange {
-  const start = BODY.indexOf(exact)
+function passageChange(id: string, exact: string, text: string, body = BODY): ProposedChange {
+  const start = body.indexOf(exact)
   return {
     id,
     op: 'body.replace',
@@ -125,6 +125,21 @@ describe('adopting a proposed passage (ADR-0029 decision 6)', () => {
 
     expect(session.getMarkdownBody()).toBe(BODY)
     expect(session.getProposals()[0]?.changes[0]?.status).toBe('dismissed')
+  })
+
+  it('writes nothing and leaves the change open when adopting passes the limit', async () => {
+    // A body the keepers would refuse is refused here instead, and whole: a
+    // change stamped adopted over words still on the page is the state the
+    // single commit exists to rule out.
+    const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS - 'tail-'.length)}`
+    const change = passageChange('c1', 'tail', 'tails', body)
+    const { session, pushes } = openNote(seededNote([change], body))
+
+    await decide(session, 'adopted', [change])
+
+    expect(session.getMarkdownBody()).toBe(body)
+    expect(session.getProposals()[0]?.changes[0]?.status).toBe('open')
+    expect(pushes).toEqual([])
   })
 
   it('closes the change for a passage that is gone, writing nothing into the body', async () => {

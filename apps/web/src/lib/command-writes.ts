@@ -96,6 +96,42 @@ export function commandTargetKey(command: EditorCommand): string {
 }
 
 /**
+ * Every plane in ONE commit, because a decision is one act: the changes are
+ * stamped where the proposal lives, and an ADOPTED one also rewrites the
+ * board and the body. A commit each would be four independent deltas for one
+ * press — see `withDocumentBatch` for the measurement and for what a
+ * transport dying between them left behind. The canvas write is a
+ * whole-canvas reconcile deliberately: a proposal reaches whatever it names,
+ * so there is no single target to write.
+ */
+function writeDecision(
+  doc: DocumentContainers,
+  command: Extract<EditorCommand, { kind: 'decide-proposal' }>,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+): void {
+  withDocumentBatch(doc, (writer) => {
+    if (command.decision === 'adopted') {
+      // And the OTHER subject a proposal can have (ADR-0029 decision 6).
+      // `applyCommand` folds the canvas and cannot reach a body, so a passage
+      // adopted here would otherwise close its change against a document that
+      // never changed — the worst of the three states, since the person is
+      // looking at an "adopted" verdict and their own words still on the
+      // page. It runs FIRST because a body past the size limit refuses the
+      // whole decision: nothing is written and the change stays open.
+      const refused = applyAdoptedPassages(doc, command.changes, (body) =>
+        writer.writeMarkdownBody(body),
+      )
+      if (refused !== undefined) return
+      writer.reconcileSpatialCanvas(prev, next)
+    }
+    for (const change of command.changes) {
+      writer.setProposedChangeStatus(command.proposalId, change.id, command.decision)
+    }
+  })
+}
+
+/**
  * Writes exactly the node/edge the command targets into its own LoroMap
  * entry (via crdt's `writeSpatialNode`/`writeSpatialEdge`, the
  * same field projection the whole-canvas write uses), and says whether it
@@ -166,30 +202,9 @@ function writeCommandTarget(
       // write a reply is, aimed at a message the thread already holds.
       writeThreadMessage(doc, command.threadId, command.message)
       return 'written'
-    case 'decide-proposal': {
-      // Every plane in ONE commit, because a decision is one act: the
-      // changes are stamped where the proposal lives, and an ADOPTED one
-      // also rewrites the board and the body. A commit each would be four
-      // independent deltas for one press — see `withDocumentBatch` for the
-      // measurement and for what a transport dying between them left behind.
-      // The canvas write is a whole-canvas reconcile deliberately: a proposal
-      // reaches whatever it names, so there is no single target to write.
-      withDocumentBatch(doc, (writer) => {
-        for (const change of command.changes) {
-          writer.setProposedChangeStatus(command.proposalId, change.id, command.decision)
-        }
-        if (command.decision !== 'adopted') return
-        writer.reconcileSpatialCanvas(prev, next)
-        // And the OTHER subject a proposal can have (ADR-0029 decision 6).
-        // `applyCommand` folds the canvas and cannot reach a body, so a
-        // passage adopted here would otherwise close its change against a
-        // document that never changed — the worst of the three states,
-        // since the person is looking at an "adopted" verdict and their own
-        // words still on the page.
-        applyAdoptedPassages(doc, command.changes, (body) => writer.writeMarkdownBody(body))
-      })
+    case 'decide-proposal':
+      writeDecision(doc, command, prev, next)
       return 'written'
-    }
     case 'create-thread':
       // Always "handled", for `reply-to-thread`'s reason: the fallback writes
       // the whole SpatialCanvas, and a markdown document's canvas holds
