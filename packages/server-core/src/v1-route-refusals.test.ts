@@ -135,6 +135,18 @@ describe('/api/v1 workspace that names nothing', () => {
   })
 })
 
+describe('POST /api/v1 document creating a workspace under a handle that cannot be one', () => {
+  it('is refused as a 400 naming the handle, since only the caller can pick another', async () => {
+    const { status, body, reason } = await refusal('/api/v1/workspaces/not_a_segment/documents', {
+      ...json,
+      body: JSON.stringify({ path: 'a', kind: 'markdown', createWorkspace: true }),
+    })
+    expect(status).toBe(400)
+    expect(body).toMatchObject({ error: 'workspace_segment_unusable' })
+    expect(reason).toContain('Cannot create workspace "not_a_segment"')
+  })
+})
+
 describe('DELETE /api/v1 document with documents below it', () => {
   it('is refused as a 409 naming the descendants rather than escaping as a 500', async () => {
     const { app } = await seededServer()
@@ -196,6 +208,16 @@ describe('GET /api/v1 document the store holds but cannot read', () => {
     )
     expect(status).toBe(500)
     expect(body).toMatchObject({ error: 'stored_document_unsupported_version' })
+  })
+
+  it('answers an engine abort as document_engine_trap naming the document, not the workspace', async () => {
+    const { status, body } = await readOf(() =>
+      Object.assign(new Error('unreachable'), { name: 'RuntimeError' }),
+    )
+    expect(status).toBe(500)
+    expect(body).toMatchObject({ error: 'document_engine_trap' })
+    expect(apiErrorReason(body)).toContain(`while loading document ${SEEDED_MARKDOWN_ID};`)
+    expect(apiErrorReason(body)).not.toContain(SEEDED_WORKSPACE_ID)
   })
 
   it('answers chunks that do not reassemble as corrupt stored data', async () => {

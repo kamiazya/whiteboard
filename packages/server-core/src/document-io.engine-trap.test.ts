@@ -58,7 +58,14 @@ describe('an engine abort while a document is loaded or saved', () => {
     const failure = await run().catch((err: unknown) => err)
 
     expect(failure).toBeInstanceOf(DocumentEngineTrapError)
-    expect((failure as DocumentEngineTrapError).message).toContain(`while ${doing} document`)
+    expect((failure as DocumentEngineTrapError).message).toContain(
+      `while ${doing} document ${DOCUMENT_ID};`,
+    )
+    // The engine's own throw rides along for whoever logs the error further up.
+    expect((failure as DocumentEngineTrapError).cause).toMatchObject({
+      name: 'RuntimeError',
+      message: 'unreachable',
+    })
     expect(records).toContainEqual(
       expect.objectContaining({
         level: 'error',
