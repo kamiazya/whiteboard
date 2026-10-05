@@ -154,3 +154,30 @@ describe("pnpm mcp:http:stop stops this checkout's dev daemon through the wrappe
     expect(stop.stdout).toMatch(/no dev daemon is running/)
   })
 })
+
+// A second start on a data dir whose record names a live daemon has nothing to
+// serve: its daemon could not take the socket. What it must not do is clobber
+// the running one's bookkeeping on the way out — the record is how every client
+// finds the daemon, and the pid file is what `pnpm mcp:http:stop` signals.
+describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running', () => {
+  it('refuses before starting a watcher, and leaves the running pair the record and pid file', async () => {
+    const { wrapper, childPid, cwd } = await startWrapper()
+    const recordPath = join(cwd, 'data', 'daemon.json')
+    const pidPath = join(cwd, 'data', 'dev-wrapper.pid')
+    await until(() => existsSync(pidPath), 'the first wrapper to record its pid')
+
+    const second = spawnSync(process.execPath, [WRAPPER], {
+      cwd,
+      env: { ...process.env, WHITEBOARD_DATA_DIR: join(cwd, 'data') },
+      encoding: 'utf8',
+      timeout: 10_000,
+    })
+
+    expect(second.status).not.toBe(0)
+    expect(second.stderr).toMatch(/already running/)
+    expect(second.stderr).toMatch(/pnpm mcp:http:stop/)
+    expect(JSON.parse(readFileSync(recordPath, 'utf8')).pid).toBe(childPid)
+    expect(readFileSync(pidPath, 'utf8')).toBe(String(wrapper.pid))
+    expect(alive(childPid)).toBe(true)
+  })
+})

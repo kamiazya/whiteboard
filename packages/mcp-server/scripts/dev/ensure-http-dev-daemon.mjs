@@ -16,7 +16,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
-import { readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
+import { isPidAlive, readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
   releaseSpawnLock,
@@ -65,18 +65,6 @@ const QUIET = flags.has('--quiet')
 
 function info(message) {
   if (!QUIET) console.log(message)
-}
-
-// process.kill(pid, 0) throws (ESRCH) when no process with that pid exists;
-// it does not actually send a signal. This is the standard cross-platform
-// liveness check pattern.
-function isPidAlive(pid) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
 }
 
 async function answersPing(record) {

@@ -164,6 +164,30 @@ describe('startHttpServer on a socket another daemon holds', () => {
       await new Promise<void>((resolve) => occupier.close(() => resolve()))
     }
   })
+
+  // `onClose` is where a root deletes the daemon record, and the record on
+  // disk at this point is the RUNNING daemon's: a losing start that called it
+  // would leave that daemon serving with nothing able to find it.
+  it('never calls onClose, since it never opened a listener to close', async () => {
+    const socketPath = testSocketPath()
+    const occupier = createServer()
+    await new Promise<void>((resolve) => occupier.listen(socketPath, resolve))
+    let onCloseCalls = 0
+
+    try {
+      await expect(
+        startHttpServer({
+          socketPath,
+          onClose: () => {
+            onCloseCalls += 1
+          },
+        }),
+      ).rejects.toThrow('another daemon is already listening on this socket')
+      expect(onCloseCalls).toBe(0)
+    } finally {
+      await new Promise<void>((resolve) => occupier.close(() => resolve()))
+    }
+  })
 })
 
 describe('workspace tail wiring', () => {

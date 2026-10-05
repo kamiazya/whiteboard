@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
-import { readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import { isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
 import { stopDevDaemon } from './stop-http-dev-daemon-lib.mjs'
 import {
   devWrapperPidPath,
@@ -24,16 +24,6 @@ const dataDir = resolveDevDataDirEnv(
   resolveRepoRootFromGit(process.cwd()),
 ).WHITEBOARD_DATA_DIR
 
-function isAlive(pid) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    // EPERM: it exists, and is not ours to signal.
-    return error?.code === 'EPERM'
-  }
-}
-
 function readWrapperPid(dir) {
   try {
     const pid = Number(readFileSync(devWrapperPidPath(dir), 'utf8'))
@@ -47,7 +37,7 @@ const result = await stopDevDaemon({
   dataDir,
   readRecord: readDaemonRecord,
   readWrapperPid,
-  isAlive,
+  isAlive: isPidAlive,
   kill: (pid, signal) => process.kill(pid, signal),
   sleep,
 })

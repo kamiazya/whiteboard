@@ -34,6 +34,26 @@ export function readDaemonRecord(dataDir) {
 }
 
 /**
+ * Whether a process with this pid exists — the bare-`node` mirror of
+ * `isPidAlive` (src/shared/process-alive.ts), which the daemon's own refusal to
+ * start beside a live record uses; `dev-daemon-socket-lib.test.ts` holds the
+ * two to the same answers. `EPERM` reads as alive: the process exists, it is
+ * just not ours to signal, and calling a live daemon dead is the unsafe side.
+ *
+ * @param {number} pid
+ * @returns {boolean}
+ */
+export function isPidAlive(pid) {
+  if (!Number.isFinite(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+/**
  * One HTTP exchange with the daemon a record names. `socketPath` is a Unix
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
