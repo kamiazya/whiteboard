@@ -10,11 +10,7 @@
  * tree while the `documents` table remains the placement/listing mirror
  * (versions and the fold still key off it).
  */
-import {
-  isEngineTrap,
-  resolveWorkspaceDocumentById,
-  writeWorkspaceDocumentContent,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { isEngineTrap, resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -39,7 +35,12 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { evictDoc } from './doc-cache.js'
-import { getDoc, openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
+import {
+  getDoc,
+  openWorkspaceDocIfStored,
+  saveWorkspaceDoc,
+  writeDocumentContent,
+} from './document-store.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -170,7 +171,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         return evictingOnEngineTrap(workspaceId, entry.path, this.scope, async () => {
           const live = await getDoc(workspaceId, entry.path, this.scope)
           live.import(doc.export({ mode: 'update' }))
-          if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
+          if (!writeDocumentContent(workspaceDoc, documentId, live)) return false
           await saveWorkspaceDoc(workspaceId, workspaceDoc, this.scope)
           return true
         })
