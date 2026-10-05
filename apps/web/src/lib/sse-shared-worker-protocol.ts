@@ -5,6 +5,7 @@
  * drift — a mismatch here fails silently at runtime (a message nobody handles)
  * rather than at build time.
  */
+import { syncWriteRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
 import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { z } from 'zod'
 
@@ -65,6 +66,11 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // document. A tab's push returns at once, so this is the only way it can
   // learn that a write failed — or that the worker's retry has since landed.
   z.object({ type: z.literal('write-state'), doc: z.string(), landed: z.boolean() }),
+  // The daemon refused a write for what its bytes would do, so the worker
+  // stopped offering them and dropped them from its replica. A tab holding
+  // them — the one that made the edit, or one they were fanned out to — has
+  // to fork again, since every edit it makes on top of them is refused too.
+  z.object({ type: z.literal('write-refused'), doc: z.string(), refusal: syncWriteRefusalSchema }),
   // The daemon refused the worker's credential for this document. Distinct
   // from a `status` of disconnected: the worker stops reconnecting, and a tab
   // told only that the stream is down would report a reconnect in progress

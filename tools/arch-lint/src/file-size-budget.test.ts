@@ -185,8 +185,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // taking `contentOf` and `doc`; the undo one is also handed
   // `dropQueuedWrite`, because the debounce timer and the queue stay closed
   // over by the factory (`function-size-budget.test.ts` carries the same path
-  // for `createDocumentSyncSession`).
-  'apps/web/src/lib/document-sync-session.ts': 1179,
+  // for `createDocumentSyncSession`). Raised by nine for the refused-write
+  // handler and its dep: a backend message the session answers is a line of
+  // the handler table, and the recovery itself lives in the ledger.
+  'apps/web/src/lib/document-sync-session.ts': 1188,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step

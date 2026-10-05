@@ -1,6 +1,5 @@
-// @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import { titleFromMarkdownBody } from './title-from-body.js'
 
 describe('titleFromMarkdownBody', () => {

@@ -14,6 +14,7 @@
  * sync-frames.ts, so there is no parallel re-declaration of those shapes.
  */
 
+export type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 // ── The one payload type a root reads through this contract ──────────────────
 // It originates from z.infer<> in sync-frames.ts; the frame schemas themselves
 // are read from that module, not re-exported here.
@@ -21,6 +22,7 @@ export type { VersionCreatedPayload } from './sync-frames.js'
 
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
 
+import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 import type {
   AgentActivityMessage,
   RestoreStartedMessage,
@@ -71,6 +73,15 @@ export interface DocumentBackendHandlers {
    * elsewhere a later push resolving is what clears the failure.
    */
   onWritesLanded?: () => void
+  /**
+   * The keeper refused a write for what its bytes would do — a body or a
+   * node's text past its limit, a name too long, a path or node it cannot
+   * store. Permanent: the same bytes are refused every time, and so is every
+   * later edit built on them, so the backend stops offering them and then
+   * delivers the keeper's own state through `onSnapshot`. The caller drops
+   * what it held for that state, and tells the person what was refused.
+   */
+  onWriteRefused?: (refusal: SyncWriteRefusal) => void
   /**
    * The keeper refused this backend's credential (a 401 or 403 on the sync
    * stream or on a push). The backend does NOT retry — the caller surfaces

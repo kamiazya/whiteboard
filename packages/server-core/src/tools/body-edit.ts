@@ -201,6 +201,9 @@ function applyPlaced(body: string, placed: readonly PlacedPassage[]): string {
  *
  * Only growth is refused. A body written before the limit existed stays
  * editable toward it, which a flat length test would forbid.
+ *
+ * `result` may hold more than `placed` — a proposal's earlier passages — and
+ * the change named is the largest grower among `placed` alone.
  */
 function assertWithinLimit(body: string, placed: readonly PlacedPassage[], result: string): void {
   if (result.length <= MARKDOWN_MAX_CHARS || result.length <= body.length) return
@@ -306,8 +309,9 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
     // changes by id, so an unrefused reuse REPLACES a passage the agent
     // proposed, and a whole-proposal Adopt applies every open change at
     // once, so an overlap spread across two calls corrupts the body just
-    // as one inside a single call would. Both checks therefore see what
-    // the proposal already holds.
+    // as one inside a single call would. The overlap and the limit
+    // checks therefore see what the proposal already holds; the refusal
+    // still names a change from THIS call, the one the caller can shrink.
     const continuing = readProposals(doc).find((existing) => existing.id === input.proposalId)
     const existing = placeExisting(body, continuing)
     const placed = placeAll(
@@ -316,7 +320,7 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
       new Set(continuing?.changes.map((change) => change.id) ?? []),
     )
     assertDisjoint([...existing, ...placed])
-    assertWithinLimit(body, placed, applyPlaced(body, placed))
+    assertWithinLimit(body, placed, applyPlaced(body, [...existing, ...placed]))
     const proposed = await storeBodyProposal({
       deps,
       input,

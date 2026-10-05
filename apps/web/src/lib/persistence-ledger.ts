@@ -30,6 +30,10 @@ export class PersistenceLedger {
   // "this push resolved" is not "this write landed". A push clears the
   // failure only when no report arrived between its start and its end.
   private failureEpoch = 0
+  // A refusal leaves the session's copy holding ops the keeper will never
+  // take, with every later edit built on them: nothing it shows is saved
+  // until the keeper's own state has replaced that copy.
+  private awaitingKeeperState = false
 
   constructor(
     private readonly report: Report,
@@ -74,6 +78,26 @@ export class PersistenceLedger {
     if (this.written || this.unsaved) this.failed()
   }
 
+  /**
+   * The keeper refused a write for good. What was outstanding is not retried
+   * — it is dropped with the copy that held it — so it is no longer a write
+   * failure, and the session stays unsaved until `tookKeeperState`.
+   */
+  refused(): void {
+    const pendingAlready = this.unsaved && !this.writeFailed
+    this.writeFailed = false
+    this.awaitingKeeperState = true
+    this.unsaved = true
+    if (!pendingAlready) this.report({ kind: 'pending', lastSavedAt: this.lastSavedAt })
+  }
+
+  /** The session now holds the keeper's state, so what it shows is what is kept. */
+  tookKeeperState(): void {
+    if (!this.awaitingKeeperState) return
+    this.awaitingKeeperState = false
+    this.settle()
+  }
+
   /** Every write outstanding after a failure has now landed. */
   landed(): void {
     this.writeFailed = false
@@ -82,7 +106,8 @@ export class PersistenceLedger {
 
   /** Report saved if nothing is left behind the last edit. */
   settle(): void {
-    if (!this.unsaved || this.writeFailed || this.inFlightPushes > 0 || this.busy()) return
+    if (!this.unsaved || this.writeFailed || this.awaitingKeeperState) return
+    if (this.inFlightPushes > 0 || this.busy()) return
     this.unsaved = false
     this.lastSavedAt = new Date().toISOString()
     this.report({ kind: 'saved', lastSavedAt: this.lastSavedAt })

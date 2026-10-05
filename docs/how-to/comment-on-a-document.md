@@ -55,6 +55,10 @@ Expanding a conversation in the rail shows a **Reply** box. A reply
 inherits the conversation's anchor — it is the conversation that gets
 closed, not an individual remark.
 
+One message holds at most **4,096 characters**. A longer paste into the
+compose bubble or a Reply box is refused whole, with a line saying so; split
+it across replies.
+
 **Resolve** closes a conversation; **Reopen** brings it back. Resolving is
 the only way to close one: nothing deletes a comment, because what a
 conversation accumulates is the reason a decision was taken.

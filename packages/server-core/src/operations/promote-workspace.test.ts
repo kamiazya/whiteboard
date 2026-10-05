@@ -2,7 +2,6 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
-  readWorkspaceDocuments,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
@@ -13,6 +12,7 @@ import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { promoteWorkspace } from './promote-workspace.js'
+import { OffGrammarPathError } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -70,6 +70,7 @@ function fakes(peer = 1n) {
   const live = new FakeLiveDocuments()
   const versions = new FakeVersionHistory()
   let saves = 0
+  let evictions = 0
   const workspaceDocuments: WorkspaceDocuments = {
     ...unusedWorkspaceDocuments(),
     async exists() {
@@ -81,6 +82,9 @@ function fakes(peer = 1n) {
     async save() {
       saves += 1
     },
+    evict() {
+      evictions += 1
+    },
     evictProjections() {},
   }
   return {
@@ -89,6 +93,7 @@ function fakes(peer = 1n) {
     workspaceDocuments,
     workspaceDoc,
     saves: () => saves,
+    evictions: () => evictions,
   }
 }
 
@@ -218,7 +223,7 @@ describe('promoteWorkspace', () => {
     expect(fake.saves()).toBe(0)
   })
 
-  it('refuses a record holding a path outside the document-path grammar before merging any of it', async () => {
+  it('refuses a record holding a path outside the document-path grammar and merges none of it', async () => {
     const fake = fakes()
     const record = new LoroDoc()
     record.setPeerId(2n)
@@ -233,19 +238,21 @@ describe('promoteWorkspace', () => {
       kind: 'markdown',
     })
     record.commit()
-    const result = await promoteWorkspace(
+    const refusal = await promoteWorkspace(
       {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
       },
       { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
-    )
-    expect(result).toEqual({ kind: 'invalid-paths', paths: ['Meeting notes'] })
+    ).catch((err: unknown) => err)
+    // The merge's own refusal: one judgement of a path for promote and sync alike.
+    expect(refusal).toBeInstanceOf(OffGrammarPathError)
+    expect(refusal).toMatchObject({ paths: ['Meeting notes'] })
+    // Nothing saved, and the instance the merge touched is dropped, so the
+    // next read rebuilds the record from what was stored.
     expect(fake.saves()).toBe(0)
-    expect(readWorkspaceDocuments(fake.workspaceDoc).map((entry) => entry.path)).toEqual([
-      'contested',
-    ])
+    expect(fake.evictions()).toBe(1)
     expect(fake.versions.saves).toEqual([])
   })
 })

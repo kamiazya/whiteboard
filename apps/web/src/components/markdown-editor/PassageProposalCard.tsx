@@ -12,8 +12,10 @@
  * whole content of the decision, and a summary of them would be a worse
  * version of the thing itself.
  */
-import type { Proposal } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, type Proposal } from '@kamiazya/whiteboard-model'
 import { CircleCheck, CircleX } from 'lucide-react'
+import { useState } from 'react'
+import { type AdoptionRefusal, adoptionRefusal } from '../../lib/apply-adopted-passages.js'
 import { ProposalAuthor } from '../proposals/ProposalAuthor.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
@@ -31,6 +33,8 @@ export interface PassageProposalCardProps {
   readonly conflicted: boolean
   /** Who proposed it, when the proposal says. */
   readonly author?: Proposal['author']
+  /** How long the whole body is now, so adopting can be held to the size limit. */
+  readonly bodyLength: number
   readonly at: { readonly x: number; readonly y: number }
   readonly onDecide: (decision: 'adopted' | 'dismissed') => void
   readonly onClose: () => void
@@ -41,10 +45,12 @@ export function PassageProposalCard({
   proposed,
   conflicted,
   author,
+  bodyLength,
   at,
   onDecide,
   onClose,
 }: PassageProposalCardProps) {
+  const adopt = useAdoptWithinLimit(bodyLength, current, proposed, onDecide)
   return (
     <div
       className="absolute z-30 w-72 max-w-[min(18rem,calc(100vw-2rem))] rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md"
@@ -65,13 +71,14 @@ export function PassageProposalCard({
         <p className="whitespace-pre-wrap break-words">{proposed}</p>
       </div>
       <ProposalAuthor author={author} className="mb-1 block text-xs text-muted-foreground" />
+      {adopt.refused === undefined ? null : <LimitNotice refusal={adopt.refused} />}
       <div className="flex items-center justify-end gap-1">
         {/* Dismiss first, Adopt last: the rightmost is the one a thumb
             reaches without looking, and adopting is the act that writes. */}
         <VerbButton label="Dismiss this change" onSelect={() => onDecide('dismissed')}>
           <CircleX aria-hidden="true" className="size-5" />
         </VerbButton>
-        <VerbButton label="Adopt this change" onSelect={() => onDecide('adopted')}>
+        <VerbButton label="Adopt this change" onSelect={adopt.press}>
           <CircleCheck aria-hidden="true" className="size-5" />
         </VerbButton>
       </div>
@@ -108,5 +115,42 @@ function VerbButton({
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * Adopt, unless the body it would leave is one the keepers refuse — then
+ * nothing is decided and the card says why, so the change stays open to
+ * dismiss or to keep while the document is split. Judged on the body as it
+ * is at the press, by the rule the write path applies again at commit.
+ *
+ * The press is remembered for the passage it was made on, since one card is
+ * reused as the person moves between passages.
+ */
+function useAdoptWithinLimit(
+  bodyLength: number,
+  current: string,
+  proposed: string,
+  onDecide: (decision: 'adopted') => void,
+): { readonly refused: AdoptionRefusal | undefined; readonly press: () => void } {
+  const subject = `${current}\u0000${proposed}`
+  const [pressedOn, setPressedOn] = useState<string | null>(null)
+  const refusal = adoptionRefusal(bodyLength, bodyLength - current.length + proposed.length)
+  return {
+    refused: pressedOn === subject ? refusal : undefined,
+    press: () => (refusal === undefined ? onDecide('adopted') : setPressedOn(subject)),
+  }
+}
+
+// en-US explicitly: the editor's own size notice counts the same way, so the
+// two refusals of one limit read alike whatever the browser's locale.
+const COUNT = new Intl.NumberFormat('en-US')
+
+function LimitNotice({ refusal }: { readonly refusal: AdoptionRefusal }) {
+  return (
+    <output className="mb-1.5 block text-xs text-destructive">
+      Not adopted: this would make the document {COUNT.format(refusal.length)} characters long, past
+      the {COUNT.format(MARKDOWN_MAX_CHARS)}-character limit. Split the content across documents.
+    </output>
   )
 }

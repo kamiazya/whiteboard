@@ -45,6 +45,72 @@ export interface TextNodeEditorProps {
   readonly onCancel: () => void
   /** Fires on every keystroke so a caller can track the in-progress value (e.g. to commit it if a gesture interrupts the edit). */
   readonly onChange?: (text: string) => void
+  /**
+   * The most text the draft may hold, and the words a refused edit is
+   * explained in. An edit that would leave the draft longer than `max` AND
+   * longer than it was is refused whole, so a value stored before the bound
+   * can still be shortened.
+   */
+  readonly lengthLimit?: TextLengthLimit
+}
+
+export interface TextLengthLimit {
+  readonly max: number
+  readonly describe: (length: number) => string
+}
+
+/**
+ * The draft, held to `limit`: `offer` takes an edit unless it would leave the
+ * draft past the limit and longer than it was, and answers whether it did.
+ * `refusal` explains the last refused edit until the next one lands.
+ */
+function useLimitedDraft(initialText: string, limit: TextLengthLimit | undefined) {
+  const [value, setValue] = useState(initialText)
+  const [refused, setRefused] = useState<number | null>(null)
+  const offer = (next: string): boolean => {
+    if (limit !== undefined && next.length > limit.max && next.length > value.length) {
+      setRefused(next.length)
+      return false
+    }
+    setRefused(null)
+    setValue(next)
+    return true
+  }
+  const refusal = refused === null || limit === undefined ? null : limit.describe(refused)
+  return { value, offer, refusal }
+}
+
+/** A refused edit's explanation, above the draft where it covers neither the text nor the exit strip. */
+function LengthLimitNotice({
+  box,
+  testId,
+  text,
+}: {
+  readonly box: Box
+  readonly testId: string
+  readonly text: string
+}) {
+  return (
+    <output
+      data-testid={`${testId}-limit`}
+      style={{
+        display: 'block',
+        position: 'absolute',
+        left: box.x,
+        top: box.y,
+        width: box.width,
+        transform: 'translateY(calc(-100% - 4px))',
+        padding: '2px 4px',
+        fontSize: 11,
+        lineHeight: 1.3,
+        background: 'var(--muted)',
+        color: 'var(--foreground)',
+        borderBottom: '1px solid var(--destructive)',
+      }}
+    >
+      {text}
+    </output>
+  )
 }
 
 export function TextNodeEditor({
@@ -56,8 +122,9 @@ export function TextNodeEditor({
   onCommit,
   onCancel,
   onChange,
+  lengthLimit,
 }: TextNodeEditorProps) {
-  const [value, setValue] = useState(initialText)
+  const { value, offer, refusal } = useLimitedDraft(initialText, lengthLimit)
   const mountedRef = useRef(true)
   const finishedRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -108,8 +175,7 @@ export function TextNodeEditor({
           ...style,
         }}
         onChange={(e) => {
-          setValue(e.target.value)
-          onChange?.(e.target.value)
+          if (offer(e.target.value)) onChange?.(e.target.value)
         }}
         data-editor-overlay
         onPointerDown={(e) => e.stopPropagation()}
@@ -124,6 +190,7 @@ export function TextNodeEditor({
           }
         }}
       />
+      {refusal !== null && <LengthLimitNotice box={box} testId={testId} text={refusal} />}
       <EditorExitHint
         onDone={commit}
         onCancel={cancel}

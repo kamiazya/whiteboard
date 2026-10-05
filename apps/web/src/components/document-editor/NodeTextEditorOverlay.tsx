@@ -1,5 +1,8 @@
+import type { Extension } from '@codemirror/state'
+import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { textLengthLimit } from '../../lib/text-length-limit.js'
 import { EditorExitHint } from '../EditorExitHint.js'
 import type { MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
 import { MarkdownEditor } from '../markdown-editor/MarkdownEditor.js'
@@ -25,6 +28,23 @@ export interface NodeTextEditorOverlayProps
   readonly onClose: () => void
 }
 
+const COUNT = new Intl.NumberFormat('en-US')
+
+/**
+ * The text edited here is a NODE's, so it is held to the node bound rather
+ * than to the document editor's own, which is far larger. Module-level, so
+ * the editor's extension list keeps one identity across renders. Passing
+ * `sourceExtensions` also turns off the editor's value reconcile, which this
+ * surface does not need: its value only ever comes from the editor itself.
+ */
+const NODE_TEXT_LIMIT: readonly Extension[] = [
+  textLengthLimit(
+    NODE_TEXT_MAX_CHARS,
+    (length) =>
+      `Not added: this would make the node ${COUNT.format(length)} characters long, past the ${COUNT.format(NODE_TEXT_MAX_CHARS)}-character limit for one node. Put longer text in a markdown document.`,
+  ),
+]
+
 /**
  * A canvas node's body on the same surface a document gets.
  *
@@ -44,11 +64,8 @@ export function NodeTextEditorOverlay({
   onCommit,
   onClose,
   onDraft,
-  theme,
-  references,
-  linkTargets,
-  initialViewMode,
   onOpenDocument,
+  ...editorProps
 }: NodeTextEditorOverlayProps) {
   const [text, setText] = useState(initialText)
   // The keydown handler is bound once; without a ref it would close over the
@@ -131,10 +148,8 @@ export function NodeTextEditorOverlay({
           onChange={onChange}
           className="h-full"
           autoFocus
-          theme={theme}
-          references={references}
-          linkTargets={linkTargets}
-          initialViewMode={initialViewMode}
+          {...editorProps}
+          sourceExtensions={NODE_TEXT_LIMIT}
           onOpenDocument={onOpenDocument === undefined ? undefined : followLink}
         />
       </div>

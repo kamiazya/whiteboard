@@ -36,7 +36,7 @@ import {
   completionStatus,
 } from '@codemirror/autocomplete'
 import { markdown } from '@codemirror/lang-markdown'
-import { EditorState, Prec } from '@codemirror/state'
+import { EditorState, type Extension, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { GFM } from '@lezer/markdown'
@@ -68,6 +68,30 @@ import {
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
+
+/**
+ * Inherits the node's own typography from the wrapper — the parity styles
+ * live there so the SVG render and the editor agree.
+ */
+function nodeEditorTheme(centerContent: boolean): Extension {
+  return EditorView.theme({
+    '&': centerContent
+      ? // minHeight 0 lets the column-flex child SHRINK below its
+        // content height, so overflow reaches the scroller instead of
+        // being clipped by the host's overflow:hidden.
+        { maxHeight: '100%', minHeight: '0', backgroundColor: 'transparent' }
+      : { height: '100%', backgroundColor: 'transparent' },
+    '.cm-scroller': {
+      fontFamily: 'inherit',
+      fontSize: 'inherit',
+      lineHeight: 'inherit',
+      overflow: 'auto',
+    },
+    '.cm-content': { padding: '0', caretColor: 'currentColor' },
+    '.cm-line': { padding: '0' },
+    '&.cm-focused': { outline: 'none' },
+  })
+}
 
 export interface MarkdownNodeEditorProps {
   readonly box: Box
@@ -110,6 +134,11 @@ export interface MarkdownNodeEditorProps {
    * sits in the node's own box). Offsets are into the node's text.
    */
   readonly threads?: readonly CommentThread[]
+  /**
+   * The most text the draft may hold (`nodeTextLengthLimit` for a node's
+   * body). Read once at mount, like `initialText`.
+   */
+  readonly lengthLimit?: Extension
 }
 
 export function MarkdownNodeEditor({
@@ -125,6 +154,7 @@ export function MarkdownNodeEditor({
   onChange,
   onRequestComment,
   threads,
+  lengthLimit = [],
 }: MarkdownNodeEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -240,6 +270,7 @@ export function MarkdownNodeEditor({
         completionTouchAccept,
         ...markdownEditingBase(),
         annotationMarks(),
+        lengthLimit,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) callbacksRef.current.onChange?.(update.state.doc.toString())
         }),
@@ -251,25 +282,7 @@ export function MarkdownNodeEditor({
           if (isMenuTarget(event.relatedTarget)) return
           commit(view)
         }),
-        // Inherit the node's own typography from the wrapper — the parity
-        // styles live there so the SVG render and the editor agree.
-        EditorView.theme({
-          '&': centerContent
-            ? // minHeight 0 lets the column-flex child SHRINK below its
-              // content height, so overflow reaches the scroller instead of
-              // being clipped by the host's overflow:hidden.
-              { maxHeight: '100%', minHeight: '0', backgroundColor: 'transparent' }
-            : { height: '100%', backgroundColor: 'transparent' },
-          '.cm-scroller': {
-            fontFamily: 'inherit',
-            fontSize: 'inherit',
-            lineHeight: 'inherit',
-            overflow: 'auto',
-          },
-          '.cm-content': { padding: '0', caretColor: 'currentColor' },
-          '.cm-line': { padding: '0' },
-          '&.cm-focused': { outline: 'none' },
-        }),
+        nodeEditorTheme(centerContent),
       ],
     })
     mountedRef.current = true

@@ -64,14 +64,24 @@ export class DocumentEngineTrapError extends Error {
   }
 }
 
+/**
+ * The code every surface answers `DocumentEngineTrapError` with — `/api/v1`'s
+ * refusal table and the sync routes alike — with status 500: a server fault
+ * the caller cannot fix by rewording.
+ */
+export const DOCUMENT_ENGINE_TRAP_CODE = 'document_engine_trap'
+
 const STUCK_UNTIL_RESTART =
   'If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.'
 
 const DOCUMENT_ENGINE_TRAP_ADVICE: Readonly<Record<DocumentEngineTrapError['doing'], string>> = {
   loading: STUCK_UNTIL_RESTART,
   saving: STUCK_UNTIL_RESTART,
+  // Measured on loro-crdt 1.13.6: after one trap, fresh instances in the same
+  // process took a 64 Ki-character import and trapped within a millisecond
+  // on 128 Ki and larger, so the reload is not promised to work.
   'importing an update into':
-    'The in-memory copy was dropped and the next request reloads what was stored; sending the same update again aborts the same way.',
+    'The in-memory copy was dropped, so the next request reloads what was stored; sending the same update again aborts the same way. After a trap this process may abort on other large writes too, until the daemon restarts.',
 }
 
 /**
@@ -102,34 +112,48 @@ async function withEngineTrapReported<T>(
   }
 }
 
+/** A document some cache holds, as an engine trap inside a write must report and drop it. */
+export interface CachedTarget {
+  /** What the engine was working on, in words a caller can act on. */
+  readonly subject: string
+  /** The log fields that locate it. */
+  readonly fields: Record<string, unknown>
+  /** Drops the cached instance, so the next read rebuilds it from what was stored. */
+  evict(): void
+}
+
 /**
- * Imports a client's update into a CACHED document, telling an engine trap
- * apart from bytes the engine refuses.
+ * Runs `work` on a CACHED document, telling an engine trap apart from
+ * anything else it throws.
  *
  * A refusal leaves the instance as it was, so it is rethrown untouched and the
  * caller answers it as the client's mistake. A trap poisons the instance for
  * every later call, so `evict` drops whatever cache holds it before the
  * `DocumentEngineTrapError` is raised — the next request then rebuilds from
- * storage instead of the daemon serving a dead copy until it restarts. Every
- * sync write that imports into a cached document goes through here, so none
- * can recover from a trap differently from the others.
+ * storage instead of the daemon serving a dead copy until it restarts.
+ *
+ * The one funnel for a cached document's sync writes: the import, the
+ * attach that brings a detached document's state up, and the attach after a
+ * checkout all run inside it, so none can recover from a trap differently
+ * from the others. A load or save goes through `withEngineTrapReported`,
+ * which has no cached instance to drop.
  */
-export function importEvictingOnEngineTrap(
-  doc: LoroDoc,
-  update: Uint8Array,
-  trapped: { readonly subject: string; readonly fields: Record<string, unknown>; evict(): void },
-): void {
+export function runEvictingOnEngineTrap<T>(
+  target: CachedTarget,
+  doing: DocumentEngineTrapError['doing'],
+  work: () => T,
+): T {
   try {
-    doc.import(update)
+    return work()
   } catch (err) {
     if (!isEngineTrap(err)) throw err
-    trapped.evict()
-    log.error('the CRDT engine trapped importing an update; the cached copy was dropped', {
-      ...trapped.fields,
-      updateBytes: update.byteLength,
+    target.evict()
+    log.error('the CRDT engine trapped on a cached document; the cached copy was dropped', {
+      ...target.fields,
+      doing,
       err: messageOf(err),
     })
-    throw new DocumentEngineTrapError(trapped.subject, 'importing an update into', err)
+    throw new DocumentEngineTrapError(target.subject, doing, err)
   }
 }
 

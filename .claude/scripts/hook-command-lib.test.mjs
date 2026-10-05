@@ -71,6 +71,40 @@ test('the gh pr create form reads its body, branch and checkout as the hooks alw
   assert.equal(fromCommand('gh pr create --fill')?.body, null)
 })
 
+// The two forms carry the same body, so they must read it the same: a gh pr
+// form that misreads a quoting the REST form understands blocks a body that
+// does state its skip, and only on the form the reader happened to type.
+test('the gh pr and REST forms read every shell quoting of a body alike', () => {
+  const rest = 'gh api -X POST repos/{owner}/{repo}/pulls -f head=feat -f body='
+  for (const [quoted, text] of [
+    [`$'Visual evidence: none - docs only\\nmore'`, 'Visual evidence: none - docs only\nmore'],
+    ['Visual\\ evidence:\\ none\\ -\\ docs', 'Visual evidence: none - docs'],
+    [`"say \\"hi\\""'; tail'`, 'say "hi"; tail'],
+    [`'single'"double"`, 'singledouble'],
+  ]) {
+    assert.deepEqual(fromCommand(`${rest}${quoted}`)?.body, { text }, `REST: ${quoted}`)
+    assert.deepEqual(
+      fromCommand(`gh pr create --title t --body ${quoted}`)?.body,
+      { text },
+      `gh pr --body: ${quoted}`,
+    )
+    assert.deepEqual(
+      fromCommand(`gh pr edit 5 --body=${quoted}`)?.body,
+      { text },
+      `gh pr --body=: ${quoted}`,
+    )
+  }
+  writeFileSync(join(scratch, 'spaced body.md'), 'from a spaced path')
+  assert.deepEqual(fromCommand('gh pr create --body-file spaced\\ body.md')?.body, {
+    text: 'from a spaced path',
+  })
+  assert.deepEqual(fromCommand(`gh pr create --body-file=$'spaced body.md'`)?.body, {
+    text: 'from a spaced path',
+  })
+  // A body belongs to the gh pr command that carries it, not to the next one.
+  assert.equal(fromCommand(`gh pr create --fill && echo --body 'x'`)?.body, null)
+})
+
 test('the REST calls behind gh pr create, merge and edit are recognised', () => {
   const create = fromCommand(
     "gh api -X POST repos/{owner}/{repo}/pulls -f title=x -f head=feat -f base=main -f body='Visual evidence: none — n/a'",
@@ -132,6 +166,10 @@ test('a REST read, another endpoint, or a mention is not a PR action', () => {
     'gh api repos/{owner}/{repo}/pulls/12/comments --paginate',
     "gh api 'repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=open'",
     'gh api -X GET repos/{owner}/{repo}/pulls -f state=open',
+    // Only a field sends parameters; a filter or header holding `=` is still a GET.
+    "gh api repos/{owner}/{repo}/pulls --jq '.[] | select(.draft == false) | .number'",
+    'gh api repos/{owner}/{repo}/pulls -q \'.[] | select(.head.ref == "x")\'',
+    "gh api repos/{owner}/{repo}/pulls -H 'X-Probe=1'",
     'gh api repos/{owner}/{repo}/pulls/12/merge',
     'gh api -X POST repos/{owner}/{repo}/issues/12/comments -f body=x',
     'gh api -X POST repos/{owner}/{repo}/pulls/12/reviews -f event=COMMENT',
@@ -201,6 +239,22 @@ test('a GitHub MCP tool call reads as the same action, with no command string', 
     tool_input: { owner: 'o', repo: 'r', pullNumber: 3 },
   })
   assert.deepEqual([edit?.action, edit?.pr], ['edit', 3])
+  // A number GitHub could never have issued names no PR, and a repo missing
+  // either half names no repo.
+  for (const pullNumber of [0, -1, 1.5, 'x', undefined]) {
+    const odd = prActionFromHookInput({
+      tool_name: 'mcp__github__merge_pull_request',
+      tool_input: { owner: 'o', repo: 'r', pullNumber },
+    })
+    assert.equal(odd?.pr, null, String(pullNumber))
+  }
+  for (const halves of [{ owner: 'o' }, { repo: 'r' }]) {
+    const half = prActionFromHookInput({
+      tool_name: 'mcp__github__merge_pull_request',
+      tool_input: { ...halves, pullNumber: 1 },
+    })
+    assert.equal(half?.repo, '{owner}/{repo}', JSON.stringify(halves))
+  }
   assert.deepEqual(
     prActionFromHookInput({
       tool_name: 'mcp__github__create_pull_request',

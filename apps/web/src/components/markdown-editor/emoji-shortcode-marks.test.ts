@@ -68,6 +68,20 @@ describe('a finished shortcode is drawn as its emoji', () => {
     expect(reads(target)).toContain(':nope:')
   })
 
+  it('names the shortcode it stands for, colons and all, to a screen reader', () => {
+    const target = open('a :fire: and :rocket:', 0)
+    const drawn = [...target.dom.querySelectorAll<HTMLElement>('[data-emoji-shortcode]')]
+    expect(drawn.map((el) => el.dataset.emojiShortcode)).toEqual(['fire', 'rocket'])
+    expect(drawn.map((el) => el.getAttribute('aria-label'))).toEqual([':fire:', ':rocket:'])
+  })
+
+  it('keeps the drawn emoji when an edit elsewhere on the line shifts it', () => {
+    const target = open('a :rocket: b', 0)
+    const before = target.dom.querySelector('[data-emoji-shortcode]')
+    target.dispatch({ changes: { from: 0, insert: 'x' }, selection: { anchor: 0 } })
+    expect(target.dom.querySelector('[data-emoji-shortcode]')).toBe(before)
+  })
+
   /**
    * The caret is what says "still writing". Inside the shortcode the source
    * comes back, so it can be edited at all — a widget that never yields

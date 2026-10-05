@@ -5,7 +5,7 @@
  * the view builds, the affordance is a gutter marker it renders, and the card
  * is positioned from that marker's own box. A jsdom render has none of them.
  */
-import type { Proposal } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, type Proposal } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -150,6 +150,35 @@ describe('a proposed passage in the body', () => {
     marker.focus()
     await userEvent.keyboard('{Enter}')
     expect(getByTestId('passage-proposal-card').textContent).toContain('Friday')
+  })
+
+  it('refuses an adoption past the size limit on the card and keeps it open', async () => {
+    // Both keepers refuse a body past the limit, so adopting one is never
+    // sent: the card says why, and the change stays open to dismiss or keep.
+    const nearLimit = `${BODY}${'x'.repeat(MARKDOWN_MAX_CHARS - BODY.length)}`
+    const onDecidePassage = vi.fn()
+    const { container, getByRole, getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value={nearLimit}
+        onChange={vi.fn()}
+        proposals={proposalOf('Thursday', 'Thursday or Friday')}
+        onDecidePassage={onDecidePassage}
+      />,
+    )
+
+    const marker = await vi.waitFor(() => {
+      const found = container.querySelector<HTMLElement>('.cm-proposal-gutter-marker')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    await userEvent.click(marker)
+    await userEvent.click(getByRole('button', { name: 'Adopt this change' }))
+
+    expect(onDecidePassage).not.toHaveBeenCalled()
+    expect(getByTestId('passage-proposal-card').textContent).toContain(
+      'Not adopted: this would make the document 262,154 characters long, past the 262,144-character limit.',
+    )
   })
 
   it('draws nothing for a change the person already decided', async () => {

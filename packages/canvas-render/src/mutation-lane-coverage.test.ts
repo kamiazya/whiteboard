@@ -164,8 +164,9 @@ describe('the mutation lane covers what it says it covers', () => {
     // reason its own entry gives: it is a rule whose every decision is
     // mutation-shaped, not a ladder of ways to decline.
     // `layout/nodes/uax-segments.ts` is OUT and always will be — it is the
-    // `LineBreaker` call and its options object, with no branch of its own,
-    // and it exists only so the wrapper's granularity ladder and the
+    // `LineBreaker` call plus the code-point to UTF-16 offset walk that
+    // slices each segment (pinned by a differential property against the
+    // library's own `Break.slice()`), and it exists only so the wrapper's granularity ladder and the
     // junction rule cannot come to disagree about where a line may break.
     // 76 since the legend (ADR-0040 decision 6), all three modules outside
     // the lane. `legend/legend-geometry.ts` is constants and the panel's row

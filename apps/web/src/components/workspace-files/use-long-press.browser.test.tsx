@@ -94,3 +94,36 @@ it('a release before the threshold cancels the hold', () => {
   vi.advanceTimersByTime(LONG_PRESS_MS)
   expect(onLongPress).not.toHaveBeenCalled()
 })
+
+// Literal times and distances, not the constants: every case above reads the
+// threshold back from the hook, so a changed threshold would pass them all.
+it('the menu opens at half a second of hold, and not a millisecond before', () => {
+  vi.useFakeTimers()
+  const { onLongPress, card } = mount()
+
+  fireEvent.pointerDown(card, touch)
+  vi.advanceTimersByTime(499)
+  expect(onLongPress).not.toHaveBeenCalled()
+  vi.advanceTimersByTime(1)
+  expect(onLongPress).toHaveBeenCalledTimes(1)
+})
+
+it('a hold that drifts exactly eight pixels is still a press', () => {
+  vi.useFakeTimers()
+  const { onLongPress, card } = mount()
+
+  fireEvent.pointerDown(card, touch)
+  fireEvent.pointerMove(card, { ...touch, clientX: 40 + 8, clientY: 60 })
+  vi.advanceTimersByTime(500)
+  expect(onLongPress).toHaveBeenCalledWith('plan/doc', 40, 60)
+})
+
+it("another finger's movement does not cancel the hold", () => {
+  vi.useFakeTimers()
+  const { onLongPress, card } = mount()
+
+  fireEvent.pointerDown(card, touch)
+  fireEvent.pointerMove(card, { ...touch, pointerId: 8, clientX: 400, clientY: 600 })
+  vi.advanceTimersByTime(500)
+  expect(onLongPress).toHaveBeenCalledTimes(1)
+})

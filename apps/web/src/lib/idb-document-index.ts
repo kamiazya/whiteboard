@@ -39,6 +39,7 @@ import {
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   type SetDocumentNameInput,
+  setDocumentNameInputSchema,
   storedWorkspaceEntrySchema,
   type WorkspaceEntry,
   WorkspaceNotFoundError,
@@ -330,7 +331,8 @@ export class IdbDocumentIndex implements DocumentIndex {
     })
   }
 
-  async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
+  async setDocumentName(input: SetDocumentNameInput): Promise<void> {
+    const { workspaceId, documentId, name } = setDocumentNameInputSchema.parse(input)
     await this.tx([DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
       const store = tx.objectStore(DOCUMENT_INDEX_STORE)
       const row = parseRow(await request(store.index('byId').get([workspaceId, documentId])))

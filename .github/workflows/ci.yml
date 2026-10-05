@@ -248,10 +248,12 @@ jobs:
     #
     # The partition is by project NAME, not by a list of them: a list beside
     # the vitest config is the drift this repo keeps paying for. vitest takes
-    # globs and negation (`--project '*-browser'` / `--project '!*-browser'`),
+    # globs and negation (`--project '*-browser*'` / `--project '!*-browser*'`),
     # so the two legs are complementary by construction. What that RESTS on —
-    # every browser project's name ending `-browser`, and every project being
-    # claimed by exactly one leg — is derived and asserted in
+    # every browser-mode project's name containing `-browser` (as a suffix,
+    # `web-browser`, or inside it, `web-browser-window-state`), no other
+    # project's name containing it, and every project being claimed by exactly
+    # one leg — is derived from each config's browser mode and asserted in
     # `ci-stress-job.test.ts`, because `--passWithNoTests` makes a pattern
     # that matches nothing silent.
     #
@@ -279,19 +281,19 @@ jobs:
       matrix:
         include:
           - leg: browser
-            projects: '*-browser'
+            projects: '*-browser*'
             shard: 1
             shards: 1
           - leg: node
-            projects: '!*-browser'
+            projects: '!*-browser*'
             shard: 1
             shards: 3
           - leg: node
-            projects: '!*-browser'
+            projects: '!*-browser*'
             shard: 2
             shards: 3
           - leg: node
-            projects: '!*-browser'
+            projects: '!*-browser*'
             shard: 3
             shards: 3
     env:

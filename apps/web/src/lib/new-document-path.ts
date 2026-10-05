@@ -11,6 +11,10 @@ import { pathBelow } from '@kamiazya/whiteboard-model'
  * path from a display name and found every non-Latin title collapsing to
  * `untitled-N`, and ADR-0007's addendum retracted it. A path is chosen or it
  * stays `untitled-N`; it is never guessed from what the document is called.
+ *
+ * Its inverse is loro-adapter's `isGeneratedDocumentPath`, which every keeper
+ * reads to decide whether a heading may still name a document; a property
+ * beside this file holds the two to each other through that seeding.
  */
 export function newDocumentPathIn(folder: string, existingPaths: readonly string[]): string {
   // Anchored at a segment boundary, so `design-system/untitled` is not
@@ -29,18 +33,4 @@ export function newDocumentPathIn(folder: string, existingPaths: readonly string
   let n = 2
   while (siblings.has(`untitled-${n}`)) n++
   return `${prefix}untitled-${n}`
-}
-
-/**
- * Whether a path is one this function chose, rather than one a person did.
- *
- * The pair matters because "nobody has named this yet" is not something the
- * tree records: clearing a name in the rename dialog leaves the same absent
- * `name` a brand-new document has. A still-generated path is the closest
- * honest proxy — someone who cleared the name of a document they had also
- * placed somewhere has engaged with naming, and must not be overridden.
- */
-export function isGeneratedDocumentPath(path: string): boolean {
-  const last = path.slice(path.lastIndexOf('/') + 1)
-  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(last)
 }

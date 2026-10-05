@@ -1,3 +1,5 @@
+import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
+
 /**
  * A document's name, as the create and rename forms both ask for it.
  *
@@ -22,6 +24,7 @@ export function DocumentNameField({
       <input
         type="text"
         value={value}
+        maxLength={DOCUMENT_NAME_MAX_LENGTH}
         onChange={(event) => onChange(event.target.value)}
         placeholder={path.split('/').at(-1) ?? ''}
         className="rounded-md border bg-background px-2 py-1.5 text-sm"

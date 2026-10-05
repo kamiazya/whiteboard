@@ -504,8 +504,6 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(exportResponseSchema.parse(await res.json()).undrawable).toEqual([])
   })
 
-  // Nested canvas paths such as architecture/overview should create parent
-  // directories recursively instead of failing with ENOENT.
   it('never clobbers an existing default-path file when nanoid produces a collision', async () => {
     // Force a nanoid collision on the first two calls to prove the write
     // path retries with a new random suffix instead of silently
@@ -548,6 +546,8 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     }
   })
 
+  // Nested canvas paths such as architecture/overview should create parent
+  // directories recursively instead of failing with ENOENT.
   it('writes nested slash-containing paths without ENOENT', async () => {
     mockExportCanvasHeadless.mockResolvedValue({
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),

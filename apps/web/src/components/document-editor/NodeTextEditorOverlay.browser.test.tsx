@@ -3,7 +3,8 @@ import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 // too small: the same MarkdownEditor a document uses, over the canvas, with
 // the inline editor's commit grammar (close = commit, Escape = discard) so
 // there is only one thing to learn.
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { focusEditable } from '../../test-utils/focus-editable.js'
@@ -185,5 +186,28 @@ describe('the node text overlay (real browser)', () => {
     expect(onCommit.mock.invocationCallOrder[0]).toBeLessThan(
       onOpenDocument.mock.invocationCallOrder[0],
     )
+  })
+})
+
+// The surface edits a NODE's text, so the node bound holds here too: the
+// document editor's own bound is thirty-two times larger.
+describe('the node text overlay past the node text limit', () => {
+  it('refuses a paste that would take the body past the limit, and says why', async () => {
+    const { container, getByRole, onCommit } = renderOverlay()
+    const editable = () => container.querySelector<HTMLElement>('[contenteditable="true"]')
+    await focusEditable(editable)
+    const clipboardData = new DataTransfer()
+    clipboardData.setData('text/plain', 'x'.repeat(NODE_TEXT_MAX_CHARS))
+
+    fireEvent(
+      editable() as HTMLElement,
+      new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }),
+    )
+
+    await waitFor(() =>
+      expect(container.querySelector('[role="status"]')?.textContent).toContain('8,192'),
+    )
+    await userEvent.click(getByRole('button', { name: 'Back to canvas' }))
+    expect(onCommit).not.toHaveBeenCalled()
   })
 })

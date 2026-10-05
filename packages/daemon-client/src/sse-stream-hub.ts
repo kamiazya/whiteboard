@@ -15,6 +15,12 @@
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
+import {
+  isPermanentWriteRefusal,
+  type SyncWriteRefusal,
+  SyncWriteRefusedError,
+  syncWriteRefusalOf,
+} from './api-contracts/sync-write-refusal.js'
 import type { ClientTextMessage } from './sync-frames.js'
 import {
   MAX_DOCS_PER_STREAM,
@@ -154,6 +160,15 @@ export interface DocListener {
    * rejects instead, which already tells its caller.
    */
   onWriteState?: (landed: boolean) => void
+  /**
+   * The authority refused a write for what its bytes would do, permanently:
+   * it has stopped offering them and holds the keeper's state again, so the
+   * caller has to take that state too — its own copy still carries the
+   * refused ops, and every edit built on them is refused with them. Only a
+   * source whose `push` resolves before the write lands says this; the
+   * hub's push rejects with `SyncWriteRefusedError` instead.
+   */
+  onWriteRefused?: (refusal: SyncWriteRefusal) => void
   /**
    * The daemon refused the credential this stream carries — a 401 or 403 on
    * the stream itself, or on a push for this document. Not a dropped
@@ -371,6 +386,13 @@ export class SseStreamHub implements SseStreamSource {
     // accepts for writes (a membership revoked mid-session), so the push is
     // the only place that refusal is visible.
     if (isAuthRefusal(res.status)) this.announceAuthRefused([this.docs.get(doc)])
+    // A refusal of the BYTES is told apart from the rest, with the keeper's
+    // reason: sending them again gets the same answer, so a caller that
+    // retried it would keep every later edit built on them unsaved forever.
+    if (isPermanentWriteRefusal(res.status)) {
+      const body: unknown = await res.json().catch(() => undefined)
+      throw new SyncWriteRefusedError(res.status, syncWriteRefusalOf(body))
+    }
     if (!res.ok) throw new Error(`update refused: ${res.status}`)
   }
 

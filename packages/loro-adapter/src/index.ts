@@ -45,12 +45,19 @@ export {
 } from './loro-bridge.js'
 export { MARKDOWN_BODY_NODE_ID, readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
+export { seedNameFromTitle, seedNamesFromTitles } from './name-from-title.js'
 export {
   readProposals,
   setProposedChangeStatus,
   writeProposal,
 } from './proposals.js'
 export { countSpatialNodes } from './spatial-node-count.js'
+export {
+  importWithinTextLimits,
+  type SyncTextBreach,
+  type SyncTextJudgement,
+  syncTextLimitBreach,
+} from './sync-text-limits.js'
 export {
   markThreadPassages,
   type PassageRange,

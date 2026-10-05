@@ -87,6 +87,24 @@ describe("the worker's word on a document's writes", () => {
   })
 })
 
+describe("the worker's word that the daemon refused a write for good", () => {
+  it('reaches the listener for that document with the reason, and no other', () => {
+    const source = createSharedSseStreamSource('http://write-refused.test')
+    const mine = vi.fn()
+    const other = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteRefused: mine })
+    source?.subscribe('w/other', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteRefused: other })
+    const refusal = { code: 'invalid_path', message: 'bad path' }
+
+    FakeSharedWorker.instances[0]?.port.onmessage?.({
+      data: { type: 'write-refused', doc: 'w/doc', refusal },
+    } as MessageEvent)
+
+    expect(mine.mock.calls).toEqual([[refusal]])
+    expect(other).not.toHaveBeenCalled()
+  })
+})
+
 describe("the worker's word that the daemon refused the session", () => {
   it('reaches the listener for that document, and no other', () => {
     const source = createSharedSseStreamSource('http://auth-refused.test')

@@ -119,6 +119,7 @@ import { editThreadMessageCommand } from '../../lib/spatial-thread-write.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
+import { CanvasNotice } from './CanvasNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
@@ -1044,6 +1045,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       copySelection,
       cutSelection,
       createTextNodeAtViewportCenter,
+      clipboardNotice,
       pasteClipboard,
       pasteFragment,
     } = useClipboardActions({
@@ -1545,6 +1547,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setMarquee(null)
             }
           }}
+        />
+        <CanvasNotice
+          testId="clipboard-notice"
+          notice={clipboardNotice.text}
+          onDismiss={clipboardNotice.dismiss}
         />
         {onAddImage !== undefined && (
           <ImageIntake

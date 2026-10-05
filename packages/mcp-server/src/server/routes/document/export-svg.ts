@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
@@ -12,10 +10,10 @@ import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { getLogger } from '../../log.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import {
-  defaultExportPath,
   documentMissingBody,
   readExportBody,
   resolveRequestedOutputPath,
+  writeExportFile,
 } from '../export-request.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -50,8 +48,8 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
     if ('refusal' in parsedBody) return parsedBody.refusal
     const body: ExportSvgRequest = parsedBody.data
 
-    const exportsDir = options.scope.layout.exportsDir(workspaceId)
-    const resolved = await resolveRequestedOutputPath(body, workspaceId, exportsDir)
+    const { layout } = options.scope
+    const resolved = await resolveRequestedOutputPath(body, workspaceId, layout)
     if ('error' in resolved) return c.json(resolved.error, resolved.status)
     const outputPath = resolved.outputPath
 
@@ -85,9 +83,13 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
       return c.json(errBody, 500)
     }
 
-    const filePath = outputPath ?? defaultExportPath(exportsDir, path, 'svg')
-    await mkdir(dirname(filePath), { recursive: true })
-    await writeFile(filePath, svg, 'utf-8')
+    const filePath = await writeExportFile(svg, {
+      outputPath,
+      layout,
+      workspaceId,
+      path,
+      extension: 'svg',
+    })
     // Typed rather than a bare literal so the contract, not this handler,
     // decides what an export answers with — the PNG route and this one had
     // already drifted into two different response shapes.

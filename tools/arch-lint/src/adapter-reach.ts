@@ -232,15 +232,10 @@ export const ADAPTER_HOST_REACH: Readonly<Record<string, HostReach>> = {
     reason:
       'takes the default human display name from the OS user (`userInfo`); the root could hand in the name',
   },
-  'routes/document/export-svg.ts': {
+  'routes/export-request.ts': {
     kinds: ['node:fs'],
     reason:
-      'creates the exports directory and writes the rendered SVG; the write is the export keeper’s and belongs behind `export/`',
-  },
-  'routes/export.ts': {
-    kinds: ['node:fs'],
-    reason:
-      'creates the exports directory and writes the rendered PNG; the write is the export keeper’s and belongs behind `export/`',
+      'the export routes’ one write policy: creates the exports directory and writes the rendered PNG or SVG, never over an earlier default export; the write is the export keeper’s and belongs behind `export/`',
   },
   'routes/files.ts': {
     kinds: ['node:fs'],
@@ -259,4 +254,4 @@ export const ADAPTER_HOST_REACH: Readonly<Record<string, HostReach>> = {
  * equality: a new reach fails until it is listed, and paying one off fails until
  * this comes down.
  */
-export const ADAPTER_HOST_REACH_CEILING = 29
+export const ADAPTER_HOST_REACH_CEILING = 28

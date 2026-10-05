@@ -317,6 +317,10 @@ export const documentSummarySchema = z.object({
   // follows the port's promise rather than claiming more.
   // A kind a newer daemon added reads as absent, like any other kindless row:
   // the listing stays readable and this build simply cannot open that one.
+  // That covers a client older than its daemon, and only that. A node whose
+  // stored kind the DAEMON cannot read never reaches this listing — the
+  // daemon's own reader skips it with everything below it — and its sync
+  // route refuses an update that would leave a readable node so.
   kind: unknownIsAbsent(documentKindSchema),
   // The losing side of a converged path collision, carried from the port's
   // DocumentEntry so the daemon-connected file browser can badge it the way

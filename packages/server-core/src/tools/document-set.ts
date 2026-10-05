@@ -18,6 +18,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
+  documentNameSchema,
   EXTENSION_FACET_KEY_PATTERN,
   type ExtensionFacets,
   markdownInputSchema,
@@ -125,6 +126,9 @@ export const OKF_YAML_SAFE_STAGE = 'frontmatter-yaml-safe'
 /** The stage a write is refused at when a frontmatter tag breaks ADR-0040's write grammar. */
 const OKF_TAGS_STAGE = 'frontmatter-tags'
 
+/** The stage a write is refused at when a frontmatter title cannot be a document name. */
+const OKF_TITLE_STAGE = 'frontmatter-title'
+
 /** The stage a write is refused at when a facet key sits at the frontmatter root. */
 const OKF_ROOT_FACET_STAGE = 'frontmatter-facets'
 
@@ -197,7 +201,23 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
       tags.error.issues.map((issue) => ({ ...issue, path: ['tags', ...issue.path] })),
     )
   }
+  refuseUnnamableTitle(parsed.value.frontmatter.title)
   return parsed.value
+}
+
+/**
+ * A title lands on the workspace as the document's name, so it is held to the
+ * bound a `name` is — here, where `document.create`'s preflight runs it before
+ * the mint, rather than at the index write after it.
+ */
+function refuseUnnamableTitle(title: string | undefined): void {
+  const checked = documentNameSchema.safeParse(title ?? '')
+  if (checked.success) return
+  throw new OkfParseError(
+    OKF_TITLE_STAGE,
+    'frontmatter title cannot be a document name',
+    checked.error.issues.map((issue) => ({ ...issue, path: ['title', ...issue.path] })),
+  )
 }
 
 /**

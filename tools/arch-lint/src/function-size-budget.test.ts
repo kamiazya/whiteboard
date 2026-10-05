@@ -78,7 +78,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
-  'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 69,
+  // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
+  'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
   'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 311,
   // The row the panel's list is made of, split three ways: the row and its
@@ -201,9 +202,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
+  // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 92,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 96,
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 97,
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
@@ -302,7 +304,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // undecided, not foreign, while its silent renewal is outstanding.
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 362,
+  // Raised by two: the session's refused-write report and its teardown.
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 364,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
@@ -318,9 +321,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // rather than the queue itself. Both document pages already sit behind one
   // `DocumentBackend`, so that port is not what is left to do.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 864,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 186,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 87,
-  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 140,
+  // Both raised for the refused write: one more backend message in the
+  // handler table, and the snapshot that answers it ending the wait.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 193,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 88,
+  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/fold-workspace.ts#foldWorkspaceDocuments': 56,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
@@ -345,7 +350,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 451,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 449,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity

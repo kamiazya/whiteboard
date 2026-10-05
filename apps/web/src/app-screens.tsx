@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import type { AppShellProps } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
 import { UnsavedChangesNotice } from './components/connection/UnsavedChangesNotice.js'
+import { WriteRefusedNotice } from './components/connection/WriteRefusedNotice.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
@@ -92,6 +93,7 @@ function ShellFrame({
           {...(onWorkInBrowser === undefined ? {} : { onWorkInBrowser })}
         />
         <UnsavedChangesNotice />
+        <WriteRefusedNotice />
         {children}
       </div>
     </ErrorBoundary>

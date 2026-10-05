@@ -10,6 +10,7 @@ import {
   type AnnotationAnchor,
   annotationAnchorSchema,
   annotationIdSchema,
+  commentMessageInputSchema,
   commentThreadSchema,
   documentIdSchema,
   nodeText,
@@ -43,8 +44,6 @@ class ThreadEditError extends Error {
   }
 }
 
-const bodySchema = z.string().min(1, 'a comment message must not be empty')
-
 /**
  * The three ops, and deliberately only these three.
  *
@@ -61,7 +60,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
       /** Minted when absent, so a caller never has to invent an id. */
       threadId: annotationIdSchema.optional(),
       anchor: annotationAnchorSchema,
-      body: bodySchema,
+      body: commentMessageInputSchema,
       author: okfActorSchema.optional(),
     })
     .strict(),
@@ -69,7 +68,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
     .object({
       op: z.literal('message.add'),
       threadId: annotationIdSchema,
-      body: bodySchema,
+      body: commentMessageInputSchema,
       author: okfActorSchema.optional(),
     })
     .strict(),

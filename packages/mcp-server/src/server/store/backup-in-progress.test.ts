@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
+import { captureLogsForTests } from '../log.js'
 import { backupIsInProgress, withBackupMarker } from './backup-in-progress.js'
 
 let dir: string
@@ -207,6 +208,20 @@ describe('the backup-in-progress marker', () => {
    * safe way, because a slower reader has MORE rewrites landing between its
    * reads, not fewer.
    */
+  // Not being able to write the marker is not fatal to the backup, but it is
+  // said: a silent failure reads exactly like a refresh that never ran.
+  it('says so when it cannot write the marker, and the backup still runs', async () => {
+    const notADirectory = join(dir, 'file')
+    await writeFile(notADirectory, '')
+    const capture = captureLogsForTests('warning')
+    try {
+      await expect(withBackupMarker(notADirectory, async () => 'done')).resolves.toBe('done')
+      expect(capture.records.map((record) => record.msg)).toContain('backup marker refresh failed')
+    } finally {
+      capture.restore()
+    }
+  })
+
   it('is never read as absent while a refresh is rewriting it', async () => {
     const READS = 300
     let absent = 0
@@ -233,13 +248,19 @@ describe('the backup-in-progress marker', () => {
           throw new Error('the marker never read back as JSON in 100 attempts')
         }
         const before = await deadlineOf()
-        for (let i = 0; i < READS; i += 1) {
+        // At least READS reads, and past them until a rewrite has landed
+        // among them, up to twice as many: a runner can finish the first 300
+        // before a 1ms timer gets a turn, which reads as "no rewrite
+        // overlapped" when it only says the reader was quicker.
+        let rewritten = false
+        for (let i = 0; i < READS || (!rewritten && i < 2 * READS); i += 1) {
           if (!(await backupIsInProgress(dir, Date.now()))) absent += 1
+          if (i >= READS - 1 && i % 10 === 9) rewritten = (await deadlineOf()) > before
         }
         // Proves rewrites really overlapped the reads, rather than asserting
         // a read count that only says how fast the machine is. Read after the
         // loop, so it cannot be satisfied by a refresh that landed before it.
-        rewrites = (await deadlineOf()) > before ? 1 : 0
+        rewrites = rewritten || (await deadlineOf()) > before ? 1 : 0
       },
       { ttlMs: 60_000, refreshEveryMs: 1 },
     )

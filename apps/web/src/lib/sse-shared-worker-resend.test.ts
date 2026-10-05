@@ -12,7 +12,7 @@
  * therefore shares ONE port and separates itself by document key, the way the
  * sibling worker suite already separates itself from leftover workers.
  */
-import { bytesToBase64 } from '@kamiazya/whiteboard-model'
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import '@vitest/web-worker'
 import { LoroDoc } from 'loro-crdt'
 import { HttpResponse, http } from 'msw'
@@ -28,6 +28,14 @@ const endByStream = new Map<string, () => void>()
 const daemonWrites: { doc: string; body: Uint8Array }[] = []
 /** Flipped per case to make the daemon refuse the write. */
 let refuseWrites = false
+/** Set per case to refuse every write for good, with this answer. */
+let refuseFor: { status: number; body: { error: string; message: string } } | null = null
+/** Set per case to fail this many snapshot fetches before answering. */
+let failSnapshots = 0
+/** Set per case to hold the next snapshot answer until released. */
+let holdSnapshot: Promise<void> | null = null
+/** Every write the daemon was sent, accepted or not, per document. */
+const writeAttempts = new Map<string, number>()
 /** Set per case to hold the next accepted write's answer until released. */
 let holdNextWrite: Promise<void> | null = null
 
@@ -57,15 +65,25 @@ const server = setupServer(
   // Answered rather than left to `bypass`: the worker seeds every subscribed
   // document from this route, and an unhandled request would escape to
   // whatever real daemon is on this port.
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, () =>
-    HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
-  ),
+  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, async () => {
+    const hold = holdSnapshot
+    holdSnapshot = null
+    if (hold) await hold
+    if (failSnapshots > 0) {
+      failSnapshots -= 1
+      return new HttpResponse('restarting', { status: 503 })
+    }
+    return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
+  }),
   http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
+    const attempted = `${String(params.workspaceId)}/${String(params.path)}`
+    writeAttempts.set(attempted, (writeAttempts.get(attempted) ?? 0) + 1)
     // A refusal that ANSWERS rather than drops the connection: a 5xx is the
     // shape a restarting daemon actually produces, and it is the one a
     // `fetch().catch()` cannot see — fetch resolves, so a writer that only
     // catches rejections counts this as a success.
     if (refuseWrites) return new HttpResponse('nope', { status: 503 })
+    if (refuseFor) return HttpResponse.json(refuseFor.body, { status: refuseFor.status })
     const hold = holdNextWrite
     holdNextWrite = null
     if (hold) await hold
@@ -110,7 +128,13 @@ beforeAll(() => {
 })
 
 /** What the worker told this port, in order. */
-const events: { type: string; doc?: string; landed?: boolean }[] = []
+const events: {
+  type: string
+  doc?: string
+  landed?: boolean
+  refusal?: unknown
+  snapshot?: string
+}[] = []
 const writeStatesFor = (doc: string, landed: boolean) =>
   events.filter((e) => e.doc === doc && e.type === 'write-state' && e.landed === landed).length
 
@@ -263,5 +287,88 @@ describe('a write the daemon refused', { timeout: 25_000 }, () => {
     const received = new LoroDoc()
     for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
     expect(received.getMap('m').get('second')).toBe('while-in-flight')
+  })
+})
+
+describe('a write the daemon refused for what its bytes would do', { timeout: 25_000 }, () => {
+  it('is dropped from the replica, and the tab is told why', async () => {
+    // A 4xx answers the bytes, not the moment: sent again, they are refused
+    // again, and every later write that carries them with it is refused too —
+    // so nothing more from this browser would ever be saved.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    refuseFor = {
+      status: 413,
+      body: { error: 'markdown_too_large', message: 'past the limit for one document' },
+    }
+    pushEdit(doc, 'refused', 'too-big')
+    await until(() => events.some((e) => e.doc === doc && e.type === 'write-refused'))
+    expect(events.find((e) => e.doc === doc && e.type === 'write-refused')?.refusal).toEqual({
+      code: 'markdown_too_large',
+      message: 'past the limit for one document',
+    })
+    refuseFor = null
+
+    pushEdit(doc, 'later', 'kept')
+    await until(() => daemonWrites.some((w) => w.doc === doc))
+    const received = new LoroDoc()
+    for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
+    expect(received.getMap('m').get('later')).toBe('kept')
+    expect(received.getMap('m').get('refused')).toBeUndefined()
+
+    // What a tab forks from after the refusal holds none of it either.
+    port.postMessage({ type: 'snapshot-request', doc })
+    await until(() => events.some((e) => e.doc === doc && e.type === 'snapshot'))
+    const answered = events.filter((e) => e.doc === doc && e.type === 'snapshot').at(-1)
+    const forked = new LoroDoc()
+    forked.import(base64ToBytes(answered?.snapshot ?? '') ?? new Uint8Array())
+    expect(forked.getMap('m').get('refused')).toBeUndefined()
+  })
+
+  it('is told only once the replica is the daemon state again', async () => {
+    // A tab that forked while the snapshot could not be fetched would fork
+    // the refused ops back, or an empty document; until the replica is
+    // replaced, the tab hears only that the write did not land.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    failSnapshots = 1
+    refuseFor = { status: 400, body: { error: 'invalid_path', message: 'bad path' } }
+    pushEdit(doc, 'refused', 'off-grammar')
+    await until(() => writeStatesFor(doc, false) === 1)
+    expect(events.some((e) => e.doc === doc && e.type === 'write-refused')).toBe(false)
+    refuseFor = null
+
+    await until(() => events.some((e) => e.doc === doc && e.type === 'write-refused'))
+    expect(failSnapshots).toBe(0)
+  })
+
+  it('is not sent again by a reconnect while the replica is being replaced', async () => {
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+
+    let release: () => void = () => {}
+    holdSnapshot = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    refuseFor = { status: 413, body: { error: 'node_text_too_large', message: 'too long' } }
+    pushEdit(doc, 'refused', 'long-text')
+    await until(() => writeStatesFor(doc, false) === 1)
+    const subscribesBefore = subscribeBodies.filter((b) => b.includes(doc)).length
+    // A reconnect is a write trigger of its own, and it does not wait on the
+    // replica: it would find the refused ops still outstanding.
+    endByStream.get(streamIdFor(doc) as string)?.()
+    await until(() => subscribeBodies.filter((b) => b.includes(doc)).length > subscribesBefore)
+    refuseFor = null
+    release()
+
+    await until(() => events.some((e) => e.doc === doc && e.type === 'write-refused'))
+    pushEdit(doc, 'later', 'kept')
+    await until(() => daemonWrites.some((w) => w.doc === doc))
+    expect(writeAttempts.get(doc)).toBe(2)
   })
 })

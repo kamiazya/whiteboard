@@ -36,10 +36,11 @@ const CHANGED_TEST_PATHSPEC = [
   '*.browser.test.tsx',
   ':(exclude).claude/**',
 ]
-// Partitioned by project NAME, as the job is: every browser project's name ends `-browser`.
+// Partitioned by project NAME, as the job is: every browser-mode project's name, and no other,
+// contains `-browser` (`web-browser-window-state` included).
 const LEGS = [
-  { name: 'browser', project: '*-browser' },
-  { name: 'node', project: '!*-browser' },
+  { name: 'browser', project: '*-browser*' },
+  { name: 'node', project: '!*-browser*' },
 ]
 const FILES_PLACEHOLDER = '<files>'
 const USAGE = [

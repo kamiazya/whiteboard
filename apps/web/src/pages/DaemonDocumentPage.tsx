@@ -15,11 +15,11 @@ import { sessionHealthOf } from '../lib/connection-state.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
-import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { sessionBodyBinding } from '../lib/loro-codemirror-sync.js'
+import { newDocumentPathIn } from '../lib/new-document-path.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -65,6 +65,8 @@ export interface DaemonDocumentPageProps {
   // keep — the session cookie authenticates the connection.
   serverMode?: boolean
 }
+
+const pathOf = (document: { readonly path: string }): string => document.path
 
 /**
  * The daemon keeper: the controller over the daemon's REST routes, the sync
@@ -377,9 +379,7 @@ function useDaemonDocument(
   const handleCreateDocument = async (): Promise<void> => {
     setCreating(true)
     try {
-      await controller.createDocument(
-        deriveNewDocumentPath(controller.documents.map((c) => c.path)),
-      )
+      await controller.createDocument(newDocumentPathIn('', controller.documents.map(pathOf)))
     } finally {
       setCreating(false)
     }

@@ -5,7 +5,8 @@
  * claims here — a chord that sends, a chord that wraps a selection — are
  * both keyboard.
  */
-import { cleanup, render } from '@testing-library/react'
+import { COMMENT_MESSAGE_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -97,4 +98,26 @@ it('opens with the caret after the text it was handed, not in front of it', asyn
   await userEvent.keyboard(' twice')
 
   await vi.waitFor(() => expect(box.element().textContent).toBe('noted twice'))
+})
+
+it('refuses a paste past the message limit, keeps the draft, and says why', async () => {
+  // Every composer is this box — a reply, an edit, a note's new thread — so
+  // the bound the agent tools hold a message to is held here once.
+  const sent: string[] = []
+  render(<Host onSubmit={(value) => sent.push(value)} />)
+  await userEvent.click(box())
+  await userEvent.keyboard('kept')
+
+  const clipboardData = new DataTransfer()
+  clipboardData.setData('text/plain', 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS))
+  fireEvent(
+    box().element(),
+    new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }),
+  )
+
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('4,096-character'),
+  )
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  expect(sent).toEqual(['kept'])
 })

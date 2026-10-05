@@ -10,6 +10,7 @@ import {
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { commentMessageLengthLimit } from '../../lib/comment-message-limit.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { CommentComposeState } from './canvas-commands.js'
@@ -137,6 +138,7 @@ export function CommentComposeOverlay({
       initialText=""
       testId="comment-compose"
       style={commentComposeStyle(palette)}
+      lengthLimit={commentMessageLengthLimit}
       onCommit={(draft) => {
         const text = draft.trim()
         if (text.length > 0 && compose.threadAnchor !== undefined) {

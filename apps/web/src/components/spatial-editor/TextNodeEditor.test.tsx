@@ -80,4 +80,46 @@ describe('TextNodeEditor', () => {
     expect(onCommit).toHaveBeenCalledTimes(1)
     expect(onCommit).toHaveBeenCalledWith('edited')
   })
+
+  describe('with a length limit', () => {
+    const limit = { max: 5, describe: (length: number) => `would be ${length}` }
+    const notice = () => screen.queryByTestId('text-node-editor-limit')
+
+    it('refuses an edit past the limit, keeps the draft, and says why', () => {
+      const onCommit = vi.fn()
+      render(
+        <TextNodeEditor
+          box={BOX}
+          initialText="abc"
+          lengthLimit={limit}
+          onCommit={onCommit}
+          onCancel={vi.fn()}
+        />,
+      )
+      const textarea = screen.getByTestId('text-node-editor') as HTMLTextAreaElement
+      fireEvent.change(textarea, { target: { value: 'abcdef' } })
+      expect(textarea.value).toBe('abc')
+      expect(notice()?.textContent).toBe('would be 6')
+      fireEvent.change(textarea, { target: { value: 'abcde' } })
+      expect(notice()).toBeNull()
+      fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+      expect(onCommit).toHaveBeenCalledWith('abcde')
+    })
+
+    it('lets a draft already past the limit shrink', () => {
+      render(
+        <TextNodeEditor
+          box={BOX}
+          initialText="abcdefgh"
+          lengthLimit={limit}
+          onCommit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      )
+      const textarea = screen.getByTestId('text-node-editor') as HTMLTextAreaElement
+      fireEvent.change(textarea, { target: { value: 'abcdefg' } })
+      expect(textarea.value).toBe('abcdefg')
+      expect(notice()).toBeNull()
+    })
+  })
 })

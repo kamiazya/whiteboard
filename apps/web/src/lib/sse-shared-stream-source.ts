@@ -12,7 +12,11 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { isBridgeDaemon } from './bridge-address.js'
-import { postWorkerRequest, sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
+import {
+  postWorkerRequest,
+  type SseWorkerEvent,
+  sseWorkerEventSchema,
+} from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
 
@@ -51,8 +55,8 @@ function deliverToListeners(
     for (const l of set) l.onConnectionChange?.(evt.connected)
     return
   }
-  if (evt.type === 'write-state') {
-    for (const l of set) l.onWriteState?.(evt.landed)
+  if (evt.type === 'write-state' || evt.type === 'write-refused') {
+    deliverWriteNews(set, evt)
     return
   }
   if (evt.type === 'auth-refused') {
@@ -60,6 +64,18 @@ function deliverToListeners(
     return
   }
   for (const l of set) l.onMessage(evt.raw)
+}
+
+/** What the worker says of the writes a tab handed it. */
+function deliverWriteNews(
+  set: ReadonlySet<DocListener>,
+  evt: Extract<SseWorkerEvent, { type: 'write-state' | 'write-refused' }>,
+): void {
+  if (evt.type === 'write-state') {
+    for (const l of set) l.onWriteState?.(evt.landed)
+  } else {
+    for (const l of set) l.onWriteRefused?.(evt.refusal)
+  }
 }
 
 export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | null {

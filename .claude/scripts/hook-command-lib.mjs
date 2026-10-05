@@ -22,11 +22,15 @@
 // beginning of the text, or after a separator, optionally behind `VAR=value`
 // assignments.
 //
-// Known ceilings: a separator inside a quoted string (`echo 'a; gh pr merge
-// 1'`) still reads as a command position, and a PR made by `curl` against the
-// API is not recognised. Telling quotes from separators needs a shell parser,
-// and every hook here is a one-time block or a fail-safe, so the cost of the
-// first miss is a single unnecessary prompt.
+// A command's own words — a body, a REST call's fields — are read by
+// `shellWords`, which removes quotes the way the shell does (`'…'`, `"…"`,
+// `$'…'`, a backslash escape) but expands nothing.
+//
+// Known ceilings: FINDING a command is still a regex, so a separator inside a
+// quoted string (`echo 'a; gh pr merge 1'`) still reads as a command
+// position, and a PR made by `curl` against the API is not recognised. Every
+// hook here is a one-time block or a fail-safe, so the cost of that first
+// miss is a single unnecessary prompt.
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -114,6 +118,8 @@ const GH_PR_VERBS = ['create', 'merge', 'edit']
 function fromGhPr(command, cwd, wanted) {
   const verb = GH_PR_VERBS.find((v) => wanted(v) && commandPattern(`gh pr ${v}`).test(command))
   if (verb === undefined) return null
+  const at = commandPattern(`gh pr ${verb}`).exec(command)
+  const { words } = shellWords(command.slice(at.index + at[0].length))
   const pr = commandPattern(`gh pr ${verb}`, String.raw`\s+(\d+)\b`).exec(command)
   const cd = leadingCd(command)
   return {
@@ -123,28 +129,35 @@ function fromGhPr(command, cwd, wanted) {
     pr: verb === 'create' || !pr ? null : Number(pr[1]),
     repo: PLACEHOLDER_REPO,
     head: command.match(/--head[= ]([^\s'"]+)/)?.[1] ?? null,
-    body: ghPrBody(command, cd ?? cwd),
+    body: ghPrBody(words, cd ?? cwd),
     cd,
   }
 }
 
-/** Reads --body '<text>' / --body="<text>" / --body-file <path>, as `gh pr create` takes them. */
-function ghPrBody(command, where) {
-  const file = command.match(/--body-file[= ]("([^"]*)"|'([^']*)'|[^\s'"]+)/)
-  if (file) {
-    const path = file[2] ?? file[3] ?? file[1]
+/**
+ * Reads `--body <text>` / `--body=<text>` / `--body-file <path>` off one gh pr command's words,
+ * which `shellWords` has already unquoted the way the shell would, so every quoting a reader can
+ * type (`$'…'`, `a\ b`, `"x"'y'`) reaches the hook as the text gh receives.
+ */
+function ghPrBody(words, where) {
+  const value = (flag) => {
+    let found
+    for (let i = 0; i < words.length; i++) {
+      if (words[i] === flag) found = words[++i]
+      else if (words[i].startsWith(`${flag}=`)) found = words[i].slice(flag.length + 1)
+    }
+    return found
+  }
+  const path = value('--body-file')
+  if (path !== undefined) {
     try {
       return { text: readFileSync(resolve(where, path), 'utf8') }
     } catch {
       return null
     }
   }
-  const quoted = command.match(/--body[= ]("((?:[^"\\]|\\.)*)"|'([^']*)')/)
-  if (quoted) {
-    return { text: quoted[2] !== undefined ? quoted[2].replace(/\\(.)/g, '$1') : quoted[3] }
-  }
-  const bare = command.match(/--body[= ]([^\s'"]+)/)
-  return bare ? { text: bare[1] } : null
+  const text = value('--body')
+  return text === undefined ? null : { text }
 }
 
 /** gh api flags that take a value, so the value is not mistaken for the endpoint. */

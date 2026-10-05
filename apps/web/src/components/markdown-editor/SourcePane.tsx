@@ -11,6 +11,7 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
+import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import {
@@ -18,7 +19,6 @@ import {
   followCaret,
   markdownEditingBase,
 } from './markdown-editing-base.js'
-import { externalValue } from './markdown-length-limit.js'
 import { rangeToActOn } from './word-at.js'
 
 /**

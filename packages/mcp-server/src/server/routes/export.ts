@@ -1,5 +1,3 @@
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
@@ -7,17 +5,15 @@ import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { z } from 'zod'
 import { type ExportResponse, exportRequestSchema } from '../../shared/api-contracts/export.js'
-import { isErrnoCode } from '../../shared/errno.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { getLogger } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
-import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { onDocumentAction } from './document/path-route.js'
 import {
-  defaultExportPath,
   documentMissingBody,
   readExportBody,
   resolveRequestedOutputPath,
+  writeExportFile,
 } from './export-request.js'
 
 /**
@@ -83,11 +79,8 @@ export function createExportRouter(options: ExportRouterOptions) {
 
     // Validated up front, before rendering, so the caller does not waste a
     // render on a write that will fail.
-    const resolved = await resolveRequestedOutputPath(
-      body,
-      workspaceId,
-      options.scope.layout.exportsDir(workspaceId),
-    )
+    const { layout } = options.scope
+    const resolved = await resolveRequestedOutputPath(body, workspaceId, layout)
     if ('error' in resolved) return c.json(resolved.error, resolved.status)
     const outputPath = resolved.outputPath
 
@@ -104,10 +97,13 @@ export function createExportRouter(options: ExportRouterOptions) {
     if ('error' in rendered) return c.json(rendered.error, rendered.status)
     const { png: pngBuffer, undrawable, unresolvedFamilies } = rendered
 
-    const filePath =
-      outputPath !== undefined
-        ? await writeExplicitOutput(outputPath, pngBuffer)
-        : await writeDefaultOutput(options.scope.layout, workspaceId, path, pngBuffer)
+    const filePath = await writeExportFile(pngBuffer, {
+      outputPath,
+      layout,
+      workspaceId,
+      path,
+      extension: 'png',
+    })
     const response: ExportResponse = {
       filePath,
       undrawable: [...undrawable],
@@ -145,44 +141,4 @@ async function renderHeadless(
     undrawable: result.undrawable,
     unresolvedFamilies: result.unresolvedFamilies,
   }
-}
-
-// The millisecond timestamp + nanoid(6) suffix is only probabilistically
-// unique, not guaranteed — two exports racing in the same millisecond could
-// still collide. `wx` makes the create fail loudly (EEXIST) instead of
-// silently clobbering an earlier export, and a bounded retry with a fresh
-// random suffix turns that rare collision into a transparent retry rather
-// than a user-visible failure.
-const MAX_DEFAULT_PATH_ATTEMPTS = 5
-
-async function writeDefaultOutput(
-  layout: DataLayout,
-  workspaceId: string,
-  path: string,
-  pngBuffer: Buffer,
-): Promise<string> {
-  let lastFilePath: string | undefined
-  for (let attempt = 0; attempt < MAX_DEFAULT_PATH_ATTEMPTS; attempt++) {
-    const filePath = defaultExportPath(layout.exportsDir(workspaceId), path, 'png')
-    lastFilePath = filePath
-    await mkdir(dirname(filePath), { recursive: true })
-    try {
-      await writeFile(filePath, pngBuffer, { flag: 'wx' })
-      return filePath
-    } catch (err) {
-      if (!isErrnoCode(err, 'EEXIST')) throw err
-    }
-  }
-  throw new Error(
-    `failed to generate a unique export filename after ${MAX_DEFAULT_PATH_ATTEMPTS} attempts (last tried: ${lastFilePath})`,
-  )
-}
-
-// outputPath's existence was already validated up front (validateOutputPath,
-// honoring `overwrite`), so a plain write is correct here — no `wx` retry
-// needed for a caller-chosen path.
-async function writeExplicitOutput(outputPath: string, pngBuffer: Buffer): Promise<string> {
-  await mkdir(dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, pngBuffer)
-  return outputPath
 }

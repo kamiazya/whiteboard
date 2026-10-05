@@ -26,6 +26,7 @@ import { UPLOADABLE_IMAGE_TYPES } from './files.js'
 import * as barrel from './index.js'
 import { membershipRefusalSchema } from './membership.js'
 import { signInRefusalSchema } from './sign-in.js'
+import { syncWriteRefusalSchema } from './sync-write-refusal.js'
 import { tenantPeopleRefusalSchema } from './tenant-people.js'
 import { documentBacklinksResponseSchema } from './v1-answers.js'
 import { workspacePeopleRefusalSchema } from './workspace-people.js'
@@ -249,6 +250,10 @@ const LOCKSTEP: ReadonlyMap<string, string> = new Map([
   [
     signatureOfSchema(signInRefusalSchema),
     'sign-in refusal codes: read with safeParse; an unrecognised refusal shows the generic sign-in failure',
+  ],
+  [
+    signatureOfSchema(syncWriteRefusalSchema.shape.code.unwrap()),
+    "sync write refusal codes: read with safeParse; a code this build cannot name is still a refusal, told with the keeper's own sentence",
   ],
 ])
 

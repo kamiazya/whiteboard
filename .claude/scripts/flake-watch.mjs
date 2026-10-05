@@ -30,6 +30,7 @@ import {
   commitsLandedAfter,
   failedLegFrom,
   flakeCacheDir,
+  formatIdleLine,
   formatReport,
   formatUnhealedReport,
   inspectPublishJobs,
@@ -325,16 +326,14 @@ function main() {
     }),
   }))
 
-  const report = formatReport(
-    clusterFailures(window),
-    WINDOW_DAYS,
-    gitInspector(),
-    mainPassedAfter(),
-  )
+  const clusters = clusterFailures(window)
+  const inspect = gitInspector()
+  const passedAfter = mainPassedAfter()
+  const report = formatReport(clusters, WINDOW_DAYS, inspect, passedAfter)
   if (report !== '') process.stdout.write(`${report}\n`)
   else if (!QUIET) {
     process.stdout.write(
-      `[flake-watch] no recurring test failure on main in ${WINDOW_DAYS} days (${window.length} failed run(s) examined)\n`,
+      `${formatIdleLine(clusters, WINDOW_DAYS, window.length, inspect, passedAfter)}\n`,
     )
   }
 }

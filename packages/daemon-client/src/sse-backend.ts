@@ -11,6 +11,7 @@
  */
 
 import { apiFetch } from './api-client.js'
+import { type SyncWriteRefusal, SyncWriteRefusedError } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { documentSyncKey, SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
@@ -30,6 +31,13 @@ export class SseBackend implements DocumentBackend {
   private ownedHub: SseStreamHub | null = null
   private unsubscribe: (() => void) | null = null
   private unsubscribeText: (() => void) | null = null
+  private handlers: DocumentBackendHandlers | null = null
+  /**
+   * Frames that arrived while the keeper's state was being fetched after a
+   * refusal, or `null` when no such fetch is running. Held rather than
+   * applied: they would land on the copy the fetched state replaces.
+   */
+  private heldFrames: Uint8Array[] | null = null
   /**
    * The key binary frames travel on: always the WORKSPACE document's — the
    * seed snapshot and every update are the workspace record's, and local
@@ -61,6 +69,7 @@ export class SseBackend implements DocumentBackend {
 
   connect(handlers: DocumentBackendHandlers): void {
     this.cancelled = false
+    this.handlers = handlers
     void this.run(handlers)
   }
 
@@ -104,7 +113,10 @@ export class SseBackend implements DocumentBackend {
   /** What the workspace key's subscription does with each thing the source says. */
   private binaryListener(handlers: DocumentBackendHandlers): DocListener {
     return {
-      onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
+      onUpdate: (bytes) => {
+        if (this.heldFrames !== null) this.heldFrames.push(bytes)
+        else handlers.onRemoteUpdate(bytes)
+      },
       // Nothing addresses text to the workspace key; per-document text
       // arrives on the per-document subscription `run` makes.
       onMessage: () => {},
@@ -129,6 +141,33 @@ export class SseBackend implements DocumentBackend {
         if (this.cancelled) return
         handlers.onAuthError?.()
       },
+      onWriteRefused: (refusal) => this.writeRefused(refusal, handlers),
+    }
+  }
+
+  /**
+   * The keeper refused bytes it will refuse every time, and every edit after
+   * them is built on them: the caller is told why, then handed the keeper's
+   * state to continue from.
+   */
+  private writeRefused(refusal: SyncWriteRefusal, handlers: DocumentBackendHandlers): void {
+    if (this.cancelled) return
+    handlers.onWriteRefused?.(refusal)
+    void this.resync(handlers)
+  }
+
+  private async resync(handlers: DocumentBackendHandlers): Promise<void> {
+    const held: Uint8Array[] = []
+    this.heldFrames = held
+    try {
+      const bytes = await this.resolveSource().snapshot(this.binaryKey)
+      if (!this.cancelled && bytes !== null) handlers.onSnapshot(bytes)
+    } catch {
+      // The caller keeps the copy it has; its next write is refused again and
+      // asks again.
+    } finally {
+      if (this.heldFrames === held) this.heldFrames = null
+      if (!this.cancelled) for (const bytes of held) handlers.onRemoteUpdate(bytes)
     }
   }
 
@@ -172,6 +211,8 @@ export class SseBackend implements DocumentBackend {
 
   disconnect(): void {
     this.cancelled = true
+    this.handlers = null
+    this.heldFrames = null
     this.unsubscribe?.()
     this.unsubscribe = null
     this.unsubscribeText?.()
@@ -192,7 +233,16 @@ export class SseBackend implements DocumentBackend {
     // Returned, not swallowed: `DocumentBackendHandlers` already treats a
     // rejected push as the session's `error` status, and with no worker in
     // front there is nothing else that will ever retry this write.
-    return this.resolveSource().push(this.binaryKey, bytes)
+    //
+    // A refusal of the bytes themselves is the exception: retrying cannot
+    // land it, so it is answered here by taking the keeper's state.
+    const pushed = this.resolveSource().push(this.binaryKey, bytes)
+    if (pushed === undefined) return
+    const handlers = this.handlers
+    return pushed.catch((err: unknown) => {
+      if (!(err instanceof SyncWriteRefusedError) || handlers === null) throw err
+      this.writeRefused(err.refusal, handlers)
+    })
   }
 
   sendClientReady(): void {

@@ -2,10 +2,9 @@ import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/
 import {
   type ApiErrorBody,
   applyDocumentUpdate,
-  DocumentEngineTrapError,
   errorBody,
-  MarkdownBodyTooLargeError,
   type ServerDeps,
+  syncWriteAnswer,
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
@@ -20,11 +19,10 @@ export interface LiveDocRouterOptions {
 }
 
 /**
- * Runs the update, answering an engine abort as `document_engine_trap` — the
- * code `/api/v1` answers it with. The operation has already dropped the doc it
- * poisoned, so the caller is told what failed rather than the catch-all's
- * anonymous 500, and the next request is served. A body past the markdown
- * size limit is 413 `markdown_too_large`, with nothing of the update kept.
+ * Runs the update, answering a refusal the way every sync surface answers it
+ * (`syncWriteAnswer`): a size limit 413, an engine abort `document_engine_trap`
+ * — the operation has already dropped the doc it poisoned, so the next
+ * request is served. Nothing of a refused update is kept.
  */
 async function answeringWriteRefusal(
   c: Context,
@@ -33,11 +31,9 @@ async function answeringWriteRefusal(
   try {
     return await run()
   } catch (err) {
-    if (err instanceof MarkdownBodyTooLargeError) {
-      return c.json(errorBody('markdown_too_large', err.message), 413)
-    }
-    if (!(err instanceof DocumentEngineTrapError)) throw err
-    return c.json(errorBody('document_engine_trap', err.message), 500)
+    const answer = syncWriteAnswer(err)
+    if (answer === undefined) throw err
+    return c.json(errorBody(answer.code, (err as Error).message), answer.status)
   }
 }
 

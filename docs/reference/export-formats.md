@@ -41,18 +41,30 @@ not:
 - **The markdown editor** refuses a paste or keystroke that would take the
   document past 262,144 characters, leaves the document as it was, and says
   so in a notice at the top of the editor.
-- **A browser-kept workspace** does not save a body past the limit; the editor
-  shows the save as failed.
+- **A browser-kept workspace** does not save a body past the limit: the page
+  goes back to what is stored, undoing that change and anything typed after it,
+  and a notice at the top says the change was not saved and why. A refusal from
+  the daemon's sync routes below is answered the same way, and never retried.
 - **The daemon's sync routes** — a document's `update`, the workspace
   document's `update` and `promote` — answer `413` with
   `{"error":"markdown_too_large"}` and store nothing. They also refuse, in
   milliseconds, an update that inserts more than 262,144 characters in one
-  piece, before applying it. The same `update` and `promote` refuse, with
+  piece, before applying it. A promoted workspace is judged by its whole
+  history: if a note once took one paste past the limit, even one cut back
+  since, a workspace that already holds documents refuses it, naming the
+  document, while a workspace with no documents yet takes it whole, since
+  nothing is replayed there. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
   at a path outside the path grammar; a document already at such a path can
-  still be moved to a valid one.
+  still be moved to a valid one. The workspace document's `update` also
+  refuses, with `400 {"error":"unreadable_document_meta"}`, an update that
+  would leave a readable document with a kind, segment or id this server
+  cannot read — which would hide it and everything below it — and, with
+  `400 {"error":"document_name_too_long"}`, one that gives a document a name
+  longer than 200 characters. A name stored longer before that bound can
+  still be kept or shortened.
 
-## How large a text node and a document name may be
+## How large a text node, a label, a comment and a document name may be
 
 A text node's text — the `text` of a `wb_canvas_edit` `node.add` or
 `node.patch`, and what a `node.splice` leaves — carries at most **8,192
@@ -61,10 +73,35 @@ characters**; a longer one is refused with "node text is longer than the
 the limit one node still finishes in about a second. A splice that shrinks text
 already over the limit is accepted.
 
-A document's display name — `wb_workspace_edit` `document.create` and
-`document.move`, `POST /api/v1/workspaces/{id}/documents`, and
-`PUT /api/workspaces/{id}/documents/{path}/name` — carries at most **200
-characters**, as a workspace name does. A blank name still clears it.
+The daemon's sync routes — a document's `update`, the workspace document's
+`update` and `promote` — hold the same bound: an update that adds a node with
+more than 8,192 characters of text, or grows a node's text past that, answers
+`413` with `{"error":"node_text_too_large"}` and stores nothing. A node stored
+longer before the limit can still be moved, restyled or shortened. A
+browser-kept workspace does not check a canvas node's text.
+
+A label — of an edge, a line or a group — carries at most **1,024
+characters**, and one comment message at most **4,096**. Each is laid out
+again on every render of its board, at a cost that grows with its length.
+`wb_canvas_edit` refuses a longer `label` on `node.add`, `node.patch`,
+`edge.add`, `edge.patch`, `line.add` and `line.patch`, and a longer `text` on
+`comment.add`; `wb_thread_edit` refuses a longer `body` on `thread.add` and
+`message.add`. The editor's label and comment boxes refuse a longer edit and
+say why. The daemon's sync routes refuse an update that adds or grows one past
+its bound with `413` and `{"error":"label_too_large"}` or
+`{"error":"comment_too_large"}`, storing nothing. A label or message stored
+longer before the limit still reads, and can still be shortened.
+
+A document's display name carries at most **200 characters**, as a workspace
+name does, however it is written: the `name` of `wb_workspace_edit`
+`document.create` and `document.move` and of
+`POST /api/v1/workspaces/{id}/documents`,
+`PUT /api/workspaces/{id}/documents/{path}/name`, the web app's Name field,
+and a markdown document's frontmatter `title`, which becomes its name. An
+over-long `title` is refused before anything is written — `document.create`
+creates nothing, and through `/api/v1` the answer is
+`400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A
+blank name still clears it, and a name stored before the limit still lists.
 
 ## OKF frontmatter this server does not model
 

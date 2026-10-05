@@ -213,11 +213,26 @@ survived because only the `undefined` half was exercised).
 What no write check can reach is a CRDT update: `applyWorkspaceDocumentUpdate`
 imports state, not an intent, so the editor's own tag row is where that one
 is held (`.claude/rules/app-web.md`).
-Two things ARE checked on a CRDT update, by reading its operations before
-applying them (`importWithinSyncLimits`): a text insert run or a markdown body
-past `MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), and a document
-moved onto a path `documentPathSchema` refuses (`OffGrammarPathError`, 400).
-Both are measured in `mcp-server/scripts/measure/sync-update-body-cost.mjs`.
+What a CRDT update does to TEXT is judged once, by loro-adapter's
+`importWithinTextLimits`, which both keepers take (the browser through
+`syncTextLimitBreach`): an insert run or markdown body past
+`MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), node text added or
+grown past `NODE_TEXT_MAX_CHARS` (`NodeTextTooLargeError`), a label past
+`LABEL_MAX_CHARS` (`LabelTooLargeError`) and a thread message past
+`COMMENT_MESSAGE_MAX_CHARS` (`CommentMessageTooLargeError`), each 413; into an empty
+document no run is judged, since nothing is replayed there.
+`importWithinSyncLimits` adds the workspace record's placement checks
+(`placementRefusal`): a node left unreadable (`UnreadableDocumentMetaError`), a
+document moved off the path grammar (`OffGrammarPathError`), a name grown past
+`DOCUMENT_NAME_MAX_LENGTH` (`DocumentNameTooLongError`), each 400. Every refusal
+extends `SyncWriteRefusalError` and carries its own code and status; routes
+answer through `syncWriteAnswer`, never per-class arms. Costs are measured in
+`mcp-server/scripts/measure/sync-update-body-cost.mjs`.
+
+One thing is WRITTEN on a CRDT update: `applyWorkspaceDocumentUpdate` names a
+note at a generated path after its heading (`seedNamesFromTitles`) before the
+save, as the browser keeper does in its own store. `applyDocumentUpdate`
+cannot — its seam reaches a projection that carries no name.
 
 ## Common mistakes (append as review finds them)
 

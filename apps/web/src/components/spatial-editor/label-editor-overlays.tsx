@@ -9,15 +9,29 @@ import {
   type CanvasLine,
   frameLabel,
   isFrame,
+  LABEL_MAX_CHARS,
   type SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
-import { TextNodeEditor } from './TextNodeEditor.js'
+import { type TextLengthLimit, TextNodeEditor } from './TextNodeEditor.js'
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
 const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
+
+const COUNT = new Intl.NumberFormat('en-US')
+
+/**
+ * A label is held where a person writes it to the bound the agent tools hold
+ * it to: it is laid out on every render of its board, at a cost linear in its
+ * length, so one past `LABEL_MAX_CHARS` is never made here.
+ */
+const labelLengthLimit: TextLengthLimit = {
+  max: LABEL_MAX_CHARS,
+  describe: (length) =>
+    `Not added: the label would be ${COUNT.format(length)} characters, past its ${COUNT.format(LABEL_MAX_CHARS)}-character limit.`,
+}
 
 /**
  * Opaque surface + label typography for the edge/group label editors. The
@@ -36,6 +50,11 @@ function labelEditorStyle(palette: SpatialPalette, fontFamily: string) {
     fontFamily,
     fontSize: SPATIAL_THEME_GEOMETRY.labelFontSizePx,
   }
+}
+
+/** What every label draft shares: the board's look, and the label's bound. */
+function labelDraft(palette: SpatialPalette, fontFamily: string) {
+  return { style: labelEditorStyle(palette, fontFamily), lengthLimit: labelLengthLimit }
 }
 
 type ApplyResult = (result: ReturnType<typeof reduceGesture>) => void
@@ -92,7 +111,7 @@ export function EdgeLabelEditorOverlay({
       }}
       initialText={edge.label ?? ''}
       testId="edge-label-editor"
-      style={labelEditorStyle(palette, fontFamily)}
+      {...labelDraft(palette, fontFamily)}
       onCommit={(label) => {
         const command = labelInkCommand(canvas, edge.id, label.trim())
         applyResult({
@@ -134,7 +153,7 @@ export function GroupLabelEditorOverlay({
       box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
       initialText={frameLabel(group) ?? ''}
       testId="group-label-editor"
-      style={labelEditorStyle(palette, fontFamily)}
+      {...labelDraft(palette, fontFamily)}
       onCommit={(label) => {
         applyResult({
           state: { kind: 'idle' },

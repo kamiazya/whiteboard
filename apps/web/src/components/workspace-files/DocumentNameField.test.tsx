@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentNameField } from './DocumentNameField.js'
@@ -9,6 +11,13 @@ describe('DocumentNameField', () => {
   it('shows the last path segment as the placeholder an empty name falls back to', () => {
     render(<DocumentNameField value="" path="design/login" onChange={() => {}} />)
     expect(screen.getByLabelText(/^Name/).getAttribute('placeholder')).toBe('login')
+  })
+
+  it('caps what can be typed at the length every keeper accepts', () => {
+    render(<DocumentNameField value="" path="a" onChange={() => {}} />)
+    expect((screen.getByLabelText(/^Name/) as HTMLInputElement).maxLength).toBe(
+      DOCUMENT_NAME_MAX_LENGTH,
+    )
   })
 
   it('reports what is typed and explains the fallback to the path', () => {

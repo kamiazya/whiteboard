@@ -17,6 +17,7 @@ function renderCard(extra: Partial<PassageProposalCardProps>) {
       current="Thursday"
       proposed="Friday"
       conflicted={false}
+      bodyLength={30}
       at={{ x: 0, y: 0 }}
       onDecide={vi.fn()}
       onClose={vi.fn()}

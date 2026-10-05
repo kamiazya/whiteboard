@@ -127,6 +127,8 @@ export interface SessionDeps {
    * resolves at once, so a daemon page must not read this as "saved".
    */
   onPersistenceChange?: (state: BrowserPersistenceState) => void
+  /** A write the keeper refused for good, to tell the person; the session recovers itself. */
+  onWriteRefused?: DocumentBackendHandlers['onWriteRefused']
   dispatchIdentityEvent: (eventName: string, identity: UseDocumentSyncOptions['identity']) => void
   generations: GenerationCounters
   /**
@@ -778,6 +780,12 @@ export function createDocumentSyncSession(
         persistence.landed()
       },
 
+      onWriteRefused(refusal) {
+        if (isStale()) return
+        persistence.refused()
+        deps.onWriteRefused?.(refusal)
+      },
+
       onDisconnected() {
         if (isStale()) return
         deps.onStatusChange('reconnecting')
@@ -869,6 +877,7 @@ export function createDocumentSyncSession(
         // Same for the stored body: this is the read that makes an
         // agent-authored document open with its prose already in the editor.
         notifyBodyChanged()
+        persistence.tookKeeperState()
       },
 
       onRemoteUpdate(bytes) {

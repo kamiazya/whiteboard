@@ -640,7 +640,7 @@ the table alone.
     WHERE a line may break is this package's own job and the answer is a
     Unicode standard. It is pure and DOM-free, so Node, the browser and a
     worker agree, which is what the byte-identical-SVG guarantee needs.
-    Four consequences worth knowing:
+    Consequences worth knowing:
     - **`wordBreak` stays `normal`.** `break-all` would also break English
       mid-word. A segment that alone exceeds `maxWidth` is instead expanded to
       CODE POINTS at the point it arises, so only the string that needs it

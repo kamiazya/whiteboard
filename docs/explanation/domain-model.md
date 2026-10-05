@@ -84,6 +84,14 @@ A path is never derived from a display name, in either mode.
 that and found every non-Latin title collapsing to `untitled-N`, which is
 indistinguishable in the very column a path exists to distinguish.
 
+The display name can come from the document instead. A note still at a
+generated path (`untitled`, `untitled-2`, …) that nobody has named takes its
+name from a level-1 heading on its first line, and keeps following that
+heading while it is being typed. It stops for good once someone renames the
+note to something the heading does not start with, or gives it an address of
+their own in place of `untitled`. Both keepers do this, and neither touches
+the path.
+
 A `[[reference]]` between documents is written as a **path** or a
 **document id** — display names never resolve; they label a link at render
 time instead. The id survives everything; a path reference is repointed

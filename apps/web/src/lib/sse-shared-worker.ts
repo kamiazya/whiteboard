@@ -10,6 +10,10 @@
  * This file must be a real same-origin module: the app's CSP declares
  * `worker-src 'self'`, which rejects a blob: worker.
  */
+import {
+  type SyncWriteRefusal,
+  SyncWriteRefusedError,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
 import { SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-fetch.js'
@@ -287,10 +291,15 @@ function scheduleWrite(baseUrl: string, doc: string): void {
       // failure is not over.
       if (replica.version().compare(at) === 0) writeLanded(baseUrl, doc)
     })
-    // A refused write leaves `ackedVersions` where it was, so whatever writes
+    // A failed write leaves `ackedVersions` where it was, so whatever writes
     // next — a later edit, the reconnect flush, or the retry scheduled here —
-    // recomputes the same outstanding bytes.
-    .catch(() => writeFailed(baseUrl, doc))
+    // recomputes the same outstanding bytes. A refusal of the bytes
+    // themselves is the exception: those would be refused every time.
+    .catch((err: unknown) =>
+      err instanceof SyncWriteRefusedError
+        ? writeRefused(baseUrl, doc, err.refusal)
+        : writeFailed(baseUrl, doc),
+    )
   writeChains.set(key, next)
 }
 
@@ -321,6 +330,70 @@ function writeFailed(baseUrl: string, doc: string): void {
       scheduleWrite(baseUrl, doc)
     }, delay),
   )
+}
+
+/**
+ * The daemon refused the outstanding bytes for what they would do, so they
+ * can never land — and the replica, holding them, would offer them again with
+ * every write after, keeping each later edit from every tab unsaved too.
+ * Nothing more is written for the document until its replica is the daemon's
+ * again; the tabs hear the write failed now, and why once the replica is
+ * replaced — any of them may hold the refused ops by then, and each forks
+ * again from the replacement.
+ */
+function writeRefused(baseUrl: string, doc: string, refusal: SyncWriteRefusal): void {
+  const key = replicaKey(baseUrl, doc)
+  clearTimeout(writeRetries.get(key))
+  writeRetries.delete(key)
+  // `scheduleWrite` writes nothing for a document with no acknowledged
+  // version, so a write already chained behind this one stops here too.
+  ackedVersions.delete(key)
+  if (!failedWrites.has(key)) tellWriteState(baseUrl, doc, false)
+  failedWrites.set(key, (failedWrites.get(key) ?? 0) + 1)
+  replaceReplica(baseUrl, doc, refusal, 0)
+}
+
+/**
+ * The replica, rebuilt from the daemon's snapshot. On the replica queue, so a
+ * frame or push that arrives meanwhile lands on the replacement. A snapshot
+ * that cannot be fetched is asked for again: a tab forked from the old
+ * replica would carry on from the refused ops, and one forked from an empty
+ * replica would show the document gone.
+ */
+function replaceReplica(
+  baseUrl: string,
+  doc: string,
+  refusal: SyncWriteRefusal,
+  attempt: number,
+): void {
+  const key = replicaKey(baseUrl, doc)
+  queueReplicaWork(async () => {
+    let bytes: Uint8Array | null
+    try {
+      bytes = await hubFor(baseUrl).snapshot(doc)
+    } catch {
+      const delay = Math.min(WRITE_RETRY_BASE_MS * 2 ** attempt, WRITE_RETRY_MAX_MS)
+      writeRetries.set(
+        key,
+        setTimeout(() => {
+          writeRetries.delete(key)
+          replaceReplica(baseUrl, doc, refusal, attempt + 1)
+        }, delay),
+      )
+      return
+    }
+    if (loro === undefined) return
+    const replica = new loro.LoroDoc()
+    if (bytes !== null && bytes.byteLength > 0) replica.import(bytes)
+    replicas.set(key, replica)
+    ackedVersions.set(key, replica.version())
+    seededDocs.add(key)
+    failedWrites.delete(key)
+    for (const [target, state] of ports) {
+      if (state.baseUrl !== baseUrl || !state.subscriptions.has(doc)) continue
+      postWorkerEvent(target, { type: 'write-refused', doc, refusal })
+    }
+  })
 }
 
 function writeLanded(baseUrl: string, doc: string): void {
