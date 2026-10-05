@@ -48,6 +48,28 @@ async function createNote(
   return documentId
 }
 
+/** Edits the `body` after a note's `# Weekly review\n\n` heading, as an agent would. */
+async function appendToBody(client: Client, documentId: string): Promise<void> {
+  const edit = await client.callTool({
+    name: 'wb_body_edit',
+    arguments: {
+      workspaceId: WS,
+      documentId,
+      mode: 'apply',
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: { kind: 'text', quote: { exact: 'body' }, start: 17, end: 21 },
+          text: 'body, edited',
+          assumed: 'body',
+        },
+      ],
+    },
+  })
+  expect(edit.isError, JSON.stringify(edit.content)).not.toBe(true)
+}
+
 async function nameOf(deps: ServerDeps, documentId: string): Promise<string | undefined> {
   const entry = await deps.documentIndex.resolveDocumentById({ workspaceId: WS, documentId })
   expect(entry).not.toBeNull()
@@ -159,6 +181,37 @@ describe('a daemon note at a generated path is named after its heading', () => {
     })
 
     expect(await nameOf(deps, id)).toBeUndefined()
+  })
+
+  it('nor, on a later body edit, over a name the writer gave that the heading starts with', async () => {
+    const { deps, client } = await daemon()
+    const id = await createNote(client, {
+      path: 'untitled',
+      name: 'Weekly',
+      markdown: '# Weekly review\n\nbody',
+    })
+
+    await appendToBody(client, id)
+
+    expect(await nameOf(deps, id)).toBe('Weekly')
+  })
+
+  it('nor, on a later body edit, over a rename the heading starts with', async () => {
+    const { deps, client } = await daemon()
+    const id = await createNote(client, { path: 'untitled', markdown: '# Weekly review\n\nbody' })
+    expect(await nameOf(deps, id)).toBe('Weekly review')
+    const rename = await client.callTool({
+      name: 'wb_workspace_edit',
+      arguments: {
+        workspaceId: WS,
+        ops: [{ op: 'document.move', documentId: id, name: 'Weekly' }],
+      },
+    })
+    expect(rename.isError, JSON.stringify(rename.content)).not.toBe(true)
+
+    await appendToBody(client, id)
+
+    expect(await nameOf(deps, id)).toBe('Weekly')
   })
 
   it('nor over a name the writer gave it', async () => {

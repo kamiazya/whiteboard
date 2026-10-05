@@ -84,8 +84,17 @@ export interface SyncTextJudgement {
   readonly touchesNodeMeta: boolean
 }
 
-/** The keys a workspace-tree node's own meta carries; a write of one can change a path, a kind or a name. */
-const NODE_META_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'kind', 'name'])
+/**
+ * The keys a workspace-tree node's own meta carries; a write of one can change
+ * a path, a kind or a name, or leave the node unreadable.
+ */
+const NODE_META_KEYS: ReadonlySet<string> = new Set([
+  'documentId',
+  'segment',
+  'kind',
+  'name',
+  'nameChosen',
+])
 
 type Op = JsonSchema['changes'][number]['ops'][number]
 type LongValue = { container: ContainerID; key: string; bound: BoundedValue }

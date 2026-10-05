@@ -39,6 +39,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 const ISOLATED_DB = claimIsolatedWhiteboardDb('browser-backend')
 
@@ -172,6 +173,39 @@ describe('BrowserBackend', () => {
     reloaded.import(deliveredSnapshot(h2))
     expect(resolveWorkspaceDocumentById(reloaded, ID_A)?.name).toBe('Weekly review')
     backend2.disconnect()
+  })
+
+  // The prefix that lets a name follow a heading still being typed is also
+  // what a short name for a longer heading looks like; a rename says which.
+  it('keeps a name somebody chose that the heading starts with', async () => {
+    const note = { documentId: ID_A, path: 'untitled', kind: 'markdown' } as const
+    const typed = async (body: string): Promise<void> => {
+      const handlers = makeHandlers()
+      const backend = new BrowserBackend(note)
+      await connectAndWait(backend, handlers)
+      const doc = new LoroDoc()
+      doc.import(deliveredSnapshot(handlers))
+      const from = doc.version()
+      writeMarkdownBody(documentContainers(doc, ID_A), body)
+      await backend.pushLocalUpdate(doc.export({ mode: 'update', from }))
+      backend.disconnect()
+    }
+    const index = new FoldingBrowserIndex()
+    const nameNow = async () =>
+      (await index.resolveDocumentById({ workspaceId: getBrowserWorkspaceId(), documentId: ID_A }))
+        ?.name
+    await typed('# Weekly review\n\nNotes.')
+    expect(await nameNow()).toBe('Weekly review')
+
+    // What the title box and the rename dialog both call.
+    await index.setDocumentName({
+      workspaceId: getBrowserWorkspaceId(),
+      documentId: ID_A,
+      name: 'Weekly',
+    })
+    await typed('# Weekly review\n\nNotes, edited.')
+
+    expect(await nameNow()).toBe('Weekly')
   })
 
   it('a readable legacy per-document record is folded in and served from the tree', async () => {

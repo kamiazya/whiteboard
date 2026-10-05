@@ -8,7 +8,11 @@ import { describe, expect, it } from 'vitest'
 import { writeSpatialNode } from './loro-bridge.js'
 import { importWithinTextLimits, syncTextLimitJudge } from './sync-text-limits.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  WORKSPACE_TREE_KEY,
+} from './workspace-tree.js'
 
 const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
 const OTHER_ID = '01BRWAAAAAAAAAAAAAAAAAAAA6'
@@ -204,6 +208,23 @@ describe('importWithinTextLimits', () => {
     client.commit()
     const created = client.export({ mode: 'update', from })
     expect(importWithinTextLimits(base.fork(), created).touchesNodeMeta).toBe(true)
+  })
+
+  // A malformed marker leaves the node unreadable, which only a keeper that
+  // looked at the meta can refuse.
+  it('counts a write of the chosen-name marker alone as touching node meta', () => {
+    const base = record({ [DOC_ID]: 'body' })
+    const client = base.fork()
+    const from = client.oplogVersion()
+    const node = client
+      .getTree(WORKSPACE_TREE_KEY)
+      .getNodes()
+      .find((each) => each.data.get('documentId') === DOC_ID)
+    node?.data.set('nameChosen', 'yes')
+    client.commit()
+    const marked = client.export({ mode: 'update', from })
+
+    expect(importWithinTextLimits(base.fork(), marked).touchesNodeMeta).toBe(true)
   })
 })
 

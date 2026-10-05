@@ -65,6 +65,12 @@ export const workspaceNodeMetaSchema = z.object({
    */
   name: z.string().min(1).optional(),
   /**
+   * Set beside a name somebody CHOSE — at creation, by a rename, on import —
+   * and cleared with it; never by the heading seeder, which leaves a chosen
+   * name alone (`name-from-title.ts`). Absent on older records.
+   */
+  nameChosen: z.literal(true).optional(),
+  /**
    * Row-relocated meta (dual-plane collapse): state that is shared CRDT state
    * by decision, not the daemon's `documents` table alone — every client sees
    * the same timestamps. All optional so every workspace
@@ -115,7 +121,7 @@ export interface WorkspaceDocumentEntry extends WorkspaceNodeMeta {
   shadowed?: true
 }
 
-export interface CreateWorkspaceDocumentInput extends WorkspaceNodeMeta {
+export interface CreateWorkspaceDocumentInput extends Omit<WorkspaceNodeMeta, 'nameChosen'> {
   /** Omit for a document at the workspace root. */
   parentId?: string
 }
@@ -443,7 +449,7 @@ export function createWorkspaceDocument(
   node.data.set('documentId', meta.documentId)
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind satisfies DocumentKind)
-  if (meta.name !== undefined) node.data.set('name', meta.name)
+  if (meta.name !== undefined) setChosenName(node, meta.name)
   node.data.set('createdAt', meta.createdAt)
   node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)
@@ -471,6 +477,17 @@ export function moveWorkspaceDocument(
   doc.commit()
 }
 
+/** Writes a name somebody chose, with its `nameChosen` mark, or clears both. */
+function setChosenName(node: LoroTreeNode, name: string | undefined): void {
+  if (name === undefined) {
+    node.data.delete('name')
+    node.data.delete('nameChosen')
+  } else {
+    node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(name))
+    node.data.set('nameChosen', true)
+  }
+}
+
 /** Sets a document's display name; no `name`, or a blank one, clears it. */
 export function setWorkspaceDocumentName(
   doc: LoroDoc,
@@ -478,8 +495,7 @@ export function setWorkspaceDocumentName(
 ): void {
   const node = nodeById(doc, input.documentId)
   if (node === null) throw new Error(`No document "${input.documentId}" to rename`)
-  if (!input.name?.trim()) node.data.delete('name')
-  else node.data.set('name', workspaceNodeMetaSchema.shape.name.parse(input.name))
+  setChosenName(node, input.name?.trim() ? input.name : undefined)
   doc.commit()
 }
 
@@ -583,7 +599,7 @@ export function createWorkspaceDocumentAtPath(
   node.data.set('documentId', meta.documentId)
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind)
-  if (meta.name !== undefined) node.data.set('name', meta.name)
+  if (meta.name !== undefined) setChosenName(node, meta.name)
   node.data.set('createdAt', meta.createdAt)
   node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)
