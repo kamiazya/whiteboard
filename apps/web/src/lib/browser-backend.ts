@@ -6,6 +6,7 @@ import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
+  seedNameFromTitle,
   syncTextLimitBreach,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -18,7 +19,6 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
-import { seedNameFromTitle } from './seed-name-from-title.js'
 import {
   listenToWorkspace,
   type WorkspaceBroadcast,

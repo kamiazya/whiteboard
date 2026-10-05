@@ -1,3 +1,5 @@
+import { seedNamesFromTitles } from '@kamiazya/whiteboard-loro-adapter'
+import { runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 import { importWithinSyncLimits } from './apply-document-update-limit.js'
@@ -32,6 +34,9 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * (`MarkdownBodyTooLargeError`, `OffGrammarPathError`) with the record and
  * its projections dropped unsaved, so nothing of it survives.
  *
+ * A note at a generated path is named after its heading here, as the
+ * browser keeper names it in its own store's write (`seedNamesFromTitles`).
+ *
  * THE OPERATION HOLDS THE LOCK — `liveDocuments.withWriteLock`, because the
  * workspace write lock is one lock however many seams touch the workspace.
  * Import, save AND projection eviction all run inside the hold: a
@@ -47,20 +52,17 @@ export async function applyWorkspaceDocumentUpdate(
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
+    const target = {
+      subject: `the workspace record of ${workspaceId}`,
+      fields: { workspaceId },
+      evict() {
+        deps.workspaceDocuments.evict(workspaceId)
+        deps.workspaceDocuments.evictProjections(workspaceId)
+      },
+    }
+    const since = doc.oplogVersion()
     try {
-      importWithinSyncLimits(
-        doc,
-        update,
-        {
-          subject: `the workspace record of ${workspaceId}`,
-          fields: { workspaceId },
-          evict() {
-            deps.workspaceDocuments.evict(workspaceId)
-            deps.workspaceDocuments.evictProjections(workspaceId)
-          },
-        },
-        { workspaceRecord: true },
-      )
+      importWithinSyncLimits(doc, update, target, { workspaceRecord: true })
     } catch (err: unknown) {
       if (isSyncWriteRefusal(err)) {
         throw err
@@ -72,6 +74,11 @@ export async function applyWorkspaceDocumentUpdate(
       })
       return 'malformed-update'
     }
+    // Before the save, so the name rides the same write and its fan-out
+    // hands it back to the replica that typed the heading.
+    runEvictingOnEngineTrap(target, 'importing an update into', () =>
+      seedNamesFromTitles(doc, since),
+    )
     // Fan-out to subscribers happens inside save.
     await deps.workspaceDocuments.save(workspaceId, doc)
     deps.workspaceDocuments.evictProjections(workspaceId)

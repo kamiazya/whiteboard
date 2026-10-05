@@ -1,7 +1,16 @@
 // @vitest-environment node
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  MARKDOWN_BODY_KEY,
+  readWorkspaceDocuments,
+  seedNameFromTitle,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { documentPathSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { isGeneratedDocumentPath, newDocumentPathIn } from './new-document-path.js'
+import { newDocumentPathIn } from './new-document-path.js'
 
 describe('newDocumentPathIn', () => {
   it('creates in the folder the browser is standing in', () => {
@@ -39,30 +48,47 @@ describe('newDocumentPathIn', () => {
     expect(newDocumentPathIn('design', ['design-untitled'])).toBe('design/untitled')
     expect(newDocumentPathIn('design', ['design-system/untitled'])).toBe('design/untitled')
   })
+
+  // Paths drawn near the generator's own output, so a collision is the
+  // usual case rather than a lucky one.
+  const nearUntitled = fc.oneof(
+    fc.constant('untitled'),
+    fc.integer({ min: 1, max: 12 }).map((n) => `untitled-${n}`),
+    fc.string(),
+  )
+
+  fcTest.prop([fc.array(nearUntitled)], withDefaults())(
+    'never answers a path already taken, and always one the path grammar accepts',
+    (existing) => {
+      const path = newDocumentPathIn('', existing)
+      expect(existing).not.toContain(path)
+      expect(documentPathSchema.safeParse(path).success).toBe(true)
+    },
+  )
 })
 
-describe('isGeneratedDocumentPath', () => {
-  it('recognises what newDocumentPathIn produces, at the root and in a folder', () => {
-    expect(isGeneratedDocumentPath('untitled')).toBe(true)
-    expect(isGeneratedDocumentPath('untitled-2')).toBe(true)
-    expect(isGeneratedDocumentPath('design/untitled-17')).toBe(true)
-  })
-
-  it('does not claim a path a person chose', () => {
-    expect(isGeneratedDocumentPath('weekly-review')).toBe(false)
-    expect(isGeneratedDocumentPath('untitled-notes')).toBe(false)
-    expect(isGeneratedDocumentPath('design/untitled/child')).toBe(false)
-    // `-1` and `-0` are never generated: the counter starts at 2.
-    expect(isGeneratedDocumentPath('untitled-1')).toBe(false)
-  })
-
-  // The pair has to agree, or the seeding gate opens on paths nobody generated.
-  fcTest.prop([fc.integer({ min: 0, max: 30 })], withDefaults())(
-    'every path the generator produces is recognised by the predicate',
+describe('a generated path against the naming gate', () => {
+  // Every keeper names a note after its heading only while its path is one
+  // this generator chose (loro-adapter's `isGeneratedDocumentPath`). The two
+  // have to agree, or a note made here keeps the name `untitled` however
+  // plainly its first line says what it is.
+  fcTest.prop([fc.integer({ min: 1, max: 12 })], withDefaults())(
+    'a heading names every note the generator placed',
     (howMany) => {
+      const workspace = new LoroDoc()
       const taken: string[] = []
-      for (let i = 0; i < howMany; i++) taken.push(newDocumentPathIn('design', taken))
-      for (const path of taken) expect(isGeneratedDocumentPath(path)).toBe(true)
+      for (let i = 0; i < howMany; i++) {
+        const path = newDocumentPathIn('design', taken)
+        taken.push(path)
+        const documentId = generateDocumentId()
+        createWorkspaceDocumentAtPath(workspace, { path, documentId, kind: 'markdown' })
+        documentContainers(workspace, documentId).getText(MARKDOWN_BODY_KEY).insert(0, `# N${i}`)
+        workspace.commit()
+        seedNameFromTitle(workspace, documentId)
+      }
+      const notes = readWorkspaceDocuments(workspace)
+      expect(notes).toHaveLength(howMany)
+      for (const note of notes) expect(note.name, note.path).toMatch(/^N\d+$/)
     },
   )
 })
