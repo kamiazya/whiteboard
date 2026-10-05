@@ -71,6 +71,40 @@ test('the gh pr create form reads its body, branch and checkout as the hooks alw
   assert.equal(fromCommand('gh pr create --fill')?.body, null)
 })
 
+// The two forms carry the same body, so they must read it the same: a gh pr
+// form that misreads a quoting the REST form understands blocks a body that
+// does state its skip, and only on the form the reader happened to type.
+test('the gh pr and REST forms read every shell quoting of a body alike', () => {
+  const rest = 'gh api -X POST repos/{owner}/{repo}/pulls -f head=feat -f body='
+  for (const [quoted, text] of [
+    [`$'Visual evidence: none - docs only\\nmore'`, 'Visual evidence: none - docs only\nmore'],
+    ['Visual\\ evidence:\\ none\\ -\\ docs', 'Visual evidence: none - docs'],
+    [`"say \\"hi\\""'; tail'`, 'say "hi"; tail'],
+    [`'single'"double"`, 'singledouble'],
+  ]) {
+    assert.deepEqual(fromCommand(`${rest}${quoted}`)?.body, { text }, `REST: ${quoted}`)
+    assert.deepEqual(
+      fromCommand(`gh pr create --title t --body ${quoted}`)?.body,
+      { text },
+      `gh pr --body: ${quoted}`,
+    )
+    assert.deepEqual(
+      fromCommand(`gh pr edit 5 --body=${quoted}`)?.body,
+      { text },
+      `gh pr --body=: ${quoted}`,
+    )
+  }
+  writeFileSync(join(scratch, 'spaced body.md'), 'from a spaced path')
+  assert.deepEqual(fromCommand('gh pr create --body-file spaced\\ body.md')?.body, {
+    text: 'from a spaced path',
+  })
+  assert.deepEqual(fromCommand(`gh pr create --body-file=$'spaced body.md'`)?.body, {
+    text: 'from a spaced path',
+  })
+  // A body belongs to the gh pr command that carries it, not to the next one.
+  assert.equal(fromCommand(`gh pr create --fill && echo --body 'x'`)?.body, null)
+})
+
 test('the REST calls behind gh pr create, merge and edit are recognised', () => {
   const create = fromCommand(
     "gh api -X POST repos/{owner}/{repo}/pulls -f title=x -f head=feat -f base=main -f body='Visual evidence: none — n/a'",
