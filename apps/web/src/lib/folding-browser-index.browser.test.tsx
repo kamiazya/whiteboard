@@ -15,6 +15,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -22,7 +23,7 @@ import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 import { LoroStore } from './loro-store.js'
-import { loadDocumentContent, seedWorkspaceDocumentContent } from './workspace-content.js'
+import { loadDocumentContent } from './workspace-content.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.

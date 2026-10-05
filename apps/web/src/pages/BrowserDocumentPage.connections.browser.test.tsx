@@ -13,10 +13,10 @@ import { userEvent } from 'vitest/browser'
 import '../index.css'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { seedWorkspaceDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-connections')
 

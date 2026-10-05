@@ -11,7 +11,6 @@
 import {
   projectWorkspaceDocument,
   resolveWorkspaceDocumentById,
-  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
@@ -169,27 +168,6 @@ export async function touchIfWorkspaceBacked(
   const workspace = await openWorkspaceOrNull(new BrowserWorkspaceDocs(dbName))
   if (workspace === null) return false
   if (resolveWorkspaceDocumentById(workspace, documentId) === null) return false
-  await touchContentTimestamp(documentId, dbName)
-  return true
-}
-
-/**
- * Writes standalone-document bytes INTO an existing tree node, as a test
- * seeds a document's content. Returns false when the workspace record or the
- * node is absent.
- */
-export async function seedWorkspaceDocumentContent(
-  documentId: string,
-  content: Uint8Array,
-  dbName?: string,
-): Promise<boolean> {
-  const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await openWorkspaceOrNull(docs)
-  if (workspace === null) return false
-  const source = new Loro()
-  source.import(content)
-  if (!writeWorkspaceDocumentContent(workspace, documentId, source)) return false
-  await docs.save(getBrowserWorkspaceId(), workspace)
   await touchContentTimestamp(documentId, dbName)
   return true
 }

@@ -3,12 +3,12 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
-import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 // The browser keeper answering "what links here" from its own documents,
 // over real IndexedDB and the production tree-backed index — so every listing
