@@ -3,6 +3,9 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
+import { getLogger } from '../log.js'
+
+const log = getLogger('backup-in-progress')
 
 /** Exported so `backupDataDir` can keep this command's own bookkeeping out
  *  of its own output. */
@@ -140,9 +143,9 @@ export async function withBackupMarker<T>(
   const startedAt = new Date().toISOString()
   const holder = options.holder ?? `pid ${process.pid}`
 
-  // A directory this process cannot write to is one the backup is about to
-  // fail on anyway; not being able to ask GC to wait is not the error worth
-  // reporting, so the backup proceeds without the stand-down.
+  // An unwritable directory is one the backup is about to fail on anyway, so
+  // the backup proceeds without the stand-down — logged, since a silent
+  // failure reads exactly like a refresh that never ran.
   const write = async (): Promise<void> => {
     const marker = {
       schemaVersion: 2,
@@ -161,7 +164,7 @@ export async function withBackupMarker<T>(
       dataDir,
       markerPath(dataDir),
       `${JSON.stringify(marker, null, 2)}\n`,
-    ).catch(() => {})
+    ).catch((err: unknown) => log.warning({ dataDir, err }, 'backup marker refresh failed'))
   }
 
   await write()
