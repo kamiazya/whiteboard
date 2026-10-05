@@ -312,7 +312,11 @@ through `nodeTextLengthLimit`, the "open in editor" surface through
 `NodeTextEditorOverlay`'s `sourceExtensions`, and a plain-text paste, fragment
 paste or duplicate through `node-text-limit.ts`, each refusal said where it
 happened. The CodeMirror limit itself is `lib/text-length-limit.ts`, shared
-with the markdown body's.
+with the markdown body's. A label and a comment message are held to
+`LABEL_MAX_CHARS` / `COMMENT_MESSAGE_MAX_CHARS` the same way: every comment
+composer through `lib/comment-message-limit.ts`, the label drafts through
+`TextNodeEditor`'s `lengthLimit`, which refuses an over-limit edit whole rather
+than truncating a paste.
 
 ### The settings migrations are total, and say so under a property
 
@@ -346,6 +350,9 @@ not the other is a message nobody handles, silently. Passing it through
 side was already there (`sseWorkerRequestSchema.safeParse` in the worker,
 `sseWorkerEventSchema.safeParse` in the stream source); this closes the
 emitting side, which is where the inventory found four raw literals.
+A `write-refused` event follows a permanent refusal only once the worker has
+rebuilt its replica from the daemon, so a tab never forks the refused ops
+back; until then the worker writes nothing for that document.
 
 ### Every IndexedDB stored shape round-trips under a property
 

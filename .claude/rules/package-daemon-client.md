@@ -42,6 +42,12 @@ paths:
   `document-backend-contract` types it implements. The SSE wire itself is
   `sync-sse-contract`, and `sync-frames` / `sync-frame-text` are the text
   frames that stream carries inside its `message` events.
+- The sync write refusal (`api-contracts/sync-write-refusal`): the codes
+  server-core's `syncWriteAnswer` emits, read by both the hub and the worker.
+  A permanent 4xx on a sync push throws `SyncWriteRefusedError` and is never
+  retried; the backend reports `onWriteRefused` and re-delivers the keeper's
+  snapshot. The daemon's `sync-update-body-limit.test.ts` reads every refusal
+  through it, so the two cannot drift.
 - `api-client` (same-origin fetch wrapper — injects a `traceparent` header
   through @opentelemetry/api's no-op surface, no SDK shipped), the extension
   bridge the hosted page reaches a daemon through, the read plane and the

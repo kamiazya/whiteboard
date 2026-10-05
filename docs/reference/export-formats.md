@@ -41,8 +41,10 @@ not:
 - **The markdown editor** refuses a paste or keystroke that would take the
   document past 262,144 characters, leaves the document as it was, and says
   so in a notice at the top of the editor.
-- **A browser-kept workspace** does not save a body past the limit; the editor
-  shows the save as failed.
+- **A browser-kept workspace** does not save a body past the limit: the page
+  goes back to what is stored, undoing that change and anything typed after it,
+  and a notice at the top says the change was not saved and why. A refusal from
+  the daemon's sync routes below is answered the same way, and never retried.
 - **The daemon's sync routes** — a document's `update`, the workspace
   document's `update` and `promote` — answer `413` with
   `{"error":"markdown_too_large"}` and store nothing. They also refuse, in

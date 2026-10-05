@@ -216,8 +216,10 @@ is held (`.claude/rules/app-web.md`).
 What a CRDT update does to TEXT is judged once, by loro-adapter's
 `importWithinTextLimits`, which both keepers take (the browser through
 `syncTextLimitBreach`): an insert run or markdown body past
-`MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), and node text added or
-grown past `NODE_TEXT_MAX_CHARS` (`NodeTextTooLargeError`, 413); into an empty
+`MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), node text added or
+grown past `NODE_TEXT_MAX_CHARS` (`NodeTextTooLargeError`), a label past
+`LABEL_MAX_CHARS` (`LabelTooLargeError`) and a thread message past
+`COMMENT_MESSAGE_MAX_CHARS` (`CommentMessageTooLargeError`), each 413; into an empty
 document no run is judged, since nothing is replayed there.
 `importWithinSyncLimits` adds the workspace record's placement checks
 (`placementRefusal`): a node left unreadable (`UnreadableDocumentMetaError`), a
