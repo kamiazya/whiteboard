@@ -8,6 +8,7 @@ import {
   documentContainers,
   readMarkdownBody,
   readSpatialCanvas,
+  resolveWorkspaceDocumentById,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -20,6 +21,7 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { announceVersion, listenToWorkspace } from './workspace-broadcast.js'
 
 claimIsolatedWhiteboardDb('browser-backend-cross-tab')
@@ -124,6 +126,24 @@ it("another tab's edit applies to a note the first tab named from its heading", 
   await vi.waitFor(() => {
     for (const [bytes] of vi.mocked(a.h.onRemoteUpdate).mock.calls) a.doc.import(bytes)
     expect(readMarkdownBody(documentContainers(a.doc, DOC))).toContain('from tab B')
+  }, WAIT)
+})
+
+// The index's delete is saved to the record and announced by path; the tab
+// holding the document has to learn of it from the record, or it keeps
+// writing to a node nobody can reach and reading every write as saved.
+it('a delete made elsewhere reaches the tab holding that document', async () => {
+  const a = await open(target(DOC, 'design'))
+  opened.push(a.backend)
+
+  await new FoldingBrowserIndex().deleteDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path: 'design',
+  })
+
+  await vi.waitFor(() => {
+    for (const [bytes] of vi.mocked(a.h.onRemoteUpdate).mock.calls) a.doc.import(bytes)
+    expect(resolveWorkspaceDocumentById(a.doc, DOC)).toBeNull()
   }, WAIT)
 })
 
