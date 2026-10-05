@@ -103,7 +103,7 @@ async function adoptRow(
  */
 const running = new Map<string, Promise<FoldReport>>()
 
-export function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
+function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
   const key = dbName ?? ''
   const joined = running.get(key)
   if (joined !== undefined) return joined

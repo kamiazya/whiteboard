@@ -22,16 +22,24 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { getAppLogger } from './app-logger.js'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { foldOrServeTheTree } from './fold-workspace.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = claimIsolatedWhiteboardDb('fold-workspace')
+// Through the surfaces' entry point, refusing the null a failed fold answers
+// so every case here proves a run that completed.
+async function foldWorkspaceDocuments(dbName: string) {
+  const report = await foldOrServeTheTree(getAppLogger('fold-workspace.test'), dbName)
+  if (report === null) throw new Error('the fold failed')
+  return report
+}
 
 beforeEach(clearWhiteboardDb)
 afterEach(() => {
