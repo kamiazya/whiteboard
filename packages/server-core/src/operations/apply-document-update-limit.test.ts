@@ -166,6 +166,31 @@ describe('a workspace-document sync update', () => {
     expect(storedWorkspaceBody(store)).toBe('short')
   })
 
+  it('joins pieces of characters outside the BMP into one run, counting them as the engine does', async () => {
+    const store = new StoredDoc(workspaceSeed('short'))
+    const client = store.get().fork()
+    client.setRecordTimestamp(true)
+    client.setChangeMergeInterval(0)
+    const from = client.oplogVersion()
+    const body = workspaceBody(client)
+    // The engine's counters advance per scalar while a JS string holds two
+    // units for each of these, so a run counted in units never joins up.
+    const piece = '\u{1F600}'.repeat(MARKDOWN_MAX_CHARS / 4 + 1)
+    body.insert(body.length, piece)
+    client.commit({ timestamp: 1_000 })
+    body.insert(body.length, piece)
+    client.commit({ timestamp: 1_000_000 })
+    const update = client.export({ mode: 'update', from })
+
+    const refusal = await applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(refusal).toMatchObject({ shape: 'run', chars: 2 * piece.length })
+    expect(storedWorkspaceBody(store)).toBe('short')
+  })
+
   it('that grows a body past the limit with a small insert is refused and nothing is imported', async () => {
     const body = 'y'.repeat(MARKDOWN_MAX_CHARS - 3)
     const store = new StoredDoc(workspaceSeed(body))

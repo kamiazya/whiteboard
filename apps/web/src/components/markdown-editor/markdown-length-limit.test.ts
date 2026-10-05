@@ -18,13 +18,13 @@ describe('markdownLengthLimit', () => {
 
   it('lets an edit land exactly at the limit', () => {
     const state = stateWith('12345')
-    expect(state.update({ changes: { from: 5, insert: '67890' } }).state.doc.length).toBe(LIMIT)
+    expect(state.update({ changes: { from: 5, insert: '67890' } }).state.doc).toHaveLength(LIMIT)
   })
 
   it('lets a document already past the limit shrink, and refuses its growth', () => {
     const state = stateWith('x'.repeat(LIMIT + 5))
-    expect(state.update({ changes: { from: 0, to: 2 } }).state.doc.length).toBe(LIMIT + 3)
-    expect(state.update({ changes: { from: 0, insert: 'y' } }).state.doc.length).toBe(LIMIT + 5)
+    expect(state.update({ changes: { from: 0, to: 2 } }).state.doc).toHaveLength(LIMIT + 3)
+    expect(state.update({ changes: { from: 0, insert: 'y' } }).state.doc).toHaveLength(LIMIT + 5)
   })
 
   it('does not judge what arrives from the document or the host', () => {
@@ -37,7 +37,7 @@ describe('markdownLengthLimit', () => {
       changes: { from: 5, insert: '678901' },
       annotations: externalValue.of(true),
     })
-    expect(remote.state.doc.length).toBe(11)
-    expect(reconciled.state.doc.length).toBe(11)
+    expect(remote.state.doc).toHaveLength(11)
+    expect(reconciled.state.doc).toHaveLength(11)
   })
 })

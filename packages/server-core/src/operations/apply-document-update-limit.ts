@@ -45,8 +45,9 @@ export class MarkdownBodyTooLargeError extends Error {
  */
 export class OffGrammarPathError extends Error {
   constructor(public readonly paths: readonly string[]) {
+    const quoted = paths.map((path) => JSON.stringify(path)).join(', ')
     super(
-      `This update would put documents at paths this keeper cannot store: ${paths.map((path) => `"${path}"`).join(', ')}. A path segment may hold only ASCII letters, digits and interior hyphens`,
+      `This update would put documents at paths this keeper cannot store: ${quoted}. A path segment may hold only ASCII letters, digits and interior hyphens`,
     )
     this.name = 'OffGrammarPathError'
   }
@@ -88,11 +89,8 @@ function movesPaths(op: JsonSchema['changes'][number]['ops'][number]): boolean {
 
 /** Unicode scalar values, the unit Loro's counters and text positions advance by. */
 function scalarLength(text: string): number {
-  let length = text.length
-  for (let i = 0; i < text.length; i += 1) {
-    const unit = text.charCodeAt(i)
-    if (unit >= 0xdc00 && unit <= 0xdfff) length -= 1
-  }
+  let length = 0
+  for (const _ of text) length += 1
   return length
 }
 
@@ -137,7 +135,7 @@ function textGrowth(json: JsonSchema): TextGrowth {
 /** The run an insert at `counter`/`pos` belongs to: `previous` extended when it is adjacent, else its own. */
 function extendRun(previous: Run | undefined, counter: number, pos: number, text: string): Run {
   const scalars = scalarLength(text)
-  const adjacent = previous !== undefined && previous.counter === counter && previous.pos === pos
+  const adjacent = previous?.counter === counter && previous.pos === pos
   return {
     counter: counter + scalars,
     pos: pos + scalars,
