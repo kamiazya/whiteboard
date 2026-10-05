@@ -7,14 +7,13 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 
@@ -34,26 +33,41 @@ afterEach(async () => {
   await clearWhiteboardDb()
 })
 
-it('a note deleted elsewhere says so and stops taking edits', async () => {
-  const store = new IdbDocumentIndex()
-  await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+function saveState(container: HTMLElement): string | null | undefined {
+  return container
+    .querySelector('[data-testid="persistence-state"]')
+    ?.getAttribute('data-save-state')
+}
+
+/**
+ * A note open on the page, with a line typed into it and saved. Created in
+ * the workspace tree, the way the app creates one, so the trash holds what
+ * the delete took.
+ */
+async function openSavedNote() {
+  const store = new FoldingBrowserIndex()
+  const workspaceId = getBrowserWorkspaceId()
+  await store.createWorkspace({ workspaceId })
+  const { documentId } = await store.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
+  await new IdbDefaultDocumentPointer().set(documentId)
   const page = renderInRouter(<BrowserDocumentPage store={store} />, { height: '50vh' })
   await focusEditable(() => editorIn(page.container))
   await userEvent.keyboard('# Before the delete')
-  await waitFor(
-    () =>
-      expect(
-        page.container
-          .querySelector('[data-testid="persistence-state"]')
-          ?.getAttribute('data-save-state'),
-      ).toBe('saved'),
-    WAIT,
-  )
+  await waitFor(() => expect(saveState(page.container)).toBe('saved'), WAIT)
+  return { page, documentId }
+}
 
+async function deleteElsewhere(): Promise<void> {
   await new FoldingBrowserIndex().deleteDocument({
     workspaceId: getBrowserWorkspaceId(),
     path: 'note',
   })
+}
+
+it('a note deleted elsewhere says so and stops taking edits', async () => {
+  const { page } = await openSavedNote()
+
+  await deleteElsewhere()
 
   const notice = await screen.findByTestId('document-removed-notice', undefined, WAIT)
   expect(notice.textContent).toContain('deleted elsewhere')
@@ -63,4 +77,25 @@ it('a note deleted elsewhere says so and stops taking edits', async () => {
   await waitFor(() => expect(editorIn(page.container)?.closest('[inert]')).not.toBeNull(), WAIT)
   // What was on screen stays readable; only writing it stops.
   expect(editorIn(page.container)?.textContent).toBe('# Before the delete')
+})
+
+it('a note restored from the trash elsewhere is editable again, and saves', async () => {
+  const { page, documentId } = await openSavedNote()
+  await deleteElsewhere()
+  await screen.findByTestId('document-removed-notice', undefined, WAIT)
+
+  await new FoldingBrowserIndex().restoreDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    documentId,
+  })
+
+  await waitFor(() => expect(screen.queryByTestId('document-removed-notice')).toBeNull(), WAIT)
+  expect(editorIn(page.container)?.closest('[inert]')).toBeNull()
+  await focusEditable(() => editorIn(page.container))
+  await userEvent.keyboard('{Control>}{End}{/Control} again')
+  await waitFor(
+    () => expect(editorIn(page.container)?.textContent).toBe('# Before the delete again'),
+    WAIT,
+  )
+  await waitFor(() => expect(saveState(page.container)).toBe('saved'), WAIT)
 })

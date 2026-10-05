@@ -324,7 +324,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // document is a read of the session's own doc, the one place that holds it.
   // Raised by twenty-six for `documentRemoved`: the open document deleted
   // elsewhere is seen by the session alone, which stops writing and says so.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 895,
+  // Raised by two more for a trash restore bringing it back, which resumes it.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 897,
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
   // raised by one more for a reconnect whose snapshot no longer holds the

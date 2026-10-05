@@ -105,6 +105,16 @@ export class PersistenceLedger {
     this.documentGone = true
   }
 
+  /**
+   * The document is back. What was dropped while it was gone is not on
+   * screen any more — the restored content replaces it — so what is shown is
+   * what is kept once nothing else is outstanding.
+   */
+  documentRestored(): void {
+    this.documentGone = false
+    this.settle()
+  }
+
   /** Every write outstanding after a failure has now landed. */
   landed(): void {
     this.writeFailed = false

@@ -385,11 +385,13 @@ export class BrowserBackend implements DocumentBackend {
       if (message.documentId === this.target.documentId) handlers.onVersionCreated(message.version)
       return
     }
-    // A removal names a PATH — this document's, a folder above it, or neither
-    // once a move has left this backend's own path stale — so whether this
-    // document survived it is the record's to say, and any removal catches up.
+    // A removal or a restore names a PATH — this document's, a folder above
+    // it, or neither once a move has left this backend's own path stale — so
+    // whether this document is in the record is the record's to say, and any
+    // of either catches up.
     const catchUp =
       message.type === 'document-removed' ||
+      message.type === 'document-restored' ||
       (message.type === 'document-renamed' && message.documentId === this.target.documentId)
     if (catchUp) {
       this._writeQueue = this._writeQueue.then(() =>
@@ -407,13 +409,14 @@ export class BrowserBackend implements DocumentBackend {
 
   /**
    * Merges what the stored record gained since this copy last read it, and
-   * hands it on to the session. A rename or a delete is written by the index,
-   * whose save travels to nobody — and the name this keeper seeds from a
-   * heading is judged against THIS copy, so a copy that never saw the name
-   * somebody chose named the note over it, and one that never saw the delete
-   * kept saving into a node that was gone. Queued like any write, and it
-   * never rejects the queue: a catch-up that failed leaves the copy where it
-   * was.
+   * hands it on to the session. A rename, delete or restore is written by
+   * the index, whose save travels to nobody — and the name this keeper seeds
+   * from a heading is judged against THIS copy, so a copy that never saw the
+   * name somebody chose named the note over it, one that never saw the delete
+   * kept saving into a node that was gone, and one that never saw the restore
+   * stayed locked over a document that was back. Queued like any write, and
+   * it never rejects the queue: a catch-up that failed leaves the copy where
+   * it was.
    */
   private async catchUpWithStore(
     workspaceId: string,

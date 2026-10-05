@@ -63,7 +63,7 @@ function openSession() {
     },
     sendClientReady() {},
   } satisfies DocumentBackend
-  const errors: BackendErrorReason[] = []
+  const errors: (BackendErrorReason | null)[] = []
   const persistence: BrowserPersistenceState['kind'][] = []
   const session = createDocumentSyncSession(backend, {
     getOptions: () => ({}),
@@ -85,7 +85,18 @@ function openSession() {
       peer.export({ mode: 'update', from }),
     )
   }
-  return { session, errors, persistence, pushed, deleteByPeer }
+  // A restore from the trash re-mints the node under the documentId it had,
+  // with the content the trash kept.
+  const restoreByPeer = () => {
+    const from = peer.oplogVersion()
+    createWorkspaceDocumentAtPath(peer, { path: 'design', documentId: DOC, kind: 'spatial' })
+    writeSpatialCanvas(documentContainers(peer, DOC), { nodes: [before], edges: [] })
+    peer.commit()
+    ;(handlers as unknown as DocumentBackendHandlers).onRemoteUpdate(
+      peer.export({ mode: 'update', from }),
+    )
+  }
+  return { session, errors, persistence, pushed, deleteByPeer, restoreByPeer }
 }
 
 beforeEach(() => {
@@ -93,6 +104,35 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+})
+
+describe('a session whose deleted document is restored from the trash', () => {
+  it('withdraws the removal it reported', () => {
+    const s = openSession()
+    s.deleteByPeer()
+
+    s.restoreByPeer()
+
+    expect(s.errors).toEqual(['document-removed', null])
+    expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept'])
+  })
+
+  // An edit refused while the document was gone was never accepted, so it is
+  // not replayed; the ones made after the restore are written and saved.
+  it('writes and saves the edits made after the restore', async () => {
+    const s = openSession()
+    s.deleteByPeer()
+    s.session.onChange(...added(s.session.getCanvas(), 'while-gone'))
+    s.restoreByPeer()
+    const pushesBefore = s.pushed.length
+
+    s.session.onChange(...added(s.session.getCanvas(), 'after-restore'))
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+
+    expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept', 'after-restore'])
+    expect(s.pushed.length).toBeGreaterThan(pushesBefore)
+    expect(s.persistence.at(-1)).toBe('saved')
+  })
 })
 
 describe('a session whose document a peer deletes', () => {
@@ -186,7 +226,7 @@ function openReconnecting() {
     pushLocalUpdate: () => Promise.resolve(),
     sendClientReady() {},
   } satisfies DocumentBackend
-  const errors: BackendErrorReason[] = []
+  const errors: (BackendErrorReason | null)[] = []
   const session = createDocumentSyncSession(backend, {
     getOptions: () => ({}),
     onStatusChange: () => {},

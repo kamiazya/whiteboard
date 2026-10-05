@@ -120,9 +120,10 @@ export interface SessionDeps {
    * it is not for a document that is intact and unreadable by THIS build.
    * Collapsing those into one status is how a user with a future-version
    * document gets shown an empty canvas — which says their work is gone when
-   * it is sitting on disk.
+   * it is sitting on disk. `null` withdraws `document-removed`, the one
+   * reason the session raises itself, once the document is back.
    */
-  onBackendError: (reason: BackendErrorReason) => void
+  onBackendError: (reason: BackendErrorReason | null) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
   /**
    * What the session knows about its own writes, as facts for the page to
@@ -340,8 +341,7 @@ export function createDocumentSyncSession(
   const myGeneration = deps.generations.nextConnectionGeneration()
 
   let disposed = false
-  // See `documentRemoved`. Never cleared: a restore re-mints the node, which
-  // is a document to open again, not this session's to resume.
+  // See `documentRemoved`.
   let removed = false
   let doc: LoroDoc | null = null
   let undoManager: UndoManager | null = null
@@ -866,7 +866,7 @@ export function createDocumentSyncSession(
         })
 
         newDoc.subscribe((e) => {
-          if (isStale() || removed || (e.by === 'import' && documentRemoved(newDoc))) return
+          if (isStale() || (e.by === 'import' ? documentRemoved(newDoc) : removed)) return
           // Fires for both a local commit (onChange -> doc.commit()) and a
           // remote import (onRemoteUpdate), matching MCP-app parity for
           // what counts as "the doc changed" — but never for the initial
@@ -1082,22 +1082,25 @@ export function createDocumentSyncSession(
   }
 
   /**
-   * Whether this session's document has left the workspace record — deleted
-   * by a peer, an agent, another tab. Only an import can take the node away,
-   * so that is when it is asked. From then on nothing is written: an edit
-   * would land on a node no reader reaches, so the write still in its window
-   * is dropped, the ledger never settles it as saved, and the page is told.
+   * Whether this session's document is missing from the workspace record —
+   * deleted by a peer, an agent, another tab — asked on each import, the only
+   * way the node goes or a trash restore brings it back. While it is gone
+   * nothing is written and the write in its window is dropped, never settled
+   * as saved; a restore resumes writing, and what was refused meanwhile stays
+   * refused, since it was never accepted. The page is told on each change.
    */
   function documentRemoved(targetDoc: LoroDoc): boolean {
-    if (removed) return true
     const id = deps.contentDocumentId
-    if (id === undefined || resolveWorkspaceDocumentById(targetDoc, id) !== null) return false
-    removed = true
-    persistence.documentRemoved()
-    bodyOpsPending = false
-    dropQueuedWrite()
-    deps.onBackendError('document-removed')
-    return true
+    const gone = id !== undefined && resolveWorkspaceDocumentById(targetDoc, id) === null
+    if (gone === removed) return gone
+    removed = gone
+    if (gone) {
+      persistence.documentRemoved()
+      bodyOpsPending = false
+      dropQueuedWrite()
+    } else persistence.documentRestored()
+    deps.onBackendError(gone ? 'document-removed' : null)
+    return gone
   }
 
   function undo(): boolean {
