@@ -161,6 +161,9 @@ test('the placeholder itself is not a reason, while a reason naming an element i
   for (const body of [
     'Visual evidence: none — renames a prop on <Toolbar>, renders identically.',
     'Visual evidence: none — <Toolbar> only gains a test id.',
+    // A component name is a word of the reason even with nothing else beside
+    // it: only the lower-case template placeholder is stripped before counting.
+    'Visual evidence: none — <Toolbar>.',
   ]) {
     assert.equal(runHook(work, bodyArg(body)).status, 0, body)
   }

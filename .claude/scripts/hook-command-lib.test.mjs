@@ -132,6 +132,16 @@ test('the gh pr form reads every spelling gh accepts for its body and head flags
   assert.equal(fromCommand('gh pr create --fill')?.head, null)
 })
 
+test('a flag given twice reads its last occurrence, as gh does', () => {
+  // gh's flag parser overwrites a repeated flag, so what it submits is the LAST
+  // value; a hook reading the first would judge a body gh never sends.
+  assert.deepEqual(fromCommand('gh pr create -t t -b first -b second')?.body, { text: 'second' })
+  assert.deepEqual(fromCommand('gh pr create -t t --body=first -bsecond')?.body, {
+    text: 'second',
+  })
+  assert.equal(fromCommand('gh pr create -t t --head one -H=two')?.head, 'two')
+})
+
 test('the REST calls behind gh pr create, merge and edit are recognised', () => {
   const create = fromCommand(
     "gh api -X POST repos/{owner}/{repo}/pulls -f title=x -f head=feat -f base=main -f body='Visual evidence: none — n/a'",
