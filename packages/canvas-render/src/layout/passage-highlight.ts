@@ -7,7 +7,8 @@
  * and the runs hold what that source rendered to (markers gone, lines
  * wrapped). A quote survives that projection the way it survives an edit —
  * it is the selector W3C Web Annotation's TextQuoteSelector exists for —
- * and `resolveTextAnchor` in the web app already trusts it over offsets.
+ * and `resolveTextAnchor` (model's `text-anchor.ts`) trusts it over offsets
+ * the same way when it re-finds a passage in the source.
  * A quote that spans a marker (`**plan**` selected with its stars) is not
  * found here and draws nothing; the pin at the node's corner still says
  * the conversation exists.
@@ -17,7 +18,13 @@
  * source, and a strict search would miss exactly the passages long enough
  * to wrap.
  */
-import type { CommentThread, TextQuoteSelector } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  resolveTextAnchor,
+  sharedContext,
+  type TextAnchor,
+  type TextQuoteSelector,
+} from '@kamiazya/whiteboard-model'
 import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
@@ -28,7 +35,7 @@ import { runFontOf } from './nodes/mdast-layout-options.js'
 export interface NodePassage {
   readonly threadId: string
   readonly nodeId: string
-  readonly quote: TextQuoteSelector
+  readonly anchor: TextAnchor
   readonly resolved: boolean
 }
 
@@ -40,7 +47,7 @@ export function nodePassagesOf(threads: readonly CommentThread[]): readonly Node
     out.push({
       threadId: thread.id,
       nodeId: thread.anchor.nodeId,
-      quote: thread.anchor.quote,
+      anchor: thread.anchor,
       resolved: thread.status === 'resolved',
     })
   }
@@ -121,47 +128,129 @@ function loosePattern(quote: string): RegExp {
   return new RegExp(body, 'g')
 }
 
+const WHITESPACE = /\s/
+
 const squash = (value: string): string => value.replace(/\s+/g, ' ')
 
 /**
- * Where the quote sits in the rendered text, or null. Several occurrences
- * are told apart by how much of the remembered surroundings each has —
- * the same rule `resolveTextAnchor` applies to the source.
+ * The rendered text read outward from `from` one step at a time, a run of
+ * whitespace read as one space — the squashed text, produced only as far as
+ * the comparison asks for it, so an occurrence never costs the whole string.
+ */
+function readOutward(text: string, from: number, step: 1 | -1): (k: number) => string | undefined {
+  const seen: string[] = []
+  let at = from
+  return (k) => {
+    while (seen.length <= k) {
+      const char = text[at]
+      if (char === undefined) return undefined
+      if (WHITESPACE.test(char)) {
+        seen.push(' ')
+        do at += step
+        while (text[at] !== undefined && WHITESPACE.test(text[at] as string))
+      } else {
+        seen.push(char)
+        at += step
+      }
+    }
+    return seen[k]
+  }
+}
+
+interface Span {
+  readonly start: number
+  readonly end: number
+}
+
+/** The node's markdown source and the anchor's stored offsets into it. */
+export interface PassageSource {
+  readonly text: string
+  readonly start: number
+  readonly end: number
+}
+
+/**
+ * Which of the quote's occurrences in the SOURCE the model resolves the
+ * anchor to, and how many there are — or `orphaned` when the source no
+ * longer holds the quote at all.
+ *
+ * Asked of the source because that is where the anchor's evidence lives:
+ * its stored offsets index the source, and `resolveTextAnchor` keeps them
+ * whenever they still select the quote, which is what keeps the occurrence
+ * the writer chose when several share the same surroundings. The rendered
+ * text cannot answer that question, only count.
+ */
+function sourceOccurrence(
+  source: PassageSource,
+  quote: TextQuoteSelector,
+  pattern: RegExp,
+): { readonly index: number; readonly count: number } | 'orphaned' {
+  const placed = resolveTextAnchor(source.text, {
+    kind: 'text',
+    quote,
+    start: source.start,
+    end: source.end,
+  })
+  if (placed.kind === 'orphaned') return 'orphaned'
+  // The loose pattern matches from the quote's first non-blank character.
+  const lead = quote.exact.length - quote.exact.trimStart().length
+  const starts = Array.from(source.text.matchAll(pattern), (match) => match.index)
+  return { index: starts.indexOf(placed.start + lead), count: starts.length }
+}
+
+/**
+ * Where the quote sits in the rendered text, or null.
+ *
+ * With the source, the passage is the SAME-NUMBERED occurrence as the one
+ * `resolveTextAnchor` places in it, so the canvas highlights the words the
+ * editor's thread is about. That holds while rendering keeps every
+ * occurrence; when it does not (one inside an HTML comment, say), the counts
+ * differ and the numbering means nothing.
+ *
+ * Then, and without a source, occurrences are told apart by `sharedContext`
+ * — the comparison the resolver scores with: the nearest characters of the
+ * remembered prefix and suffix, at most the context window of each. What
+ * differs is what it reads — rendered text, whitespace-loose on both sides —
+ * and the tie-break: the resolver prefers the occurrence nearest the stored
+ * offsets, which index the source and not these runs, so a tie here goes to
+ * the first occurrence.
  */
 function findPassage(
   rendered: string,
   quote: TextQuoteSelector,
-): { readonly start: number; readonly end: number } | null {
+  source?: PassageSource,
+): Span | null {
   if (quote.exact.trim() === '') return null
   const pattern = loosePattern(quote.exact)
+  const matches: Span[] = Array.from(rendered.matchAll(pattern), (match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+  }))
+  if (matches.length === 0) return null
+  if (source !== undefined) {
+    const inSource = sourceOccurrence(source, quote, pattern)
+    if (inSource === 'orphaned') return null
+    const same = matches[inSource.index]
+    if (inSource.count === matches.length && same !== undefined) return same
+  }
+  return bestScored(rendered, matches, quote)
+}
+
+function bestScored(
+  rendered: string,
+  matches: readonly Span[],
+  quote: TextQuoteSelector,
+): Span | null {
   const prefix = squash(quote.prefix ?? '')
   const suffix = squash(quote.suffix ?? '')
-  let best: { start: number; end: number } | null = null
+  let best: Span | null = null
   let bestScore = -1
-  for (const match of rendered.matchAll(pattern)) {
-    const start = match.index
-    const end = start + match[0].length
-    const before = squash(rendered.slice(0, start))
-    const after = squash(rendered.slice(end))
-    let score = 0
-    while (
-      score < prefix.length &&
-      score < before.length &&
-      before[before.length - 1 - score] === prefix[prefix.length - 1 - score]
-    ) {
-      score += 1
-    }
-    let afterScore = 0
-    while (
-      afterScore < suffix.length &&
-      afterScore < after.length &&
-      after[afterScore] === suffix[afterScore]
-    ) {
-      afterScore += 1
-    }
-    score += afterScore
+  for (const match of matches) {
+    const score =
+      sharedContext(prefix, 'before', readOutward(rendered, match.start - 1, -1)) +
+      sharedContext(suffix, 'after', readOutward(rendered, match.end, 1))
     if (score > bestScore) {
-      best = { start, end }
+      best = match
       bestScore = score
     }
   }
@@ -178,9 +267,10 @@ export function passageBoxes(
   runs: readonly TextRunNode[],
   quote: TextQuoteSelector,
   measure: MeasureText,
+  source?: PassageSource,
 ): readonly ShapeSceneNode['bbox'][] {
   const { text, pieces } = renderedTextOf(runs)
-  const range = findPassage(text, quote)
+  const range = findPassage(text, quote, source)
   if (range === null) return []
   const boxes: ShapeSceneNode['bbox'][] = []
   for (const { run, at } of pieces) {
@@ -204,17 +294,21 @@ export function passageBoxes(
  * Painted BEFORE the runs (the caller puts them first), and marked
  * `commentChrome` so `sceneDigest` leaves them out and the editor hit-tests
  * them as the thread's own chrome — `${threadId}/passage-<n>`.
+ * `sourceText` is the node's markdown source, the text the anchors' stored
+ * offsets index.
  */
 export function composePassageHighlights(
   passages: readonly NodePassage[],
   runs: readonly TextRunNode[],
   measure: MeasureText,
   appearance: { readonly open?: Appearance; readonly resolved?: Appearance },
+  sourceText: string,
 ): readonly ShapeSceneNode[] {
   const out: ShapeSceneNode[] = []
   for (const passage of passages) {
     const look = passage.resolved ? appearance.resolved : appearance.open
-    passageBoxes(runs, passage.quote, measure).forEach((bbox, index) => {
+    const { quote, start, end } = passage.anchor
+    passageBoxes(runs, quote, measure, { text: sourceText, start, end }).forEach((bbox, index) => {
       out.push({
         kind: 'shape',
         id: `${passage.threadId}/passage-${index}`,
