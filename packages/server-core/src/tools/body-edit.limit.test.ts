@@ -134,6 +134,42 @@ describe('the size of the body a passage edit may leave', () => {
     expect(result.body.startsWith('TAIL-')).toBe(true)
   })
 
+  // A whole-proposal Adopt applies every open change at once, so the limit is
+  // the proposal's, not the call's: two calls each under it can adopt past it.
+  test('refuses a continuation whose proposal, adopted whole, passes the limit', async () => {
+    const store = new FakeDocumentStore()
+    const body = `head-tail-${'x'.repeat(MARKDOWN_MAX_CHARS - 'head-tail-'.length - 4)}`
+    await seedMarkdown(store, body)
+    const tool = createBodyEditTool(makeDeps(store))
+    const proposeGrowth = (id: string, exact: string, proposalId?: string) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'propose',
+        ...(proposalId === undefined ? {} : { proposalId }),
+        ops: [
+          {
+            id,
+            op: 'body.replace',
+            anchor: passage(body, exact),
+            text: `${exact}!!!`,
+            assumed: exact,
+          },
+        ],
+      })
+
+    const first = await proposeGrowth('c1', 'head')
+    const proposalId = first.proposed?.id
+    if (proposalId === undefined) throw new Error('nothing proposed')
+
+    const refused = await proposeGrowth('c2', 'tail', proposalId).catch((err: unknown) => err)
+    expect(refused).toBeInstanceOf(PassageNotApplicableError)
+    expect((refused as PassageNotApplicableError).changeId).toBe('c2')
+    expect((refused as Error).message).toMatch(LIMIT_REFUSAL)
+    const stored = readProposals(await storedDoc(store))
+    expect(stored.map((proposal) => proposal.changes.map((change) => change.id))).toEqual([['c1']])
+  })
+
   // The refusal names one change, and the one to shrink is the one that grows
   // the body most: a long replacement of a long passage may grow it least.
   test('names the change that grows the body most when a batch is refused', async () => {
