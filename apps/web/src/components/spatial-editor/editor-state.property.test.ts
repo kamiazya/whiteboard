@@ -58,8 +58,14 @@ import {
   type SpatialNode,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { afterAll, describe, expect, it } from 'vitest'
+import {
+  afterAllFloor,
+  fileNode,
+  groupNode,
+  linkNode,
+  textNode,
+} from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
   clearClipboardFragmentForTests,
@@ -2594,145 +2600,148 @@ describe('editor composite state (command-based)', () => {
    * under a live gesture — and a generator that drifted away from those
    * would keep passing while covering only presses that resolve to nothing.
    */
-  afterAll(() => {
-    // The three surface ledgers, checked from both sides. These come
-    // FIRST because they answer a different question from the floors
-    // below: not "did the fixture reach the interesting arrangement" but
-    // "does this model still know about the whole editor". A feature
-    // added to the canvas fails the BUILD at the ledger's `satisfies`
-    // before it ever reaches here; these assertions are what stop an
-    // entry that compiles from being wrong.
-    assertLedger('EditorCommand kind', COMMAND_COVERAGE, stats.commandKinds)
-    assertLedger('GestureEvent type', GESTURE_EVENT_COVERAGE, stats.eventTypes)
-    assertLedger('shortcut', SHORTCUT_COVERAGE, stats.shortcutIds)
+  afterAllFloor(
+    ['canvas, gesture and selection stay mutually coherent under any operation sequence'],
+    () => {
+      // The three surface ledgers, checked from both sides. These come
+      // FIRST because they answer a different question from the floors
+      // below: not "did the fixture reach the interesting arrangement" but
+      // "does this model still know about the whole editor". A feature
+      // added to the canvas fails the BUILD at the ledger's `satisfies`
+      // before it ever reaches here; these assertions are what stop an
+      // entry that compiles from being wrong.
+      assertLedger('EditorCommand kind', COMMAND_COVERAGE, stats.commandKinds)
+      assertLedger('GestureEvent type', GESTURE_EVENT_COVERAGE, stats.eventTypes)
+      assertLedger('shortcut', SHORTCUT_COVERAGE, stats.shortcutIds)
 
-    // Every floor failure prints the WHOLE census, not only the counter
-    // that fell — because which one fell says almost nothing on its own.
-    // A counter that dropped while the one it shares a branch with stayed
-    // healthy is an unlucky ARRANGEMENT; a whole column that fell together
-    // is a run that simply did less work. Those want opposite fixes — a
-    // denser domain versus a bigger budget — and the message could not
-    // tell them apart, so the reader has to reconstruct the other numbers
-    // from somewhere else.
-    //
-    // Measured, on the run that occasioned this: separating those two
-    // readings took THIRTY local runs of this file, to recover numbers the
-    // failing run had already computed and thrown away.
-    const census = () =>
-      Object.entries(stats)
-        .filter(([, value]) => typeof value === 'number')
-        .map(([name, value]) => `${name}=${value}`)
-        .join(' ')
-    const atLeast = (actual: number, floor: number, wentWrong: string) =>
-      expect(actual, `${wentWrong}\ncensus: ${census()}`).toBeGreaterThan(floor)
+      // Every floor failure prints the WHOLE census, not only the counter
+      // that fell — because which one fell says almost nothing on its own.
+      // A counter that dropped while the one it shares a branch with stayed
+      // healthy is an unlucky ARRANGEMENT; a whole column that fell together
+      // is a run that simply did less work. Those want opposite fixes — a
+      // denser domain versus a bigger budget — and the message could not
+      // tell them apart, so the reader has to reconstruct the other numbers
+      // from somewhere else.
+      //
+      // Measured, on the run that occasioned this: separating those two
+      // readings took THIRTY local runs of this file, to recover numbers the
+      // failing run had already computed and thrown away.
+      const census = () =>
+        Object.entries(stats)
+          .filter(([, value]) => typeof value === 'number')
+          .map(([name, value]) => `${name}=${value}`)
+          .join(' ')
+      const atLeast = (actual: number, floor: number, wentWrong: string) =>
+        expect(actual, `${wentWrong}\ncensus: ${census()}`).toBeGreaterThan(floor)
 
-    // Printed on a run that PASSES too, which is the half the paragraph
-    // above cannot supply: a floor is a statement about a DISTRIBUTION, and
-    // a census printed only on failure shows one draw from its left tail
-    // with nothing to compare it against. Two floors have now been argued
-    // about from exactly that — a single failing column, and a distribution
-    // rebuilt afterwards from thirty fresh runs on one machine, which is the
-    // wrong machine and the wrong day. Every green CI run carries a line
-    // now, so the next argument is settled from runs that already happened.
-    // `process.stdout.write` rather than `console.log`, because the jsdom
-    // setup swallows the latter — measured, as two instrumented runs that
-    // printed nothing at all.
-    process.stdout.write(`[editor-state census] ${census()}\n`)
+      // Printed on a run that PASSES too, which is the half the paragraph
+      // above cannot supply: a floor is a statement about a DISTRIBUTION, and
+      // a census printed only on failure shows one draw from its left tail
+      // with nothing to compare it against. Two floors have now been argued
+      // about from exactly that — a single failing column, and a distribution
+      // rebuilt afterwards from thirty fresh runs on one machine, which is the
+      // wrong machine and the wrong day. Every green CI run carries a line
+      // now, so the next argument is settled from runs that already happened.
+      // `process.stdout.write` rather than `console.log`, because the jsdom
+      // setup swallows the latter — measured, as two instrumented runs that
+      // printed nothing at all.
+      process.stdout.write(`[editor-state census] ${census()}\n`)
 
-    // Floors, not sentinels. `> 0` passes on a generator that reached an
-    // arrangement once by luck, which is the shape this guard exists to
-    // reject — except for the counters below that a directed script owns.
-    // Each other floor is roughly a third of a sampled minimum; the census
-    // line above is the distribution NOW, and any range quoted here goes
-    // stale the first time an arm moves weight.
-    //
-    // Three rules, all learned by getting them wrong here.
-    //
-    // Count EFFECTS, not attempts, for "did this code run" — `reorders`
-    // counted attempts and read as green while forward/backward were
-    // doing nothing at all, because the fixture's nodes never overlapped.
-    // But count ATTEMPTS for "does the model press this key": the
-    // reorder shortcut tally was effect-gated and one of its four
-    // placements read as uncovered in one run of four.
-    //
-    // Count the RIGHT effect. `groupFrameDrags` first counted any frame
-    // dragged alongside a selection, which the extras kept green with
-    // production containment disabled outright.
-    //
-    // Seven counters are NOT held to a sampled floor. Four are each the end of
-    // a conjunction (`stepReordersEffective`, `reconnections`, `cutMoves`,
-    // `pasteInserts`: a cut across an edge, then an insert; an overlapping
-    // neighbour; a held cut resolved as a move), and three — `copies`,
-    // `edgeDeletes`, `groupFrameDrags` — sat about three standard deviations
-    // above their floors over thirty runs, chains too. A chain's probability
-    // is a product, so `numRuns` buys margin on it only linearly, and a
-    // floor at a third of a sampled minimum failed in CI on two chains
-    // (`stepReordersEffective` at 3, `reconnections` at 2) with the rest of
-    // the census in range, so the run had done MORE work, not less.
-    //
-    // Those seven are asserted as ARRANGEMENTS by the directed describe below,
-    // deterministically, and here they only have to be reached at all (`> 0`):
-    // the guard that remains is "the generator still produces this", which
-    // is what a statistical floor can say that a script cannot. Do not
-    // re-derive a floor for them from sampled minima; densify the generator
-    // or add a directed script instead.
-    //
-    // Densifying moved the CENTRE of these counters, not their worst draw
-    // (`stepReordersEffective` 8 -> 16, `reconnections` median 8 -> 10,
-    // measured over 20 baseline runs against 60 after), and taking weight
-    // from `copy` AND `cut` put `cutMoves` under its floor — `cut` is the only
-    // route to the same-canvas MOVE branch. Visible only because the WHOLE
-    // census was compared rather than the counters being aimed at, which is
-    // the habit rather than the anecdote.
-    //
-    // Re-measure when adding a command, widening the document generator,
-    // or making the model MORE faithful, because all three dilute every
-    // existing counter. `numRuns` went 300 -> 500 when the command set
-    // reached thirty kinds and two counters started landing ON their
-    // floor: the arrangements were still being reached, so that was
-    // variance rather than vacuity, and more runs is the honest lever for
-    // variance. It costs about three seconds.
-    atLeast(stats.moveCommits, 100, 'moves barely committed')
-    atLeast(stats.resizeCommits, 18, 'resizes barely committed')
-    atLeast(stats.connectCommits, 20, 'edges barely connected')
-    atLeast(stats.deletes, 18, 'nodes barely deleted')
-    atLeast(stats.textEditsOpened, 40, 'text edits barely opened')
-    atLeast(stats.pendingTextHandoffs, 12, 'open edits barely left with text in them')
-    atLeast(
-      stats.externalReplacementsMidGesture,
-      14,
-      'external replacements barely landed mid-gesture',
-    )
-    atLeast(stats.multiSelections, 150, 'multi-selection barely reached')
-    atLeast(stats.nudges, 25, 'arrow-key nudges barely reached')
-    atLeast(stats.duplicates, 6, 'Cmd+D barely reached')
-    atLeast(stats.reordersEffective, 15, 'z-order barely changed anything')
-    atLeast(
-      stats.stepReordersEffective,
-      0,
-      'forward/backward never stepped over an overlapping node',
-    )
-    atLeast(stats.locksApplied, 5, 'Cmd+Shift+L barely locked anything')
-    atLeast(stats.selectAlls, 40, 'Cmd+A barely reached')
-    atLeast(stats.edgeSelections, 28, 'edges barely ever selected')
-    atLeast(stats.edgeDeletes, 0, 'no selected edge was ever deleted')
-    atLeast(stats.copies, 0, 'Cmd+C was never reached')
-    atLeast(stats.cuts, 18, 'Cmd+X barely reached')
-    atLeast(stats.cutMoves, 0, 'no paste resolved as a same-canvas move')
-    atLeast(stats.pasteInserts, 0, 'no paste inserted a copy')
-    atLeast(stats.reconnections, 0, 'no cut surface was ever reconnected')
-    atLeast(stats.marqueeSelections, 7, 'no marquee ever gathered a node')
-    atLeast(stats.handPressesIgnored, 17, 'hand mode never swallowed a press')
-    atLeast(stats.handEntries, 14, 'hand mode was never entered')
-    atLeast(stats.connectArms, 14, 'the connect tool never armed')
-    atLeast(stats.inkStrokes, 24, 'the draw tool never made ink')
-    atLeast(stats.cappedStrokes, 13, 'no stroke ever reached the bend cap')
-    atLeast(stats.toolSwitches, 60, 'the tool never changed')
-    atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
-    atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')
-    atLeast(stats.groupFrameDrags, 0, 'a dragged group frame never carried anything it contained')
-    atLeast(stats.groupsCreated, 17, 'no group frame was ever made from a selection')
-  })
+      // Floors, not sentinels. `> 0` passes on a generator that reached an
+      // arrangement once by luck, which is the shape this guard exists to
+      // reject — except for the counters below that a directed script owns.
+      // Each other floor is roughly a third of a sampled minimum; the census
+      // line above is the distribution NOW, and any range quoted here goes
+      // stale the first time an arm moves weight.
+      //
+      // Three rules, all learned by getting them wrong here.
+      //
+      // Count EFFECTS, not attempts, for "did this code run" — `reorders`
+      // counted attempts and read as green while forward/backward were
+      // doing nothing at all, because the fixture's nodes never overlapped.
+      // But count ATTEMPTS for "does the model press this key": the
+      // reorder shortcut tally was effect-gated and one of its four
+      // placements read as uncovered in one run of four.
+      //
+      // Count the RIGHT effect. `groupFrameDrags` first counted any frame
+      // dragged alongside a selection, which the extras kept green with
+      // production containment disabled outright.
+      //
+      // Seven counters are NOT held to a sampled floor. Four are each the end of
+      // a conjunction (`stepReordersEffective`, `reconnections`, `cutMoves`,
+      // `pasteInserts`: a cut across an edge, then an insert; an overlapping
+      // neighbour; a held cut resolved as a move), and three — `copies`,
+      // `edgeDeletes`, `groupFrameDrags` — sat about three standard deviations
+      // above their floors over thirty runs, chains too. A chain's probability
+      // is a product, so `numRuns` buys margin on it only linearly, and a
+      // floor at a third of a sampled minimum failed in CI on two chains
+      // (`stepReordersEffective` at 3, `reconnections` at 2) with the rest of
+      // the census in range, so the run had done MORE work, not less.
+      //
+      // Those seven are asserted as ARRANGEMENTS by the directed describe below,
+      // deterministically, and here they only have to be reached at all (`> 0`):
+      // the guard that remains is "the generator still produces this", which
+      // is what a statistical floor can say that a script cannot. Do not
+      // re-derive a floor for them from sampled minima; densify the generator
+      // or add a directed script instead.
+      //
+      // Densifying moved the CENTRE of these counters, not their worst draw
+      // (`stepReordersEffective` 8 -> 16, `reconnections` median 8 -> 10,
+      // measured over 20 baseline runs against 60 after), and taking weight
+      // from `copy` AND `cut` put `cutMoves` under its floor — `cut` is the only
+      // route to the same-canvas MOVE branch. Visible only because the WHOLE
+      // census was compared rather than the counters being aimed at, which is
+      // the habit rather than the anecdote.
+      //
+      // Re-measure when adding a command, widening the document generator,
+      // or making the model MORE faithful, because all three dilute every
+      // existing counter. `numRuns` went 300 -> 500 when the command set
+      // reached thirty kinds and two counters started landing ON their
+      // floor: the arrangements were still being reached, so that was
+      // variance rather than vacuity, and more runs is the honest lever for
+      // variance. It costs about three seconds.
+      atLeast(stats.moveCommits, 100, 'moves barely committed')
+      atLeast(stats.resizeCommits, 18, 'resizes barely committed')
+      atLeast(stats.connectCommits, 20, 'edges barely connected')
+      atLeast(stats.deletes, 18, 'nodes barely deleted')
+      atLeast(stats.textEditsOpened, 40, 'text edits barely opened')
+      atLeast(stats.pendingTextHandoffs, 12, 'open edits barely left with text in them')
+      atLeast(
+        stats.externalReplacementsMidGesture,
+        14,
+        'external replacements barely landed mid-gesture',
+      )
+      atLeast(stats.multiSelections, 150, 'multi-selection barely reached')
+      atLeast(stats.nudges, 25, 'arrow-key nudges barely reached')
+      atLeast(stats.duplicates, 6, 'Cmd+D barely reached')
+      atLeast(stats.reordersEffective, 15, 'z-order barely changed anything')
+      atLeast(
+        stats.stepReordersEffective,
+        0,
+        'forward/backward never stepped over an overlapping node',
+      )
+      atLeast(stats.locksApplied, 5, 'Cmd+Shift+L barely locked anything')
+      atLeast(stats.selectAlls, 40, 'Cmd+A barely reached')
+      atLeast(stats.edgeSelections, 28, 'edges barely ever selected')
+      atLeast(stats.edgeDeletes, 0, 'no selected edge was ever deleted')
+      atLeast(stats.copies, 0, 'Cmd+C was never reached')
+      atLeast(stats.cuts, 18, 'Cmd+X barely reached')
+      atLeast(stats.cutMoves, 0, 'no paste resolved as a same-canvas move')
+      atLeast(stats.pasteInserts, 0, 'no paste inserted a copy')
+      atLeast(stats.reconnections, 0, 'no cut surface was ever reconnected')
+      atLeast(stats.marqueeSelections, 7, 'no marquee ever gathered a node')
+      atLeast(stats.handPressesIgnored, 17, 'hand mode never swallowed a press')
+      atLeast(stats.handEntries, 14, 'hand mode was never entered')
+      atLeast(stats.connectArms, 14, 'the connect tool never armed')
+      atLeast(stats.inkStrokes, 24, 'the draw tool never made ink')
+      atLeast(stats.cappedStrokes, 13, 'no stroke ever reached the bend cap')
+      atLeast(stats.toolSwitches, 60, 'the tool never changed')
+      atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
+      atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')
+      atLeast(stats.groupFrameDrags, 0, 'a dragged group frame never carried anything it contained')
+      atLeast(stats.groupsCreated, 17, 'no group frame was ever made from a selection')
+    },
+  )
 
   fcTest.prop(
     [initialCanvasArb, fc.commands(allCommands, { maxCommands: 24 })],

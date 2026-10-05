@@ -2,7 +2,8 @@
 // topology: outermost-group units, fixed-first-anchor band alignment (no
 // running-mean chaining), bounded overlap resolution, locked nodes as
 // fixed obstacles. Only boxes that actually move are reported.
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import type { TidyNode } from './tidy.js'
 import { tidyNodes } from './tidy.js'
@@ -1127,7 +1128,7 @@ describe('tidy properties', () => {
   const note = (key: keyof typeof REACHED, hit: boolean) => {
     if (hit) reached.set(key, (reached.get(key) ?? 0) + 1)
   }
-  afterAll(() => {
+  afterAllFloor(['a locked node is never moved'], () => {
     expect(
       Object.fromEntries(
         Object.keys(REACHED).map((key) => [key, (reached.get(key) ?? 0) >= REACHED_FLOOR]),

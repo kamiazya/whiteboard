@@ -14,7 +14,8 @@
  * the twelve refs this replaces there was no single place to state that,
  * and the last two defects were both a field that outlived its gesture.
  */
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc } from '../../test-utils/fast-check.js'
 import {
@@ -83,7 +84,8 @@ let anchorReusedCount = 0
  */
 let doublePressZoomCount = 0
 
-afterAll(() => {
+// Every invariant below folds its sequences through `drive`, so the tallies are the whole file's.
+afterAllFloor('every test', () => {
   assertLedger('NavigationEffect kind', EFFECT_COVERAGE, effectTally)
   assertLedger('NavigationMode kind', MODE_COVERAGE, modeTally)
   expect(

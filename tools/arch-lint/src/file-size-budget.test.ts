@@ -373,7 +373,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1240,
   'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
   'packages/canvas-render/src/svg/backend.test.ts': 1184,
-  'packages/canvas-render/src/tidy.test.ts': 1176,
+  // +1: the import of `afterAllFloor`, which keeps the reach floor from failing
+  // a run that filtered the property feeding it away.
+  'packages/canvas-render/src/tidy.test.ts': 1177,
   // A referenced canvas arriving in the form canvas_view
   // sends it (JSON Canvas) reaches the viewer as the model.
   // The refresh asking for the style the last result drew, which needs the

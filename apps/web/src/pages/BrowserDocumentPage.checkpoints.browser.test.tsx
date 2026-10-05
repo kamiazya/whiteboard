@@ -4,10 +4,10 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { afterAllFloor, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -94,19 +94,28 @@ const CHECKPOINT_COVERAGE = {
 const exercised = new Set<`${DocumentKind}/${Trigger}`>()
 
 describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
-  afterAll(() => {
-    const lying = Object.entries(CHECKPOINT_COVERAGE).flatMap(([kind, triggers]) =>
-      Object.entries(triggers)
-        .filter(
-          ([trigger, claim]) =>
-            claim === 'covered' && !exercised.has(`${kind}/${trigger}` as never),
-        )
-        .map(
-          ([trigger]) => `${kind}/${trigger} is recorded as covered but the run never exercised it`,
-        ),
-    )
-    expect(lying).toEqual([])
-  })
+  afterAllFloor(
+    [
+      'leaves a checkpoint behind when the page goes away after an edit',
+      'leaves a checkpoint behind when the person navigates away inside the quiet window',
+      'leaves a checkpoint behind once the document has been quiet, without any page exit',
+      'leaves a checkpoint behind once a markdown document has been quiet',
+    ],
+    () => {
+      const lying = Object.entries(CHECKPOINT_COVERAGE).flatMap(([kind, triggers]) =>
+        Object.entries(triggers)
+          .filter(
+            ([trigger, claim]) =>
+              claim === 'covered' && !exercised.has(`${kind}/${trigger}` as never),
+          )
+          .map(
+            ([trigger]) =>
+              `${kind}/${trigger} is recorded as covered but the run never exercised it`,
+          ),
+      )
+      expect(lying).toEqual([])
+    },
+  )
 
   beforeEach(async () => {
     await clearWhiteboardDb()

@@ -11,6 +11,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type * as opentype from 'opentype.js'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { opentypeApi } from '../../shared/opentype.js'
@@ -95,7 +96,7 @@ describe('segmenting a run against measuring it whole', () => {
     }
   })
 
-  afterAll(() => {
+  afterAllFloor(['sums to what one opentype call measures for the whole run'], () => {
     // Reachability: a cut every 64 code points regardless of what follows
     // must be WRONG in a good share of runs, or the property passes whatever
     // rule the measurer cuts by. Measured at 14-23 runs of 60 over six runs.

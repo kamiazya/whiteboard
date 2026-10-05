@@ -22,8 +22,10 @@
  * reached, with a floor, so a generator change that stops producing them
  * fails by name instead of passing vacuously.
  */
+
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { afterAll, describe, expect } from 'vitest'
+import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import {
   createWorkspaceDocumentAtPath,
@@ -287,9 +289,7 @@ describe('workspace-record listing convergence (S5a)', () => {
     PROPERTY_TIMEOUT_MS,
   )
 
-  afterAll(() => {
-    // Skipped by a name filter: nothing ran, so there is nothing to measure.
-    if (races.cases === 0) return
+  afterAllFloor(['two replicas converge on one listing, pin list, and meta'], () => {
     expect(races.any / races.cases).toBeGreaterThanOrEqual(FLOORS.any)
     expect(races.deleteVs / races.cases).toBeGreaterThanOrEqual(FLOORS.deleteVs)
     expect(races.deleteVsMove / races.cases).toBeGreaterThanOrEqual(FLOORS.deleteVsMove)

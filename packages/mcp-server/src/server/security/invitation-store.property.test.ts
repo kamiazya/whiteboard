@@ -11,6 +11,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { tenantDatabase } from '../store/db/tenant-database.js'
@@ -77,7 +78,7 @@ afterAll(async () => {
 })
 
 describe('invitation links — against a model', () => {
-  afterAll(() => {
+  afterAllFloor(['opening and redeeming always answer what the model says a link is'], () => {
     expect(reached.redeemedOnce, 'no run ever redeemed a link').toBeGreaterThan(0)
     expect(reached.refusedTwice, 'no run ever tried a second redemption').toBeGreaterThan(0)
     expect(reached.expiredAtBoundary, 'no run ever sat exactly on the TTL').toBeGreaterThan(0)

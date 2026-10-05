@@ -1,4 +1,5 @@
-import { afterAll, describe, expect } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import type { BackupSnapshot } from './backup-retention.js'
 import {
@@ -389,29 +390,32 @@ const allCommands = [
 ]
 
 describe('ADR-0021 decision 6: an offered backup is a restorable backup', () => {
-  afterAll(() => {
-    // Non-vacuity. Each of these is an arrangement the property would silently
-    // stop covering if the generator drifted, and the failure mode of that is
-    // a green test asserting nothing.
-    expect(reached.seals, 'no snapshot was ever sealed').toBeGreaterThan(0)
-    expect(reached.restores, 'no snapshot was ever restored').toBeGreaterThan(0)
-    expect(
-      reached.dereferences,
-      'no blob was ever dereferenced, so the backup and the live document never disagreed',
-    ).toBeGreaterThan(0)
-    expect(
-      reached.gcDeletes,
-      'file-GC never had anything to collect, so its separation from the backup was never exercised',
-    ).toBeGreaterThan(0)
-    expect(
-      reached.retentionDeletes,
-      'the retention pass never deleted anything, so the far boundary was never under pressure',
-    ).toBeGreaterThan(0)
-    expect(
-      reached.retentionUnderOffer,
-      'retention never ran while a snapshot with real references was on offer — the far boundary is untested',
-    ).toBeGreaterThan(0)
-  })
+  afterAllFloor(
+    ['holds under any interleaving of writes, mirroring, sealing, GC, retention and expiry'],
+    () => {
+      // Non-vacuity. Each of these is an arrangement the property would silently
+      // stop covering if the generator drifted, and the failure mode of that is
+      // a green test asserting nothing.
+      expect(reached.seals, 'no snapshot was ever sealed').toBeGreaterThan(0)
+      expect(reached.restores, 'no snapshot was ever restored').toBeGreaterThan(0)
+      expect(
+        reached.dereferences,
+        'no blob was ever dereferenced, so the backup and the live document never disagreed',
+      ).toBeGreaterThan(0)
+      expect(
+        reached.gcDeletes,
+        'file-GC never had anything to collect, so its separation from the backup was never exercised',
+      ).toBeGreaterThan(0)
+      expect(
+        reached.retentionDeletes,
+        'the retention pass never deleted anything, so the far boundary was never under pressure',
+      ).toBeGreaterThan(0)
+      expect(
+        reached.retentionUnderOffer,
+        'retention never ran while a snapshot with real references was on offer — the far boundary is untested',
+      ).toBeGreaterThan(0)
+    },
+  )
 
   fcTest.prop(
     [fc.commands(allCommands, { maxCommands: 40, size: '+2' })],

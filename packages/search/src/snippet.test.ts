@@ -11,7 +11,8 @@
  * this kind of property passes without ever reaching the case it names, so the
  * tally below counts the runs that actually entered it.
  */
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, it } from 'vitest'
 import { CONTEXT_RADIUS, snippetAround } from './snippet.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
@@ -41,7 +42,7 @@ const RUN = CONTEXT_RADIUS + 20
  */
 let enteredDefectZone = 0
 
-afterAll(() => {
+afterAllFloor(['never cuts a character in half'], () => {
   expect(
     enteredDefectZone,
     'the generator never put a cut inside a character — the surrogate property proved nothing',
@@ -125,7 +126,7 @@ describe('snippetAround cuts between characters a reader sees as one', () => {
    */
   let cutInsideACluster = 0
 
-  afterAll(() => {
+  afterAllFloor(['every grapheme of the excerpt is a grapheme of the source'], () => {
     expect(
       cutInsideACluster,
       'the sweep never cut inside a cluster — the grapheme property proved nothing',

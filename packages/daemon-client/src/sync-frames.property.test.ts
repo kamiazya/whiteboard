@@ -8,8 +8,8 @@
  * the daemon's emitters against this parser. What this file adds beside
  * the round trip is the arms tally: every message kind is drawn.
  */
-import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { afterAll, describe, expect, vi } from 'vitest'
+import { afterAllFloor, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
+import { describe, expect, vi } from 'vitest'
 import { parseServerTextMessage } from './sync-frame-text.js'
 import { serverTextMessageSchema, viewportRequestParamsSchema } from './sync-frames.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -42,7 +42,7 @@ describe('server text messages survive the wire', () => {
     },
   )
 
-  afterAll(() => {
+  afterAllFloor(['every message the schema admits parses back equal after JSON.stringify'], () => {
     const unreached = ARMS.filter((arm) => (seen.get(arm) ?? 0) === 0)
     expect(
       unreached,
