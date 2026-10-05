@@ -1,7 +1,8 @@
-// The markdown size limit where a person makes the edit. Both keepers refuse
-// a body past `MARKDOWN_MAX_CHARS`, and a daemon-kept document's sync worker
-// retries a refused write without end, so an edit that would cross the limit
-// must never be made rather than be refused after it is.
+// A size limit where a person makes the edit. A keeper refuses a markdown
+// body past `MARKDOWN_MAX_CHARS`, and a daemon-kept document's sync worker
+// retries a refused write without end, so an edit that would cross a limit
+// must never be made rather than be refused after it is. The same shape holds
+// a canvas node's text to `NODE_TEXT_MAX_CHARS`.
 import {
   Annotation,
   EditorState,
@@ -21,30 +22,7 @@ import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
  */
 export const externalValue = Annotation.define<true>()
 
-/** Dispatched in place of a refused edit, carrying the length it would have made. */
-const refused = StateEffect.define<number>()
-
-/** The length of the last refused edit, until the next edit that lands. */
-const refusal = StateField.define<number | null>({
-  create: () => null,
-  update(value, tr) {
-    for (const effect of tr.effects) if (effect.is(refused)) return effect.value
-    return tr.docChanged ? null : value
-  },
-  provide: (field) => showPanel.from(field, (length) => (length === null ? null : notice(length))),
-})
-
 const COUNT = new Intl.NumberFormat('en-US')
-
-function notice(length: number): (view: unknown) => Panel {
-  return () => {
-    const dom = document.createElement('div')
-    dom.setAttribute('role', 'status')
-    dom.className = 'cm-length-limit-notice'
-    dom.textContent = `Not added: this would make the document ${COUNT.format(length)} characters long, past the ${COUNT.format(MARKDOWN_MAX_CHARS)}-character limit. Split the content across documents.`
-    return { dom, top: true }
-  }
-}
 
 /**
  * Whether a transaction is somebody else's write rather than this person's:
@@ -56,13 +34,28 @@ function arrivedFromOutside(tr: Transaction): boolean {
 }
 
 /**
- * Refuses an edit that would leave the document longer than `limit` and
- * longer than it was. Shrinking a document already past the limit is let
- * through, as the keepers let it through: refusing it would leave the
- * document stuck. The refused edit is replaced by an effect the notice reads,
- * so a paste that did nothing says why.
+ * Refuses an edit that would leave the text longer than `limit` and longer
+ * than it was. Shrinking a text already past the limit is let through, as
+ * the keepers let it through: refusing it would leave the text stuck. The
+ * refused edit is replaced by an effect the notice reads, so a paste that
+ * did nothing says why — in the words `describe` gives the length it would
+ * have made.
+ *
+ * Each call carries its own state, so two limits installed in one editor
+ * each report only the edits they refused.
  */
-export function markdownLengthLimit(limit: number = MARKDOWN_MAX_CHARS): Extension {
+export function textLengthLimit(limit: number, describe: (length: number) => string): Extension {
+  const refused = StateEffect.define<number>()
+  // The length of the last refused edit, until the next edit that lands.
+  const refusal = StateField.define<number | null>({
+    create: () => null,
+    update(value, tr) {
+      for (const effect of tr.effects) if (effect.is(refused)) return effect.value
+      return tr.docChanged ? null : value
+    },
+    provide: (field) =>
+      showPanel.from(field, (length) => (length === null ? null : notice(describe(length)))),
+  })
   return [
     refusal,
     // The app's own colours: CodeMirror's base theme paints panels a fixed
@@ -79,4 +72,23 @@ export function markdownLengthLimit(limit: number = MARKDOWN_MAX_CHARS): Extensi
       return { effects: refused.of(length) }
     }),
   ]
+}
+
+function notice(text: string): (view: unknown) => Panel {
+  return () => {
+    const dom = document.createElement('div')
+    dom.setAttribute('role', 'status')
+    dom.className = 'cm-length-limit-notice'
+    dom.textContent = text
+    return { dom, top: true }
+  }
+}
+
+/** A markdown document's body, held to the size both keepers accept. */
+export function markdownLengthLimit(limit: number = MARKDOWN_MAX_CHARS): Extension {
+  return textLengthLimit(
+    limit,
+    (length) =>
+      `Not added: this would make the document ${COUNT.format(length)} characters long, past the ${COUNT.format(limit)}-character limit. Split the content across documents.`,
+  )
 }

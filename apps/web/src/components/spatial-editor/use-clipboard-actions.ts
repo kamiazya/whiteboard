@@ -5,7 +5,7 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
-import type { MutableRefObject } from 'react'
+import { type MutableRefObject, useState } from 'react'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
   readClipboardFragment,
@@ -22,6 +22,7 @@ import {
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { screenToCanvas } from '../../lib/spatial/viewport.js'
 import { textNodeDefaults } from './node-factories.js'
+import { copiedTextRefusal, pastedTextRefusal } from './node-text-limit.js'
 
 /**
  * The deferred half of a cut: the originals stay on the canvas as a ghost
@@ -122,6 +123,41 @@ function heldOffset(
   }
 }
 
+/**
+ * Why the last paste or duplicate made nothing, until the next one. A
+ * refused verb still answers HANDLED to its caller: the notice is the
+ * answer, and an unhandled Mod+D falls through to the browser's bookmark
+ * dialog.
+ */
+function useClipboardNotice() {
+  const [text, setText] = useState<string | null>(null)
+  return {
+    text,
+    dismiss: () => setText(null),
+    /** Records the refusal (or clears the last one) and answers whether there was one. */
+    refused: (refusal: string | null): boolean => {
+      setText(refusal)
+      return refusal !== null
+    },
+  }
+}
+
+/** What a paste or a duplicate created, so the copies become the selection. */
+function selectCreatedBy(
+  command: EditorCommand,
+  selectNodes: (ids: readonly string[]) => void,
+  selectInk: (ids: readonly string[]) => void,
+): void {
+  if (command.kind !== 'batch') return
+  const nodes = command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : []))
+  const lines = command.commands.flatMap((c) => (c.kind === 'create-line' ? [c.line.id] : []))
+  if (nodes.length > 0) selectNodes(nodes)
+  // Ink is selected whether or not boxes were, because the two selections
+  // are independent: a paste of one stroke leaves the node selection alone
+  // and a mixed paste selects both halves of what it made.
+  if (lines.length > 0) selectInk(lines)
+}
+
 export function useClipboardActions({
   canvasRef,
   primaryId,
@@ -136,6 +172,7 @@ export function useClipboardActions({
   viewport,
   viewportCenterScreen,
 }: ClipboardActionsInputs) {
+  const notice = useClipboardNotice()
   /**
    * Everything the clipboard family acts on, whatever collection it is in.
    *
@@ -148,17 +185,7 @@ export function useClipboardActions({
   /** Whether anything at all is selected — a node, a relation or a stroke. */
   const hasSelection = (): boolean => primaryId !== undefined || selectedInkIds.length > 0
 
-  /** What a paste or a duplicate created, so the copies become the selection. */
-  const selectCreated = (command: EditorCommand): void => {
-    if (command.kind !== 'batch') return
-    const nodes = command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : []))
-    const lines = command.commands.flatMap((c) => (c.kind === 'create-line' ? [c.line.id] : []))
-    if (nodes.length > 0) selectNodes(nodes)
-    // Ink is selected whether or not boxes were, because the two selections
-    // are independent: a paste of one stroke leaves the node selection alone
-    // and a mixed paste selects both halves of what it made.
-    if (lines.length > 0) selectInk(lines)
-  }
+  const selectCreated = (command: EditorCommand) => selectCreatedBy(command, selectNodes, selectInk)
   /**
    * Clones the selection as ONE batch command (one undo step): reminted
    * ids via the clipboard-fragment helpers, +16px offset (the standard
@@ -169,6 +196,7 @@ export function useClipboardActions({
     if (!hasSelection()) return false
     const current = canvasRef.current
     const fragment = extractClipboardFragment(current, selectedIds())
+    if (notice.refused(copiedTextRefusal(fragment.nodes, 'duplicated'))) return true
     const command = buildFragmentInsertCommand(
       current,
       fragment,
@@ -231,6 +259,7 @@ export function useClipboardActions({
 
   /** A note carrying pasted foreign text, at the viewport center. */
   const createTextNodeAtViewportCenter = (text: string): void => {
+    if (notice.refused(pastedTextRefusal(text))) return
     const point = screenToCanvas(viewportCenterScreen(), viewport)
     const node = textNodeDefaults(createId?.() ?? crypto.randomUUID(), point, text)
     const command: EditorCommand = { kind: 'create-node', node }
@@ -292,12 +321,9 @@ export function useClipboardActions({
      * to the insert.
      */
     const current = canvasRef.current
-    // A paste that answers THIS canvas's pending cut is a MOVE: the held
-    // nodes keep their ids and just change place, so every edge — internal
-    // or boundary — survives without any reconnection machinery. One batch
-    // of move-node commands = one undo step that only moves them back.
     const moved = pasteAsMove(fragment, at)
     if (moved !== undefined) return moved
+    if (notice.refused(copiedTextRefusal(fragment.nodes, 'pasted'))) return true
 
     // The cut surface reconnects while the document shows no trace of a
     // previous reconnection: as long as any edge a prior paste of this cut
@@ -346,6 +372,7 @@ export function useClipboardActions({
     copySelection,
     cutSelection,
     createTextNodeAtViewportCenter,
+    clipboardNotice: notice,
     pasteClipboard,
     pasteFragment,
   }

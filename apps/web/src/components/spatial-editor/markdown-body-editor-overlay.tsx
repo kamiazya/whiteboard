@@ -13,10 +13,30 @@ import {
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import type { Box } from '../../lib/spatial/geometry.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
+import { nodeTextLengthLimit } from './node-text-limit.js'
+
+/** The silhouette's inscribed content box — where the committed text sits. */
+function contentBoxOf(
+  node: SpatialNode,
+  selectionBox: { x: number; y: number; width: number; height: number },
+  sceneNodes: readonly SceneNode[],
+): Box {
+  const chrome = sceneNodes.find((entry) => entry.kind === 'shape' && entry.id === node.id)
+  const shapeId = chrome !== undefined && chrome.kind === 'shape' ? chrome.shape : undefined
+  const bbox = {
+    x: selectionBox.x,
+    y: selectionBox.y,
+    w: selectionBox.width,
+    h: selectionBox.height,
+  }
+  const inner = outlineContentBox(shapeId, bbox)
+  return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
+}
 
 /**
  * The in-place editor for a text node's markdown body. The scene keeps
@@ -68,19 +88,9 @@ export function MarkdownBodyEditorOverlay({
 }) {
   return (
     <MarkdownNodeEditor
-      box={(() => {
-        const chrome = sceneNodes.find((entry) => entry.kind === 'shape' && entry.id === node.id)
-        const shapeId = chrome !== undefined && chrome.kind === 'shape' ? chrome.shape : undefined
-        const bbox = {
-          x: selectionBox.x,
-          y: selectionBox.y,
-          w: selectionBox.width,
-          h: selectionBox.height,
-        }
-        const inner = outlineContentBox(shapeId, bbox)
-        return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
-      })()}
+      box={contentBoxOf(node, selectionBox, sceneNodes)}
       initialText={nodeText(node) ?? ''}
+      lengthLimit={nodeTextLengthLimit}
       // The conversations about passages of this node's text, highlighted
       // over the draft; and the comment verb's seam, which attaches the
       // caret's scope to this node and opens the compose bubble at the
