@@ -22,10 +22,11 @@ import {
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   nodeText,
 } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
@@ -270,9 +271,22 @@ async function connectedBoard() {
 }
 
 /**
- * The same three bounds `apply-document-update-label-limit.test.ts` holds the
- * daemon's sync operation to, pushed through the browser keeper.
+ * The same bounds the daemon's sync operation is held to, pushed through the
+ * browser keeper.
  */
+const linkTo = (length: number) => (board: DocumentContainers) =>
+  writeSpatialNode(
+    board,
+    linkNode({
+      id: 'k',
+      x: 0,
+      y: 200,
+      width: 200,
+      height: 60,
+      url: `https://example.com/${'a'.repeat(length - 'https://example.com/'.length)}`,
+    }),
+  )
+
 describe.each([
   {
     edit: "a node's text",
@@ -301,6 +315,12 @@ describe.each([
           text: 'x'.repeat(NODE_TEXT_MAX_CHARS),
         }),
       ),
+  },
+  {
+    edit: "a link's URL",
+    code: 'node_location_too_large',
+    past: linkTo(NODE_LOCATION_MAX_CHARS + 1),
+    within: linkTo(NODE_LOCATION_MAX_CHARS),
   },
   {
     edit: "an edge's label",

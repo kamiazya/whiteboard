@@ -4,13 +4,16 @@
  *
  * Validation delegates to the same rule the model schema enforces
  * (`z.url()`), so a URL this dialog accepts can never fail schema
- * validation downstream — one authority, no drift.
+ * validation downstream — one authority, no drift. The field stops taking
+ * characters at `NODE_LOCATION_MAX_CHARS`, the bound every keeper holds a
+ * link's URL to.
  *
  * Marked `data-editor-overlay` so the canvas root's gesture handlers ignore
  * presses inside it. Positioning is inline for the same reason as the
  * context menu: it must behave identically where the app stylesheet is
  * absent (browser-mode component tests).
  */
+import { NODE_LOCATION_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { useId, useState } from 'react'
 import { z } from 'zod'
 import { isFollowableUrl } from './followable-url.js'
@@ -86,6 +89,7 @@ export function LinkUrlDialog({ title, initialUrl, onSubmit, onCancel }: LinkUrl
             // biome-ignore lint/a11y/noAutofocus: the dialog exists only to take this URL; focusing it is the entire interaction
             autoFocus
             type="url"
+            maxLength={NODE_LOCATION_MAX_CHARS}
             value={value}
             placeholder="https://example.com"
             aria-invalid={refusal !== null}

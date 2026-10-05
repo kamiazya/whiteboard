@@ -76,4 +76,6 @@ export const KEEPER_LIMIT_REASON = {
   label_too_large:
     'It would give a label more text than one label may hold. Put longer text in a node.',
   comment_too_large: `It would make a comment longer than one comment may be. ${COMMENT_MESSAGE_ADVICE}`,
+  node_location_too_large:
+    'It would give a link node a URL, or a file node a path, longer than one may be.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>

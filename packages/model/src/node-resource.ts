@@ -57,6 +57,39 @@ export const nodeResourceSchema = z
 
 export type NodeResource = z.infer<typeof nodeResourceSchema>
 
+/**
+ * The most characters (UTF-16 code units) a link's URL, a file's path, or a
+ * file's subpath may carry when it is written.
+ *
+ * Each is drawn as the node's label on every render of its board, at the
+ * label's per-character cost. Measured through the real store and the export
+ * measurer (`mcp-server/scripts/measure/label-and-comment-cost.mjs`, 4-core
+ * machine), one wb_scene_render of a board with one link or file node: 2 Ki
+ * ~50-75 ms, 8 Ki ~130 ms, 16 Ki ~230 ms, 64 Ki ~0.9 s, linear at about
+ * 14 µs a character past the board's baseline — so a 1 Mi URL costs ~14 s of
+ * CPU on every render. 8 Ki rather than a label's 1 Ki because a URL is not
+ * chrome someone chose to write: signed and query-heavy URLs legitimately
+ * reach a few Ki, and RFC 9110 §4.1 asks every recipient to support at least
+ * 8000 octets. A file's path and subpath share the bound so a node's label
+ * has one ceiling whatever it points at.
+ */
+export const NODE_LOCATION_MAX_CHARS = 8 * 1024
+
+const tooLong = (what: string) =>
+  `${what} is longer than the ${NODE_LOCATION_MAX_CHARS}-character limit`
+
+/**
+ * A link's URL, a file's path and a file's subpath as a tool or route accepts
+ * them. The STORED resource stays unbounded: one written before the limit
+ * must still read, and still take an edit that leaves it alone.
+ */
+export const nodeUrlInputSchema = z.url().max(NODE_LOCATION_MAX_CHARS, tooLong("a link's URL"))
+export const nodeFileInputSchema = z.string().max(NODE_LOCATION_MAX_CHARS, tooLong("a file's path"))
+export const nodeSubpathInputSchema = z
+  .string()
+  .startsWith('#')
+  .max(NODE_LOCATION_MAX_CHARS, tooLong("a file's subpath"))
+
 export interface ResourceKindSpec {
   /** What a resource of this kind is emitted with. */
   readonly mimeType: string

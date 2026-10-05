@@ -8,6 +8,7 @@ import {
   CommentMessageTooLargeError,
   LabelTooLargeError,
   MarkdownBodyTooLargeError,
+  NodeLocationTooLargeError,
   NodeTextTooLargeError,
 } from './sync-write-refusals.js'
 
@@ -64,6 +65,7 @@ function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
   const named =
     err instanceof MarkdownBodyTooLargeError ||
     err instanceof NodeTextTooLargeError ||
+    err instanceof NodeLocationTooLargeError ||
     err instanceof LabelTooLargeError ||
     err instanceof CommentMessageTooLargeError
   if (!named || err.container === undefined) return err
@@ -72,6 +74,9 @@ function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
   const at = { path: entry.path }
   if (err instanceof NodeTextTooLargeError) {
     return new NodeTextTooLargeError(err.nodeId, err.chars, err.container, at)
+  }
+  if (err instanceof NodeLocationTooLargeError) {
+    return new NodeLocationTooLargeError(err.nodeId, err.chars, err.container, at)
   }
   if (err instanceof LabelTooLargeError) {
     return new LabelTooLargeError(err.elementId, err.chars, err.container, at)

@@ -171,7 +171,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/EdgeSelectionHighlight.tsx#EdgeSelectionHighlight': 52,
   'apps/web/src/components/spatial-editor/LegendOverlay.tsx#LegendOverlay': 73,
   'apps/web/src/components/spatial-editor/LinkEmbedLayer.tsx#LinkEmbedLayer': 98,
-  'apps/web/src/components/spatial-editor/LinkUrlDialog.tsx#LinkUrlDialog': 83,
+  'apps/web/src/components/spatial-editor/LinkUrlDialog.tsx#LinkUrlDialog': 84, // +1 the URL field's maxLength
   'apps/web/src/components/spatial-editor/MarkdownNodeEditor.tsx#MarkdownNodeEditor': 246,
   'apps/web/src/components/spatial-editor/MemberOutlinesOverlay.tsx#MemberOutlinesOverlay': 61,
   'apps/web/src/components/spatial-editor/MinimapOverlay.tsx#MinimapOverlay': 108,

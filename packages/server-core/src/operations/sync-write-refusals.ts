@@ -8,6 +8,7 @@ import {
   DOCUMENT_NAME_MAX_LENGTH,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
 } from '@kamiazya/whiteboard-model'
@@ -119,6 +120,39 @@ export class NodeTextTooLargeError extends SyncWriteRefusalError {
       ),
     )
     this.name = 'NodeTextTooLargeError'
+  }
+}
+
+/**
+ * A sync write refused because it would add or grow a link's URL or a file's
+ * path or subpath past `NODE_LOCATION_MAX_CHARS` — the bound every tool write
+ * holds, since each render of the board lays it out again as the node's
+ * label. Nothing of the write was kept; a location stored longer before the
+ * bound still takes an edit that does not grow it.
+ *
+ * `container` is the map that holds it, for a caller that can resolve it to
+ * a document; `at` is that document, once resolved.
+ */
+export class NodeLocationTooLargeError extends SyncWriteRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['node-location']
+  readonly status = 413
+
+  constructor(
+    public readonly nodeId: string,
+    public readonly chars: number,
+    public readonly container?: ContainerID,
+    public readonly at?: RefusedIn,
+  ) {
+    const location = `node ${JSON.stringify(nodeId)} a location of ${chars} characters`
+    super(
+      valueRefusalMessage(
+        at,
+        `give ${location}`,
+        `gives ${location}`,
+        `past the ${NODE_LOCATION_MAX_CHARS}-character limit for a link's URL or a file's path`,
+      ),
+    )
+    this.name = 'NodeLocationTooLargeError'
   }
 }
 

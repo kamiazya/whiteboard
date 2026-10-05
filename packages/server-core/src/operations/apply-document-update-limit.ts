@@ -13,6 +13,7 @@ import {
   DocumentNameTooLongError,
   LabelTooLargeError,
   MarkdownBodyTooLargeError,
+  NodeLocationTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
@@ -32,6 +33,8 @@ function breachRefusal(breach: SyncTextBreach): SyncWriteRefusalError {
   switch (breach.shape) {
     case 'node-text':
       return new NodeTextTooLargeError(breach.nodeId, breach.chars, breach.container)
+    case 'node-location':
+      return new NodeLocationTooLargeError(breach.nodeId, breach.chars, breach.container)
     case 'label':
       return new LabelTooLargeError(breach.elementId, breach.chars, breach.container)
     case 'comment-message':

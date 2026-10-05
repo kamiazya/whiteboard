@@ -98,6 +98,17 @@ refuses an over-long node: nothing is saved, the page goes back to what is
 stored, and the notice says why. A label or message stored longer before the
 limit still reads, and can still be shortened.
 
+A link node's URL, a file node's path and a file node's subpath each carry at
+most **8,192 characters**. Each is drawn as the node's label on every render,
+at the same per-character cost as a label; 8,192 leaves room for long signed or
+query-heavy URLs. `wb_canvas_edit` refuses a longer `url`, `file` or `subpath`
+on `node.add` and `node.patch`, and the web app's link dialog stops taking
+characters at the limit. The daemon's sync routes refuse an update that adds or
+grows one past it with `413` and `{"error":"node_location_too_large"}`, storing
+nothing; `promote` names the canvas that holds it. A browser-kept workspace
+refuses the same change the way it refuses an over-long node. A URL or path
+stored longer before the limit still reads, and can still be shortened.
+
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
 `document.create` and `document.move` and of

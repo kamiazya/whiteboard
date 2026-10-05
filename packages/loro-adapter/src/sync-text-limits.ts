@@ -9,6 +9,7 @@ import {
   growsPast,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
 } from '@kamiazya/whiteboard-model'
@@ -30,9 +31,11 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * Why a sync update was refused: one insert longer than `MARKDOWN_MAX_CHARS`
  * (`run`), a markdown body it left past that limit and longer than it was
  * (`body`), a node's text it added or grew past `NODE_TEXT_MAX_CHARS`
- * (`node-text`), an edge's, line's or group's label past `LABEL_MAX_CHARS`
- * (`label`), or a comment message past `COMMENT_MESSAGE_MAX_CHARS`
- * (`comment-message`). Counts are UTF-16 units, the length every limit counts.
+ * (`node-text`), a link's URL or a file's path or subpath past
+ * `NODE_LOCATION_MAX_CHARS` (`node-location`), an edge's, line's or group's
+ * label past `LABEL_MAX_CHARS` (`label`), or a comment message past
+ * `COMMENT_MESSAGE_MAX_CHARS` (`comment-message`). Counts are UTF-16 units,
+ * the length every limit counts.
  */
 export type SyncTextBreach =
   | {
@@ -46,6 +49,12 @@ export type SyncTextBreach =
       readonly chars: number
       readonly nodeId: string
       /** The map holding the node, so a caller can name the document. */
+      readonly container: ContainerID
+    }
+  | {
+      readonly shape: 'node-location'
+      readonly chars: number
+      readonly nodeId: string
       readonly container: ContainerID
     }
   | {
@@ -70,6 +79,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   run: 'markdown_too_large',
   body: 'markdown_too_large',
   'node-text': 'node_text_too_large',
+  'node-location': 'node_location_too_large',
   label: 'label_too_large',
   'comment-message': 'comment_too_large',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
@@ -109,6 +119,20 @@ function nodeTextLength(value: unknown): number {
   return typeof text === 'string' ? text.length : 0
 }
 
+/**
+ * A node value's longest location as every reader lifts it: the resource's
+ * `location` or `subpath`, or the legacy `url`, `file` or `subpath` field.
+ */
+function nodeLocationLength(value: unknown): number {
+  if (typeof value !== 'object' || value === null) return 0
+  const resource = (value as { resource?: unknown }).resource
+  return Math.max(
+    fieldLength(resource, 'location'),
+    fieldLength(resource, 'subpath'),
+    ...['url', 'file', 'subpath'].map((field) => fieldLength(value, field)),
+  )
+}
+
 /** The length of a value's string field, 0 when it has none. */
 function fieldLength(value: unknown, field: string): number {
   if (typeof value !== 'object' || value === null) return 0
@@ -145,6 +169,12 @@ const BOUNDED_VALUES: readonly BoundedValue[] = [
     length: nodeTextLength,
     holds: (doc, container) => isContentContainer(doc, container, NODES_KEY),
     breach: (chars, nodeId, container) => ({ shape: 'node-text', chars, nodeId, container }),
+  },
+  {
+    max: NODE_LOCATION_MAX_CHARS,
+    length: nodeLocationLength,
+    holds: (doc, container) => isContentContainer(doc, container, NODES_KEY),
+    breach: (chars, nodeId, container) => ({ shape: 'node-location', chars, nodeId, container }),
   },
   {
     // A group's label is a node field; an edge's and a line's their own.

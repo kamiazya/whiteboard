@@ -28,9 +28,10 @@ import {
   DOCUMENT_NAME_MAX_LENGTH,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
-import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
@@ -290,8 +291,23 @@ describe('a workspace-document update giving a document a name past its bound', 
   })
 })
 
-describe('an editor sync write giving a label or a comment message past its bound', () => {
+describe('an editor sync write giving a label, a location or a comment message past its bound', () => {
   it.each([
+    {
+      code: 'node_location_too_large',
+      edit: (doc: LoroDoc) =>
+        writeSpatialNode(
+          doc,
+          linkNode({
+            id: 'k',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 60,
+            url: `https://example.com/${'a'.repeat(NODE_LOCATION_MAX_CHARS)}`,
+          }),
+        ),
+    },
     {
       code: 'label_too_large',
       edit: (doc: LoroDoc) =>

@@ -10,9 +10,10 @@ import {
 import {
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
@@ -284,6 +285,22 @@ describe('promoteWorkspace', () => {
             width: 200,
             height: 100,
             text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
+          }),
+        ),
+    },
+    {
+      bound: "a file's path",
+      code: 'node_location_too_large',
+      write: (board: ReturnType<typeof documentContainers>) =>
+        writeSpatialNode(
+          board,
+          fileNode({
+            id: 'ref',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 60,
+            file: 'x'.repeat(NODE_LOCATION_MAX_CHARS + 1),
           }),
         ),
     },

@@ -7,6 +7,7 @@ import {
   DocumentNameTooLongError,
   LabelTooLargeError,
   MarkdownBodyTooLargeError,
+  NodeLocationTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
@@ -18,6 +19,7 @@ import {
 const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   MarkdownBodyTooLargeError: () => new MarkdownBodyTooLargeError('run', 300_000),
   NodeTextTooLargeError: () => new NodeTextTooLargeError('n1', 9_000),
+  NodeLocationTooLargeError: () => new NodeLocationTooLargeError('n1', 9_000),
   LabelTooLargeError: () => new LabelTooLargeError('e1', 2_000),
   CommentMessageTooLargeError: () => new CommentMessageTooLargeError('m1', 5_000),
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
