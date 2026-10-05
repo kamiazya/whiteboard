@@ -121,7 +121,8 @@ export interface SessionDeps {
    * Collapsing those into one status is how a user with a future-version
    * document gets shown an empty canvas — which says their work is gone when
    * it is sitting on disk. `null` withdraws `document-removed`, the one
-   * reason the session raises itself, once the document is back.
+   * reason the session raises itself, once the document is back — and only
+   * that reason: a failure the backend reported meanwhile still stands.
    */
   onBackendError: (reason: BackendErrorReason | null) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
@@ -459,11 +460,23 @@ export function createDocumentSyncSession(
    * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
    * the node under a NEW TreeID for the same documentId, and a cached handle
    * would keep pointing at the deleted node.
+   *
+   * Null while the document is removed: the one place every content read and
+   * write learns it, since resolving a gone node throws, and the type makes
+   * each caller say what it answers instead.
    */
-  function contentOf(targetDoc: LoroDoc): DocumentContainers {
+  function contentOf(targetDoc: LoroDoc): DocumentContainers | null {
+    if (removed) return null
     return deps.contentDocumentId === undefined
       ? targetDoc
       : documentContainers(targetDoc, deps.contentDocumentId)
+  }
+
+  // The held doc's content: null before the first snapshot and while removed.
+  const liveContent = (): DocumentContainers | null => (doc === null ? null : contentOf(doc))
+  function readContent<T>(read: (content: DocumentContainers) => T, empty: T): T {
+    const content = liveContent()
+    return content === null ? empty : read(content)
   }
 
   function notify(canvas: SpatialCanvas, origin: 'local' | 'external'): void {
@@ -541,8 +554,8 @@ export function createDocumentSyncSession(
    */
   function publishCanvasFromDoc(targetDoc: LoroDoc): void {
     deps.generations.nextApplyGeneration()
-    if (isStale()) return
-    const content = contentOf(targetDoc)
+    const content = isStale() ? null : contentOf(targetDoc)
+    if (content === null) return
     const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
     // Read from the same doc read that produced the canvas, so the two
@@ -572,10 +585,11 @@ export function createDocumentSyncSession(
    * the panel never hears about. Equality here cannot go stale that way.
    */
   function republishAnnotationsIfChanged(targetDoc: LoroDoc): void {
-    if (isStale() || removed) return
+    const content = isStale() ? null : contentOf(targetDoc)
+    if (content === null) return
     let next: readonly CommentThread[]
     try {
-      next = readAnnotations(contentOf(targetDoc))
+      next = readAnnotations(content)
     } catch (err) {
       // Same contract as guardedCommit: the chain must never reject, or every
       // later firing's commit is skipped for the rest of the session.
@@ -586,14 +600,14 @@ export function createDocumentSyncSession(
     // passage merely MOVED leaves the thread list byte-for-byte identical,
     // so gating on the threads alone would keep drawing the highlight where
     // the text used to be. Both are compared, and neither alone decides.
-    const marks = refreshThreadMarks(targetDoc, contentOf(targetDoc), next)
+    const marks = refreshThreadMarks(targetDoc, content, next)
     const movedMarks = !sameThreadMarks(currentThreadMarks, marks)
     currentThreadMarks = marks
     // The proposal layer changes on the same signal and is compared the
     // same cheap way: adopting one rewrites its status, and a person's edit
     // can turn a change into a conflict without touching the proposal at
     // all — which the canvas publish beside this already reports.
-    const nextProposals = readProposals(contentOf(targetDoc))
+    const nextProposals = readProposals(content)
     if (JSON.stringify(currentProposals) !== JSON.stringify(nextProposals)) {
       currentProposals = nextProposals
       notifyProposals(nextProposals)
@@ -651,12 +665,9 @@ export function createDocumentSyncSession(
       if (commitBody) targetDoc.commit()
       for (const command of commands) {
         try {
-          // contentOf resolves inside the try: a scoped node deleted between
-          // scheduling and commit throws here, and must fail only this
-          // target — guardedCommit's contract is that the chain never
-          // rejects.
-          if (next !== null)
-            commitToDoc(targetDoc, contentOf(targetDoc), prev ?? next, next, command)
+          // Inside the try, contentOf included: guardedCommit's contract is
+          // that the chain never rejects.
+          if (next !== null) commitTarget(targetDoc, prev ?? next, next, command)
         } catch (err) {
           log.error('scene commit failed; skipping this target', err)
         }
@@ -674,6 +685,17 @@ export function createDocumentSyncSession(
         pendingCommitCount--
         void settleAfterCommitDrained()
       })
+  }
+
+  // Nowhere to write once the document is removed; the page was told already.
+  function commitTarget(
+    targetDoc: LoroDoc,
+    prev: SpatialCanvas,
+    next: SpatialCanvas,
+    command: EditorCommand,
+  ): void {
+    const content = contentOf(targetDoc)
+    if (content !== null) commitToDoc(targetDoc, content, prev, next, command)
   }
 
   function armDebounce(): void {
@@ -703,9 +725,7 @@ export function createDocumentSyncSession(
   }
 
   const bodyBindingOf = bodyBindingFor({
-    // The session subscribed to the doc before any binding did, so it has
-    // already seen the import that removed the node when the binding reads.
-    contentOf: (target) => (removed ? null : contentOf(target)),
+    contentOf,
     onEdited: bodyEdited,
     isCurrent: (target) => target === doc,
   })
@@ -1088,6 +1108,9 @@ export function createDocumentSyncSession(
    * nothing is written and the write in its window is dropped, never settled
    * as saved; a restore resumes writing, and what was refused meanwhile stays
    * refused, since it was never accepted. The page is told on each change.
+   * Content reads and writes learn it from `contentOf` (null); the doc
+   * subscriber alone wakes no listener on it, so the page keeps the view it
+   * had under the removal notice rather than reading empty values into it.
    */
   function documentRemoved(targetDoc: LoroDoc): boolean {
     const id = deps.contentDocumentId
@@ -1141,44 +1164,19 @@ export function createDocumentSyncSession(
     return historyChanged.subscribe(listener)
   }
 
-  function getNodeLocks(): ReadonlySet<string> {
-    return doc === null || removed ? EMPTY_LOCKS : readNodeLocks(contentOf(doc))
-  }
-
   function notifyLocksChanged(): void {
     locksChanged.emit()
   }
 
-  function setNodeLock(nodeId: string, locked: boolean): void {
-    if (doc === null || removed) return
-    // The commit inside setNodeLock reaches peers through the doc's own
-    // subscribeLocalUpdates push, like every other local change. The canvas
-    // VALUE is unchanged, so subscribers get a lock notification rather
-    // than a canvas publish.
-    workspaceSetNodeLock(contentOf(doc), nodeId, locked)
+  // The commit inside a lock write reaches peers through the doc's own
+  // subscribeLocalUpdates push, like every other local change. The canvas
+  // VALUE is unchanged, so subscribers get a lock notification rather than a
+  // canvas publish.
+  function writeLocks(write: (content: DocumentContainers) => void): void {
+    const content = liveContent()
+    if (content === null) return
+    write(content)
     notifyLocksChanged()
-  }
-
-  function getEdgeLocks(): ReadonlySet<string> {
-    return doc === null || removed ? EMPTY_LOCKS : readEdgeLocks(contentOf(doc))
-  }
-
-  function setEdgeLock(edgeId: string, locked: boolean): void {
-    if (doc === null || removed) return
-    workspaceSetEdgeLock(contentOf(doc), edgeId, locked)
-    notifyLocksChanged()
-  }
-
-  function getMarkdownBody(): string {
-    return doc === null || removed ? '' : readMarkdownBody(contentOf(doc))
-  }
-
-  function getCoreFacets(): StoredCoreFacets | undefined {
-    return doc === null || removed ? undefined : readCoreFacets(contentOf(doc))
-  }
-
-  function getFacets(): ExtensionFacets {
-    return doc === null || removed ? EMPTY_FACETS : readFacets(contentOf(doc))
   }
 
   function getDocumentName(): string | null | undefined {
@@ -1218,16 +1216,16 @@ export function createDocumentSyncSession(
     subscribeProposals,
     subscribe,
     subscribeHistory,
-    getNodeLocks,
-    setNodeLock,
-    getEdgeLocks,
-    setEdgeLock,
+    getNodeLocks: () => readContent(readNodeLocks, EMPTY_LOCKS),
+    setNodeLock: (nodeId, locked) => writeLocks((on) => workspaceSetNodeLock(on, nodeId, locked)),
+    getEdgeLocks: () => readContent(readEdgeLocks, EMPTY_LOCKS),
+    setEdgeLock: (edgeId, locked) => writeLocks((on) => workspaceSetEdgeLock(on, edgeId, locked)),
     subscribeLocks,
-    getMarkdownBody,
+    getMarkdownBody: () => readContent(readMarkdownBody, ''),
     subscribeMarkdownBody,
     getBodyBinding,
-    getCoreFacets,
-    getFacets,
+    getCoreFacets: () => readContent(readCoreFacets, undefined),
+    getFacets: () => readContent(readFacets, EMPTY_FACETS),
     getDocumentName,
   }
 }

@@ -194,6 +194,33 @@ function handleUndoRedoKey(ev: KeyboardEvent, undo: () => boolean, redo: () => b
 }
 
 /**
+ * Why the last backend failure happened, or null.
+ *
+ * Kept beside `syncStatus` rather than folded into it: 'error' answers
+ * whether the editor is live, and this answers what to tell the user about
+ * their document — which for an unreadable one is the opposite of "it is
+ * empty".
+ *
+ * `document-removed` is held apart from the backend's own reasons because the
+ * session withdraws it alone, with `null`: in one slot that withdrawal would
+ * drop a failure reported before the removal, and a failure reported during
+ * it would hide the removal. The removal reads first while it lasts.
+ */
+function useBackendError() {
+  const [failure, setFailure] = useState<BackendErrorReason | null>(null)
+  const [removed, setRemoved] = useState(false)
+  const report = useCallback((reason: BackendErrorReason | null) => {
+    if (reason === null || reason === 'document-removed') setRemoved(reason !== null)
+    else setFailure(reason)
+  }, [])
+  const reset = useCallback(() => {
+    setFailure(null)
+    setRemoved(false)
+  }, [])
+  return { backendError: removed ? 'document-removed' : failure, report, reset } as const
+}
+
+/**
  * useDocumentSync — canonical sync hook for both the browser backend and
  * a daemon-backed connection.
  *
@@ -262,15 +289,7 @@ export function useDocumentSync(
    * starts with nothing unsaved.
    */
   const [persistence, setPersistence] = useState<BrowserPersistenceState>(NOTHING_UNSAVED)
-  /**
-   * Why the last backend failure happened, or null.
-   *
-   * Kept beside `syncStatus` rather than folded into it: 'error' answers
-   * whether the editor is live, and this answers what to tell the user about
-   * their document — which for an unreadable one is the opposite of "it is
-   * empty".
-   */
-  const [backendError, setBackendError] = useState<BackendErrorReason | null>(null)
+  const { backendError, report: reportBackendError, reset: resetBackendError } = useBackendError()
   const [canvas, setCanvas] = useState<SpatialCanvas>(EMPTY_CANVAS)
   const [loaded, setLoaded] = useState(false)
   const [externalVersion, setExternalVersion] = useState(0)
@@ -328,7 +347,7 @@ export function useDocumentSync(
     // consequence: it describes ONE document, and carried across a switch it
     // turns the next one — which may be perfectly readable — into an error
     // screen the page cannot distinguish from a real failure.
-    setBackendError(null)
+    resetBackendError()
     setPersistence(NOTHING_UNSAVED)
 
     if (backend === null) {
@@ -346,7 +365,7 @@ export function useDocumentSync(
     const session = createDocumentSyncSession(backend, {
       getOptions: () => optionsRef.current,
       onStatusChange: setSyncStatus,
-      onBackendError: setBackendError,
+      onBackendError: reportBackendError,
       onRestoreChange: (inProgress, label) => {
         setRestoreInProgress(inProgress)
         setRestoreLabel(label)
