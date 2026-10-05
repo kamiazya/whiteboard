@@ -113,15 +113,39 @@ const fanout = new Writable({
 
 // Stderr destination is added by default so a freshly imported logger
 // already produces visible output (matches the previous behaviour).
+//
+// Whether it writes is a flag on `globalThis` rather than module state: a
+// test that calls `vi.resetModules()` evaluates a fresh copy of this module,
+// and a module-local switch would come back on in that copy.
+const STDERR_MUTED = Symbol.for('@kamiazya/whiteboard-mcp/log/stderr-muted')
+type StderrMuteHolder = { [STDERR_MUTED]?: boolean }
+const muteHolder = globalThis as StderrMuteHolder
+
 const stderrDestination: ManagedDestination = {
   levelValue: LEVEL_VALUES.debug,
   stream: {
     write(line: string) {
+      if (muteHolder[STDERR_MUTED] === true) return
       process.stderr.write(line)
     },
   },
 }
 destinations.add(stderrDestination)
+
+// Turns the default stderr destination off or back on, answering a function
+// that puts back the state it found. A test runner turns it off: the suite
+// drives negative paths on purpose, and their records on stderr read like a
+// broken setup in a run that passed. Every other destination (a capture, the
+// MCP bridge) still receives each record. Production never calls this, and
+// no environment variable reaches it, so the daemon cannot be muted by
+// configuration.
+export function setStderrLogDestination(enabled: boolean): () => void {
+  const wasMuted = muteHolder[STDERR_MUTED] === true
+  muteHolder[STDERR_MUTED] = !enabled
+  return () => {
+    muteHolder[STDERR_MUTED] = wasMuted
+  }
+}
 
 // ── Root pino instance ────────────────────────────────────────────────
 

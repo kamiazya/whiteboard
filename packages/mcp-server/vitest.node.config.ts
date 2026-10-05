@@ -61,6 +61,7 @@ export default mergeConfig(
       hookTimeout: 10_000,
       env: { WHITEBOARD_DATA_DIR: MCP_NODE_DATA_DIR },
       globalSetup: ['./vitest.data-dir-setup.ts'],
+      setupFiles: ['./vitest.log-setup.ts'],
     },
   }),
 )
