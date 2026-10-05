@@ -312,7 +312,11 @@ through `nodeTextLengthLimit`, the "open in editor" surface through
 `NodeTextEditorOverlay`'s `sourceExtensions`, and a plain-text paste, fragment
 paste or duplicate through `node-text-limit.ts`, each refusal said where it
 happened. The CodeMirror limit itself is `lib/text-length-limit.ts`, shared
-with the markdown body's. A label and a comment message are held to
+with the markdown body's; every refusal's WORDS (the count, the sentence per
+bound, the keeper's reasons) are `lib/limit-notice.ts`, and
+`limit-notice-surface.test.ts` fails on an en-US count formatter or a
+`-character limit` sentence written anywhere else. A link's URL is held to
+`NODE_LOCATION_MAX_CHARS` by `LinkUrlDialog`'s `maxLength`. A label and a comment message are held to
 `LABEL_MAX_CHARS` / `COMMENT_MESSAGE_MAX_CHARS` the same way: every comment
 composer through `lib/comment-message-limit.ts`, the label drafts through
 `TextNodeEditor`'s `lengthLimit`, which refuses an over-limit edit whole rather
