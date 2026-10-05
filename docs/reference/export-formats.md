@@ -61,10 +61,16 @@ characters**; a longer one is refused with "node text is longer than the
 the limit one node still finishes in about a second. A splice that shrinks text
 already over the limit is accepted.
 
-A document's display name — `wb_workspace_edit` `document.create` and
-`document.move`, `POST /api/v1/workspaces/{id}/documents`, and
-`PUT /api/workspaces/{id}/documents/{path}/name` — carries at most **200
-characters**, as a workspace name does. A blank name still clears it.
+A document's display name carries at most **200 characters**, as a workspace
+name does, however it is written: the `name` of `wb_workspace_edit`
+`document.create` and `document.move` and of
+`POST /api/v1/workspaces/{id}/documents`,
+`PUT /api/workspaces/{id}/documents/{path}/name`, the web app's Name field,
+and a markdown document's frontmatter `title`, which becomes its name. An
+over-long `title` is refused before anything is written — `document.create`
+creates nothing, and through `/api/v1` the answer is
+`400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A
+blank name still clears it, and a name stored before the limit still lists.
 
 ## OKF frontmatter this server does not model
 
