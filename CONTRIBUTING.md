@@ -154,7 +154,7 @@ This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code
 ### First-clone setup
 
 1. `pnpm install` (required before anything else — the dev daemon and tests need the workspace installed).
-2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which pings the daemon over the socket named in this checkout's daemon record (`.dev-data/daemon.json`) and, if nothing answers, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to answer.
+2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which pings the daemon over the socket named in this checkout's daemon record (`.dev-data/daemon.json`) and, if no daemon is running, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to answer.
 3. **Register the stdio proxy once per checkout** so Claude Code actually talks to that daemon instead of the published npm package. `.claude/settings.json` has no `mcpServers` field in its schema — a definition there is silently ignored — so this is a one-time `--scope local` CLI registration (machine-private `~/.claude.json`) per checkout:
 
    ```bash
@@ -166,7 +166,7 @@ This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code
 
    Local scope shadows the repo-tracked `.mcp.json` (precedence: local > project), which stays pointed at the published `npx @kamiazya/whiteboard-mcp@latest` package — do not repoint `.mcp.json` at dev tooling. The proxy runs the ensure hook itself and retries each request across daemon watch-restarts, so registering it as stdio (rather than the HTTP URL directly) survives a `tsx watch` restart mid-session.
 4. **Self-check — am I hitting my checkout, not npx?** Run `claude mcp get whiteboard`: it should show `node <main checkout>/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` — the main checkout's path, not a `.claude/worktrees/…` one — and not `npx -y @kamiazya/whiteboard-mcp@latest`. A worktree path works until that worktree is removed, then every session in the repository starts without the tools; re-run step 3. If it shows the `npx` command, step 3's local-scope registration did not take (or is missing) and your MCP calls are silently hitting the published package instead of your local code changes.
-5. **If the daemon is not up** — hooks disabled, or project not trusted yet — the `whiteboard` MCP server shows a connection error. This is **not fatal**: ordinary development (tests, build, lint) is unaffected. Start it manually with `pnpm mcp:http:dev` in another terminal. If a dev daemon is already running for this checkout, that command refuses and says so — reuse the running one, or stop it first with `pnpm mcp:http:stop`.
+5. **If the daemon is not up** — hooks disabled, or project not trusted yet — the `whiteboard` MCP server shows a connection error. This is **not fatal**: ordinary development (tests, build, lint) is unaffected. Start it manually with `pnpm mcp:http:dev` in another terminal. If a dev daemon is already running for this checkout, that command reuses it, says so, and exits 0 — stop it first with `pnpm mcp:http:stop` to run one in that terminal instead.
 
 See `docs/contributing/development.md` for the full daemon/proxy design (per-worktree sockets, the spawn lock, why the stdio proxy wraps the daemon's `/mcp`) and `docs/contributing/mcp-debugging.md` for debugging the endpoint itself.
 
