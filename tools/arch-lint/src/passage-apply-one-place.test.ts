@@ -15,9 +15,12 @@
  * a.….start`). Read off the syntax tree, any parameter names, through `sort`
  * or `toSorted`, an arrow or a function, a parameter destructured
  * (`({ at: a }, { at: b }) => b.start - a.start`, or down to the start
- * itself), and a difference that leads a tie-break (`… || 0`, `… ?? 0`). Not
- * seen: an ascending sort followed by `reverse()`, a negated comparator, or
- * one passed by name.
+ * itself), a key read as `.start` or `['start']`, a block that returns the
+ * `const` it computed the difference into, a difference wrapped in
+ * `Math.sign`, and one that leads a tie-break (`… || 0`, `… ?? 0`). Not seen:
+ * an ascending sort followed by `reverse()`, a negated comparator, one passed
+ * by name, a key computed at run time, and an answer reached through more
+ * than one local.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -66,36 +69,77 @@ function boundBy(name: ts.BindingName): Bound {
   return { roots, starts }
 }
 
+/** The key a `x.key` or `x['key']` access reads, or undefined for anything else. */
+function accessedKey(node: ts.Expression): string | undefined {
+  if (ts.isPropertyAccessExpression(node)) return node.name.text
+  if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) {
+    return node.argumentExpression.text
+  }
+  return undefined
+}
+
 /** Whether `raw` reads a start out of what `bound` binds: `x.….start`, or a destructured `start`. */
 function readsStart(raw: ts.Expression, bound: Bound): boolean {
   const node = unwrapExpression(raw)
   if (ts.isIdentifier(node)) return bound.starts.has(node.text)
-  if (!ts.isPropertyAccessExpression(node) || node.name.text !== 'start') return false
-  let root: ts.Expression = node.expression
-  while (ts.isPropertyAccessExpression(root)) root = root.expression
+  if (accessedKey(node) !== 'start') return false
+  let root = (node as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression
+  while (accessedKey(root) !== undefined) {
+    root = (root as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression
+  }
   return ts.isIdentifier(root) && bound.roots.has(root.text)
 }
 
-/** The expression a comparator answers with, for an arrow body or a lone `return`. */
+/**
+ * The expression a comparator answers with: an arrow body, or a block's
+ * closing `return` — followed back to the `const` it returns, when that is
+ * declared in the same block.
+ */
 function answerOf(fn: ts.ArrowFunction | ts.FunctionExpression): ts.Expression | undefined {
   if (!ts.isBlock(fn.body)) return fn.body
-  const [only] = fn.body.statements
-  return fn.body.statements.length === 1 && only !== undefined && ts.isReturnStatement(only)
-    ? only.expression
-    : undefined
+  const last = fn.body.statements.at(-1)
+  if (last === undefined || !ts.isReturnStatement(last) || last.expression === undefined) {
+    return undefined
+  }
+  const answer = unwrapExpression(last.expression)
+  if (!ts.isIdentifier(answer)) return answer
+  for (const statement of fn.body.statements) {
+    if (!ts.isVariableStatement(statement)) continue
+    if (!(statement.declarationList.flags & ts.NodeFlags.Const)) continue
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === answer.text) {
+        return declaration.initializer
+      }
+    }
+  }
+  return answer
 }
 
-/** The difference that decides the order: the answer itself, or what leads its tie-breaks. */
+/** Whether `node` is `Math.sign(…)`, which keeps the order of what it wraps. */
+function isMathSign(node: ts.Expression): node is ts.CallExpression {
+  return (
+    ts.isCallExpression(node) &&
+    node.arguments.length === 1 &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === 'sign' &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === 'Math'
+  )
+}
+
+/** The difference that decides the order: the answer itself, or what leads its tie-breaks, unwrapped from `Math.sign`. */
 function leadingTerm(raw: ts.Expression): ts.Expression {
   let node = unwrapExpression(raw)
-  while (
-    ts.isBinaryExpression(node) &&
-    (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-      node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
-  ) {
-    node = unwrapExpression(node.left)
+  for (;;) {
+    if (isMathSign(node)) node = unwrapExpression(node.arguments[0] as ts.Expression)
+    else if (
+      ts.isBinaryExpression(node) &&
+      (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)
+    ) {
+      node = unwrapExpression(node.left)
+    } else return node
   }
-  return node
 }
 
 function isDescendingStartSort(node: ts.Node): boolean {
@@ -155,6 +199,22 @@ const FIXTURES: readonly { readonly source: string; readonly sorts: number }[] =
   { source: 'placed.sort(({ end: a }, { end: b }) => b - a)', sorts: 0 },
   { source: 'placed.sort((a, b) => b.at.end - a.at.end || b.at.start - a.at.start)', sorts: 0 },
   { source: 'placed.sort((a, b) => b.at.start - a.at.start && 0)', sorts: 0 },
+  { source: "placed.sort((a, b) => b.at['start'] - a.at['start'])", sorts: 1 },
+  { source: "placed.sort((a, b) => b['at'].start - a['at'].start)", sorts: 1 },
+  {
+    source: 'placed.sort((a, b) => { const delta = b.at.start - a.at.start; return delta })',
+    sorts: 1,
+  },
+  { source: 'placed.sort((a, b) => Math.sign(b.at.start - a.at.start))', sorts: 1 },
+  { source: "placed.sort((a, b) => b.at['end'] - a.at['end'])", sorts: 0 },
+  {
+    source:
+      'placed.sort((a, b) => { let delta = b.at.start - a.at.start; delta = 0; return delta })',
+    sorts: 0,
+  },
+  { source: 'placed.sort((a, b) => Math.abs(b.at.start - a.at.start))', sorts: 0 },
+  { source: 'placed.sort((a, b) => Math.sign(a.at.start - b.at.start))', sorts: 0 },
+  { source: 'placed.sort((a, b) => order.sign(b.at.start - a.at.start))', sorts: 0 },
 ]
 
 describe('a batch of passages is applied in one place', () => {

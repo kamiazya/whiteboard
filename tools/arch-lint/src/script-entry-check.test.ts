@@ -11,13 +11,17 @@
  *
  * So the scan does not judge the comparison, which has as many spellings as
  * there are ways to build a string: it fails any script but the helper that
- * reads the entry path at all. `argv` is followed through the names it is
- * bound to — imported from `node:process`, destructured off `process`, or
- * assigned (`const args = process.argv`) — and asking argv whether it HOLDS
- * this module (`process.argv.includes(fileURLToPath(import.meta.url))`) is a
- * read too, since that is the same comparison with the index left out. Named
- * blind spots: an index computed at run time, a name rebound by assignment
- * rather than declaration, and a search whose argument reaches
+ * reads the entry path at all. `process` is `globalThis.process` too, and any
+ * namespace or default import of `node:process`; `argv` is read off it as
+ * `.argv` or `['argv']` and followed through the names it is bound to —
+ * imported from `node:process`, destructured off `process` (down to a nested
+ * `{ argv: [, entry] }`), or assigned (`const args = process.argv`) — and
+ * asking argv whether it HOLDS this module
+ * (`process.argv.includes(fileURLToPath(import.meta.url))`) is a read too,
+ * since that is the same comparison with the index left out. Named blind
+ * spots: an index or key computed at run time, a name rebound by assignment
+ * rather than declaration, a `process` reached through a variable
+ * (`const p = globalThis.process`), and a search whose argument reaches
  * `import.meta.url` through a variable.
  */
 import { spawnSync } from 'node:child_process'
@@ -33,15 +37,55 @@ const HOME = 'tools/checks/src/is-run-as-script.mjs'
 
 const scripts = scriptFiles().filter((path) => !/\.test\.[mc]?js$/.test(path))
 
-/** Whether `node` is `process.argv`, or an `argv` imported from `node:process`. */
-function isArgv(node: ts.Expression, importedArgv: ReadonlySet<string>): boolean {
+/**
+ * The local names `process` itself is reachable under: the global, and a
+ * namespace or default import of `node:process` / `process`.
+ */
+function processNames(file: ts.SourceFile): Set<string> {
+  const names = new Set(['process'])
+  for (const statement of file.statements) {
+    if (!ts.isImportDeclaration(statement)) continue
+    const from = (statement.moduleSpecifier as ts.StringLiteral).text
+    const clause = statement.importClause
+    if ((from !== 'node:process' && from !== 'process') || !clause) continue
+    if (clause.name) names.add(clause.name.text)
+    if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+      names.add(clause.namedBindings.name.text)
+    }
+  }
+  return names
+}
+
+/** What a file calls `process` and what it calls `argv`. */
+interface ArgvScope {
+  readonly processes: ReadonlySet<string>
+  readonly argv: ReadonlySet<string>
+}
+
+/** Whether `node` is `process` under one of its names, or `globalThis.process`. */
+function isProcess(node: ts.Expression, scope: ArgvScope): boolean {
   const bare = unwrapExpression(node)
-  if (ts.isIdentifier(bare)) return importedArgv.has(bare.text)
+  if (ts.isIdentifier(bare)) return scope.processes.has(bare.text)
   return (
     ts.isPropertyAccessExpression(bare) &&
-    bare.name.text === 'argv' &&
+    bare.name.text === 'process' &&
     ts.isIdentifier(bare.expression) &&
-    bare.expression.text === 'process'
+    bare.expression.text === 'globalThis'
+  )
+}
+
+/** Whether `node` is `argv` read off `process` (`.argv` or `['argv']`), or a name bound to it. */
+function isArgv(node: ts.Expression, scope: ArgvScope): boolean {
+  const bare = unwrapExpression(node)
+  if (ts.isIdentifier(bare)) return scope.argv.has(bare.text)
+  if (ts.isPropertyAccessExpression(bare)) {
+    return bare.name.text === 'argv' && isProcess(bare.expression, scope)
+  }
+  return (
+    ts.isElementAccessExpression(bare) &&
+    ts.isStringLiteralLike(bare.argumentExpression) &&
+    bare.argumentExpression.text === 'argv' &&
+    isProcess(bare.expression, scope)
   )
 }
 
@@ -61,18 +105,26 @@ function importedArgvNames(file: ts.SourceFile): Set<string> {
   return names
 }
 
-/** The name `const { argv: name } = process` binds, if `declaration` is one. */
-function argvDestructuredFromProcess(declaration: ts.VariableDeclaration): string | undefined {
-  const init = declaration.initializer && unwrapExpression(declaration.initializer)
-  if (init === undefined || !ts.isIdentifier(init) || init.text !== 'process') return undefined
-  if (!ts.isObjectBindingPattern(declaration.name)) return undefined
-  for (const element of declaration.name.elements) {
-    const key = element.propertyName ?? element.name
-    if (ts.isIdentifier(key) && key.text === 'argv' && ts.isIdentifier(element.name)) {
-      return element.name.text
-    }
+/** The `argv` element of `const { argv… } = process`, if `declaration` is one. */
+function argvElementFromProcess(
+  declaration: ts.VariableDeclaration,
+  scope: ArgvScope,
+): ts.BindingElement | undefined {
+  if (declaration.initializer === undefined || !isProcess(declaration.initializer, scope)) {
+    return undefined
   }
-  return undefined
+  if (!ts.isObjectBindingPattern(declaration.name)) return undefined
+  return declaration.name.elements.find((element) => {
+    const key = element.propertyName ?? element.name
+    return (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) && key.text === 'argv'
+  })
+}
+
+/** Whether `name` is an array pattern that binds the second element. */
+function bindsSecond(name: ts.BindingName): boolean {
+  if (!ts.isArrayBindingPattern(name)) return false
+  const second = name.elements[1]
+  return second !== undefined && !ts.isOmittedExpression(second)
 }
 
 /**
@@ -80,31 +132,31 @@ function argvDestructuredFromProcess(declaration: ts.VariableDeclaration): strin
  * `process`, or declared as another name for one of those — followed until no
  * declaration adds a name, so an alias of an alias is still argv.
  */
-function argvNames(file: ts.SourceFile): Set<string> {
+function argvScopeOf(
+  file: ts.SourceFile,
+  declarations: readonly ts.VariableDeclaration[],
+): ArgvScope {
   const names = importedArgvNames(file)
-  const declarations: ts.VariableDeclaration[] = []
-  const collect = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node)) declarations.push(node)
-    ts.forEachChild(node, collect)
-  }
-  collect(file)
+  const scope: ArgvScope = { processes: processNames(file), argv: names }
   for (let grew = true; grew; ) {
     grew = false
     for (const declaration of declarations) {
+      const element = argvElementFromProcess(declaration, scope)
       const name =
-        argvDestructuredFromProcess(declaration) ??
-        (ts.isIdentifier(declaration.name) &&
-        declaration.initializer !== undefined &&
-        isArgv(declaration.initializer, names)
-          ? declaration.name.text
-          : undefined)
+        element && ts.isIdentifier(element.name)
+          ? element.name.text
+          : ts.isIdentifier(declaration.name) &&
+              declaration.initializer !== undefined &&
+              isArgv(declaration.initializer, scope)
+            ? declaration.name.text
+            : undefined
       if (name !== undefined && !names.has(name)) {
         names.add(name)
         grew = true
       }
     }
   }
-  return names
+  return scope
 }
 
 /** Array methods that ask whether, or where, argv holds a value. */
@@ -125,6 +177,27 @@ function mentionsImportMeta(node: ts.Node): boolean {
   return ts.forEachChild(node, (child) => mentionsImportMeta(child) || undefined) ?? false
 }
 
+/** Whether `node`, one node of the file, reads argv's second element or searches it for this module. */
+function readsEntryAt(node: ts.Node, scope: ArgvScope): boolean {
+  if (ts.isElementAccessExpression(node)) {
+    return (
+      isArgv(node.expression, scope) &&
+      ts.isNumericLiteral(node.argumentExpression) &&
+      node.argumentExpression.text === '1'
+    )
+  }
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+    const method = node.expression.name.text
+    if (!isArgv(node.expression.expression, scope)) return false
+    return method === 'at' || (SEARCHES.has(method) && node.arguments.some(mentionsImportMeta))
+  }
+  if (!ts.isVariableDeclaration(node)) return false
+  if (node.initializer !== undefined && isArgv(node.initializer, scope))
+    return bindsSecond(node.name)
+  const element = argvElementFromProcess(node, scope)
+  return element !== undefined && bindsSecond(element.name)
+}
+
 /**
  * Whether a script reads the entry path itself: `process.argv[1]`,
  * `process.argv.at(1)`, or a destructure that binds the second element. Read
@@ -134,46 +207,14 @@ function mentionsImportMeta(node: ts.Node): boolean {
  */
 function readsEntryPath(fileName: string, source: string): boolean {
   const file = parseSource(fileName, source, false, ts.ScriptKind.JS)
-  const argv = argvNames(file)
-  let found = false
-  const visit = (node: ts.Node): void => {
-    if (found) return
-    if (
-      ts.isElementAccessExpression(node) &&
-      isArgv(node.expression, argv) &&
-      ts.isNumericLiteral(node.argumentExpression) &&
-      node.argumentExpression.text === '1'
-    ) {
-      found = true
-    } else if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      node.expression.name.text === 'at' &&
-      isArgv(node.expression.expression, argv)
-    ) {
-      found = true
-    } else if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      SEARCHES.has(node.expression.name.text) &&
-      isArgv(node.expression.expression, argv) &&
-      node.arguments.some(mentionsImportMeta)
-    ) {
-      found = true
-    } else if (
-      ts.isVariableDeclaration(node) &&
-      node.initializer !== undefined &&
-      isArgv(node.initializer, argv) &&
-      ts.isArrayBindingPattern(node.name) &&
-      node.name.elements.length > 1 &&
-      !ts.isOmittedExpression(node.name.elements[1] as ts.ArrayBindingElement)
-    ) {
-      found = true
-    }
-    ts.forEachChild(node, visit)
+  const nodes: ts.Node[] = []
+  const collect = (node: ts.Node): void => {
+    nodes.push(node)
+    ts.forEachChild(node, collect)
   }
-  visit(file)
-  return found
+  collect(file)
+  const scope = argvScopeOf(file, nodes.filter(ts.isVariableDeclaration))
+  return nodes.some((node) => readsEntryAt(node, scope))
 }
 
 const ARGV1 = 'process.argv[1]'
@@ -214,6 +255,11 @@ describe('a script finds out it is the entry module in one place', () => {
       'if (process.argv.includes(fileURLToPath(import.meta.url))) {}',
       'if (process.argv.some((arg) => import.meta.url.endsWith(arg))) {}',
       `import { argv } from 'node:process'\nif (argv.indexOf(fileURLToPath(import.meta.url)) > 0) {}`,
+      `if (process['argv'][1]) {}`,
+      'if (globalThis.process.argv[1]) {}',
+      `import * as proc from 'node:process'\nif (proc.argv[1]) {}`,
+      `import proc from 'process'\nif (proc.argv.at(1)) {}`,
+      'const { argv: [, entry] } = process',
     ]) {
       expect(readsEntryPath('x.mjs', read), read).toBe(true)
     }
@@ -223,6 +269,10 @@ describe('a script finds out it is the entry module in one place', () => {
       `if (process.argv.includes('--write')) {}`,
       `const args = process.argv\nif (args.includes('--write')) {}`,
       `const url = import.meta.url\nif (process.argv.slice(2).includes(url)) {}`,
+      `if (process['env'][1]) {}`,
+      'if (globalThis.process.argv.slice(2)[1]) {}',
+      `import proc from 'node:process'\nif (proc.env[1]) {}`,
+      'const { argv: [first] } = process',
     ]) {
       expect(readsEntryPath('x.mjs', notRead), notRead).toBe(false)
     }

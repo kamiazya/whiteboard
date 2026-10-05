@@ -10,7 +10,12 @@
  * claim is short and always spelled the same way. What counts as a comment is
  * the parser's answer (`stripComments`), so a claim trailing code on its line
  * (`} catch {} // server-core has no logger`) is read like one standing alone,
- * and a string that happens to hold `//` is not. Scoped to the two trees
+ * and a string that happens to hold `//` is not. Any run of whitespace
+ * separates the words, and a comment line is read joined to the comment on
+ * the next, so "has no" / "logger" wrapped across a block comment is one
+ * claim. Named blind spots: the words split across a line that holds no
+ * comment, and the claim said otherwise ("without a logger", "nothing to log
+ * to"). Scoped to the two trees
  * that run with a logger to hand, so the true sentence about a package that
  * has none (canvas-render, whose degradations reach the caller through
  * `onDegrade`) is a recorded exemption that must keep saying it.
@@ -22,7 +27,11 @@ import { REPO_ROOT } from './scan-roots.js'
 import { stripComments } from './strip-comments.js'
 import { trackedFiles } from './tracked-files.js'
 
-const NO_LOGGER = /\bno logger\b/i
+const NO_LOGGER = /\bno\s+logger\b/i
+/** The claim anywhere in a file, comment markers between its words included: the cheap pre-filter. */
+const NO_LOGGER_ACROSS_LINES = /\bno[\s*/]+logger\b/i
+/** A comment line's leading markers: `//`, `/*`, or a block comment's `*`. */
+const LEADING_MARKERS = /^[\s*/]*/
 
 const isScanned = (path: string): boolean =>
   /\.(?:tsx?|mts)$/.test(path) &&
@@ -52,11 +61,19 @@ function commentLines(text: string, fileName: string): string[] {
   })
 }
 
+/**
+ * The lines a claim starts on. A comment's line break falls anywhere in a
+ * sentence, so a line is also read joined to the comment on the next one.
+ */
 function claimsIn(text: string, fileName = 'fixture.ts'): number[] {
-  if (!NO_LOGGER.test(text)) return []
-  return commentLines(text, fileName).flatMap((comment, index) =>
-    NO_LOGGER.test(comment) ? [index + 1] : [],
-  )
+  if (!NO_LOGGER_ACROSS_LINES.test(text)) return []
+  const comments = commentLines(text, fileName)
+  return comments.flatMap((comment, index) => {
+    const next = comments[index + 1] ?? ''
+    const joined = `${comment} ${next.replace(LEADING_MARKERS, '')}`
+    const claims = NO_LOGGER.test(comment) || (NO_LOGGER.test(joined) && !NO_LOGGER.test(next))
+    return claims ? [index + 1] : []
+  })
 }
 
 const files = trackedFiles(REPO_ROOT).filter(isScanned)
@@ -78,6 +95,12 @@ describe('no comment in a tree with a logger claims it has none', () => {
     expect(claimsIn('run() /* no logger here */ + 1')).toEqual([1])
     expect(claimsIn("const hint = 'see https://x.example // no logger'")).toEqual([])
     expect(claimsIn('const re = /no logger/ // matched in messages')).toEqual([])
+    expect(claimsIn('/**\n * server-core has no\n * logger of its own\n */')).toEqual([2])
+    expect(claimsIn('// a shared layer with no\n// logger to report it')).toEqual([1])
+    expect(claimsIn('// server-core has no  logger')).toEqual([1])
+    expect(claimsIn('// no logger here\n// nor no logger there')).toEqual([1, 2])
+    expect(claimsIn('// answers no\nconst logger = getLogger()')).toEqual([])
+    expect(claimsIn('// answers no\n\n// logger set up below')).toEqual([])
   })
 
   it('scans both trees, the files that once said it among them', () => {
