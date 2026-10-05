@@ -82,21 +82,37 @@ describe('syncTextLimitBreach', () => {
     expect(client.export({ mode: 'update', from }).byteLength).toBeGreaterThanOrEqual(50_000)
   })
 
+  const edit = fc.record({
+    at: fc.double({ min: 0, max: 1, noNaN: true }),
+    deleted: fc.integer({ min: 0, max: 3_000 }),
+    inserted: fc.integer({ min: 0, max: 3_000 }),
+  })
+
   fcTest.prop(
     [
-      fc.integer({ min: MARKDOWN_MAX_CHARS - 2_000, max: MARKDOWN_MAX_CHARS + 2_000 }),
-      fc.integer({ min: 0, max: 3_000 }),
-      fc.integer({ min: 0, max: 3_000 }),
+      fc.integer({ min: MARKDOWN_MAX_CHARS - 4_000, max: MARKDOWN_MAX_CHARS + 2_000 }),
+      fc.array(edit, { minLength: 1, maxLength: 4 }),
     ],
     withDefaults({ numRuns: 25 }),
-  )('answers as the full judgement does, near the limit', (before, deleted, inserted) => {
+  )('refuses exactly the edits that leave a body past the limit and longer', (before, edits) => {
     const base = record({ [DOC_ID]: 'y'.repeat(before) })
     const update = updateFrom(base, DOC_ID, (body) => {
-      body.delete(0, Math.min(deleted, body.length))
-      body.insert(0, 'z'.repeat(inserted))
+      for (const { at, deleted, inserted } of edits) {
+        const pos = Math.floor(at * body.length)
+        body.delete(pos, Math.min(deleted, body.length - pos))
+        body.insert(pos, 'z'.repeat(inserted))
+      }
     })
-    const full = importWithinTextLimits(base.fork(), update).breach
-    expect(syncTextLimitBreach(base, update)).toEqual(full)
+    // The oracle applies the update plainly and measures the body, so it
+    // shares nothing with how the judgement reads the update's operations.
+    const applied = base.fork()
+    applied.import(update)
+    const after = documentContainers(applied, DOC_ID).getText('body').length
+    const expected =
+      after > MARKDOWN_MAX_CHARS && after > before ? { shape: 'body', chars: after } : null
+
+    expect(importWithinTextLimits(base.fork(), update).breach).toEqual(expected)
+    expect(syncTextLimitBreach(base, update)).toEqual(expected)
   })
 })
 
@@ -119,5 +135,84 @@ describe('importWithinTextLimits', () => {
     client.commit()
     const created = client.export({ mode: 'update', from })
     expect(importWithinTextLimits(base.fork(), created).touchesNodeMeta).toBe(true)
+  })
+})
+
+/** A standalone document's body, as the per-document sync route carries it. */
+describe('importWithinTextLimits on update shapes', () => {
+  function seeded(body: string): LoroDoc {
+    const doc = new LoroDoc()
+    doc.setPeerId(1n)
+    doc.getText('body').insert(0, body)
+    doc.commit()
+    return doc
+  }
+
+  function editOf(base: LoroDoc, edit: (doc: LoroDoc, body: LoroText) => void): Uint8Array {
+    const client = base.fork()
+    client.setPeerId(2n)
+    const from = client.oplogVersion()
+    edit(client, client.getText('body'))
+    client.commit()
+    return client.export({ mode: 'update', from })
+  }
+
+  it('refuses a replacement that grows a body past the limit', () => {
+    const doc = seeded('y'.repeat(MARKDOWN_MAX_CHARS - 1))
+    const update = editOf(doc, (_, body) => {
+      body.delete(0, 3)
+      body.insert(0, 'abcde')
+    })
+    expect(importWithinTextLimits(doc, update).breach).toEqual({
+      shape: 'body',
+      chars: MARKDOWN_MAX_CHARS + 1,
+    })
+  })
+
+  it('takes a replacement that shrinks a body already past the limit', () => {
+    const doc = seeded('y'.repeat(MARKDOWN_MAX_CHARS + 10))
+    const update = editOf(doc, (_, body) => {
+      body.delete(0, 10)
+      body.insert(0, 'abcde')
+    })
+    expect(importWithinTextLimits(doc, update).breach).toBeNull()
+    expect(doc.getText('body').length).toBe(MARKDOWN_MAX_CHARS + 5)
+  })
+
+  it('takes an equal-length replacement in a body already past the limit', () => {
+    const doc = seeded('y'.repeat(MARKDOWN_MAX_CHARS + 10))
+    const update = editOf(doc, (_, body) => {
+      body.delete(0, 5)
+      body.insert(0, 'abcde')
+    })
+    expect(importWithinTextLimits(doc, update).breach).toBeNull()
+    expect(doc.getText('body').toString().startsWith('abcde')).toBe(true)
+  })
+
+  it('reads two inserts at scattered positions as two runs, so the body arm refuses', () => {
+    const half = Math.floor(MARKDOWN_MAX_CHARS / 2) + 10
+    const doc = seeded('short')
+    const update = editOf(doc, (_, body) => {
+      body.insert(0, 'a'.repeat(half))
+      body.insert(0, 'b'.repeat(half))
+    })
+    expect(importWithinTextLimits(doc, update).breach).toMatchObject({ shape: 'body' })
+  })
+
+  it('reads a positional continuation after another op as a new run', () => {
+    const half = Math.floor(MARKDOWN_MAX_CHARS / 2) + 10
+    const doc = seeded('')
+    const update = editOf(doc, (client, body) => {
+      body.insert(0, 'a'.repeat(half))
+      client.getMap('m').set('k', 1)
+      body.insert(half, 'b'.repeat(half))
+    })
+    expect(importWithinTextLimits(doc, update).breach).toMatchObject({ shape: 'body' })
+  })
+
+  it('leaves the document attached after bytes the engine refuses', () => {
+    const doc = seeded('short')
+    expect(() => importWithinTextLimits(doc, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow()
+    expect(doc.isDetached()).toBe(false)
   })
 })

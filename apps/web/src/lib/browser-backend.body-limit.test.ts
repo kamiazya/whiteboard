@@ -110,6 +110,21 @@ describe.each([
     after: 100_000,
   },
   {
+    edit: 'a select-all replace of the same length',
+    before: 150_000,
+    change: (body: LoroText) => {
+      body.delete(0, body.length)
+      body.insert(0, 'z'.repeat(150_000))
+    },
+    after: 150_000,
+  },
+  {
+    edit: 'clearing a body already past the limit',
+    before: MARKDOWN_MAX_CHARS + 10_000,
+    change: (body: LoroText) => body.delete(0, body.length),
+    after: 0,
+  },
+  {
     edit: 'a delete from a body already past the limit',
     before: MARKDOWN_MAX_CHARS + 10,
     change: (body: LoroText) => body.delete(0, 5),
@@ -141,5 +156,23 @@ describe.each([
       expect(saved.map((body) => body.length)).toEqual([after])
       expect(reasons).toEqual([])
     }
+  })
+})
+
+describe('a browser-kept body replaced wholesale', () => {
+  it('is persisted, and so is the edit after it', async () => {
+    const { saved, reasons, pushEdit } = await connected('y'.repeat(150_000))
+
+    await pushEdit((body) => {
+      body.delete(0, body.length)
+      body.insert(0, 'z'.repeat(150_000))
+    })
+    await pushEdit((body) => body.insert(0, 'ab'))
+
+    expect(reasons).toEqual([])
+    expect(saved.map((body) => `${body.slice(0, 3)}:${body.length}`)).toEqual([
+      'zzz:150000',
+      'abz:150002',
+    ])
   })
 })
