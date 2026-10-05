@@ -8,6 +8,7 @@ import {
   endIn,
   endNodes,
   nodeText,
+  nodeTextInputSchema,
   type SpatialNode,
   spatialNodeSchema,
   withNodeText,
@@ -500,6 +501,13 @@ const CANVAS_EDIT_HANDLERS: {
       ...op.replacement.split('\n'),
       ...bodyLines.slice(op.endLine + 1),
     ].join('\n')
+    // The replacement is bounded by the input schema; what it LEAVES is
+    // bounded here. Only growth is refused, so a node written before the
+    // limit stays editable toward it.
+    if (spliced.length > nodeOwnText.length) {
+      const bounded = nodeTextInputSchema.safeParse(spliced)
+      if (!bounded.success) fail(index, op.op, ctx.s.issues(bounded.error))
+    }
     const parsed = spatialNodeSchema.safeParse(withNodeText(node, spliced))
     if (!parsed.success) fail(index, op.op, ctx.s.issues(parsed.error))
     ctx.s.nodes = ctx.s.nodes.map((existing) => (existing.id === op.id ? parsed.data : existing))

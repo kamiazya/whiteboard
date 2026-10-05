@@ -18,6 +18,7 @@ import {
   nodePatchFieldsSchema,
   nodePositionSchema,
   nodeSizeSchema,
+  nodeTextInputSchema,
   nonnegativeIntegerSchema,
   proposalSchema,
   RESOURCE_KINDS,
@@ -104,7 +105,7 @@ const draftBase = sharedNodeFieldsSchema
  */
 const textOption = draftBase.extend({
   type: z.literal('text'),
-  text: z.string(),
+  text: nodeTextInputSchema,
 })
 const fileOption = draftBase.extend({
   type: z.literal('file'),
@@ -350,12 +351,18 @@ const STENCIL_FIELD = namespacedIdSchema
  * repair costs the whole batch twice.
  */
 const nodePatchSchema = z
-  .object(nodePatchFieldsSchema.shape, {
-    error: (issue: { code: string; keys?: readonly string[] }) =>
-      issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
-        ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `patch`.'
-        : undefined,
-  })
+  // `text` is bounded HERE and not on the stored patch shape: a proposal
+  // stores a patch and its prior, and a prior is whatever the node held,
+  // which may predate the limit.
+  .object(
+    { ...nodePatchFieldsSchema.shape, text: nodeTextInputSchema.optional() },
+    {
+      error: (issue: { code: string; keys?: readonly string[] }) =>
+        issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+          ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `patch`.'
+          : undefined,
+    },
+  )
   .strict()
 
 const canvasOpSchema = z.discriminatedUnion('op', [
@@ -398,7 +405,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       id: nodeIdSchema,
       startLine: nonnegativeIntegerSchema,
       endLine: nonnegativeIntegerSchema,
-      replacement: z.string(),
+      replacement: nodeTextInputSchema,
     })
     .strict()
     .refine((value) => value.startLine <= value.endLine, {
