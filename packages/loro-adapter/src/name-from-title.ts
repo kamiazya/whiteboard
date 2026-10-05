@@ -1,7 +1,7 @@
 // A document named after the title its body announces, judged once for every
-// keeper: the browser's store and the daemon's sync routes take the same
-// bytes, so a note typed into at `untitled` must come out named the same way
-// whichever of them keeps it.
+// keeper: the browser's store and the daemon, which names on every content
+// write, take the same bytes, so a note typed into at `untitled` must come out
+// named the same way whichever of them keeps it.
 import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
