@@ -109,12 +109,19 @@ export function seedNameFromTitle(workspace: LoroDoc, documentId: string): void 
  * still at a generated path after its heading (`seedNameFromTitle`) — false,
  * with nothing written, when the record holds no such document.
  *
- * Every whole-content write either keeper makes comes through here — the
- * daemon's tools, `/api/v1` and restore, and the browser's restore — so a
- * note is named however its body was written. One that skipped the seed kept
- * its old name until the next unrelated keystroke named it, which reads as a
- * rename nobody made. Before the caller's save, so the name rides the same
- * write and its fan-out.
+ * Every whole-content write a keeper makes outside this package comes through
+ * here — the daemon's saves, tools, `/api/v1` and restore, and the browser's
+ * restore — so a note is named however its body was written. One that skipped
+ * the seed kept its old name until the next unrelated keystroke named it,
+ * which reads as a rename nobody made. Before the caller's save, so the name
+ * rides the same write and its fan-out.
+ *
+ * Two writes inside this package call `writeWorkspaceDocumentContent` bare on
+ * purpose, because the caller supplies the name: `duplicateWorkspaceDocument`
+ * (the copy's name is chosen) and `adoptWorkspaceDocument` (a fold carries the
+ * name the document already had). A browser create writes no content at all —
+ * its node starts empty — so it has nothing to name from.
+ * `document-content-write-one-place.test.ts` keeps the bare write inside here.
  */
 export function writeDocumentContentAndName(
   workspace: LoroDoc,
