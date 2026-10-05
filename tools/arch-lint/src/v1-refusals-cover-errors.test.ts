@@ -94,6 +94,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote), whose routes are the daemon’s, not /api/v1; /api/v1 writes markdown through markdownInputSchema',
   NodeTextTooLargeError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no canvas node',
+  SyncWriteRefusalError:
+    'the abstract base of the sync write refusals below; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes node meta through its schemas',
   DocumentNameTooLongError:

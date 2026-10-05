@@ -1,6 +1,7 @@
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
-import { importWithinSyncLimits, isSyncWriteRefusal } from './apply-document-update-limit.js'
+import { importWithinSyncLimits } from './apply-document-update-limit.js'
+import { isSyncWriteRefusal } from './sync-write-refusals.js'
 
 const log = getLogger('workspace-document')
 

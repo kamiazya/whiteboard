@@ -64,6 +64,13 @@ export class DocumentEngineTrapError extends Error {
   }
 }
 
+/**
+ * The code every surface answers `DocumentEngineTrapError` with — `/api/v1`'s
+ * refusal table and the sync routes alike — with status 500: a server fault
+ * the caller cannot fix by rewording.
+ */
+export const DOCUMENT_ENGINE_TRAP_CODE = 'document_engine_trap'
+
 const STUCK_UNTIL_RESTART =
   'If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.'
 

@@ -10,17 +10,11 @@ export { answerUnhandled, createServer } from './create-server.js'
 export { DocumentEngineTrapError } from './document-io.js'
 export { getLogger, setLogSink } from './log.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
-export {
-  DocumentNameTooLongError,
-  MarkdownBodyTooLargeError,
-  NodeTextTooLargeError,
-  OffGrammarPathError,
-  UnreadableDocumentMetaError,
-} from './operations/apply-document-update-limit.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export { promoteWorkspace } from './operations/promote-workspace.js'
 export type { RestoreProgress } from './operations/restore-version.js'
 export { restoreVersion } from './operations/restore-version.js'
+export { syncWriteAnswer } from './operations/sync-write-refusals.js'
 export { unknownStyleRefusal } from './render/unknown-style.js'
 export type { Embedder } from './search/embedder.js'
 export type { Judgments } from './search/eval.js'

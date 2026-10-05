@@ -32,15 +32,15 @@ import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
+import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
+import { promoteWorkspace } from './promote-workspace.js'
 import {
   DocumentNameTooLongError,
   MarkdownBodyTooLargeError,
   NodeTextTooLargeError,
   OffGrammarPathError,
   UnreadableDocumentMetaError,
-} from './apply-document-update-limit.js'
-import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
-import { promoteWorkspace } from './promote-workspace.js'
+} from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'

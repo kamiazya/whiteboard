@@ -7,16 +7,11 @@ import {
 import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyWorkspaceDocumentUpdate,
-  DocumentEngineTrapError,
-  DocumentNameTooLongError,
   errorBody,
-  MarkdownBodyTooLargeError,
-  NodeTextTooLargeError,
-  OffGrammarPathError,
   type OperatorInfo,
   promoteWorkspace,
   type ServerDeps,
-  UnreadableDocumentMetaError,
+  syncWriteAnswer,
 } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -90,30 +85,13 @@ async function admittedWorkspace(
 
 /**
  * A write that threw one of the refusals the operations raise rather than
- * return. An engine trap: the operation has already dropped the instance it
- * poisoned, so the next request is served; the caller is told the engine
- * failed, in the code `/api/v1` answers it with, and not that its bytes were
- * malformed. A body past the markdown size limit: 413, since the bytes are
- * well-formed and only their size is refused. A document moved onto a path
- * the grammar refuses: 400 `invalid_path`, as promote answers it. Nothing of
- * a refused write is kept.
+ * return, answered the way every sync surface answers it (`syncWriteAnswer`).
+ * Nothing of a refused write is kept.
  */
 function answerWriteRefusal(c: Context, err: unknown): Response {
-  if (err instanceof MarkdownBodyTooLargeError) {
-    return c.json(errorBody('markdown_too_large', err.message), 413)
-  }
-  if (err instanceof NodeTextTooLargeError) {
-    return c.json(errorBody('node_text_too_large', err.message), 413)
-  }
-  if (err instanceof OffGrammarPathError) return c.json(errorBody('invalid_path', err.message), 400)
-  if (err instanceof UnreadableDocumentMetaError) {
-    return c.json(errorBody('unreadable_document_meta', err.message), 400)
-  }
-  if (err instanceof DocumentNameTooLongError) {
-    return c.json(errorBody('document_name_too_long', err.message), 400)
-  }
-  if (!(err instanceof DocumentEngineTrapError)) throw err
-  return c.json(errorBody('document_engine_trap', err.message), 500)
+  const answer = syncWriteAnswer(err)
+  if (answer === undefined) throw err
+  return c.json(errorBody(answer.code, (err as Error).message), answer.status)
 }
 
 const PROMOTE_BODY: ReadJsonBodyOptions = {

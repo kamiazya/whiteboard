@@ -13,7 +13,11 @@ import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import type { z } from 'zod'
 import { type ApiErrorBody, errorBody, invalidRequestBody, issueText } from './api-errors.js'
-import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
+import {
+  DOCUMENT_ENGINE_TRAP_CODE,
+  DocumentEngineTrapError,
+  SnapshotNotFoundError,
+} from './document-io.js'
 import { getLogger } from './log.js'
 import { factsCacheFor } from './references/content-source.js'
 import { vectorCacheFor } from './search/document-vector-cache.js'
@@ -505,7 +509,7 @@ const REFUSALS: readonly Refusal[] = [
   // The CRDT engine aborted while loading or saving a document, usually on a
   // very large body. A server fault the caller cannot fix by rewording, but
   // the document is named and a repeat is not a retry.
-  refusalOf(DocumentEngineTrapError, 'document_engine_trap', 500),
+  refusalOf(DocumentEngineTrapError, DOCUMENT_ENGINE_TRAP_CODE, 500),
   // The route reads one format; a document in the other is a conflict with
   // what it is, which only reading it by its own kind resolves.
   refusalOf(DocumentKindMismatchError, 'document_kind_mismatch', 409),

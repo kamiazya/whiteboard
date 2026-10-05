@@ -3,8 +3,8 @@ import { LoroDoc, type LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
-import { MarkdownBodyTooLargeError } from './apply-document-update-limit.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
+import { MarkdownBodyTooLargeError } from './sync-write-refusals.js'
 
 export interface PromoteWorkspaceInput {
   readonly workspaceId: string
