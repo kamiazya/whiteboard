@@ -1,3 +1,4 @@
+import { HTTPException } from 'hono/http-exception'
 import { afterEach, describe, expect, it } from 'vitest'
 import { apiErrorBodySchema } from './api-errors.js'
 import { createServer } from './create-server.js'
@@ -57,5 +58,28 @@ describe('/api/v1 on an unhandled throw', () => {
     expect(res.status).toBe(503)
     expect(res.headers.get('retry-after')).toBe('1')
     expect(apiErrorBodySchema.parse(await res.json())).toMatchObject({ error: 'database_busy' })
+  })
+
+  it('logs a busy database at warning, since the caller is told to retry', async () => {
+    const records: Parameters<Parameters<typeof setLogSink>[0]>[0][] = []
+    setLogSink((record) => records.push(record))
+    const busy = Object.assign(new Error('database stayed locked'), { code: 'SQLITE_BUSY' })
+
+    await serverThrowing(busy).request(LIST)
+
+    expect(records.map((r) => r.level)).toEqual(['warning'])
+    expect(records[0]?.data).toMatchObject({ method: 'GET', path: LIST })
+  })
+
+  it('answers a thrown HTTPException with the response it carries, unlogged', async () => {
+    const records: unknown[] = []
+    setLogSink((record) => records.push(record))
+    const teapot = new HTTPException(418, { res: new Response('short and stout', { status: 418 }) })
+
+    const res = await serverThrowing(teapot).request(LIST)
+
+    expect(res.status).toBe(418)
+    expect(await res.text()).toBe('short and stout')
+    expect(records).toEqual([])
   })
 })
