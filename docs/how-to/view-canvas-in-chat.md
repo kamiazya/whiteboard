@@ -68,7 +68,12 @@ still lands in the document; the agent picks it up whenever it next reads the
 board (`wb_canvas_snapshot` carries comments).
 
 A refused or failed write keeps your text and spot for retry; they clear only
-once the comment is committed. This is the widget's ONE write — everything
+once the comment is committed. The reason shows in a line under the field —
+the server's own words when it refused the comment (a message over the
+4,096-character limit, or a node that no longer exists), or a note that the
+host call did not get through — and clears as soon as you type again. The
+field itself stops at that 4,096-character limit. A Refresh that fails shows
+its reason on the same line and leaves the last loaded view in place. This is the widget's ONE write — everything
 else stays read-only, and the only tools it can ever call through the host
 are `canvas_view` and this comment.
 

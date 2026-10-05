@@ -480,7 +480,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/font-loading.ts#loadViewerFont': 61,
   'packages/canvas-viewer/src/widget-entry.ts#applyToolResult': 58,
   'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 170,
-  'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 118,
+  'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 76,
   'packages/codec/src/markdown/from-remark.ts#toFlow': 55,
   'packages/codec/src/markdown/from-remark.ts#toPhrasing': 55,
   'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 52,

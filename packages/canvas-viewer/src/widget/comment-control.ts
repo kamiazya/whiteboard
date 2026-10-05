@@ -3,9 +3,12 @@
 // — see refresh-control.ts's doc comment: `remount` clears #root via
 // container.replaceChildren() on every mount, which would delete this
 // element if it lived inside the container.
+import { COMMENT_MESSAGE_MAX_CHARS } from '@kamiazya/whiteboard-model'
+
 export interface CommentControl {
   readonly element: HTMLFormElement
   show(): void
+  /** Busy also drops any reason shown: a new attempt answers for itself. */
   setBusy(busy: boolean): void
   clear(): void
   /**
@@ -16,6 +19,12 @@ export interface CommentControl {
    * to do instead of offering a button that can only fail.
    */
   setAnchor(label: string | undefined): void
+  /**
+   * Why the last write (or refresh) did not land, as one alert line under
+   * the field, or `undefined` to clear it. The next keystroke clears it too:
+   * once the person is editing, the reason describes text that is gone.
+   */
+  setError(message: string | undefined): void
 }
 
 // Stable hooks for tests and the widget smoke script — deliberately not an
@@ -28,77 +37,122 @@ export const COMMENT_ANCHOR_TEST_ID = 'widget-comment-anchor'
 
 const PICK_A_SPOT_HINT = 'Click the canvas to pick a spot'
 
+// Deliberately minimal inline styling: this widget has no CSS build step of
+// its own (single-file bundle) and must stay legible over an arbitrary
+// host-rendered scene. `left` (not just `right`) pins the other edge, and
+// `max-width` bounds the form to whatever room remains between the two —
+// without both, a form with no explicit width shrinks-to-fit its content
+// and, in a narrow inline/mobile MCP App frame, that content can be wider
+// than the space between `right:96px` and the left viewport edge, pushing
+// the form (and its input) off-screen to the left. `flex-wrap` gives the
+// alert line a row of its own below the field.
+const FORM_STYLE = [
+  'position:fixed',
+  'top:8px',
+  'left:8px',
+  'right:96px',
+  'max-width:calc(100% - 104px)',
+  'box-sizing:border-box',
+  'z-index:2147483647',
+  'display:none',
+  'gap:4px',
+  'padding:4px',
+  'border-radius:6px',
+  'border:1px solid rgba(0,0,0,0.2)',
+  'background:rgba(255,255,255,0.9)',
+  'align-items:center',
+  'flex-wrap:wrap',
+].join(';')
+
+const ANCHOR_HINT_STYLE = [
+  'flex:0 0 auto',
+  'font:11px system-ui,sans-serif',
+  'color:#6b7280',
+  'white-space:nowrap',
+].join(';')
+
+// `flex:1 1 auto` plus `min-width:0` (the flexbox default is `min-width:auto`,
+// which floors the input at its intrinsic content width and defeats
+// shrinking) lets the input shrink to whatever room the form's `max-width`
+// above leaves, instead of forcing the form wider than that bound.
+const INPUT_STYLE = [
+  'flex:1 1 auto',
+  'min-width:0',
+  'font:12px system-ui,sans-serif',
+  'padding:4px 6px',
+  'border-radius:4px',
+  'border:1px solid rgba(0,0,0,0.2)',
+].join(';')
+
+const SUBMIT_STYLE = [
+  'flex:0 0 auto',
+  'padding:4px 10px',
+  'font:12px system-ui,sans-serif',
+  'border-radius:6px',
+  'border:1px solid rgba(0,0,0,0.2)',
+  'background:rgba(255,255,255,0.9)',
+  'color:#1e1e1e',
+  'cursor:pointer',
+].join(';')
+
+const ERROR_LINE_STYLE = [
+  'flex:1 0 100%',
+  'margin:0',
+  'font:11px system-ui,sans-serif',
+  'color:#b91c1c',
+  'max-height:4.5em',
+  'overflow:auto',
+  'overflow-wrap:anywhere',
+].join(';')
+
+/**
+ * The alert line under the field. In the DOM from the start and filled in
+ * place: a live region inserted together with its text is not reliably
+ * announced.
+ */
+function createErrorLine(): { element: HTMLElement; set(message: string | undefined): void } {
+  const line = document.createElement('p')
+  line.setAttribute('role', 'alert')
+  line.hidden = true
+  line.style.cssText = ERROR_LINE_STYLE
+  return {
+    element: line,
+    set(message: string | undefined): void {
+      line.textContent = message ?? ''
+      line.hidden = message === undefined
+    },
+  }
+}
+
 export function createCommentControl(onSubmit: (text: string) => void): CommentControl {
   const form = document.createElement('form')
   form.setAttribute('data-testid', COMMENT_CONTROL_TEST_ID)
-  // Deliberately minimal inline styling: this widget has no CSS build step
-  // of its own (single-file bundle) and must stay legible over an arbitrary
-  // host-rendered scene. `left` (not just `right`) pins the other edge, and
-  // `max-width` bounds the form to whatever room remains between the two —
-  // without both, a form with no explicit width shrinks-to-fit its content
-  // and, in a narrow inline/mobile MCP App frame, that content can be wider
-  // than the space between `right:96px` and the left viewport edge, pushing
-  // the form (and its input) off-screen to the left.
-  form.style.cssText = [
-    'position:fixed',
-    'top:8px',
-    'left:8px',
-    'right:96px',
-    'max-width:calc(100% - 104px)',
-    'box-sizing:border-box',
-    'z-index:2147483647',
-    'display:none',
-    'gap:4px',
-    'padding:4px',
-    'border-radius:6px',
-    'border:1px solid rgba(0,0,0,0.2)',
-    'background:rgba(255,255,255,0.9)',
-    'align-items:center',
-  ].join(';')
+  form.style.cssText = FORM_STYLE
 
   const anchorHint = document.createElement('span')
   anchorHint.setAttribute('data-testid', COMMENT_ANCHOR_TEST_ID)
   anchorHint.textContent = PICK_A_SPOT_HINT
-  anchorHint.style.cssText = [
-    'flex:0 0 auto',
-    'font:11px system-ui,sans-serif',
-    'color:#6b7280',
-    'white-space:nowrap',
-  ].join(';')
+  anchorHint.style.cssText = ANCHOR_HINT_STYLE
 
   const input = document.createElement('input')
   input.type = 'text'
   input.placeholder = 'Comment…'
   input.setAttribute('data-testid', COMMENT_INPUT_TEST_ID)
   input.setAttribute('aria-label', 'Comment text')
-  // `flex:1 1 auto` plus `min-width:0` (the flexbox default is `min-width:auto`,
-  // which floors the input at its intrinsic content width and defeats
-  // shrinking) lets the input shrink to whatever room the form's `max-width`
-  // above leaves, instead of forcing the form wider than that bound.
-  input.style.cssText = [
-    'flex:1 1 auto',
-    'min-width:0',
-    'font:12px system-ui,sans-serif',
-    'padding:4px 6px',
-    'border-radius:4px',
-    'border:1px solid rgba(0,0,0,0.2)',
-  ].join(';')
+  // The bound the server writes a message under: past it every retry is
+  // refused, so the field stops accepting characters there instead.
+  input.maxLength = COMMENT_MESSAGE_MAX_CHARS
+  input.style.cssText = INPUT_STYLE
 
   const submit = document.createElement('button')
   submit.type = 'submit'
   submit.textContent = 'Comment'
   submit.setAttribute('data-testid', COMMENT_SUBMIT_TEST_ID)
   submit.setAttribute('aria-label', 'Comment on the canvas')
-  submit.style.cssText = [
-    'flex:0 0 auto',
-    'padding:4px 10px',
-    'font:12px system-ui,sans-serif',
-    'border-radius:6px',
-    'border:1px solid rgba(0,0,0,0.2)',
-    'background:rgba(255,255,255,0.9)',
-    'color:#1e1e1e',
-    'cursor:pointer',
-  ].join(';')
+  submit.style.cssText = SUBMIT_STYLE
+
+  const errorLine = createErrorLine()
+  input.addEventListener('input', () => errorLine.set(undefined))
 
   // The two independent reasons submit may be unavailable, tracked apart so
   // clearing one never un-disables the other.
@@ -122,9 +176,7 @@ export function createCommentControl(onSubmit: (text: string) => void): CommentC
     onSubmit(text)
   })
 
-  form.appendChild(anchorHint)
-  form.appendChild(input)
-  form.appendChild(submit)
+  form.append(anchorHint, input, submit, errorLine.element)
   document.body.appendChild(form)
 
   return {
@@ -134,6 +186,7 @@ export function createCommentControl(onSubmit: (text: string) => void): CommentC
     },
     setBusy(next: boolean): void {
       busy = next
+      if (busy) errorLine.set(undefined)
       applyDisabled()
     },
     clear(): void {
@@ -144,5 +197,6 @@ export function createCommentControl(onSubmit: (text: string) => void): CommentC
       anchorHint.textContent = label ?? PICK_A_SPOT_HINT
       applyDisabled()
     },
+    setError: errorLine.set,
   }
 }
