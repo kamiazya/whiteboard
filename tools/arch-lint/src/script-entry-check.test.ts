@@ -16,7 +16,7 @@
  * run time are not followed.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
@@ -112,6 +112,9 @@ const FRAGILE_SPELLINGS = [
   `${ARGV1} && resolve(${ARGV1}) === fileURLToPath(import.meta.url)`,
   `${ARGV1}?.endsWith('docker-build-inputs.mjs')`,
   'process.argv.at(1) === fileURLToPath(import.meta.url)',
+  `'file://' + ${ARGV1} === import.meta.url`,
+  `new URL(import.meta.url).pathname === ${ARGV1}`,
+  `import.meta.url.endsWith(${ARGV1})`,
 ]
 
 describe('a script finds out it is the entry module in one place', () => {
@@ -166,5 +169,37 @@ describe('a script finds out it is the entry module in one place', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  /** Runs `body` as a module importing the helper, from a fresh directory; answers its stdout and stderr. */
+  function runProbe(body: string, entryOf: (real: string, root: string) => string) {
+    const root = mkdtempSync(join(tmpdir(), 'script-entry-'))
+    try {
+      const real = join(root, 'real.mjs')
+      writeFileSync(
+        real,
+        `import { isRunAsScript } from ${JSON.stringify(join(REPO_ROOT, HOME))}\n${body}\nconsole.log(isRunAsScript(import.meta.url))\n`,
+      )
+      const result = spawnSync(process.execPath, [entryOf(real, root)], { encoding: 'utf8' })
+      return { stdout: result.stdout.trim(), stderr: result.stderr }
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+
+  // Node runs a symlinked entry under its real path, so `import.meta.url`
+  // names the target while `process.argv[1]` still names the link.
+  it('the helper answers true when node is started on a symlink to the entry', () => {
+    const answer = runProbe('', (real, root) => {
+      const link = join(root, 'link.mjs')
+      symlinkSync(real, link)
+      return link
+    })
+    expect(answer).toEqual({ stdout: 'true', stderr: '' })
+  })
+
+  it('the helper answers false, not true, for an entry path that names nothing on disk', () => {
+    const answer = runProbe("process.argv[1] = '/nonexistent/entry.mjs'", (real) => real)
+    expect(answer).toEqual({ stdout: 'false', stderr: '' })
   })
 })
