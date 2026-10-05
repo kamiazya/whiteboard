@@ -198,6 +198,15 @@ is stamped by the write, and git already knows what moved. It also runs on
 SessionStart, quietly, so a stale issue announces itself rather than waiting to
 be re-read.
 
+Quiet is not silent for the three states that look like "nothing stale" and
+are not. A store it cannot reach prints `[stale-issues] skipped: <reason>`; a
+workspace holding no issue document prints `holds 0 issue documents`; and a
+`whiteboard` registration naming a proxy script that no longer exists prints
+the two commands that repair it. The last is the one that matters most: the
+hook reaches the daemon over its socket, not through that registration, so a
+registration left naming a removed worktree leaves this check healthy while
+no session can file or read an issue at all.
+
 What it is worth, measured on the six issues one session read and found
 already resolved: **four** named something that had since changed or been
 deleted. The two it missed share a shape — the fix landed in a file the issue

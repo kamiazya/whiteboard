@@ -46,6 +46,7 @@ import {
   buildDesiredConfig,
   buildReRegisterCommand,
   classifyExistingConfig,
+  danglingMainRegistration,
   planStaleSweep,
   removeStaleEntriesFromConfig,
   resolveMainCheckoutRoot,
@@ -209,6 +210,7 @@ function wireWorktree({
   spawn,
   readConfig,
   log,
+  pathExists,
   isMainCheckoutOverride,
   claudeCliAvailableOverride,
   mainCheckoutRootOverride,
@@ -265,6 +267,16 @@ function wireWorktree({
       name: desired.name,
     })
   ) {
+    const dangling = danglingMainRegistration({
+      config: existingConfig,
+      mainRoot,
+      pathExists,
+      name: desired.name,
+    })
+    if (dangling !== null) {
+      log(`[wire-worktree-mcp] ${dangling.message}`)
+      return
+    }
     log(
       `[wire-worktree-mcp] skipping: \`claude mcp add --scope local\` resolves a linked worktree to the ` +
         `main checkout, which already registers "${desired.name}". ~/.claude.json holds one project key ` +
@@ -373,7 +385,7 @@ const USAGE = 'usage: wire-worktree-mcp.mjs [worktreePath]   |   wire-worktree-m
  * @param {{
  *   argv?: string[],
  *   spawn?: typeof defaultSpawn, readConfig?: typeof defaultReadConfig, writeConfig?: typeof defaultWriteConfig,
- *   log?: (msg: string) => void, isMainCheckoutOverride?: boolean, claudeCliAvailableOverride?: boolean,
+ *   log?: (msg: string) => void, pathExists?: (path: string) => boolean, isMainCheckoutOverride?: boolean, claudeCliAvailableOverride?: boolean,
  *   mainCheckoutRootOverride?: string, liveWorktreePathsOverride?: string[], exit?: (code: number) => never,
  * }} [deps]
  */
@@ -383,6 +395,7 @@ export async function main({
   readConfig = defaultReadConfig,
   writeConfig = defaultWriteConfig,
   log = (msg) => console.log(msg),
+  pathExists = existsSync,
   isMainCheckoutOverride,
   claudeCliAvailableOverride,
   mainCheckoutRootOverride,
@@ -411,6 +424,7 @@ export async function main({
     spawn,
     readConfig,
     log,
+    pathExists,
     isMainCheckoutOverride,
     claudeCliAvailableOverride,
     mainCheckoutRootOverride,
