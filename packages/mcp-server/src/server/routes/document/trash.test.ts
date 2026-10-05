@@ -13,7 +13,12 @@ import {
   purgeTrashEntryResponseSchema,
   restoreTrashResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readSpatialCanvas,
+  readTrashEntries,
+  recordTrashEntry,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import {
@@ -247,6 +252,32 @@ describe('trash routes', () => {
       method: 'POST',
     })
     expect(keptRestore.status).toBe(200)
+  })
+
+  it('answers 409, not 404, for a trash entry whose documentId the workspace already places', async () => {
+    const WS = 'ws-trash-restore-placed'
+    await saveDocument(WS, 'twice', canvasDoc('live copy'), { kind: 'spatial' })
+    const documentId = (await resolveDocumentIdAtPath(WS, 'twice')) as string
+    const deps = await realDeps()
+    const app = await appWithRealDeps(deps)
+    await app.request(`/api/workspaces/${WS}/documents/twice`, { method: 'DELETE' })
+    const record = await deps.workspaceDocuments.get(WS)
+    const [entry] = readTrashEntries(record)
+    if (entry === undefined) throw new Error('the delete recorded no trash entry')
+    await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, { method: 'POST' })
+    // The row a merge from another replica can leave beside the live
+    // document: same documentId, still in the trash.
+    const placed = await deps.workspaceDocuments.get(WS)
+    recordTrashEntry(placed, entry)
+    await deps.workspaceDocuments.save(WS, placed)
+
+    const again = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
+      method: 'POST',
+    })
+
+    expect(again.status).toBe(409)
+    expect(((await again.json()) as { title: string }).title).toContain('twice')
+    expect(await resolveDocumentIdAtPath(WS, 'twice')).toBe(documentId)
   })
 
   it('a restore from the trash brings the saved versions back with the document', async () => {
