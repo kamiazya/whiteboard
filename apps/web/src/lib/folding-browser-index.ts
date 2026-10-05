@@ -46,7 +46,7 @@ import {
 } from './browser-keeper-capacity.js'
 import { deleteVersionRowsOfDocument } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { foldOrServeTheTree } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
@@ -154,24 +154,23 @@ export class FoldingBrowserIndex
   }
 
   private ensureFolded(): Promise<void> {
-    this.folded ??= foldWorkspaceDocuments(this.dbName)
-      .then((report) => {
-        // A skipped document is one the fold left OUT of the tree — from
-        // here on it is invisible to every listing, so the count must reach
-        // a log even though the fold itself succeeded.
-        if (report.skipped > 0) {
-          log.warn('startup fold left documents behind', {
-            folded: report.folded,
-            skipped: report.skipped,
-          })
-        }
-      })
-      .catch((err: unknown) => {
-        log.warn('startup fold failed; the index serves what the tree holds', err)
+    this.folded ??= foldOrServeTheTree(log, this.dbName).then((report) => {
+      if (report === null) {
         // Cleared so the NEXT call retries — a transient failure must not
         // pin this session to an unfolded view forever.
         this.folded = null
-      })
+        return
+      }
+      // A skipped document is one the fold left OUT of the tree, served only
+      // by the fold-skipped fallback below, so the count must reach a log
+      // even though the fold itself succeeded.
+      if (report.skipped > 0) {
+        log.warn('startup fold left documents behind', {
+          folded: report.folded,
+          skipped: report.skipped,
+        })
+      }
+    })
     return this.folded
   }
 

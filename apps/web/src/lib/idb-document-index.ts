@@ -116,8 +116,15 @@ function parseRow(value: unknown): IndexRow | undefined {
 }
 
 export class IdbDocumentIndex implements DocumentIndex {
-  /** Only tests pass this; see `openWhiteboardDb`'s note on why it exists. */
-  constructor(private readonly dbName?: string) {}
+  /**
+   * `dbName`: only tests pass this; see `openWhiteboardDb`'s note on why it
+   * exists. `readsAwaitIssuedWrites: false` is the startup fold's alone — see
+   * `tx`.
+   */
+  constructor(
+    private readonly dbName?: string,
+    private readonly options: { readsAwaitIssuedWrites?: boolean } = {},
+  ) {}
 
   private tx<T>(
     stores: string[],
@@ -131,6 +138,12 @@ export class IdbDocumentIndex implements DocumentIndex {
     // cover. An empty set costs a read one microtask.
     if (mode === 'readwrite') {
       return trackIndexWrite(inTransaction(this.dbName, stores, mode, body))
+    }
+    // The fold reads without waiting because a tracked write can be what is
+    // running it: the save loop's rename asks for the fold, and a fold read
+    // that waited here would wait on that loop, which waits on the fold.
+    if (this.options.readsAwaitIssuedWrites === false) {
+      return inTransaction(this.dbName, stores, mode, body)
     }
     return indexWritesSettled().then(() => inTransaction(this.dbName, stores, mode, body))
   }

@@ -282,7 +282,7 @@ export function PromoteWorkspaceSection({
       const [
         { countBrowserWorkspaceDocuments },
         { BrowserWorkspaceDocs },
-        { foldWorkspaceDocuments },
+        { foldOrServeTheTree },
         workspaces,
       ] = await Promise.all([
         import('../../lib/promote-workspace.js'),
@@ -293,15 +293,10 @@ export function PromoteWorkspaceSection({
       // Settings can be a session's first surface (deep-link/reload), so the
       // startup fold may not have run yet — and this count reads the
       // workspace record, which without the fold silently omits an older
-      // build's per-document records. Non-fatal, and its OWN catch: a fold
-      // failure degrades to the pre-fold view (undercounted but open) and is
-      // a storage-side problem, so it must not read as the outer catch's
-      // "could not reach the daemon".
-      try {
-        await foldWorkspaceDocuments()
-      } catch (err) {
-        log.warn('startup fold failed; continuing without it', err)
-      }
+      // build's per-document records. A fold failure degrades to the
+      // pre-fold count and never reaches the outer catch: it is a
+      // storage-side problem, not "could not reach the daemon".
+      await foldOrServeTheTree(log)
       const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
       const targets: WorkspaceIdentity[] = workspaces.workspaces.map((ws) => ({
         workspaceId: ws.workspaceId,

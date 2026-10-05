@@ -25,7 +25,7 @@ import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { getAppLogger } from './app-logger.js'
+import { type AppLogger, getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -112,8 +112,30 @@ export function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
   return run
 }
 
+/**
+ * The fold as every surface runs it. It is migration, so a failure is logged
+ * under the caller's name and the caller goes on with what the tree holds — a
+ * briefly incomplete or undercounted view, never a surface that refuses to
+ * open over a step that only tidies storage. Null on failure; the next caller
+ * to ask runs it again, since the work list is derived.
+ */
+export async function foldOrServeTheTree(
+  log: AppLogger,
+  dbName?: string,
+): Promise<FoldReport | null> {
+  try {
+    return await foldWorkspaceDocuments(dbName)
+  } catch (err) {
+    log.warn('startup fold failed; serving what the tree holds', err)
+    return null
+  }
+}
+
 async function foldOnce(dbName?: string): Promise<FoldReport> {
-  const index = new IdbDocumentIndex(dbName)
+  // No write barrier on these reads (see pending-index-writes.ts): nothing
+  // tracked there adds a legacy row — this build writes none — and a tracked
+  // save loop can be the caller this run is answering.
+  const index = new IdbDocumentIndex(dbName, { readsAwaitIssuedWrites: false })
   const entries = await legacyRows(index)
   if (entries === null) return { folded: 0, skipped: 0 }
 

@@ -1,14 +1,15 @@
 /**
- * The promote dialog's fold-failure degradation, in its own file: vi.mock is
- * hoisted file-wide, and the positive-path tests next door must exercise the
- * REAL fold — a shared file would put the spy under them too.
+ * The promote dialog's fold-failure degradation, in its own file so the
+ * injected failure cannot reach the positive-path tests next door, which
+ * must exercise the REAL fold.
  *
  * The decided degradation: a failed fold falls back to exactly the pre-fold
  * view — tree-held documents only, undercounted but OPEN — and never reads
  * as a daemon failure, because it is a storage-side problem. Note the
  * observability asymmetry: an un-called fold and a failed fold are identical
  * at the dialog, so the load-bearing assertion is that the fold was ATTEMPTED
- * (the spy fired); the count and copy assertions pin the degradation shape.
+ * and failed under this surface's name (the log record); the count and copy
+ * assertions pin the degradation shape.
  */
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
@@ -17,7 +18,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { foldWorkspaceDocuments } from '../../lib/fold-workspace.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { LoroStore } from '../../lib/loro-store.js'
@@ -26,8 +26,6 @@ import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
-
-vi.mock('../../lib/fold-workspace.js', { spy: true })
 
 claimIsolatedWhiteboardDb('promote-fold-failure')
 
@@ -45,9 +43,11 @@ const listOnlyStub = (async (input: RequestInfo | URL) => {
 beforeEach(async () => {
   localStorage.removeItem(STORAGE_KEY)
   await clearWhiteboardDb()
-  vi.mocked(foldWorkspaceDocuments).mockClear()
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('PromoteWorkspaceSection under a failing fold', () => {
   it('attempts the fold, degrades to the tree-held count, never claims a daemon failure', async () => {
@@ -78,10 +78,11 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
     doc.commit()
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
-    // The seeding above runs the real (spied) fold via FoldingBrowserIndex;
-    // only the component's own call is under test.
-    vi.mocked(foldWorkspaceDocuments).mockClear()
-    vi.mocked(foldWorkspaceDocuments).mockRejectedValueOnce(new Error('injected fold failure'))
+    // The seeding above ran the real fold through FoldingBrowserIndex; the
+    // component's own run is the next to read the legacy rows, and fails.
+    vi.spyOn(IdbDocumentIndex.prototype, 'listDocuments').mockRejectedValueOnce(
+      new Error('injected fold failure'),
+    )
 
     render(
       <PromoteWorkspaceSection
@@ -95,15 +96,15 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
 
     // The flow reaches the confirmation, not a stuck or error state...
     const dialog = await screen.findByTestId('promote-dialog')
-    // ...the fold was attempted exactly once (an un-called fold shows the
-    // same dialog, which is why this assertion carries the test)...
-    expect(vi.mocked(foldWorkspaceDocuments)).toHaveBeenCalledTimes(1)
     // ...the count is the pre-fold degradation value: the tree-held document
     // alone, the legacy record left behind by the failed fold...
     expect(dialog.textContent).toMatch(/all 1 document\b/i)
     // ...and nothing blames the daemon for a storage-side failure.
     expect(screen.queryByTestId('promote-unavailable')).toBeNull()
     expect(document.body.textContent).not.toMatch(/could not reach the daemon/i)
+    // ...and the fold was attempted, and failed, under this surface's name
+    // (an un-called fold shows the same dialog, which is why this assertion
+    // carries the test).
     expect(logged.join('\n')).toContain('[promote-workspace-section] startup fold failed')
   })
 })

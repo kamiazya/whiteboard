@@ -16,10 +16,15 @@
  * index: only the writer knows about work it has not issued yet. This module
  * is the one place both halves can see.
  *
- * A tracked promise must never READ through the index. Reads wait here, so a
- * tracked promise that waited on one would wait on itself. Today's registrants
- * are the index's own write transactions and the document controller's save
- * loop, neither of which reads.
+ * A tracked promise must never WAIT here, by itself or through a read it
+ * makes: reads wait here, so it would wait on itself. That is narrower than
+ * "never reads". The registrants are the index's own write transactions and
+ * the document controller's save loop, and the loop's rename asks the folding
+ * index for the startup fold, which reads the legacy rows. That read is the
+ * one that does not wait (`IdbDocumentIndex`'s `readsAwaitIssuedWrites`),
+ * sound because nothing registered here adds a legacy row; and the folding
+ * index's writes wait for the fold alone, never for the reads' barrier. A
+ * tracked caller that reaches any other read reopens the deadlock.
  */
 const issued = new Set<Promise<unknown>>()
 

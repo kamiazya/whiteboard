@@ -20,7 +20,7 @@ import { Loro, type LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { foldOrServeTheTree } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 import {
   listenToWorkspace,
@@ -465,18 +465,11 @@ export class BrowserBackend implements DocumentBackend {
   /**
    * Any per-document records first fold into the tree, so a document created
    * by an older build is served from the same place as everything else.
-   * Derived work list — a second connect finds nothing pending. Non-fatal on
-   * failure: the fold retries at the next connect, and `placeMissingDocument`
-   * still classifies this backend's own document — degrading the open over a
-   * fold hiccup would take the whole editor down for a step that is only
-   * migration.
+   * Derived work list — a second connect finds nothing pending. A failure
+   * leaves `placeMissingDocument` to classify this backend's own document.
    */
   private async foldLegacyRecords(): Promise<void> {
-    try {
-      await foldWorkspaceDocuments()
-    } catch (err) {
-      getAppLogger('browser-backend').warn('startup fold failed; continuing without it', err)
-    }
+    await foldOrServeTheTree(getAppLogger('browser-backend'))
   }
 
   private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
