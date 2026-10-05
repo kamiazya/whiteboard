@@ -266,6 +266,19 @@ describe('importWithinTextLimits on update shapes', () => {
     expect(importWithinTextLimits(doc, update).breach).toMatchObject({ shape: 'body' })
   })
 
+  it('keeps the longest run when a shorter one in another container follows it', () => {
+    const doc = seeded('s')
+    const update = editOf(doc, (client, body) => {
+      body.insert(1, 'a'.repeat(MARKDOWN_MAX_CHARS + 10))
+      body.delete(1, MARKDOWN_MAX_CHARS + 5)
+      client.getText('other').insert(0, 'x')
+    })
+    expect(importWithinTextLimits(doc, update).breach).toMatchObject({
+      shape: 'run',
+      chars: MARKDOWN_MAX_CHARS + 10,
+    })
+  })
+
   it('leaves the document attached after bytes the engine refuses', () => {
     const doc = seeded('short')
     expect(() => importWithinTextLimits(doc, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow()
