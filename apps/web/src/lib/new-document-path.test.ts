@@ -57,7 +57,7 @@ describe('newDocumentPathIn', () => {
     fc.string(),
   )
 
-  fcTest.prop([fc.array(nearUntitled)], withDefaults())(
+  fcTest.prop([fc.array(nearUntitled)], withDefaults({ numRuns: 100 }))(
     'never answers a path already taken, and always one the path grammar accepts',
     (existing) => {
       const path = newDocumentPathIn('', existing)
@@ -72,23 +72,25 @@ describe('a generated path against the naming gate', () => {
   // this generator chose (loro-adapter's `isGeneratedDocumentPath`). The two
   // have to agree, or a note made here keeps the name `untitled` however
   // plainly its first line says what it is.
-  fcTest.prop([fc.integer({ min: 1, max: 12 })], withDefaults())(
-    'a heading names every note the generator placed',
-    (howMany) => {
-      const workspace = new LoroDoc()
-      const taken: string[] = []
-      for (let i = 0; i < howMany; i++) {
-        const path = newDocumentPathIn('design', taken)
-        taken.push(path)
-        const documentId = generateDocumentId()
-        createWorkspaceDocumentAtPath(workspace, { path, documentId, kind: 'markdown' })
-        documentContainers(workspace, documentId).getText(MARKDOWN_BODY_KEY).insert(0, `# N${i}`)
-        workspace.commit()
-        seedNameFromTitle(workspace, documentId)
-      }
-      const notes = readWorkspaceDocuments(workspace)
-      expect(notes).toHaveLength(howMany)
-      for (const note of notes) expect(note.name, note.path).toMatch(/^N\d+$/)
-    },
-  )
+  // Twelve notes reach a two-digit suffix, and each prefix of the run is the
+  // case a smaller count would draw, so one pass covers every count a
+  // property over 1..12 would — at a fortieth of the time, which matters
+  // because each note is a real workspace write.
+  it('a heading names every note the generator placed', () => {
+    const workspace = new LoroDoc()
+    const taken: string[] = []
+    for (let i = 0; i < 12; i++) {
+      const path = newDocumentPathIn('design', taken)
+      taken.push(path)
+      const documentId = generateDocumentId()
+      createWorkspaceDocumentAtPath(workspace, { path, documentId, kind: 'markdown' })
+      documentContainers(workspace, documentId).getText(MARKDOWN_BODY_KEY).insert(0, `# N${i}`)
+      workspace.commit()
+      seedNameFromTitle(workspace, documentId)
+    }
+    expect(taken.at(-1)).toBe('design/untitled-12')
+    const notes = readWorkspaceDocuments(workspace)
+    expect(notes).toHaveLength(12)
+    for (const note of notes) expect(note.name, note.path).toMatch(/^N\d+$/)
+  })
 })
