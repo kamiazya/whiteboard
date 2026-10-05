@@ -9,7 +9,7 @@ import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { LoroStoreLike } from './loro-store.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
-import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from './workspace-content.js'
+import { touchIfWorkspaceBacked } from './workspace-content.js'
 
 /**
  * Create a document AND seed its content record, as one operation.
@@ -32,35 +32,26 @@ export async function createSeededDocument(
   clock: ContentClock,
   name?: string,
   kind: DocumentSnapshot['kind'] = 'spatial',
-  content?: Uint8Array,
-  /** Where to create it; absent, the next free `untitled` at the workspace root. */
-  path?: string,
 ): Promise<DocumentSnapshot> {
   await ensureBrowserWorkspace(index)
   const trimmed = name?.trim()
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
-    path:
-      path ??
-      newDocumentPathIn(
-        '',
-        (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path),
-      ),
+    // The next free `untitled` at the workspace root.
+    path: newDocumentPathIn(
+      '',
+      (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path),
+    ),
     kind,
     ...(trimmed ? { name: trimmed } : {}),
   })
   try {
     // Tree-backed index: the node the create just made IS the content record
-    // (its containers are the empty document), so a seed with content copies
-    // into it and an empty create only stamps the clock. The legacy branch
-    // keeps the per-document record for an index without a workspace
-    // document behind it — injected test doubles included.
-    const seededInTree =
-      content !== undefined
-        ? await seedWorkspaceDocumentContent(entry.documentId, content)
-        : await touchIfWorkspaceBacked(entry.documentId)
-    if (!seededInTree) {
-      await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
+    // (its containers are the empty document), so the create only stamps the
+    // clock. The legacy branch keeps the per-document record for an index
+    // without a workspace document behind it — injected test doubles included.
+    if (!(await touchIfWorkspaceBacked(entry.documentId))) {
+      await loro.save(entry.documentId, loro.createEmptySnapshot())
     }
   } catch (err) {
     try {

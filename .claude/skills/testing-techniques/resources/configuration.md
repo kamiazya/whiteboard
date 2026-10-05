@@ -168,8 +168,10 @@ prints at startup. Do not hand-build either. `browser.api` moved to top-level `a
 
 ## Benchmarks (`pnpm bench`)
 
-`vitest bench --project "canvas-render-node (bench)"` runs
-`packages/canvas-render/src/**/*.bench.ts`. **Bench mode runs each project's benchmark
+`vitest bench --reporter=default --project "canvas-render-node (bench)" --project
+"search-node (bench)"` runs every `*.bench.ts` in the repo; a file argument narrows it.
+The reporter is named because an agent session otherwise gets `minimal`, which prints no
+table (below, under the past releases' features). **Bench mode runs each project's benchmark
 files under a sibling project whose name carries a ` (bench)` suffix, and that full string
 is what `--project` / `-p` must be given** — measured: `--project canvas-render-node` and
 `-p canvas-render-node` both answer `No projects matched the filter`. The discipline —
@@ -355,11 +357,20 @@ at all. `vi.defineHelper` was the one worth adopting (`executable-rungs.md`). Th
 - **`toBeInViewport` (4.0)** has no site either. The repo's `getBoundingClientRect` reads are
   pointer coordinates for a synthetic touch and box dimensions for a diagnostic string —
   neither asks whether an element is in the viewport.
-- **The `agent` reporter (4.1)** produces the same content as the default here: 14 non-noise
-  lines each on a green `web-jsdom` run. It suppresses passing-test output, and this repo's
-  default output has almost none — 94 of 108 lines are jsdom's `Not implemented:
-  HTMLCanvasElement getContext` warnings, which no reporter controls. `AI_AGENT` is not set
-  in Claude Code, so it does not auto-enable either.
+- **The agent reporter (4.1) is named `minimal` in vitest 5, and it is ON in every Claude
+  Code session.** Vitest's default reporter list starts with `minimal` instead of
+  `default` whenever std-env detects an agent, which it does when `AI_AGENT` is set OR any
+  agent's marker is (`CLAUDECODE=1` alone is enough; a Claude Code shell sets both). `minimal` renders only
+  failing tests and drops console output from passing ones (`silent: 'passed-only'`), so
+  what it hides is exactly what an instrument exists to show: measured, `pnpm bench`
+  printed `5 passed` and no table, and a bench project run alone printed zero rows (three
+  with `--reporter=default`). The remedy is `--reporter=default` on the command — the root
+  `bench` script carries it (`bench-invocation.test.ts`), and repeating it on the command
+  line is harmless (one table, measured). An instrument that must print on a passing run
+  writes past the reporter: `process.stdout.write` in node, the `printReading` browser
+  command (`vitest.browser.shared.ts`) in a browser project. **Not in the root config**: a
+  `reporters` key there replaces the whole default list, including the `github-actions`
+  reporter vitest adds on CI, whose annotations `flake-watch.mjs` reads.
 - **`sequence.groupOrder` (3.2)** solves a conflict this repo does not have: `mcp-smoke`
   serialises with `maxWorkers: 1` for daemon ports WITHIN its project, and nothing binds a
   fixed port across projects.

@@ -11,7 +11,6 @@
 import {
   projectWorkspaceDocument,
   resolveWorkspaceDocumentById,
-  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
@@ -38,7 +37,7 @@ class DocumentContentUnreadableError extends Error {
  * workspace tree nor the legacy store HOLDS it.
  *
  * The ONE read for a browser-kept document nothing has open: the files
- * source, a duplicate, an embed and the reference graph all come through
+ * source, an embed and the reference graph all come through
  * here, so what "current" means — tree first, legacy record after — is
  * decided once.
  *
@@ -169,28 +168,6 @@ export async function touchIfWorkspaceBacked(
   const workspace = await openWorkspaceOrNull(new BrowserWorkspaceDocs(dbName))
   if (workspace === null) return false
   if (resolveWorkspaceDocumentById(workspace, documentId) === null) return false
-  await touchContentTimestamp(documentId, dbName)
-  return true
-}
-
-/**
- * Writes standalone-document bytes INTO an existing tree node (a create
- * seed, a duplicate's copy). Returns false when the workspace record or the
- * node is absent — the caller falls back to the legacy per-document store,
- * which is also what keeps injected test doubles working.
- */
-export async function seedWorkspaceDocumentContent(
-  documentId: string,
-  content: Uint8Array,
-  dbName?: string,
-): Promise<boolean> {
-  const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await openWorkspaceOrNull(docs)
-  if (workspace === null) return false
-  const source = new Loro()
-  source.import(content)
-  if (!writeWorkspaceDocumentContent(workspace, documentId, source)) return false
-  await docs.save(getBrowserWorkspaceId(), workspace)
   await touchContentTimestamp(documentId, dbName)
   return true
 }

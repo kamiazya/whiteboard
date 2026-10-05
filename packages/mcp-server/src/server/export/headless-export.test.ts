@@ -167,8 +167,7 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
     })
     expect(optionsOf(renderSvgSpy)?.tagLibrary).toBeUndefined()
     // The headless read path answers a missing document with an EMPTY one,
-    // so the library lookup must probe existence first or every export
-    // would mint a `tags` document.
+    // which must neither stand in for a library nor leave a `tags` document.
     expect(await documentExists('ws_nolib', 'tags')).toBe(false)
   })
 

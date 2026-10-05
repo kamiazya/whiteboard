@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { playwright } from '@vitest/browser-playwright'
-import type { TestProject } from 'vitest/node'
+import type { BrowserCommand, TestProject } from 'vitest/node'
 import { resolveBrowserLaunchOptions } from './vitest.browser.launch-options.js'
 
 /** Where a project's failure traces land, relative to its own root. */
@@ -21,6 +21,17 @@ const LIVE_MARKER = '.live-'
  * command line can turn it back on. This is the switch that can.
  */
 const SNAPSHOTS_VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
+
+/**
+ * `commands.printReading(line)` from `vitest/browser`: one line on the runner's
+ * stdout, for an instrument whose reading is its output. Console output from a
+ * PASSING test is dropped by the `minimal` reporter vitest picks in an agent
+ * session, and a test in the page has no `process.stdout` of its own to write
+ * past it the way a node instrument does.
+ */
+const printReading: BrowserCommand<[line: string], void> = (_context, line) => {
+  process.stdout.write(`${line}\n`)
+}
 
 /**
  * The one definition of how this repo runs a Vitest browser project —
@@ -107,6 +118,7 @@ export function sharedBrowserTestConfig(
       launchOptions: resolveBrowserLaunchOptions(process.env),
     }),
     instances: [{ browser: 'chromium' as const }],
+    commands: { printReading },
   }
 }
 

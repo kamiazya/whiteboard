@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentDuplicates, DocumentIndex } from '../index.js'
-import { DocumentNotFoundError, WorkspaceNotFoundError } from '../index.js'
+import { DocumentNotFoundError, NoRoomForCopyError, WorkspaceNotFoundError } from '../index.js'
 
 type DuplicatingIndex = DocumentIndex & DocumentDuplicates
 
@@ -90,6 +90,24 @@ function describeNumbering(withIndex: WithIndex): void {
     })
   })
 
+  // A copy placed on a folder's path would be promoted into it and arrive
+  // holding documents that were never its own. The folder takes the path and
+  // not the name: no document there is called "Roadmap (copy)".
+  it('numbers the copy past a folder standing on the first copy path', async () => {
+    await withIndex(async (index, content) => {
+      await roadmap(index, content)
+      await index.createDocument({
+        workspaceId: WS,
+        path: 'notes/roadmap-copy/minutes',
+        kind: 'markdown',
+      })
+
+      const copy = await index.duplicateDocument({ workspaceId: WS, path: 'notes/roadmap' })
+
+      expect(copy).toMatchObject({ path: 'notes/roadmap-copy-2', name: 'Roadmap (copy)' })
+    })
+  })
+
   it('lands two duplicates started together on two paths', async () => {
     await withIndex(async (index, content) => {
       await roadmap(index, content)
@@ -138,6 +156,22 @@ function describeRefusals(withIndex: WithIndex): void {
         index.duplicateDocument({ workspaceId: WS, path: 'notes/gone' }),
       ).rejects.toThrow(DocumentNotFoundError)
       await expect(index.listDocuments({ workspaceId: WS })).resolves.toEqual([])
+    })
+  })
+
+  // Six folders of 169 characters leave a source `b` at 1021 of the path's
+  // 1024: no copy segment fits beside it, and anywhere else is not beside it.
+  it('refuses a source whose folder leaves no room for a copy, and makes nothing', async () => {
+    await withIndex(async (index) => {
+      const folder = Array.from({ length: 6 }, (_, i) => `f${i}${'a'.repeat(167)}`).join('/')
+      const path = `${folder}/b`
+      await index.createDocument({ workspaceId: WS, path, kind: 'markdown' })
+
+      await expect(index.duplicateDocument({ workspaceId: WS, path })).rejects.toThrow(
+        NoRoomForCopyError,
+      )
+      const listed = await index.listDocuments({ workspaceId: WS })
+      expect(listed.map((entry) => entry.path)).toEqual([path])
     })
   })
 

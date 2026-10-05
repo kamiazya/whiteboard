@@ -7,6 +7,7 @@ import {
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyNodePatch,
+  boundsOf,
   type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
@@ -300,16 +301,12 @@ export class CanvasEditSession {
       width: r.width + 2 * PLACEMENT_GUTTER_PX,
       height: r.height + 2 * PLACEMENT_GUTTER_PX,
     }))
-    const all = holding ? [...around, group] : around
-    const left = Math.min(...all.map((r) => r.x))
-    const top = Math.min(...all.map((r) => r.y))
-    const right = Math.max(...all.map((r) => r.x + r.width))
-    const bottom = Math.max(...all.map((r) => r.y + r.height))
+    const covered = boundsOf(holding ? [...around, group] : around) ?? group
     const box = {
-      x: left,
-      y: top,
-      width: Math.max(given.width ?? 0, right - left),
-      height: Math.max(given.height ?? 0, bottom - top),
+      x: covered.x,
+      y: covered.y,
+      width: Math.max(given.width ?? 0, covered.width),
+      height: Math.max(given.height ?? 0, covered.height),
     }
     const members = new Set(rects.map((r) => r.id))
     // Another group this batch put at the cursor, still holding

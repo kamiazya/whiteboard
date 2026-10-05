@@ -262,7 +262,7 @@ describe('useBrowserToolRegistry', () => {
     const realCommands = createWhiteboardCommands({
       current: {
         provider: { kind: 'browser' },
-        canvas: { documentId: 'c1', name: 'c1' },
+        canvas: { documentId: 'c1' },
       },
     })
 

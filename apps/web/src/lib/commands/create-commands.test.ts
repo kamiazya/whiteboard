@@ -6,7 +6,7 @@ import { CommandError, type WhiteboardCommandDeps } from './types.js'
 function baseDeps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
     provider: { kind: 'browser' },
-    canvas: { documentId: 'c1', name: 'Canvas 1' },
+    canvas: { documentId: 'c1' },
     ...overrides,
   }
 }
@@ -35,7 +35,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
           kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
         },
-        canvas: { workspaceId: 'ws1', documentId: 'my-canvas', name: 'my-canvas' },
+        canvas: { workspaceId: 'ws1', documentId: 'my-canvas' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)
@@ -86,7 +86,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
           kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
         },
-        canvas: { documentId: 'c1', name: 'Canvas 1' },
+        canvas: { documentId: 'c1' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)
@@ -111,7 +111,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const depsRef = refOf(
       baseDeps({
         provider: poisoned,
-        canvas: { workspaceId: 'ws1', documentId: 'c1', name: 'Canvas 1' },
+        canvas: { workspaceId: 'ws1', documentId: 'c1' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)

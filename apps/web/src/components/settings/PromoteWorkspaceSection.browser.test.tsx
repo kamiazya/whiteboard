@@ -31,10 +31,10 @@ import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
-import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
+import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 claimIsolatedWhiteboardDb('promote-section')

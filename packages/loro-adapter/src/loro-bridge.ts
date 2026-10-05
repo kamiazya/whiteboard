@@ -20,6 +20,7 @@ import {
 } from './comment-threads.js'
 import {
   CANVAS_KEY,
+  CANVAS_TAGS_FIELD,
   COMMENTS_KEY,
   CORE_KEY,
   DOCUMENT_KEY,
@@ -45,8 +46,8 @@ import {
 } from './document-envelope-reconcile.js'
 import { LEGACY_EXTENSION_FIELD, liftLegacyExtension, liftStoredNode } from './legacy-lifts.js'
 
-/** The board's own tags (ADR-0040): one value under its own key, like the facets. */
-const TAGS_FIELD = 'tags'
+/** The board's own tags: one value under its own key, like the facets. */
+const TAGS_FIELD = CANVAS_TAGS_FIELD
 /** The board's tags, read verbatim; a malformed value costs the tags alone. */
 function readCanvasTags(doc: DocumentContainers): string[] | undefined {
   const parsed = storedTagsSchema.safeParse(doc.getMap(CANVAS_KEY).get(TAGS_FIELD))

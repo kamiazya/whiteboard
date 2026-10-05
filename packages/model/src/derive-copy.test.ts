@@ -51,6 +51,16 @@ describe('deriveCopyName', () => {
     const copy = deriveCopyName('😀'.repeat(DOCUMENT_NAME_MAX_LENGTH / 2), [])
     expect(isWellFormed(copy)).toBe(true)
   })
+
+  // The first and last astral code points carry the lowest and highest high
+  // surrogate, so an off-by-one in the range check splits exactly these.
+  it.each([
+    ['U+10000', '\u{10000}'],
+    ['U+10FFFF', '\u{10FFFF}'],
+  ])('never splits %s, at the edge of the high-surrogate range, when it shortens', (_, ch) => {
+    const copy = deriveCopyName(ch.repeat(DOCUMENT_NAME_MAX_LENGTH / 2), [])
+    expect(isWellFormed(copy)).toBe(true)
+  })
 })
 
 describe('deriveCopyPath', () => {

@@ -13,11 +13,16 @@ import { REPO_ROOT } from './scan-roots.js'
 
 const STRYKER_PACKAGES = ['packages/canvas-render', 'packages/mcp-server'] as const
 
-const { MUTATED, shardOf } = (await import(
+const { MUTATED, MINUTES, shardOf } = (await import(
   pathToFileURL(resolve(REPO_ROOT, 'packages/canvas-render/stryker-targets.mjs')).href
 )) as {
   MUTATED: readonly string[]
-  shardOf: (files: readonly string[], spec: string | undefined) => string[]
+  MINUTES: Readonly<Record<string, number>>
+  shardOf: (
+    files: readonly string[],
+    spec: string | undefined,
+    minutes?: Readonly<Record<string, number>>,
+  ) => string[]
 }
 
 const configs = await Promise.all(
@@ -171,6 +176,20 @@ describe('mutation.yml timeouts', () => {
   })
 })
 
+type Step = { id?: string; run?: string; env?: Record<string, string> }
+type Job = {
+  'timeout-minutes'?: number
+  strategy?: { matrix?: { shard?: number[]; include?: unknown } }
+  steps?: Step[]
+}
+const JOBS = (parseYaml(WORKFLOW) as { jobs: Record<string, Job> }).jobs
+
+/** The weekly matrix's leg count, which the PR lane deals against too. */
+const LEGS = JOBS.weekly?.strategy?.matrix?.shard?.length ?? 0
+
+const minutesOf = (files: readonly string[]) =>
+  files.reduce((sum, file) => sum + (MINUTES[file] ?? Number.NaN), 0)
+
 describe('the weekly lane shards', () => {
   it('deal every curated file to exactly one leg, whatever the leg count', () => {
     expect(MUTATED.length).toBeGreaterThan(5)
@@ -180,12 +199,39 @@ describe('the weekly lane shards', () => {
     }
   })
 
-  // The list is grouped by subject with its heavy files at both ends, so a
-  // contiguous slice or a plain round-robin would stack them on one leg.
-  it('deal in a snake, so a leg gets a spread of the list', () => {
-    const files = 'abcdefghijkl'.split('')
-    expect(shardOf(files, '1/4')).toEqual(['a', 'h', 'i'])
-    expect(shardOf(files, '4/4')).toEqual(['d', 'e', 'l'])
+  // A leg's run time is its files' mutants times the tests each one runs, and
+  // a file's share of that differs by two orders of magnitude between files
+  // of a similar mutant count. Dealt by count, the legs of one measured run
+  // ranged from 11 to 60 minutes.
+  it('deal by recorded minutes, so one heavy file is not paired with others', () => {
+    // Listed light first, so a deal that walks the list in order pairs the
+    // heavy file with a light one; heaviest first leaves it alone.
+    const minutes = { b: 3, c: 3, d: 4, a: 10 }
+    const files = Object.keys(minutes)
+    expect(shardOf(files, '1/2', minutes)).toEqual(['a'])
+    expect(shardOf(files, '2/2', minutes)).toEqual(['b', 'c', 'd'])
+  })
+
+  // The table is a measurement of THIS list, so it cannot hold a file the lane
+  // no longer mutates, and a file without a figure cannot be dealt at all.
+  it('have a recorded figure for every curated file, and none for any other', () => {
+    expect(Object.keys(MINUTES).sort()).toEqual([...MUTATED].sort())
+    for (const [file, minutes] of Object.entries(MINUTES)) {
+      expect(minutes, file).toBeGreaterThan(0)
+    }
+    expect(() => shardOf(['src/unmeasured.ts'], '1/2')).toThrow(/src\/unmeasured\.ts/)
+  })
+
+  // The leg the timeout is sized from is the heaviest, so the deal is only as
+  // good as its worst leg. One file heavier than a fair share has to sit
+  // alone; any leg holding more than one file stays near the fair share.
+  it('keep every leg that holds more than one file within 1.15x of a fair share', () => {
+    expect(LEGS).toBeGreaterThan(1)
+    const fair = minutesOf(MUTATED) / LEGS
+    for (let k = 1; k <= LEGS; k++) {
+      const leg = shardOf(MUTATED, `${k}/${LEGS}`)
+      if (leg.length > 1) expect(minutesOf(leg), leg.join(', ')).toBeLessThanOrEqual(fair * 1.15)
+    }
   })
 
   it('run everything when no leg is named, and refuse a spec that names none', () => {
@@ -198,22 +244,33 @@ describe('the weekly lane shards', () => {
   // The workflow decides how many legs run; the config decides which files a
   // leg gets. They only agree if every leg is numbered 1..n and told n.
   it('are numbered 1..n in the workflow and told n by the job', () => {
-    const weekly = (
-      parseYaml(WORKFLOW) as {
-        jobs: Record<
-          string,
-          {
-            strategy?: { matrix?: { shard?: number[] } }
-            steps?: { env?: Record<string, string> }[]
-          }
-        >
-      }
-    ).jobs.weekly
-    const shards = weekly?.strategy?.matrix?.shard ?? []
+    const shards = JOBS.weekly?.strategy?.matrix?.shard ?? []
     expect(shards).toEqual(Array.from({ length: shards.length }, (_, i) => i + 1))
-    expect(shards.length).toBeGreaterThan(1)
-    const spec = weekly?.steps?.find((step) => step.env?.MUTATION_SHARD !== undefined)?.env
+    const spec = JOBS.weekly?.steps?.find((step) => step.env?.MUTATION_SHARD !== undefined)?.env
       ?.MUTATION_SHARD
     expect(spec).toMatch(/^\$\{\{ matrix\.shard \}\}\/\$\{\{ strategy\.job-total \}\}$/)
+  })
+})
+
+describe('the PR lane', () => {
+  // A PR leg mutates the changed files of ONE weekly leg, so it can never run
+  // longer than that leg — which is what lets both share one sizing. That
+  // holds only while the plan deals against the weekly leg count.
+  it('deals the changed files into the weekly legs', () => {
+    const plan = JOBS['pr-plan']?.steps?.find((step) => step.run?.includes('mutation-scope.mjs'))
+    expect(plan?.run, 'a pr-plan step that runs mutation-scope.mjs').toBeDefined()
+    expect(/--legs (\d+)\b/.exec(plan?.run ?? '')?.[1]).toBe(String(LEGS))
+    expect(JOBS.pr?.strategy?.matrix?.include).toMatch(/fromJSON\(needs\.pr-plan\.outputs\.legs\)/)
+  })
+
+  // Stryker writes its report only at the end, so a run the job limit cuts
+  // off leaves nothing to comment from. The run carries its own, shorter
+  // budget so the leg can still say how far it got.
+  it('stops Stryker on its own budget, with time left under the job limit', () => {
+    const mutate = JOBS.pr?.steps?.find((step) => step.run?.includes('stryker run'))
+    expect(mutate?.run).toMatch(/timeout [^\n]*"\$\{BUDGET_MINUTES\}m" pnpm exec stryker run/)
+    const budget = Number(mutate?.env?.BUDGET_MINUTES)
+    expect(budget).toBeGreaterThan(0)
+    expect(budget + 5).toBeLessThanOrEqual(JOBS.pr?.['timeout-minutes'] ?? 0)
   })
 })

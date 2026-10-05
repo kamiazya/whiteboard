@@ -34,7 +34,7 @@ import { blobsRoot } from '../tenant/data-layout.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
+import { evictDoc, getOrLoad, settleSavedDoc } from './doc-cache.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { moveEvictingCache } from './moved-paths.js'
 import { documentStoreReady } from './store-handles.js'
@@ -286,12 +286,10 @@ export async function saveDocument(
     })
     await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     // A caller may hand this function a doc that is NOT the cached
-    // projection (a fresh import, a checkout clone) — the cached one is then
-    // behind the content just written, and the next getDoc would serve (and
-    // a later save would diff) the stale copy. Self-heal at the funnel entry
-    // instead of trusting every such caller to remember to evict.
-    const cached = peekDoc(workspaceId, path, scope)
-    if (cached !== undefined && cached !== doc) evictDoc(workspaceId, path, scope)
+    // projection (a fresh import, a checkout clone), or the empty stand-in a
+    // read of an unplaced path was answered with. Self-heal at the funnel
+    // entry instead of trusting every such caller to remember to evict.
+    settleSavedDoc(workspaceId, path, doc, scope)
     notifyDocumentSaved(workspaceId, path)
   })
 }
@@ -302,6 +300,15 @@ export async function loadDocument(
   path: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc> {
+  return (await loadPlacedDocument(workspaceId, path, scope)) ?? new LoroDoc()
+}
+
+/** The document the tree places at `path`, or `null` when it places none there. */
+async function loadPlacedDocument(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+): Promise<LoroDoc | null> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   // The workspace tree answers first, and resolves the PATH itself:
@@ -309,11 +316,10 @@ export async function loadDocument(
   // if its mirror row is skewed or gone. The projection is a VALUE copy
   // with its own oplog.
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return new LoroDoc()
+  if (workspaceDoc === null) return null
   const entry = resolveWorkspaceDocument(workspaceDoc, path)
-  if (entry === null) return new LoroDoc()
-  const projected = projectWorkspaceDocument(workspaceDoc, entry.documentId)
-  return projected ?? new LoroDoc()
+  if (entry === null) return null
+  return projectWorkspaceDocument(workspaceDoc, entry.documentId) ?? new LoroDoc()
 }
 
 /**
@@ -338,7 +344,7 @@ export async function getDoc(
   // resurrect pre-fold state over current content.
   validateWorkspaceId(workspaceId)
   await openWorkspaceDocIfStored(workspaceId, scope)
-  return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path, scope), scope)
+  return getOrLoad(workspaceId, path, () => loadPlacedDocument(workspaceId, path, scope), scope)
 }
 
 /**

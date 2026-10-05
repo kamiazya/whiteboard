@@ -533,11 +533,17 @@ describe('every tool answers or refuses an input its own schema admits', () => {
   // and a failing floor stops the ones after it.
   afterAll(() => {
     if (process.env.FUZZ_TALLY) {
+      // stdout, not console: vitest's agent-session reporter drops a passing test's console.
       for (const [name, counts] of tally) {
-        console.info(name, JSON.stringify(counts), [...(reasons.get(name) ?? [])].join(' | '))
-        console.info(`  answered-shapes ${name}`, [...(answeredShapes.get(name) ?? [])].join(' | '))
+        process.stdout.write(
+          `${name} ${JSON.stringify(counts)} ${[...(reasons.get(name) ?? [])].join(' | ')}\n`,
+        )
+        process.stdout.write(
+          `  answered-shapes ${name} ${[...(answeredShapes.get(name) ?? [])].join(' | ')}\n`,
+        )
       }
-      for (const [name, counts] of opTally) console.info('op', name, JSON.stringify(counts))
+      for (const [name, counts] of opTally)
+        process.stdout.write(`op ${name} ${JSON.stringify(counts)}\n`)
     }
   })
 })

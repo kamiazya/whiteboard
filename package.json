@@ -74,7 +74,7 @@
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "test:scripts": "node --test --test-reporter=spec .claude/scripts/*.test.mjs .claude/workflows/lib/*.test.mjs tests/e2e/distribution/*.test.mjs",
     "prepare": "lefthook install || echo WARNING: lefthook install failed - git hooks are NOT active. Re-run pnpm lefthook install once fixed.",
-    "bench": "vitest bench --project \"canvas-render-node (bench)\""
+    "bench": "vitest bench --reporter=default --project \"canvas-render-node (bench)\" --project \"search-node (bench)\""
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",

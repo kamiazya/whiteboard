@@ -8,10 +8,13 @@ import {
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
   LABEL_LIMIT_PHRASE,
+  MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_LIMIT_PHRASE,
   NODE_TEXT_LIMIT_PHRASE,
   type SyncWriteRefusalCode,
+  TAG_COUNT_LIMIT_PHRASE,
+  TAG_LENGTH_LIMIT_PHRASE,
 } from '@kamiazya/whiteboard-model'
 import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-io.js'
 
@@ -58,15 +61,15 @@ function valueRefusalMessage(
 function bodyRefusalMessage({ shape, chars }: BreachOf<'run' | 'body'>, at?: RefusedIn): string {
   if (at === undefined) {
     return shape === 'run'
-      ? `This update inserts ${chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`
-      : `This update would make a document body ${chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split the content across documents`
+      ? `This update inserts ${chars} characters in one piece, past ${MARKDOWN_LIMIT_PHRASE}`
+      : `This update would make a document body ${chars} characters long, past ${MARKDOWN_LIMIT_PHRASE}`
   }
   const where = JSON.stringify(at.path)
   const now =
     at.bodyChars === undefined ? '' : `, though its body is ${at.bodyChars} characters now`
   return shape === 'run'
     ? `The document at ${where} holds in its history one insert of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one write${now}. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
-    : `The document at ${where} has a body of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split it across documents`
+    : `The document at ${where} has a body of ${chars} characters, past ${MARKDOWN_LIMIT_PHRASE}`
 }
 
 /**
@@ -185,6 +188,30 @@ class CommentMessageTooLargeError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A node's, edge's or board's tags grown past `TAGS_PER_ELEMENT_MAX` in
+ * number, or given a tag past `TAG_MAX_CHARS` — the bounds every tool write
+ * holds, since each layout of the board scores every tag it carries.
+ */
+class TagsTooLargeError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES.tags
+
+  constructor(
+    readonly breach: BreachOf<'tags'>,
+    readonly at?: RefusedIn,
+  ) {
+    const carrier =
+      breach.elementId === null ? 'the board' : `element ${JSON.stringify(breach.elementId)}`
+    const what =
+      breach.measure === 'count'
+        ? `${carrier} ${breach.amount} tags`
+        : `${carrier} a tag of ${breach.amount} characters`
+    const limit = breach.measure === 'count' ? TAG_COUNT_LIMIT_PHRASE : TAG_LENGTH_LIMIT_PHRASE
+    super(valueRefusalMessage(at, `give ${what}`, `gives ${what}`, limit))
+    this.name = 'TagsTooLargeError'
+  }
+}
+
 /** The one refusal each way a write can break a text bound is answered with, naming `at` once known. */
 export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextBreachRefusalError {
   switch (breach.shape) {
@@ -196,6 +223,8 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new LabelTooLargeError(breach, at)
     case 'comment-message':
       return new CommentMessageTooLargeError(breach, at)
+    case 'tags':
+      return new TagsTooLargeError(breach, at)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)

@@ -285,6 +285,18 @@ const WRITE_VERBS = ['POST', 'PUT', 'PATCH', 'DELETE']
 // that splits on write/read owes both halves.
 const SCOPE_DECISIONS = [
   ['runtime/ping', 'GET', '/api/runtime/ping', { kind: 'public' }],
+  [
+    'document file/action overlap',
+    'GET',
+    '/api/w/ws1/document/a/file/snapshot',
+    scoped('files:read', 'canvas:read'),
+  ],
+  [
+    'document file/action overlap',
+    'POST',
+    '/api/w/ws1/document/a/file/update',
+    scoped('files:write', 'canvas:write'),
+  ],
   ['document file', 'GET', '/api/w/ws1/document/a/b/file/f1', scoped('files:read')],
   ['document file', 'PUT', '/api/w/ws1/document/a/b/file/f1', scoped('files:write')],
   [
@@ -328,8 +340,8 @@ const SCOPE_DECISIONS = [
   ],
   [
     'document versions',
-    'DELETE',
-    '/api/workspaces/ws1/documents/d1/versions/v1',
+    'POST',
+    '/api/workspaces/ws1/documents/d1/versions/v1/restore',
     scoped('versions:write'),
   ],
   [
@@ -394,7 +406,6 @@ describe('what each rule decides', () => {
   it.for([
     ['/api/w/ws1/document/d1', 'canvas:write'],
     ['/api/w/ws1/workspace-document/update', 'canvas:write'],
-    ['/api/workspaces/ws1/documents/d1/versions/v1', 'versions:write'],
     ['/api/workspaces/ws1/trash/d1/restore', 'workspace:write'],
     ['/api/workspaces/ws1', 'workspace:write'],
     ['/api/v1/workspaces/ws1/documents/d1', 'workspace:write'],
@@ -435,6 +446,7 @@ describe('what each rule decides', () => {
 // rule fails on that rule's own entry.
 const CLAIMED_BY = {
   'runtime/ping': ['GET', '/api/runtime/ping'],
+  'document file/action overlap': ['POST', '/api/w/ws1/document/a/file/update'],
   'document file': ['GET', '/api/w/ws1/document/a/b/file/f1'],
   'workspace-document/promote': ['POST', '/api/w/ws1/workspace-document/promote'],
   'workspace-document sync': ['POST', '/api/w/ws1/workspace-document/update'],
@@ -486,6 +498,7 @@ describe('no rule in the table is shadowed by an earlier one', () => {
 // added to ORIGIN_TRUSTED here fails this test, which is the point: nothing
 // ships silently unclassified.
 const GATED = [
+  'document file/action overlap',
   'document file',
   'workspace-document/promote',
   'workspace-document sync',

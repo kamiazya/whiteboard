@@ -10,7 +10,7 @@ import {
   uninstallAutoCompact,
 } from '../server/store/auto-compact.js'
 import { peekDoc } from '../server/store/doc-cache.js'
-import { getDoc } from '../server/store/document-store.js'
+import { getDoc, saveDocument } from '../server/store/document-store.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { createContainer, resolveServerDeps } from './container.js'
@@ -122,7 +122,9 @@ describe('resolveServerDeps document teardown', () => {
   it("supplies the composition root's own teardown, not an inert stub", async () => {
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
     // A cached projection the teardown has to drop: an inert stub would run
-    // the delete and leave it behind for the next create to inherit.
+    // the delete and leave it behind for the next create to inherit. Only a
+    // placed document is cached, so it is saved at its path first.
+    await saveDocument('ws-container', 'torn-down', new LoroDoc(), { overwrite: true })
     await getDoc('ws-container', 'torn-down')
     expect(peekDoc('ws-container', 'torn-down')).toBeDefined()
 

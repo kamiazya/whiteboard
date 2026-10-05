@@ -25,7 +25,7 @@ import {
   nodeText,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { Scene, SceneNode, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { referenceFor } from '../references/seams.js'
 import { composeFileNode } from './compose-file-node.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
@@ -121,22 +121,36 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
     }
   }
   // Behind the runs, in the same origin-relative space, so `placeInNode`
-  // carries them into the node together. A resolved passage is drawn only
-  // with the resolved comments, muted like its pin.
-  const passages = (options.passagesByNode.get(node.id) ?? []).filter(
-    (passage) => !passage.resolved || options.showResolved === true,
-  )
-  const highlights =
-    passages.length === 0
-      ? []
-      : composePassageHighlights(passages, collectTextRuns(body.nodes), options.measure, {
-          open: options.appearance.resolveComment?.()?.passage,
-          resolved: options.appearance.resolveComment?.()?.resolvedOverlay.passage,
-        })
+  // carries them into the node together.
+  const highlights = passageHighlightsOf(node, text, body, options)
   return [
     chromeWithFit(node, options, body),
     ...placeInNode(node, { nodes: [...highlights, ...body.nodes] }, options),
   ]
+}
+
+/**
+ * The node's passage highlights. A resolved passage is drawn only with the
+ * resolved comments, muted like its pin.
+ */
+function passageHighlightsOf(
+  node: SpatialNode,
+  text: string,
+  body: FittedBlocks,
+  options: ResolvedLayoutOptions,
+): readonly ShapeSceneNode[] {
+  const passages = (options.passagesByNode.get(node.id) ?? []).filter(
+    (passage) => !passage.resolved || options.showResolved === true,
+  )
+  if (passages.length === 0) return []
+  const comment = options.appearance.resolveComment?.()
+  return composePassageHighlights(
+    passages,
+    collectTextRuns(body.nodes),
+    options.measure,
+    { open: comment?.passage, resolved: comment?.resolvedOverlay.passage },
+    text,
+  )
 }
 
 export function groupPassages(

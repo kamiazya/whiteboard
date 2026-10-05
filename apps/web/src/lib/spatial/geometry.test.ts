@@ -15,7 +15,6 @@ import {
   resizeBoxByDelta,
   resizeHandleBoxes,
   scaleBoxWithin,
-  unionBox,
 } from './geometry.js'
 
 function canvas(nodes: SpatialCanvas['nodes']): SpatialCanvas {
@@ -263,20 +262,6 @@ describe('findFreeSpot', () => {
 })
 
 const box = (x: number, y: number, width: number, height: number): Box => ({ x, y, width, height })
-
-describe('unionBox', () => {
-  it('covers every box it is given', () => {
-    expect(unionBox([box(10, 20, 30, 40), box(100, 0, 10, 10)])).toEqual(box(10, 0, 100, 60))
-  })
-
-  it('is the box itself for a single member', () => {
-    expect(unionBox([box(5, 6, 7, 8)])).toEqual(box(5, 6, 7, 8))
-  })
-
-  it('has no answer for an empty selection', () => {
-    expect(unionBox([])).toBeUndefined()
-  })
-})
 
 describe('scaleBoxWithin', () => {
   it('leaves a member alone when the enclosing box did not change', () => {

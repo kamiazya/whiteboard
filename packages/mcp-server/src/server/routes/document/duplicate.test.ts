@@ -84,4 +84,19 @@ describe('POST …/documents/<path>/duplicate', () => {
     const { documents } = (await listed.json()) as { documents: { path: string }[] }
     expect(documents.map((row) => row.path)).toEqual(['kept'])
   })
+
+  it('answers 409 for a source too deep for a copy beside it, and makes nothing', async () => {
+    const folder = Array.from({ length: 6 }, (_, i) => `f${i}${'a'.repeat(167)}`).join('/')
+    const deep = `${folder}/b`
+    await saveDocument(WS, deep, note('deep'), { kind: 'markdown' })
+    const app = await appWithRealDeps()
+
+    const res = await app.request(documentDuplicateApiUrl(WS, deep), { method: 'POST' })
+
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { title: string }).title).toMatch(/no room beside/)
+    const listed = await app.request(`/api/workspaces/${WS}/documents`)
+    const { documents } = (await listed.json()) as { documents: { path: string }[] }
+    expect(documents.map((row) => row.path)).toEqual([deep])
+  })
 })

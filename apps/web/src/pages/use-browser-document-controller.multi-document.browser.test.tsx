@@ -8,8 +8,10 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { loadDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
@@ -119,35 +121,24 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
   })
 
-  it('duplicateDocument deep-copies the Loro doc: later source edits never leak', async () => {
-    const store = new IdbDocumentIndex()
-    const loro = new LoroStore()
-    const { result } = renderHook(() => useBrowserDocumentController(store))
+  // The legacy row index has no duplicate, so this runs on the index a page
+  // really holds. That the copy is a deep one — a later edit to the source
+  // leaves it as it was — is the DocumentDuplicates conformance suite's,
+  // which this index answers to.
+  it('duplicate switches onto the copy the production index made', async () => {
+    const index = new FoldingBrowserIndex()
+    const { result } = renderHook(() => useBrowserDocumentController(index))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
-    const sourceId = result.current.snapshot!.documentId
-    await loro.save(sourceId, snapshotWithElements([{ id: 'original-element' }]))
+    const source = result.current.snapshot!
 
     let duplicated: Awaited<ReturnType<typeof result.current.duplicateDocument>> | undefined
     await act(async () => {
       duplicated = await result.current.duplicateDocument()
     })
-    expect(duplicated?.documentId).not.toBe(sourceId)
+
+    expect(duplicated?.documentId).not.toBe(source.documentId)
+    expect(duplicated?.path).toBe(`${source.path}-copy`)
     expect(result.current.snapshot?.documentId).toBe(duplicated?.documentId)
-
-    // Edit the SOURCE canvas's real IndexedDB record after duplicating.
-    const loadedSource = await loro.load(sourceId)
-    expect(loadedSource.kind).toBe('ok')
-    if (loadedSource.kind !== 'ok') return
-    const sourceDoc = new Loro()
-    sourceDoc.import(loadedSource.snapshot)
-    sourceDoc.getList('elements').push({ id: 'added-after-duplicate' })
-    await loro.save(sourceId, sourceDoc.export({ mode: 'snapshot' }))
-
-    const loadedCopy = await loro.load(duplicated!.documentId)
-    expect(loadedCopy.kind).toBe('ok')
-    if (loadedCopy.kind !== 'ok') return
-    const copyDoc = new Loro()
-    copyDoc.import(loadedCopy.snapshot)
-    expect(copyDoc.getList('elements').toJSON()).toEqual([{ id: 'original-element' }])
+    await expect(loadDocumentContent(duplicated!.documentId)).resolves.not.toBeNull()
   })
 })

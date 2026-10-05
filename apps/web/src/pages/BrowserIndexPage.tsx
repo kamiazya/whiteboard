@@ -469,7 +469,7 @@ export function BrowserIndexPage({
       setDuplicating(true)
       setError(null)
       try {
-        await duplicateBrowserDocument({ index, loro, clock, sourcePath })
+        await duplicateBrowserDocument({ index, clock, sourcePath })
         // ONLY the duplicate itself is under this catch. The bump is what
         // re-reads the list (the load effect follows it) and that effect owns
         // its own refusal — so a re-read that fails after the copy exists is

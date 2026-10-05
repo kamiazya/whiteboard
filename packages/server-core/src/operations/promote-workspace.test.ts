@@ -14,6 +14,7 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  TAG_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -339,6 +340,10 @@ describe('promoteWorkspace', () => {
           status: 'open',
           messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }],
         }),
+    },
+    tags: {
+      at: 'sketch',
+      write: (board: Board) => board.getMap('canvas').set('tags', ['x'.repeat(TAG_MAX_CHARS + 1)]),
     },
   } satisfies Record<
     keyof typeof SYNC_TEXT_BREACH_CODES,

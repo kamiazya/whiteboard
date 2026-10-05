@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { scopeToDiff } from './mutation-scope.mjs'
+import { legsOf, scopeToDiff } from './mutation-scope.mjs'
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -39,6 +39,30 @@ test('a glob in the curated list throws instead of matching nothing', () => {
     () => scopeToDiff(['src/**/*.ts'], [`${PREFIX}src/tidy.ts`], PREFIX),
     /cannot intersect a glob/,
   )
+})
+
+// --- the legs a scoped run is dealt into ---
+
+/** Leg k of n takes every n-th file, from the k-th: enough to tell legs apart. */
+const roundRobin = (files, spec) => {
+  const [k, n] = spec.split('/').map(Number)
+  return files.filter((_, i) => i % n === k - 1)
+}
+const LANE = ['a', 'b', 'c', 'd', 'e', 'f']
+
+test('a changed file runs in the leg the full run deals it to', () => {
+  assert.deepEqual(legsOf(['e'], LANE, roundRobin, 3), [{ shard: 2, files: 'e' }])
+})
+
+test('changed files a full run deals apart run apart, and legs with none are left out', () => {
+  assert.deepEqual(legsOf(['a', 'b', 'd'], LANE, roundRobin, 3), [
+    { shard: 1, files: 'a,d' },
+    { shard: 2, files: 'b' },
+  ])
+})
+
+test('no changed file means no leg', () => {
+  assert.deepEqual(legsOf([], LANE, roundRobin, 3), [])
 })
 
 // --- the range the scope is computed over ---

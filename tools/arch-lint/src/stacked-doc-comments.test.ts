@@ -14,12 +14,14 @@ import { trackedFiles } from './tracked-files.js'
 //
 // Excluded by shape, never by entry: a file's header (the first comment,
 // before any code), which documents the module rather than what follows it,
-// and a block carrying `@typedef`, `@module` or `@packageDocumentation`, which
-// documents something other than the next declaration by definition. Prose
-// that heads a SECTION of a file is a `//` comment, because it describes no
-// declaration either.
+// and a block carrying `@typedef`, `@module` or `@packageDocumentation` where
+// JSDoc reads a tag (the start of a line), which documents something other
+// than the next declaration by definition. Prose that heads a SECTION of a
+// file is a `//` comment, because it describes no declaration either — but a
+// `//` between two doc blocks does not separate them, since TypeScript still
+// reads only the last block above the declaration.
 
-const SELF_DESCRIBING_TAG = /@(?:typedef|module|packageDocumentation)\b/
+const SELF_DESCRIBING_TAG = /^\s*(?:\/\*\*|\*)?\s*@(?:typedef|module|packageDocumentation)\b/m
 
 /** `/**` opens a doc block; `/**\/` is an empty ordinary comment. */
 const isDocBlock = (text: string): boolean => /^\/\*\*(?!\/)/.test(text)
@@ -30,18 +32,31 @@ const isFileHead = (raw: string, offset: number): boolean =>
 
 /** The 1-based line of each doc block that another doc block directly follows. */
 function strandedDocBlocks(raw: string, fileName: string): number[] {
-  const docs = commentRanges(raw, fileName)
+  const comments = commentRanges(raw, fileName)
   const lines: number[] = []
-  for (let i = 0; i + 1 < docs.length; i++) {
-    const [start, end] = docs[i] as [number, number]
-    const [nextStart, nextEnd] = docs[i + 1] as [number, number]
+  for (let i = 0; i + 1 < comments.length; i++) {
+    const [start, end] = comments[i] as [number, number]
     const text = raw.slice(start, end)
-    if (!isDocBlock(text) || !isDocBlock(raw.slice(nextStart, nextEnd))) continue
-    if (raw.slice(end, nextStart).trim() !== '') continue
+    if (!isDocBlock(text)) continue
     if ((i === 0 && isFileHead(raw, start)) || SELF_DESCRIBING_TAG.test(text)) continue
-    lines.push(raw.slice(0, start).split('\n').length)
+    if (docBlockFollows(raw, comments, i)) lines.push(raw.slice(0, start).split('\n').length)
   }
   return lines
+}
+
+/**
+ * Whether the next doc block after comment `i` comes before any code — past
+ * whitespace and comments that are not doc blocks, which TypeScript reads
+ * through as the same leading trivia.
+ */
+function docBlockFollows(raw: string, comments: Array<[number, number]>, i: number): boolean {
+  let gapStart = (comments[i] as [number, number])[1]
+  for (const [start, end] of comments.slice(i + 1)) {
+    if (raw.slice(gapStart, start).trim() !== '') return false
+    if (isDocBlock(raw.slice(start, end))) return true
+    gapStart = end
+  }
+  return false
 }
 
 /**
@@ -72,9 +87,24 @@ describe('a doc block is the only doc block above its declaration', () => {
     expect(
       strandedDocBlocks('let a\n/** @typedef {number} N */\n/** Doc. */\nlet b\n', 'a.ts'),
     ).toEqual([])
-    expect(strandedDocBlocks('let a\n/** A. */\n// section\n/** B. */\nlet b\n', 'a.ts')).toEqual(
-      [],
-    )
+    // A line comment between two blocks separates nothing: TypeScript still
+    // reads only the last block above the declaration.
+    expect(
+      strandedDocBlocks(
+        'let a\n/** A. */\n// eslint-disable-next-line\n/** B. */\nlet b\n',
+        'a.ts',
+      ),
+    ).toEqual([2])
+    // A tag self-describes only where JSDoc reads one, at the start of a line.
+    expect(
+      strandedDocBlocks('let a\n/** Wraps the @module loader. */\n/** B. */\nlet b\n', 'a.ts'),
+    ).toEqual([2])
+    expect(
+      strandedDocBlocks(
+        'let a\n/**\n * Loader.\n * @module loader\n */\n/** B. */\nlet b\n',
+        'a.ts',
+      ),
+    ).toEqual([])
     expect(strandedDocBlocks('let a\n/** A. */\nlet b\n/** B. */\nlet c\n', 'a.ts')).toEqual([])
     expect(strandedDocBlocks('let a\n/**/\n/** B. */\nlet b\n', 'a.ts')).toEqual([])
     // A `/**` inside a string or template is not a comment at all.

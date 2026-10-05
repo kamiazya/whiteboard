@@ -82,15 +82,6 @@ const IMAGE_PLACEHOLDER = '\u2002'
  */
 const ICON_PLACEHOLDER = '\u2003'
 
-/**
- * Every layout constant comes from ONE theme object (theme/markdown-theme.ts),
- * calibrated to GitHub's rendered-markdown surface. Read once here so the
- * rest of the file reads as geometry rather than as a table of numbers, and
- * so restyling stays a data change.
- */
-// The metrics a NODE is laid out with. Exported because `apps/web`'s edit
-// overlay has to sit on the same line box the render draws, and a node is what
-// it edits — see MdastLayoutOptions.theme for the surface that differs.
 /** Root depth is 0; a 4th level degrades to a placeholder (package rule, decision 4). */
 const EMBED_DEPTH_CAP = 3
 

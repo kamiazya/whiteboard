@@ -667,11 +667,11 @@ describe('what the tool table costs to read', () => {
         // trade the registration made still holds — it is bought by -79 on
         // `wb_canvas_edit` — and the sentence is what a model needs to read
         // the vocabulary before being refused by it.
-        visibleBytes: 3330,
+        visibleBytes: 3380, // +50 the tag bounds: maxItems on tags.add (+16), maxLength on its tags and rename.to (+17, +17)
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
         // +14 wire more: the title names tags and every object a facet reaches.
-        wireBytes: 4276,
+        wireBytes: 4326, // +50 the tag bounds, as visible
         descriptionWords: 176,
         parameters: 12,
         undescribed: 1,
@@ -983,7 +983,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 41343, // +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30)
+      visibleBytes: 41393, // +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, each the same bytes as visible.
-      wireBytes: 132689, // +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible
+      wireBytes: 132739, // +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

@@ -1,9 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 
 // A full 40-character hex commit SHA — the only form that is immutable.
 const COMMIT_SHA_RE = /^[0-9a-f]{40}$/
@@ -233,8 +234,11 @@ describe('ci.yml — a sharded job must be re-runnable after one leg fails', () 
  * it fails.
  *
  * "Runs a browser project" is read off the commands, not a list of job names:
- * `pnpm test:browser`, or a `--project` pattern (a matrix value expanded) that
- * matches a project whose config enables browser mode.
+ * `pnpm test:browser`, a `--project` pattern (a matrix value expanded) that
+ * matches a project whose config enables browser mode, a `--config` naming such
+ * a config, or a `pnpm --filter <pkg> <script>` whose package script does one
+ * of those. A script that reaches a browser config through a node program
+ * (`apps/web`'s `run-web-tests.mjs`) is not followed.
  */
 describe('workflows — a job that runs a browser project uploads its traces when it fails', () => {
   interface Step {
@@ -255,6 +259,32 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     return readBrowserProjectNames(REPO_ROOT)
   }
 
+  /** Repo-relative paths of every config whose project enables browser mode. */
+  async function browserConfigPaths(): Promise<string[]> {
+    const { readVitestProjects } = (await import(
+      pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
+    )) as { readVitestProjects: (repoRoot: string) => { configPath: string; isBrowser: boolean }[] }
+    return readVitestProjects(REPO_ROOT)
+      .filter((project) => project.isBrowser)
+      .map((project) => project.configPath)
+  }
+
+  interface Browser {
+    names: readonly string[]
+    configs: readonly string[]
+  }
+
+  /** Workspace package name -> its directory and scripts. */
+  const workspacePackages = new Map(
+    workspaceDirs().map((dir) => {
+      const manifest = JSON.parse(readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf-8')) as {
+        name: string
+        scripts?: Record<string, string>
+      }
+      return [manifest.name, { dir, scripts: manifest.scripts ?? {} }] as const
+    }),
+  )
+
   /** vitest's rule: no negated pattern matches, and — when plain ones are given — one of them does. */
   function selects(name: string, patterns: readonly string[]): boolean {
     const glob = (p: string): RegExp =>
@@ -274,21 +304,45 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     return values.filter((value): value is string => typeof value === 'string')
   }
 
-  function runsBrowserProject(job: Job, browser: readonly string[]): boolean {
-    return (job.steps ?? []).some((step) =>
-      (step.run ?? '').split('\n').some((line) => {
-        if (/\btest:browser\b/.test(line)) return true
-        const raw = [...line.matchAll(/--project[= ](?:'([^']*)'|(\S+))/g)].map(
-          (m) => (m[1] ?? m[2]) as string,
+  function selectsBrowserProject(job: Job, line: string, browser: Browser): boolean {
+    const raw = [...line.matchAll(/--project[= ](?:'([^']*)'|(\S+))/g)].map(
+      (m) => (m[1] ?? m[2]) as string,
+    )
+    if (raw.length === 0) return false
+    const expansions = raw.some((p) => p.includes('matrix.projects'))
+      ? matrixProjects(job).map((value) =>
+          raw.map((p) => (p.includes('matrix.projects') ? value : p)),
         )
-        if (raw.length === 0) return false
-        const expansions = raw.some((p) => p.includes('matrix.projects'))
-          ? matrixProjects(job).map((value) =>
-              raw.map((p) => (p.includes('matrix.projects') ? value : p)),
-            )
-          : [raw]
-        return expansions.some((patterns) => browser.some((name) => selects(name, patterns)))
-      }),
+      : [raw]
+    return expansions.some((patterns) => browser.names.some((name) => selects(name, patterns)))
+  }
+
+  /** A `--config` / `-c` naming a browser config, resolved against `cwd`. */
+  function namesBrowserConfig(line: string, cwd: string, browser: Browser): boolean {
+    return [...line.matchAll(/(?:--config|-c)[= ](\S+)/g)].some((m) =>
+      browser.configs.includes(relative(REPO_ROOT, join(REPO_ROOT, cwd, m[1] ?? ''))),
+    )
+  }
+
+  /** `pnpm --filter <pkg> …`: the package a line runs in, and the script it names if any. */
+  function filtered(line: string): { dir: string; script: string | undefined } | undefined {
+    const m = line.match(/\bpnpm\s+(?:--filter|-F)[= ](\S+)(?:\s+(?:run\s+)?([\w:-]+))?/)
+    const pkg = workspacePackages.get(m?.[1] ?? '')
+    return pkg && { dir: pkg.dir, script: pkg.scripts[m?.[2] ?? ''] }
+  }
+
+  function lineRunsBrowser(job: Job, line: string, browser: Browser): boolean {
+    if (/\btest:browser\b/.test(line)) return true
+    if (selectsBrowserProject(job, line, browser)) return true
+    const pkg = filtered(line)
+    if (namesBrowserConfig(line, pkg?.dir ?? '.', browser)) return true
+    const script = pkg?.script ?? ''
+    return /\btest:browser\b/.test(script) || namesBrowserConfig(script, pkg?.dir ?? '.', browser)
+  }
+
+  function runsBrowserProject(job: Job, browser: Browser): boolean {
+    return (job.steps ?? []).some((step) =>
+      (step.run ?? '').split('\n').some((line) => lineRunsBrowser(job, line, browser)),
     )
   }
 
@@ -302,8 +356,9 @@ describe('workflows — a job that runs a browser project uploads its traces whe
   }
 
   it("finds the browser jobs, and every one of them keeps a failure's traces", async () => {
-    const browser = await browserProjectNames()
-    expect(browser.length).toBeGreaterThanOrEqual(3)
+    const browser = { names: await browserProjectNames(), configs: await browserConfigPaths() }
+    expect(browser.names.length).toBeGreaterThanOrEqual(3)
+    expect(browser.configs).toContain('apps/web/vitest.browser.config.ts')
 
     const dir = join(REPO_ROOT, '.github/workflows')
     const browserJobs: { id: string; job: Job }[] = []
@@ -328,6 +383,20 @@ describe('workflows — a job that runs a browser project uploads its traces whe
       unguarded,
       'upload `**/tmp/vitest-traces/**/*.trace.zip` under `if: failure()`, pinned by SHA',
     ).toEqual([])
+  })
+
+  it('reads a browser run through a --config and through a package script', async () => {
+    const browser = { names: await browserProjectNames(), configs: await browserConfigPaths() }
+    const runs = (run: string): boolean => runsBrowserProject({ steps: [{ run }] }, browser)
+    // The canvas-viewer `test` script ends in its browser config.
+    expect(runs('pnpm --filter @kamiazya/whiteboard-canvas-viewer test')).toBe(true)
+    expect(runs('pnpm exec vitest run --config apps/web/vitest.browser.config.ts')).toBe(true)
+    expect(runs('pnpm --filter @kamiazya/whiteboard-web run test:browser')).toBe(true)
+    expect(
+      runs('pnpm --filter @kamiazya/whiteboard-web exec vitest run -c vitest.browser.config.ts'),
+    ).toBe(true)
+    expect(runs('pnpm --filter @kamiazya/whiteboard-canvas-render test')).toBe(false)
+    expect(runs('pnpm exec vitest run --config apps/web/vitest.config.ts')).toBe(false)
   })
 })
 

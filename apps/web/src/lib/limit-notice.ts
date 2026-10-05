@@ -10,6 +10,7 @@ import {
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 
 // en-US whatever the browser's locale: a notice and the keeper's own message
@@ -84,6 +85,11 @@ export function commentMessageNotice(length: number): string {
   return `Not added: the comment would be ${pastLimit(length, COMMENT_MESSAGE_MAX_CHARS, 'comment')}. ${COMMENT_MESSAGE_ADVICE}`
 }
 
+/** A tag the tag editor did not add, because the thing it tags already carries the most it may. */
+export function tagCountNotice(count: number): string {
+  return `Not added: that would be ${COUNT.format(count)} tags, past the ${COUNT.format(TAGS_PER_ELEMENT_MAX)}-tag limit for one document, board, node or edge. Remove one first.`
+}
+
 /**
  * Why a keeper refused a write past a text bound, for the notice above the
  * page. The refusal carries no length, so these name the bound rather than
@@ -98,4 +104,6 @@ export const KEEPER_LIMIT_REASON = {
   comment_too_large: `It would make a comment longer than one comment may be. ${COMMENT_MESSAGE_ADVICE}`,
   node_location_too_large:
     'It would give a link node a URL, or a file node a path, longer than one may be.',
+  tags_too_large:
+    'It would give a node, an edge or the board more tags, or a longer tag, than one may carry.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>

@@ -8,6 +8,8 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
+  boundsOf,
+  commentCornerOf,
   endIn,
   frameBackground,
   frameBackgroundStyle,
@@ -186,24 +188,20 @@ function pushMultiSelectionBands(verbs: ContextMenuItem[], input: NodeMenuItemsI
   // the thread is drawn from once they are gone. The bubble opens at the
   // box's top-right corner, where the layer will pin it.
   const nodeIds = [node.id, ...extraIds]
-  const members = canvas.nodes.filter((entry) => nodeIds.includes(entry.id))
-  const left = Math.min(...members.map((entry) => entry.x))
-  const top = Math.min(...members.map((entry) => entry.y))
-  const right = Math.max(...members.map((entry) => entry.x + entry.width))
-  const bottom = Math.max(...members.map((entry) => entry.y + entry.height))
+  const box = boundsOf(canvas.nodes.filter((entry) => nodeIds.includes(entry.id))) ?? node
   verbs.push({
     label: 'Comment on selection',
     icon: <MessageSquarePlus />,
     onSelect: () =>
       setCommentCompose({
-        point: { x: right, y: top },
+        point: commentCornerOf(box),
         threadAnchor: {
           kind: 'spatial',
           nodeIds,
-          x: Math.round(left),
-          y: Math.round(top),
-          width: Math.round(right - left),
-          height: Math.round(bottom - top),
+          x: Math.round(box.x),
+          y: Math.round(box.y),
+          width: Math.round(box.width),
+          height: Math.round(box.height),
         },
       }),
   })

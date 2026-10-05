@@ -11,7 +11,8 @@ import type { LoroDoc, LoroText } from 'loro-crdt'
  */
 export interface BodyBinding {
   readonly doc: LoroDoc
-  readonly readText: (doc: LoroDoc) => LoroText
+  /** Null once the document has left the workspace record. */
+  readonly readText: (doc: LoroDoc) => LoroText | null
   readonly commit: () => void
   /** Writes a pre-unification body into the container; see `loroTextSync`'s `adoptInitial`. */
   readonly adopt: (text: string) => void
@@ -25,11 +26,11 @@ export interface BodyBinding {
  * never commits or converts a doc it no longer holds.
  */
 export function bodyBindingFor(deps: {
-  contentOf: (doc: LoroDoc) => DocumentContainers
+  contentOf: (doc: LoroDoc) => DocumentContainers | null
   onEdited: (doc: LoroDoc) => void
   isCurrent: (doc: LoroDoc) => boolean
 }): (doc: LoroDoc | null) => BodyBinding | null {
-  const readText = (doc: LoroDoc) => deps.contentOf(doc).getText(MARKDOWN_BODY_KEY)
+  const readText = (doc: LoroDoc) => deps.contentOf(doc)?.getText(MARKDOWN_BODY_KEY) ?? null
   let cached: BodyBinding | null = null
   return (doc) => {
     if (doc === null) return null
@@ -43,7 +44,8 @@ export function bodyBindingFor(deps: {
         // `okf-body` node the text came from, so no reader finds a stale
         // second body. It commits at once: the conversion is its own push.
         adopt: (text) => {
-          if (deps.isCurrent(bound)) writeMarkdownBody(deps.contentOf(bound), text)
+          const content = deps.isCurrent(bound) ? deps.contentOf(bound) : null
+          if (content !== null) writeMarkdownBody(content, text)
         },
       }
     }

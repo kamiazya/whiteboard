@@ -1,4 +1,4 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { DuplicatingInMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
@@ -57,6 +57,21 @@ export class InMemoryLoroStore implements LoroStoreLike {
     if (bytes === undefined) return { kind: 'not-found' }
     return { kind: 'ok', snapshot: bytes }
   }
+
+  /**
+   * The content half of the double's duplicate: the source's record, as
+   * independent bytes, under the copy's id. A source with no record leaves
+   * the copy with none, as it found it. Throws, and so leaves no copy, under
+   * `shouldThrow` — a failed write is a duplicate that did not happen.
+   */
+  copyRecord(sourceId: string, copyId: string): void {
+    if (this.shouldThrow) throw new Error('loro save failed')
+    const bytes = this.#byId.get(sourceId)
+    if (bytes === undefined) return
+    const copy = bytes.slice()
+    this.saved.push({ id: copyId, bytes: copy })
+    this.#byId.set(copyId, copy)
+  }
 }
 
 /**
@@ -70,10 +85,16 @@ export class InMemoryLoroStore implements LoroStoreLike {
  * needed no upsert of its own.
  */
 export class BrowserStoreDouble {
-  readonly index = new InMemoryDocumentIndex()
-
   readonly pointer = new InMemoryDefaultDocumentPointer()
   readonly loro = new InMemoryLoroStore()
+  /**
+   * Duplicates as the browser's own index does — one operation, placed by
+   * the keepers' derivation — copying content within `loro` above. A page
+   * handed a different Loro store reads none of the copy's content.
+   */
+  readonly index = new DuplicatingInMemoryDocumentIndex({
+    copy: (from, to) => this.loro.copyRecord(from, to),
+  })
   readonly #stamps = new Map<string, string>()
 
   readonly clock: ContentClock = async (ids) =>

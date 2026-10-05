@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { boundsOf } from './bounds.js'
 import { compareCodeUnit } from './compare.js'
 import { nodeIdSchema } from './ids.js'
 import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
@@ -230,13 +231,8 @@ export function spatialAnchorRect(
       const node = nodeById?.(id)
       return node === undefined ? [] : [node]
     })
-    if (live.length > 0) {
-      const left = Math.min(...live.map((node) => node.x))
-      const top = Math.min(...live.map((node) => node.y))
-      const right = Math.max(...live.map((node) => node.x + node.width))
-      const bottom = Math.max(...live.map((node) => node.y + node.height))
-      return { x: left, y: top, width: right - left, height: bottom - top }
-    }
+    const bounds = boundsOf(live)
+    if (bounds !== undefined) return bounds
   }
   if (anchor.width === undefined || anchor.height === undefined) return undefined
   return { x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height }

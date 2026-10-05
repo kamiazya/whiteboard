@@ -13,6 +13,12 @@ import {
   nodeFileInputSchema,
   nodeTextInputSchema,
   syncWriteRefusalCodeSchema,
+  TAG_COUNT_LIMIT_PHRASE,
+  TAG_LENGTH_LIMIT_PHRASE,
+  TAG_MAX_CHARS,
+  TAGS_PER_ELEMENT_MAX,
+  tagListWriteSchema,
+  tagWriteSchema,
 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type { ZodString } from 'zod'
@@ -51,6 +57,14 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
   label: () => textBreachRefusal({ shape: 'label', chars: 2_000, elementId: 'e1', container: MAP }),
   'comment-message': () =>
     textBreachRefusal({ shape: 'comment-message', chars: 5_000, messageId: 'm1', container: MAP }),
+  tags: () =>
+    textBreachRefusal({
+      shape: 'tags',
+      measure: 'chars',
+      amount: 2_000,
+      elementId: 'n1',
+      container: MAP,
+    }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
@@ -143,6 +157,7 @@ describe('a refused text bound', () => {
       commentMessageInputSchema,
       COMMENT_MESSAGE_MAX_CHARS,
     ],
+    ['a tag', TEXT_SAMPLES.tags, TAG_LENGTH_LIMIT_PHRASE, tagWriteSchema, TAG_MAX_CHARS],
   ] as const)('ends %s as the tools do', (_, sample, phrase, schema: ZodString, max) => {
     // The whole tail, so a refusal that adds its own qualifier after the bound fails.
     const tail = (text: string | undefined, clause: string) => text?.slice(-clause.length)
@@ -150,5 +165,52 @@ describe('a refused text bound', () => {
     expect(tail(syncRefusal, `, past ${phrase}`)).toBe(`, past ${phrase}`)
     const toolRefusal = schema.safeParse('x'.repeat(max + 1)).error?.issues[0]?.message
     expect(tail(toolRefusal, ` is longer than ${phrase}`)).toBe(` is longer than ${phrase}`)
+  })
+})
+
+describe('a refused tag count', () => {
+  it('names the board, or the element, and ends on the count bound as the tools do', () => {
+    const refusal = (elementId: string | null) =>
+      textBreachRefusal({
+        shape: 'tags',
+        measure: 'count',
+        amount: TAGS_PER_ELEMENT_MAX + 1,
+        elementId,
+        container: MAP,
+      }).message
+    expect(refusal(null)).toBe(
+      `This update would give the board ${TAGS_PER_ELEMENT_MAX + 1} tags, past ${TAG_COUNT_LIMIT_PHRASE}`,
+    )
+    expect(refusal('n1')).toContain('element "n1"')
+    const tool = tagListWriteSchema.safeParse(Array(TAGS_PER_ELEMENT_MAX + 1).fill('t')).error
+      ?.issues[0]?.message
+    expect(tool?.endsWith(TAG_COUNT_LIMIT_PHRASE)).toBe(true)
+  })
+
+  it('names the document holding it, once resolved', () => {
+    const refusal = textBreachRefusal(
+      { shape: 'tags', measure: 'count', amount: 2_000, elementId: 'e1', container: MAP },
+      { path: 'boards/ops' },
+    )
+    expect(refusal.message).toBe(
+      `The document at "boards/ops" gives element "e1" 2000 tags, past ${TAG_COUNT_LIMIT_PHRASE}`,
+    )
+  })
+})
+
+describe('a refused run found in a resolved document', () => {
+  // A run lives in the history, so the body a person opens may be short; the
+  // refusal says how long it is today only when the caller measured it.
+  const run = (at: refusals.RefusedIn) =>
+    textBreachRefusal({ shape: 'run', chars: 300_000, container: MAP }, at).message
+
+  it('says how long the body is now when the caller measured it', () => {
+    expect(run({ path: 'notes/a', bodyChars: 12 })).toContain(
+      ', though its body is 12 characters now',
+    )
+  })
+
+  it('says nothing of the body today when the caller did not measure it', () => {
+    expect(run({ path: 'notes/a' })).not.toContain('though its body is')
   })
 })

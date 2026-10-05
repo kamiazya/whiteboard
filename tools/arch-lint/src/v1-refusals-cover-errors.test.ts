@@ -86,6 +86,7 @@ const EXEMPT: Readonly<Record<string, string>> = {
   NodeTargetNeedsOneDocumentError: FACET_SET,
   NodeAndEdgeTargetError: FACET_SET,
   NodeAndCanvasTargetError: FACET_SET,
+  TooManyTagsError: FACET_SET,
   VersionNotFoundError: VERSION_TOOLS,
   RestoreTargetExistsError: VERSION_TOOLS,
   SubtreeNeedsWorkspaceVersionError: VERSION_TOOLS,
@@ -102,10 +103,12 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no edge, line or group',
   CommentMessageTooLargeError:
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no comment',
+  TagsTooLargeError:
+    'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no node, edge or board tags',
   SyncWriteRefusalError:
     'the abstract base of the sync write refusals below; raised only as one of them, by the sync operations, never on /api/v1',
   TextBreachRefusalError:
-    'the abstract base of the five text refusals above; raised only as one of them, by the sync operations, never on /api/v1',
+    'the abstract base of the six text refusals above; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes node meta through its schemas',
   DocumentNameTooLongError:

@@ -103,28 +103,41 @@ function linearOccurrences(haystack: string, needle: string): number[] {
 }
 
 /**
- * How many characters of `prefix` the body still has just before `at`.
+ * How many characters of a quote's `context` a text still has beside the
+ * passage. `read(k)` is the text's `k`-th character outward from the passage
+ * — `read(0)` the one touching it — and `undefined` past the text's edge;
+ * `side` says which end of `context` touches the passage: a prefix's last
+ * character, a suffix's first.
  *
  * Only the nearest `TEXT_ANCHOR_CONTEXT_MAX_CHARS` count, so one occurrence
  * costs a bounded comparison however long the stored context is. An anchor
  * written before tools refused a longer context still resolves, judged on its
  * nearest characters.
+ *
+ * The text is read through a function because not every reader has the
+ * body: the canvas re-finds a passage in RENDERED text, whose whitespace it
+ * compares loosely, and it must apply this rule rather than a copy of it.
  */
-function matchedBefore(body: string, at: number, prefix: string): number {
-  const reach = Math.min(prefix.length, at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
+export function sharedContext(
+  context: string,
+  side: 'before' | 'after',
+  read: (k: number) => string | undefined,
+): number {
+  const reach = Math.min(context.length, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (shared < reach && body[at - 1 - shared] === prefix[prefix.length - 1 - shared]) {
+  while (shared < reach) {
+    const expected = side === 'before' ? context[context.length - 1 - shared] : context[shared]
+    if (read(shared) !== expected) break
     shared += 1
   }
   return shared
 }
 
-function matchedAfter(body: string, at: number, suffix: string): number {
-  const reach = Math.min(suffix.length, body.length - at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
-  let shared = 0
-  while (shared < reach && body[at + shared] === suffix[shared]) shared += 1
-  return shared
-}
+const matchedBefore = (body: string, at: number, prefix: string): number =>
+  sharedContext(prefix, 'before', (k) => body[at - 1 - k])
+
+const matchedAfter = (body: string, at: number, suffix: string): number =>
+  sharedContext(suffix, 'after', (k) => body[at + k])
 
 /**
  * Where the CRDT still holds this passage, when it does.

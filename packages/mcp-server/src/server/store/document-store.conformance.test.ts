@@ -135,9 +135,8 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
     return { index, dispose, content: liveMarkdownContent }
   })
 
-  // The doc cache is keyed by path too, and a read lazily caches an empty
-  // document for a path nothing holds — so a copy landing where somebody had
-  // looked would be served as that empty phantom.
+  // The doc cache is keyed by path too, so an empty read of a path nothing
+  // holds must leave nothing a copy landing there could be served as.
   it('serves a copy as its content even after its path was read while empty', async () => {
     const { index, dispose } = await makeProductionIndex()
     try {
@@ -150,6 +149,30 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
       await index.duplicateDocument({ workspaceId, path: 'note' })
 
       await expect(liveMarkdownContent.read(workspaceId, 'note-copy')).resolves.toBe('the source')
+    } finally {
+      await dispose()
+    }
+  })
+
+  // A restore places a document back at a path a stale reader may have looked
+  // at while it stood empty; that empty read must not be what the path serves
+  // afterwards, nor what the next save through the live seam writes back.
+  it('serves a restored document as its content even after its path was read while trashed', async () => {
+    const { index, dispose } = await makeProductionIndex()
+    try {
+      const workspaceId = 'ws-restore-phantom'
+      await index.createWorkspace({ workspaceId })
+      const created = await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
+      await liveMarkdownContent.write(workspaceId, 'note', 'the source')
+      await index.deleteDocument({ workspaceId, path: 'note' })
+      expect(readMarkdownBody(await getDoc(workspaceId, 'note'))).toBe('')
+
+      await index.restoreDocument({ workspaceId, documentId: created.documentId })
+
+      await expect(liveMarkdownContent.read(workspaceId, 'note')).resolves.toBe('the source')
+      await liveMarkdownContent.write(workspaceId, 'note', 'the source + edit')
+      clearDocCacheForTests()
+      await expect(liveMarkdownContent.read(workspaceId, 'note')).resolves.toBe('the source + edit')
     } finally {
       await dispose()
     }

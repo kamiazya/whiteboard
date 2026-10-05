@@ -4,7 +4,7 @@
  * refusal carries when a chosen position cannot go where it was pointed.
  * Pure geometry, so `canvas-edit.ts` keeps to the transaction.
  */
-import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+import { boundsOf, isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { NodeDraft } from './canvas-edit-ops.js'
 
 /** How many auto-placed nodes go in a row before the next one wraps. */
@@ -82,10 +82,9 @@ export function prevailingWidth(nodes: readonly SpatialNode[]): number | undefin
 }
 
 function contentBottomLeft(nodes: readonly SpatialNode[]): { x: number; y: number } {
-  if (nodes.length === 0) return { x: 0, y: 0 }
-  const left = Math.min(...nodes.map((node) => node.x))
-  const bottom = Math.max(...nodes.map((node) => node.y + node.height))
-  return { x: left, y: bottom + PLACEMENT_GUTTER_PX }
+  const bounds = boundsOf(nodes)
+  if (bounds === undefined) return { x: 0, y: 0 }
+  return { x: bounds.x, y: bounds.y + bounds.height + PLACEMENT_GUTTER_PX }
 }
 
 /**

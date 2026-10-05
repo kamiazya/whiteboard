@@ -13,6 +13,7 @@ import {
   documentIdSchema,
   findPassageOverlap,
   growsPast,
+  MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
   mintProposalId,
   type PassageOverlap,
@@ -218,7 +219,7 @@ function assertWithinLimit(body: string, placed: readonly PlacedPassage[], resul
   const largest = placed.reduce((a, b) => (growth(b) > growth(a) ? b : a))
   throw new PassageNotApplicableError(
     largest.change.id,
-    `the edit would leave the body ${result.length} characters, over the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`,
+    `the edit would leave the body ${result.length} characters, over ${MARKDOWN_LIMIT_PHRASE}`,
   )
 }
 

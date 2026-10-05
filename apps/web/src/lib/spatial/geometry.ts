@@ -246,22 +246,6 @@ export function resizeBoxByDelta(
   }
 }
 
-/** The smallest box covering all of `boxes`; `undefined` for an empty selection. */
-export function unionBox(boxes: readonly Box[]): Box | undefined {
-  if (boxes.length === 0) return undefined
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-  for (const box of boxes) {
-    minX = Math.min(minX, box.x)
-    minY = Math.min(minY, box.y)
-    maxX = Math.max(maxX, box.x + box.width)
-    maxY = Math.max(maxY, box.y + box.height)
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-}
-
 /** A node scaled to nothing can never be grabbed to grow again. */
 const MIN_SCALED_EXTENT_PX = 1
 

@@ -15,8 +15,12 @@ import {
   documentIdSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
+  growsPast,
   nodeIdSchema,
   type SpatialCanvas,
+  TAG_COUNT_LIMIT_PHRASE,
+  TAGS_PER_ELEMENT_MAX,
+  tagListWriteSchema,
   tagWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
@@ -52,8 +56,7 @@ const tagsChangeSchema = z
     // The scoped-tag grammar (ADR-0040 decision 1) is checked HERE, where a
     // tag is written, and only on `add`: a removal names what is stored, and
     // what is stored may have been written by another tool.
-    add: z
-      .array(tagWriteSchema)
+    add: tagListWriteSchema
       .optional()
       .describe('Tags to add; one already present is left where it is.'),
     remove: z.array(z.string().min(1)).optional().describe('Tags to drop, by name.'),
@@ -256,6 +259,18 @@ class ElementLockedError extends Error {
   }
 }
 
+/**
+ * A tag change that would leave one document, board, node or edge carrying
+ * more tags than `TAGS_PER_ELEMENT_MAX` and more than it carries now. A set
+ * stored larger before the bound still takes a change that does not grow it.
+ */
+class TooManyTagsError extends Error {
+  constructor(what: string, count: number) {
+    super(`${what} would carry ${count} tags, past ${TAG_COUNT_LIMIT_PHRASE}. Nothing was written.`)
+    this.name = 'TooManyTagsError'
+  }
+}
+
 export function createFacetSetTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_set' as const,
@@ -349,12 +364,14 @@ function requiredTargetOf(input: FacetSetInput): FacetTarget {
 
 /**
  * The refusals that need the WORKSPACE read: every document is confirmed to be
- * in it, and then what its tag library forbids is refused.
+ * in it, and then a tag set grown past `TAGS_PER_ELEMENT_MAX`, or one its tag
+ * library forbids, is refused.
  *
  * The library is read once per batch (a listing plus a read), and only for a
  * batch that writes tags — a facets-only write gets the same answer either way
- * and must not pay for it. With no library the pre-pass costs nothing further:
- * every set passes, so no document is loaded twice.
+ * and must not pay for it. With no library, only a batch that ADDS tags loads
+ * its documents here: a removal or a rename cannot grow a set, so every set
+ * it writes passes and no document is loaded twice.
  */
 async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Promise<void> {
   for (const documentId of input.documentIds) {
@@ -363,11 +380,16 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Pro
   await refuseLockedTargets(deps, input)
   if (input.tags === undefined) return
   const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
-  if (Object.keys(library).length === 0) return
+  const judgesLibrary = Object.keys(library).length > 0
+  // Only `add` can grow a set; a batch with nothing to judge loads nothing.
+  if (!judgesLibrary && input.tags.add === undefined) return
   for (const documentId of input.documentIds) {
     const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-    for (const { what, tags } of tagSetsAfter(doc, input, documentId)) {
-      refuseAgainstLibrary(library, tags, what)
+    for (const { what, before, tags } of tagSetsAfter(doc, input, documentId)) {
+      if (growsPast(TAGS_PER_ELEMENT_MAX, before, tags.length)) {
+        throw new TooManyTagsError(what, tags.length)
+      }
+      if (judgesLibrary) refuseAgainstLibrary(library, tags, what)
     }
   }
 }
@@ -640,7 +662,13 @@ async function setDocumentFacets(
  * cannot reach (no such node, the wrong kind) answers nothing here and
  * leaves `setOne` to refuse it by name.
  */
-type TagSet = { what: string; tags: string[] }
+type TagSet = { what: string; before: number; tags: string[] }
+
+const tagSet = (what: string, current: readonly string[] | undefined, tags: string[]): TagSet => ({
+  what,
+  before: current?.length ?? 0,
+  tags,
+})
 
 function tagSetsAfter(doc: LoroDoc, input: FacetSetInput, documentId: string): TagSet[] {
   const change = input.tags
@@ -674,7 +702,7 @@ function tagSetsAtElement(
       : canvas.edges.find((edge) => edge.id === input.edgeId)
   if (element === undefined) return []
   const what = input.nodeId !== undefined ? `node ${input.nodeId}` : `edge ${input.edgeId}`
-  return [{ what, tags: applyTagChange(element.tags, change) }]
+  return [tagSet(what, element.tags, applyTagChange(element.tags, change))]
 }
 
 /**
@@ -686,17 +714,17 @@ function tagSetsAtCanvas(
   canvas: SpatialCanvas,
   change: NonNullable<FacetSetInput['tags']>,
 ): TagSet[] {
-  const sets: TagSet[] = [{ what: 'the board', tags: applyTagChange(canvas.tags, change) }]
+  const sets: TagSet[] = [tagSet('the board', canvas.tags, applyTagChange(canvas.tags, change))]
   const rename = change.rename ?? []
   if (rename.length === 0) return sets
   for (const node of canvas.nodes) {
     if (node.tags !== undefined) {
-      sets.push({ what: `node ${node.id}`, tags: applyTagChange(node.tags, { rename }) })
+      sets.push(tagSet(`node ${node.id}`, node.tags, applyTagChange(node.tags, { rename })))
     }
   }
   for (const edge of canvas.edges) {
     if (edge.tags !== undefined) {
-      sets.push({ what: `edge ${edge.id}`, tags: applyTagChange(edge.tags, { rename }) })
+      sets.push(tagSet(`edge ${edge.id}`, edge.tags, applyTagChange(edge.tags, { rename })))
     }
   }
   return sets
@@ -710,7 +738,7 @@ function tagSetsAtDocument(
 ): TagSet[] {
   const core = readCoreFacets(doc)
   if (core === undefined) return []
-  return [{ what: `document ${documentId}`, tags: applyTagChange(core.tags, change) }]
+  return [tagSet(`document ${documentId}`, core.tags, applyTagChange(core.tags, change))]
 }
 
 /**
@@ -728,15 +756,23 @@ function applyTagChange(
 ): string[] {
   // Rename first, then remove, then add — so `rename` onto a tag already
   // present MERGES (one copy survives) and a removal names the new spelling.
-  const renamed = (current ?? []).map(
-    (tag) => change.rename?.find((r) => r.from === tag)?.to ?? tag,
-  )
+  // Sets rather than list scans: the stored side may predate any bound.
+  const renameTo = new Map<string, string>()
+  for (const { from, to } of change.rename ?? []) if (!renameTo.has(from)) renameTo.set(from, to)
   const remove = new Set(change.remove ?? [])
-  const kept = renamed.filter((tag, i, all) => !remove.has(tag) && all.indexOf(tag) === i)
-  const added = (change.add ?? []).filter(
-    (tag, i, all) => !kept.includes(tag) && all.indexOf(tag) === i,
-  )
-  return [...kept, ...added]
+  const seen = new Set<string>()
+  const result: string[] = []
+  const keepFirst = (tag: string) => {
+    if (seen.has(tag)) return
+    seen.add(tag)
+    result.push(tag)
+  }
+  for (const tag of current ?? []) {
+    const renamed = renameTo.get(tag) ?? tag
+    if (!remove.has(renamed)) keepFirst(renamed)
+  }
+  for (const tag of change.add ?? []) keepFirst(tag)
+  return result
 }
 
 /** Canonical emptiness for a tag set: an empty list is no field at all. */

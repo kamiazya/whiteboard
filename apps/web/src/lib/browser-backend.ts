@@ -299,9 +299,9 @@ export class BrowserBackend implements DocumentBackend {
       seedNameFromTitle(workspaceDoc, this.target.documentId)
       const named = workspaceDoc.oplogVersion().compare(before) !== 0
       this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
-      // The session never READS the name, but it must HOLD those ops: every
-      // later edit anywhere depends on them, and a doc missing a dependency
-      // keeps that edit pending — another tab's typing never appeared here.
+      // The session reads the name (the open page's title follows it), and it
+      // must HOLD those ops either way: every later edit anywhere depends on
+      // them, and a doc missing a dependency keeps that edit pending.
       if (named && handlers !== null && !this.isStale(handlers)) {
         handlers.onRemoteUpdate(workspaceDoc.export({ mode: 'update', from: before }))
       }
@@ -385,8 +385,15 @@ export class BrowserBackend implements DocumentBackend {
       if (message.documentId === this.target.documentId) handlers.onVersionCreated(message.version)
       return
     }
-    if (message.type === 'document-renamed') {
-      if (message.documentId !== this.target.documentId) return
+    // A removal or a restore names a PATH — this document's, a folder above
+    // it, or neither once a move has left this backend's own path stale — so
+    // whether this document is in the record is the record's to say, and any
+    // of either catches up.
+    const catchUp =
+      message.type === 'document-removed' ||
+      message.type === 'document-restored' ||
+      (message.type === 'document-renamed' && message.documentId === this.target.documentId)
+    if (catchUp) {
       this._writeQueue = this._writeQueue.then(() =>
         this.catchUpWithStore(workspaceId, workspaceDoc, handlers),
       )
@@ -402,11 +409,14 @@ export class BrowserBackend implements DocumentBackend {
 
   /**
    * Merges what the stored record gained since this copy last read it, and
-   * hands it on to the session. A rename is written by the index, whose save
-   * travels to nobody — and the name this keeper seeds from a heading is
-   * judged against THIS copy, so a copy that never saw the name somebody
-   * chose named the note over it. Queued like any write, and it never rejects
-   * the queue: a catch-up that failed leaves the copy where it was.
+   * hands it on to the session. A rename, delete or restore is written by
+   * the index, whose save travels to nobody — and the name this keeper seeds
+   * from a heading is judged against THIS copy, so a copy that never saw the
+   * name somebody chose named the note over it, one that never saw the delete
+   * kept saving into a node that was gone, and one that never saw the restore
+   * stayed locked over a document that was back. Queued like any write, and
+   * it never rejects the queue: a catch-up that failed leaves the copy where
+   * it was.
    */
   private async catchUpWithStore(
     workspaceId: string,

@@ -681,8 +681,8 @@ export function adoptWorkspaceDocument(
 /**
  * Makes an EXISTING tree document's content equal a standalone document's —
  * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
- * already exists (seeding a freshly created document, a duplicate's copy,
- * the daemon's per-save write-through).
+ * already exists: a duplicate's copy, and `writeDocumentContentAndName`, which
+ * every keeper's whole-content write outside this package goes through.
  *
  * A DIFF, not a rewrite, and that is load-bearing twice over: the daemon
  * calls this on every save, so a wholesale rewrite would append a

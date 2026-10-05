@@ -79,8 +79,9 @@ function openOnBrowserKeeper(body: string) {
   session.connect()
   const typed = (edit: (text: ReturnType<LoroDoc['getText']>) => void) => {
     const binding = session?.getBodyBinding()
-    if (!binding) throw new Error('no body binding yet')
-    edit(binding.readText(binding.doc))
+    const text = binding?.readText(binding.doc)
+    if (!binding || !text) throw new Error('no body binding yet')
+    edit(text)
     binding.commit()
   }
   return { session, stored, typed, refusals, persistence, savedOverWhatIsKept }
@@ -147,7 +148,7 @@ describe('a session whose keeper answers a refusal from across a round trip', ()
     keeper().onSnapshot(markdownRecord('kept').export({ mode: 'snapshot' }))
     const type = (text: string) => {
       const binding = session.getBodyBinding()
-      binding?.readText(binding.doc).insert(0, text)
+      binding?.readText(binding.doc)?.insert(0, text)
       binding?.commit()
     }
     type('refused ')

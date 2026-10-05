@@ -16,9 +16,9 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so the module loads after the mocks resolve.
-const { clearDocCacheForTests, getOrLoad } = await import('./doc-cache.js')
+const { clearDocCacheForTests, getOrLoad, peekDoc } = await import('./doc-cache.js')
 const { storeScope } = await import('./store-scope.js')
-const { getDoc } = await import('./document-store.js')
+const { getDoc, saveDocument } = await import('./document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -43,9 +43,36 @@ describe('getDoc', () => {
   })
 
   it('returns the same instance on cache hit for the same key', async () => {
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
     const doc1 = await getDoc('session1', 'canvas-a')
     const doc2 = await getDoc('session1', 'canvas-a')
     expect(doc1).toBe(doc2)
+  })
+
+  it('keeps nothing for a path nothing is placed at', async () => {
+    const first = await getDoc('session1', 'nowhere')
+
+    expect(peekDoc('session1', 'nowhere')).toBeUndefined()
+    expect(await getDoc('session1', 'nowhere')).not.toBe(first)
+  })
+
+  // The writer that placed it goes on sending deltas built on its own
+  // history, which a projection reloaded from the tree does not share.
+  it('caches the empty document a save placed at its path as the instance it serves', async () => {
+    const standIn = await getDoc('session1', 'fresh')
+    standIn.getText('content').insert(0, 'first edit')
+
+    await saveDocument('session1', 'fresh', standIn)
+
+    expect(await getDoc('session1', 'fresh')).toBe(standIn)
+  })
+
+  it('does not cache an empty document saved at a path other than its own', async () => {
+    const standIn = await getDoc('session1', 'asked')
+
+    await saveDocument('session1', 'elsewhere', standIn)
+
+    expect(peekDoc('session1', 'elsewhere')).toBeUndefined()
   })
 
   it('returns different instances for different documents', async () => {

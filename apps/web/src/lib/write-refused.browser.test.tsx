@@ -55,7 +55,7 @@ describe('a browser-kept note whose keeper refuses a change', () => {
     const typed = (at: number, text: string) => {
       const binding = page?.bodyBinding
       if (!binding) throw new Error('the note has no body binding yet')
-      binding.readText(binding.doc).insert(at, text)
+      binding.readText(binding.doc)?.insert(at, text)
       binding.commit()
     }
     await vi.waitFor(() => expect(page?.bodyBinding).toBeTruthy(), { timeout: 10_000 })

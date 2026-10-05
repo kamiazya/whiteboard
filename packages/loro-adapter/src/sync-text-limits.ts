@@ -12,6 +12,8 @@ import {
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
+  TAG_MAX_CHARS,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import type {
   ContainerID,
@@ -23,7 +25,15 @@ import type {
   TextOp,
   VersionVector,
 } from 'loro-crdt'
-import { EDGES_KEY, LINES_KEY, MARKDOWN_BODY_KEY, NODES_KEY, THREADS_KEY } from './containers.js'
+import {
+  CANVAS_KEY,
+  CANVAS_TAGS_FIELD,
+  EDGES_KEY,
+  LINES_KEY,
+  MARKDOWN_BODY_KEY,
+  NODES_KEY,
+  THREADS_KEY,
+} from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
 import { liftStoredNode } from './legacy-lifts.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
@@ -34,9 +44,11 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * (`body`), a node's text it added or grew past `NODE_TEXT_MAX_CHARS`
  * (`node-text`), a link's URL or a file's path or subpath past
  * `NODE_LOCATION_MAX_CHARS` (`node-location`), an edge's, line's or group's
- * label past `LABEL_MAX_CHARS` (`label`), or a comment message past
- * `COMMENT_MESSAGE_MAX_CHARS` (`comment-message`). Counts are UTF-16 units,
- * the length every limit counts.
+ * label past `LABEL_MAX_CHARS` (`label`), a comment message past
+ * `COMMENT_MESSAGE_MAX_CHARS` (`comment-message`), or a node's, edge's or
+ * board's tags past `TAGS_PER_ELEMENT_MAX` in number or with one past
+ * `TAG_MAX_CHARS` (`tags`). Lengths are UTF-16 units, the length every limit
+ * counts.
  */
 export type SyncTextBreach =
   | {
@@ -70,6 +82,15 @@ export type SyncTextBreach =
       readonly messageId: string
       readonly container: ContainerID
     }
+  | {
+      readonly shape: 'tags'
+      /** Which bound: how many tags, or the longest one's length. */
+      readonly measure: 'count' | 'chars'
+      readonly amount: number
+      /** The node or edge carrying them, or `null` for the board's own. */
+      readonly elementId: string | null
+      readonly container: ContainerID
+    }
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -83,6 +104,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   'node-location': 'node_location_too_large',
   label: 'label_too_large',
   'comment-message': 'comment_too_large',
+  tags: 'tags_too_large',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -154,8 +176,55 @@ function isThreadMessages(doc: LoroDoc, container: ContainerID): boolean {
 interface BoundedValue {
   readonly max: number
   readonly length: (value: unknown) => number
-  readonly holds: (doc: LoroDoc, container: ContainerID) => boolean
-  readonly breach: (chars: number, key: string, container: ContainerID) => SyncTextBreach
+  readonly holds: (doc: LoroDoc, container: ContainerID, key: string) => boolean
+  readonly breach: (amount: number, key: string, container: ContainerID) => SyncTextBreach
+}
+
+/**
+ * The tags a map value carries: a node's or edge's own `tags` field, or —
+ * for the board, whose tags are one value under their own key — the value
+ * itself.
+ */
+function tagsIn(value: unknown): readonly unknown[] {
+  if (Array.isArray(value)) return value
+  if (typeof value !== 'object' || value === null) return []
+  const held = (value as { tags?: unknown }).tags
+  return Array.isArray(held) ? held : []
+}
+
+function longestTag(value: unknown): number {
+  let longest = 0
+  for (const tag of tagsIn(value)) {
+    if (typeof tag === 'string' && tag.length > longest) longest = tag.length
+  }
+  return longest
+}
+
+/**
+ * Both tag bounds, for one place tags sit: how many, and the longest. Where
+ * the board's tags sit, the value under the key IS the list; on a node or an
+ * edge it is the element, carrying its list in `tags`.
+ */
+function tagBounds(
+  holds: BoundedValue['holds'],
+  elementOf: (key: string) => string | null,
+): BoundedValue[] {
+  const measured = (measure: 'count' | 'chars', max: number, length: BoundedValue['length']) => ({
+    max,
+    length,
+    holds,
+    breach: (amount: number, key: string, container: ContainerID): SyncTextBreach => ({
+      shape: 'tags',
+      measure,
+      amount,
+      elementId: elementOf(key),
+      container,
+    }),
+  })
+  return [
+    measured('count', TAGS_PER_ELEMENT_MAX, (value) => tagsIn(value).length),
+    measured('chars', TAG_MAX_CHARS, longestTag),
+  ]
 }
 
 const BOUNDED_VALUES: readonly BoundedValue[] = [
@@ -190,6 +259,16 @@ const BOUNDED_VALUES: readonly BoundedValue[] = [
       container,
     }),
   },
+  ...tagBounds(
+    (doc, container) =>
+      [NODES_KEY, EDGES_KEY].some((key) => isContentContainer(doc, container, key)),
+    (elementId) => elementId,
+  ),
+  ...tagBounds(
+    (doc, container, key) =>
+      key === CANVAS_TAGS_FIELD && isContentContainer(doc, container, CANVAS_KEY),
+    () => null,
+  ),
 ]
 
 /** No map value shorter than this can breach any bound above. */
@@ -334,7 +413,7 @@ function valueBreach(
   before: ReadonlyMap<string, number>,
 ): SyncTextBreach | null {
   for (const [id, value] of long) {
-    if (!value.bound.holds(doc, value.container)) continue
+    if (!value.bound.holds(doc, value.container, value.key)) continue
     const length = lengthIn(doc, value)
     if (growsPast(value.bound.max, before.get(id) ?? 0, length)) {
       return value.bound.breach(length, value.key, value.container)
@@ -436,11 +515,12 @@ function longestBody(doc: LoroDoc): number {
  *
  * An update's bytes hold every string it writes uncompressed, and a UTF-16
  * unit never takes less than one byte, so no insert, body growth, node text,
- * label or message it carries is longer than its byte length
- * (`sync-text-limits.test.ts` pins that encoding). An update short enough that
- * no limit can be reached — no longer than the smallest bound, a label's, and
- * not enough to take the longest body past its own — is therefore answered
- * without being applied.
+ * label, message or tag it carries is longer than its byte length, nor does
+ * it carry more tags than bytes (`sync-text-limits.test.ts` and
+ * `sync-text-limits.tags.test.ts` pin that encoding). An update short
+ * enough that no limit can be reached — no longer than the smallest bound,
+ * a label's, and not enough to take the longest body past its own — is
+ * therefore answered without being applied.
  *
  * The longest body is not walked for each update: every document's body
  * would be read on every keystroke, in a workspace of hundreds of notes. It

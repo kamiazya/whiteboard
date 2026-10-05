@@ -9,12 +9,12 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
-import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 // Body search over a browser-kept workspace, against real IndexedDB: the browser ranks with
 // the same stage-0 core the daemon uses, so a query finds the same

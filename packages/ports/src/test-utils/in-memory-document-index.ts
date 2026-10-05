@@ -1,12 +1,19 @@
-import { generateDocumentId, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
+import {
+  deriveCopyName,
+  deriveCopyPath,
+  generateDocumentId,
+  isSelfOrDescendant,
+} from '@kamiazya/whiteboard-model'
 import { findDescendantPath, planSubtreeMove } from '../document-path-tree.js'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
   DeleteDocumentInput,
+  DocumentDuplicates,
   DocumentEntry,
   DocumentIndex,
   DocumentPins,
+  DuplicateDocumentInput,
   ListDocumentsInput,
   MoveDocumentInput,
   RenameWorkspaceInput,
@@ -24,7 +31,9 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  duplicateDocumentInputSchema,
   moveDocumentInputSchema,
+  NoRoomForCopyError,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -238,6 +247,40 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     }
   }
 
+  /**
+   * Places a copy of the document at `path` beside it, under the same
+   * derivation the tree-backed index runs, and hands the two ids to
+   * `copyContent` before the copy becomes visible. Synchronous, so it is
+   * serialised the way every other write here is.
+   *
+   * Protected because this index holds no content: only a subclass that is
+   * given a content record to copy may offer `DocumentDuplicates`.
+   */
+  protected placeCopy(
+    raw: DuplicateDocumentInput,
+    copyContent: (sourceDocumentId: string, copyDocumentId: string) => void,
+  ): DocumentEntry {
+    const { workspaceId, path } = duplicateDocumentInputSchema.parse(raw)
+    if (!this.#workspaces.has(workspaceId)) throw new WorkspaceNotFoundError(workspaceId)
+    const documents = this.#inWorkspace(workspaceId)
+    const source = documents.get(path)
+    if (source === undefined) throw new DocumentNotFoundError(workspaceId, path)
+    const copyPath = deriveCopyPath(source.path, occupiedPaths(documents.keys()))
+    if (copyPath === null) throw new NoRoomForCopyError(source.path)
+    const copy: DocumentEntry = {
+      documentId: generateDocumentId(),
+      path: copyPath,
+      kind: source.kind,
+      name: deriveCopyName(
+        source.name ?? source.path,
+        [...documents.values()].map((entry) => entry.name ?? entry.path),
+      ),
+    }
+    copyContent(source.documentId, copy.documentId)
+    documents.set(copyPath, copy)
+    return copy
+  }
+
   async deleteDocument({ workspaceId, path }: DeleteDocumentInput): Promise<void> {
     const documents = this.#inWorkspace(workspaceId)
     const descendant = findDescendantPath(
@@ -251,5 +294,51 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
       )
     }
     documents.delete(path)
+  }
+}
+
+/**
+ * Every path a row-backed workspace occupies: each document's, and each
+ * folder its path implies. A tree-backed index holds those folders as nodes,
+ * and a copy must not land on one there either.
+ */
+function occupiedPaths(documentPaths: Iterable<string>): Set<string> {
+  const occupied = new Set<string>()
+  for (const path of documentPaths) {
+    const segments = path.split('/')
+    for (let depth = 1; depth <= segments.length; depth++) {
+      occupied.add(segments.slice(0, depth).join('/'))
+    }
+  }
+  return occupied
+}
+
+/**
+ * Copies one document's content record to another id. Synchronous, so the
+ * duplicate that calls it completes without awaiting; a throw leaves no copy.
+ */
+export interface InMemoryContentCopy {
+  copy(sourceDocumentId: string, copyDocumentId: string): void
+}
+
+/**
+ * `InMemoryDocumentIndex` with the `DocumentDuplicates` capability, for a
+ * double that keeps document content beside the index — so a test that
+ * duplicates runs the same placement the keepers do, and the copy holds
+ * what its source held. Held to the same conformance suite as they are.
+ */
+export class DuplicatingInMemoryDocumentIndex
+  extends InMemoryDocumentIndex
+  implements DocumentDuplicates
+{
+  readonly #content: InMemoryContentCopy
+
+  constructor(content: InMemoryContentCopy) {
+    super()
+    this.#content = content
+  }
+
+  async duplicateDocument(input: DuplicateDocumentInput): Promise<DocumentEntry> {
+    return this.placeCopy(input, (from, to) => this.#content.copy(from, to))
   }
 }

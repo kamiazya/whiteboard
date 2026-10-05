@@ -60,7 +60,9 @@ const SILENCE_ONLY: Readonly<Record<string, string>> = {
 }
 
 const SPIES_ON_STDERR = /\bspyOn\(\s*process\.stderr\b/
-const OPTS_IN = /\bsetStderrLogDestination\(/
+// Only turning the destination ON opts in: `setStderrLogDestination(false)` is
+// the mute itself, and a file calling it has opted further OUT.
+const OPTS_IN = /\bsetStderrLogDestination\(\s*true\b|\bcaptureStdio\(/
 
 function testSources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -78,6 +80,12 @@ describe('a test that spies on process.stderr sees what the logger writes there'
       code: stripComments(readFileSync(path, 'utf8')),
     }))
     .filter(({ code }) => SPIES_ON_STDERR.test(code))
+
+  it('reads only turning the destination on, or captureStdio, as opting in', () => {
+    expect(OPTS_IN.test('setStderrLogDestination(true)')).toBe(true)
+    expect(OPTS_IN.test('await captureStdio(async () => {})')).toBe(true)
+    expect(OPTS_IN.test('const restore = setStderrLogDestination(false)')).toBe(false)
+  })
 
   it('finds the files it polices', () => {
     // captureStdio itself, log.test.ts, the native-host CLI test, tracing.

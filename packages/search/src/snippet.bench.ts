@@ -4,9 +4,10 @@
 // document-sized and the hits are interior — the shape the function meets in
 // production, not a short string with the needle at the front.
 //
-// Run with `pnpm vitest bench --project "search-node (bench)"` — bench mode
+// Run with `pnpm bench`, which selects `search-node (bench)` — bench mode
 // runs each project's benchmark files under a sibling project carrying that
-// suffix, and the bare name matches nothing.
+// suffix, and the bare name matches nothing. A file argument narrows the run
+// to this file alone.
 //
 // **The pair is the measurement, not either row.** `ascii` cannot hold a
 // grapheme cluster at all, so it is the floor of what the function costs

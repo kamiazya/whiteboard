@@ -4,8 +4,9 @@
  * The row has a path and nothing open, so this is the wiring the page had to
  * grow: the panel renders Duplicate only when it is handed a handler, and the
  * copy has to appear in the list without anyone leaving and coming back. The
- * copy's own CONTENT is the shared function's contract
- * (`lib/duplicate-browser-document.test.ts`).
+ * store double's index runs the keepers' duplicate operation, so what the
+ * copy is called and where it lands are theirs; the copy's CONTENT on the
+ * production index is `lib/duplicate-browser-document.browser.test.tsx`'s.
  */
 
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
@@ -42,9 +43,8 @@ async function seedOne() {
     updatedAt: '2026-09-01T00:00:00Z',
     kind: 'markdown',
   })
-  // Real Loro bytes: the duplicate reads the source's record and refuses
-  // content it cannot merge, so a placeholder here would fail the write
-  // rather than the wiring this test is about.
+  // Content for the duplicate to carry over, as a keeper's copy carries its
+  // source's.
   await store.loro.save(documentId, new Loro().export({ mode: 'snapshot' }))
   await new IdbDocumentIndex().createWorkspace({ workspaceId, segment: 'default' })
   return store
@@ -96,9 +96,8 @@ it('offers Duplicate on a row and shows the copy in the list', async () => {
 it('reports a refusing list as a list failure, not as a failed duplicate', async () => {
   const store = await seedOne()
   // Listing refuses from the moment the row is on screen: the page's own
-  // re-read is what fails, while the duplicate itself does not — both reads
-  // inside `duplicateBrowserDocument` are already tolerant of a listing that
-  // refuses (they only number the copy's name and path).
+  // re-read is what fails, while the duplicate itself does not — the keeper
+  // numbers the copy from its own record, not from a listing.
   let refuseListing = false
   const flaky = new Proxy(store.index, {
     get(target, prop) {

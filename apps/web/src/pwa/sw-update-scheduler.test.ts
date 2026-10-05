@@ -54,6 +54,21 @@ describe('startSwUpdateScheduler', () => {
     stop()
   })
 
+  // Written as an hour rather than through the constant, so a change to the
+  // cadence itself is a change to this test too.
+  it('checks hourly by default, not before the hour is up', () => {
+    const { doc } = createFakeDoc()
+    const update = vi.fn().mockResolvedValue(undefined)
+    const stop = startSwUpdateScheduler({ update, doc })
+
+    vi.advanceTimersByTime(60 * 60 * 1000 - 1)
+    expect(update).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(update).toHaveBeenCalledTimes(1)
+
+    stop()
+  })
+
   it('calls update() once when the document becomes visible', () => {
     const { doc, fireVisibilityChange } = createFakeDoc()
     const update = vi.fn().mockResolvedValue(undefined)

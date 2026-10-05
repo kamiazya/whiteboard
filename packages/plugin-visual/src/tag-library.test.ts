@@ -128,4 +128,15 @@ describe('tagLibraryObjection', () => {
       ]),
     ).toBeUndefined()
   })
+
+  it('judges many values under one declared key in time linear in them', () => {
+    // A stored set may predate any bound on how many tags one element holds.
+    const values = 20_000
+    const tags = Array.from({ length: values }, (_, i) => `owner:o${i}`)
+    const started = performance.now()
+    const objection = tagLibraryObjection({ owner: { exclusive: true } }, tags)
+    const elapsed = performance.now() - started
+    expect(objection).toMatchObject({ kind: 'exclusive', key: 'owner' })
+    expect(elapsed / values).toBeLessThan(0.05)
+  })
 })

@@ -402,7 +402,7 @@ describe('renameDocumentPath', () => {
     }
   })
 
-  it('evicts a phantom doc-cache entry already sitting at the destination path, so the renamed content is not overwritten', async () => {
+  it('serves the renamed content at a destination path that was read while empty', async () => {
     const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
     clearDocCacheForTests()
@@ -413,17 +413,12 @@ describe('renameDocumentPath', () => {
       doc.commit()
       await saveDocument('session1', 'a', doc)
 
-      // Simulate a WS connect (or update route) against a not-yet-created
-      // path 'b': getDoc() lazily caches an empty in-memory doc for it
-      // even though there is no DB row yet.
+      // A read of the not-yet-placed path 'b' is answered empty, and must
+      // leave nothing behind to shadow the document renamed onto it.
       await getDoc('session1', 'b')
-      expect(peekDoc('session1', 'b')).toBeDefined()
+      expect(peekDoc('session1', 'b')).toBeUndefined()
 
       await renameDocumentPath('session1', 'a', 'b')
-
-      // The stale phantom doc must not still shadow the just-renamed
-      // document's real content at the destination path.
-      expect(peekDoc('session1', 'b')).toBeUndefined()
 
       const reloaded = await getDoc('session1', 'b')
       expect(reloaded.getText('content').toString()).toBe('real content')

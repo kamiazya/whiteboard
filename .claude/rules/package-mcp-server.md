@@ -127,9 +127,9 @@ legend naming the key. Two guards, each held by an example and
 mutation-checked: it asks only for a board that CARRIES a tag
 (`carriesATag`, server-core's), so the common untagged board costs no
 read; and it probes `documentExists` before `getDoc`, because the headless
-read path answers a missing path with an EMPTY document it then keeps —
-without the probe every export of every workspace would mint a `tags`
-document. `headless-renderer.tag-library.test.ts` holds the threading
+read path answers a missing path with an EMPTY document (uncached:
+`getOrLoad` never keeps one for a path the tree does not place), which
+would read as a library declaring nothing rather than as no library. `headless-renderer.tag-library.test.ts` holds the threading
 through the real renderer, since the export test mocks it.
 
 ## Background work is declared before it is armed

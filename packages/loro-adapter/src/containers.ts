@@ -85,6 +85,8 @@ export const LINES_KEY = 'lines'
  * the whole of what it needs.
  */
 export const CANVAS_KEY = 'canvas'
+/** The board's own tags (ADR-0040): one value under this key of the canvas map. */
+export const CANVAS_TAGS_FIELD = 'tags'
 export const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,

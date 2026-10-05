@@ -217,7 +217,7 @@ What a CRDT update does to TEXT is judged once, by loro-adapter's
 `importWithinTextLimits`, which both keepers take (the browser through
 `syncTextLimitJudge`, which keeps a copy of the record in step rather than
 forking it per update). Each breach shape in `SYNC_TEXT_BREACH_CODES` (a
-run, a body, node text, a location, a label, a thread message) is answered 413
+run, a body, node text, a location, a label, a thread message, an element's tags) is answered 413
 by a `TextBreachRefusalError` built only by `textBreachRefusal(breach, at?)`,
 which promote also uses to name the document; into an empty document no run is
 judged, since nothing is replayed there.

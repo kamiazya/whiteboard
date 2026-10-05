@@ -225,7 +225,8 @@ function useDaemonDocument(
   // Undefined until the list names a row for this path — a refresh in flight
   // leaves it so, which both the picker's exclusion and the backlinks fetch
   // read as "not yet".
-  const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.documentId
+  const currentSummary = controller.documents.find((d) => d.path === controller.path)
+  const currentDocumentId = currentSummary?.documentId
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
@@ -419,7 +420,10 @@ function useDaemonDocument(
   const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 
-  const labels = daemonDocumentLabels(canvas)
+  const labels = daemonDocumentLabels(canvas, {
+    recorded: sync.documentName,
+    listed: currentSummary?.name,
+  })
   const { documentKey } = labels
   const openDocument = (id: string) => controller.switchDocument(resolveRefPath(id) ?? id)
 
@@ -478,8 +482,6 @@ function useDaemonDocument(
     exportFilenameBase: labels.exportFilenameBase,
     commands: {
       provider: { kind: 'daemon', daemonBaseUrl },
-      // The daemon canvas summary carries no display name yet (only
-      // path/updatedAt) — the path doubles as `name` until that changes.
       canvas: labels.commandCanvas,
       // Identity key = workspaceId+path, matching this page's own canvas.
       registryKey: labels.registryKey,

@@ -19,6 +19,7 @@ import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-sou
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import {
@@ -29,7 +30,6 @@ import {
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
-import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-files-source')
 

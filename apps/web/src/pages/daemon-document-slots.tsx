@@ -160,13 +160,22 @@ export function daemonEmptyState({
 }
 
 /**
- * What an unloaded document is still called. Every one of these is read
- * before a canvas has arrived, and each default differs because each surface
- * differs: a React key needs any stable string, a scope key and a command
- * registry key need an identity (so they answer `null`), and the version
- * seam needs strings its own `enabled: false` makes unreachable.
+ * What a document is called on this page, and what an unloaded one is still
+ * called. Every one of these is read before a canvas has arrived, and each
+ * default differs because each surface differs: a React key needs any stable
+ * string, a scope key and a command registry key need an identity (so they
+ * answer `null`), and the version seam needs strings its own `enabled: false`
+ * makes unreachable.
+ *
+ * The overlay and the export are named the way the title box is: the name the
+ * workspace record holds once it has been read (`null` there means nobody
+ * named it, so the listing's older answer does not overrule it), the
+ * listing's name before then, and the path for a document nobody named.
  */
-export function daemonDocumentLabels(canvas: { workspaceId: string; path: string } | null): {
+export function daemonDocumentLabels(
+  canvas: { workspaceId: string; path: string } | null,
+  names: { recorded: string | null | undefined; listed: string | undefined },
+): {
   documentKey: string
   scopeKey: string | null
   overlayTitle: string
@@ -188,19 +197,18 @@ export function daemonDocumentLabels(canvas: { workspaceId: string; path: string
       commandCanvas: null,
     }
   }
+  const name = (names.recorded === undefined ? names.listed : names.recorded) ?? canvas.path
   return {
     documentKey: documentSyncKey(canvas.workspaceId, canvas.path),
     scopeKey: `${canvas.workspaceId}:${canvas.path}`,
-    overlayTitle: canvas.path,
-    exportFilenameBase: canvas.path,
+    overlayTitle: name,
+    exportFilenameBase: name,
     // Identity key = workspaceId+path, matching this page's own canvas.
     registryKey: documentSyncKey(canvas.workspaceId, canvas.path),
     workspaceId: canvas.workspaceId,
     path: canvas.path,
-    // The daemon's command surface addresses a document by path (the row it
-    // answers with carries path/updatedAt) — the path doubles as `name`
-    // until that changes.
-    commandCanvas: { workspaceId: canvas.workspaceId, documentId: canvas.path, name: canvas.path },
+    // The daemon's command surface addresses a document by path.
+    commandCanvas: { workspaceId: canvas.workspaceId, documentId: canvas.path },
   }
 }
 

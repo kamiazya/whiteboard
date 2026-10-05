@@ -23,7 +23,7 @@ import {
   type ExtensionFacets,
   markdownInputSchema,
   okfActorSchema,
-  tagWriteSchema,
+  tagListWriteSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -132,8 +132,6 @@ const OKF_TITLE_STAGE = 'frontmatter-title'
 /** The stage a write is refused at when a facet key sits at the frontmatter root. */
 const OKF_ROOT_FACET_STAGE = 'frontmatter-facets'
 
-const writableTagsSchema = z.array(tagWriteSchema)
-
 export class OkfParseError extends Error {
   constructor(
     public readonly stage: string,
@@ -193,7 +191,7 @@ export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
       `${quoted} at the root of the frontmatter look like facet keys, which are only read under \`facets:\` — move them there`,
     )
   }
-  const tags = writableTagsSchema.safeParse(parsed.value.frontmatter.tags ?? [])
+  const tags = tagListWriteSchema.safeParse(parsed.value.frontmatter.tags ?? [])
   if (!tags.success) {
     throw new OkfParseError(
       OKF_TAGS_STAGE,

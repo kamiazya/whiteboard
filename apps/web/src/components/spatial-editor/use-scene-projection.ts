@@ -9,10 +9,10 @@
 
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-canvas-render'
 import { flattenDrawnEdgePath, resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { boundsOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useMemo } from 'react'
-import { type NodeBox, unionBox } from '../../lib/spatial/geometry.js'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { buildMinimapNodes } from '../../lib/spatial/minimap.js'
 import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -180,7 +180,7 @@ export function useSceneProjection({
     })
   }, [selectedId, extraIds, boxes])
   const selectionBox = useMemo(
-    () => unionBox(selectionMembers.map((member) => member.box)),
+    () => boundsOf(selectionMembers.map((member) => member.box)),
     [selectionMembers],
   )
   /**

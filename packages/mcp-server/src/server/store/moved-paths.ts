@@ -11,9 +11,11 @@ import type { StoreScope } from './store-scope.js'
  *
  * A SOURCE path: a caller still reading through it should lazily create a
  * fresh document rather than resurrect the moved doc's cached instance. A
- * DESTINATION path: a read that arrived before the move can lazily cache an
- * empty phantom doc there, and leaving that phantom cached would shadow the
- * just-moved document's real content.
+ * DESTINATION path: the cache keeps no entry for a path the tree places
+ * nothing at (`getOrLoad`), so there should be nothing to evict; evicting
+ * anyway costs a map delete and keeps the moved document's content from
+ * being shadowed should some other write that vacated the path have missed
+ * its own eviction.
  *
  * The subtree is collected BEFORE `move` runs: afterwards the tree is the
  * only record of it, and it records the new paths only. `workspaceDoc` is

@@ -30,6 +30,7 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { groupNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, type LoroText } from 'loro-crdt'
@@ -291,7 +292,7 @@ describe('a workspace-document update giving a document a name past its bound', 
   })
 })
 
-describe('an editor sync write giving a label, a location or a comment message past its bound', () => {
+describe('an editor sync write giving a label, a location, a comment message or tags past its bound', () => {
   it.each([
     {
       code: 'node_location_too_large',
@@ -331,6 +332,14 @@ describe('an editor sync write giving a label, a location or a comment message p
           anchor: { kind: 'document' },
           status: 'open',
           messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }],
+        }),
+    },
+    {
+      code: 'tags_too_large',
+      edit: (doc: LoroDoc) =>
+        writeSpatialNode(doc, {
+          ...linkNode({ id: 'k', x: 0, y: 0, width: 200, height: 60, url: 'https://example.com/' }),
+          tags: Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `t${i}`),
         }),
     },
   ])('answers 413 $code, a code the client contract reads', async ({ code, edit }) => {

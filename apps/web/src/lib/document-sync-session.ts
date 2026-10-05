@@ -28,8 +28,14 @@ import {
  */
 const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 
-/** Why a backend read or write failed. The published contract's own union. */
-export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
+/**
+ * Why a backend read or write failed: the published contract's own union, and
+ * `document-removed`, which the session raises itself — only it knows which
+ * node of the workspace record it serves, so only it can see that node go.
+ */
+export type BackendErrorReason =
+  | Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
+  | 'document-removed'
 
 import type {
   CommentThread,
@@ -114,9 +120,10 @@ export interface SessionDeps {
    * it is not for a document that is intact and unreadable by THIS build.
    * Collapsing those into one status is how a user with a future-version
    * document gets shown an empty canvas — which says their work is gone when
-   * it is sitting on disk.
+   * it is sitting on disk. `null` withdraws `document-removed`, the one
+   * reason the session raises itself, once the document is back.
    */
-  onBackendError: (reason: BackendErrorReason) => void
+  onBackendError: (reason: BackendErrorReason | null) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
   /**
    * What the session knows about its own writes, as facts for the page to
@@ -334,6 +341,8 @@ export function createDocumentSyncSession(
   const myGeneration = deps.generations.nextConnectionGeneration()
 
   let disposed = false
+  // See `documentRemoved`.
+  let removed = false
   let doc: LoroDoc | null = null
   let undoManager: UndoManager | null = null
   const historyChanged = createSubscribers()
@@ -563,7 +572,7 @@ export function createDocumentSyncSession(
    * the panel never hears about. Equality here cannot go stale that way.
    */
   function republishAnnotationsIfChanged(targetDoc: LoroDoc): void {
-    if (isStale()) return
+    if (isStale() || removed) return
     let next: readonly CommentThread[]
     try {
       next = readAnnotations(contentOf(targetDoc))
@@ -687,14 +696,16 @@ export function createDocumentSyncSession(
    * not ours to commit — the editor remounts on the new binding instead.
    */
   function bodyEdited(bound: LoroDoc): void {
-    if (bound !== doc) return
+    if (bound !== doc || removed) return
     persistence.edited()
     bodyOpsPending = true
     armDebounce()
   }
 
   const bodyBindingOf = bodyBindingFor({
-    contentOf,
+    // The session subscribed to the doc before any binding did, so it has
+    // already seen the import that removed the node when the binding reads.
+    contentOf: (target) => (removed ? null : contentOf(target)),
     onEdited: bodyEdited,
     isCurrent: (target) => target === doc,
   })
@@ -805,6 +816,7 @@ export function createDocumentSyncSession(
         // doc + import() is the only reconstruction that works for both.
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
+        if (doc !== null && documentRemoved(newDoc)) return
         // A scoped session's contract with its backend: the workspace bytes
         // hold this document's tree node. Bytes that do not are unreadable
         // FOR THIS DOCUMENT — reported like any other unreadable content,
@@ -854,7 +866,7 @@ export function createDocumentSyncSession(
         })
 
         newDoc.subscribe((e) => {
-          if (isStale()) return
+          if (isStale() || (e.by === 'import' ? documentRemoved(newDoc) : removed)) return
           // Fires for both a local commit (onChange -> doc.commit()) and a
           // remote import (onRemoteUpdate), matching MCP-app parity for
           // what counts as "the doc changed" — but never for the initial
@@ -1013,6 +1025,7 @@ export function createDocumentSyncSession(
   }
 
   function onChange(next: SpatialCanvas, command: EditorCommand): void {
+    if (removed) return
     // Published immediately (not debounced) so a controlled SpatialEditor's
     // own re-render reflects the edit right away; only the Loro write is
     // debounced in the background.
@@ -1068,8 +1081,30 @@ export function createDocumentSyncSession(
     return true
   }
 
+  /**
+   * Whether this session's document is missing from the workspace record —
+   * deleted by a peer, an agent, another tab — asked on each import, the only
+   * way the node goes or a trash restore brings it back. While it is gone
+   * nothing is written and the write in its window is dropped, never settled
+   * as saved; a restore resumes writing, and what was refused meanwhile stays
+   * refused, since it was never accepted. The page is told on each change.
+   */
+  function documentRemoved(targetDoc: LoroDoc): boolean {
+    const id = deps.contentDocumentId
+    const gone = id !== undefined && resolveWorkspaceDocumentById(targetDoc, id) === null
+    if (gone === removed) return gone
+    removed = gone
+    if (gone) {
+      persistence.documentRemoved()
+      bodyOpsPending = false
+      dropQueuedWrite()
+    } else persistence.documentRestored()
+    deps.onBackendError(gone ? 'document-removed' : null)
+    return gone
+  }
+
   function undo(): boolean {
-    if (!doc) return false
+    if (!doc || removed) return false
     // An edit still inside its debounce window is the most recent thing the
     // person did and is not in the document yet, so taking it back IS the
     // undo — the committed stack is left alone.
@@ -1084,7 +1119,7 @@ export function createDocumentSyncSession(
   }
 
   function redo(): boolean {
-    if (!undoManager || !doc) return false
+    if (!undoManager || !doc || removed) return false
     if (!undoManager.canRedo()) return false
     // Same staleness, for the same reason: the queued write was computed
     // against the document as it stood before this redo.
@@ -1107,7 +1142,7 @@ export function createDocumentSyncSession(
   }
 
   function getNodeLocks(): ReadonlySet<string> {
-    return doc === null ? EMPTY_LOCKS : readNodeLocks(contentOf(doc))
+    return doc === null || removed ? EMPTY_LOCKS : readNodeLocks(contentOf(doc))
   }
 
   function notifyLocksChanged(): void {
@@ -1115,7 +1150,7 @@ export function createDocumentSyncSession(
   }
 
   function setNodeLock(nodeId: string, locked: boolean): void {
-    if (doc === null) return
+    if (doc === null || removed) return
     // The commit inside setNodeLock reaches peers through the doc's own
     // subscribeLocalUpdates push, like every other local change. The canvas
     // VALUE is unchanged, so subscribers get a lock notification rather
@@ -1125,25 +1160,25 @@ export function createDocumentSyncSession(
   }
 
   function getEdgeLocks(): ReadonlySet<string> {
-    return doc === null ? EMPTY_LOCKS : readEdgeLocks(contentOf(doc))
+    return doc === null || removed ? EMPTY_LOCKS : readEdgeLocks(contentOf(doc))
   }
 
   function setEdgeLock(edgeId: string, locked: boolean): void {
-    if (doc === null) return
+    if (doc === null || removed) return
     workspaceSetEdgeLock(contentOf(doc), edgeId, locked)
     notifyLocksChanged()
   }
 
   function getMarkdownBody(): string {
-    return doc === null ? '' : readMarkdownBody(contentOf(doc))
+    return doc === null || removed ? '' : readMarkdownBody(contentOf(doc))
   }
 
   function getCoreFacets(): StoredCoreFacets | undefined {
-    return doc === null ? undefined : readCoreFacets(contentOf(doc))
+    return doc === null || removed ? undefined : readCoreFacets(contentOf(doc))
   }
 
   function getFacets(): ExtensionFacets {
-    return doc === null ? EMPTY_FACETS : readFacets(contentOf(doc))
+    return doc === null || removed ? EMPTY_FACETS : readFacets(contentOf(doc))
   }
 
   function getDocumentName(): string | null | undefined {
