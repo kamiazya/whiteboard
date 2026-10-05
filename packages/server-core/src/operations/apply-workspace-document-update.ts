@@ -23,7 +23,8 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * import may have half-applied, and the instance traps on every later call,
  * so the cached record and every projection derived from it are dropped and
  * `DocumentEngineTrapError` is thrown. The next request reloads what was
- * stored instead of the whole workspace answering 500 until a restart.
+ * stored rather than meeting the dead instance — though the engine itself may
+ * keep trapping on large writes until the daemon restarts (`isEngineTrap`).
  *
  * Nor is an update past the markdown size limit, or one that moves a
  * document onto a path the grammar refuses: it is well-formed, and is thrown

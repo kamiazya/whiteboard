@@ -1,7 +1,7 @@
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { documentPathSchema } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
-import { DocumentEngineTrapError, importEvictingOnEngineTrap } from '../document-io.js'
+import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
@@ -49,6 +49,31 @@ function offGrammarPaths(entries: readonly { readonly path: string }[]): string[
 }
 
 /**
+ * The promoted record as a throwaway instance, or `null` for bytes that are
+ * not a Loro snapshot. A trap is thrown, never answered as malformed: the
+ * bytes may be well-formed.
+ */
+function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
+  const incoming = new LoroDoc()
+  try {
+    runEvictingOnEngineTrap(
+      {
+        subject: 'the promoted workspace record',
+        fields: { workspaceId: input.workspaceId, updateBytes: input.snapshot.byteLength },
+        // No cache holds it, so there is nothing to drop.
+        evict() {},
+      },
+      'importing an update into',
+      () => incoming.import(input.snapshot),
+    )
+  } catch (err) {
+    if (err instanceof DocumentEngineTrapError) throw err
+    return null
+  }
+  return incoming
+}
+
+/**
  * Promotion (ADR-0023): a browser-kept workspace record merged into a daemon
  * workspace, followed by what ADR-0039 decision 8 says a person's explicit
  * act leaves behind — one explicit (`auto: false`) checkpoint per promoted
@@ -74,18 +99,8 @@ export async function promoteWorkspace(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions'>,
   input: PromoteWorkspaceInput,
 ): Promise<PromoteWorkspaceResult> {
-  const incoming = new LoroDoc()
-  try {
-    importEvictingOnEngineTrap(incoming, input.snapshot, {
-      subject: 'the promoted workspace record',
-      fields: { workspaceId: input.workspaceId },
-      // A throwaway instance: no cache holds it, so there is nothing to drop.
-      evict() {},
-    })
-  } catch (err) {
-    if (err instanceof DocumentEngineTrapError) throw err
-    return { kind: 'malformed-snapshot' }
-  }
+  const incoming = readIncoming(input)
+  if (incoming === null) return { kind: 'malformed-snapshot' }
   const incomingEntries = readWorkspaceDocuments(incoming)
   const invalidPaths = offGrammarPaths(incomingEntries)
   if (invalidPaths.length > 0) return { kind: 'invalid-paths', paths: invalidPaths }

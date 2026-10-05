@@ -19,6 +19,7 @@ import {
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { DocumentEngineTrapError } from '../document-io.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
@@ -349,10 +350,10 @@ describe('a promoted record', () => {
   })
 })
 
-describe('a workspace-document sync update that moves a path', () => {
-  const storedPaths = (store: StoredDoc) =>
-    readWorkspaceDocuments(store.get()).map((entry) => entry.path)
+const storedPathsOf = (store: StoredDoc) =>
+  readWorkspaceDocuments(store.get()).map((entry) => entry.path)
 
+describe('a workspace-document sync update that moves a path', () => {
   it('onto a path outside the document-path grammar is refused and nothing is imported', async () => {
     const store = new StoredDoc(workspaceSeed('body'))
     const update = updateFrom(store.get(), (doc) => {
@@ -367,7 +368,7 @@ describe('a workspace-document sync update that moves a path', () => {
     expect(refusal).toBeInstanceOf(OffGrammarPathError)
     expect(refusal).toMatchObject({ paths: ['Meeting notes'] })
     expect(store.saves).toBe(0)
-    expect(storedPaths(store)).toEqual([PATH])
+    expect(storedPathsOf(store)).toEqual([PATH])
   })
 
   it('creating a document outside the grammar is refused', async () => {
@@ -383,7 +384,7 @@ describe('a workspace-document sync update that moves a path', () => {
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
     ).rejects.toMatchObject({ paths: ['notes/Ä'] })
-    expect(storedPaths(store)).toEqual([PATH])
+    expect(storedPathsOf(store)).toEqual([PATH])
   })
 
   it('off a path already outside the grammar onto one inside it is applied', async () => {
@@ -398,7 +399,7 @@ describe('a workspace-document sync update that moves a path', () => {
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
     ).resolves.toBe('applied')
-    expect(storedPaths(store)).toEqual(['meeting-notes'])
+    expect(storedPathsOf(store)).toEqual(['meeting-notes'])
   })
 
   it('that leaves an already off-grammar path where it was is applied', async () => {
@@ -428,6 +429,94 @@ describe('a workspace-document sync update that moves a path', () => {
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
     ).rejects.toMatchObject({ paths: ['Meeting notes/other'] })
-    expect(storedPaths(store)).toEqual(['Meeting notes', 'other'])
+    expect(storedPathsOf(store)).toEqual(['Meeting notes', 'other'])
+  })
+})
+
+/** Makes the `nth` attach on `doc` abort the way the WASM engine does. */
+function trapOnAttach(doc: LoroDoc, nth: number): void {
+  const attach = doc.attach.bind(doc)
+  let calls = 0
+  doc.attach = () => {
+    calls += 1
+    if (calls === nth) throw Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
+    attach()
+  }
+}
+
+describe('an engine trap while a sync update is brought into the state', () => {
+  it('drops the cached record and answers DocumentEngineTrapError', async () => {
+    const store = new StoredDoc(workspaceSeed('body'))
+    const update = updateFrom(store.get(), (doc) => workspaceBody(doc).insert(0, 'more '))
+    trapOnAttach(store.get(), 1)
+
+    const refusal = await applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(refusal).toBeInstanceOf(DocumentEngineTrapError)
+    expect(store.evictions).toBe(1)
+    expect(store.saves).toBe(0)
+    expect(storedWorkspaceBody(store)).toBe('body')
+  })
+
+  it('drops the cached record when the trap comes after taking the state back for the path check', async () => {
+    const seed = workspaceSeed('body')
+    moveWorkspaceNodeToPath(seed, PATH, 'Meeting notes')
+    createWorkspaceDocumentAtPath(seed, { path: 'other', documentId: OTHER_ID, kind: 'markdown' })
+    seed.commit()
+    const store = new StoredDoc(seed)
+    const update = updateFrom(store.get(), (doc) =>
+      moveWorkspaceDocument(doc, { documentId: OTHER_ID, parentId: DOC_ID }),
+    )
+    // The first attach brings the update in; the second follows the checkout.
+    trapOnAttach(store.get(), 2)
+
+    const refusal = await applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(refusal).toBeInstanceOf(DocumentEngineTrapError)
+    expect(store.evictions).toBe(1)
+    expect(storedPathsOf(store)).toEqual(['Meeting notes', 'other'])
+  })
+
+  it('rethrows an attach failure that is not a trap untouched, without dropping the cached doc', async () => {
+    const store = new StoredDoc(liveSeed('short'))
+    const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(5, ' note'))
+    const cached = store.get()
+    cached.attach = () => {
+      throw new Error('refused')
+    }
+
+    await expect(
+      applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
+    ).rejects.toThrow('refused')
+    expect(store.evictions).toBe(0)
+  })
+
+  it('drops a per-document cached doc too', async () => {
+    const store = new StoredDoc(liveSeed('short'))
+    const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(5, ' note'))
+    trapOnAttach(store.get(), 1)
+
+    await expect(
+      applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
+    ).rejects.toBeInstanceOf(DocumentEngineTrapError)
+    expect(store.evictions).toBe(1)
+    expect(readMarkdownBody(store.get())).toBe('short')
+  })
+})
+
+describe('MarkdownBodyTooLargeError', () => {
+  it('says which limit a run broke and which a body broke', () => {
+    expect(new MarkdownBodyTooLargeError('run', 300_000).message).toMatch(
+      /^This update inserts 300000 characters in one piece, past the 262144-character limit for one write/,
+    )
+    expect(new MarkdownBodyTooLargeError('body', 300_000).message).toMatch(
+      /^This update would make a document body 300000 characters long, past the 262144-character limit for one document/,
+    )
   })
 })

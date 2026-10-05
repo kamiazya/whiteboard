@@ -1,11 +1,11 @@
-import {
-  importWithinTextLimits,
-  isEngineTrap,
-  readWorkspaceDocuments,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { documentPathSchema, MARKDOWN_MAX_CHARS, messageOf } from '@kamiazya/whiteboard-model'
+import { importWithinTextLimits, readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import { documentPathSchema, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
-import { DocumentEngineTrapError } from '../document-io.js'
+import {
+  type CachedTarget,
+  DocumentEngineTrapError,
+  runEvictingOnEngineTrap,
+} from '../document-io.js'
 import { getLogger } from '../log.js'
 
 const log = getLogger('sync-write-limit')
@@ -53,13 +53,6 @@ export function isSyncWriteRefusal(err: unknown): boolean {
   )
 }
 
-interface CachedTarget {
-  readonly subject: string
-  readonly fields: Record<string, unknown>
-  /** Drops the cached instance, so the next read rebuilds it from what was stored. */
-  evict(): void
-}
-
 function refuse(
   target: CachedTarget,
   error: MarkdownBodyTooLargeError | OffGrammarPathError,
@@ -84,38 +77,17 @@ function pathsById(doc: LoroDoc): Map<string, string> {
  * walk, which costs re-applying this update: that is the rare case of a
  * workspace still holding a path written before the grammar was enforced.
  */
-function newOffGrammarPaths(
-  doc: LoroDoc,
-  before: Frontiers,
-  update: Uint8Array,
-  target: CachedTarget,
-): string[] {
+function newOffGrammarPaths(doc: LoroDoc, before: Frontiers, target: CachedTarget): string[] {
   const offGrammar = [...pathsById(doc)].filter(
     ([, path]) => !documentPathSchema.safeParse(path).success,
   )
   if (offGrammar.length === 0) return []
   doc.checkout(before)
   const earlier = pathsById(doc)
-  evictingOnEngineTrap(target, update, () => doc.attach())
+  runEvictingOnEngineTrap(target, 'importing an update into', () => doc.attach())
   return offGrammar
     .filter(([documentId, path]) => earlier.get(documentId) !== path)
     .map(([, path]) => path)
-}
-
-/** Runs `work` on a cached doc, dropping the instance when the engine traps inside it. */
-function evictingOnEngineTrap<T>(target: CachedTarget, update: Uint8Array, work: () => T): T {
-  try {
-    return work()
-  } catch (err) {
-    if (!isEngineTrap(err)) throw err
-    target.evict()
-    log.error('the CRDT engine trapped applying an update; the cached copy was dropped', {
-      ...target.fields,
-      updateBytes: update.byteLength,
-      err: messageOf(err),
-    })
-    throw new DocumentEngineTrapError(target.subject, 'importing an update into', err)
-  }
 }
 
 /**
@@ -141,11 +113,14 @@ export function importWithinSyncLimits(
   options: { readonly workspaceRecord: boolean },
 ): void {
   const before = doc.oplogFrontiers()
-  const { breach, touchesNodeMeta } = evictingOnEngineTrap(target, update, () =>
-    importWithinTextLimits(doc, update),
+  const trapped = { ...target, fields: { ...target.fields, updateBytes: update.byteLength } }
+  const { breach, touchesNodeMeta } = runEvictingOnEngineTrap(
+    trapped,
+    'importing an update into',
+    () => importWithinTextLimits(doc, update),
   )
   if (breach !== null) refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars))
   if (!(options.workspaceRecord && touchesNodeMeta)) return
-  const offGrammar = newOffGrammarPaths(doc, before, update, target)
+  const offGrammar = newOffGrammarPaths(doc, before, trapped)
   if (offGrammar.length > 0) refuse(target, new OffGrammarPathError(offGrammar))
 }
