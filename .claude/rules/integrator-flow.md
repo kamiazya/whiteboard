@@ -4,8 +4,8 @@ Hard-won mechanics for the integrator session. Each rule exists because skipping
 
 ## Read GitHub over REST
 
-`gh pr view|checks|list|status|ready|comment|create|merge|edit` and `gh repo view` are
-GraphQL-backed and answer HTTP 403 in a Claude Code web session, where the
+`gh pr|issue|release|repo <sub>` is GraphQL-backed (only `gh pr diff` is measured to work) and
+answers HTTP 403 in a Claude Code web session, where the
 `ci-triage` watch loop once read that as "settled" and the pre-merge hook
 exited 0. Read GitHub with `gh api repos/{owner}/{repo}/…` (check-runs,
 pulls, comments), and treat a failed or empty read as unknown, never as
