@@ -1,6 +1,7 @@
 import {
   documentIdSchema,
   documentKindSchema,
+  documentNameSchema,
   documentPathSchema,
   markdownInputSchema,
   okfActorSchema,
@@ -16,8 +17,7 @@ const documentCreateCommonShape = {
   path: documentPathSchema.describe(
     'Where the document goes, as a slash-separated path from the workspace root. Hierarchy is the path: `plan/sub` sits under `plan`, and no separate parent id is involved.',
   ),
-  name: z
-    .string()
+  name: documentNameSchema
     .optional()
     .describe(
       'What a human reads. Free text, unlike `path`, which is a path and decides placement. Omit it and the document has no name of its own — a reader falls back to the segment rather than being handed the path as a title.',

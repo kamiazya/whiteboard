@@ -1,6 +1,7 @@
 import {
   documentIdSchema,
   documentKindSchema,
+  documentNameSchema,
   spatialCanvasSchema,
   versionLabelSchema,
   workspaceDisplayNameSchema,
@@ -22,9 +23,11 @@ export const workspaceNamesSchema = z.object({
 })
 
 // `name: ''` deletes the stored name and falls back to the path/workspaceId.
+// The workspace rename route reads this body too; the bound is the same 200
+// both names carry.
 export const setNameRequestSchema = z
   .object({
-    name: z.string(),
+    name: documentNameSchema,
   })
   .strict()
 

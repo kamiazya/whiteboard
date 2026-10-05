@@ -780,9 +780,9 @@ describe('what the tool table costs to read', () => {
         // arm, and `path` optional. A spatial document has no frontmatter
         // `title`, so a rename of one had no tool at any price (C5); the web
         // app renames both kinds.
-        // +103 both: markdown `maxLength` on two arms (+38); `document.create` says facets go under `facets:` (+65).
-        visibleBytes: 3301, // +51: three input paths state the 1024-character bound
-        wireBytes: 4862, // +68: the same, and the output's path
+        // +103 both: markdown `maxLength` on two arms (+38); `document.create` says facets go under `facets:` (+65). +48 both: a name's 200 `maxLength` on both creates and the move.
+        visibleBytes: 3349, // +51: three input paths state the 1024-character bound
+        wireBytes: 4910, // +68: the same, and the output's path
         descriptionWords: 47,
         parameters: 22,
         undescribed: 14,
@@ -982,8 +982,8 @@ describe('what the tool table costs to read', () => {
       // `proposals` on wb_document_get (see those rows).
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
-      // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +51: the node text bound.
-      visibleBytes: 40980, // +68 for the 1024-character document path bound
+      // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
+      visibleBytes: 41028, // +68 for the 1024-character document path bound
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1008,8 +1008,8 @@ describe('what the tool table costs to read', () => {
       // facet tools' titles. Then +258 on wb_viewport_set (see that row).
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
-      // Then +158, then +51, each the same bytes as visible.
-      wireBytes: 132326, // +119 for the 1024-character document path bound (see those rows)
+      // Then +158, then +99, each the same bytes as visible.
+      wireBytes: 132374, // +119 for the 1024-character document path bound (see those rows)
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

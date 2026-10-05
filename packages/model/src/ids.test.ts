@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
   documentIdSchema,
+  documentNameSchema,
   documentPathSchema,
   nodeIdSchema,
   WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
@@ -161,6 +163,7 @@ describe('length bounds on what a request can name', () => {
 
   it('refuses a megabyte-long display name, segment and document path', () => {
     expect(workspaceDisplayNameSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
+    expect(documentNameSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
     expect(workspaceSegmentSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
     expect(documentPathSchema.safeParse('x'.repeat(MIB)).success).toBe(false)
     expect(
@@ -179,6 +182,20 @@ describe('length bounds on what a request can name', () => {
     expect(workspaceDisplayNameSchema.safeParse('x'.repeat(201)).success).toBe(false)
     expect(workspaceSegmentSchema.safeParse('a'.repeat(200)).success).toBe(true)
     expect(workspaceSegmentSchema.safeParse('a'.repeat(201)).success).toBe(false)
+  })
+
+  it('holds a document name at 200 characters, and admits the blank that clears one', () => {
+    expect(DOCUMENT_NAME_MAX_LENGTH).toBe(200)
+    expect(documentNameSchema.safeParse('x'.repeat(200)).success).toBe(true)
+    expect(documentNameSchema.safeParse('x'.repeat(201)).success).toBe(false)
+    expect(documentNameSchema.safeParse('').success).toBe(true)
+  })
+
+  it('refuses a long document name in words that name the limit', () => {
+    const refusal = documentNameSchema.safeParse('x'.repeat(201))
+    expect(refusal.success ? '' : refusal.error.issues[0]?.message).toBe(
+      'a display name is at most 200 characters',
+    )
   })
 
   it('holds a document path at 1024 characters, separators included', () => {
