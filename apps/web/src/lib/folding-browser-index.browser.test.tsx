@@ -271,6 +271,19 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     ).resolves.toMatchObject({ path: 'c' })
   })
 
+  it('refuses to duplicate into a full workspace, and makes no copy', async () => {
+    const index = new FoldingBrowserIndex(undefined, { capacity: { bandStartsAt: 1, limit: 2 } })
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    await index.createDocument({ workspaceId, path: 'a', kind: 'markdown' })
+    await index.createDocument({ workspaceId, path: 'b', kind: 'markdown' })
+
+    await expect(index.duplicateDocument({ workspaceId, path: 'a' })).rejects.toBeInstanceOf(
+      WorkspaceCapacityReachedError,
+    )
+    expect((await index.listDocuments({ workspaceId })).map((e) => e.path)).toEqual(['a', 'b'])
+  })
+
   it('refuses to restore from the trash into a full workspace', async () => {
     const index = new FoldingBrowserIndex(undefined, { capacity: { bandStartsAt: 1, limit: 2 } })
     const workspaceId = getBrowserWorkspaceId()

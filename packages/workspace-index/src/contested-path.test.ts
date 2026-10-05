@@ -85,6 +85,15 @@ describe('contested paths', () => {
     )
   })
 
+  it('refuses to duplicate a contested path instead of copying whichever sibling', async () => {
+    const index = await contestedIndex()
+    await expect(index.duplicateDocument({ workspaceId: 'ws', path: 'design' })).rejects.toThrow(
+      DocumentPathContestedError,
+    )
+    const listing = await index.listDocuments({ workspaceId: 'ws' })
+    expect(listing.map((entry) => entry.path)).toEqual(['design', 'design'])
+  })
+
   it('still resolves each contestant by id', async () => {
     const index = await contestedIndex()
     const owner = await index.resolveDocumentById({ workspaceId: 'ws', documentId: OWNER_ID })
