@@ -17,6 +17,9 @@ import { z } from 'zod'
  */
 export const LABEL_MAX_CHARS = 1024
 
+/** The label bound as every refusal of it ends, as `NODE_TEXT_LIMIT_PHRASE` is for a node's text. */
+export const LABEL_LIMIT_PHRASE = `the ${LABEL_MAX_CHARS}-character limit; a longer text belongs in a text node`
+
 /**
  * The label a tool or route accepts, whole. The STORED label stays unbounded:
  * one written before the limit must still read, and still take an edit that
@@ -24,10 +27,7 @@ export const LABEL_MAX_CHARS = 1024
  */
 export const labelInputSchema = z
   .string()
-  .max(
-    LABEL_MAX_CHARS,
-    `a label is longer than the ${LABEL_MAX_CHARS}-character limit; a longer text belongs in a text node`,
-  )
+  .max(LABEL_MAX_CHARS, `a label is longer than ${LABEL_LIMIT_PHRASE}`)
 
 /**
  * The most characters one comment message may carry when it is written.
@@ -44,11 +44,14 @@ export const labelInputSchema = z
  */
 export const COMMENT_MESSAGE_MAX_CHARS = 4 * 1024
 
+/** The message bound as every refusal of it ends, as `NODE_TEXT_LIMIT_PHRASE` is for a node's text. */
+export const COMMENT_MESSAGE_LIMIT_PHRASE = `the ${COMMENT_MESSAGE_MAX_CHARS}-character limit; split it across replies`
+
 /** A comment message as a tool or route accepts it. Stored messages stay unbounded. */
 export const commentMessageInputSchema = z
   .string()
   .min(1, 'a comment message must not be empty')
   .max(
     COMMENT_MESSAGE_MAX_CHARS,
-    `a comment message is longer than the ${COMMENT_MESSAGE_MAX_CHARS}-character limit; split it across replies`,
+    `a comment message is longer than ${COMMENT_MESSAGE_LIMIT_PHRASE}`,
   )

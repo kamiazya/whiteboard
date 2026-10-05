@@ -85,7 +85,7 @@ describe('a document sync update', () => {
     ).catch((err: unknown) => err)
 
     expect(refusal).toBeInstanceOf(LabelTooLargeError)
-    expect(refusal).toMatchObject({ elementId: 'e1', chars: LABEL_MAX_CHARS + 1 })
+    expect(refusal).toMatchObject({ breach: { elementId: 'e1', chars: LABEL_MAX_CHARS + 1 } })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'label_too_large', status: 413 })
     expect(store.saves).toBe(0)
     expect(readSpatialCanvas(store.get()).edges[0]?.label).toBe('calls')
@@ -108,7 +108,9 @@ describe('a document sync update', () => {
     ).catch((err: unknown) => err)
 
     expect(refusal).toBeInstanceOf(CommentMessageTooLargeError)
-    expect(refusal).toMatchObject({ messageId: 'm2', chars: COMMENT_MESSAGE_MAX_CHARS + 1 })
+    expect(refusal).toMatchObject({
+      breach: { messageId: 'm2', chars: COMMENT_MESSAGE_MAX_CHARS + 1 },
+    })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'comment_too_large', status: 413 })
     expect(store.saves).toBe(0)
     expect(readCommentThreads(store.get())[0]?.messages).toHaveLength(1)

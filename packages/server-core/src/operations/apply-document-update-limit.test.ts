@@ -19,6 +19,7 @@ import {
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  DOCUMENT_PATH_MAX_LENGTH,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SpatialNode,
@@ -121,7 +122,7 @@ describe('a workspace-document sync update', () => {
     // Refused as a RUN: measured before the state is brought up, which is the
     // half of the import whose cost is quadratic in that run.
     expect(refusal).toBeInstanceOf(MarkdownBodyTooLargeError)
-    expect(refusal).toMatchObject({ shape: 'run', chars: MARKDOWN_MAX_CHARS + 1 })
+    expect(refusal).toMatchObject({ breach: { shape: 'run', chars: MARKDOWN_MAX_CHARS + 1 } })
     expect(store.saves).toBe(0)
     expect(storedWorkspaceBody(store)).toBe('short')
   })
@@ -147,7 +148,7 @@ describe('a workspace-document sync update', () => {
       update,
     }).catch((err: unknown) => err)
 
-    expect(refusal).toMatchObject({ shape: 'run', chars: 2 * half })
+    expect(refusal).toMatchObject({ breach: { shape: 'run', chars: 2 * half } })
     expect(storedWorkspaceBody(store)).toBe('short')
   })
 
@@ -172,7 +173,7 @@ describe('a workspace-document sync update', () => {
       update,
     }).catch((err: unknown) => err)
 
-    expect(refusal).toMatchObject({ shape: 'run', chars: 2 * piece.length })
+    expect(refusal).toMatchObject({ breach: { shape: 'run', chars: 2 * piece.length } })
     expect(storedWorkspaceBody(store)).toBe('short')
   })
 
@@ -234,7 +235,7 @@ describe('a per-document sync update', () => {
 
     await expect(
       applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
-    ).rejects.toMatchObject({ shape: 'run' })
+    ).rejects.toMatchObject({ breach: { shape: 'run' } })
 
     expect(store.evictions).toBe(1)
     expect(readMarkdownBody(store.get())).toBe('short')
@@ -364,7 +365,7 @@ describe('a promoted record whose history once held a run past the limit', () =>
     const refusal = await promote(target, shrunkRecord()).catch((err: unknown) => err)
 
     expect(refusal).toBeInstanceOf(MarkdownBodyTooLargeError)
-    expect(refusal).toMatchObject({ shape: 'run', at: { path: 'big', chars: 6 } })
+    expect(refusal).toMatchObject({ breach: { shape: 'run' }, at: { path: 'big', bodyChars: 6 } })
     expect((refusal as Error).message).toMatch(
       /^The document at "big" holds in its history one insert/,
     )
@@ -408,6 +409,23 @@ describe('a workspace-document sync update that moves a path', () => {
     expect(refusal).toMatchObject({ paths: ['Meeting notes'] })
     expect(store.saves).toBe(0)
     expect(storedPathsOf(store)).toEqual([PATH])
+  })
+
+  it('creating a document at a grammatical path past the length bound is refused, saying so', async () => {
+    const store = new StoredDoc(workspaceSeed('body'))
+    const path = Array.from({ length: 103 }, () => 'segment-xx').join('/')
+    expect(path.length).toBeGreaterThan(DOCUMENT_PATH_MAX_LENGTH)
+    const update = updateFrom(store.get(), (doc) =>
+      createWorkspaceDocumentAtPath(doc, { path, documentId: OTHER_ID, kind: 'markdown' }),
+    )
+
+    const refusal = await applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(refusal).toBeInstanceOf(OffGrammarPathError)
+    expect((refusal as Error).message).toContain(`${DOCUMENT_PATH_MAX_LENGTH} characters`)
   })
 
   it('creating a document outside the grammar is refused', async () => {
@@ -551,10 +569,16 @@ describe('an engine trap while a sync update is brought into the state', () => {
 
 describe('MarkdownBodyTooLargeError', () => {
   it('says which limit a run broke and which a body broke', () => {
-    expect(new MarkdownBodyTooLargeError('run', 300_000).message).toMatch(
+    expect(
+      new MarkdownBodyTooLargeError({ shape: 'run', chars: 300_000, container: 'cid:0@1:Text' })
+        .message,
+    ).toMatch(
       /^This update inserts 300000 characters in one piece, past the 262144-character limit for one write/,
     )
-    expect(new MarkdownBodyTooLargeError('body', 300_000).message).toMatch(
+    expect(
+      new MarkdownBodyTooLargeError({ shape: 'body', chars: 300_000, container: 'cid:0@1:Text' })
+        .message,
+    ).toMatch(
       /^This update would make a document body 300000 characters long, past the 262144-character limit for one document/,
     )
   })
@@ -593,7 +617,7 @@ describe('a sync update that writes a node', () => {
     ).catch((err: unknown) => err)
 
     expect(refusal).toBeInstanceOf(NodeTextTooLargeError)
-    expect(refusal).toMatchObject({ nodeId: 'n1', chars: NODE_TEXT_MAX_CHARS + 1 })
+    expect(refusal).toMatchObject({ breach: { nodeId: 'n1', chars: NODE_TEXT_MAX_CHARS + 1 } })
     expect(store.saves).toBe(0)
     expect(readSpatialCanvas(store.get()).nodes).toEqual([])
   })
@@ -647,7 +671,7 @@ describe('a sync update that writes a node', () => {
 
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
-    ).rejects.toMatchObject({ nodeId: 'n1', chars: 1_000_000 })
+    ).rejects.toMatchObject({ breach: { nodeId: 'n1', chars: 1_000_000 } })
     expect(store.saves).toBe(0)
   })
 

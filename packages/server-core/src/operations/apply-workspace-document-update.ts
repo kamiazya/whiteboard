@@ -29,13 +29,13 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * stored rather than meeting the dead instance — though the engine itself may
  * keep trapping on large writes until the daemon restarts (`isEngineTrap`).
  *
- * Nor is an update past the markdown size limit, or one that moves a
- * document onto a path the grammar refuses: it is well-formed, and is thrown
- * (`MarkdownBodyTooLargeError`, `OffGrammarPathError`) with the record and
- * its projections dropped unsaved, so nothing of it survives.
+ * Nor is an update the keeper refuses — past a text bound, onto a path the
+ * grammar refuses, or leaving a node unreadable: it is well-formed, and is
+ * thrown as its `SyncWriteRefusalError` with the record and its projections
+ * dropped unsaved, so nothing of it survives.
  *
  * A note at a generated path is named after its heading here, as the
- * browser keeper names it in its own store's write (`seedNamesFromTitles`).
+ * browser keeper names it in its own store's write (`seedNameFromTitle`).
  *
  * THE OPERATION HOLDS THE LOCK — `liveDocuments.withWriteLock`, because the
  * workspace write lock is one lock however many seams touch the workspace.

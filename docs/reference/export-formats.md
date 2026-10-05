@@ -55,11 +55,13 @@ not:
   document, while a workspace with no documents yet takes it whole, since
   nothing is replayed there. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
-  at a path outside the path grammar; a document already at such a path can
-  still be moved to a valid one. The workspace document's `update` also
-  refuses, with `400 {"error":"unreadable_document_meta"}`, an update that
-  would leave a readable document with a kind, segment or id this server
-  cannot read — which would hide it and everything below it — and, with
+  at a path outside the path grammar or longer than 1,024 characters; a
+  document already at such a path can still be moved to a valid one. The
+  workspace document's `update` also refuses, with
+  `400 {"error":"unreadable_document_meta"}`, an update that would leave a
+  readable document or folder with meta this server cannot read — a document's
+  kind, segment, id or timestamps, or any key on a folder besides its segment —
+  which would hide it and everything below it — and, with
   `400 {"error":"document_name_too_long"}`, one that gives a document a name
   longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened.

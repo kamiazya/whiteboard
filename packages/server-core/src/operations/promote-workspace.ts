@@ -1,16 +1,10 @@
 import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
-import { type ContainerID, LoroDoc, type LoroText, type TreeID } from 'loro-crdt'
+import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
-import {
-  CommentMessageTooLargeError,
-  LabelTooLargeError,
-  MarkdownBodyTooLargeError,
-  NodeLocationTooLargeError,
-  NodeTextTooLargeError,
-} from './sync-write-refusals.js'
+import { TextBreachRefusalError, textBreachRefusal } from './sync-write-refusals.js'
 
 export interface PromoteWorkspaceInput {
   readonly workspaceId: string
@@ -62,32 +56,14 @@ function promotedDocumentAt(
  * not the problem.
  */
 function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
-  const named =
-    err instanceof MarkdownBodyTooLargeError ||
-    err instanceof NodeTextTooLargeError ||
-    err instanceof NodeLocationTooLargeError ||
-    err instanceof LabelTooLargeError ||
-    err instanceof CommentMessageTooLargeError
-  if (!named || err.container === undefined) return err
-  const entry = promotedDocumentAt(incoming, err.container)
+  if (!(err instanceof TextBreachRefusalError)) return err
+  const { container } = err.breach
+  const entry = promotedDocumentAt(incoming, container)
   if (entry === undefined) return err
-  const at = { path: entry.path }
-  if (err instanceof NodeTextTooLargeError) {
-    return new NodeTextTooLargeError(err.nodeId, err.chars, err.container, at)
-  }
-  if (err instanceof NodeLocationTooLargeError) {
-    return new NodeLocationTooLargeError(err.nodeId, err.chars, err.container, at)
-  }
-  if (err instanceof LabelTooLargeError) {
-    return new LabelTooLargeError(err.elementId, err.chars, err.container, at)
-  }
-  if (err instanceof CommentMessageTooLargeError) {
-    return new CommentMessageTooLargeError(err.messageId, err.chars, err.container, at)
-  }
-  const body = incoming.getContainerById(err.container) as LoroText
-  return new MarkdownBodyTooLargeError(err.shape, err.chars, err.container, {
-    ...at,
-    chars: body.length,
+  const held = incoming.getContainerById(container)
+  return textBreachRefusal(err.breach, {
+    path: entry.path,
+    ...(held instanceof LoroText && { bodyChars: held.length }),
   })
 }
 
