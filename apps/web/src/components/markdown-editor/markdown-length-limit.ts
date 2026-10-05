@@ -34,12 +34,14 @@ const refusal = StateField.define<number | null>({
   provide: (field) => showPanel.from(field, (length) => (length === null ? null : notice(length))),
 })
 
+const COUNT = new Intl.NumberFormat('en-US')
+
 function notice(length: number): (view: unknown) => Panel {
   return () => {
     const dom = document.createElement('div')
     dom.setAttribute('role', 'status')
     dom.className = 'cm-length-limit-notice'
-    dom.textContent = `Not added: this would make the document ${length.toLocaleString('en-US')} characters long, past the ${MARKDOWN_MAX_CHARS.toLocaleString('en-US')}-character limit. Split the content across documents.`
+    dom.textContent = `Not added: this would make the document ${COUNT.format(length)} characters long, past the ${COUNT.format(MARKDOWN_MAX_CHARS)}-character limit. Split the content across documents.`
     return { dom, top: true }
   }
 }

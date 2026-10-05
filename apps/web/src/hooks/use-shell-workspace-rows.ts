@@ -64,9 +64,11 @@ export function useShellWorkspaceRows(
       })
       // A list that will not load leaves the mark naming the handle the
       // address carries, which is still true. Failing the whole shell over
-      // it would take the settings gear down with it. Reported, though: an
-      // empty switcher otherwise reads as a keeper holding no workspaces.
-      .catch((cause: unknown) => log.warn('could not list the workspaces', cause))
+      // it would take the settings gear down with it. Recorded at info, not
+      // warn: a shell with no keeper to ask (offline, server mode before
+      // sign-in) reaches this by design, and an empty switcher should still
+      // leave a trace of why.
+      .catch((cause: unknown) => log.info('could not list the workspaces', cause))
     return () => {
       cancelled = true
     }
