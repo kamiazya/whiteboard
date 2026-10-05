@@ -1,5 +1,9 @@
 import { importWithinTextLimits, readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
-import { documentPathSchema, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  documentPathSchema,
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+} from '@kamiazya/whiteboard-model'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import {
   type CachedTarget,
@@ -30,6 +34,25 @@ export class MarkdownBodyTooLargeError extends Error {
 }
 
 /**
+ * A sync write refused because it would add or grow a node's text past
+ * `NODE_TEXT_MAX_CHARS` — the bound every tool write already holds, since
+ * each read of the canvas lays that text out again. Nothing of the write was
+ * kept; a node stored longer before the bound still takes an edit that does
+ * not grow it.
+ */
+export class NodeTextTooLargeError extends Error {
+  constructor(
+    public readonly nodeId: string,
+    public readonly chars: number,
+  ) {
+    super(
+      `This update would give node ${JSON.stringify(nodeId)} ${chars} characters of text, past the ${NODE_TEXT_MAX_CHARS}-character limit for one node; split it across nodes, or put it in a markdown document and embed that`,
+    )
+    this.name = 'NodeTextTooLargeError'
+  }
+}
+
+/**
  * A sync write refused because it would put documents at paths the
  * document-path grammar refuses — a path every listing and search of the
  * workspace then fails on. Nothing of the write was kept.
@@ -49,13 +72,14 @@ export function isSyncWriteRefusal(err: unknown): boolean {
   return (
     err instanceof DocumentEngineTrapError ||
     err instanceof MarkdownBodyTooLargeError ||
+    err instanceof NodeTextTooLargeError ||
     err instanceof OffGrammarPathError
   )
 }
 
 function refuse(
   target: CachedTarget,
-  error: MarkdownBodyTooLargeError | OffGrammarPathError,
+  error: MarkdownBodyTooLargeError | NodeTextTooLargeError | OffGrammarPathError,
 ): never {
   target.evict()
   log.warning('sync write refused', { ...target.fields, reason: error.message })
@@ -92,8 +116,8 @@ function newOffGrammarPaths(doc: LoroDoc, before: Frontiers, target: CachedTarge
 
 /**
  * Imports a client's update into a CACHED document unless it breaks the
- * markdown size limit or, for a workspace record, the document-path grammar —
- * in which case nothing of it is kept.
+ * markdown size limit, the node-text limit or, for a workspace record, the
+ * document-path grammar — in which case nothing of it is kept.
  *
  * What the update does to text is `importWithinTextLimits`'s judgement, the
  * one the browser keeper takes too; this adds what only the daemon's sync
@@ -119,6 +143,9 @@ export function importWithinSyncLimits(
     'importing an update into',
     () => importWithinTextLimits(doc, update),
   )
+  if (breach?.shape === 'node-text') {
+    refuse(target, new NodeTextTooLargeError(breach.nodeId, breach.chars))
+  }
   if (breach !== null) refuse(target, new MarkdownBodyTooLargeError(breach.shape, breach.chars))
   if (!(options.workspaceRecord && touchesNodeMeta)) return
   const offGrammar = newOffGrammarPaths(doc, before, trapped)

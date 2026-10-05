@@ -12,9 +12,11 @@ import {
   documentContainers,
   moveWorkspaceNodeToPath,
   readMarkdownBody,
+  readSpatialCanvas,
   readWorkspaceDocuments,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
@@ -189,5 +191,38 @@ describe('a workspace-document update moving a document outside the path grammar
     expect(body.message).toContain('"Meeting notes"')
     const stored = await snapshot(`${url}/snapshot`)
     expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['big'])
+  })
+})
+
+describe('an editor sync write giving a node text past the node limit', () => {
+  it('on the per-document route answers 413 node_text_too_large and stores nothing', async () => {
+    const { post, snapshot } = await setup()
+    const url = `/api/w/${WS}/document/board`
+    expect(
+      (
+        await post(
+          `${url}/update`,
+          updateFrom(new LoroDoc(), () => {}),
+        )
+      ).status,
+    ).toBe(200)
+
+    const refused = await post(
+      `${url}/update`,
+      updateFrom(await snapshot(`${url}/snapshot`), (doc) =>
+        writeSpatialNode(doc, {
+          id: 'big',
+          resource: { mimeType: 'text/markdown', content: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1) },
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+        }),
+      ),
+    )
+
+    expect(refused.status).toBe(413)
+    expect(await refused.json()).toMatchObject({ error: 'node_text_too_large' })
+    expect(readSpatialCanvas(await snapshot(`${url}/snapshot`)).nodes).toEqual([])
   })
 })

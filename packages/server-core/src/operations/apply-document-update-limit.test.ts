@@ -13,10 +13,16 @@ import {
   moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
   readMarkdownBody,
+  readSpatialCanvas,
   readWorkspaceDocuments,
   writeMarkdownBody,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import {
+  MARKDOWN_MAX_CHARS,
+  NODE_TEXT_MAX_CHARS,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
@@ -25,7 +31,11 @@ import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
-import { MarkdownBodyTooLargeError, OffGrammarPathError } from './apply-document-update-limit.js'
+import {
+  MarkdownBodyTooLargeError,
+  NodeTextTooLargeError,
+  OffGrammarPathError,
+} from './apply-document-update-limit.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
@@ -518,5 +528,109 @@ describe('MarkdownBodyTooLargeError', () => {
     expect(new MarkdownBodyTooLargeError('body', 300_000).message).toMatch(
       /^This update would make a document body 300000 characters long, past the 262144-character limit for one document/,
     )
+  })
+})
+
+describe('a sync update that writes a node', () => {
+  const textNode = (text: string, x = 0): SpatialNode => ({
+    id: 'n1',
+    resource: { mimeType: 'text/markdown', content: text },
+    x,
+    y: 0,
+    width: 200,
+    height: 100,
+  })
+  const spatialSeed = (text?: string) => {
+    const doc = new LoroDoc()
+    if (text !== undefined) writeSpatialNode(doc, textNode(text))
+    return doc
+  }
+  const storedText = (store: StoredDoc) => {
+    const node = readSpatialCanvas(store.get()).nodes[0]
+    return node?.resource?.content
+  }
+  const send = (store: StoredDoc, edit: (doc: LoroDoc) => void) =>
+    applyDocumentUpdate(liveDeps(store), {
+      workspaceId: WS,
+      path: PATH,
+      update: updateFrom(store.get(), edit),
+    })
+
+  it('adding text past the node limit is refused and nothing is kept', async () => {
+    const store = new StoredDoc(spatialSeed())
+
+    const refusal = await send(store, (doc) =>
+      writeSpatialNode(doc, textNode('x'.repeat(NODE_TEXT_MAX_CHARS + 1))),
+    ).catch((err: unknown) => err)
+
+    expect(refusal).toBeInstanceOf(NodeTextTooLargeError)
+    expect(refusal).toMatchObject({ nodeId: 'n1', chars: NODE_TEXT_MAX_CHARS + 1 })
+    expect(store.saves).toBe(0)
+    expect(readSpatialCanvas(store.get()).nodes).toEqual([])
+  })
+
+  it('growing a node already past the limit is refused', async () => {
+    const stored = 'y'.repeat(NODE_TEXT_MAX_CHARS + 10)
+    const store = new StoredDoc(spatialSeed(stored))
+
+    await expect(
+      send(store, (doc) => writeSpatialNode(doc, textNode(`${stored}!`))),
+    ).rejects.toBeInstanceOf(NodeTextTooLargeError)
+    expect(storedText(store)).toBe(stored)
+  })
+
+  it('moving or shrinking a node stored past the limit is applied', async () => {
+    const stored = 'y'.repeat(NODE_TEXT_MAX_CHARS + 10)
+    const store = new StoredDoc(spatialSeed(stored))
+
+    await send(store, (doc) => writeSpatialNode(doc, textNode(stored, 40)))
+    await send(store, (doc) => writeSpatialNode(doc, textNode(stored.slice(5), 40)))
+
+    expect(storedText(store)).toHaveLength(NODE_TEXT_MAX_CHARS + 5)
+  })
+
+  it('in the legacy shape, carrying its text in its own field, is judged the same', async () => {
+    const store = new StoredDoc(spatialSeed())
+
+    await expect(
+      send(store, (doc) =>
+        doc.getMap('nodes').set('n1', {
+          id: 'n1',
+          type: 'text',
+          text: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1),
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(NodeTextTooLargeError)
+  })
+
+  it('under a workspace-tree node is refused through the workspace record', async () => {
+    const seed = new LoroDoc()
+    createWorkspaceDocumentAtPath(seed, { path: 'board', documentId: OTHER_ID, kind: 'spatial' })
+    seed.commit()
+    const store = new StoredDoc(seed)
+    const update = updateFrom(store.get(), (doc) =>
+      writeSpatialNode(documentContainers(doc, OTHER_ID), textNode('x'.repeat(1_000_000))),
+    )
+
+    await expect(
+      applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
+    ).rejects.toMatchObject({ nodeId: 'n1', chars: 1_000_000 })
+    expect(store.saves).toBe(0)
+  })
+
+  it('a map value elsewhere, past the node limit, is not node text', async () => {
+    const store = new StoredDoc(spatialSeed())
+
+    await send(store, (doc) =>
+      doc
+        .getMap('canvas')
+        .set('note', { resource: { content: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1) } }),
+    )
+
+    expect(store.saves).toBe(1)
   })
 })

@@ -12,6 +12,7 @@ export { getLogger, setLogSink } from './log.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export {
   MarkdownBodyTooLargeError,
+  NodeTextTooLargeError,
   OffGrammarPathError,
 } from './operations/apply-document-update-limit.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'

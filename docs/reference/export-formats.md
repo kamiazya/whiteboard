@@ -61,6 +61,13 @@ characters**; a longer one is refused with "node text is longer than the
 the limit one node still finishes in about a second. A splice that shrinks text
 already over the limit is accepted.
 
+The daemon's sync routes — a document's `update`, the workspace document's
+`update` and `promote` — hold the same bound: an update that adds a node with
+more than 8,192 characters of text, or grows a node's text past that, answers
+`413` with `{"error":"node_text_too_large"}` and stores nothing. A node stored
+longer before the limit can still be moved, restyled or shortened. A
+browser-kept workspace does not check a canvas node's text.
+
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
 `document.create` and `document.move` and of

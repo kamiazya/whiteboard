@@ -5,6 +5,7 @@ import {
   DocumentEngineTrapError,
   errorBody,
   MarkdownBodyTooLargeError,
+  NodeTextTooLargeError,
   type ServerDeps,
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
@@ -35,6 +36,9 @@ async function answeringWriteRefusal(
   } catch (err) {
     if (err instanceof MarkdownBodyTooLargeError) {
       return c.json(errorBody('markdown_too_large', err.message), 413)
+    }
+    if (err instanceof NodeTextTooLargeError) {
+      return c.json(errorBody('node_text_too_large', err.message), 413)
     }
     if (!(err instanceof DocumentEngineTrapError)) throw err
     return c.json(errorBody('document_engine_trap', err.message), 500)

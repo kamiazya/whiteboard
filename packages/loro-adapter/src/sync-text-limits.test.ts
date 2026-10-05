@@ -1,6 +1,7 @@
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { writeSpatialNode } from './loro-bridge.js'
 import { importWithinTextLimits, syncTextLimitBreach } from './sync-text-limits.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
@@ -65,6 +66,27 @@ describe('syncTextLimitBreach', () => {
         updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab')),
       ),
     ).toBe(null)
+  })
+
+  it("refuses a node's text past the node limit however short every body is", () => {
+    const base = record({ [DOC_ID]: 'short' })
+    const client = base.fork()
+    const from = client.oplogVersion()
+    writeSpatialNode(documentContainers(client, DOC_ID), {
+      id: 'n1',
+      resource: { mimeType: 'text/markdown', content: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1) },
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+    })
+    client.commit()
+
+    expect(syncTextLimitBreach(base, client.export({ mode: 'update', from }))).toEqual({
+      shape: 'node-text',
+      chars: NODE_TEXT_MAX_CHARS + 1,
+      nodeId: 'n1',
+    })
   })
 
   it('takes an update whose bytes are at least as many as every string it writes', () => {

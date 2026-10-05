@@ -10,6 +10,7 @@ import {
   DocumentEngineTrapError,
   errorBody,
   MarkdownBodyTooLargeError,
+  NodeTextTooLargeError,
   OffGrammarPathError,
   type OperatorInfo,
   promoteWorkspace,
@@ -98,6 +99,9 @@ async function admittedWorkspace(
 function answerWriteRefusal(c: Context, err: unknown): Response {
   if (err instanceof MarkdownBodyTooLargeError) {
     return c.json(errorBody('markdown_too_large', err.message), 413)
+  }
+  if (err instanceof NodeTextTooLargeError) {
+    return c.json(errorBody('node_text_too_large', err.message), 413)
   }
   if (err instanceof OffGrammarPathError) return c.json(errorBody('invalid_path', err.message), 400)
   if (!(err instanceof DocumentEngineTrapError)) throw err
