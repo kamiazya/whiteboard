@@ -74,7 +74,7 @@ interface Props {
    */
   titleSlot?: (identity: DocumentIdentity) => ReactNode
   /** The open document's name in the record the page syncs; see `useDocumentNames`. */
-  recordedName?: string | null | undefined
+  recordedName?: string | null
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.

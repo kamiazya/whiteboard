@@ -53,6 +53,6 @@ describe('comment control failure line (real browser)', () => {
     const { input } = parts(control.element)
     input.value = 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS - 1)
     await userEvent.type(input, 'abc')
-    expect(input.value.length).toBe(COMMENT_MESSAGE_MAX_CHARS)
+    expect(input.value).toHaveLength(COMMENT_MESSAGE_MAX_CHARS)
   })
 })

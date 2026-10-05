@@ -47,7 +47,7 @@ export function deriveCopyPath(
     const room = DOCUMENT_PATH_MAX_LENGTH - folder.length - suffix.length
     // A path segment must end in a letter or digit, so a cut that lands just
     // after a hyphen drops the hyphen too.
-    const kept = leaf.slice(0, Math.max(0, room)).replace(/-+$/, '')
+    const kept = trimTrailingHyphens(leaf.slice(0, Math.max(0, room)))
     return kept === '' ? null : `${folder}${kept}${suffix}`
   }
   let suffix = '-copy'
@@ -62,6 +62,12 @@ export function deriveCopyPath(
 function fitName(name: string, max: number): string {
   if (name.length <= max) return name
   const cut = name.slice(0, max)
-  const last = cut.charCodeAt(cut.length - 1)
+  const last = cut.codePointAt(cut.length - 1) ?? 0
   return (last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut).trimEnd()
+}
+
+function trimTrailingHyphens(text: string): string {
+  let end = text.length
+  while (end > 0 && text[end - 1] === '-') end--
+  return text.slice(0, end)
 }

@@ -17,7 +17,7 @@ export class StoredDoc {
   }
 
   get(): LoroDoc {
-    if (this.cached === null) this.cached = LoroDoc.fromSnapshot(this.stored)
+    this.cached ??= LoroDoc.fromSnapshot(this.stored)
     return this.cached
   }
 

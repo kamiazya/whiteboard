@@ -44,7 +44,7 @@ function withRecordedName(
   names: WorkspaceNames,
   recorded: UseDocumentNamesOptions['recorded'],
 ): WorkspaceNames {
-  if (recorded === undefined || recorded.name === undefined) return names
+  if (recorded?.name === undefined) return names
   const { [recorded.path]: _previous, ...others } = names.documents
   const documents = recorded.name === null ? others : { ...others, [recorded.path]: recorded.name }
   return { ...names, documents }
