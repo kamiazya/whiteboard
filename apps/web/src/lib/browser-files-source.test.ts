@@ -275,7 +275,26 @@ describe('createBrowserFilesSource trash', () => {
     await ensureBrowserWorkspace(index)
     const source = createBrowserFilesSource({ index })
 
-    await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow()
+    await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow(
+      'Nothing restorable',
+    )
+  })
+
+  // The daemon answers 409 with this sentence for the same case: the id is
+  // live, so the restore has nothing to bring back and "not found" would lie.
+  it('refuses to restore a document the workspace already places, naming its path', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureBrowserWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'notes/live',
+      kind: 'markdown',
+    })
+    const source = createBrowserFilesSource({ index })
+
+    await expect(source.restoreFromTrash?.(entry.documentId)).rejects.toThrow(
+      '"notes/live" is already in this workspace, so there is nothing to restore',
+    )
   })
 
   it('stays capability-less over an index that keeps no trash', async () => {

@@ -218,17 +218,20 @@ function trashMembers(
       }))
     },
     async restoreFromTrash(documentId) {
-      const restored = await folding.restoreDocument({
-        workspaceId: getBrowserWorkspaceId(),
-        documentId,
-      })
+      const workspaceId = getBrowserWorkspaceId()
+      const restored = await folding.restoreDocument({ workspaceId, documentId })
+      if (restored !== null) return
       // null means nothing came back — surfacing it is what lets the
       // section show its restore error instead of silently reloading
-      // with the row still there. The daemon path already rejects here
-      // (its route answers 404); the two keepers must agree.
-      if (restored === null) {
-        throw new Error(`Nothing restorable for "${documentId}"`)
+      // with the row still there. The two keepers refuse alike: an id the
+      // workspace already places is the daemon's 409, anything else its 404.
+      const placed = await index.resolveDocumentById({ workspaceId, documentId })
+      if (placed !== null) {
+        throw new Error(
+          `"${placed.path}" is already in this workspace, so there is nothing to restore`,
+        )
       }
+      throw new Error(`Nothing restorable for "${documentId}"`)
     },
     async purgeFromTrash(documentId) {
       // false means the trash held no such entry; rejecting is what the
