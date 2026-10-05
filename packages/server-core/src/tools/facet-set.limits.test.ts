@@ -112,6 +112,21 @@ describe('wb_facet_set — tags per element', () => {
     )
   })
 
+  // A rename or a removal grows no set, but each entry is applied to every
+  // tag of every node and edge a board-wide rename reaches, so the lists are
+  // held to the one bound a single element's set already has.
+  test.each([
+    'remove',
+    'rename',
+  ] as const)('refuses a %s naming more tags than one element may carry', (key) => {
+    const named = (count: number) =>
+      key === 'remove' ? tagsOf(count) : tagsOf(count).map((from) => ({ from, to: 'merged' }))
+    const change = (count: number) => ({ ...request([]), tags: { [key]: named(count) } })
+    expect(facetSetInputSchema.safeParse(change(TAGS_PER_ELEMENT_MAX)).success).toBe(true)
+    const refused = facetSetInputSchema.safeParse(change(TAGS_PER_ELEMENT_MAX + 1))
+    expect(refused.error?.issues[0]?.message).toContain(TAG_COUNT_LIMIT_PHRASE)
+  })
+
   test('refuses a change that grows a set past the bound, and writes nothing', async () => {
     const store = await noteTagged(tagsOf(TAGS_PER_ELEMENT_MAX))
     const tool = createFacetSetTool(
