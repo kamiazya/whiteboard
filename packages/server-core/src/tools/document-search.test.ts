@@ -10,7 +10,7 @@ import {
   documentSearchOutputSchema,
   SearchNeedsQueryOrFilterError,
 } from './document-search.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { createFacetSetTool } from './facet-set.js'
 
 const WS = 'ws-1'
@@ -31,7 +31,7 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
       kind,
       ...(name === undefined ? {} : { name }),
     })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const writeBody = (documentId: string, frontmatter: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\n${frontmatter}\n---\n${body}` })
   return { create, writeBody, edit: createCanvasEditTool(deps) }

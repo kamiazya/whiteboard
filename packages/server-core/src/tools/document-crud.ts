@@ -28,7 +28,11 @@ import type {
   wbDocumentResolveOutputSchema,
 } from './document-crud.schemas.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
-import { checkFrontmatterFacets, createDocumentSetTool, parseWritableOkf } from './document-set.js'
+import {
+  checkFrontmatterFacets,
+  createDocumentSetOperation,
+  parseWritableOkf,
+} from './document-set.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 const log = getLogger('document-crud')
@@ -194,7 +198,7 @@ async function fillCreatedDocument(
     // `markdown` is only ever defined on the markdown arm, but `input.actor`
     // below is reachable only once TypeScript knows which arm this is.
     if (input.kind === 'markdown' && markdown !== undefined) {
-      await createDocumentSetTool(deps).execute({
+      await createDocumentSetOperation(deps).execute({
         workspaceId,
         documentId,
         markdown,

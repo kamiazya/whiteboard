@@ -3,7 +3,7 @@ import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
-import { createDocumentSetTool } from '../tools/document-set.js'
+import { createDocumentSetOperation } from '../tools/document-set.js'
 import { factsCacheFor } from './content-source.js'
 
 const WS = 'ws-1'
@@ -26,7 +26,7 @@ async function seedTwo(deps: ReturnType<typeof makeDeps>) {
     })
   const a = await create('a', 'Alpha')
   const b = await create('b', 'Beta')
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const write = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   await write(a.documentId, 'alpha body one')
@@ -46,7 +46,7 @@ describe('ContentFactsCache', () => {
       kind: 'markdown',
       name: 'Gamma',
     })
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: OTHER,
       documentId: c.documentId,
       markdown: '---\ntype: note\n---\ngamma body',
@@ -156,7 +156,7 @@ describe('ContentFactsCache', () => {
       path: 'tagged',
       kind: 'markdown',
     })
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WS,
       documentId: doc.documentId,
       markdown: '---\ntype: note\ntags:\n  - release\n---\nbody',

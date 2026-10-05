@@ -3,7 +3,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
-import { createDocumentSetTool } from '../tools/document-set.js'
+import { createDocumentSetOperation } from '../tools/document-set.js'
 import type { Embedder } from './embedder.js'
 
 const WS = 'sem'
@@ -58,7 +58,7 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
   // of the first create: creating one is ADR-0019's MINT boundary, which
   // keys it by a fresh ULID and would leave the literal below naming nothing.
   await deps.documentIndex.createWorkspace({ workspaceId: WS })
-  const set = createDocumentSetTool(deps)
+  const set = createDocumentSetOperation(deps)
   const write = async (path: string, name: string, body: string) => {
     const created = await wbDocumentCreate(deps, {
       workspaceId: WS,
@@ -205,7 +205,7 @@ describe('semantic fusion', () => {
     // of the first create: creating one is ADR-0019's MINT boundary, which
     // keys it by a fresh ULID and would leave the literal below naming nothing.
     await deps.documentIndex.createWorkspace({ workspaceId: WS })
-    const set = createDocumentSetTool(deps)
+    const set = createDocumentSetOperation(deps)
     const write = async (path: string, name: string, body: string) => {
       const created = await wbDocumentCreate(deps, {
         workspaceId: WS,
@@ -281,7 +281,7 @@ describe('semantic fusion', () => {
     expect(embedder.calls).toBe(afterFirst + 1)
 
     // One document edited: that document plus the query.
-    await createDocumentSetTool(deps).execute({
+    await createDocumentSetOperation(deps).execute({
       workspaceId: WS,
       documentId: storage,
       markdown: '---\ntype: note\n---\nquota まわりを書き直した',

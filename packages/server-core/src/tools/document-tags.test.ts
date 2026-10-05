@@ -11,7 +11,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from './document-crud.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { computeDocumentTags, documentTagsOutputSchema } from './document-tags.js'
 
 const WS = 'ws-1'
@@ -33,7 +33,7 @@ describe('GET /document-tags', () => {
     const plain = await create('plain', 'markdown')
     await create('board', 'spatial')
     await create('empty', 'markdown') // never written: no snapshot
-    const set = createDocumentSetTool(deps)
+    const set = createDocumentSetOperation(deps)
     await set.execute({
       workspaceId: WS,
       documentId: tagged.documentId,

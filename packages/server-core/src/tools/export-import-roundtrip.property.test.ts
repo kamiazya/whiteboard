@@ -12,7 +12,7 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetOperation } from './document-set.js'
 import { exportOkf } from './export-okf.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -102,7 +102,7 @@ async function setupTools() {
   const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
   return {
     deps,
-    documentSet: createDocumentSetTool(deps),
+    documentSet: createDocumentSetOperation(deps),
   }
 }
 

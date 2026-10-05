@@ -444,7 +444,7 @@ export function createServer(deps: ServerDeps) {
     // record holds the batch rather than the batch AND three singletons.
     // The operations themselves are unchanged — the routes above still call
     // `wbDocumentCreate` / `wbDocumentDelete` directly, and the batch calls
-    // them plus `createDocumentSetTool`.
+    // them plus `createDocumentSetOperation`.
     documentList: {
       name: 'wb_document_list' as const,
       description: WB_DOCUMENT_LIST_DESCRIPTION,
