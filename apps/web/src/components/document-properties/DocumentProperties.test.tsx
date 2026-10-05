@@ -33,8 +33,10 @@ function meta(overrides: Partial<StoredCoreFacets> = {}): StoredCoreFacets {
 }
 
 /** The two title props every render needs, defaulted to an unnamed document. */
-function titleProps(overrides: { title?: string; onTitleChange?: (next: string) => void } = {}) {
-  return { title: '', onTitleChange: vi.fn(), ...overrides }
+function titleProps(
+  overrides: { title?: string; onTitleChange?: (next: string) => Promise<string | null> } = {},
+) {
+  return { title: '', onTitleChange: vi.fn(async () => null), ...overrides }
 }
 
 describe('DocumentProperties', () => {
@@ -59,7 +61,7 @@ describe('DocumentProperties', () => {
 
   it('reports an edited title through onTitleChange, and never as a facet', () => {
     const onChange = vi.fn()
-    const onTitleChange = vi.fn()
+    const onTitleChange = vi.fn(async (_next: string) => null)
     render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: /title/i }), {
@@ -72,7 +74,7 @@ describe('DocumentProperties', () => {
   })
 
   it('reports a cleared title as the empty string, which the workspace reads as unnamed', () => {
-    const onTitleChange = vi.fn()
+    const onTitleChange = vi.fn(async (_next: string) => null)
     render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: /title/i }), { target: { value: '  ' } })
@@ -203,8 +205,9 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   it('lets a space be typed in the middle of a title', () => {
     // Exactly what the workspace does with a name it is handed.
     let current = ''
-    const onTitleChange = vi.fn((next: string) => {
+    const onTitleChange = vi.fn(async (next: string) => {
       current = next.trim() || 'untitled'
+      return null
     })
     const view = () => (
       <DocumentProperties
@@ -234,8 +237,9 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // pins: no await between the change and the Escape.
   it('restores the previous name even when Escape lands in the same tick as the edit', () => {
     let current = 'Release plan'
-    const onTitleChange = vi.fn((next: string) => {
+    const onTitleChange = vi.fn(async (next: string) => {
       current = next
+      return null
     })
     const view = () => <DocumentProperties {...titleProps({ title: current, onTitleChange })} />
     render(view())
@@ -258,7 +262,9 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     render(
       // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the page chrome that wraps this row
       <div onKeyDown={onAncestorKeyDown}>
-        <DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange: vi.fn() })} />
+        <DocumentProperties
+          {...titleProps({ title: 'Release plan', onTitleChange: vi.fn(async () => null) })}
+        />
       </div>,
     )
 
@@ -273,7 +279,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // ring goes away and the save dot is the receipt. Without it the caret just
   // sits there and nothing says the name was kept.
   it('finishes the edit on Enter: the field blurs and keeps the typed name', () => {
-    const onChange = vi.fn()
+    const onChange = vi.fn(async () => null)
     render(<DocumentProperties {...titleProps({ title: 'Draft', onTitleChange: onChange })} />)
     const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
     box.focus()
@@ -301,7 +307,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   })
 
   it('drops the draft on blur so the box shows the canonical name', () => {
-    const onTitleChange = vi.fn()
+    const onTitleChange = vi.fn(async (_next: string) => null)
     render(<DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange })} />)
     const box = screen.getByRole('textbox', { name: /title/i })
     fireEvent.change(box, { target: { value: 'Release plan  ' } })

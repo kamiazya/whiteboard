@@ -56,7 +56,9 @@ export interface DocumentPageModel {
    * through its own store answers with the value and the rename; one that
    * leaves naming to the top bar's identity answers `'top-bar'`.
    */
-  readonly title: { readonly value: string; readonly onChange: (next: string) => void } | 'top-bar'
+  readonly title:
+    | { readonly value: string; readonly onChange: (next: string) => Promise<string | null> }
+    | 'top-bar'
   readonly properties: {
     /** False while the row must not render yet (the browser's facets have not hydrated). */
     readonly ready: boolean

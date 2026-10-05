@@ -26,8 +26,7 @@ export interface DocumentPropertiesProps {
    * it is saved), shown beside the box: every keystroke commits, so a refusal
    * nobody shows reads as a rename that stuck until the name snaps back.
    */
-  // biome-ignore lint/suspicious/noConfusingVoidType: the page model types a keeper's own rename as returning nothing, so `void` is what lets it be passed here
-  readonly onTitleChange?: (next: string) => Promise<string | null> | void
+  readonly onTitleChange?: (next: string) => Promise<string | null>
   /**
    * The document's OKF frontmatter, or absent when the document has none to
    * hold: a facet belongs to OKF and a JSON Canvas document has nowhere to
@@ -195,10 +194,9 @@ function useTitleCommit(onTitleChange: DocumentPropertiesProps['onTitleChange'])
   const [refusal, setRefusal] = useState<string | null>(null)
   const latestRef = useRef(0)
   const commit = (next: string) => {
-    const outcome = onTitleChange?.(next)
-    if (!(outcome instanceof Promise)) return
+    if (onTitleChange === undefined) return
     const ticket = ++latestRef.current
-    void outcome.then((answer) => {
+    void onTitleChange(next).then((answer) => {
       if (ticket === latestRef.current) setRefusal(answer)
     })
   }
