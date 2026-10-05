@@ -6,7 +6,7 @@ import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { userEvent } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { nodeTextEditNotice } from '../../lib/limit-notice.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { NodeTextEditorOverlay } from './NodeTextEditorOverlay.js'
@@ -172,12 +172,15 @@ describe('the node text overlay (real browser)', () => {
     await typeInto(container, '!')
     await userEvent.click(getByRole('button', { name: 'Read' }))
 
-    const anchor = await waitFor(() => {
+    // Only the link's NAME is taken from the rendered anchor: the preview can
+    // re-render between that read and the click, so the click goes through a
+    // locator resolved at click time rather than a node that may be detached.
+    const linkName = await waitFor(() => {
       const found = container.querySelector(`a[href="${TARGET_ID}"]`)
-      if (!found) throw new Error('expected the wiki link to render as an anchor')
-      return found as HTMLElement
+      if (!found?.textContent) throw new Error('expected the wiki link to render as an anchor')
+      return found.textContent
     })
-    await userEvent.click(anchor)
+    await page.getByRole('link', { name: linkName, exact: true }).click()
 
     expect(onOpenDocument).toHaveBeenCalledWith(TARGET_ID)
     expect(onCommit).toHaveBeenCalledWith(`See [[${TARGET_NAME}]]!`)
