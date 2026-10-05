@@ -1,12 +1,14 @@
 /**
- * What a comment message and an edge, line or group label cost the daemon,
- * by their length — the write, and then every `wb_scene_render` of the board,
- * through the real store and the export measurer. What the comment and label
- * limits beside `NODE_TEXT_MAX_CHARS` are sized against.
+ * What a comment message, an edge, line or group label, and a link's URL or a
+ * file's path cost the daemon, by their length — the write, and then every
+ * `wb_scene_render` of the board, through the real store and the export
+ * measurer. What the comment, label and node-location limits beside
+ * `NODE_TEXT_MAX_CHARS` are sized against; a length past its limit is
+ * refused at the write, so the rows above a limit need it lifted first.
  *
  * Run:
- *   SHAPE=paragraph|word node --import tsx/esm \
- *     scripts/measure/label-and-comment-cost.mjs [lengths...]
+ *   SHAPE=paragraph|word [KINDS=comment,edge,line,group,link,file] \
+ *     node --import tsx/esm scripts/measure/label-and-comment-cost.mjs [lengths...]
  *
  *   paragraph  prose with spaces and no blank line
  *   word       one unbroken run of a single letter: nothing to wrap at
@@ -52,6 +54,22 @@ const KINDS = {
   group: (text) => ({
     op: 'node.add',
     node: { type: 'group', label: text, x: 0, y: 600, width: 400, height: 300 },
+  }),
+  // A link's URL and a file's path are drawn as the node's label.
+  link: (text) => ({
+    op: 'node.add',
+    node: {
+      type: 'link',
+      url: `https://example.com/${text}`,
+      x: 0,
+      y: 600,
+      width: 400,
+      height: 100,
+    },
+  }),
+  file: (text) => ({
+    op: 'node.add',
+    node: { type: 'file', file: `assets/${text}`, x: 0, y: 600, width: 400, height: 100 },
   }),
 }
 
