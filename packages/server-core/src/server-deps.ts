@@ -401,17 +401,16 @@ export type DocumentWritten = (input: {
  * A BRACKET around the delete, not a pair of hooks, because two separate
  * things have to be true at once.
  *
- * The information the cleanup needs stops existing partway through: a
- * version's thumbnail is filed under the version id, and version rows
- * cascade away with the document, so what to unlink can only be read while
- * the document is still whole. And a composition root may need to hold
- * something across the WHOLE delete — the daemon holds its per-workspace
+ * The information the cleanup needs stops existing partway through:
+ * whether the delete left the document in the trash (its saved versions then
+ * stay until the purge) can only be read once the delete has run, and what
+ * to drop is keyed by a document the delete is removing. And a composition
+ * root may need to hold something across the WHOLE delete — the daemon holds its per-workspace
  * write lock — which a `begin` that has already returned cannot do.
  *
  * A begin/finalize pair gave the first without the second, and the gap was
- * real: a version saved between the capture and the row delete had its row
- * cascaded away while its thumbnail was never in the captured set, leaving
- * the orphaned file this seam exists to prevent.
+ * real: a version saved between the capture and the sweep landed after it,
+ * leaving the orphan this seam exists to prevent.
  *
  * `deleteDocument` runs the delete itself. What it throws propagates, and
  * the cleanup is then skipped — the index refuses while documents sit below
