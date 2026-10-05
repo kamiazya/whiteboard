@@ -103,7 +103,10 @@ every `*.test.ts(x)` name in it against the repo's real tests and fail on one
 that exists nowhere — a stale name is a claim that something covers the member
 when nothing does, and no other gate reads a string.
 
-Runtime assertions go in `afterAll`. Note vitest reports an `afterAll`
+Runtime assertions go in `afterAllFloor(feeders, floor)`
+(`@kamiazya/whiteboard-model/test-utils`), never a bare `afterAll`: it asserts
+only when the named feeder tests ran, so a `-t` run does not fail a floor
+nothing fed, and `after-all-floor-check.test.ts` enforces it. Note vitest reports an `afterAll`
 failure as a failed SUITE while the summary line still reads "N passed" —
 **the exit code is the truth.**
 
