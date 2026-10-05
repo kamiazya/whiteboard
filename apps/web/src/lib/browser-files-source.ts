@@ -2,16 +2,14 @@ import {
   type DocumentMove,
   movesForPathChange,
   planReferenceRewrite,
-  rewriteCanvasReferences,
-  rewriteReferenceTargets,
 } from '@kamiazya/whiteboard-codec'
 import {
   type DocumentContent,
+  documentContainers,
   readDocumentContent,
   readFacets,
   readMarkdownBody,
-  writeMarkdownBody,
-  writeSpatialNode,
+  resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { type DocumentKind, type ExtensionFacets, tagsInUse } from '@kamiazya/whiteboard-model'
 import {
@@ -27,7 +25,7 @@ import {
   hasDocumentTrash,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
-import { splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
+import { rewriteDocumentReferences, splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
   fullTextSearch,
   type SearchableDocument,
@@ -40,7 +38,13 @@ import {
   idbContentClock,
 } from './browser-document-summary.js'
 import { createTagBearersCache } from './browser-files-source-tags.js'
+import {
+  BrowserWorkspaceDocs,
+  openWorkspaceOrNull,
+  saveAndAnnounce,
+} from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { seedCreatedDocument } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
   type LoadedMarkdown,
@@ -48,7 +52,7 @@ import {
   WorkspaceMissingError,
 } from './files-source.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { LoroStore, type LoroStoreLike } from './loro-store.js'
+import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-store.js'
 import {
   type ContentRecord,
   lazyContentRecord,
@@ -127,28 +131,26 @@ async function* readDocumentsFrom(
 }
 
 /**
- * Rewrite one document's references in place, answering whether anything
- * changed. The caller saves; this only edits the in-memory doc.
- *
- * A board takes TARGETED writes, never a whole-canvas resync:
- * `readSpatialCanvas` drops records this build cannot parse, so writing the
- * whole canvas back would DELETE them.
+ * Repoints one listed document's references inside the workspace record,
+ * answering whether anything changed. A document the record does not hold (a
+ * per-document record nothing has folded yet) or cannot read is left as
+ * written: the rename already stands, and the rest still get repaired.
  */
-function rewriteReferencesIn(
-  read: LoadedDocument,
-  plan: ReturnType<typeof planReferenceRewrite>,
+function rewriteInRecord(
+  workspace: LoroDoc,
+  entry: { readonly documentId: string; readonly kind?: DocumentKind },
+  plan: ReadonlyMap<string, string>,
 ): boolean {
-  const { content } = read
-  if (content.kind === 'spatial') {
-    const result = rewriteCanvasReferences(content.canvas, plan)
-    if (!result.changed) return false
-    for (const node of result.changedNodes) writeSpatialNode(read.doc, node)
-    return true
+  if (resolveWorkspaceDocumentById(workspace, entry.documentId) === null) return false
+  try {
+    return rewriteDocumentReferences(
+      documentContainers(workspace, entry.documentId),
+      plan,
+      entry.kind,
+    )
+  } catch {
+    return false
   }
-  const next = rewriteReferenceTargets(content.body, plan)
-  if (next === content.body) return false
-  writeMarkdownBody(read.doc, next)
-  return true
 }
 
 /** A library document's value, or what `read` answers for none: absent, unreadable or malformed. */
@@ -285,17 +287,15 @@ export function createBrowserFilesSource(
   const corpus = new Map<string, { stamp: string; texts: string[] }>()
 
   /**
-   * After a move, repoint references other documents wrote to the old path — the same codec plan the daemon's
-   * rename routes apply, so both keepers give one answer. Scans every
-   * document rather than keeping a reference index: a rename is a rare,
-   * user-initiated click, and the search corpus above already prices the
-   * full read (60 documents / 202KB = 176ms against real IndexedDB).
+   * After a move, repoint references other documents wrote to the old path — the same codec plan
+   * and the same rewrite the daemon's rename routes apply, so both keepers give one answer.
+   * Written into the workspace record every reader reads, as one save, and announced, so a page
+   * open on a referring document shows the new target without a reload. Scans every document
+   * rather than keeping a reference index: a rename is a rare, user-initiated click, and the
+   * search corpus above already prices the full read (60 documents / 202KB = 176ms against real
+   * IndexedDB).
    * ponytail: full scan per rename; share a facts cache with search if a
    * measured workspace makes the click slow.
-   *
-   * One unreadable document must not abort the rest — the rename already
-   * stands, and every reference this CAN repair is one fewer silently
-   * broken link.
    */
   async function followReferences(
     entriesBefore: readonly WorkspaceDocumentEntry[],
@@ -310,16 +310,21 @@ export function createBrowserFilesSource(
       moves,
     })
     if (plan.size === 0) return
-    const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
-    for await (const read of readableDocuments(entries)) {
-      if (!rewriteReferencesIn(read, plan)) continue
-      try {
-        await loro.save(read.documentId, read.doc.export({ mode: 'snapshot' }))
-        // The content moved, so the search corpus entry for it is stale.
-        corpus.delete(read.documentId)
-      } catch {
-        // Unsaveable: leave it; the reference stays as written.
-      }
+    const workspaceId = getBrowserWorkspaceId()
+    const entries = await index.listDocuments({ workspaceId })
+    const docs = new BrowserWorkspaceDocs()
+    const workspace = await openWorkspaceOrNull(docs)
+    if (workspace === null) return
+    const rewritten: string[] = []
+    for (const entry of entries) {
+      if (rewriteInRecord(workspace, entry, plan)) rewritten.push(entry.documentId)
+    }
+    if (rewritten.length === 0) return
+    await saveAndAnnounce(docs, workspaceId, workspace)
+    for (const documentId of rewritten) {
+      await touchContentTimestamp(documentId)
+      // The content moved, so the search corpus entry for it is stale.
+      corpus.delete(documentId)
     }
   }
 
@@ -422,21 +427,7 @@ export function createBrowserFilesSource(
         kind,
         ...(trimmed ? { name: trimmed } : {}),
       })
-      // Seeded like every other browser create: a document with no content
-      // record has no last-edited time and nothing to open. Rolled back if
-      // the seed fails, so a failed create never leaves a row with nothing
-      // behind it.
-      try {
-        await loro.save(entry.documentId, loro.createEmptySnapshot())
-      } catch (err) {
-        try {
-          await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: entry.path })
-        } catch {
-          // Best-effort: a stray index row is harmless next to reporting a
-          // create that did not happen.
-        }
-        throw err
-      }
+      await seedCreatedDocument(index, loro, entry)
     },
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {

@@ -9,6 +9,11 @@
  * here exactly where the daemon degrades it, and what the suite then measures
  * is the source's mapping of that answer.
  */
+import {
+  movesForPathChange,
+  planReferenceRewrite,
+  rewriteReferenceTargets,
+} from '@kamiazya/whiteboard-codec'
 import { type TagBearerKind, tagsInUse } from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
@@ -83,12 +88,26 @@ function tagsAnswer(state: State) {
   }
 }
 
+/**
+ * A subtree move, and the follow pass the daemon's rename route runs after
+ * it: the same codec plan over the listing before the move, applied to every
+ * body.
+ */
 function renameSubtree(state: State, from: string, to: string): void {
-  state.rows = state.rows.map((row) =>
-    row.path === from || row.path.startsWith(`${from}/`)
-      ? { ...row, path: `${to}${row.path.slice(from.length)}` }
-      : row,
-  )
+  const before = state.rows.map((row) => ({ id: row.id, path: row.path }))
+  const plan = planReferenceRewrite({
+    entries: before,
+    moves: movesForPathChange(before, from, to),
+  })
+  state.rows = state.rows.map((row) => {
+    const moved =
+      row.path === from || row.path.startsWith(`${from}/`)
+        ? { ...row, path: `${to}${row.path.slice(from.length)}` }
+        : row
+    return moved.body === undefined
+      ? moved
+      : { ...moved, body: rewriteReferenceTargets(moved.body, plan) }
+  })
 }
 
 function setPinned(state: State, path: string, pinned: boolean): Response {

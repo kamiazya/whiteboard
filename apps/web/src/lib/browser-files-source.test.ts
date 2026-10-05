@@ -30,6 +30,7 @@ import {
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
+import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-files-source')
 
@@ -102,10 +103,14 @@ describe('createBrowserFilesSource', () => {
 
     const entries = await source.listDocuments()
     expect(entries.map((e) => e.path)).toEqual(['notes/plan'])
-    // Content record seeded: a document created without one has no
-    // last-edited time and nothing to open.
-    const loaded = await new LoroStore().load(entries[0]?.documentId ?? '')
-    expect(loaded.kind).toBe('ok')
+    // Its content is the record's node, stamped: a document with no stamp
+    // has no last-edited time.
+    const documentId = entries[0]?.documentId ?? ''
+    expect(entries[0]?.updatedAt).toBeDefined()
+    expect(await loadDocumentContent(documentId)).not.toBeNull()
+    // And nothing in the retired per-document store, where a second copy
+    // would outlive the document's delete and answer reads for it.
+    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
   })
 
   it('renames through the index, so the subtree moves with it', async () => {

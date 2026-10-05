@@ -9,6 +9,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   resolveWorkspaceDocumentById,
+  writeDocumentKind,
   writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -18,7 +19,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
+import { ensureBrowserWorkspace } from './browser-document-summary.js'
+import { createBrowserFilesSource } from './browser-files-source.js'
+import { linkifyBrowserMentions } from './browser-linkify.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
@@ -87,6 +92,57 @@ it('an edit saved in one tab reaches the other as a remote update', async () => 
   expect(seen.nodes.map((n) => n.id)).toEqual(['n1'])
   // The tab that made the edit is not told about it again.
   expect(a.h.onRemoteUpdate).not.toHaveBeenCalled()
+})
+
+/** A note in the record, with content, through the production index — the way a page finds one. */
+async function note(index: FoldingBrowserIndex, path: string, name: string, body: string) {
+  const entry = await index.createDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path,
+    kind: 'markdown',
+    name,
+  })
+  const doc = new LoroDoc()
+  writeDocumentKind(doc, 'markdown')
+  writeMarkdownBody(doc, body)
+  expect(
+    await seedWorkspaceDocumentContent(entry.documentId, doc.export({ mode: 'snapshot' })),
+  ).toBe(true)
+  return entry.documentId
+}
+
+/** The open page's body once it has merged every remote update it was handed. */
+function pageBody(page: Awaited<ReturnType<typeof open>>, documentId: string): string {
+  for (const [bytes] of vi.mocked(page.h.onRemoteUpdate).mock.calls) page.doc.import(bytes)
+  return readMarkdownBody(documentContainers(page.doc, documentId))
+}
+
+// Link writes the record from outside any backend, so the page open on the
+// source learns of it only if that write is announced.
+it('a page open on a note shows the links Link wrote into it', async () => {
+  const index = new FoldingBrowserIndex()
+  await ensureBrowserWorkspace(index)
+  const beta = await note(index, 'beta', 'Beta', 'The target.')
+  const gamma = await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
+  const page = await open({ documentId: gamma, path: 'gamma', kind: 'markdown' })
+  opened.push(page.backend)
+
+  expect(await linkifyBrowserMentions(index, gamma, beta)).toBe(1)
+
+  await vi.waitFor(() => expect(pageBody(page, gamma)).toContain('[[beta|Beta]]'), WAIT)
+})
+
+it('a page open on a note shows a reference a rename repointed', async () => {
+  const index = new FoldingBrowserIndex()
+  await ensureBrowserWorkspace(index)
+  await note(index, 'x/target', 'Target', 'The target.')
+  const daily = await note(index, 'daily', 'Daily', 'see [[x/target]]')
+  const page = await open({ documentId: daily, path: 'daily', kind: 'markdown' })
+  opened.push(page.backend)
+
+  await createBrowserFilesSource({ index }).renameDocumentPath('x/target', 'x/moved')
+
+  await vi.waitFor(() => expect(pageBody(page, daily)).toBe('see [[x/moved]]'), WAIT)
 })
 
 it('a version saved for a document reaches the tabs on it, and only those', async () => {

@@ -9,24 +9,25 @@
  * collisions, ambiguity clusters) lives in the daemon-side property and the
  * example tests. What THIS one pins is the browser wiring: entriesBefore
  * taken on the right side of the mutation, the plan applied to every
- * candidate, the rewrite persisted.
+ * candidate, the rewrite persisted — into the workspace record, through the
+ * production index, and read back the way every reader reads it.
  */
 
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import {
+  documentContainers,
   readMarkdownBody,
-  writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { Loro } from 'loro-crdt'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
+import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore } from './loro-store.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
+import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-follow-rename-property')
 
@@ -126,25 +127,16 @@ class Model {
 }
 
 async function writeBodyOf(documentId: string, body: string): Promise<void> {
-  const store = new LoroStore()
-  const doc = new Loro()
-  const loaded = await store.load(documentId)
-  if (loaded.kind === 'ok') {
-    doc.import(loaded.snapshot)
-    for (const delta of loaded.deltas ?? []) doc.import(delta)
-  } else {
-    writeDocumentKind(doc, 'markdown')
-  }
-  writeMarkdownBody(doc, body)
-  await store.save(documentId, doc.export({ mode: 'snapshot' }))
+  const docs = new BrowserWorkspaceDocs()
+  const workspace = await openWorkspaceOrNull(docs)
+  if (workspace === null) throw new Error('the workspace record did not open')
+  writeMarkdownBody(documentContainers(workspace, documentId), body)
+  await docs.save(getBrowserWorkspaceId(), workspace)
 }
 
 async function tokensOf(documentId: string): Promise<string[]> {
-  const loaded = await new LoroStore().load(documentId)
-  if (loaded.kind !== 'ok') throw new Error(`unreadable: ${loaded.kind}`)
-  const doc = new Loro()
-  doc.import(loaded.snapshot)
-  for (const delta of loaded.deltas ?? []) doc.import(delta)
+  const doc = await loadDocumentContent(documentId)
+  if (doc === null) throw new Error(`no content: ${documentId}`)
   return scanReferences(readMarkdownBody(doc)).map((m) => m.target)
 }
 
@@ -158,7 +150,7 @@ describe('browser rename follow parity', () => {
       const P = (suffix: string) => `${prefix}/${suffix}`
       const NAME = `Plan-${prefix}`
       const alias = (a: string) => (a === 'Plan' ? NAME : P(a))
-      const index = new IdbDocumentIndex()
+      const index = new FoldingBrowserIndex()
       await ensureBrowserWorkspace(index)
       const source = createBrowserFilesSource({ index })
       const model = new Model()
@@ -171,9 +163,6 @@ describe('browser rename follow parity', () => {
           kind: 'markdown',
           ...(name === undefined ? {} : { name }),
         })
-        const doc = new Loro()
-        writeDocumentKind(doc, 'markdown')
-        await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
         return entry.documentId
       }
 

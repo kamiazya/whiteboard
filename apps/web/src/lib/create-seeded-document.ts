@@ -20,11 +20,9 @@ import { touchIfWorkspaceBacked } from './workspace-content.js'
  * has no last-edited time to report. It is also what lets a switch onto a
  * never-edited document find something to load.
  *
- * Every create path routes through here, so one that skips it is
- * unrepresentable rather than merely avoided.
- *
- * The index row is rolled back if the content write fails, so a failed create
- * never leaves a document with nothing behind it.
+ * Every create path seeds through `seedCreatedDocument` — this one, and the
+ * Files panel's, which names its own path — so the choice between the record
+ * and the per-document store is made once.
  */
 export async function createSeededDocument(
   index: DocumentIndex,
@@ -45,11 +43,31 @@ export async function createSeededDocument(
     kind,
     ...(trimmed ? { name: trimmed } : {}),
   })
+  await seedCreatedDocument(index, loro, entry)
+  const snap = await loadBrowserDocument(index, entry.documentId, clock)
+  if (snap === null) throw new Error('created document vanished before it could be read')
+  return snap
+}
+
+/**
+ * Gives a document the index just created its content record.
+ *
+ * Tree-backed index: the node the create just made IS the content record (its
+ * containers are the empty document), so this only stamps the clock. The
+ * per-document store is written only for an index with no workspace record
+ * behind it — injected test doubles — since a record written there for a
+ * document the tree holds is a second copy that outlives the document's
+ * delete and answers reads for it.
+ *
+ * The index row is rolled back if the content write fails, so a failed create
+ * never leaves a document with nothing behind it.
+ */
+export async function seedCreatedDocument(
+  index: DocumentIndex,
+  loro: LoroStoreLike,
+  entry: { readonly documentId: string; readonly path: string },
+): Promise<void> {
   try {
-    // Tree-backed index: the node the create just made IS the content record
-    // (its containers are the empty document), so the create only stamps the
-    // clock. The legacy branch keeps the per-document record for an index
-    // without a workspace document behind it — injected test doubles included.
     if (!(await touchIfWorkspaceBacked(entry.documentId))) {
       await loro.save(entry.documentId, loro.createEmptySnapshot())
     }
@@ -62,7 +80,4 @@ export async function createSeededDocument(
     }
     throw err
   }
-  const snap = await loadBrowserDocument(index, entry.documentId, clock)
-  if (snap === null) throw new Error('created document vanished before it could be read')
-  return snap
 }

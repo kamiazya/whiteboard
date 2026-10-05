@@ -197,6 +197,22 @@ function writeContract(factory: FilesSourceFactory): void {
   })
 }
 
+/** A move repoints what other documents wrote to the old path, whichever keeper made it. */
+function referenceFollowContract(factory: FilesSourceFactory): void {
+  it('repoints a reference another document wrote to a renamed path', async () => {
+    const source = await factory({
+      documents: [
+        { path: 'target', kind: 'markdown', body: 'the target' },
+        { path: 'daily', kind: 'markdown', body: 'see [[target]] and [[unrelated]]' },
+      ],
+    })
+    await source.renameDocumentPath('target', 'moved')
+    const daily = (await source.listDocuments()).find((entry) => entry.path === 'daily')
+    if (daily === undefined) throw new Error('the referring document is gone')
+    expect((await source.loadMarkdown(daily)).body).toBe('see [[moved]] and [[unrelated]]')
+  })
+}
+
 function tagLibraryContract(factory: FilesSourceFactory): void {
   describe('tag library', () => {
     it('is empty when no document sits at the tag library path', async () => {
@@ -364,6 +380,7 @@ export function describeWorkspaceFilesSourceConformance(
     tagReadContract(factory)
     boardTagContract(factory)
     writeContract(factory)
+    referenceFollowContract(factory)
     tagLibraryContract(factory)
     stencilLibraryContract(factory)
     pinContract(factory)
