@@ -15,7 +15,7 @@ coverage); **this skill is the integrator's execution loop** — judgement + mer
 Read these before applying the reference playbook — they change several steps:
 
 - **NO GitHub Issues.** This project uses native **Tasks** (live board) + **whiteboard `type: issue` documents**
-  (durable private backlog) — see the `ticketing` skill. So **never `gh issue create`** for a
+  (durable private backlog) — see the `ticketing` skill. So **never open a GitHub issue** for a
   migration/feature follow-up; file a whiteboard `type: issue` document or a `TaskCreate` instead.
 - **Single integrator owns git/CI/merge.** The main session merges; there is no team of
   reviewers approving on GitHub. Merges go to the working branch / `main` per the push model.
@@ -77,7 +77,8 @@ Dependabot leaves stale PRs when a newer bump of the same package opens (e.g. an
 not consume a merge/rebase cycle:
 
 ```bash
-gh pr close <stale-number> --comment "Superseded by #<newer> (bumps <pkg> further)."
+gh api repos/{owner}/{repo}/issues/<stale-number>/comments -f body="Superseded by #<newer> (bumps <pkg> further)."
+gh api -X PATCH repos/{owner}/{repo}/pulls/<stale-number> -f state=closed
 ```
 
 ### Step 3 — Merge loop (conflict-cascade-safe)
