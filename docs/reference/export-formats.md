@@ -62,7 +62,7 @@ not:
   longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened.
 
-## How large a text node and a document name may be
+## How large a text node, a label, a comment and a document name may be
 
 A text node's text — the `text` of a `wb_canvas_edit` `node.add` or
 `node.patch`, and what a `node.splice` leaves — carries at most **8,192
@@ -77,6 +77,18 @@ more than 8,192 characters of text, or grows a node's text past that, answers
 `413` with `{"error":"node_text_too_large"}` and stores nothing. A node stored
 longer before the limit can still be moved, restyled or shortened. A
 browser-kept workspace does not check a canvas node's text.
+
+A label — of an edge, a line or a group — carries at most **1,024
+characters**, and one comment message at most **4,096**. Each is laid out
+again on every render of its board, at a cost that grows with its length.
+`wb_canvas_edit` refuses a longer `label` on `node.add`, `node.patch`,
+`edge.add`, `edge.patch`, `line.add` and `line.patch`, and a longer `text` on
+`comment.add`; `wb_thread_edit` refuses a longer `body` on `thread.add` and
+`message.add`. The editor's label and comment boxes refuse a longer edit and
+say why. The daemon's sync routes refuse an update that adds or grows one past
+its bound with `413` and `{"error":"label_too_large"}` or
+`{"error":"comment_too_large"}`, storing nothing. A label or message stored
+longer before the limit still reads, and can still be shortened.
 
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
