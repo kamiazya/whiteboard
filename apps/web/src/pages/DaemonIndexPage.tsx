@@ -16,11 +16,11 @@ import {
   listWorkspaces,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
-import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
+import { newDocumentPathIn } from '../lib/new-document-path.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-actions.js'
 // What the list shows: a failed load with the recovery that is actually
@@ -81,6 +81,8 @@ function resolveAddress(
     usable: workspaces.filter((w) => !refused.has(workspaceHandle(w))),
   }
 }
+
+const pathOf = (row: DocumentRow): string => row.path
 
 // Unordered on purpose: the panel orders what it shows from the same source,
 // and these rows serve lookups (a name, a path, a kind) only.
@@ -496,7 +498,7 @@ export function DaemonIndexPage({
       setCreating(true)
       setCreateError(null)
       try {
-        const path = deriveNewDocumentPath(rows.map((r) => r.path))
+        const path = newDocumentPathIn('', rows.map(pathOf))
         const created = await createDocument(
           daemonFetch,
           daemonBaseUrl,
