@@ -9,19 +9,33 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 claimIsolatedWhiteboardDb('browserindexpage-tree-view')
+
+/** One note in the workspace tree, the plane a create in this app writes. */
+async function seedRoadmap(): Promise<void> {
+  const index = new FoldingBrowserIndex()
+  await ensureBrowserWorkspace(index)
+  const entry = await index.createDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path: 'roadmap',
+    name: 'Roadmap',
+    kind: 'markdown',
+  })
+  await touchIfWorkspaceBacked(entry.documentId)
+}
 
 function renderPage() {
   const onOpenDocument = vi.fn()
   render(
     <MemoryRouter initialEntries={['/']}>
-      <BrowserIndexPage index={new IdbDocumentIndex()} onOpenDocument={onOpenDocument} />
+      <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={onOpenDocument} />
     </MemoryRouter>,
     { container: document.body },
   )
@@ -35,9 +49,7 @@ describe('document kept in this browser browser (real stores)', () => {
   afterEach(cleanup)
 
   it('lands on the three-pane browser, no toggle in between', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedIdbDocument(index, { path: 'roadmap', name: 'Roadmap', kind: 'markdown' })
+    await seedRoadmap()
 
     renderPage()
 
@@ -50,9 +62,7 @@ describe('document kept in this browser browser (real stores)', () => {
   })
 
   it('opens a document from the browser through the same navigation', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedIdbDocument(index, { path: 'roadmap', name: 'Roadmap', kind: 'markdown' })
+    await seedRoadmap()
 
     const onOpenDocument = renderPage()
     fireEvent.click((await screen.findAllByText('Roadmap'))[0] as HTMLElement)

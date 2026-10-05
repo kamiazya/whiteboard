@@ -11,7 +11,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
@@ -29,7 +29,7 @@ describe('list page, production wiring', () => {
     // created, or onboarding sticks over a store that has one.
     render(
       <MemoryRouter initialEntries={['/']}>
-        <BrowserIndexPage index={new IdbDocumentIndex()} onOpenDocument={() => {}} />
+        <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={() => {}} />
       </MemoryRouter>,
     )
     await screen.findByText('What will you make first?', undefined, { timeout: 10_000 })
@@ -44,7 +44,7 @@ describe('list page, production wiring', () => {
     // The load effect depends on the clock, so it re-runs, `setSnapshots`
     // stores a new array, the render makes another clock, and the effect runs
     // again — forever, on the one path production actually takes.
-    const index = new IdbDocumentIndex()
+    const index = new FoldingBrowserIndex()
     const spy = vi.spyOn(index, 'listDocuments')
     render(
       <MemoryRouter initialEntries={['/']}>
