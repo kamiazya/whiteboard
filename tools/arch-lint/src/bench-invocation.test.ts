@@ -12,6 +12,8 @@
 // named `<name> (bench)`, and a bare `--project <name>` answers `No projects
 // matched the filter`. So a file's "Run with" line is checked against the
 // inventory, and `pnpm bench` against every project that declares benchmarks.
+// The reporter is checked on that line too: a file may name a command other
+// than `pnpm bench`, and that command owes the table the same reporter.
 
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -65,6 +67,24 @@ function selectedProjects(command: string): string[] {
   return projectFilters(command)
 }
 
+/** The reporters `command` runs with; `pnpm bench` is whatever the root script names. */
+function selectedReporters(command: string): string[] {
+  if (command.trim() === 'pnpm bench') return reporters(benchScript)
+  return reporters(command)
+}
+
+/** What is wrong with a bench file's "Run with" command: both mistakes, for any command. */
+function runWithProblems(file: string, command: string): string[] {
+  const reaches = selectedProjects(command).some((project) =>
+    file.startsWith(benchProjects.get(project) ?? '\0'),
+  )
+  const tabled = selectedReporters(command).some((name) => TABLE_REPORTERS.has(name))
+  return [
+    ...(reaches ? [] : [`${file}: \`${command}\` selects no bench project holding it`]),
+    ...(tabled ? [] : [`${file}: \`${command}\` names no reporter that renders the table`]),
+  ]
+}
+
 describe('benchmark invocations print their numbers and reach their files', () => {
   it('reads the real benchmark projects and files', () => {
     expect(benchProjects.has('canvas-render-node (bench)')).toBe(true)
@@ -95,15 +115,28 @@ describe('benchmark invocations print their numbers and reach their files', () =
     expect(projectFilters(benchScript).sort()).toEqual([...benchProjects.keys()].sort())
   })
 
-  it('every bench file says how to run it, and that command reaches it', () => {
+  it('every bench file says how to run it, and that command reaches it and prints its table', () => {
     const wrong = benchFiles.flatMap((file) => {
       const command = readFileSync(join(REPO_ROOT, file), 'utf-8').match(/Run with `([^`]+)`/)?.[1]
       if (command === undefined) return [`${file}: no "Run with \`<command>\`" line`]
-      const reaches = selectedProjects(command).some((project) =>
-        file.startsWith(benchProjects.get(project) ?? '\0'),
-      )
-      return reaches ? [] : [`${file}: \`${command}\` selects no bench project holding it`]
+      return runWithProblems(file, command)
     })
     expect(wrong).toEqual([])
+  })
+
+  it('refuses a "Run with" command that reaches its file but prints no table', () => {
+    const file = 'packages/search/src/planted.bench.ts'
+    expect(runWithProblems(file, 'pnpm bench')).toEqual([])
+    expect(
+      runWithProblems(
+        file,
+        'pnpm exec vitest bench --reporter=default --project "search-node (bench)"',
+      ),
+    ).toEqual([])
+    expect(runWithProblems(file, 'pnpm exec vitest bench --project "search-node (bench)"')).toEqual(
+      [
+        `${file}: \`pnpm exec vitest bench --project "search-node (bench)"\` names no reporter that renders the table`,
+      ],
+    )
   })
 })
