@@ -138,7 +138,7 @@ describe('serveDist traversal', () => {
     writeFileSync(join(scratch, 'dist-sibling', 'x.txt'), SECRET)
     const reply = await get(served.port, path)
     expect(reply.status).toBe(403)
-    expect(reply.text).not.toContain(SECRET)
+    expect(reply.text).toBe('forbidden')
   })
 
   it.each([
@@ -174,7 +174,10 @@ describe('serveDist single-page fallback', () => {
   it('under fallback: extensionless a missing file with an extension is a 404', async () => {
     const strict = await serveDist({ root, fallback: 'extensionless' })
     try {
-      expect((await get(strict.port, '/assets/missing.js')).status).toBe(404)
+      expect(await get(strict.port, '/assets/missing.js')).toMatchObject({
+        status: 404,
+        text: 'not found',
+      })
       expect((await get(strict.port, '/w/default')).text).toBe(INDEX)
       expect((await get(strict.port, '/assets/a.js')).text).toBe('a.js')
     } finally {
