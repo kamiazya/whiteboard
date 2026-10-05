@@ -25,6 +25,7 @@
 import { Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { type RefObject, useMemo, useRef } from 'react'
+import { commentMessageLengthLimit } from '../../lib/comment-message-limit.js'
 import { cn } from '../../lib/utils.js'
 import { SourcePane, type SourcePaneApi } from '../markdown-editor/SourcePane.js'
 
@@ -97,6 +98,7 @@ export function CommentComposer({
         'aria-label': label,
         'aria-keyshortcuts': 'Meta+Enter Control+Enter',
       }),
+      commentMessageLengthLimit,
     ],
     [label],
   )

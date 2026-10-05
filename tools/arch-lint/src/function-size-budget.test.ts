@@ -78,7 +78,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
   'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
-  'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 69,
+  // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
+  'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
   // The thread row lives in `thread-row.tsx`.
   'apps/web/src/components/annotations/CommentsPanel.tsx#CommentsPanel': 311,
   // The row the panel's list is made of, split three ways: the row and its
@@ -201,9 +202,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // `node-target-dialogs.tsx`; what is left is the context menu's wiring.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasDialogs': 62,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
-  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 91,
+  // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
+  'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 92,
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 259,
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 96,
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 97,
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
