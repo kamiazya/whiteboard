@@ -182,8 +182,7 @@ describe('what the tool table costs to read', () => {
         // +202 on both and +1 parameter: `author`, who is proposing, shared with
         // wb_canvas_edit's propose path. A proposal stored no author, so a person
         // deciding on one could not tell which agent asked.
-        // +30 on both: the anchor's 32 `maxLength` on prefix and suffix.
-        visibleBytes: 2895,
+        visibleBytes: 2895, // +30 both: a text anchor's 32 `maxLength` on prefix and suffix
         // +1,396 wire, and it is the registration's PRICE rather than its
         // saving: a named subschema costs a `$defs` entry plus a `$ref`
         // wherever it is used, so a tool that uses one ONCE pays more than

@@ -111,18 +111,18 @@ function linearOccurrences(haystack: string, needle: string): number[] {
  * nearest characters.
  */
 function matchedBefore(body: string, at: number, prefix: string): number {
-  const window = Math.min(prefix.length, at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
+  const reach = Math.min(prefix.length, at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (shared < window && body[at - 1 - shared] === prefix[prefix.length - 1 - shared]) {
+  while (shared < reach && body[at - 1 - shared] === prefix[prefix.length - 1 - shared]) {
     shared += 1
   }
   return shared
 }
 
 function matchedAfter(body: string, at: number, suffix: string): number {
-  const window = Math.min(suffix.length, body.length - at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
+  const reach = Math.min(suffix.length, body.length - at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (shared < window && body[at + shared] === suffix[shared]) shared += 1
+  while (shared < reach && body[at + shared] === suffix[shared]) shared += 1
   return shared
 }
 
