@@ -18,11 +18,16 @@ import type {
 } from '../index.js'
 import {
   compareDocumentPaths,
+  createDocumentInputSchema,
+  createWorkspaceInputSchema,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  moveDocumentInputSchema,
+  renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
+  storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
 } from '../index.js'
@@ -69,16 +74,21 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
   }
 
   /**
+   * Puts a registry row in as given, unchecked — what a keeper holds from
+   * before a bound existed, which `createWorkspace` would now refuse.
+   */
+  seedWorkspace(entry: WorkspaceEntry): void {
+    this.#workspaces.set(entry.workspaceId, entry)
+  }
+
+  /**
    * Stores the whole entry, not just the id: `segment` is what an address
    * resolves through, so a double that dropped it would satisfy the
    * interface while making `resolveWorkspace` unable to answer — the exact
    * gap the conformance suite exists to close.
    */
-  async createWorkspace({
-    workspaceId,
-    segment,
-    displayName,
-  }: CreateWorkspaceInput): Promise<void> {
+  async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
+    const { workspaceId, segment, displayName } = createWorkspaceInputSchema.parse(input)
     // Creating one that exists leaves it ALONE — it is not an error, and it is
     // not an overwrite either. The bare `{ workspaceId }` call is what an
     // "ensure it exists" caller makes, and treating it as a full row would
@@ -92,14 +102,11 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
   }
 
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
-    return [...this.#workspaces.values()]
+    return [...this.#workspaces.values()].map((row) => storedWorkspaceEntrySchema.parse(row))
   }
 
-  async renameWorkspace({
-    workspaceId,
-    segment,
-    displayName,
-  }: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+  async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    const { workspaceId, segment, displayName } = renameWorkspaceInputSchema.parse(input)
     const current = this.#workspaces.get(workspaceId)
     if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
     if (
@@ -123,12 +130,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
   }
 
-  async createDocument({
-    workspaceId,
-    path,
-    kind,
-    name,
-  }: CreateDocumentInput): Promise<DocumentEntry> {
+  async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
+    const { workspaceId, path, kind, name } = createDocumentInputSchema.parse(input)
     if (!this.#workspaces.has(workspaceId)) {
       throw new WorkspaceNotFoundError(workspaceId)
     }
@@ -213,7 +216,8 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
     )
   }
 
-  async moveDocument({ workspaceId, from, to }: MoveDocumentInput): Promise<void> {
+  async moveDocument(input: MoveDocumentInput): Promise<void> {
+    const { workspaceId, from, to } = moveDocumentInputSchema.parse(input)
     if (isSelfOrDescendant(to, from)) {
       throw new DocumentMoveIntoSelfError(from, to)
     }

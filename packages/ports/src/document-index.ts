@@ -121,6 +121,36 @@ export const workspaceEntrySchema = z
 export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
 
 /**
+ * A workspace registry row as a keeper READS it back: what a listing
+ * hydrates through, where `workspaceEntrySchema` is what it answers.
+ *
+ * A layer the model refuses reads as ABSENT instead of failing the read. A
+ * row stored before the identity bounds existed, or by a writer that did not
+ * check them, otherwise failed the whole registry's parse — one such row left
+ * a switcher with nothing in it and no rename to repair it with. Absent is a
+ * state every reader already handles: the workspace is reached by its
+ * canonical id until a rename gives it a layer the model accepts. Dropping a
+ * refused segment cannot shadow anything either, since no write can create
+ * that segment again.
+ *
+ * Writes stay bounded: `createWorkspaceInputSchema` and
+ * `renameWorkspaceInputSchema` are what every keeper parses before storing.
+ */
+export const storedWorkspaceEntrySchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    segment: workspaceSegmentSchema.optional().catch(undefined),
+    displayName: workspaceDisplayNameSchema.optional().catch(undefined),
+  })
+  .transform(
+    ({ workspaceId, segment, displayName }): WorkspaceEntry => ({
+      workspaceId,
+      ...(segment === undefined ? {} : { segment }),
+      ...(displayName === undefined ? {} : { displayName }),
+    }),
+  )
+
+/**
  * Turns an incoming address string into the workspace it names: `segment`
  * first, then `workspaceId`, else null.
  *
@@ -186,8 +216,14 @@ export type ResolveDocumentInput = z.infer<typeof resolveDocumentInputSchema>
 const listDocumentsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
 export type ListDocumentsInput = z.infer<typeof listDocumentsInputSchema>
 
-const moveDocumentInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, from: documentPathSchema, to: documentPathSchema })
+/**
+ * Only the DESTINATION is held to the path grammar. `from` names a placement
+ * that already exists, and one stored before the grammar was enforced on
+ * every write has to stay movable: moving it to a path the grammar accepts is
+ * how it is repaired.
+ */
+export const moveDocumentInputSchema = z
+  .object({ workspaceId: workspaceIdSchema, from: z.string().min(1), to: documentPathSchema })
   .strict()
 export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
 

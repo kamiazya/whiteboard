@@ -206,10 +206,16 @@ export const DAEMON_DEFAULT_SEGMENT = 'default'
 // moved an address does not have to re-list to learn the handle it should use
 // next. One workspace is one workspace whichever call produced it, and a
 // second name for the identical schema would be a synonym to keep in step.
+//
+// A layer the model refuses reads as ABSENT rather than failing the list. A
+// daemon may hold a name stored before the identity bounds, and one such row
+// otherwise made every workspace unreadable to the web, not just itself; an
+// absent layer is already handled (the workspace is addressed by its id and
+// renamed to repair it). The bounds stay on the request schemas below.
 export const workspaceSummarySchema = z.object({
   workspaceId: z.string(),
-  segment: workspaceSegmentSchema.optional(),
-  displayName: workspaceDisplayNameSchema.optional(),
+  segment: unknownIsAbsent(workspaceSegmentSchema),
+  displayName: unknownIsAbsent(workspaceDisplayNameSchema),
   /**
    * How many documents the workspace holds — what makes a switcher row worth
    * reading, since a list of names alone gives no reason to pick one.

@@ -58,13 +58,18 @@ import type {
 import {
   blobRefKey,
   compareDocumentPaths,
+  createDocumentInputSchema,
+  createWorkspaceInputSchema,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathContestedError,
   DocumentPathTakenError,
   KeyedSerializer,
+  moveDocumentInputSchema,
+  renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
+  storedWorkspaceEntrySchema,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
@@ -108,9 +113,14 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
    * browser's workspaces store), and `WorkspaceDocs` deliberately opens by
    * id only. Required, not optional — an unwired registry would make every
    * workspace invisible to the one call that lists them.
+   *
+   * Hydrated through the port's READ schema, so a registry row stored before
+   * the identity bounds lists with its refused layers absent rather than
+   * failing every reader of the list.
    */
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
-    return this.registry.listWorkspaces()
+    const rows = await this.registry.listWorkspaces()
+    return rows.map((row) => storedWorkspaceEntrySchema.parse(row))
   }
 
   /**
@@ -126,10 +136,11 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
    * Delegated for the same reason `listWorkspaces` is: identity lives in the
    * registry, and the tree document this class owns holds a workspace's
    * PLACEMENT, never its name. Nothing tree-shaped changes when a workspace
-   * is renamed.
+   * is renamed. Parsed here so no registry is handed a layer the model
+   * refuses, whichever composition root wired it.
    */
   async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
-    return this.registry.renameWorkspace(input)
+    return this.registry.renameWorkspace(renameWorkspaceInputSchema.parse(input))
   }
 
   /** A document's containers, for the content bridge. */
@@ -240,14 +251,27 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
     return doc
   }
 
-  async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
+  /**
+   * Parsed although the tree keeps neither identity layer: the port says a
+   * keeper may ignore them, not that it may accept what the model refuses,
+   * and both keepers composing this class must refuse the same input.
+   */
+  async createWorkspace(raw: CreateWorkspaceInput): Promise<void> {
+    const input = createWorkspaceInputSchema.parse(raw)
     return this.#serialise(input.workspaceId, async () => {
       const doc = await this.docs.create(input.workspaceId)
       await this.docs.save(input.workspaceId, doc)
     })
   }
 
-  async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
+  /**
+   * The path grammar is checked HERE, the one placement write both keepers
+   * share, not only at the daemon's request edges: a listing hydrates every
+   * entry through `documentEntrySchema`, so one off-grammar path stored by
+   * any writer made the whole workspace's list and search unreadable.
+   */
+  async createDocument(raw: CreateDocumentInput): Promise<DocumentEntry> {
+    const input = createDocumentInputSchema.parse(raw)
     return this.#serialise(input.workspaceId, async () => {
       const doc = await this.#open(input.workspaceId)
       const created = createWorkspaceDocumentAtPath(doc, {
@@ -300,7 +324,9 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
       .sort((left, right) => compareDocumentPaths(left.path, right.path))
   }
 
-  async moveDocument(input: MoveDocumentInput): Promise<void> {
+  /** The destination is held to the path grammar, for the reason `createDocument` gives. */
+  async moveDocument(raw: MoveDocumentInput): Promise<void> {
+    const input = moveDocumentInputSchema.parse(raw)
     return this.#serialise(input.workspaceId, async () => {
       const doc = await this.#open(input.workspaceId)
       const nodes = readWorkspaceNodes(doc)

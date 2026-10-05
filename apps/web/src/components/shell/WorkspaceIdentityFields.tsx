@@ -6,8 +6,16 @@
  * the server-mode shell), so a refusal reads the same wherever it is written.
  */
 
-import { messageOf } from '@kamiazya/whiteboard-model'
-import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import {
+  messageOf,
+  WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
+  WORKSPACE_SEGMENT_MAX_LENGTH,
+} from '@kamiazya/whiteboard-model'
+import {
+  type RenameWorkspaceInput,
+  renameWorkspaceInputSchema,
+  type WorkspaceEntry,
+} from '@kamiazya/whiteboard-ports'
 import { useId, useRef, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { workspaceHandle } from '../../lib/workspace-handle.js'
@@ -40,6 +48,14 @@ export interface WorkspaceIdentityFieldsProps {
  */
 type RenamedLayers = Omit<RenameWorkspaceInput, 'workspaceId'>
 
+/**
+ * The port's own rename schema, less the id this form never edits. Checked
+ * before the call so a refusal is said beside the field that caused it — the
+ * keeper parses the same schema and refuses too, but a keeper's refusal is a
+ * message written for a log, not for the person typing.
+ */
+const renamedLayersSchema = renameWorkspaceInputSchema.omit({ workspaceId: true })
+
 function unchanged(next: string, current: string | undefined): boolean {
   const trimmed = next.trim()
   return trimmed === '' || trimmed === current
@@ -59,8 +75,13 @@ function useRenameWrite({
   const [error, setError] = useState<string | null>(null)
   const write = (input: RenamedLayers) => {
     if (rename === undefined) return
+    const checked = renamedLayersSchema.safeParse(input)
+    if (!checked.success) {
+      setError(checked.error.issues[0]?.message ?? 'That workspace name or URL cannot be used.')
+      return
+    }
     setError(null)
-    rename(active.workspaceId, input)
+    rename(active.workspaceId, checked.data)
       .then((renamed) => {
         // Taken from what rename ANSWERED rather than re-listed: a name edit
         // navigates nowhere and remounts nothing, so the caller's own copy of
@@ -112,6 +133,7 @@ function NameField({ active, canWrite, write }: FieldProps) {
         id={id}
         value={draft ?? active.displayName ?? ''}
         readOnly={!canWrite}
+        maxLength={WORKSPACE_DISPLAY_NAME_MAX_LENGTH}
         placeholder="Unnamed workspace"
         onFocus={() => {
           baseline.current = active.displayName ?? ''
@@ -175,10 +197,9 @@ function UrlField({ active, canWrite, write }: FieldProps) {
           enterKeyHint="done"
           value={draft ?? active.segment ?? ''}
           readOnly={!canWrite}
+          maxLength={WORKSPACE_SEGMENT_MAX_LENGTH}
           placeholder={active.workspaceId}
-          onChange={(event) => {
-            if (canWrite) setDraft(event.target.value)
-          }}
+          onChange={canWrite ? (event) => setDraft(event.target.value) : undefined}
           onKeyDown={(event) => {
             event.stopPropagation()
             if (event.key === 'Enter') {

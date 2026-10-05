@@ -11,9 +11,9 @@ describe('InMemoryDocumentIndex', () => {
     return {
       index,
       dispose: async () => {},
-      // This double keeps its registry in the same map `createWorkspace`
-      // writes, so the seam is that call.
-      seedWorkspace: async (entry) => index.createWorkspace(entry),
+      // Unchecked, unlike `createWorkspace`: the seam stands for whatever a
+      // registry already holds, including rows from before a bound.
+      seedWorkspace: async (entry) => index.seedWorkspace(entry),
     }
   })
 })

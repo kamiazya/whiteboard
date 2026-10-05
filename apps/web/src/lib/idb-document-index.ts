@@ -18,6 +18,8 @@ import {
   type CreateDocumentInput,
   type CreateWorkspaceInput,
   compareDocumentPaths,
+  createDocumentInputSchema,
+  createWorkspaceInputSchema,
   type DeleteDocumentInput,
   type DocumentEntry,
   DocumentHasDescendantsError,
@@ -29,18 +31,22 @@ import {
   findDescendantPath,
   type ListDocumentsInput,
   type MoveDocumentInput,
+  moveDocumentInputSchema,
   planSubtreeMove,
   type RenameWorkspaceInput,
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
+  renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   type SetDocumentNameInput,
+  storedWorkspaceEntrySchema,
   type WorkspaceEntry,
   WorkspaceNotFoundError,
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
+import { getAppLogger } from './app-logger.js'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
@@ -54,7 +60,7 @@ import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
  *
  * Derived from `documentEntrySchema` rather than written beside it, and
  * every read below hydrates through it — the same discipline
- * `listWorkspaces` applies with `workspaceEntrySchema.parse`. A cast here
+ * `listWorkspaces` applies with `storedWorkspaceEntrySchema.parse`. A cast here
  * let a corrupt row (a devtools edit, a buggy writer, schema drift) flow
  * into the UI wearing the contract's type; the parse fails loudly and names
  * the field instead.
@@ -83,6 +89,26 @@ async function rowsIn(tx: IDBTransaction, workspaceId: string): Promise<IndexRow
   return rows.map((row) => indexRowSchema.parse(row))
 }
 
+const log = getAppLogger('idb-document-index')
+
+/**
+ * Hydrates one registry row through the port's READ schema, which reads a
+ * layer the model refuses as absent rather than failing the list around it.
+ * Said aloud when it happens: the stored row still carries the refused value
+ * until a rename replaces it, and a silent drop would hide that.
+ */
+function readWorkspaceRow(value: unknown): WorkspaceEntry {
+  const entry = storedWorkspaceEntrySchema.parse(value)
+  if (!workspaceEntrySchema.safeParse(value).success) {
+    // `info`, not `warn`: the read succeeded, and the row is the user's to
+    // rename rather than a failure anything swallowed.
+    log.info('read a workspace identity layer the model refuses as absent', {
+      workspaceId: entry.workspaceId,
+    })
+  }
+  return entry
+}
+
 /** Hydrates one stored value, passing an absent row through. */
 function parseRow(value: unknown): IndexRow | undefined {
   return value === undefined ? undefined : indexRowSchema.parse(value)
@@ -108,11 +134,13 @@ export class IdbDocumentIndex implements DocumentIndex {
     return indexWritesSettled().then(() => inTransaction(this.dbName, stores, mode, body))
   }
 
-  async createWorkspace({
-    workspaceId,
-    segment,
-    displayName,
-  }: CreateWorkspaceInput): Promise<void> {
+  /**
+   * Parsed before the transaction opens, as the daemon parses at its
+   * boundary: this store is a keeper's registry, and a row the model refuses
+   * is one every later reader of it would have to tolerate.
+   */
+  async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
+    const { workspaceId, segment, displayName } = createWorkspaceInputSchema.parse(input)
     await this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
       const store = tx.objectStore(WORKSPACES_STORE)
       // Creating one that exists is not an error — and not an overwrite. A
@@ -151,12 +179,13 @@ export class IdbDocumentIndex implements DocumentIndex {
    *
    * A row written before the value carried those fields still lists: they are
    * optional in `workspaceEntrySchema` precisely because absent is a state a
-   * workspace can be in.
+   * workspace can be in. So does one written before the identity bounds, with
+   * the refused layer absent — see `readWorkspaceRow`.
    */
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return this.tx([WORKSPACES_STORE], 'readonly', async (tx) => {
       const rows = await request(tx.objectStore(WORKSPACES_STORE).getAll())
-      return rows.map((row) => workspaceEntrySchema.parse(row))
+      return rows.map(readWorkspaceRow)
     })
   }
 
@@ -172,14 +201,14 @@ export class IdbDocumentIndex implements DocumentIndex {
    * followed by a separate `put` would let two renames both find the segment
    * free.
    */
-  async renameWorkspace({
-    workspaceId,
-    segment,
-    displayName,
-  }: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+  async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    const { workspaceId, segment, displayName } = renameWorkspaceInputSchema.parse(input)
     return this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
       const store = tx.objectStore(WORKSPACES_STORE)
-      const rows = (await request(store.getAll())).map((row) => workspaceEntrySchema.parse(row))
+      // Read tolerantly for the same reason a listing is: a rename is how a
+      // row stored before the bounds gets repaired, so it must not be the
+      // call that refuses to read that row.
+      const rows = (await request(store.getAll())).map(readWorkspaceRow)
       const current = rows.find((row) => row.workspaceId === workspaceId)
       if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
       if (
@@ -198,7 +227,8 @@ export class IdbDocumentIndex implements DocumentIndex {
     })
   }
 
-  async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
+  async createDocument(raw: CreateDocumentInput): Promise<DocumentEntry> {
+    const input = createDocumentInputSchema.parse(raw)
     const row: IndexRow = {
       workspaceId: input.workspaceId,
       documentId: generateDocumentId(),
@@ -267,7 +297,8 @@ export class IdbDocumentIndex implements DocumentIndex {
     })
   }
 
-  async moveDocument({ workspaceId, from, to }: MoveDocumentInput): Promise<void> {
+  async moveDocument(input: MoveDocumentInput): Promise<void> {
+    const { workspaceId, from, to } = moveDocumentInputSchema.parse(input)
     // Before the transaction: this is a refusal about the request itself, not
     // something the stored rows could answer.
     if (isSelfOrDescendant(to, from)) throw new DocumentMoveIntoSelfError(from, to)

@@ -3,6 +3,7 @@
  * comes from, and what happens when it cannot come from anywhere.
  */
 import 'fake-indexeddb/auto'
+import { WORKSPACE_DISPLAY_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { setWhiteboardDbNameForTests } from './browser-idb.js'
@@ -90,6 +91,22 @@ describe('createBrowserWorkspace', () => {
     // be would be asserting the absence of something that is always there.
     const before = (await index.listWorkspaces()).length
     await expect(createBrowserWorkspace(index, { displayName: '   ' })).rejects.toThrow(/name/)
+    expect(await index.listWorkspaces()).toHaveLength(before)
+  })
+
+  it('refuses a name past the bound before anything is minted, saying why', async () => {
+    // Stored once, a name the model refuses made this browser's own registry
+    // unreadable to the list that should have shown it.
+    const index = new IdbDocumentIndex(DB_NAME)
+    const before = (await index.listWorkspaces()).length
+    const refusal = await createBrowserWorkspace(index, {
+      displayName: 'n'.repeat(WORKSPACE_DISPLAY_NAME_MAX_LENGTH + 1),
+    }).catch((err: unknown) => err)
+    // Worded for the form that shows it verbatim, not the keeper's own
+    // schema failure, whose message is a JSON dump of issues.
+    expect(refusal).toBeInstanceOf(Error)
+    expect((refusal as Error).name).not.toBe('ZodError')
+    expect((refusal as Error).message).toMatch(/cannot be used.*200/)
     expect(await index.listWorkspaces()).toHaveLength(before)
   })
 

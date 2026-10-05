@@ -3,6 +3,10 @@
  * the server-mode shell both mount them, so what they decide NOT to write is
  * pinned here rather than through either host.
  */
+import {
+  WORKSPACE_DISPLAY_NAME_MAX_LENGTH,
+  WORKSPACE_SEGMENT_MAX_LENGTH,
+} from '@kamiazya/whiteboard-model'
 import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -142,5 +146,33 @@ describe('WorkspaceIdentityFields — where the keeper cannot rename', () => {
     expect(name).toHaveProperty('value', 'Design team')
     expect(url).toHaveProperty('value', 'design')
     expect(onRenamed).not.toHaveBeenCalled()
+  })
+})
+
+// The browser keeper used to store whatever these fields sent, and its own
+// reader then refused the row. The fields check against the model first, so a
+// refusal is said beside the field rather than discovered as an empty list.
+describe('WorkspaceIdentityFields — a value the model refuses', () => {
+  it('says why an address is refused, and writes nothing', async () => {
+    const rename = applyingRename()
+    const { url } = renderFields({ rename })
+    fireEvent.change(url, { target: { value: 'my team' } })
+    fireEvent.keyDown(url, { key: 'Enter' })
+    expect((await screen.findByRole('alert')).textContent).toMatch(/workspace segment/i)
+    expect(rename).not.toHaveBeenCalled()
+  })
+
+  it('caps both fields at the length the model accepts', () => {
+    const { name, url } = renderFields({ rename: applyingRename() })
+    expect((name as HTMLInputElement).maxLength).toBe(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
+    expect((url as HTMLInputElement).maxLength).toBe(WORKSPACE_SEGMENT_MAX_LENGTH)
+  })
+
+  it('reads a long name pasted past the cap as refused rather than writing it', async () => {
+    const rename = applyingRename()
+    const { name } = renderFields({ rename })
+    fireEvent.change(name, { target: { value: 'n'.repeat(WORKSPACE_DISPLAY_NAME_MAX_LENGTH + 1) } })
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(rename).not.toHaveBeenCalled()
   })
 })
