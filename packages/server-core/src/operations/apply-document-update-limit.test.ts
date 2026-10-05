@@ -570,7 +570,7 @@ describe('a markdown body refusal', () => {
     expect(
       textBreachRefusal({ shape: 'run', chars: 300_000, container: 'cid:0@1:Text' }).message,
     ).toMatch(
-      /^This update inserts 300000 characters in one piece, past the 262144-character limit for one write/,
+      /^This update inserts 300000 characters in one piece, past the 262144-character limit for one document/,
     )
     expect(
       textBreachRefusal({ shape: 'body', chars: 300_000, container: 'cid:0@1:Text' }).message,

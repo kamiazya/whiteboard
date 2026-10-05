@@ -8,6 +8,7 @@ import {
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
   LABEL_LIMIT_PHRASE,
+  MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_LIMIT_PHRASE,
   NODE_TEXT_LIMIT_PHRASE,
@@ -60,15 +61,15 @@ function valueRefusalMessage(
 function bodyRefusalMessage({ shape, chars }: BreachOf<'run' | 'body'>, at?: RefusedIn): string {
   if (at === undefined) {
     return shape === 'run'
-      ? `This update inserts ${chars} characters in one piece, past the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`
-      : `This update would make a document body ${chars} characters long, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split the content across documents`
+      ? `This update inserts ${chars} characters in one piece, past ${MARKDOWN_LIMIT_PHRASE}`
+      : `This update would make a document body ${chars} characters long, past ${MARKDOWN_LIMIT_PHRASE}`
   }
   const where = JSON.stringify(at.path)
   const now =
     at.bodyChars === undefined ? '' : `, though its body is ${at.bodyChars} characters now`
   return shape === 'run'
     ? `The document at ${where} holds in its history one insert of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one write${now}. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
-    : `The document at ${where} has a body of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one document; split it across documents`
+    : `The document at ${where} has a body of ${chars} characters, past ${MARKDOWN_LIMIT_PHRASE}`
 }
 
 /**

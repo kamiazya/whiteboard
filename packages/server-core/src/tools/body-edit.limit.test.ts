@@ -55,7 +55,7 @@ describe('the size of the body a passage edit may leave', () => {
   // Same ceiling `markdownInputSchema` puts on a whole-document write: a
   // replacement passage reaches the CRDT by the same text insert, so a body
   // grown past it by editing costs what a body written past it would.
-  const LIMIT_REFUSAL = /character limit for one write/
+  const LIMIT_REFUSAL = /character limit for one document/
 
   async function seedFilled(store: FakeDocumentStore, length: number): Promise<string> {
     const body = `tail-${'x'.repeat(length - 'tail-'.length)}`

@@ -30,13 +30,18 @@ export type MarkdownDocument = z.infer<typeof markdownDocumentSchema>
 export const MARKDOWN_MAX_CHARS = 256 * 1024
 
 /**
+ * The bound as every refusal of it ends, as `NODE_TEXT_LIMIT_PHRASE` is for a
+ * node's text. "For one document" fits each refusal alike: a whole document's
+ * markdown, a body an edit or update would grow, and a single insert, which no
+ * document could hold either.
+ */
+export const MARKDOWN_LIMIT_PHRASE = `the ${MARKDOWN_MAX_CHARS}-character limit for one document; split the content across documents`
+
+/**
  * The `markdown` string a tool or route accepts for a whole document —
  * frontmatter and body together. One definition so a write is refused the same
  * way whichever surface it arrives through.
  */
 export const markdownInputSchema = z
   .string()
-  .max(
-    MARKDOWN_MAX_CHARS,
-    `markdown is longer than the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`,
-  )
+  .max(MARKDOWN_MAX_CHARS, `markdown is longer than ${MARKDOWN_LIMIT_PHRASE}`)

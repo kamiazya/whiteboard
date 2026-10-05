@@ -27,7 +27,7 @@ One markdown write — the `markdown` field of a `wb_workspace_edit`
 `document.create` or `document.set` op, or of `POST /api/v1/workspaces/{id}/documents`
 — carries at most **262,144 characters** (256 Ki UTF-16 code units, frontmatter
 and body together). A longer one is refused with "markdown is longer than the
-262144-character limit for one write" before anything is stored. The count is
+262144-character limit for one document" before anything is stored. The count is
 characters, not bytes, because the cost of storing a document follows the
 character count: the limit is where one write still finishes in about a second.
 `wb_body_edit` is held to the same ceiling: an edit that would leave the body

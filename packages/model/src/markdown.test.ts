@@ -45,7 +45,7 @@ describe('markdownInputSchema', () => {
   it('refuses in words that name the limit and what to do', () => {
     const refusal = markdownInputSchema.safeParse('x'.repeat(MARKDOWN_MAX_CHARS + 1))
     expect(refusal.success ? '' : refusal.error.issues[0]?.message).toBe(
-      `markdown is longer than the ${MARKDOWN_MAX_CHARS}-character limit for one write; split the content across documents`,
+      `markdown is longer than the ${MARKDOWN_MAX_CHARS}-character limit for one document; split the content across documents`,
     )
   })
 })

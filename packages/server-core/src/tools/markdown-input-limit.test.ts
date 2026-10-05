@@ -13,7 +13,7 @@ const WS = 'ws-limit'
 const DOC = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const overLimit = 'x'.repeat(MARKDOWN_MAX_CHARS + 1)
 const atLimit = 'x'.repeat(MARKDOWN_MAX_CHARS)
-const REFUSAL = /character limit for one write/
+const REFUSAL = /character limit for one document/
 
 /** Every way a caller hands a whole markdown document to the write path. */
 const WRITERS: ReadonlyArray<readonly [string, (markdown: string) => unknown]> = [
