@@ -39,7 +39,9 @@ export function TagStrip({ tags, activeTag, onToggle }: TagStripProps) {
   const keys = new Map<string, TagInUse[]>()
   for (const row of tags) {
     if (row.key === undefined) continue
-    keys.set(row.key, [...(keys.get(row.key) ?? []), row])
+    const held = keys.get(row.key)
+    if (held === undefined) keys.set(row.key, [row])
+    else held.push(row)
   }
   const chip = (row: TagInUse, label: string) => (
     <button
