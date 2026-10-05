@@ -4,16 +4,18 @@
  *
  * The tree only knows documents that are IN it, and an existing browser's
  * documents are per-document records until something folds them. The
- * document page's backend and the markdown hook each fold on their own load,
- * but the LIST page is often the first thing a returning user sees — served
- * straight from this index — so the fold has to gate the index itself or a
- * legacy user opens an empty gallery over a database full of documents.
+ * document backend folds when it opens a document, and the promote dialog
+ * before it counts; but the LIST page is often the first thing a returning
+ * user sees — served straight from this index — so the fold has to gate the
+ * index itself or a legacy user opens an empty gallery over a database full
+ * of documents.
  *
- * One shared promise, not a per-call fold: every method awaits the same
- * first run. A failure logs, clears the memo so a later call retries, and
- * lets the call proceed — the fold is migration, and refusing to list what
- * IS in the tree over a fold hiccup would be worse than a briefly
- * incomplete list.
+ * One shared promise, not a per-call fold. Listing and resolving documents
+ * wait for every index write this tab has issued and then for that run
+ * (`settledForRead`). Every other method but `renameWorkspace` waits for the
+ * run alone — writes above all, since the save loop that issues them is one
+ * of the writes a read waits for. A failure logs, clears the memo so a later
+ * call retries, and lets the call proceed (`foldOrServeTheTree`).
  */
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import {
