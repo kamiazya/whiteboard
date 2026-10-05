@@ -25,15 +25,22 @@ The same search is available to tools over
 
 | key | meaning |
 |---|---|
-| `q` | the words to match |
+| `q` | the words to match, at most 1,024 characters |
 | `kind` | `markdown` or `spatial`, to narrow by kind |
-| `tag` | a tag the document carries; repeat it (`tag=a&tag=b`) to require several |
+| `tag` | a tag the document carries; repeat it (`tag=a&tag=b`) to require several, at most 1,024 |
 | `limit` | at most this many results (1–50, default 10) |
 
 A search needs `q`, a `tag` or a `kind` (a filter answers alone). Any other
 key is refused with `400 invalid_request` naming it, rather than ignored —
 `tags=x` would otherwise answer every document as though the filter had
 applied.
+
+The query is bounded because every word in it is looked up across every
+document the workspace holds: `wb_document_search` and the route refuse a
+longer `q` with "a search query is longer than the 1024-character limit", and
+more than 1,024 tags with the tag-count limit. The web app's search box stops
+taking characters at the same limit. A query is a few words; a longer text is a
+document to compare against, not something to search for.
 
 ## Also search by meaning (optional)
 

@@ -278,7 +278,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // can: all four are under the complexity threshold.
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 779,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
-  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 92,
+  // +1: the search box's `maxLength`, the query bound the search tool holds.
+  'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#cardMenuItemsFor': 94,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#BrowseTwoColumns': 81,
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#SearchColumn': 74,

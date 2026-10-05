@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
@@ -49,6 +51,12 @@ describe('body search', () => {
     expect(within(excerpt).getAllByTestId('search-match')[0]?.textContent?.toLowerCase()).toBe(
       'quota',
     )
+  })
+
+  it('takes no more words than a search query may carry', async () => {
+    renderPanel({ searchDocuments: async () => [] })
+    const box = (await screen.findByLabelText('Search documents')) as HTMLInputElement
+    expect(box.maxLength).toBe(SEARCH_QUERY_MAX_CHARS)
   })
 
   it('asks the source, not the loaded list', async () => {

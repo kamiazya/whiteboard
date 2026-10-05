@@ -1,3 +1,4 @@
+import { SEARCH_QUERY_MAX_CHARS, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
@@ -7,6 +8,7 @@ import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import {
   createDocumentSearchTool,
+  documentSearchInputSchema,
   documentSearchOutputSchema,
   SearchNeedsQueryOrFilterError,
 } from './document-search.js'
@@ -268,6 +270,16 @@ describe('wb_document_search', () => {
     await expect(createDocumentSearchTool(deps).execute({ workspaceId: WS })).rejects.toThrow(
       SearchNeedsQueryOrFilterError,
     )
+  })
+
+  it('refuses words past the query bound and more tag filters than a document may carry', () => {
+    const atBound = { workspaceId: WS, query: 'a'.repeat(SEARCH_QUERY_MAX_CHARS) }
+    expect(documentSearchInputSchema.safeParse(atBound).success).toBe(true)
+    const words = documentSearchInputSchema.safeParse({ ...atBound, query: `${atBound.query}a` })
+    expect(words.error?.issues[0]?.message).toContain(`${SEARCH_QUERY_MAX_CHARS}-character limit`)
+    const tags = Array.from({ length: TAGS_PER_ELEMENT_MAX + 1 }, (_, i) => `t${i}`)
+    const filters = documentSearchInputSchema.safeParse({ workspaceId: WS, tags })
+    expect(filters.error?.issues[0]?.message).toContain(`${TAGS_PER_ELEMENT_MAX}-tag limit`)
   })
 
   it('serves the same shape over GET /search and answers 404 for an unknown workspace', async () => {
