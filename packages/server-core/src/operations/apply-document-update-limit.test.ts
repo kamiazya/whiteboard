@@ -10,7 +10,10 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  moveWorkspaceDocument,
+  moveWorkspaceNodeToPath,
   readMarkdownBody,
+  readWorkspaceDocuments,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
@@ -21,13 +24,14 @@ import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
-import { MarkdownBodyTooLargeError } from './apply-document-update-limit.js'
+import { MarkdownBodyTooLargeError, OffGrammarPathError } from './apply-document-update-limit.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
 const WS = 'ws-1'
 const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
 const PATH = 'notes'
+const OTHER_ID = '01BRWAAAAAAAAAAAAAAAAAAAA6'
 
 /** A cache over a stored snapshot: `evict` drops the instance, `get` rebuilds from what was saved. */
 class StoredDoc {
@@ -260,5 +264,88 @@ describe('a promoted record', () => {
 
     expect(target.saves).toBe(0)
     expect(storedWorkspaceBody(target)).toBe('the daemon copy')
+  })
+})
+
+describe('a workspace-document sync update that moves a path', () => {
+  const storedPaths = (store: StoredDoc) =>
+    readWorkspaceDocuments(store.get()).map((entry) => entry.path)
+
+  it('onto a path outside the document-path grammar is refused and nothing is imported', async () => {
+    const store = new StoredDoc(workspaceSeed('body'))
+    const update = updateFrom(store.get(), (doc) => {
+      expect(moveWorkspaceNodeToPath(doc, PATH, 'Meeting notes')).toBe(true)
+    })
+
+    const refusal = await applyWorkspaceDocumentUpdate(workspaceDeps(store), {
+      workspaceId: WS,
+      update,
+    }).catch((err: unknown) => err)
+
+    expect(refusal).toBeInstanceOf(OffGrammarPathError)
+    expect(refusal).toMatchObject({ paths: ['Meeting notes'] })
+    expect(store.saves).toBe(0)
+    expect(storedPaths(store)).toEqual([PATH])
+  })
+
+  it('creating a document outside the grammar is refused', async () => {
+    const store = new StoredDoc(workspaceSeed('body'))
+    const update = updateFrom(store.get(), (doc) =>
+      createWorkspaceDocumentAtPath(doc, {
+        path: 'notes/Ä',
+        documentId: '01BRWAAAAAAAAAAAAAAAAAAAA5',
+        kind: 'markdown',
+      }),
+    )
+
+    await expect(
+      applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
+    ).rejects.toMatchObject({ paths: ['notes/Ä'] })
+    expect(storedPaths(store)).toEqual([PATH])
+  })
+
+  it('off a path already outside the grammar onto one inside it is applied', async () => {
+    const seed = workspaceSeed('body')
+    moveWorkspaceNodeToPath(seed, PATH, 'Meeting notes')
+    seed.commit()
+    const store = new StoredDoc(seed)
+    const update = updateFrom(store.get(), (doc) => {
+      expect(moveWorkspaceNodeToPath(doc, 'Meeting notes', 'meeting-notes')).toBe(true)
+    })
+
+    await expect(
+      applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
+    ).resolves.toBe('applied')
+    expect(storedPaths(store)).toEqual(['meeting-notes'])
+  })
+
+  it('that leaves an already off-grammar path where it was is applied', async () => {
+    const seed = workspaceSeed('body')
+    moveWorkspaceNodeToPath(seed, PATH, 'Meeting notes')
+    seed.commit()
+    const store = new StoredDoc(seed)
+    const update = updateFrom(store.get(), (doc) => workspaceBody(doc).insert(0, 'more '))
+
+    await expect(
+      applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
+    ).resolves.toBe('applied')
+    expect(storedWorkspaceBody(store)).toBe('more body')
+  })
+
+  it('that nests a document under one already off the grammar is refused, naming only the new path', async () => {
+    const seed = workspaceSeed('body')
+    moveWorkspaceNodeToPath(seed, PATH, 'Meeting notes')
+    createWorkspaceDocumentAtPath(seed, { path: 'other', documentId: OTHER_ID, kind: 'markdown' })
+    seed.commit()
+    const store = new StoredDoc(seed)
+    // A tree move alone, with no segment written: the parent changes the path.
+    const update = updateFrom(store.get(), (doc) =>
+      moveWorkspaceDocument(doc, { documentId: OTHER_ID, parentId: DOC_ID }),
+    )
+
+    await expect(
+      applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
+    ).rejects.toMatchObject({ paths: ['Meeting notes/other'] })
+    expect(storedPaths(store)).toEqual(['Meeting notes', 'other'])
   })
 })

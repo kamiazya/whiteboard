@@ -10,7 +10,10 @@ export { answerUnhandled, createServer } from './create-server.js'
 export { DocumentEngineTrapError } from './document-io.js'
 export { getLogger, setLogSink } from './log.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
-export { MarkdownBodyTooLargeError } from './operations/apply-document-update-limit.js'
+export {
+  MarkdownBodyTooLargeError,
+  OffGrammarPathError,
+} from './operations/apply-document-update-limit.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export { promoteWorkspace } from './operations/promote-workspace.js'
 export type { RestoreProgress } from './operations/restore-version.js'

@@ -1,6 +1,6 @@
 import type { LoroDoc } from 'loro-crdt'
 import type { ServerDeps } from '../server-deps.js'
-import { importWithinMarkdownLimit } from './apply-document-update-limit.js'
+import { importWithinSyncLimits } from './apply-document-update-limit.js'
 
 export interface ApplyDocumentUpdateInput {
   readonly workspaceId: string
@@ -45,11 +45,16 @@ export async function applyDocumentUpdate(
   const { workspaceId, path, update } = input
   return live.withWriteLock(workspaceId, async () => {
     const doc = await live.get(workspaceId, path)
-    importWithinMarkdownLimit(doc, update, {
-      subject: `the document at ${path}`,
-      fields: { workspaceId, path },
-      evict: () => live.evict(workspaceId, path),
-    })
+    importWithinSyncLimits(
+      doc,
+      update,
+      {
+        subject: `the document at ${path}`,
+        fields: { workspaceId, path },
+        evict: () => live.evict(workspaceId, path),
+      },
+      { workspaceRecord: false },
+    )
     try {
       await live.save(workspaceId, path, doc, { overwrite: true })
     } catch (err) {

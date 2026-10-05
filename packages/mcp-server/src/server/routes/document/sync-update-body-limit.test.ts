@@ -10,6 +10,7 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  moveWorkspaceNodeToPath,
   readMarkdownBody,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -163,5 +164,30 @@ describe('a promoted record holding a path outside the document-path grammar', (
     expect(body.message).toContain('"Meeting notes"')
     const stored = await snapshot(`/api/w/${WS}/workspace-document/snapshot`)
     expect(readWorkspaceDocuments(stored)).toEqual([])
+  })
+})
+
+describe('a workspace-document update moving a document outside the path grammar', () => {
+  it('answers 400 invalid_path naming it and the stored path is unchanged', async () => {
+    const { post, snapshot } = await setup()
+    const url = `/api/w/${WS}/workspace-document`
+    const seeded = updateFrom(await snapshot(`${url}/snapshot`), (doc) =>
+      createWorkspaceDocumentAtPath(doc, { path: 'big', documentId: DOC_ID, kind: 'markdown' }),
+    )
+    expect((await post(`${url}/update`, seeded)).status).toBe(200)
+
+    const refused = await post(
+      `${url}/update`,
+      updateFrom(await snapshot(`${url}/snapshot`), (doc) => {
+        expect(moveWorkspaceNodeToPath(doc, 'big', 'Meeting notes')).toBe(true)
+      }),
+    )
+
+    expect(refused.status).toBe(400)
+    const body = (await refused.json()) as { error: string; message: string }
+    expect(body.error).toBe('invalid_path')
+    expect(body.message).toContain('"Meeting notes"')
+    const stored = await snapshot(`${url}/snapshot`)
+    expect(readWorkspaceDocuments(stored).map((entry) => entry.path)).toEqual(['big'])
   })
 })

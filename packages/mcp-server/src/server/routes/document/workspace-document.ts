@@ -10,6 +10,7 @@ import {
   DocumentEngineTrapError,
   errorBody,
   MarkdownBodyTooLargeError,
+  OffGrammarPathError,
   type OperatorInfo,
   promoteWorkspace,
   type ServerDeps,
@@ -85,17 +86,20 @@ async function admittedWorkspace(
 }
 
 /**
- * A write that threw one of the two refusals the operations raise rather than
+ * A write that threw one of the refusals the operations raise rather than
  * return. An engine trap: the operation has already dropped the instance it
  * poisoned, so the next request is served; the caller is told the engine
  * failed, in the code `/api/v1` answers it with, and not that its bytes were
  * malformed. A body past the markdown size limit: 413, since the bytes are
- * well-formed and only their size is refused, with nothing of them kept.
+ * well-formed and only their size is refused. A document moved onto a path
+ * the grammar refuses: 400 `invalid_path`, as promote answers it. Nothing of
+ * a refused write is kept.
  */
 function answerWriteRefusal(c: Context, err: unknown): Response {
   if (err instanceof MarkdownBodyTooLargeError) {
     return c.json(errorBody('markdown_too_large', err.message), 413)
   }
+  if (err instanceof OffGrammarPathError) return c.json(errorBody('invalid_path', err.message), 400)
   if (!(err instanceof DocumentEngineTrapError)) throw err
   return c.json(errorBody('document_engine_trap', err.message), 500)
 }
