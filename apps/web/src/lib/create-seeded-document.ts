@@ -33,13 +33,19 @@ export async function createSeededDocument(
   name?: string,
   kind: DocumentSnapshot['kind'] = 'spatial',
   content?: Uint8Array,
+  /** Where to create it; absent, the next free `untitled` at the workspace root. */
+  path?: string,
 ): Promise<DocumentSnapshot> {
   await ensureBrowserWorkspace(index)
-  const taken = (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path)
   const trimmed = name?.trim()
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
-    path: newDocumentPathIn('', taken),
+    path:
+      path ??
+      newDocumentPathIn(
+        '',
+        (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path),
+      ),
     kind,
     ...(trimmed ? { name: trimmed } : {}),
   })

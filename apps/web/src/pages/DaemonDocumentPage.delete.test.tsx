@@ -21,9 +21,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
     'listDocuments',
     'getDocumentSnapshot',
     'deleteDocument',
-    'createDocument',
-    'updateDocument',
-    'setDocumentDisplayName',
+    'duplicateDocument',
   ]),
 )
 
@@ -52,9 +50,7 @@ const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 const mockGetSnapshot = vi.mocked(daemonApiClient.getDocumentSnapshot)
-const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
-const mockUpdateDocument = vi.mocked(daemonApiClient.updateDocument)
-const mockSetDisplayName = vi.mocked(daemonApiClient.setDocumentDisplayName)
+const mockDuplicate = vi.mocked(daemonApiClient.duplicateDocument)
 const mockDeleteDocument = vi.mocked(daemonApiClient.deleteDocument)
 
 const SOURCE = {
@@ -91,14 +87,10 @@ describe('deleting a daemon-kept document from its own page', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({ documents: [SOURCE] })
     mockGetSnapshot.mockResolvedValue(snapshotFor('agent-note'))
-    mockCreateDocument.mockImplementation(async (_f, _b, workspaceId, path) => ({
-      workspaceId,
-      documentId: COPY_ID,
-      path,
-    }))
-    mockUpdateDocument.mockResolvedValue({ ok: true })
+    mockDuplicate.mockResolvedValue({
+      document: { documentId: COPY_ID, path: 'agent-note-copy', kind: 'markdown' },
+    })
     mockDeleteDocument.mockResolvedValue({ ok: true })
-    mockSetDisplayName.mockResolvedValue({ documents: {}, pinned: [] })
   })
   afterEach(() => {
     cleanup()
@@ -157,11 +149,11 @@ describe('deleting a daemon-kept document from its own page', () => {
     // takes the rest of the page out of the accessibility tree and the kebab
     // cannot be reached again while it stands.
     let releaseCopy: (() => void) | undefined
-    mockGetSnapshot.mockImplementation(async () => {
+    mockDuplicate.mockImplementation(async () => {
       await new Promise<void>((resolve) => {
         releaseCopy = resolve
       })
-      return snapshotFor('agent-note')
+      return { document: { documentId: COPY_ID, path: 'agent-note-copy', kind: 'markdown' } }
     })
 
     await act(async () => {
@@ -180,7 +172,7 @@ describe('deleting a daemon-kept document from its own page', () => {
     await act(async () => {
       fireEvent.pointerUp(duplicate)
     })
-    await waitFor(() => expect(mockGetSnapshot).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockDuplicate).toHaveBeenCalledTimes(1))
 
     await openDocumentOpsMenu()
     const remove = await screen.findByRole('menuitem', { name: /^delete$/i })

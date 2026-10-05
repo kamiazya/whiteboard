@@ -69,6 +69,7 @@ export {
   type PassageRange,
   readThreadMarks,
 } from './thread-marks.js'
+export { duplicateWorkspaceDocument } from './workspace-duplicate.js'
 export {
   adoptWorkspaceDocument,
   type CreateWorkspaceDocumentInput,

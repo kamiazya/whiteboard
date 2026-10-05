@@ -93,6 +93,22 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     return withWorkspaceWriteLock(input.workspaceId, () => super.createDocument(input))
   }
 
+  /**
+   * The copy's path may already hold a phantom in the doc cache — an empty
+   * document a read at that path lazily cached — and the next save through it
+   * would write the phantom over the copy. Evicted once the copy exists,
+   * since only then is its path known.
+   */
+  override async duplicateDocument(
+    input: Parameters<LoroWorkspaceDocumentIndex['duplicateDocument']>[0],
+  ): ReturnType<LoroWorkspaceDocumentIndex['duplicateDocument']> {
+    return withWorkspaceWriteLock(input.workspaceId, async () => {
+      const copy = await super.duplicateDocument(input)
+      evictDoc(input.workspaceId, copy.path, this.scope)
+      return copy
+    })
+  }
+
   override async setDocumentName(
     input: Parameters<LoroWorkspaceDocumentIndex['setDocumentName']>[0],
   ): Promise<void> {

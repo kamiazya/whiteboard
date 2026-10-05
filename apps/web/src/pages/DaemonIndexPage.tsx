@@ -13,16 +13,16 @@ import {
   createDaemonFetch,
   createDocument,
   DaemonApiError,
+  duplicateDocument,
   listWorkspaces,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
-import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
-import { type DocumentRow, deleteEach, duplicateRequest } from './daemon-index-actions.js'
+import { type DocumentRow, deleteEach } from './daemon-index-actions.js'
 // What the list shows: a failed load with the recovery that is actually
 // available, the transient loading state, onboarding, or the panel. Split out
 // of the page body — each arm is a different screen, and the page is about
@@ -521,10 +521,8 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, onOpenDocument, loadWorkspace],
   )
 
-  // Client-side copy through EXISTING daemon HTTP endpoints only (read
-  // snapshot -> create canvas -> write snapshot -> rename), matching the
-  // browser controller's read-then-write duplicate flow rather than
-  // requiring a dedicated server-side "duplicate" endpoint.
+  // One request: the daemon places the copy beside its source and names it,
+  // the same operation the browser keeper runs on its own record.
   const handleDuplicate = useCallback(
     async (sourcePath: string) => {
       if (duplicatingPath !== null) return
@@ -539,9 +537,7 @@ export function DaemonIndexPage({
       // its completion (the rows refresh) to the page is gated separately,
       // below, on whether that workspace is still the one being viewed.
       try {
-        await duplicateDaemonDocument(
-          duplicateRequest(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath, rows),
-        )
+        await duplicateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath)
         const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
         if (isStale()) return
         await loadWorkspace(workspaceAtStart, isStale)
@@ -552,7 +548,7 @@ export function DaemonIndexPage({
         setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingPath],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, loadWorkspace, duplicatingPath],
   )
 
   // What the page calls itself. `selectedWorkspace` holds a HANDLE, not an id,

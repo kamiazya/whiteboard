@@ -44,9 +44,10 @@ describe('duplicating a browser-kept document by its path', () => {
     // The kind travels: a duplicated note is a note, not a board.
     expect(copy.kind).toBe('markdown')
     expect(copy.name).toBe('Roadmap (copy)')
+    // Beside its source, as the daemon places it: one placement rule for both keepers.
+    expect(copy.path).toBe('notes/roadmap-copy')
     const rows = await listBrowserDocuments(store.index, store.clock)
-    expect(rows.map((row) => row.path).sort()).toEqual(['notes/roadmap', copy.path].sort())
-    expect(copy.path).not.toBe('notes/roadmap')
+    expect(rows.map((row) => row.path).sort()).toEqual(['notes/roadmap', 'notes/roadmap-copy'])
     // A deep copy: the bytes are the source's content, not an empty document.
     expect(bytesFor(store, copy.documentId)).toEqual(bytesFor(store, source.documentId))
   })

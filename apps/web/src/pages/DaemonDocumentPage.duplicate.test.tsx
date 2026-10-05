@@ -19,9 +19,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
     'listWorkspaces',
     'listDocuments',
     'getDocumentSnapshot',
-    'createDocument',
-    'updateDocument',
-    'setDocumentDisplayName',
+    'duplicateDocument',
   ]),
 )
 
@@ -50,9 +48,14 @@ const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 const mockGetSnapshot = vi.mocked(daemonApiClient.getDocumentSnapshot)
-const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
-const mockUpdateDocument = vi.mocked(daemonApiClient.updateDocument)
-const mockSetDisplayName = vi.mocked(daemonApiClient.setDocumentDisplayName)
+const mockDuplicate = vi.mocked(daemonApiClient.duplicateDocument)
+
+const COPY = {
+  documentId: COPY_ID,
+  path: 'agent-note-copy',
+  name: 'Agent note (copy)',
+  kind: 'markdown' as const,
+}
 
 const SOURCE = {
   path: 'agent-note',
@@ -79,13 +82,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({ documents: [SOURCE] })
     mockGetSnapshot.mockResolvedValue(snapshotFor('agent-note'))
-    mockCreateDocument.mockImplementation(async (_f, _b, workspaceId, path) => ({
-      workspaceId,
-      documentId: COPY_ID,
-      path,
-    }))
-    mockUpdateDocument.mockResolvedValue({ ok: true })
-    mockSetDisplayName.mockResolvedValue({ documents: {}, pinned: [] })
+    mockDuplicate.mockResolvedValue({ document: COPY })
   })
   afterEach(() => {
     cleanup()
@@ -93,7 +90,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
     vi.clearAllMocks()
   })
 
-  it('creates the copy as the source KIND and follows it', async () => {
+  it('asks the daemon for the copy in one request and follows it', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage
@@ -107,16 +104,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
 
     // Once the copy exists, the list the page re-reads holds both.
     mockListDocuments.mockResolvedValue({
-      documents: [
-        SOURCE,
-        {
-          path: 'agent-note-copy',
-          documentId: COPY_ID,
-          updatedAt: '2026-01-02',
-          kind: 'markdown',
-          name: 'Agent note (copy)',
-        },
-      ],
+      documents: [SOURCE, { ...COPY, updatedAt: '2026-01-02' }],
     })
 
     await openDocumentOpsMenu()
@@ -129,12 +117,11 @@ describe('duplicating a daemon-kept document from its own page', () => {
     })
 
     await waitFor(() =>
-      expect(mockCreateDocument).toHaveBeenCalledWith(
+      expect(mockDuplicate).toHaveBeenCalledWith(
         expect.anything(),
         'http://127.0.0.1:3099',
         'w1',
-        'agent-note-copy',
-        'markdown',
+        'agent-note',
       ),
     )
     // Following the copy is the half a lib test cannot see: a duplicate that
@@ -144,11 +131,11 @@ describe('duplicating a daemon-kept document from its own page', () => {
 
   it('disables its own row while a copy is in flight, and re-enables it after', async () => {
     let release: (() => void) | undefined
-    mockGetSnapshot.mockImplementation(async () => {
+    mockDuplicate.mockImplementation(async () => {
       await new Promise<void>((resolve) => {
         release = resolve
       })
-      return snapshotFor('agent-note')
+      return { document: COPY }
     })
 
     await act(async () => {
@@ -171,7 +158,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
     await act(async () => {
       fireEvent.pointerUp(duplicate)
     })
-    await waitFor(() => expect(mockGetSnapshot).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockDuplicate).toHaveBeenCalledTimes(1))
 
     // Radix closes the menu on select, so the row is read again from a
     // re-opened one rather than through the reference that went with it.
@@ -182,10 +169,13 @@ describe('duplicating a daemon-kept document from its own page', () => {
       ).toBe('true'),
     )
 
+    mockListDocuments.mockResolvedValue({
+      documents: [SOURCE, { ...COPY, updatedAt: '2026-01-02' }],
+    })
     await act(async () => {
       release?.()
     })
-    await waitFor(() => expect(mockCreateDocument).toHaveBeenCalledTimes(1))
-    expect(mockGetSnapshot).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(constructed.at(-1)?.path).toBe('agent-note-copy'))
+    expect(mockDuplicate).toHaveBeenCalledTimes(1)
   })
 })

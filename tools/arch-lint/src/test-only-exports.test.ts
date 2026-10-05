@@ -257,6 +257,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 const INTENTIONAL: Readonly<Record<string, string>> = {
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
     'the one await a test has over a flush an unmount released, so clearing the database cannot race the checkpoint being taken; production never deletes storage under a page it just left',
+  'packages/daemon-client/src/api-contracts/document.ts#updateDocumentResponseSchema':
+    'the contract the per-document update route answers with, which UpdateDocumentResponse derives from; no app surface calls that route, and the route fuzz rules hold the real response to it',
   'packages/daemon-client/src/api-contracts/document.ts#restoreVersionResponseSchema':
     'the contract the restore route answers with, which RestoreVersionResponse derives from; the route fuzz rules hold the real response to it',
   'packages/mcp-server/src/server/routes/document.ts#DocumentRouterOptions':

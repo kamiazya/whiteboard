@@ -439,20 +439,22 @@ describe('DaemonIndexPage tree view', () => {
     ]
     installFetchMock(undefined, {
       documentsByWorkspace: { default: () => docs },
-      onCreateDocument: (_workspaceId, path) => {
+      onDuplicateDocument: (_workspaceId, path) => {
         posted.push(path)
+        // What the keeper's copy adds to the listing the page re-reads.
         docs = [
           ...docs,
-          { id: `id-${path}`, path, updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+          {
+            id: 'id-copy',
+            path: `${path}-copy`,
+            updatedAt: '2026-05-01T12:00:00.000Z',
+            kind: 'markdown',
+          },
         ]
+        return jsonResponse({
+          document: { documentId: 'id-copy', path: `${path}-copy`, kind: 'markdown' },
+        })
       },
-      // Duplicate reads the source's bytes before it creates anything, so a
-      // 404 here throws before the POST and the test would report a wiring
-      // failure that is really a fixture gap. The name PUT the fake answers
-      // is schema-valid for the same reason: the client parses it, and an
-      // `{ok:true}` there throws inside the duplicate before the list
-      // reload — which reads exactly like broken wiring.
-      snapshotByDocument: { 'notes/design': new Uint8Array([1, 2, 3]) },
     })
 
     render(
@@ -477,10 +479,9 @@ describe('DaemonIndexPage tree view', () => {
     expect(opened).toEqual([['default', 'notes/design']])
 
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
-    await waitFor(() => expect(posted.length).toBe(1))
-    // The copy lands beside the original, and the browser shows it without
-    // anyone leaving and coming back.
-    expect(posted[0]).toMatch(/^notes\/design/)
+    // The SOURCE is what the page names; the keeper places the copy beside it,
+    // and the browser shows it without anyone leaving and coming back.
+    await waitFor(() => expect(posted).toEqual(['notes/design']))
     await waitFor(() => {
       expect(screen.getByTestId('folder-contents').textContent).toContain('copy')
     })

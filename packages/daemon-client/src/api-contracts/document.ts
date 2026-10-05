@@ -343,6 +343,13 @@ export const listDocumentsResponseSchema = z.object({
   documents: z.array(documentSummarySchema),
 })
 
+// POST /api/workspaces/:workspaceId/documents/<path>/duplicate — the copy the
+// keeper made BESIDE the source, as one write: its path and name are derived
+// there (model's `deriveCopyPath` / `deriveCopyName`), never by the client.
+export const duplicateDocumentResponseSchema = z.object({
+  document: documentSummarySchema.pick({ documentId: true, path: true, name: true, kind: true }),
+})
+
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
@@ -352,6 +359,7 @@ export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema
 export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
+export type DuplicateDocumentResponse = z.infer<typeof duplicateDocumentResponseSchema>
 export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema>
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>
 export type TrashEntrySummary = z.infer<typeof trashEntrySummarySchema>

@@ -805,20 +805,15 @@ describe('DaemonIndexPage', () => {
     expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-unnamed', 'alpha')
   })
 
-  it('duplicates a canvas via the preview Duplicate action without opening it', async () => {
-    const updates: Array<[string, string, Uint8Array]> = []
-    const created: Array<[string, string]> = []
-    const names: Array<[string, string, string]> = []
+  it('duplicates a document via the preview Duplicate action, in one request, without opening it', async () => {
+    const duplicated: Array<[string, string]> = []
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
-      snapshotByDocument: { alpha: new Uint8Array([1, 2, 3]) },
-      onCreateDocument: (workspaceId, path) => created.push([workspaceId, path]),
-      onUpdateDocument: (workspaceId, path, bytes) => updates.push([workspaceId, path, bytes]),
-      onSetDocumentName: (workspaceId, path, name) => names.push([workspaceId, path, name]),
+      onDuplicateDocument: (workspaceId, path) => duplicated.push([workspaceId, path]),
     })
     const onOpenDocument = vi.fn()
 
@@ -826,119 +821,53 @@ describe('DaemonIndexPage', () => {
     await selectCard('Alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
 
-    await waitFor(() => {
-      expect(created).toEqual([['ws-a', 'alpha-copy']])
-    })
-    expect(updates).toEqual([['ws-a', 'alpha-copy', new Uint8Array([1, 2, 3])]])
-    expect(names).toEqual([['ws-a', 'alpha-copy', 'Alpha (copy)']])
+    // The keeper places, names and fills the copy; the page names only the source.
+    await waitFor(() => expect(duplicated).toEqual([['ws-a', 'alpha']]))
     // Clicking the Duplicate action must not also open the source canvas.
     expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
-  it('a duplicated MARKDOWN document is created as markdown, not as a canvas', async () => {
-    // The create is what sets the copy's INDEX row; the snapshot write after
-    // it is a plain re-save, which `document-store.ts` deliberately never
-    // lets touch a stored kind. The split that leaves is not cosmetic: the
-    // two readers take OPPOSITE precedence, so `resolve-file-references.ts`
-    // reads the markdown body while `reference-graph/src/extract.ts` runs
-    // `readSpatialCanvas` over the same note.
-    const created: Array<[string, string, string | undefined]> = []
+  it('a second Duplicate press while one is in flight starts no second copy', async () => {
+    let release: ((res: Response) => void) | undefined
+    let calls = 0
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
         'ws-a': [
-          { path: 'notes', name: 'Notes', kind: 'markdown', updatedAt: new Date().toISOString() },
+          { path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString(), kind: 'markdown' },
         ],
       },
-      namesByWorkspace: { 'ws-a': { documents: { notes: 'Notes' }, pinned: [] } },
-      snapshotByDocument: { notes: new Uint8Array([1, 2, 3]) },
-      onCreateDocument: (workspaceId, path, kind) => created.push([workspaceId, path, kind]),
-    })
-
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
-    await selectCard('Notes')
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
-
-    await waitFor(() => {
-      expect(created).toEqual([['ws-a', 'notes-copy', 'markdown']])
-    })
-  })
-
-  it('a second Duplicate press while one is in flight starts no second copy', async () => {
-    let resolveSnapshot: ((res: Response) => void) | undefined
-    let snapshotCalls = 0
-    const created: Array<[string, string]> = []
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
-        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
-      }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
-        // markdown: the panel's thumbnail/preview loaders then read OKF (a
-        // harmless 404 below) instead of racing this test's deferred
-        // snapshot read, which must stay the duplicate's alone.
-        return Promise.resolve(
-          jsonResponse({
-            documents: [
-              {
-                documentId: 'id-alpha',
-                path: 'alpha',
-                name: 'Alpha',
-                updatedAt: new Date().toISOString(),
-                kind: 'markdown',
-              },
-            ],
-          }),
-        )
-      }
-      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { path: string }
-        created.push(['ws-a', body.path])
-        return Promise.resolve(
-          jsonResponse(
-            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
-            201,
-          ),
-        )
-      }
-      if (url.endsWith('/api/workspaces/ws-a/names')) {
-        return Promise.resolve(jsonResponse({ documents: { alpha: 'Alpha' }, pinned: [] }))
-      }
-      if (url.endsWith('/api/w/ws-a/document/alpha/snapshot')) {
-        snapshotCalls++
+      namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
+      onDuplicateDocument: () => {
+        calls++
         return new Promise<Response>((resolve) => {
-          resolveSnapshot = resolve
+          release = resolve
         })
-      }
-      if (/\/api\/w\/ws-a\/document\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
-        return Promise.resolve(jsonResponse({ ok: true }))
-      }
-      if (/\/api\/workspaces\/ws-a\/documents\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
-        return Promise.resolve(jsonResponse({ documents: { alpha: 'Alpha' }, pinned: [] }))
-      }
-      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+      },
     })
-    vi.stubGlobal('fetch', fetchMock)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await selectCard('Alpha')
     const duplicateBtn = screen.getByRole('button', { name: 'Duplicate' })
     fireEvent.click(duplicateBtn)
-    await waitFor(() => expect(snapshotCalls).toBe(1))
+    await waitFor(() => expect(calls).toBe(1))
 
     // React has flushed the in-flight state by the second press; the
-    // handler's guard must swallow it — no second snapshot read.
+    // handler's guard must swallow it — no second request.
     fireEvent.click(duplicateBtn)
-    expect(snapshotCalls).toBe(1)
+    expect(calls).toBe(1)
 
-    resolveSnapshot?.(
-      new Response(new Uint8Array([1, 2, 3]) as BodyInit, {
-        status: 200,
-        headers: { 'Content-Type': 'application/octet-stream' },
+    release?.(
+      jsonResponse({
+        document: {
+          documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+          path: 'alpha-copy',
+          kind: 'markdown',
+        },
       }),
     )
-    await waitFor(() => expect(created).toEqual([['ws-a', 'alpha-copy']]))
-    vi.unstubAllGlobals()
+    await waitFor(() => expect(duplicateBtn.hasAttribute('disabled')).toBe(false))
+    expect(calls).toBe(1)
   })
 
   it('shows an alert and keeps the Duplicate button usable when duplicating fails', async () => {
@@ -948,7 +877,7 @@ describe('DaemonIndexPage', () => {
         'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
-      // No snapshotByDocument entry for 'alpha' -> the mock 404s the snapshot read.
+      onDuplicateDocument: () => jsonResponse({ title: 'Not found' }, 404),
     })
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await selectCard('Alpha')
@@ -960,71 +889,22 @@ describe('DaemonIndexPage', () => {
   })
 
   it('does not apply a stale duplicate completion to a workspace the user has since switched away from', async () => {
-    let resolveSnapshot: ((res: Response) => void) | undefined
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
-        return Promise.resolve(
-          jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
-        )
-      }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
-        return Promise.resolve(
-          jsonResponse({
-            documents: [
-              {
-                documentId: 'id-alpha',
-                path: 'alpha',
-                updatedAt: new Date().toISOString(),
-                kind: 'markdown',
-              },
-            ],
-          }),
-        )
-      }
-      if (url.endsWith('/api/workspaces/ws-b/documents') && (!init || init.method === undefined)) {
-        return Promise.resolve(
-          jsonResponse({
-            documents: [
-              {
-                documentId: 'id-beta',
-                path: 'beta',
-                updatedAt: new Date().toISOString(),
-                kind: 'markdown',
-              },
-            ],
-          }),
-        )
-      }
-      if (url.endsWith('/workspaces/ws-a/documents') && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { path: string }
-        return Promise.resolve(
-          jsonResponse(
-            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: body.path },
-            201,
-          ),
-        )
-      }
-      if (
-        url.endsWith('/api/workspaces/ws-a/names') ||
-        url.endsWith('/api/workspaces/ws-b/names')
-      ) {
-        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
-      }
-      if (url.endsWith('/api/w/ws-a/document/alpha/snapshot')) {
-        return new Promise<Response>((resolve) => {
-          resolveSnapshot = resolve
-        })
-      }
-      if (/\/api\/w\/ws-a\/document\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
-        return Promise.resolve(jsonResponse({ ok: true }))
-      }
-      if (/\/api\/workspaces\/ws-a\/documents\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
-        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
-      }
-      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+    let release: ((res: Response) => void) | undefined
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString(), kind: 'markdown' }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString(), kind: 'markdown' }],
+      },
+      namesByWorkspace: {
+        'ws-a': { documents: {}, pinned: [] },
+        'ws-b': { documents: {}, pinned: [] },
+      },
+      onDuplicateDocument: () =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
     })
-    vi.stubGlobal('fetch', fetchMock)
 
     const { rerender } = render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
@@ -1032,14 +912,17 @@ describe('DaemonIndexPage', () => {
     await selectCard('alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
 
-    // Switch workspaces while the duplicate (still reading alpha's snapshot) is in flight.
+    // Switch workspaces while the duplicate is in flight.
     switchWorkspace(rerender, 'ws-b')
     expect(await screen.findByText('beta')).toBeTruthy()
 
-    resolveSnapshot?.(
-      new Response(new Uint8Array([1, 2, 3]) as BodyInit, {
-        status: 200,
-        headers: { 'Content-Type': 'application/octet-stream' },
+    release?.(
+      jsonResponse({
+        document: {
+          documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+          path: 'alpha-copy',
+          kind: 'markdown',
+        },
       }),
     )
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -1050,7 +933,6 @@ describe('DaemonIndexPage', () => {
     expect(screen.getByText('beta')).toBeTruthy()
     expect(screen.queryByText('alpha')).toBeNull()
     expect(screen.queryByText('alpha-copy')).toBeNull()
-    vi.unstubAllGlobals()
   })
 
   it("creates a canvas from the panel's New menu, opening it with no name typed first", async () => {

@@ -64,6 +64,8 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 
 /** A class with no arm in create-server.ts, and why no /api/v1 operation can raise it. */
 const EXEMPT: Readonly<Record<string, string>> = {
+  NoRoomForCopyError:
+    'raised only by duplicating a document, which is the /api/workspaces duplicate route; /api/v1 has no duplicate',
   DocumentMoveIntoSelfError:
     'a move is wb_workspace_edit / document-move only; /api/v1 has no move',
   DocumentPathContestedError:

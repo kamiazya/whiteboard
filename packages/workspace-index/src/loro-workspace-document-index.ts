@@ -20,6 +20,7 @@ import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
   documentContainers,
+  duplicateWorkspaceDocument,
   exportWorkspaceSubtree,
   forgetTrashEntry,
   importWorkspaceSubtree,
@@ -35,16 +36,24 @@ import {
   setWorkspaceDocumentName,
   setWorkspacePinned,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId, isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
+import {
+  deriveCopyName,
+  deriveCopyPath,
+  generateDocumentId,
+  isSelfOrDescendant,
+  rebasePath,
+} from '@kamiazya/whiteboard-model'
 import type {
   BlobStore,
   CreateDocumentInput,
   CreateWorkspaceInput,
   DeleteDocumentInput,
+  DocumentDuplicates,
   DocumentEntry,
   DocumentIndex,
   DocumentPins,
   DocumentTrash,
+  DuplicateDocumentInput,
   ListDocumentsInput,
   MoveDocumentInput,
   RenameWorkspaceInput,
@@ -65,8 +74,10 @@ import {
   DocumentNotFoundError,
   DocumentPathContestedError,
   DocumentPathTakenError,
+  duplicateDocumentInputSchema,
   KeyedSerializer,
   moveDocumentInputSchema,
+  NoRoomForCopyError,
   renameWorkspaceInputSchema,
   resolveWorkspaceHandle,
   setDocumentNameInputSchema,
@@ -92,7 +103,9 @@ export interface WorkspaceRegistry {
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 }
 
-export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, DocumentTrash {
+export class LoroWorkspaceDocumentIndex
+  implements DocumentIndex, DocumentPins, DocumentTrash, DocumentDuplicates
+{
   /**
    * `blobs` is required, not optional.
    *
@@ -294,6 +307,46 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex, DocumentPins, 
       // Through entryOf, so a create answers the same shape a resolve does —
       // updatedAt included; the conformance suite compares them directly.
       return entryOf(created)
+    })
+  }
+
+  /**
+   * The copy's path and name are derived HERE, inside the serialised write
+   * that creates it, from what the record holds at that moment — so two
+   * duplicates of one source cannot both take `-copy`, which a caller
+   * deriving from a listing it read earlier could not promise. Folders count
+   * as taken: a copy promoted into a folder would arrive holding documents
+   * that were never its own.
+   */
+  async duplicateDocument(raw: DuplicateDocumentInput): Promise<DocumentEntry> {
+    const input = duplicateDocumentInputSchema.parse(raw)
+    return this.#serialise(input.workspaceId, async () => {
+      const doc = await this.#open(input.workspaceId)
+      const documents = readWorkspaceDocuments(doc)
+      const atPath = documents.filter((entry) => entry.path === input.path)
+      if (atPath.length > 1) throw new DocumentPathContestedError(input.workspaceId, input.path)
+      const source = atPath[0]
+      if (source === undefined) throw new DocumentNotFoundError(input.workspaceId, input.path)
+      const path = deriveCopyPath(
+        source.path,
+        readWorkspaceNodes(doc).map((node) => node.path),
+      )
+      if (path === null) throw new NoRoomForCopyError(source.path)
+      const copy = duplicateWorkspaceDocument(doc, {
+        sourceDocumentId: source.documentId,
+        documentId: generateDocumentId(),
+        path,
+        // What a listing shows for each document, so the copy's name is
+        // derived from — and kept apart from — what a person reads there.
+        name: deriveCopyName(
+          source.name ?? source.path,
+          documents.map((entry) => entry.name ?? entry.path),
+        ),
+      })
+      // Unreachable while the path above was derived free of every node.
+      if (copy === null) throw new DocumentPathTakenError(input.workspaceId, path)
+      await this.docs.save(input.workspaceId, doc)
+      return entryOf(copy)
     })
   }
 

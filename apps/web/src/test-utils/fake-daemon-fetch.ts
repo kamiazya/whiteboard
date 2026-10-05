@@ -21,11 +21,11 @@
 import {
   createWorkspaceRequestSchema,
   deleteDocumentResponseSchema,
+  duplicateDocumentResponseSchema,
   listDocumentsResponseSchema,
   listTrashResponseSchema,
   listWorkspacesResponseSchema,
   renameDocumentPathResponseSchema,
-  updateDocumentResponseSchema,
   workspaceNamesSchema,
   workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
@@ -33,6 +33,7 @@ import {
   createDocumentV1ResponseSchema,
   type DocumentOkfV1Response,
   documentApiUrl,
+  documentDuplicateApiUrl,
   documentNameApiUrl,
   documentOkfApiUrl,
   documentOkfV1ResponseSchema,
@@ -44,6 +45,7 @@ import {
   workspaceNamesApiUrl,
   workspacesApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { deriveCopyName, deriveCopyPath } from '@kamiazya/whiteboard-model'
 import { vi } from 'vitest'
 import { jsonResponse } from './json-response.js'
 
@@ -98,7 +100,11 @@ export interface FakeDaemonRoutes {
   /** Return a Response to override the default `{ path: to }`. */
   onRenameDocumentPath?: (workspaceId: string, from: string, to: string) => Overriding
   snapshotByDocument?: Record<string, Uint8Array>
-  onUpdateDocument?: (workspaceId: string, path: string, bytes: Uint8Array) => void
+  /**
+   * Return a Response (or a pending one) to override the default: the copy a
+   * keeper makes beside a listed source, or 404 for a path the list lacks.
+   */
+  onDuplicateDocument?: (workspaceId: string, path: string) => Overriding
   onSetDocumentName?: (workspaceId: string, path: string, name: string) => void
   /** The OKF the preview route answers, by document id. */
   okfByDocumentId?: Record<string, DocumentOkfV1Response>
@@ -149,7 +155,7 @@ const DOCUMENT_OKF = derive(documentOkfApiUrl(WS_MARK, DOC_MARK))
 const TRASH = derive(trashApiUrl(WS_MARK))
 const NAMES = derive(workspaceNamesApiUrl(WS_MARK))
 const SNAPSHOT = derive(documentApiUrl(WS_MARK, PATH_MARK, 'snapshot'))
-const UPDATE = derive(documentApiUrl(WS_MARK, PATH_MARK, 'update'))
+const DUPLICATE = derive(documentDuplicateApiUrl(WS_MARK, PATH_MARK))
 
 const isGet = (init?: RequestInit) => !init || init.method === undefined
 const seg = (match: RegExpMatchArray, index: number) => decodeURIComponent(match[index] ?? '')
@@ -230,6 +236,31 @@ function setDocumentName(
   const documents = names && names !== 'fail' ? names.documents : {}
   return jsonResponse(
     workspaceNamesSchema.parse({ documents: { ...documents, [path]: body.name }, pinned: [] }),
+  )
+}
+
+/** The copy the daemon would make, by the rules both keepers share. */
+function duplicateDocument(routes: FakeDaemonRoutes, workspaceId: string, path: string): Response {
+  const listed = routes.documentsByWorkspace[workspaceId]
+  const rows = withSummaryDefaults(typeof listed === 'function' ? listed() : (listed ?? []))
+  const source = rows.find((row) => row.path === path)
+  if (source === undefined)
+    return jsonResponse({ title: `No document "${path}" to duplicate` }, 404)
+  return jsonResponse(
+    duplicateDocumentResponseSchema.parse({
+      document: {
+        documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+        path: deriveCopyPath(
+          path,
+          rows.map((row) => row.path),
+        ),
+        name: deriveCopyName(
+          source.name ?? path,
+          rows.map((row) => row.name ?? row.path),
+        ),
+        kind: source.kind,
+      },
+    }),
   )
 }
 
@@ -331,12 +362,11 @@ const ROUTES: readonly Route[] = [
     },
   },
   {
-    pattern: UPDATE,
+    pattern: DUPLICATE,
     method: 'POST',
-    handle: (routes, m, init) => {
-      routes.onUpdateDocument?.(seg(m, 1), seg(m, 2), new Uint8Array(init?.body as ArrayBuffer))
-      return jsonResponse(updateDocumentResponseSchema.parse({ ok: true }))
-    },
+    handle: (routes, m) =>
+      overrideOf(routes.onDuplicateDocument?.(seg(m, 1), seg(m, 2))) ??
+      duplicateDocument(routes, seg(m, 1), seg(m, 2)),
   },
 ]
 

@@ -61,6 +61,8 @@ const READS_NO_BODY: Readonly<Record<string, string>> = {
   'POST /api/fonts/:id/install': 'installs a catalogued font by id; the request carries nothing',
   'POST /api/workspaces/:workspaceId/documents/optimize-all': 'a maintenance action, no options',
   'POST /api/workspaces/:workspaceId/files/purge-dangling': 'a maintenance action, no options',
+  'POST /api/workspaces/:workspaceId/documents/*/duplicate':
+    'the URL names the source; the keeper derives the rest',
   'POST /api/workspaces/:workspaceId/trash/:documentId/restore': 'the URL names the document',
   'POST /api/workspaces/:workspaceId/versions/prune-sandwiched': 'a maintenance action, no options',
 }

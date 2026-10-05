@@ -408,8 +408,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // snapshot refs: a name the record holds is shown only while no rename of
   // this page's own is pending or saving.
   'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 406,
-  // `duplicateDocument` is one call into lib/duplicate-daemon-document.ts,
-  // shared with the index page; what is here is the list refresh and the path
+  // `duplicateDocument` is one request to the daemon's duplicate route, the
+  // one the index page sends too; what is here is the list refresh and the path
   // move, the same two steps `createDocument` ends with. `deleteDocument` is the
   // delete call plus the same list refresh and path move its two siblings end
   // with. This is the backend seam out of `useDaemonDocument`: over the budget

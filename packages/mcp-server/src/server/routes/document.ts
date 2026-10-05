@@ -16,7 +16,7 @@ import { createRestoreRouter } from './document/restore.js'
 import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
-import { createWorkspacesRouter } from './document/workspaces.js'
+import { createDuplicateRouter, createWorkspacesRouter } from './document/workspaces.js'
 
 export type { AutoVersionTrigger }
 
@@ -120,6 +120,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
   refuseUnaddressable(app, options.serverDeps)
   app.route('/', createWorkspacesRouter(workspacesRouterOptions(options)))
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
+  app.route('/', createDuplicateRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter({ scope: options.scope }))
   app.route('/', createLiveDocRouter({ triggerAutoVersion, serverDeps: options.serverDeps }))
   app.route(
