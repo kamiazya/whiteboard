@@ -71,7 +71,7 @@ function fieldLength(value: unknown, field: string): number {
  */
 function isThreadMessages(doc: LoroDoc, container: ContainerID): boolean {
   const path = doc.getPathToContainer(container)
-  if (path === undefined || path.at(-1) !== 'messages' || path.at(-3) !== THREADS_KEY) return false
+  if (path?.at(-1) !== 'messages' || path.at(-3) !== THREADS_KEY) return false
   return path.length === 3 || (path.length === 5 && path[0] === WORKSPACE_TREE_KEY)
 }
 
@@ -219,7 +219,7 @@ function readTextWrite(writes: UpdateWrites, runs: Map<string, Run>, peer: strin
  */
 function isContentContainer(doc: LoroDoc, container: ContainerID, key: string): boolean {
   const path = doc.getPathToContainer(container)
-  if (path === undefined || path.at(-1) !== key) return false
+  if (path?.at(-1) !== key) return false
   return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
 }
 

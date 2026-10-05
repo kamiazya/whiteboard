@@ -81,12 +81,20 @@ function useLimitedDraft(initialText: string, limit: TextLengthLimit | undefined
 }
 
 /** A refused edit's explanation, above the draft where it covers neither the text nor the exit strip. */
-function LengthLimitNotice({ box, testId, text }: { box: Box; testId: string; text: string }) {
+function LengthLimitNotice({
+  box,
+  testId,
+  text,
+}: {
+  readonly box: Box
+  readonly testId: string
+  readonly text: string
+}) {
   return (
-    <div
-      role="status"
+    <output
       data-testid={`${testId}-limit`}
       style={{
+        display: 'block',
         position: 'absolute',
         left: box.x,
         top: box.y,
@@ -101,7 +109,7 @@ function LengthLimitNotice({ box, testId, text }: { box: Box; testId: string; te
       }}
     >
       {text}
-    </div>
+    </output>
   )
 }
 

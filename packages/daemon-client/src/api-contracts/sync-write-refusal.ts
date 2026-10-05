@@ -66,7 +66,8 @@ export class SyncWriteRefusedError extends Error {
     readonly status: number,
     readonly refusal: SyncWriteRefusal,
   ) {
-    super(`update refused: ${status}${refusal.code === null ? '' : ` ${refusal.code}`}`)
+    const code = refusal.code === null ? '' : ` ${refusal.code}`
+    super(`update refused: ${status}${code}`)
     this.name = 'SyncWriteRefusedError'
   }
 }

@@ -48,7 +48,7 @@ describe('syncTextLimitBreach', () => {
         base,
         updateFrom(base, DOC_ID, (body) => body.delete(0, 1)),
       ),
-    ).toBe(null)
+    ).toBeNull()
 
     expect(base.oplogVersion().compare(version)).toBe(0)
     // Reading a body length must not open a root the record never had.
@@ -65,7 +65,7 @@ describe('syncTextLimitBreach', () => {
         base,
         updateFrom(base, DOC_ID, (body) => body.insert(0, 'ab')),
       ),
-    ).toBe(null)
+    ).toBeNull()
   })
 
   it("refuses a node's text past the node limit however short every body is", () => {
@@ -201,7 +201,7 @@ describe('importWithinTextLimits on update shapes', () => {
       body.insert(0, 'abcde')
     })
     expect(importWithinTextLimits(doc, update).breach).toBeNull()
-    expect(doc.getText('body').length).toBe(MARKDOWN_MAX_CHARS + 5)
+    expect(doc.getText('body')).toHaveLength(MARKDOWN_MAX_CHARS + 5)
   })
 
   it('takes an equal-length replacement in a body already past the limit', () => {
