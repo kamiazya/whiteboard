@@ -183,6 +183,21 @@ describe('importWithinTextLimits', () => {
     const bodyEdit = updateFrom(base, DOC_ID, (body) => body.insert(0, 'more '))
     expect(importWithinTextLimits(base.fork(), bodyEdit).touchesNodeMeta).toBe(false)
 
+    // A canvas write is map writes too, and stays out of the placement walk.
+    const drawer = base.fork()
+    const drawnFrom = drawer.oplogVersion()
+    writeSpatialNode(documentContainers(drawer, DOC_ID), {
+      id: 'n1',
+      resource: { mimeType: 'text/markdown', content: 'note' },
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+    })
+    drawer.commit()
+    const drawn = drawer.export({ mode: 'update', from: drawnFrom })
+    expect(importWithinTextLimits(base.fork(), drawn).touchesNodeMeta).toBe(false)
+
     const client = base.fork()
     const from = client.oplogVersion()
     createWorkspaceDocumentAtPath(client, { path: 'other', documentId: OTHER_ID, kind: 'markdown' })
