@@ -268,7 +268,7 @@ describe('BrowserDocumentPage', () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
-    const loro = new FakeLoroStore()
+    const loro = store.loro
     const seed = new Loro()
     seed.getList('elements').push({ id: 'rect-1' })
     await loro.save('069CFJNRVY147ADGKPSWZ258BE', seed.export({ mode: 'snapshot' }))
@@ -294,19 +294,19 @@ describe('BrowserDocumentPage', () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
-    const loro = new FakeLoroStore()
+    const loro = store.loro
     const seed = new Loro()
     seed.getList('elements').push({ id: 'rect-1' })
     await loro.save('069CFJNRVY147ADGKPSWZ258BE', seed.export({ mode: 'snapshot' }))
-    // Defer the Loro read so the in-flight window is observable and long
-    // enough for a second click to land before the first duplicate resolves.
-    let releaseLoad: (() => void) | undefined
-    const realLoad = loro.load.bind(loro)
-    loro.load = async (id: string) => {
+    // Hold the copy so the in-flight window is observable and long enough
+    // for a second click to land before the first duplicate resolves.
+    let releaseCopy: (() => void) | undefined
+    const realDuplicate = store.index.duplicateDocument.bind(store.index)
+    store.index.duplicateDocument = async (input) => {
       await new Promise<void>((resolve) => {
-        releaseLoad = resolve
+        releaseCopy = resolve
       })
-      return realLoad(id)
+      return realDuplicate(input)
     }
     await act(async () => {
       renderInRouter(
@@ -327,7 +327,7 @@ describe('BrowserDocumentPage', () => {
     await waitFor(() => expect(inFlightItem.getAttribute('aria-disabled')).toBe('true'))
     fireEvent.pointerUp(inFlightItem)
     await act(async () => {
-      releaseLoad?.()
+      releaseCopy?.()
     })
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
@@ -345,7 +345,7 @@ describe('BrowserDocumentPage', () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
-    const loro = new FakeLoroStore()
+    const loro = store.loro
     await loro.save('069CFJNRVY147ADGKPSWZ258BE', new Loro().export({ mode: 'snapshot' }))
     await act(async () => {
       renderInRouter(
@@ -357,13 +357,13 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    // Break the Loro read only for the DUPLICATE — the canvas itself loaded
-    // fine, so the operations kebab is offered and the failure surfaces as
-    // an alert on an otherwise healthy page.
-    loro.load = async () => ({ kind: 'corrupt-snapshot' })
+    // Break the content write only once the canvas has loaded, so the
+    // operations kebab is offered and the refused copy surfaces as an alert
+    // on an otherwise healthy page.
+    loro.shouldThrow = true
     await openDocumentOpsMenu()
     fireEvent.pointerUp(await documentOpsItem(/duplicate/i))
-    expect((await screen.findByRole('alert')).textContent).toMatch(/duplicat/i)
+    expect((await screen.findByRole('alert')).textContent).toContain('loro save failed')
     // No switch happened — still on the source canvas. (Asserted before
     // reopening the menu: Radix's modal dropdown aria-hides the page.)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')

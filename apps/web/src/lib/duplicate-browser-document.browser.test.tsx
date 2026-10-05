@@ -1,9 +1,7 @@
 /**
  * Duplicate through the browser's PRODUCTION index, on real IndexedDB: the
  * path every browser surface takes once a page holds `FoldingBrowserIndex`,
- * where the copy is one write to the workspace record. The jsdom suite beside
- * this covers the row-backed doubles a page test injects, which never reach
- * that operation.
+ * where the copy is one write to the workspace record.
  */
 import {
   documentContainers,
@@ -19,7 +17,6 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { duplicateBrowserDocument } from './duplicate-browser-document.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('duplicate-browser-document')
@@ -52,7 +49,6 @@ it('copies beside the source, named after it, with its content and a last-edited
 
   const copy = await duplicateBrowserDocument({
     index,
-    loro: new LoroStore(),
     clock: idbContentClock(),
     sourcePath: 'notes/roadmap',
   })
@@ -76,7 +72,6 @@ it('lands two duplicates started together on two paths', async () => {
   const duplicate = () =>
     duplicateBrowserDocument({
       index,
-      loro: new LoroStore(),
       clock: idbContentClock(),
       sourcePath: 'notes/roadmap',
     })

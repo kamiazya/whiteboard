@@ -35,8 +35,8 @@ class FakeLoroStore implements LoroStoreLike {
   }
 }
 
-// duplicateDocument runs the real loro-crdt merge/export (mergeToSnapshot), so
-// its tests need real Loro bytes; the fake's `[1, 2, 3]` would throw on import.
+// A test that reads a copy's content back decodes it with real loro-crdt, so
+// it seeds real Loro bytes; the fake's `[1, 2, 3]` would throw on import.
 function realSnapshotWithElements(elements: unknown[]): Uint8Array {
   const doc = new Loro()
   const list = doc.getList('elements')
@@ -1284,7 +1284,7 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
+      const loro = store.loro
       await loro.save(C1, realSnapshotWithElements([{ id: 'rect-1' }]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
@@ -1327,7 +1327,7 @@ describe('useBrowserDocumentController', () => {
         updatedAt: snap.updatedAt,
         kind: 'spatial' as const,
       })
-      const loro = new FakeLoroStore()
+      const loro = store.loro
       await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
@@ -1350,7 +1350,7 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
+      const loro = store.loro
       await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
@@ -1373,11 +1373,11 @@ describe('useBrowserDocumentController', () => {
       expect(duplicated?.name).toBe('Renamed before duplicate (copy)')
     })
 
-    it('rolls back the metadata row when the Loro write fails', async () => {
+    it('leaves no copy behind when the copy’s content write fails', async () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
+      const loro = store.loro
       await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
@@ -1410,7 +1410,7 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
+      const loro = store.loro
       await loro.save(C1, realSnapshotWithElements([{ id: 'original-element' }]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {

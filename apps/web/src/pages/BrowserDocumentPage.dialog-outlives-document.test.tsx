@@ -23,6 +23,11 @@
 // switch, not browser layout — the spatial editor is mocked out entirely.
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  DocumentDuplicates,
+  DocumentEntry,
+  DuplicateDocumentInput,
+} from '@kamiazya/whiteboard-ports'
 import { act, cleanup, configure, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -75,15 +80,11 @@ async function openDeleteDialog(): Promise<HTMLElement> {
 }
 
 /**
- * An index whose duplicate-time create never settles until the test releases
- * it, so a test can stand between a duplicate failing for one document and
- * its error being reported.
- *
- * Only the duplicate's create is held. Seeding goes through the same method,
- * so the switch is armed explicitly rather than by counting calls.
+ * An index whose duplicate never settles until the test releases it, and
+ * then refuses — so a test can stand between a duplicate failing for one
+ * document and its error being reported.
  */
-class HeldDuplicateIndex extends IdbDocumentIndex {
-  holdNextCreate = false
+class HeldDuplicateIndex extends IdbDocumentIndex implements DocumentDuplicates {
   private release: () => void = () => {}
   private readonly gate = new Promise<void>((resolve) => {
     this.release = resolve
@@ -97,10 +98,7 @@ class HeldDuplicateIndex extends IdbDocumentIndex {
     this.release()
   }
 
-  override async createDocument(
-    input: Parameters<IdbDocumentIndex['createDocument']>[0],
-  ): ReturnType<IdbDocumentIndex['createDocument']> {
-    if (!this.holdNextCreate) return super.createDocument(input)
+  async duplicateDocument(_input: DuplicateDocumentInput): Promise<DocumentEntry> {
     this.markAttempted()
     await this.gate
     throw new Error('the browser refused the write')
@@ -240,7 +238,6 @@ describe('a destructive dialog does not outlive its document', () => {
       expect((await listBrowserDocuments(store)).map((r) => r.path)).toHaveLength(2)
     })
 
-    store.holdNextCreate = true
     const kebab = await screen.findByRole('button', { name: 'More actions' })
     fireEvent.pointerDown(kebab, { button: 0, ctrlKey: false })
     fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^duplicate$/i }))

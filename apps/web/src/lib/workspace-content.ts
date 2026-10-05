@@ -38,7 +38,7 @@ class DocumentContentUnreadableError extends Error {
  * workspace tree nor the legacy store HOLDS it.
  *
  * The ONE read for a browser-kept document nothing has open: the files
- * source, a duplicate, an embed and the reference graph all come through
+ * source, an embed and the reference graph all come through
  * here, so what "current" means — tree first, legacy record after — is
  * decided once.
  *
@@ -174,10 +174,9 @@ export async function touchIfWorkspaceBacked(
 }
 
 /**
- * Writes standalone-document bytes INTO an existing tree node (a create
- * seed, a duplicate's copy). Returns false when the workspace record or the
- * node is absent — the caller falls back to the legacy per-document store,
- * which is also what keeps injected test doubles working.
+ * Writes standalone-document bytes INTO an existing tree node, as a test
+ * seeds a document's content. Returns false when the workspace record or the
+ * node is absent.
  */
 export async function seedWorkspaceDocumentContent(
   documentId: string,

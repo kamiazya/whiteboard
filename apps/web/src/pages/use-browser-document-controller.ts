@@ -589,7 +589,6 @@ export function useBrowserDocumentController(
 
     const fresh = await duplicateBrowserDocument({
       index: indexRef.current,
-      loro: loroRef.current,
       clock: clockRef.current,
       sourcePath: source.path,
     })
