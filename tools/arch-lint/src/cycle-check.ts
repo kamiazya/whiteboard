@@ -36,10 +36,27 @@ export interface ImportEdge {
  */
 export type PathAliases = Readonly<Record<string, string>>
 
+/**
+ * The value graph, the type-inclusive graph and the escape scan each read every file's import
+ * specifiers, often in one worker, and the parse is what that costs. Keyed by name and text, so
+ * an edit between calls is a miss rather than a stale answer; the specifiers are kept, never the
+ * syntax tree, which would cost about twenty times the text.
+ */
+const specifierMemo = new Map<string, readonly ImportEdge[]>()
+
+function moduleSpecifiersOf(fileName: string, sourceText: string): readonly ImportEdge[] {
+  const key = `${fileName}\u0000${sourceText}`
+  let found = specifierMemo.get(key)
+  if (found === undefined) {
+    found = collectModuleSpecifiers(parseSource(fileName, sourceText))
+    specifierMemo.set(key, found)
+  }
+  return found
+}
+
 /** Relative-specifier subset of scanner.ts's module-specifier walk. */
 export function collectRelativeImportEdges(fileName: string, sourceText: string): ImportEdge[] {
-  const sourceFile = parseSource(fileName, sourceText)
-  return collectModuleSpecifiers(sourceFile).filter(({ specifier }) =>
+  return moduleSpecifiersOf(fileName, sourceText).filter(({ specifier }) =>
     isRelativeSpecifier(specifier),
   )
 }
@@ -55,8 +72,7 @@ function collectResolvableImportEdges(
   aliases: PathAliases,
 ): ImportEdge[] {
   const prefixes = Object.keys(aliases)
-  const sourceFile = parseSource(fileName, sourceText)
-  return collectModuleSpecifiers(sourceFile).filter(
+  return moduleSpecifiersOf(fileName, sourceText).filter(
     ({ specifier }) =>
       isRelativeSpecifier(specifier) || prefixes.some((prefix) => specifier.startsWith(prefix)),
   )

@@ -42,6 +42,18 @@ export function aliasesOf(file: ts.SourceFile, wanted: ReadonlySet<string>): Set
 }
 
 /**
+ * Whether `source` can hold a use `countNamedUses` would count. Every such use spells a wanted
+ * name in the text — the identifier, the key an alias is bound from, the string key — unless an
+ * escape spells it instead: `\u` in an identifier, or any backslash in a string key, whose cooked
+ * value drops it. So text with neither a name nor a backslash is answered 0 without the parse,
+ * which is the answer the parse gives. Most files a one-place guard walks name nothing it looks
+ * for, and the parse is most of what such a guard costs.
+ */
+function canSpellAny(source: string, names: readonly string[]): boolean {
+  return source.includes('\\') || names.some((name) => source.includes(name))
+}
+
+/**
  * How many times code USES one of `names`: bare, through a property
  * (`fs.realpathSync.native`, `x.name`), through a string key (`x['name']`), or
  * through a local alias the file binds it to (`import { name as save }`,
@@ -53,6 +65,7 @@ export function aliasesOf(file: ts.SourceFile, wanted: ReadonlySet<string>): Set
  * specifier, a comment and a string that merely mentions the name are not uses.
  */
 export function countNamedUses(fileName: string, source: string, names: readonly string[]): number {
+  if (!canSpellAny(source, names)) return 0
   const wanted = new Set(names)
   const file = parseSource(fileName, source)
   const aliases = aliasesOf(file, wanted)

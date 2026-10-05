@@ -49,9 +49,24 @@ function commentStarts(sourceFile: ts.SourceFile): Map<number, number> {
   return ranges
 }
 
+/**
+ * Several guards in one worker read the comments of the same files, and the parse is the cost;
+ * keyed by name and text like `stripCommentsAndStrings`'s memo, so an edit between calls is a
+ * miss rather than a stale answer. It keeps the key text and the offsets, never the tree: a kept
+ * syntax tree is about twenty times its source, which across the whole repo is half a gigabyte
+ * in every worker.
+ */
+const ranges = new Map<string, ReadonlyArray<readonly [number, number]>>()
+
 /** Every comment in `raw` as `[start, end)` offsets, in source order, by the same reading. */
 export function commentRanges(raw: string, fileName = 'source.tsx'): Array<[number, number]> {
-  return [...commentStarts(parseSource(fileName, raw, false))].sort((a, b) => a[0] - b[0])
+  const key = `${fileName}\u0000${raw}`
+  let found = ranges.get(key)
+  if (found === undefined) {
+    found = [...commentStarts(parseSource(fileName, raw, false))].sort((a, b) => a[0] - b[0])
+    ranges.set(key, found)
+  }
+  return found.map(([start, end]) => [start, end])
 }
 
 export function stripComments(raw: string, fileName = 'source.tsx'): string {

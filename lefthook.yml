@@ -99,7 +99,10 @@ pre-push:
     # 42-60s wall / ~80s CPU; a later measurement, with the project grown to
     # 1531 tests, read arch-lint at 90s user + 5s sys against typecheck's 71s +
     # 10s from an earlier round. Under heavy load (average 18-25 on 4 CPUs)
-    # the two came in near-equal (133s against 130s). Contention swings every
+    # the two came in near-equal (133s against 130s). Re-measured 2026-10-05
+    # at 2093 tests, three interleaved runs at load average 15-23: 147.6s user
+    # + 8.0s sys, wall 154-258s (162s user before the parse memos recorded in
+    # tools/arch-lint/vitest.node.config.ts). Contention swings every
     # number here by 2-4x, so the invariant is "these are the two long
     # commands", not any one reading — re-measure before quoting one. It stays
     # because the failure it prevents is a push CI rejects, and a push is

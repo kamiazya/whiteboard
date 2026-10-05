@@ -28,9 +28,11 @@ export default defineProject({
     // `isolate: false` is what does touch it, and this project can take it
     // where the two that hold state cannot (`web-jsdom` + `mcp-node` failed 464
     // tests under it): every guard here reads files, and none mutates what a
-    // later file imports. Checked rather than assumed. No helper module holds
-    // mutable module-scope state (the only `let` and `Map` caches are inside
-    // one test file or one function), no test uses fake timers or `chdir`,
+    // later file imports. Checked rather than assumed. The only module-scope
+    // state in a helper is three memos keyed by file name AND full text
+    // (`stripCommentsAndStrings`, `commentRanges`, `cycle-check.ts`'s import
+    // specifiers), so a later file gets the answer an isolated one would and an
+    // edited file is a miss rather than a stale hit; no test uses fake timers or `chdir`,
     // the one that stubs the environment unstubs it in an `afterEach`, and
     // the one that `vi.doMock`s `vitest` itself unmocks it and resets the
     // module registry in `afterAll`. Then run: 5 of 5 plain runs and one `--sequence.shuffle` run
@@ -46,6 +48,18 @@ export default defineProject({
     // CPU is the figure to trust; the wall numbers ride the box's load. A guard
     // that starts to depend on a previous file's state fails here first, so
     // when one does, fix the guard rather than reverting this.
+    //
+    // What a shared worker lets the memos above return is re-parsing. Over a
+    // whole run (2026-10-05, 2093 tests) the TypeScript parse was the cost that
+    // scaled with the tree — 39% of parse time re-parsed a (file, text) the
+    // same worker had already parsed — while directory walks took under a
+    // second per worker and file reads a few, so neither is memoised. A kept
+    // `SourceFile` would return all of it and costs about 540MB of heap for the
+    // tree in EVERY worker (measured), so the memos keep what a guard derives
+    // instead, and `countNamedUses` skips the parse for text that cannot spell
+    // a wanted name. Three interleaved pairs at load average 15-23 on 4 cores:
+    // CPU (user + sys) 170.9, 171.8, 165.7s before against 157.3, 155.4, 154.4s
+    // after (mean 169.4 -> 155.7, -8%).
     isolate: false,
   },
 })
