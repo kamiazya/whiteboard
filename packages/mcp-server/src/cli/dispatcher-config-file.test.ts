@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
+import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 import type { runDaemonRun as RealRunDaemonRun } from './daemon-run.js'
 
 // Exercises the REAL dispatcher path with a config file on disk, mocking each
@@ -213,17 +214,11 @@ describe('whiteboard daemon run — config file wiring', () => {
 
   it('reports an invalid config file as a clean exit-1 error instead of an unhandled rejection', async () => {
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ logLevel: 'not-a-level' }))
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    try {
-      const exitCode = await main(['daemon', 'run', '--json'])
-      expect(exitCode).toBe(1)
-      expect(runDaemonRun).not.toHaveBeenCalled()
-      const written = stderrSpy.mock.calls.map((call) => String(call[0])).join('')
-      expect(written).toContain('.whiteboardrc.json')
-      expect(written).not.toMatch(/\n\s*at /) // no raw stack trace frame
-    } finally {
-      stderrSpy.mockRestore()
-    }
+    const { result: exitCode, stderr } = await captureStdio(() => main(['daemon', 'run', '--json']))
+    expect(exitCode).toBe(1)
+    expect(runDaemonRun).not.toHaveBeenCalled()
+    expect(stderr).toContain('.whiteboardrc.json')
+    expect(stderr).not.toMatch(/\n\s*at /) // no raw stack trace frame
   })
 })
 
@@ -259,29 +254,17 @@ describe('config-file dataDir reaches every command that locates the local daemo
 
   it.each(COMMANDS)('$key resolves the file dataDir', async ({ key, argv }) => {
     writeConfig()
-    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    try {
-      await main(argv())
-    } finally {
-      vi.restoreAllMocks()
-    }
+    await captureStdio(() => main(argv()))
     expect(seen.get(key)).toContain(FROM_FILE())
   })
 
   it('agrees with `daemon run` on where the daemon lives', async () => {
     writeConfig()
-    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    try {
-      await main(['daemon', 'run', '--json'])
-      const runDataDir = process.env.WHITEBOARD_DATA_DIR
-      delete process.env.WHITEBOARD_DATA_DIR
-      await main(['daemon', 'status', '--json'])
-      expect(seen.get('daemon status')).toBe(runDataDir)
-    } finally {
-      vi.restoreAllMocks()
-    }
+    await captureStdio(() => main(['daemon', 'run', '--json']))
+    const runDataDir = process.env.WHITEBOARD_DATA_DIR
+    delete process.env.WHITEBOARD_DATA_DIR
+    await captureStdio(() => main(['daemon', 'status', '--json']))
+    expect(seen.get('daemon status')).toBe(runDataDir)
   })
 
   it('keeps flag over env over file', async () => {
@@ -311,13 +294,9 @@ describe('config-file dataDir reaches every command that locates the local daemo
 
   it('fails a read-only command on an invalid config file instead of looking in the wrong place', async () => {
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ dataDir: 7 }))
-    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    try {
-      expect(await main(['daemon', 'status', '--json'])).toBe(1)
-      expect(seen.has('daemon status')).toBe(false)
-      expect(stderrSpy.mock.calls.map((c) => String(c[0])).join('')).toContain('.whiteboardrc.json')
-    } finally {
-      vi.restoreAllMocks()
-    }
+    const { result, stderr } = await captureStdio(() => main(['daemon', 'status', '--json']))
+    expect(result).toBe(1)
+    expect(seen.has('daemon status')).toBe(false)
+    expect(stderr).toContain('.whiteboardrc.json')
   })
 })
