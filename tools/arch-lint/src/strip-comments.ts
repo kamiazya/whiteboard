@@ -49,11 +49,15 @@ function commentStarts(sourceFile: ts.SourceFile): Map<number, number> {
   return ranges
 }
 
+/** Every comment in `raw` as `[start, end)` offsets, in source order, by the same reading. */
+export function commentRanges(raw: string, fileName = 'source.tsx'): Array<[number, number]> {
+  return [...commentStarts(parseSource(fileName, raw, false))].sort((a, b) => a[0] - b[0])
+}
+
 export function stripComments(raw: string, fileName = 'source.tsx'): string {
-  const sourceFile = parseSource(fileName, raw, false)
   let out = ''
   let cursor = 0
-  for (const [start, end] of [...commentStarts(sourceFile)].sort((a, b) => a[0] - b[0])) {
+  for (const [start, end] of commentRanges(raw, fileName)) {
     out += raw.slice(cursor, start) + raw.slice(start, end).replace(/[^\n]/g, ' ')
     cursor = end
   }
