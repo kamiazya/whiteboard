@@ -910,7 +910,7 @@ describe('DaemonIndexPage', () => {
           resolveSnapshot = resolve
         })
       }
-      if (/\/api\/document\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
+      if (/\/api\/w\/ws-a\/document\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ ok: true }))
       }
       if (/\/api\/workspaces\/ws-a\/documents\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
@@ -1016,7 +1016,7 @@ describe('DaemonIndexPage', () => {
           resolveSnapshot = resolve
         })
       }
-      if (/\/api\/document\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
+      if (/\/api\/w\/ws-a\/document\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ ok: true }))
       }
       if (/\/api\/workspaces\/ws-a\/documents\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
