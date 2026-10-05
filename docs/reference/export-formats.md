@@ -111,6 +111,16 @@ nothing; `promote` names the canvas that holds it. A browser-kept workspace
 refuses the same change the way it refuses an over-long node. A URL or path
 stored longer before the limit still reads, and can still be shortened.
 
+A text anchor's `prefix` and `suffix` — the context either side of a quoted
+passage — each carry at most **32 characters**. They tell one occurrence of a
+repeated passage from another, and finding the passage compares them against
+every occurrence, so their length is paid once per occurrence. `wb_thread_edit`
+refuses a longer one on `thread.add`, and `wb_body_edit` on `body.replace`,
+with "a text anchor's context is longer than the 32-character limit"; keep the
+characters nearest the passage. The editor writes 16. An anchor stored with a
+longer context still reads, and only its 32 characters nearest the passage
+count toward placing it.
+
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`
 `document.create` and `document.move` and of

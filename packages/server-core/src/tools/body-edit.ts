@@ -20,6 +20,7 @@ import {
   type Proposal,
   proposalSchema,
   resolveTextAnchor,
+  textAnchorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -35,9 +36,13 @@ import { withWorkspaceWrite } from './write-lock.js'
  * One proposed passage as a CALLER sends it: the model's own `body.replace`
  * minus `status`, which is a verdict the document keeps rather than something
  * an agent declares. Omitted from the model schema rather than restated, so
- * the wire shape and the shape a person's card decides on cannot drift.
+ * the wire shape and the shape a person's card decides on cannot drift. The
+ * anchor is the model's own text arm in its input form, whose context is
+ * bounded on the way in while a stored one is not.
  */
-const bodyEditOpSchema = bodyReplaceChangeSchema.omit({ status: true })
+const bodyEditOpSchema = bodyReplaceChangeSchema
+  .omit({ status: true })
+  .extend({ anchor: textAnchorInputSchema.describe('Which passage to replace.') })
 type BodyEditOp = z.infer<typeof bodyEditOpSchema>
 
 export const bodyEditInputSchema = z

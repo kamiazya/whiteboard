@@ -42,22 +42,35 @@ export const TEXT_ANCHOR_CONTEXT_MAX_CHARS = 32
  * anchor at the very start or end of a body); `exact` is not, because it is
  * the only part that can re-find the passage after an edit.
  */
-const textQuoteSelectorSchema = z
-  .object({
-    prefix: z
-      .string()
-      .optional()
-      .describe('Text just before the passage, to tell it from a repeat.'),
-    exact: z
-      .string()
-      .min(1, 'a text anchor must quote at least one character')
-      .describe('The passage, quoted exactly as the body has it.'),
-    suffix: z
-      .string()
-      .optional()
-      .describe('Text just after the passage, to tell it from a repeat.'),
-  })
-  .strict()
+function textQuoteSelector(context: z.ZodString) {
+  return z
+    .object({
+      prefix: context
+        .optional()
+        .describe('Text just before the passage, to tell it from a repeat.'),
+      exact: z
+        .string()
+        .min(1, 'a text anchor must quote at least one character')
+        .describe('The passage, quoted exactly as the body has it.'),
+      suffix: context.optional().describe('Text just after the passage, to tell it from a repeat.'),
+    })
+    .strict()
+}
+
+const textQuoteSelectorSchema = textQuoteSelector(z.string())
+
+/**
+ * A quote's context as a tool accepts it. What is STORED stays unbounded: an
+ * anchor written before the limit must still read, and resolution judges it
+ * on its nearest characters anyway. `exact` has no bound of its own — one
+ * longer than the body it names can never match.
+ */
+const quoteContextInputSchema = z
+  .string()
+  .max(
+    TEXT_ANCHOR_CONTEXT_MAX_CHARS,
+    `a text anchor's context is longer than the ${TEXT_ANCHOR_CONTEXT_MAX_CHARS}-character limit; keep the characters nearest the passage`,
+  )
 
 export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
 
@@ -70,27 +83,67 @@ export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
  * unique quote → quote with context → orphaned) is the mechanism, and a
  * second selector shape would need a second one.
  */
-export const textAnchorSchema = z
-  .object({
-    kind: z.literal('text'),
-    /** The text node whose text the passage is in; absent, the document's own body. */
-    nodeId: nodeIdSchema
-      .optional()
-      .describe("The text node the passage is in; omit for a markdown document's own body."),
-    quote: textQuoteSelectorSchema.describe(
-      'What the passage says; this is what finds it if the text has moved.',
-    ),
-    start: nonnegativeIntegerSchema.describe(
-      'Character offset where the passage starts in the body (or node text) as you read it.',
-    ),
-    end: nonnegativeIntegerSchema.describe('Character offset just past the end of the passage.'),
-  })
-  .strict()
-  .refine((anchor) => anchor.end >= anchor.start, {
-    message: 'a text anchor must not end before it starts',
-  })
+function textAnchorOver(quote: ReturnType<typeof textQuoteSelector>) {
+  return z
+    .object({
+      kind: z.literal('text'),
+      /** The text node whose text the passage is in; absent, the document's own body. */
+      nodeId: nodeIdSchema
+        .optional()
+        .describe("The text node the passage is in; omit for a markdown document's own body."),
+      quote: quote.describe('What the passage says; this is what finds it if the text has moved.'),
+      start: nonnegativeIntegerSchema.describe(
+        'Character offset where the passage starts in the body (or node text) as you read it.',
+      ),
+      end: nonnegativeIntegerSchema.describe('Character offset just past the end of the passage.'),
+    })
+    .strict()
+    .refine((anchor) => anchor.end >= anchor.start, {
+      message: 'a text anchor must not end before it starts',
+    })
+}
+
+export const textAnchorSchema = textAnchorOver(textQuoteSelectorSchema)
+
+/** The text arm as a tool accepts it: its context bounded, see `quoteContextInputSchema`. */
+export const textAnchorInputSchema = textAnchorOver(textQuoteSelector(quoteContextInputSchema))
 
 export type TextAnchor = z.infer<typeof textAnchorSchema>
+
+const spatialAnchorSchema = z
+  .object({
+    kind: z.literal('spatial'),
+    nodeId: nodeIdSchema.optional(),
+    edgeId: nodeIdSchema.optional(),
+    /** Several nodes the conversation is about at once — a selection, not a single object. */
+    nodeIds: z.array(nodeIdSchema).min(2, 'a node set names at least two nodes').optional(),
+    // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
+    // fractional anchor taken from a zoomed viewport survives the session
+    // and then vanishes, because the next read drops what fails the schema.
+    x: integerSchema,
+    y: integerSchema,
+    /** With `height`: the anchor is a REGION with `x`/`y` its top-left corner. */
+    width: nonnegativeIntegerSchema.optional(),
+    height: nonnegativeIntegerSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (anchor) =>
+      [anchor.nodeId, anchor.edgeId, anchor.nodeIds].filter((ref) => ref !== undefined).length <= 1,
+    { message: 'a spatial anchor names a node, an edge or a node set, not two of them' },
+  )
+  .refine(
+    (anchor) =>
+      anchor.nodeIds === undefined || new Set(anchor.nodeIds).size === anchor.nodeIds.length,
+    {
+      message: 'a node set names each node once',
+    },
+  )
+  .refine((anchor) => (anchor.width === undefined) === (anchor.height === undefined), {
+    message: 'a region has both a width and a height',
+  })
+
+const documentAnchorSchema = z.object({ kind: z.literal('document') }).strict()
 
 /**
  * Where an annotation points. This is the ONLY part of the layer that varies
@@ -134,41 +187,16 @@ export type TextAnchor = z.infer<typeof textAnchorSchema>
  * reference on that surface's arm, never a new arm.
  */
 export const annotationAnchorSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('spatial'),
-      nodeId: nodeIdSchema.optional(),
-      edgeId: nodeIdSchema.optional(),
-      /** Several nodes the conversation is about at once — a selection, not a single object. */
-      nodeIds: z.array(nodeIdSchema).min(2, 'a node set names at least two nodes').optional(),
-      // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
-      // fractional anchor taken from a zoomed viewport survives the session
-      // and then vanishes, because the next read drops what fails the schema.
-      x: integerSchema,
-      y: integerSchema,
-      /** With `height`: the anchor is a REGION with `x`/`y` its top-left corner. */
-      width: nonnegativeIntegerSchema.optional(),
-      height: nonnegativeIntegerSchema.optional(),
-    })
-    .strict()
-    .refine(
-      (anchor) =>
-        [anchor.nodeId, anchor.edgeId, anchor.nodeIds].filter((ref) => ref !== undefined).length <=
-        1,
-      { message: 'a spatial anchor names a node, an edge or a node set, not two of them' },
-    )
-    .refine(
-      (anchor) =>
-        anchor.nodeIds === undefined || new Set(anchor.nodeIds).size === anchor.nodeIds.length,
-      {
-        message: 'a node set names each node once',
-      },
-    )
-    .refine((anchor) => (anchor.width === undefined) === (anchor.height === undefined), {
-      message: 'a region has both a width and a height',
-    }),
+  spatialAnchorSchema,
   textAnchorSchema,
-  z.object({ kind: z.literal('document') }).strict(),
+  documentAnchorSchema,
+])
+
+/** Where an annotation points, as a tool accepts it: the text arm's context bounded. */
+export const annotationAnchorInputSchema = z.discriminatedUnion('kind', [
+  spatialAnchorSchema,
+  textAnchorInputSchema,
+  documentAnchorSchema,
 ])
 
 export type AnnotationAnchor = z.infer<typeof annotationAnchorSchema>
