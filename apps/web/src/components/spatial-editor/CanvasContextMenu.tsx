@@ -178,15 +178,6 @@ export function CanvasContextMenu({
     activeEditor?.focus()
   }
   /**
-   * WHICH menu a right-click gets, in priority order.
-   *
-   * An open text editor owns the press outright (the catalog is the note
-   * editor's own), then a comment — not content, so none of the node, edge or
-   * canvas verbs apply — then the annotation-only set hand mode asks for, then
-   * the object under the pointer. Written as one nested ternary the order was
-   * six levels of indentation; as a chain it is the list it always was.
-   */
-  /**
    * The menus that are NOT about content, in the order they claim the press.
    *
    * An open text editor owns it outright — the catalog is the note editor's
@@ -314,6 +305,15 @@ export function CanvasContextMenu({
     })
   }
 
+  /**
+   * WHICH menu a right-click gets, in priority order.
+   *
+   * An open text editor owns the press outright (the catalog is the note
+   * editor's own), then a comment — not content, so none of the node, edge or
+   * canvas verbs apply — then the annotation-only set hand mode asks for, then
+   * the object under the pointer. Written as one nested ternary the order was
+   * six levels of indentation; as a chain it is the list it always was.
+   */
   const items: readonly ContextMenuItem[] = nonContentItems() ?? contentItems()
   return (
     <ContextMenu

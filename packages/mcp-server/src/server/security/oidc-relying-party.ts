@@ -9,9 +9,12 @@ import * as client from 'openid-client'
 import type { VerifiedClaims } from './sign-in-admission.js'
 import type { OidcProvider, TrustedHeaderProvider } from './sign-in-config.js'
 
-/** A provider with its client secret read from wherever the config named. */
-/** A provider the keeper signs people in through with a browser: its client,
- *  and the secret it resolved at startup. */
+/**
+ * A provider with its client secret read from wherever the config named.
+ *
+ * A provider the keeper signs people in through with a browser: its client,
+ * and the secret it resolved at startup.
+ */
 export type ResolvedProvider = OidcProvider & {
   readonly clientId: string
   readonly clientSecretValue: string

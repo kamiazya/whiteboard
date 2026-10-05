@@ -7,13 +7,19 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { MARKDOWN_BODY_KEY } from './containers.js'
-import { seedNameFromTitle, seedNamesFromTitles } from './name-from-title.js'
+import {
+  readWorkspaceDocumentName,
+  seedNameFromTitle,
+  seedNamesFromTitles,
+  writeDocumentContentAndName,
+} from './name-from-title.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   documentContainers,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  WORKSPACE_TREE_KEY,
 } from './workspace-tree.js'
 
 const DOC = '01J0000000000000000000SEED'
@@ -226,5 +232,83 @@ describe('seedNamesFromTitles', () => {
     seedNamesFromTitles(workspace, since)
 
     expect(workspace.oplogVersion().toJSON()).toEqual(after)
+  })
+})
+
+// A whole-content write — a restore, an agent's set — names the note the way
+// a keystroke does; the keepers call this one function so neither can skip it.
+describe('writeDocumentContentAndName', () => {
+  const sourceWith = (body: string) => {
+    const source = new LoroDoc()
+    source.getText(MARKDOWN_BODY_KEY).insert(0, body)
+    source.commit()
+    return source
+  }
+
+  it('writes the content and names the note after its new heading', () => {
+    const workspace = workspaceWith('untitled', 'no heading yet\n')
+
+    expect(writeDocumentContentAndName(workspace, DOC, sourceWith('# Weekly review\n'))).toBe(true)
+
+    expect(documentContainers(workspace, DOC).getText(MARKDOWN_BODY_KEY).toString()).toBe(
+      '# Weekly review\n',
+    )
+    expect(nameOf(workspace)).toBe('Weekly review')
+  })
+
+  it('leaves a chosen name alone', () => {
+    const workspace = workspaceWith('untitled', '# Draft\n', 'Meeting')
+
+    writeDocumentContentAndName(workspace, DOC, sourceWith('# Weekly review\n'))
+
+    expect(nameOf(workspace)).toBe('Meeting')
+  })
+
+  it('writes nothing for a document the record does not hold', () => {
+    const workspace = workspaceWith('untitled', '# Draft\n')
+    const before = workspace.version().toJSON()
+
+    expect(writeDocumentContentAndName(workspace, 'missing', sourceWith('# Other\n'))).toBe(false)
+
+    expect(workspace.version().toJSON()).toEqual(before)
+  })
+})
+
+describe('readWorkspaceDocumentName', () => {
+  it('reads the name the record holds', () => {
+    expect(readWorkspaceDocumentName(workspaceWith('untitled', '', 'Meeting'), DOC)).toBe('Meeting')
+  })
+
+  it('answers null for a document nobody named', () => {
+    expect(readWorkspaceDocumentName(workspaceWith('untitled', ''), DOC)).toBeNull()
+  })
+
+  it('cannot say for a document the record does not hold', () => {
+    expect(readWorkspaceDocumentName(workspaceWith('untitled', ''), 'missing')).toBeUndefined()
+  })
+
+  // A value no name schema admits is no evidence the document is unnamed.
+  it('cannot say for a stored value that is not a name', () => {
+    const workspace = workspaceWith('untitled', '', 'Meeting')
+    const node = workspace
+      .getTree(WORKSPACE_TREE_KEY)
+      .getNodes()
+      .find((each) => each.data.get('documentId') === DOC)
+    node?.data.set('name', '')
+    workspace.commit()
+
+    expect(readWorkspaceDocumentName(workspace, DOC)).toBeUndefined()
+  })
+
+  it('follows a rename another replica made', () => {
+    const workspace = workspaceWith('untitled', '')
+    const replica = new LoroDoc()
+    replica.import(workspace.export({ mode: 'snapshot' }))
+    const from = replica.oplogVersion()
+    setWorkspaceDocumentName(replica, { documentId: DOC, name: 'Weekly review' })
+
+    workspace.import(replica.export({ mode: 'update', from }))
+
+    expect(readWorkspaceDocumentName(workspace, DOC)).toBe('Weekly review')
   })
 })

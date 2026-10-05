@@ -34,7 +34,7 @@
  * matters — a passage one of them calls lost while the other rewrites it.
  */
 
-import type { TextAnchor } from './annotation.js'
+import { TEXT_ANCHOR_CONTEXT_MAX_CHARS, type TextAnchor } from './annotation.js'
 
 export type ResolvedTextAnchor =
   | { readonly kind: 'placed'; readonly start: number; readonly end: number }
@@ -42,8 +42,29 @@ export type ResolvedTextAnchor =
 
 const ORPHANED: ResolvedTextAnchor = { kind: 'orphaned' }
 
+/**
+ * The longest quote searched with `indexOf`. Past it the search is linear.
+ *
+ * `indexOf` re-verifies the whole needle at every candidate, so on a periodic
+ * body its cost is `body.length x needle.length` — even for a single call
+ * that finds nothing. Measured on a 256 Ki body of one repeated character:
+ * every occurrence of a 64 Ki run took 9.7 s, and one search for a 64 Ki
+ * needle with one different character in its middle 6.3 s. Below this length
+ * the worst case stays under ~60 ms while `indexOf`'s native scan keeps the
+ * ordinary case near free (0.1 ms against the linear search's 21 ms for a
+ * 300-character quote in 200 Ki of prose), and quotes this short are most of
+ * what anyone writes.
+ */
+const NATIVE_SEARCH_MAX_CHARS = 256
+
 /** Every index where `needle` starts in `haystack`, including overlaps. */
 function occurrences(haystack: string, needle: string): number[] {
+  return needle.length <= NATIVE_SEARCH_MAX_CHARS
+    ? nativeOccurrences(haystack, needle)
+    : linearOccurrences(haystack, needle)
+}
+
+function nativeOccurrences(haystack: string, needle: string): number[] {
   const found: number[] = []
   // `indexOf` from the previous hit PLUS ONE, not plus the needle's length:
   // overlapping occurrences are real candidates ("aa" in "aaa" starts twice),
@@ -55,23 +76,53 @@ function occurrences(haystack: string, needle: string): number[] {
   return found
 }
 
-/** How many characters of `context` the body actually has on that side. */
+/**
+ * Knuth–Morris–Pratt: every occurrence, overlaps included, in
+ * `haystack.length + needle.length` steps whatever the text repeats.
+ */
+function linearOccurrences(haystack: string, needle: string): number[] {
+  // `border[i]` is the length of the longest proper prefix of
+  // `needle[0..i]` that is also its suffix: where matching resumes after a
+  // mismatch, and after a full match, which is what keeps overlaps.
+  const border = new Int32Array(needle.length)
+  for (let i = 1, k = 0; i < needle.length; i += 1) {
+    while (k > 0 && needle[i] !== needle[k]) k = border[k - 1] as number
+    if (needle[i] === needle[k]) k += 1
+    border[i] = k
+  }
+  const found: number[] = []
+  for (let i = 0, k = 0; i < haystack.length; i += 1) {
+    while (k > 0 && haystack[i] !== needle[k]) k = border[k - 1] as number
+    if (haystack[i] === needle[k]) k += 1
+    if (k === needle.length) {
+      found.push(i - k + 1)
+      k = border[k - 1] as number
+    }
+  }
+  return found
+}
+
+/**
+ * How many characters of `prefix` the body still has just before `at`.
+ *
+ * Only the nearest `TEXT_ANCHOR_CONTEXT_MAX_CHARS` count, so one occurrence
+ * costs a bounded comparison however long the stored context is. An anchor
+ * written before tools refused a longer context still resolves, judged on its
+ * nearest characters.
+ */
 function matchedBefore(body: string, at: number, prefix: string): number {
-  const before = body.slice(Math.max(0, at - prefix.length), at)
+  const reach = Math.min(prefix.length, at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (
-    shared < before.length &&
-    before[before.length - 1 - shared] === prefix[prefix.length - 1 - shared]
-  ) {
+  while (shared < reach && body[at - 1 - shared] === prefix[prefix.length - 1 - shared]) {
     shared += 1
   }
   return shared
 }
 
 function matchedAfter(body: string, at: number, suffix: string): number {
-  const after = body.slice(at, at + suffix.length)
+  const reach = Math.min(suffix.length, body.length - at, TEXT_ANCHOR_CONTEXT_MAX_CHARS)
   let shared = 0
-  while (shared < after.length && after[shared] === suffix[shared]) shared += 1
+  while (shared < reach && body[at + shared] === suffix[shared]) shared += 1
   return shared
 }
 

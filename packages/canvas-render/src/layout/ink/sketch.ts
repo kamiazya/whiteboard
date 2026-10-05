@@ -236,11 +236,6 @@ function arcCurve(cx: number, cy: number, rx: number, ry: number, from: number, 
 }
 
 /**
- * The closed polyline the outline is inked along, plus any open extra
- * strokes (the cylinder's lid). Rect corners ignore the radius: a hand
- * does not draw a 6px fillet.
- */
-/**
  * What one outline is inked as: straight-sided polylines (a rect, a
  * polygon), curves (an ellipse; a cylinder's two caps and lid, joined to
  * its straight sides), and the polygon a hatch is clipped to.
@@ -254,6 +249,11 @@ interface Silhouette {
 
 const isCurve = (stroke: readonly Point[] | Curve): stroke is Curve => 'mids' in stroke
 
+/**
+ * The closed polyline the outline is inked along, plus any open extra
+ * strokes (the cylinder's lid). Rect corners ignore the radius: a hand
+ * does not draw a 6px fillet.
+ */
 function silhouetteOf(outline: NodeOutline | null, box: BoundingBox): Silhouette {
   if (outline === null) {
     const corners = [

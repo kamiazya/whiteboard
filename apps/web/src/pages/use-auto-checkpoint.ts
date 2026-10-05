@@ -107,23 +107,6 @@ function armCheckpoint(
 }
 
 /**
- * Automatic checkpoints for the browser keeper, on the same mechanic the
- * daemon runs (`@kamiazya/whiteboard-history`): a trailing debounce that lands
- * a point once the document has been quiet, so a row marks where a person
- * stopped rather than an arbitrary interval.
- *
- * The `doc` the scheduler is handed is the WORKSPACE RECORD, not this
- * document's content — it uses the frontier only to ask "has anything changed
- * since the last checkpoint", and the record's frontier is what the store
- * saves. Keying on the content doc would compare a frontier against a row
- * taken from a different one, and never match.
- *
- * `recordSource` is a seam rather than a backend because only one kind of
- * document has one: a markdown note deliberately has no backend, and the hook
- * that owns its doc supplies the seam instead. Reading `backend` alone here is
- * what left a note arming no checkpoint ever.
- */
-/**
  * Every flush still in flight. A flush outlives the page that fired it (an
  * unmount cannot await), so a test that tears a page down and then deletes
  * the database would otherwise race the checkpoint it just released — the
@@ -144,6 +127,23 @@ export async function settleAutoCheckpoints(): Promise<void> {
   while (inFlight.size > 0) await Promise.all(inFlight)
 }
 
+/**
+ * Automatic checkpoints for the browser keeper, on the same mechanic the
+ * daemon runs (`@kamiazya/whiteboard-history`): a trailing debounce that lands
+ * a point once the document has been quiet, so a row marks where a person
+ * stopped rather than an arbitrary interval.
+ *
+ * The `doc` the scheduler is handed is the WORKSPACE RECORD, not this
+ * document's content — it uses the frontier only to ask "has anything changed
+ * since the last checkpoint", and the record's frontier is what the store
+ * saves. Keying on the content doc would compare a frontier against a row
+ * taken from a different one, and never match.
+ *
+ * `recordSource` is a seam rather than a backend because only one kind of
+ * document has one: a markdown note deliberately has no backend, and the hook
+ * that owns its doc supplies the seam instead. Reading `backend` alone here is
+ * what left a note arming no checkpoint ever.
+ */
 export function useAutoCheckpoint(
   recordSource: VersionsRecordSeam | null,
   versionStore: Pick<BrowserVersionStore, 'save' | 'isUnchangedSinceLastVersion'>,

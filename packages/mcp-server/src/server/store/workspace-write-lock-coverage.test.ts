@@ -177,6 +177,7 @@ const WRITER_CASES: Record<string, (index: TreeIndex, workspaceId: string) => Pr
   moveDocument: (index, workspaceId) =>
     index.moveDocument({ workspaceId, from: 'doc', to: 'moved' }),
   deleteDocument: (index, workspaceId) => index.deleteDocument({ workspaceId, path: 'doc' }),
+  duplicateDocument: (index, workspaceId) => index.duplicateDocument({ workspaceId, path: 'doc' }),
 }
 
 /** Methods of the class that do not write the record, each with the reason. */
@@ -191,8 +192,8 @@ function ownMethods(): string[] {
 describe('every override of the tree index holds the workspace write lock', () => {
   it('classifies every method the class defines as a writer or a non-writer', () => {
     const methods = ownMethods()
-    // The subject is present: the class overrides nine writers today.
-    expect(methods.length).toBeGreaterThanOrEqual(9)
+    // The subject is present: the class overrides ten writers today.
+    expect(methods.length).toBeGreaterThanOrEqual(10)
     expect(Object.keys(WRITER_CASES).filter((name) => name in NOT_WRITERS)).toEqual([])
     expect([...Object.keys(WRITER_CASES), ...Object.keys(NOT_WRITERS)].sort()).toEqual(
       [...methods].sort(),

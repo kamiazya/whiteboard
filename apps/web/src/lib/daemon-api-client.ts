@@ -5,10 +5,12 @@ import {
   type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
   type DocumentSearchResponse,
+  type DuplicateDocumentResponse,
   deleteDocumentResponseSchema,
   documentApiUrl,
   documentBacklinksApiUrl,
   documentBacklinksResponseSchema,
+  documentDuplicateApiUrl,
   documentNameApiUrl,
   documentOkfApiUrl,
   documentOkfV1ResponseSchema,
@@ -18,6 +20,7 @@ import {
   documentSearchResponseSchema,
   documentsV1ApiUrl,
   documentTagsApiUrl,
+  duplicateDocumentResponseSchema,
   fontFileApiUrl,
   fontInstallApiUrl,
   fontsApiUrl,
@@ -48,8 +51,6 @@ import {
   trashApiUrl,
   trashEntryApiUrl,
   trashRestoreApiUrl,
-  type UpdateDocumentResponse,
-  updateDocumentResponseSchema,
   type WorkspaceDocumentTagsResponse,
   type WorkspaceNames,
   type WorkspaceSummary,
@@ -274,18 +275,22 @@ export async function getDocumentSnapshot(
   return new Uint8Array(await res.arrayBuffer())
 }
 
-export function updateDocument(
+/**
+ * Copy a document beside itself, in ONE request: the daemon derives the
+ * copy's path and name and writes them with the content as one change, so
+ * there is no half-made copy for this side to clean up.
+ */
+export function duplicateDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
-  snapshot: Uint8Array,
-): Promise<UpdateDocumentResponse> {
+): Promise<DuplicateDocumentResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentApiUrl(workspaceId, path, 'update')}`,
-    updateDocumentResponseSchema,
-    { method: 'POST', body: snapshot as BodyInit },
+    `${daemonBaseUrl}${documentDuplicateApiUrl(workspaceId, path)}`,
+    duplicateDocumentResponseSchema,
+    { method: 'POST' },
   )
 }
 

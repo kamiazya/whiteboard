@@ -21,10 +21,12 @@ import {
   type CreateWorkspaceInput,
   compareDocumentPaths,
   type DeleteDocumentInput,
+  type DocumentDuplicates,
   type DocumentEntry,
   type DocumentIndex,
   type DocumentPins,
   type DocumentTrash,
+  type DuplicateDocumentInput,
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
@@ -47,15 +49,19 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
+import { touchContentTimestamp } from './loro-store.js'
 import {
   announceDocumentMoved,
   announceDocumentRemoved,
+  announceDocumentRenamed,
   announceDocumentRestored,
 } from './workspace-broadcast.js'
 
 const log = getAppLogger('folding-browser-index')
 
-export class FoldingBrowserIndex implements DocumentIndex, DocumentPins, DocumentTrash {
+export class FoldingBrowserIndex
+  implements DocumentIndex, DocumentPins, DocumentTrash, DocumentDuplicates
+{
   private readonly inner: LoroWorkspaceDocumentIndex
   private readonly legacy: IdbDocumentIndex
   private folded: Promise<void> | null = null
@@ -183,6 +189,19 @@ export class FoldingBrowserIndex implements DocumentIndex, DocumentPins, Documen
   }
 
   /**
+   * The copy grows the workspace as a create does, so it is admitted the same
+   * way. Its listing clock is stamped here because the write went into the
+   * record directly, past the store that would otherwise stamp it.
+   */
+  async duplicateDocument(input: DuplicateDocumentInput): Promise<DocumentEntry> {
+    await this.ensureFolded()
+    await this.admitOneMore(input.workspaceId)
+    const copy = await this.inner.duplicateDocument(input)
+    await touchContentTimestamp(copy.documentId, this.dbName)
+    return copy
+  }
+
+  /**
    * ponytail: check-then-write, not atomic. Creates racing in this tab or
    * others can each pass and overshoot by how many raced; the count comes
    * from each tab's own replica of the record, so even a cross-tab lock
@@ -229,7 +248,8 @@ export class FoldingBrowserIndex implements DocumentIndex, DocumentPins, Documen
 
   async setDocumentName(input: SetDocumentNameInput): Promise<void> {
     await this.ensureFolded()
-    return this.inner.setDocumentName(input)
+    await this.inner.setDocumentName(input)
+    announceDocumentRenamed(input.workspaceId, input.documentId)
   }
 
   async listPinnedDocuments(input: ListDocumentsInput): Promise<string[]> {

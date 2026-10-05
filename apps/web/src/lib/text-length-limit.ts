@@ -3,8 +3,7 @@
 // undoing that edit and everything typed after it, since each later edit is
 // built on the refused one. So an edit that would cross a limit is never
 // made, rather than refused after it is and taking more with it. One shape
-// for every bounded text a CodeMirror view edits: a markdown body, a canvas
-// node's text.
+// for every bounded text a CodeMirror view edits.
 import {
   Annotation,
   EditorState,

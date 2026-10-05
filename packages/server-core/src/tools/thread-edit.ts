@@ -8,7 +8,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type AnnotationAnchor,
-  annotationAnchorSchema,
+  annotationAnchorInputSchema,
   annotationIdSchema,
   commentMessageInputSchema,
   commentThreadSchema,
@@ -59,7 +59,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
       op: z.literal('thread.add'),
       /** Minted when absent, so a caller never has to invent an id. */
       threadId: annotationIdSchema.optional(),
-      anchor: annotationAnchorSchema,
+      anchor: annotationAnchorInputSchema,
       body: commentMessageInputSchema,
       author: okfActorSchema.optional(),
     })

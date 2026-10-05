@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
@@ -219,6 +220,114 @@ describe('ci.yml — a sharded job must be re-runnable after one leg fails', () 
       .filter(([, job]) => job.strategy?.['fail-fast'] !== false)
       .map(([name]) => name)
     expect(cancellable).toEqual([])
+  })
+})
+
+/**
+ * A browser test that fails in CI prints the path of its retained trace —
+ * `tmp/vitest-traces/<name>.trace.zip`, the only place its stack, action log
+ * and screenshots are kept — and the runner is then discarded with the file
+ * on it. A CI-only failure that printed `Cannot read properties of undefined`
+ * and no source frame was diagnosed by reasoning alone for want of it. So
+ * every job that runs a browser-mode project must upload that directory when
+ * it fails.
+ *
+ * "Runs a browser project" is read off the commands, not a list of job names:
+ * `pnpm test:browser`, or a `--project` pattern (a matrix value expanded) that
+ * matches a project whose config enables browser mode.
+ */
+describe('workflows — a job that runs a browser project uploads its traces when it fails', () => {
+  interface Step {
+    run?: string
+    uses?: string
+    if?: string
+    with?: Record<string, unknown>
+  }
+  interface Job {
+    strategy?: { matrix?: { include?: Record<string, unknown>[]; projects?: unknown } }
+    steps?: Step[]
+  }
+
+  async function browserProjectNames(): Promise<string[]> {
+    const { readBrowserProjectNames } = (await import(
+      pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
+    )) as { readBrowserProjectNames: (repoRoot: string) => string[] }
+    return readBrowserProjectNames(REPO_ROOT)
+  }
+
+  /** vitest's rule: no negated pattern matches, and — when plain ones are given — one of them does. */
+  function selects(name: string, patterns: readonly string[]): boolean {
+    const glob = (p: string): RegExp =>
+      new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`)
+    const negated = patterns.filter((p) => p.startsWith('!')).map((p) => glob(p.slice(1)))
+    const plain = patterns.filter((p) => !p.startsWith('!')).map(glob)
+    if (negated.some((re) => re.test(name))) return false
+    return plain.length === 0 || plain.some((re) => re.test(name))
+  }
+
+  function matrixProjects(job: Job): string[] {
+    const matrix = job.strategy?.matrix
+    const values = [
+      ...(matrix?.include ?? []).map((entry) => entry.projects),
+      ...(Array.isArray(matrix?.projects) ? matrix.projects : []),
+    ]
+    return values.filter((value): value is string => typeof value === 'string')
+  }
+
+  function runsBrowserProject(job: Job, browser: readonly string[]): boolean {
+    return (job.steps ?? []).some((step) =>
+      (step.run ?? '').split('\n').some((line) => {
+        if (/\btest:browser\b/.test(line)) return true
+        const raw = [...line.matchAll(/--project[= ](?:'([^']*)'|(\S+))/g)].map(
+          (m) => (m[1] ?? m[2]) as string,
+        )
+        if (raw.length === 0) return false
+        const expansions = raw.some((p) => p.includes('matrix.projects'))
+          ? matrixProjects(job).map((value) =>
+              raw.map((p) => (p.includes('matrix.projects') ? value : p)),
+            )
+          : [raw]
+        return expansions.some((patterns) => browser.some((name) => selects(name, patterns)))
+      }),
+    )
+  }
+
+  function uploadsTracesOnFailure(job: Job): boolean {
+    return (job.steps ?? []).some(
+      (step) =>
+        /^actions\/upload-artifact@[0-9a-f]{40}$/.test(step.uses ?? '') &&
+        (step.if ?? '').includes('failure()') &&
+        String(step.with?.path ?? '').includes('tmp/vitest-traces'),
+    )
+  }
+
+  it("finds the browser jobs, and every one of them keeps a failure's traces", async () => {
+    const browser = await browserProjectNames()
+    expect(browser.length).toBeGreaterThanOrEqual(3)
+
+    const dir = join(REPO_ROOT, '.github/workflows')
+    const browserJobs: { id: string; job: Job }[] = []
+    for (const file of (await readdir(dir)).filter((f) => /\.ya?ml$/.test(f))) {
+      const workflow = parseYaml(await readFile(join(dir, file), 'utf-8')) as {
+        jobs?: Record<string, Job>
+      }
+      for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
+        if (runsBrowserProject(job, browser)) browserJobs.push({ id: `${file}:${name}`, job })
+      }
+    }
+    // The subject is present: a detector that stopped recognising the
+    // commands would otherwise pass over an empty list.
+    expect(browserJobs.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(['ci.yml:test-browser', 'ci.yml:stress-changed-tests']),
+    )
+
+    const unguarded = browserJobs
+      .filter(({ job }) => !uploadsTracesOnFailure(job))
+      .map(({ id }) => id)
+    expect(
+      unguarded,
+      'upload `**/tmp/vitest-traces/**/*.trace.zip` under `if: failure()`, pinned by SHA',
+    ).toEqual([])
   })
 })
 

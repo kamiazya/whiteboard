@@ -38,8 +38,10 @@ implementations live in the composition roots.
 
 - **A note's name from its heading** (`name-from-title.ts`, with
   `title-from-body.ts`): the one judgement both keepers run —
-  `seedNameFromTitle` by id for the browser store and every daemon content write
-  (mcp-server's `writeDocumentContent`), `seedNamesFromTitles(since)`
+  `seedNameFromTitle` by id for the browser store's pushes,
+  `writeDocumentContentAndName` for every whole-content write either keeper
+  makes (the daemon's tools, `/api/v1` and restore, and the browser's restore),
+  `seedNamesFromTitles(since)`
   for the daemon's workspace update, which reads the touched nodes off the
   update's operations rather than walking the tree (135 ms at 1000 documents).
   A name somebody CHOSE carries `nameChosen: true` in the node meta, written
@@ -48,6 +50,9 @@ implementations live in the composition roots.
   "Weekly" under `# Weekly review` read as a half-typed heading. Unmarked names
   keep the prefix-follow, old records are not migrated, and an OKF `title`
   equal to the stored name is not a choice (server-core's `applyOkfTitle`).
+- **A duplicate is one record change** (`workspace-duplicate.ts`), written
+  through the projection rather than `copyNodeData`, so the source's id,
+  segment, name, timestamps and plane keys stay behind.
 - **A stored plane key is skipped, never read.** The branch's `plane:` child map
   on a document's node is gone with the branch (ADR-0029), but a record
   written then still carries it, so `projectWorkspaceDocument` and

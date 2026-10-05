@@ -385,7 +385,6 @@ function layoutSpatialCanvasInternalScene(
   return layoutSpatialCanvasInternal(canvas, resolved).scene
 }
 
-/** Badge geometry: a small corner mark, not content — fixed, not themed. */
 /**
  * The context a decoration is given. `bounds` is the node's CONTENT box, so a
  * silhouette insets a decoration exactly as it insets text; `label` is the

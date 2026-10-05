@@ -66,36 +66,6 @@ const MODE_OPTIONS: readonly ModeOption[] = [
   { mode: 'read', label: 'Read', icon: BookOpen },
 ]
 
-/**
- * The markdown editor's one chrome strip, and it holds exactly one kind of
- * thing: **how this document is shown** (word count + view mode), plus the
- * doorway to everything that CHANGES the document.
- *
- * The doorway's name is "Editing actions" rather than the generic "More
- * actions" the app shell's own ⋯ uses: two controls with the same accessible
- * name on one screen are indistinguishable to anyone reading it aloud.
- *
- * Formatting buttons sat here, were removed, and are back — the removal's
- * two reasons have both expired. They were "redundant beside ⌘B", which was
- * true of six verbs that mostly had chords and is not true of sixteen, ten
- * of which have none; and a 28px target at the top edge was "the worst
- * place on a phone", which mattered while it was the phone's ONLY path and
- * stopped mattering when the phone got its own keyboard-docked bar.
- *
- * So the verbs are shown where there is room for them and folded into ⋯
- * where there is not — `MarkdownVerbBar` decides which from its own measured
- * width. On a phone the catalog behind ⋯ still opens as a bottom sheet,
- * exactly where a thumb already is.
- *
- * Undo and redo are a separate pair beside them, not verbs in that bar and
- * not entries in the catalog. They are not verbs: they act on the pane's
- * history rather than on a selection, so `MARKDOWN_EDITOR_VERBS` does not
- * carry them and neither does anything derived from it. And the catalog is
- * the wrong vessel either way — undo is pressed repeatedly, and a sheet that
- * must be reopened per press is not an undo affordance. Before this pair a
- * touch device had no way at all to take back a keystroke; the only path was
- * a chord.
- */
 /** One history step. Always enabled: CodeMirror answers a press with nothing
  *  to undo by doing nothing, and a control that greys out between keystrokes
  *  is noisier than one that is simply inert at the ends. */
@@ -127,6 +97,36 @@ function StepButton({
   )
 }
 
+/**
+ * The markdown editor's one chrome strip, and it holds exactly one kind of
+ * thing: **how this document is shown** (word count + view mode), plus the
+ * doorway to everything that CHANGES the document.
+ *
+ * The doorway's name is "Editing actions" rather than the generic "More
+ * actions" the app shell's own ⋯ uses: two controls with the same accessible
+ * name on one screen are indistinguishable to anyone reading it aloud.
+ *
+ * Formatting buttons sat here, were removed, and are back — the removal's
+ * two reasons have both expired. They were "redundant beside ⌘B", which was
+ * true of six verbs that mostly had chords and is not true of sixteen, ten
+ * of which have none; and a 28px target at the top edge was "the worst
+ * place on a phone", which mattered while it was the phone's ONLY path and
+ * stopped mattering when the phone got its own keyboard-docked bar.
+ *
+ * So the verbs are shown where there is room for them and folded into ⋯
+ * where there is not — `MarkdownVerbBar` decides which from its own measured
+ * width. On a phone the catalog behind ⋯ still opens as a bottom sheet,
+ * exactly where a thumb already is.
+ *
+ * Undo and redo are a separate pair beside them, not verbs in that bar and
+ * not entries in the catalog. They are not verbs: they act on the pane's
+ * history rather than on a selection, so `MARKDOWN_EDITOR_VERBS` does not
+ * carry them and neither does anything derived from it. And the catalog is
+ * the wrong vessel either way — undo is pressed repeatedly, and a sheet that
+ * must be reopened per press is not an undo affordance. Before this pair a
+ * touch device had no way at all to take back a keystroke; the only path was
+ * a chord.
+ */
 export function EditorToolbar({
   mode,
   onModeChange,

@@ -40,6 +40,14 @@ export interface BrowserDocumentController {
   // rename input open for retry instead of silently closing it.
   renameDocument(name: string): Promise<void>
   /**
+   * Shows the name the workspace record now holds — `null` for none — when
+   * something other than this controller wrote it: the keeper naming a note
+   * after its heading, or another tab's rename. Never saved: the record
+   * already holds it, and a save is a rename, which would mark it chosen. A
+   * rename of this page's own that has not landed yet wins.
+   */
+  followRecordedName(name: string | null): void
+  /**
    * Resolves once the document is gone and what is left is open (a fresh
    * document when nothing is), or when there is nothing to delete; REJECTS
    * with the sentence to show when it refused and kept the document — the
@@ -297,9 +305,6 @@ export function useBrowserDocumentController(
     }
   }, [])
 
-  // Registered as outstanding for as long as the whole loop runs, not just
-  // the one write inside it: a caller that queued a snapshot the loop has not
-  // reached yet is exactly the case the barrier exists for.
   // Registered for as long as the whole loop runs, not just the one write
   // inside it: a keystroke whose snapshot the loop has not reached yet holds
   // no transaction, and that is exactly the window a read must not slip
@@ -384,6 +389,15 @@ export function useBrowserDocumentController(
     },
     [flushSave],
   )
+
+  const followRecordedName = useCallback((name: string | null) => {
+    const base = snapshotRef.current
+    if (base === null || pendingSnapshotRef.current !== null || savePromiseRef.current !== null)
+      return
+    if (base.name === (name ?? base.path)) return
+    snapshotRef.current = { ...base, name: name ?? base.path }
+    setSnapshot(snapshotRef.current)
+  }, [])
 
   const deleteDocument = useCallback(async () => {
     // Copy below names the document, and a note is not a canvas — kindNoun is
@@ -589,6 +603,7 @@ export function useBrowserDocumentController(
     snapshot,
     persistence,
     renameDocument,
+    followRecordedName,
     deleteDocument,
     startFresh,
     listDocuments,

@@ -1,13 +1,11 @@
 import { nanoid } from 'nanoid'
 import { createDaemonIdentity } from './security/daemon-identity.js'
 
-/**
- * How this daemon names ITSELF, in OKF §7's actor vocabulary — the one
- * `operatorInfoSchema.actor` and the trust family both speak.
- *
- * There are two answers because there are two questions, and conflating
- * them is what put a value that changes on its own into a stored row.
- */
+// How this daemon names ITSELF, in OKF §7's actor vocabulary — the one
+// `operatorInfoSchema.actor` and the trust family both speak.
+//
+// There are two answers because there are two questions, and conflating
+// them is what put a value that changes on its own into a stored row.
 
 /**
  * WHICH SESSION is editing right now. Minted once per process, so a browser

@@ -1,30 +1,28 @@
 import type { Point, Rect } from './edge-geometry.js'
 import { MinHeap } from './min-heap.js'
 
-/**
- * A rectilinear shortest path around rectangles, used ONLY as a fallback
- * when the enumerated candidates in `spatial-edges.ts` all fail.
- *
- * The enumerated family — two elbows plus four ways around one bounding box —
- * handles the arrangements that actually occur, cheaply, and is what runs for
- * almost every edge. What it cannot do is thread BETWEEN obstacles: measured
- * across 2000 generated layouts, 67 of the 68 routes that still cut through a
- * node body had a clean rectilinear path available that no candidate in that
- * family expressed. This finds those.
- *
- * The search space is the Hanan grid — every obstacle border offset outward by
- * `clearance`, plus the two endpoints' own coordinates. A rectilinear shortest
- * path among rectangles always exists on that grid if it exists at all, so
- * nothing is lost by not searching the continuous plane. Cost is Manhattan
- * length plus a per-corner charge, which is what makes it prefer the straight
- * route over an equally-long staircase.
- *
- * Deliberately NOT the default path: it is O(n^2) grid nodes for n obstacles
- * and runs a priority search over them, against a handful of array operations
- * for the enumerated candidates. `MAX_GRID_CELLS` abandons the search rather
- * than spend an unbounded amount of time on a dense canvas — the caller keeps
- * its best enumerated candidate, exactly as before this existed.
- */
+// A rectilinear shortest path around rectangles, used ONLY as a fallback
+// when the enumerated candidates in `spatial-edges.ts` all fail.
+//
+// The enumerated family — two elbows plus four ways around one bounding box —
+// handles the arrangements that actually occur, cheaply, and is what runs for
+// almost every edge. What it cannot do is thread BETWEEN obstacles: measured
+// across 2000 generated layouts, 67 of the 68 routes that still cut through a
+// node body had a clean rectilinear path available that no candidate in that
+// family expressed. This finds those.
+//
+// The search space is the Hanan grid — every obstacle border offset outward by
+// `clearance`, plus the two endpoints' own coordinates. A rectilinear shortest
+// path among rectangles always exists on that grid if it exists at all, so
+// nothing is lost by not searching the continuous plane. Cost is Manhattan
+// length plus a per-corner charge, which is what makes it prefer the straight
+// route over an equally-long staircase.
+//
+// Deliberately NOT the default path: it is O(n^2) grid nodes for n obstacles
+// and runs a priority search over them, against a handful of array operations
+// for the enumerated candidates. `MAX_GRID_CELLS` abandons the search rather
+// than spend an unbounded amount of time on a dense canvas — the caller keeps
+// its best enumerated candidate, exactly as before this existed.
 
 /** Charge per corner, in px. Two routes of equal length differ only in how
  * many times they turn, and a reader prefers the one that turns less. Sized
@@ -126,18 +124,6 @@ function tracedAlong(borders: readonly Rect[], step: GridStep, lo: number, hi: n
   return traced
 }
 
-/**
- * The cheapest rectilinear path from `start` to `end` whose interior avoids
- * every rect in `obstacles`, or undefined when there is none (or the grid is
- * too large to search). The returned path always begins at `start` and ends
- * at `end`, with collinear intermediate points removed.
- */
-/** The Hanan grid for this pair of endpoints, or undefined when it would be
- *  larger than `MAX_GRID_CELLS`. `near` is every obstacle a path inside the
- *  search window could touch, so a search over this grid is exact there.
- *  (No sentence here ends on the word `window` followed by a full stop:
- *  import-guard.test.ts scans this file's raw TEXT for `/\bwindow\./`, and
- *  prose satisfies that pattern as readily as a DOM access does.) */
 /** The Hanan grid's lines, plus every obstacle reaching into the searched box. */
 interface Grid {
   readonly xs: number[]
@@ -145,6 +131,14 @@ interface Grid {
   readonly near: readonly Rect[]
 }
 
+/**
+ * The Hanan grid for this pair of endpoints, or undefined when it would be
+ * larger than `MAX_GRID_CELLS`. `near` is every obstacle a path inside the
+ * search window could touch, so a search over this grid is exact there.
+ * (No sentence here ends on the word `window` followed by a full stop:
+ * import-guard.test.ts scans this file's raw TEXT for `/\bwindow\./`, and
+ * prose satisfies that pattern as readily as a DOM access does.)
+ */
 function buildGrid(
   start: Point,
   end: Point,
@@ -268,12 +262,6 @@ function reconstructPath(
   return path.length >= 2 ? path : undefined
 }
 
-/**
- * The cheapest rectilinear path from `start` to `end` whose interior avoids
- * every rect in `obstacles`, or undefined when there is none (or the grid is
- * too large to search). The returned path always begins at `start` and ends
- * at `end`, with collinear intermediate points removed.
- */
 /**
  * The state the A* search runs over: the grid's lines, the obstacles
  * bucketed per line, and the dense arrays indexed by state.
@@ -399,6 +387,12 @@ function searchGrid(g: GridSearch, si: number, sj: number, ei: number, ej: numbe
   return undefined
 }
 
+/**
+ * The cheapest rectilinear path from `start` to `end` whose interior avoids
+ * every rect in `obstacles`, or undefined when there is none (or the grid is
+ * too large to search). The returned path always begins at `start` and ends
+ * at `end`, with collinear intermediate points removed.
+ */
 export function routeOnGrid(
   start: Point,
   end: Point,

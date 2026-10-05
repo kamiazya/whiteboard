@@ -16,6 +16,7 @@ import {
   readProposals,
   readSpatialCanvas,
   readThreadMarks,
+  readWorkspaceDocumentName,
   resolveWorkspaceDocumentById,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
@@ -231,6 +232,9 @@ export interface DocumentSyncSession {
    * is why only one kind reads this.
    */
   getFacets(): ExtensionFacets
+  // The record's name for this document: `null` for none, `undefined` with no
+  // record to read. On the body signal, since a rename is no canvas value.
+  getDocumentName(): string | null | undefined
   /**
    * A stable id for the document's CURRENT state — what a picture drawn from
    * it right now would be a picture OF. `null` before the first snapshot.
@@ -401,13 +405,6 @@ export function createDocumentSyncSession(
   }
 
   /**
-   * Where this session's content containers live: the doc's roots, or — when
-   * a content scope is set — the workspace tree node carrying
-   * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
-   * the node under a NEW TreeID for the same documentId, and a cached handle
-   * would keep pointing at the deleted node.
-   */
-  /**
    * Where each conversation's passage is now, and — once per body — the
    * marks a document arrived without.
    *
@@ -447,6 +444,13 @@ export function createDocumentSyncSession(
     }
   }
 
+  /**
+   * Where this session's content containers live: the doc's roots, or — when
+   * a content scope is set — the workspace tree node carrying
+   * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
+   * the node under a NEW TreeID for the same documentId, and a cached handle
+   * would keep pointing at the deleted node.
+   */
   function contentOf(targetDoc: LoroDoc): DocumentContainers {
     return deps.contentDocumentId === undefined
       ? targetDoc
@@ -1142,6 +1146,11 @@ export function createDocumentSyncSession(
     return doc === null ? EMPTY_FACETS : readFacets(contentOf(doc))
   }
 
+  function getDocumentName(): string | null | undefined {
+    const id = deps.contentDocumentId
+    return doc === null || id === undefined ? undefined : readWorkspaceDocumentName(doc, id)
+  }
+
   function notifyBodyChanged(): void {
     bodyChanged.emit()
   }
@@ -1184,5 +1193,6 @@ export function createDocumentSyncSession(
     getBodyBinding,
     getCoreFacets,
     getFacets,
+    getDocumentName,
   }
 }

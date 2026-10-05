@@ -3,11 +3,14 @@ import {
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   commentMessageNotice,
+  copiedLabelNotice,
+  copiedLocationNotice,
   copiedNodeTextNotice,
   KEEPER_LIMIT_REASON,
   labelNotice,
@@ -43,6 +46,30 @@ const COUNTED = [
     notice: (n: number) => copiedNodeTextNotice('duplicated', n),
     max: NODE_TEXT_MAX_CHARS,
     one: 'node',
+  },
+  {
+    name: 'link paste',
+    notice: (n: number) => copiedLocationNotice('pasted', 'URL', n),
+    max: NODE_LOCATION_MAX_CHARS,
+    one: 'URL',
+  },
+  {
+    name: 'file path duplicate',
+    notice: (n: number) => copiedLocationNotice('duplicated', 'path', n),
+    max: NODE_LOCATION_MAX_CHARS,
+    one: 'path',
+  },
+  {
+    name: 'file subpath paste',
+    notice: (n: number) => copiedLocationNotice('pasted', 'subpath', n),
+    max: NODE_LOCATION_MAX_CHARS,
+    one: 'subpath',
+  },
+  {
+    name: 'label paste',
+    notice: (n: number) => copiedLabelNotice('pasted', n),
+    max: LABEL_MAX_CHARS,
+    one: 'label',
   },
   { name: 'label edit', notice: labelNotice, max: LABEL_MAX_CHARS, one: 'label' },
   {

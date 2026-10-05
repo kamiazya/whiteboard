@@ -231,14 +231,6 @@ function sideCandidatesFor(
 }
 
 /**
- * Bounded global improvement over per-edge side choices: iterate edges in
- * document order; adopt an alternative ranked pair only when the WHOLE
- * configuration's cost strictly decreases (lexicographic integer compare —
- * deterministic, monotone, so the loop cannot oscillate). A crossing-free,
- * overlap-free configuration short-circuits without evaluating a single
- * candidate, which keeps the common case at one scoring sweep.
- */
-/**
  * The search's incremental configuration score: per-edge routed paths, the
  * pairwise score matrix, and the aggregate cost, kept patchable because a
  * trial re-sides ONE edge — only the edges whose anchor entries actually
@@ -557,6 +549,14 @@ function createConfigScore(
   }
 }
 
+/**
+ * Bounded global improvement over per-edge side choices: iterate edges in
+ * document order; adopt an alternative ranked pair only when the WHOLE
+ * configuration's cost strictly decreases (lexicographic integer compare —
+ * deterministic, monotone, so the loop cannot oscillate). A crossing-free,
+ * overlap-free configuration short-circuits without evaluating a single
+ * candidate, which keeps the common case at one scoring sweep.
+ */
 function optimizeSideChoices(
   nodes: readonly SpatialNode[],
   edges: readonly RoutableElement[],
@@ -991,6 +991,24 @@ function optimizeAcrossRegions(
   return settled
 }
 
+/**
+ * Deterministic anchor positions for every edge end, spreading the ends
+ * that share one (node, side) instead of stacking them all on the side's
+ * midpoint. JSON Canvas authors a side but never a position along it, so
+ * the position is the renderer's to choose — and a stack of ends at one
+ * point makes edges with different colors or arrowheads read as a single
+ * line until they diverge.
+ *
+ * Within a shared side, ends sit at fractions 1/(n+1) … n/(n+1), ordered
+ * by where the FAR endpoint's center lies along the side's tangent axis so
+ * routes leave in the order of their destinations and never cross right at
+ * the node; ties (same far node, e.g. a bidirectional pair) fall back to
+ * edge document order, then from-before-to. A side with a single end keeps
+ * its midpoint, so documents without shared sides render exactly as before.
+ *
+ * Edges with a missing endpoint get no entry — `routeEdge` already
+ * degrades those to a zero-length path on its own.
+ */
 export function assignEdgeAnchors(
   nodes: readonly SpatialNode[],
   edges: readonly RoutableElement[],

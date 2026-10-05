@@ -79,3 +79,23 @@ describe('a floor whose feeder is skipped', () => {
     throw new Error('this floor ran although its feeder did not')
   })
 })
+
+// The positive half, through the real runner: a floor whose feeder ran must
+// run. A met floor passes whether or not it ran, so only a later suite can
+// see that it did — describe blocks run in order within a file.
+const floorsRun: string[] = []
+
+describe('a floor whose feeder ran', () => {
+  it('feeds', () => {
+    expect(floorsRun).toEqual([])
+  })
+  afterAllFloor(['feeds'], () => {
+    floorsRun.push('fed')
+  })
+})
+
+describe('after a fed floor', () => {
+  it('sees that the floor ran once its suite was done', () => {
+    expect(floorsRun).toEqual(['fed'])
+  })
+})

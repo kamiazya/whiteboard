@@ -24,38 +24,10 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments } from '../server-deps.js'
+import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { applyDocumentUpdate } from './apply-document-update.js'
-import {
-  CommentMessageTooLargeError,
-  LabelTooLargeError,
-  syncWriteAnswer,
-} from './sync-write-refusals.js'
-
-/** A cache over a stored snapshot: `evict` drops the instance, `get` rebuilds from what was saved. */
-class StoredDoc {
-  private stored: Uint8Array
-  private cached: LoroDoc | null = null
-  saves = 0
-
-  constructor(seed: LoroDoc) {
-    this.stored = seed.export({ mode: 'snapshot' })
-  }
-
-  get(): LoroDoc {
-    if (this.cached === null) this.cached = LoroDoc.fromSnapshot(this.stored)
-    return this.cached
-  }
-
-  save(doc: LoroDoc): void {
-    this.saves += 1
-    this.stored = doc.export({ mode: 'snapshot' })
-  }
-
-  evict(): void {
-    this.cached = null
-  }
-}
+import { syncWriteAnswer } from './sync-write-refusals.js'
 
 const edge = (label: string): CanvasEdge => ({
   id: 'e1',
@@ -108,8 +80,8 @@ describe('a document sync update', () => {
       writeSpatialEdge(doc, edge('x'.repeat(LABEL_MAX_CHARS + 1))),
     ).catch((err: unknown) => err)
 
-    expect(refusal).toBeInstanceOf(LabelTooLargeError)
-    expect(refusal).toMatchObject({ elementId: 'e1', chars: LABEL_MAX_CHARS + 1 })
+    expect(refusal).toMatchObject({ name: 'LabelTooLargeError' })
+    expect(refusal).toMatchObject({ breach: { elementId: 'e1', chars: LABEL_MAX_CHARS + 1 } })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'label_too_large', status: 413 })
     expect(store.saves).toBe(0)
     expect(readSpatialCanvas(store.get()).edges[0]?.label).toBe('calls')
@@ -131,8 +103,10 @@ describe('a document sync update', () => {
       writeThreadMessage(doc, 't1', { id: 'm2', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }),
     ).catch((err: unknown) => err)
 
-    expect(refusal).toBeInstanceOf(CommentMessageTooLargeError)
-    expect(refusal).toMatchObject({ messageId: 'm2', chars: COMMENT_MESSAGE_MAX_CHARS + 1 })
+    expect(refusal).toMatchObject({ name: 'CommentMessageTooLargeError' })
+    expect(refusal).toMatchObject({
+      breach: { messageId: 'm2', chars: COMMENT_MESSAGE_MAX_CHARS + 1 },
+    })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'comment_too_large', status: 413 })
     expect(store.saves).toBe(0)
     expect(readCommentThreads(store.get())[0]?.messages).toHaveLength(1)

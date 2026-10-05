@@ -1,6 +1,7 @@
 import {
   createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
+  type DuplicateDocumentResponse,
   type ListDocumentsResponse,
   type ListWorkspacesResponse,
   type RenameDocumentPathResponse,
@@ -12,8 +13,11 @@ import type { ReplicaTier } from '@kamiazya/whiteboard-daemon-client/api-contrac
 import { deriveWorkspaceSegment, generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
   type DocumentIndex,
+  DocumentPathContestedError,
+  hasDocumentDuplicates,
   isDatabaseBusy,
   isWorkspaceNotFoundError,
+  NoRoomForCopyError,
 } from '@kamiazya/whiteboard-ports'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import {
@@ -37,6 +41,7 @@ import {
 import { readJsonBody } from '../read-json-body.js'
 import {
   corruptStored,
+  type ErrorAnswer,
   firstOwned,
   hasDescendants,
   moveIntoSelf,
@@ -417,6 +422,64 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
         if (isDatabaseBusy(err)) throw err
         getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
         return c.json({ title: 'Failed to rename document.' } satisfies ApiErrorBody, 500)
+      }
+    },
+    { badRequest: 'problem-details' },
+  )
+
+  return app
+}
+
+/**
+ * Duplicate a document: ONE request, ONE keeper-side write.
+ *
+ * An ADAPTER over the index's `DocumentDuplicates` capability (ADR-0018): the
+ * keeper derives the copy's path (beside the source) and name and writes both
+ * with the content in one serialised change, so there is no partial copy for
+ * a client to clean up and no window in which two duplicates pick one path.
+ * Its own router beside the workspace's other document routes, mounted by
+ * document.ts, so the listing router's handler budget is not spent on it.
+ */
+export interface DuplicateRouterOptions {
+  serverDeps: ServerDeps
+}
+
+const NO_DUPLICATES: ApiErrorBody = { title: 'This composition cannot duplicate documents.' }
+
+/** A source path two documents carry, or one too deep for a copy beside it. */
+const cannotPlaceCopy: ErrorAnswer = (err) =>
+  err instanceof DocumentPathContestedError || err instanceof NoRoomForCopyError
+    ? { status: 409, body: { title: err.message } }
+    : null
+
+export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): Hono {
+  const app = new Hono()
+
+  onDocumentsRoute(
+    app,
+    'post',
+    ['duplicate'],
+    async (c, workspaceId, path) => {
+      const { documentIndex } = serverDeps
+      if (!hasDocumentDuplicates(documentIndex)) return c.json(NO_DUPLICATES, 501)
+      try {
+        const copy = await documentIndex.duplicateDocument({ workspaceId, path })
+        const response: DuplicateDocumentResponse = {
+          document: {
+            documentId: copy.documentId,
+            path: copy.path,
+            ...(copy.name === undefined ? {} : { name: copy.name }),
+            ...(copy.kind === undefined ? {} : { kind: copy.kind }),
+          },
+        }
+        return c.json(response)
+      } catch (err) {
+        const owned = firstOwned(err, [
+          notFoundAs(`No document "${path}" to duplicate`),
+          cannotPlaceCopy,
+        ])
+        if (owned) return c.json(owned.body, owned.status)
+        throw err
       }
     },
     { badRequest: 'problem-details' },

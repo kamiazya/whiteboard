@@ -1,5 +1,22 @@
 import { z } from 'zod'
 
+/** Why a non-container value cannot round-trip through YAML, or `undefined` when it can. */
+function scalarUnsafety(node: unknown): string | undefined {
+  if (node === undefined) return 'undefined is not yaml-safe'
+  if (typeof node === 'number' && !Number.isFinite(node)) return `${node} is not yaml-safe`
+  if (typeof node === 'bigint' || typeof node === 'function' || typeof node === 'symbol') {
+    return `${typeof node} is not yaml-safe`
+  }
+  return undefined
+}
+
+/** Whether `node` is an object the store keeps as written: an array, or a record with no class. */
+function isPlainContainer(node: object): boolean {
+  if (Array.isArray(node)) return true
+  const prototype = Object.getPrototypeOf(node)
+  return prototype === Object.prototype || prototype === null
+}
+
 /**
  * A value is not yaml-safe once it can no longer round-trip through a YAML
  * document: `undefined` (YAML has no concept of it — only `null`), non-finite
@@ -25,23 +42,6 @@ import { z } from 'zod'
  * built-in structural recursion, so a cycle is reported as a normal ZodError
  * instead of crashing the process.
  */
-/** Why a non-container value cannot round-trip through YAML, or `undefined` when it can. */
-function scalarUnsafety(node: unknown): string | undefined {
-  if (node === undefined) return 'undefined is not yaml-safe'
-  if (typeof node === 'number' && !Number.isFinite(node)) return `${node} is not yaml-safe`
-  if (typeof node === 'bigint' || typeof node === 'function' || typeof node === 'symbol') {
-    return `${typeof node} is not yaml-safe`
-  }
-  return undefined
-}
-
-/** Whether `node` is an object the store keeps as written: an array, or a record with no class. */
-function isPlainContainer(node: object): boolean {
-  if (Array.isArray(node)) return true
-  const prototype = Object.getPrototypeOf(node)
-  return prototype === Object.prototype || prototype === null
-}
-
 export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((value, ctx) => {
   // Ancestor stack (not a whole-traversal seen set): a DAG where one object
   // is legitimately referenced from two different branches is not cyclic

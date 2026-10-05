@@ -48,16 +48,6 @@ interface Props {
    */
   keeper?: 'daemon' | 'browser'
   /**
-   * Opens and closes the document's history. The PAGE owns both the state and
-   * the panel: history is a column of the editor row, not a popover hanging
-   * off this bar, so the bar carries only the control that asks for it.
-   *
-   * Omitted for a document with no history to open, which hides the control
-   * rather than rendering it inert. It is deliberately NOT gated on the
-   * document's kind — a markdown document's history is its keeper's business,
-   * and gating it here is what left one unreachable.
-   */
-  /**
    * A past version on screen in place of the document, and the two things to
    * do about it.
    *
@@ -83,6 +73,8 @@ interface Props {
    * workspace (ADR-0009 decision 2) rather than by its content.
    */
   titleSlot?: (identity: DocumentIdentity) => ReactNode
+  /** The open document's name in the record the page syncs; see `useDocumentNames`. */
+  recordedName?: string | null
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -105,16 +97,15 @@ export default function WorkspaceTopBar({
   keeper = 'daemon',
   preview,
   titleSlot,
+  recordedName,
 }: Props) {
   const keptByBrowser = keeper === 'browser'
-  const daemonFetch = useDaemonApi()
-
   const { effectiveNames, renameDocument } = useDocumentNames({
     workspaceId,
     keptByBrowser,
-    daemonFetch,
+    daemonFetch: useDaemonApi(),
+    recorded: { path, name: recordedName },
   })
-
   const canvasCustomName = effectiveNames.documents[path]
 
   if (preview !== undefined) {

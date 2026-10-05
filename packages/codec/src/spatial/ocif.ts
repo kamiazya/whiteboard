@@ -1,18 +1,16 @@
 import { z } from 'zod'
 
-/**
- * OCIF v0.7.0 (https://spec.canvasprotocol.org/) as this package writes and
- * reads it — a WIRE shape, declared here for the reason
- * [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) put
- * JSON Canvas here: the model is native, and a format is a projection of it.
- *
- * Declared to the subset this projection uses rather than to the whole
- * specification. What is deliberately absent, so a later reader does not take
- * silence for an oversight: `rotation`/`rotationAxis`/`scale` (the model has
- * no rotation to project), 3D positions, `@ocif/ports`, `@ocif/inherit`,
- * `@ocif/page`, `@ocif/theme-*`, and `@ocif/global-positions`. A document
- * arriving with any of them keeps them — see `ocifExtensionSchema` below.
- */
+// OCIF v0.7.0 (https://spec.canvasprotocol.org/) as this package writes and
+// reads it — a WIRE shape, declared here for the reason
+// [ADR-0037](../../../../docs/contributing/adr/0037-model-and-format.md) put
+// JSON Canvas here: the model is native, and a format is a projection of it.
+//
+// Declared to the subset this projection uses rather than to the whole
+// specification. What is deliberately absent, so a later reader does not take
+// silence for an oversight: `rotation`/`rotationAxis`/`scale` (the model has
+// no rotation to project), 3D positions, `@ocif/ports`, `@ocif/inherit`,
+// `@ocif/page`, `@ocif/theme-*`, and `@ocif/global-positions`. A document
+// arriving with any of them keeps them — see `ocifExtensionSchema` below.
 
 /**
  * Every extension is an object with a `type`, and everything else is the

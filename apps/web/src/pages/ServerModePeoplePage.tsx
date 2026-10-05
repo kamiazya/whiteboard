@@ -71,10 +71,6 @@ function useChange(reload: () => void) {
   return [refusal, run] as const
 }
 
-/**
- * Creates a single-use invitation link and shows it once, to copy. The link
- * is the secret, so it lives only in this page's state.
- */
 /** A created link, shown once with a way to copy it. */
 function InvitationLinkField({ link }: { link: InvitationLink }) {
   const [copied, setCopied] = useState(false)

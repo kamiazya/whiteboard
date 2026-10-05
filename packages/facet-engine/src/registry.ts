@@ -183,15 +183,6 @@ export function defineWorkspaceStencilPlugin(
 }
 
 /**
- * Everything `definePlugin` checks EXCEPT the reserved-id rule, so the
- * engine's own definition is held to the same bar as a plugin an author
- * wrote.
- *
- * Split out rather than given a bypass flag: a flag would let a caller turn
- * off whichever check it found inconvenient, and the reservation is the only
- * rule that is about WHO is defining rather than about what.
- */
-/**
  * Each asset's own SHAPE, by the schema that owns it. What a stencil's facet
  * payloads MEAN belongs to the plugin that registered those facets, which may
  * not be this one and is not knowable until every plugin is present — so that
@@ -216,6 +207,15 @@ function assertAssetShapes(plugin: FacetPlugin): void {
   }
 }
 
+/**
+ * Everything `definePlugin` checks EXCEPT the reserved-id rule, so the
+ * engine's own definition is held to the same bar as a plugin an author
+ * wrote.
+ *
+ * Split out rather than given a bypass flag: a flag would let a caller turn
+ * off whichever check it found inconvenient, and the reservation is the only
+ * rule that is about WHO is defining rather than about what.
+ */
 function validatePlugin(plugin: FacetPlugin): FacetPlugin {
   if (!FACET_SEGMENT_PATTERN.test(plugin.id)) {
     throw new Error(`plugin id "${plugin.id}" must match ${FACET_SEGMENT_PATTERN}`)
@@ -240,13 +240,6 @@ function assertAssetName(pluginId: string, name: string): void {
   }
 }
 
-/**
- * Definition-time check for asset refs, the same shape as an editor spec's:
- * a ref naming a field the schema does not declare is a programmer error.
- * Reads the schema's object shape directly rather than the derived form,
- * because a ref field is a plain string the form layer already handles and
- * the check is about NAMES, not controls.
- */
 /**
  * A specimen picker's ref must be exactly one `themes` field.
  *
@@ -282,6 +275,13 @@ function assertSpecimenPickerFits(
   }
 }
 
+/**
+ * Definition-time check for asset refs, the same shape as an editor spec's:
+ * a ref naming a field the schema does not declare is a programmer error.
+ * Reads the schema's object shape directly rather than the derived form,
+ * because a ref field is a plain string the form layer already handles and
+ * the check is about NAMES, not controls.
+ */
 function assertAssetRefsFit(
   facetName: string,
   schema: z.ZodTypeAny,
@@ -546,22 +546,6 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     kind === 'themes' ? themes : kind === 'icons' ? icons : stencils
 
   /**
-   * An asset-ref field's OPTIONS come from THIS registry, replacing whatever
-   * the definition declared (ADR-0034 decision 4's UI half).
-   *
-   * The definition declares the WIDGET; the registry owns the VALUES,
-   * because it is the only thing that knows what this deployment has. Before
-   * this, `visual.theme` and `visual.stencil` each listed their ids by hand,
-   * so a pack could register a stencil that the tool applied and the picker
-   * did not offer — registered but unselectable, which is the one state an
-   * ecosystem cannot ship.
-   *
-   * A `null` leads, because an asset ref is optional and "no stencil" is a
-   * real answer — without it a picker can dress a box and never undress it.
-   * Only fields named in `assetRefs` are touched: a plain enum is the
-   * plugin's own vocabulary and none of the registry's business.
-   */
-  /**
    * The CARDS half of the same promise (足場3b, user decision 2026-09-12).
    *
    * A picker writes whole payloads and its cards each need a picture, so the
@@ -618,6 +602,22 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     }
   }
 
+  /**
+   * An asset-ref field's OPTIONS come from THIS registry, replacing whatever
+   * the definition declared (ADR-0034 decision 4's UI half).
+   *
+   * The definition declares the WIDGET; the registry owns the VALUES,
+   * because it is the only thing that knows what this deployment has. Before
+   * this, `visual.theme` and `visual.stencil` each listed their ids by hand,
+   * so a pack could register a stencil that the tool applied and the picker
+   * did not offer — registered but unselectable, which is the one state an
+   * ecosystem cannot ship.
+   *
+   * A `null` leads, because an asset ref is optional and "no stencil" is a
+   * real answer — without it a picker can dress a box and never undress it.
+   * Only fields named in `assetRefs` are touched: a plain enum is the
+   * plugin's own vocabulary and none of the registry's business.
+   */
   const withAssetOptions = (form: FacetForm, definition: FacetDefinition): FacetForm => {
     const refs = definition.assetRefs
     if (refs === undefined) return form

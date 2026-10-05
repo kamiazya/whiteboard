@@ -7,15 +7,13 @@ import { PreviewPane } from './PreviewPane.js'
 import { previewColumnMaxWidth } from './preview-width.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 
-/**
- * The two COLUMNS the editor lays side by side, and the marker that sits in
- * the preview's gutter.
- *
- * They are components rather than three slices of one return for the reason
- * the editor's own JSX gave: everything a column decides — which mode hides
- * it, how wide it is, whether it has anything to draw — was decided inside
- * the editor's markup, where it read as the editor's own branching.
- */
+// The two COLUMNS the editor lays side by side, and the marker that sits in
+// the preview's gutter.
+//
+// They are components rather than three slices of one return for the reason
+// the editor's own JSX gave: everything a column decides — which mode hides
+// it, how wide it is, whether it has anything to draw — was decided inside
+// the editor's markup, where it read as the editor's own branching.
 
 /** What the preview's gutter draws one conversation from. */
 interface PreviewColumnMarker {

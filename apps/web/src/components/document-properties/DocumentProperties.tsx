@@ -28,17 +28,6 @@ export interface DocumentPropertiesProps {
    */
   readonly onTitleChange?: (next: string) => Promise<string | null>
   /**
-   * The document's OKF frontmatter, or absent when the document has none to
-   * hold: a facet belongs to OKF and a JSON Canvas document has nowhere to
-   * put one (ADR-0009 decision 3), so a spatial canvas omits both this and
-   * `onFacetsChange` and gets no Properties opener. Absent rather than a
-   * `showFacets={false}` flag beside a value, because the flag hid the
-   * opener while the document went on storing what it would have shown.
-   *
-   * The row only OPENS the editor: `DocumentFacetsEditor` lives in the
-   * page's inspector slot beside the document, which the row does not own.
-   */
-  /**
    * Save-state indicator, rendered LEFT of the title — the canvas's "am I
    * safe" signal reads before its name, like a title-bar dirty dot.
    */
@@ -59,10 +48,7 @@ export interface DocumentPropertiesProps {
  */
 const TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'] as const
 
-/**
- * The canvas row: the document's name, plus — for a document that HAS OKF
- * frontmatter — the opener for its core-facet editor.
- */
+/** The canvas row: the document's name. */
 export function DocumentProperties({
   inline = false,
   title,

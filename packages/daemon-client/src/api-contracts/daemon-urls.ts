@@ -38,7 +38,14 @@ export function workspaceDocumentsApiUrl(workspaceId: string): string {
 
 // The `/api/workspaces/:workspaceId/documents/<document path>[/<suffix>]`
 // family. The suffix is a closed set, written once below.
-type DocumentsSuffix = '' | 'path' | 'name' | 'pin' | 'versions' | `versions/${string}`
+type DocumentsSuffix =
+  | ''
+  | 'path'
+  | 'name'
+  | 'pin'
+  | 'duplicate'
+  | 'versions'
+  | `versions/${string}`
 
 function documentsFamilyUrl(workspaceId: string, path: string, suffix: DocumentsSuffix): string {
   const base = `${workspaceDocumentsApiUrl(workspaceId)}/${encodeDocumentPath(path)}`
@@ -60,6 +67,11 @@ export function documentNameApiUrl(workspaceId: string, path: string): string {
 
 export function documentPinApiUrl(workspaceId: string, path: string): string {
   return documentsFamilyUrl(workspaceId, path, 'pin')
+}
+
+/** POST: copy the document, beside itself, in one keeper-side write. */
+export function documentDuplicateApiUrl(workspaceId: string, path: string): string {
+  return documentsFamilyUrl(workspaceId, path, 'duplicate')
 }
 
 export function documentVersionsApiUrl(workspaceId: string, path: string): string {

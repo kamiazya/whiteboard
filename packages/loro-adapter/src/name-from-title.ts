@@ -6,7 +6,11 @@ import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from '
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { titleFromMarkdownBody } from './title-from-body.js'
-import { WORKSPACE_TREE_KEY, workspaceNodeMetaSchema } from './workspace-tree.js'
+import {
+  WORKSPACE_TREE_KEY,
+  workspaceNodeMetaSchema,
+  writeWorkspaceDocumentContent,
+} from './workspace-tree.js'
 
 /**
  * Whether a path is one the new-document flow chose, rather than one a person
@@ -94,13 +98,58 @@ function seedNode(node: LoroTreeNode): void {
  * a document it leaves alone costs no write.
  */
 export function seedNameFromTitle(workspace: LoroDoc, documentId: string): void {
-  const node = workspace
-    .getTree(WORKSPACE_TREE_KEY)
-    .getNodes()
-    .find((each) => each.data.get('documentId') === documentId)
+  const node = documentNode(workspace, documentId)
   if (node === undefined) return
   seedNode(node)
   workspace.commit()
+}
+
+/**
+ * Writes `source` into the record as `documentId`'s content and names a note
+ * still at a generated path after its heading (`seedNameFromTitle`) — false,
+ * with nothing written, when the record holds no such document.
+ *
+ * Every whole-content write either keeper makes comes through here — the
+ * daemon's tools, `/api/v1` and restore, and the browser's restore — so a
+ * note is named however its body was written. One that skipped the seed kept
+ * its old name until the next unrelated keystroke named it, which reads as a
+ * rename nobody made. Before the caller's save, so the name rides the same
+ * write and its fan-out.
+ */
+export function writeDocumentContentAndName(
+  workspace: LoroDoc,
+  documentId: string,
+  source: LoroDoc,
+): boolean {
+  if (!writeWorkspaceDocumentContent(workspace, documentId, source)) return false
+  seedNameFromTitle(workspace, documentId)
+  return true
+}
+
+/**
+ * The name the record holds for `documentId`: the name, `null` when it has
+ * none, `undefined` when it cannot say — no such document, or a stored value
+ * that is not a name.
+ *
+ * For a page following its document's name while the record changes under
+ * it, so it is read on every change: it finds the node and reads one key,
+ * where resolving the whole entry would also digest the content.
+ */
+export function readWorkspaceDocumentName(
+  workspace: LoroDoc,
+  documentId: string,
+): string | null | undefined {
+  const node = documentNode(workspace, documentId)
+  if (node === undefined) return undefined
+  const name = workspaceNodeMetaSchema.shape.name.safeParse(node.data.get('name'))
+  return name.success ? (name.data ?? null) : undefined
+}
+
+function documentNode(workspace: LoroDoc, documentId: string): LoroTreeNode | undefined {
+  return workspace
+    .getTree(WORKSPACE_TREE_KEY)
+    .getNodes()
+    .find((each) => each.data.get('documentId') === documentId)
 }
 
 /**

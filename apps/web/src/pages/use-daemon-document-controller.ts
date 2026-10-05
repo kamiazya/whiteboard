@@ -7,10 +7,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createDocument as createDocumentApi,
   deleteDocument as deleteDocumentApi,
+  duplicateDocument as duplicateDocumentApi,
   listDocuments,
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
-import { duplicateDaemonDocument } from '../lib/duplicate-daemon-document.js'
 import { type MembershipRefusalState, membershipRefusal } from '../lib/membership-refusal.js'
 
 export interface UseDaemonDocumentControllerOptions {
@@ -69,13 +69,6 @@ export interface DaemonDocumentController {
 const DAEMON_REQUEST_FAILED = 'The daemon request failed.'
 
 /**
- * Resolves workspace/canvas defaults and owns the canvas-switcher list state
- * for DaemonDocumentPage. Deliberately does NOT create or own the
- * DocumentBackend/useDocumentSync connection — that stays in the page component,
- * mirroring BrowserDocumentPage's own useMemo(backend, [documentId]) plus
- * useDocumentSync ownership split.
- */
-/**
  * How a failed resolve is reported.
  *
  * A refusal names the workspace it refused, when one is known — the page can
@@ -96,6 +89,13 @@ function reportResolveFailure(
   setLoadError(messageOf(err, DAEMON_REQUEST_FAILED))
 }
 
+/**
+ * Resolves workspace/canvas defaults and owns the canvas-switcher list state
+ * for DaemonDocumentPage. Deliberately does NOT create or own the
+ * DocumentBackend/useDocumentSync connection — that stays in the page component,
+ * mirroring BrowserDocumentPage's own useMemo(backend, [documentId]) plus
+ * useDocumentSync ownership split.
+ */
 export function useDaemonDocumentController(
   options: UseDaemonDocumentControllerOptions,
 ): DaemonDocumentController {
@@ -228,24 +228,19 @@ export function useDaemonDocumentController(
     if (workspaceId === null || path === null) {
       throw new Error('No document is open to duplicate.')
     }
-    const source = documents.find((entry) => entry.path === path)
-    const copy = await duplicateDaemonDocument({
-      fetch: daemonFetch,
+    const { document: copy } = await duplicateDocumentApi(
+      daemonFetch,
       daemonBaseUrl,
       workspaceId,
-      sourcePath: path,
-      kind: source?.kind ?? 'spatial',
-      displayName: source?.name ?? path,
-      existingPaths: documents.map((entry) => entry.path),
-      existingNames: documents.map((entry) => entry.name ?? entry.path),
-    })
+      path,
+    )
     // Same two steps `createDocument` ends with, and the same order: the list
     // is refreshed BEFORE the path moves, so the page never points at a
     // document its own switcher does not hold yet.
     const { documents: refreshed } = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
     setDocuments(refreshed)
     setPath(copy.path)
-  }, [daemonFetch, daemonBaseUrl, workspaceId, path, documents])
+  }, [daemonFetch, daemonBaseUrl, workspaceId, path])
 
   const deleteDocument = useCallback(async (): Promise<void> => {
     if (workspaceId === null || path === null) {

@@ -5,15 +5,13 @@ import type { ProviderState } from './provider.js'
 import { findReplicaForHandle, type ReplicaMatch } from './replicas.js'
 import type { UserSettings } from './user-settings-store.js'
 
-/**
- * WHO KEEPS this session's workspace, and how to reach them — the derivations
- * that would otherwise be four stacked ternaries among `App`'s thirty hooks.
- *
- * Pure, and here rather than in `App`, for the reason any decision chain is:
- * each answer is about its inputs alone, and a reader asking "which daemon is
- * the shell talking to?" should not have to hold a component's render order in
- * mind to find out.
- */
+// WHO KEEPS this session's workspace, and how to reach them — the derivations
+// that would otherwise be four stacked ternaries among `App`'s thirty hooks.
+//
+// Pure, and here rather than in `App`, for the reason any decision chain is:
+// each answer is about its inputs alone, and a reader asking "which daemon is
+// the shell talking to?" should not have to hold a component's render order in
+// mind to find out.
 
 /**
  * The 'Work in this browser instead' escape hatch collapses a daemon OR

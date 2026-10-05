@@ -64,6 +64,8 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 
 /** A class with no arm in create-server.ts, and why no /api/v1 operation can raise it. */
 const EXEMPT: Readonly<Record<string, string>> = {
+  NoRoomForCopyError:
+    'raised only by duplicating a document, which is the /api/workspaces duplicate route; /api/v1 has no duplicate',
   DocumentMoveIntoSelfError:
     'a move is wb_workspace_edit / document-move only; /api/v1 has no move',
   DocumentPathContestedError:
@@ -102,6 +104,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'raised by the sync operations (document and workspace-document update, promote) on a CRDT update; /api/v1 takes no CRDT bytes and writes no comment',
   SyncWriteRefusalError:
     'the abstract base of the sync write refusals below; raised only as one of them, by the sync operations, never on /api/v1',
+  TextBreachRefusalError:
+    'the abstract base of the five text refusals above; raised only as one of them, by the sync operations, never on /api/v1',
   UnreadableDocumentMetaError:
     'raised by applyWorkspaceDocumentUpdate on a CRDT update; /api/v1 takes no CRDT bytes and writes node meta through its schemas',
   DocumentNameTooLongError:

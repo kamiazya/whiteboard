@@ -203,12 +203,6 @@ export function renderCanvasForExportWith(
 }
 
 /**
- * The keyed projection of an already-rendered canvas, derived on the main
- * thread from the scene the worker (or sync path) already delivered —
- * stringification is ~3ms at 40 nodes against a 66-125ms layout, so the
- * worker protocol stays untouched. Same envelope as `RenderedCanvas.svg`.
- */
-/**
  * The keyed render with every group under `keyPrefix` left out — how a
  * comment being dragged leaves the committed surface for the gesture. It
  * has to LEAVE rather than hide: the patcher animates a replaced group from
@@ -228,6 +222,12 @@ export function keyedWithoutPrefix(keyed: KeyedSvgRender, keyPrefix: string): Ke
   }
 }
 
+/**
+ * The keyed projection of an already-rendered canvas, derived on the main
+ * thread from the scene the worker (or sync path) already delivered —
+ * stringification is ~3ms at 40 nodes against a 66-125ms layout, so the
+ * worker protocol stays untouched. Same envelope as `RenderedCanvas.svg`.
+ */
 export function renderedCanvasKeyed(
   rendered: Pick<RenderedCanvas, 'scene' | 'bounds'>,
 ): KeyedSvgRender {

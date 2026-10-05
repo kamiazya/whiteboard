@@ -8,16 +8,6 @@ import { Ban, Circle, Cylinder, Diamond, Hexagon, Octagon, Square } from 'lucide
 import { createElement, type ReactNode } from 'react'
 
 /**
- * The core's glyph vocabulary rendered: a spec NAMES a glyph, this draws it.
- * Keeping the map in the vessel (not the engine) is the same split as
- * everywhere else — the engine owns what may be said, the vessel owns how it
- * looks.
- *
- * It lives in its own module because every vessel draws it. A picker showing
- * shapes in one and words in the other is two vocabularies pretending to be
- * one.
- */
-/**
  * An SVG with no `width`/`height` has an intrinsic size of 300x150, and it
  * only sits inside its 16px box here because the box is a flex container and
  * the default `flex-shrink` pulls it back. That is a load-bearing accident:
@@ -205,6 +195,15 @@ export function EmojiText({ value }: { readonly value: string }): ReactNode {
 }
 
 /**
+ * The core's glyph vocabulary rendered: a spec NAMES a glyph, this draws it.
+ * Keeping the map in the vessel (not the engine) is the same split as
+ * everywhere else — the engine owns what may be said, the vessel owns how it
+ * looks.
+ *
+ * It lives in its own module because every vessel draws it. A picker showing
+ * shapes in one and words in the other is two vocabularies pretending to be
+ * one.
+ *
  * @param registry needed only by the `asset` arm — a caller with no
  * registry simply draws no asset glyphs, which is the same degradation as
  * an unknown id.

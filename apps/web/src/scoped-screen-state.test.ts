@@ -448,6 +448,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   lastKnownDocumentIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   shortcutHandledRef: 'no subject: a once-per-page-load flag for the ?new=canvas launcher param',
+  previous:
+    'no subject: the last name the session’s record reported, taken from `sync.documentName` on every change — the session resets that to undefined on a document switch and this ref takes it, so nothing of the old document reaches the next',
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {

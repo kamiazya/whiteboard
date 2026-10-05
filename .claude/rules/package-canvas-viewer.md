@@ -44,7 +44,7 @@ paths:
   mapping (`canvas-point.ts`), `widget-tool-calls.ts` (the builders of the
   widget's `canvas_view` / `wb_canvas_edit` requests — import-free so
   mcp-server's contract test and e2e smoke parse the very bytes the widget
-  sends), `canvas-view-result.ts` (the reader of `canvas_view`'s result,
+  sends), `tool-error-text.ts` (the reason an `isError` result carries, shown on the comment control's alert line — the widget's one status line, for refused comments and failed refreshes alike), `canvas-view-result.ts` (the reader of `canvas_view`'s result,
   the other half of that contract — mcp-server's
   `canvas-view-widget.contract.test.ts` runs the real tool's output
   through it), and `theme-font.ts`: the widget's ONE

@@ -164,11 +164,12 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/pages/DaemonIndexPage.tsx': {
     reach: 'both-keepers',
     browser: 'src/pages/BrowserIndexPage.tsx',
+    note: "duplicate is ONE keeper-side operation on both: the daemon's duplicate route and the browser's index both run `DocumentDuplicates`, whose conformance suite holds the two to one placement",
   },
   'src/pages/daemon-index-actions.ts': {
     reach: 'both-keepers',
-    browser: 'src/lib/duplicate-browser-document.ts',
-    note: "the row actions each index page performs on the panel's behalf. The browser's delete helpers are inline in BrowserIndexPage; its duplicate is one definition for both browser surfaces, since the row has only a path while the open page also owes a flush and a switch",
+    browser: 'src/pages/BrowserIndexPage.tsx',
+    note: "the delete each index page performs on the panel's behalf; the browser's delete helpers are inline in BrowserIndexPage",
   },
   'src/pages/SettingsPage.tsx': {
     reach: 'daemon-itself',
@@ -220,11 +221,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/lib/browser-workspaces.ts',
     note: "builds both keepers' halves of the workspace switcher side by side; the browser half is the registry in browser-workspaces.ts, answering the same WorkspaceSwitcherSource",
-  },
-  'src/lib/duplicate-daemon-document.ts': {
-    reach: 'both-keepers',
-    browser: 'src/lib/duplicate-browser-document.ts',
-    note: 'the daemon copy runs through endpoints, the browser copy through its own store; both keep the create-then-write-then-name order',
   },
   'src/lib/theme-fonts.ts': {
     reach: 'both-keepers',

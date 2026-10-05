@@ -19,6 +19,13 @@ import { z } from 'zod'
 export const NODE_TEXT_MAX_CHARS = 8 * 1024
 
 /**
+ * The bound as every refusal of it ends — a tool's schema and a keeper's
+ * refused sync write alike — with what to do instead, so a writer is told
+ * the same thing whichever path refused it.
+ */
+export const NODE_TEXT_LIMIT_PHRASE = `the ${NODE_TEXT_MAX_CHARS}-character limit for one node; split it across nodes, or put it in a markdown document and embed that`
+
+/**
  * The text a tool or route accepts for one text node, whole. One definition
  * so a write is refused the same way whichever op it arrives through. The
  * STORED node stays unbounded: a node written before the limit must still
@@ -26,7 +33,4 @@ export const NODE_TEXT_MAX_CHARS = 8 * 1024
  */
 export const nodeTextInputSchema = z
   .string()
-  .max(
-    NODE_TEXT_MAX_CHARS,
-    `node text is longer than the ${NODE_TEXT_MAX_CHARS}-character limit for one node; split it across nodes, or put it in a markdown document and embed that`,
-  )
+  .max(NODE_TEXT_MAX_CHARS, `node text is longer than ${NODE_TEXT_LIMIT_PHRASE}`)

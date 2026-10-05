@@ -240,18 +240,6 @@ export const userSettingsSchema = z
 const readSchema = tolerantAnswer(userSettingsSchema)
 
 /**
- * The shape v2 migrates FROM, kept parse-only.
- *
- * It spells the retired keeper words on purpose, for the same reason a
- * database migration names the columns as they stood at its point in the log:
- * this schema's whole job is to read a payload that was written under those
- * names. Correcting them here would make it parse nothing.
- *
- * Not derived from `storageSettingsSchema` by `.extend()`/`.omit()`, because
- * the two shapes are only coincidentally similar — v2 is free to move without
- * silently changing what a v1 payload is allowed to contain.
- */
-/**
  * The all-optional promotion shape v1 and v2 stored, kept parse-only. The
  * live schema is a discriminated union; this one's job is to read whatever
  * partial record an old payload holds so the v3 migration can normalize it.
@@ -290,6 +278,18 @@ const legacyMigrationSettingsSchema = z
   })
   .strict()
 
+/**
+ * The shape v2 migrates FROM, kept parse-only.
+ *
+ * It spells the retired keeper words on purpose, for the same reason a
+ * database migration names the columns as they stood at its point in the log:
+ * this schema's whole job is to read a payload that was written under those
+ * names. Correcting them here would make it parse nothing.
+ *
+ * Not derived from `storageSettingsSchema` by `.extend()`/`.omit()`, because
+ * the two shapes are only coincidentally similar — v2 is free to move without
+ * silently changing what a v1 payload is allowed to contain.
+ */
 export const legacyV1SettingsSchema = z
   .object({
     version: z.literal(1),

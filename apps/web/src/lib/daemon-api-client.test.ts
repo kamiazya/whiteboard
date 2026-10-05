@@ -7,13 +7,13 @@ import {
   createDocument,
   createWorkspace,
   deleteDocument,
+  duplicateDocument,
   getDocumentSnapshot,
   listDocuments,
   listWorkspaces,
   renameDocumentPath,
   renameWorkspace,
   setDocumentDisplayName,
-  updateDocument,
 } from './daemon-api-client.js'
 import { DAEMON_CONTRACT_COPY, DaemonContractError } from './daemon-contract-error.js'
 
@@ -320,23 +320,34 @@ describe('getDocumentSnapshot', () => {
   })
 })
 
-describe('updateDocument', () => {
-  it('POSTs the snapshot bytes as the request body', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
-    const bytes = new Uint8Array([9, 9, 9])
-    const result = await updateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'main', bytes)
-    expect(result).toEqual({ ok: true })
+describe('duplicateDocument', () => {
+  it('asks the daemon for the copy in ONE request and answers what it made', async () => {
+    const copy = {
+      documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+      path: 'notes/roadmap-copy',
+      name: 'Roadmap (copy)',
+      kind: 'markdown',
+    }
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ document: copy }))
+
+    await expect(
+      duplicateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'notes/roadmap'),
+    ).resolves.toEqual({ document: copy })
+    expect(fetchFn).toHaveBeenCalledTimes(1)
     const [urlArg, initArg] = fetchFn.mock.calls[0]
-    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/w/w1/document/main/update`)
+    expect(String(urlArg)).toBe(
+      `${DAEMON_BASE_URL}/api/workspaces/w1/documents/notes/roadmap/duplicate`,
+    )
     expect(initArg?.method).toBe('POST')
-    expect(initArg?.body).toBe(bytes)
   })
 
-  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Server error' }, 500))
-    await expect(
-      updateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'main', new Uint8Array()),
-    ).rejects.toThrow(/server error/i)
+  it("rejects on a refusal, surfacing the daemon's reason", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ title: 'No document "gone" to duplicate' }, 404))
+    await expect(duplicateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'gone')).rejects.toThrow(
+      /to duplicate/,
+    )
   })
 })
 

@@ -98,6 +98,9 @@ const SAMPLES: Record<string, readonly Sample[]> = {
     { label: 'name', method: 'PUT', url: daemonUrls.documentNameApiUrl(...doc) },
   ],
   documentPinApiUrl: [{ label: 'pin', method: 'PUT', url: daemonUrls.documentPinApiUrl(...doc) }],
+  documentDuplicateApiUrl: [
+    { label: 'duplicate', method: 'POST', url: daemonUrls.documentDuplicateApiUrl(...doc) },
+  ],
   documentVersionsApiUrl: [
     { label: 'list', method: 'GET', url: daemonUrls.documentVersionsApiUrl(...doc) },
     { label: 'save', method: 'POST', url: daemonUrls.documentVersionsApiUrl(...doc) },

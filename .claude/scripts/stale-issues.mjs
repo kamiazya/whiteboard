@@ -18,7 +18,8 @@
 // Exit code is always 0: this is information, not a gate.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -32,6 +33,7 @@ import {
   issueDocumentsFrom,
   unwrapToolResult,
 } from './stale-issues-lib.mjs'
+import { danglingMainRegistration } from './wire-worktree-mcp-lib.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 
@@ -92,9 +94,29 @@ function inspectorFor(root) {
   }
 }
 
+/**
+ * The session's tools reach the backlog through the `whiteboard` registration, not through the
+ * socket this check uses, so a registration naming a deleted worktree leaves this check healthy
+ * while nobody can file or read an issue. Said under --quiet too: it is the one fault here that
+ * stops every other session from noticing anything. Read-only, and fail-open on a config this
+ * cannot parse — that file is the CLI's.
+ */
+function reportDanglingRegistration(mainRoot) {
+  let config
+  try {
+    config = JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf-8'))
+  } catch {
+    return
+  }
+  const dangling = danglingMainRegistration({ config, mainRoot, pathExists: existsSync })
+  if (dangling !== null) process.stdout.write(`[stale-issues] ${dangling.message}\n`)
+}
+
 async function main() {
   const root = repoRoot()
-  const dataDir = resolveDevDataDirEnv(process.env, mainCheckoutRoot(root)).WHITEBOARD_DATA_DIR
+  const mainRoot = mainCheckoutRoot(root)
+  reportDanglingRegistration(mainRoot)
+  const dataDir = resolveDevDataDirEnv(process.env, mainRoot).WHITEBOARD_DATA_DIR
   const token = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
 
   let nextId = 1
@@ -185,7 +207,14 @@ async function main() {
     )
   }
   if (report !== '') process.stdout.write(`${report}\n`)
-  else if (!QUIET) {
+  else if (documents.length === 0) {
+    // An empty backlog is not "nothing stale": it is what a store nobody can write to looks like,
+    // so it is said under --quiet too.
+    process.stdout.write(
+      `[stale-issues] workspace "${WORKSPACE}" holds 0 issue documents (of ${entries.length} ` +
+        'document(s)) — nothing to judge; if issues have been filed, they are not reaching this store\n',
+    )
+  } else if (!QUIET) {
     const judged = documents.filter((d) => d.sources.length > 0 && d.generatedAt !== undefined)
     process.stdout.write(
       `[stale-issues] nothing to report — ${judged.length} of ${documents.length} issue(s) could be judged` +

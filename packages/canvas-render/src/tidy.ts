@@ -139,19 +139,6 @@ function anchorsToYieldTo(
 }
 
 /**
- * Row order by edges. A box whose connections along its own row all lie to
- * one side of it, two or more of them, is a hub drawn at the end of its
- * row: the edge to the farther box has to pass the nearer one, and the
- * router pays with a crossing or a loop under both. Measured on the lane's
- * layered board, the same hub between its targets reads crossings 1 -> 0,
- * bends 2 -> 0, reversals 1 -> 0 and a quarter less ink — and telling the
- * model so, in the skill and in the call's answer, moved nothing in nine
- * trials. So the hub swaps places with the nearest of them. After the swap
- * one connection lies on each side, so the condition no longer holds and a
- * second tidy moves nothing. Frames are left alone (a frame's order is its
- * members' business), and so is a hub or partner that cannot move.
- */
-/**
  * The units this pass can reason about, by root id: a lone box, never a
  * frame. A frame's order is its members' business.
  */
@@ -205,6 +192,19 @@ function partnerToSwapWith(hub: Unit, along: readonly Unit[]): Unit | undefined 
   return nearest.movable ? nearest : undefined
 }
 
+/**
+ * Row order by edges. A box whose connections along its own row all lie to
+ * one side of it, two or more of them, is a hub drawn at the end of its
+ * row: the edge to the farther box has to pass the nearer one, and the
+ * router pays with a crossing or a loop under both. Measured on the lane's
+ * layered board, the same hub between its targets reads crossings 1 -> 0,
+ * bends 2 -> 0, reversals 1 -> 0 and a quarter less ink — and telling the
+ * model so, in the skill and in the call's answer, moved nothing in nine
+ * trials. So the hub swaps places with the nearest of them. After the swap
+ * one connection lies on each side, so the condition no longer holds and a
+ * second tidy moves nothing. Frames are left alone (a frame's order is its
+ * members' business), and so is a hub or partner that cannot move.
+ */
 function orderRowsByEdges(units: Unit[], edges: readonly Pick<CanvasEdge, 'from' | 'to'>[]): void {
   const byId = soleBoxUnits(units)
   for (const hub of units) {
@@ -369,22 +369,6 @@ function enclosing(frame: Rect, rects: readonly Rect[]): Rect {
 }
 
 /**
- * Tidy each frame's members inside it, and grow it to hold them.
- *
- * Runs ONCE, before the level's own passes. Running it inside the loop
- * instead was implemented and measured and did NOT pay: it settles more
- * boards in a single pass (400 of 20000 crowded generated boards still
- * needed a second, against 1394), and the second pass is cheaper than
- * doing this work every iteration — 1.6s against 2.4s over those 20000
- * boards, and 45ms against 56ms on a 300-box, 8-frame one, with the
- * output and every scoreboard column identical. What makes the leftovers
- * safe is `tidyNodes` settling to a fixpoint; this would only make them
- * rarer, for more work.
- *
- * Writes each member's settled rect into `settled`, and a frame that grew
- * carries its new box on its own unit too.
- */
-/**
  * Where a frame's members lay their grid FROM.
  *
  * A frame that can MOVE lays it from its own corner, because the members it
@@ -439,6 +423,22 @@ function framePolicyFor(units: readonly Unit[], options: TidyOptions): FramePoli
   }
 }
 
+/**
+ * Tidy each frame's members inside it, and grow it to hold them.
+ *
+ * Runs ONCE, before the level's own passes. Running it inside the loop
+ * instead was implemented and measured and did NOT pay: it settles more
+ * boards in a single pass (400 of 20000 crowded generated boards still
+ * needed a second, against 1394), and the second pass is cheaper than
+ * doing this work every iteration — 1.6s against 2.4s over those 20000
+ * boards, and 45ms against 56ms on a 300-box, 8-frame one, with the
+ * output and every scoreboard column identical. What makes the leftovers
+ * safe is `tidyNodes` settling to a fixpoint; this would only make them
+ * rarer, for more work.
+ *
+ * Writes each member's settled rect into `settled`, and a frame that grew
+ * carries its new box on its own unit too.
+ */
 function tidyInsideFrames(
   units: readonly Unit[],
   nodes: readonly TidyNode[],

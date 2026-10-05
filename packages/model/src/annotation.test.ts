@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   type AnnotationAnchor,
+  annotationAnchorInputSchema,
   annotationAnchorSchema,
   type CommentThread,
   canvasCommentFromThread,
@@ -16,6 +17,7 @@ import {
   compareMessages,
   type SpatialAnchor,
   spatialAnchorRect,
+  TEXT_ANCHOR_CONTEXT_MAX_CHARS,
   threadFromCanvasComment,
 } from './annotation.js'
 import type { CanvasComment } from './spatial.js'
@@ -116,6 +118,30 @@ describe('annotationAnchorSchema', () => {
     // The union is closed on purpose (ADR-0026 decision 3): a new format is a
     // new arm here, which is what makes every renderer's switch exhaustive.
     expect(annotationAnchorSchema.safeParse({ kind: 'audio', at: 3 }).success).toBe(false)
+  })
+})
+
+describe("a text anchor's context bound", () => {
+  const withPrefix = (length: number): AnnotationAnchor => ({
+    kind: 'text',
+    quote: { exact: 'passage', prefix: 'x'.repeat(length) },
+    start: 0,
+    end: 7,
+  })
+
+  it('is a write contract: a stored anchor past it still reads', () => {
+    // An anchor stored before the bound must not vanish from its thread on
+    // the next read; resolution judges it on its nearest characters instead.
+    expect(annotationAnchorSchema.safeParse(withPrefix(10_000)).success).toBe(true)
+  })
+
+  it('is refused on the way in past it, and accepted at it', () => {
+    expect(
+      annotationAnchorInputSchema.safeParse(withPrefix(TEXT_ANCHOR_CONTEXT_MAX_CHARS + 1)).success,
+    ).toBe(false)
+    expect(
+      annotationAnchorInputSchema.safeParse(withPrefix(TEXT_ANCHOR_CONTEXT_MAX_CHARS)).success,
+    ).toBe(true)
   })
 })
 

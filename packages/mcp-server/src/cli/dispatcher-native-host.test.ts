@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setStderrLogDestination } from '../server/log.js'
 import { main } from './dispatcher.js'
 
 // `os.homedir()` reads the process's real environment, which a worker thread
@@ -30,6 +31,7 @@ vi.mock('node:os', async (importOriginal) => {
 let scratch: string
 let stdout: string
 let stderr: string
+let restoreStderrLog: () => void
 
 beforeEach(() => {
   home.override = undefined
@@ -44,8 +46,12 @@ beforeEach(() => {
     stderr += String(chunk)
     return true
   })
+  // What the logger writes is part of this command's stderr; the suite's
+  // mute would hide it from the assertions on what a refusal prints.
+  restoreStderrLog = setStderrLogDestination(true)
 })
 afterEach(() => {
+  restoreStderrLog()
   vi.restoreAllMocks()
   rmSync(scratch, { recursive: true, force: true })
 })

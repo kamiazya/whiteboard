@@ -182,7 +182,7 @@ describe('what the tool table costs to read', () => {
         // +202 on both and +1 parameter: `author`, who is proposing, shared with
         // wb_canvas_edit's propose path. A proposal stored no author, so a person
         // deciding on one could not tell which agent asked.
-        visibleBytes: 2865,
+        visibleBytes: 2895, // +30 both: a text anchor's 32 `maxLength` on prefix and suffix
         // +1,396 wire, and it is the registration's PRICE rather than its
         // saving: a named subschema costs a `$defs` entry plus a `$ref`
         // wherever it is used, so a tool that uses one ONCE pays more than
@@ -221,7 +221,7 @@ describe('what the tool table costs to read', () => {
         // unmoved, which is what makes both safe on a table a model reads.
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 17896,
+        wireBytes: 17926,
         descriptionWords: 112,
         parameters: 19,
         undescribed: 7,
@@ -692,10 +692,10 @@ describe('what the tool table costs to read', () => {
         // status, every message with author and time) where it was a count,
         // so "Returns every thread the document holds" is true. The
         // description now names the read that writes nothing.
-        visibleBytes: 3523, // +34 both: a message's 4096 `maxLength` at thread.add and message.add
+        visibleBytes: 3553, // +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 6202,
+        wireBytes: 6232,
         descriptionWords: 138,
         parameters: 32,
         undescribed: 25,
@@ -983,7 +983,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 41283, // +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds
+      visibleBytes: 41343, // +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30)
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, each the same bytes as visible.
-      wireBytes: 132629, // +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds
+      wireBytes: 132689, // +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

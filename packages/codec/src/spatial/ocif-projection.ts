@@ -35,21 +35,6 @@ const NATIVE = { kind: 'native' } as const
 const EXTENSION = { kind: 'extension' } as const
 
 /**
- * Colour was written `degraded` here from the spec — OCIF's shape extensions
- * take a concrete `fillColor`, so a preset index would have to be resolved on
- * the way out and would arrive having lost the theme role it named.
- *
- * Writing the projection corrected it. Resolving a preset needs a palette,
- * and a palette is a RENDERING decision this package does not get to make
- * (`canvas-render` owns it and depends on this package, not the other way
- * round). So the projection carries the colour as authored, on an extension
- * of ours, and a foreign reader paints the node however it paints an
- * un-styled one. Emitting a resolved `@ocif/rect` BESIDE that — better
- * interop, at the cost of a palette this layer would have to invent — is a
- * named follow-up rather than a thing this table can claim.
- */
-
-/**
  * OCIF draws this as `@ocif/arrow`, which is a SHAPE with coordinates rather
  * than `@ocif/edge`, whose `start`/`end` must be node ids. The line still
  * reaches the same place; what changes is that it stops being a relation.
@@ -83,6 +68,20 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'nodes[].y': NATIVE,
   'nodes[].width': NATIVE,
   'nodes[].height': NATIVE,
+  /**
+   * Colour was written `degraded` here from the spec — OCIF's shape extensions
+   * take a concrete `fillColor`, so a preset index would have to be resolved on
+   * the way out and would arrive having lost the theme role it named.
+   *
+   * Writing the projection corrected it. Resolving a preset needs a palette,
+   * and a palette is a RENDERING decision this package does not get to make
+   * (`canvas-render` owns it and depends on this package, not the other way
+   * round). So the projection carries the colour as authored, on an extension
+   * of ours, and a foreign reader paints the node however it paints an
+   * un-styled one. Emitting a resolved `@ocif/rect` BESIDE that — better
+   * interop, at the cost of a palette this layer would have to invent — is a
+   * named follow-up rather than a thing this table can claim.
+   */
   'nodes[].color': EXTENSION,
   // A resource is what the model STORES, not something the projection
   // builds — decision 3 took OCIF's shape into the model, so there is no

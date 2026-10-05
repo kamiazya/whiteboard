@@ -14,18 +14,6 @@ import type { z } from 'zod'
 import { daemonContractError } from './daemon-contract-error.js'
 
 /**
- * A document's version history as the UI reads and writes it — the seam
- * between the History panel / save controls and whoever KEEPS the
- * workspace. The daemon answers over its HTTP routes; the browser keeper
- * answers from its own IndexedDB store. Either way the panel sees the same
- * rows (`VersionEntry`, declared once in server-core) and performs the same
- * three acts.
- *
- * `path`-addressed like the routes are, because a version belongs to a
- * document at the name it had. Every method throws on failure — a rejected
- * save or restore is the caller's signal to keep its dialog open.
- */
-/**
  * A past state, as the panel PREVIEWS it before deciding to restore.
  *
  * A projected value rather than a CRDT document: what a preview needs is
@@ -37,6 +25,18 @@ export type PastDocument =
   | { readonly kind: 'spatial'; readonly canvas: SpatialCanvas }
   | { readonly kind: 'markdown'; readonly body: string }
 
+/**
+ * A document's version history as the UI reads and writes it — the seam
+ * between the History panel / save controls and whoever KEEPS the
+ * workspace. The daemon answers over its HTTP routes; the browser keeper
+ * answers from its own IndexedDB store. Either way the panel sees the same
+ * rows (`VersionEntry`, declared once in server-core) and performs the same
+ * three acts.
+ *
+ * `path`-addressed like the routes are, because a version belongs to a
+ * document at the name it had. Every method throws on failure — a rejected
+ * save or restore is the caller's signal to keep its dialog open.
+ */
 export interface VersionsBackend {
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
   /**

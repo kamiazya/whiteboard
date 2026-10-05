@@ -22,7 +22,7 @@ import {
 import type { Point, Viewport } from '../../lib/spatial/viewport.js'
 import { screenToCanvas } from '../../lib/spatial/viewport.js'
 import { textNodeDefaults } from './node-factories.js'
-import { copiedTextRefusal, pastedTextRefusal } from './node-text-limit.js'
+import { copiedFragmentRefusal, pastedTextRefusal } from './node-text-limit.js'
 
 /**
  * The deferred half of a cut: the originals stay on the canvas as a ghost
@@ -67,12 +67,6 @@ export interface ClipboardActionsInputs {
   readonly viewportCenterScreen: () => Point
 }
 
-/**
- * The clipboard family — copy/cut/paste/duplicate plus the foreign-text
- * fallback note. Every canvas mutation goes through applyCommand and out
- * through `onChange`; every selection write goes through `selectNodes`.
- * Plain per-render closures, exactly as they were inside the editor body.
- */
 /** One batch that moves every held element, so the whole cut undoes as one step. */
 function moveHeldCommand(
   held: readonly SpatialNode[],
@@ -158,6 +152,12 @@ function selectCreatedBy(
   if (lines.length > 0) selectInk(lines)
 }
 
+/**
+ * The clipboard family — copy/cut/paste/duplicate plus the foreign-text
+ * fallback note. Every canvas mutation goes through applyCommand and out
+ * through `onChange`; every selection write goes through `selectNodes`.
+ * Plain per-render closures, exactly as they were inside the editor body.
+ */
 export function useClipboardActions({
   canvasRef,
   primaryId,
@@ -196,7 +196,7 @@ export function useClipboardActions({
     if (!hasSelection()) return false
     const current = canvasRef.current
     const fragment = extractClipboardFragment(current, selectedIds())
-    if (notice.refused(copiedTextRefusal(fragment.nodes, 'duplicated'))) return true
+    if (notice.refused(copiedFragmentRefusal(fragment, 'duplicated'))) return true
     const command = buildFragmentInsertCommand(
       current,
       fragment,
@@ -323,7 +323,7 @@ export function useClipboardActions({
     const current = canvasRef.current
     const moved = pasteAsMove(fragment, at)
     if (moved !== undefined) return moved
-    if (notice.refused(copiedTextRefusal(fragment.nodes, 'pasted'))) return true
+    if (notice.refused(copiedFragmentRefusal(fragment, 'pasted'))) return true
 
     // The cut surface reconnects while the document shows no trace of a
     // previous reconnection: as long as any edge a prior paste of this cut

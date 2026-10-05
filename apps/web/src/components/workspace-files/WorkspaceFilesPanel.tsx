@@ -341,18 +341,6 @@ export function WorkspaceFilesPanel({
   }, [revision, readList])
 
   /**
-   * Move a document and re-read the list.
-   *
-   * A move is the one action here that changes what every pane is showing —
-   * a subtree lands somewhere else entirely — so the list is re-read rather
-   * than patched. The selection follows the document to its new path,
-   * because losing it would leave the preview blank right when someone wants
-   * to see that the move landed.
-   *
-   * The rejection is re-thrown: the pane that asked owns the message, and
-   * this is the only place that knows it was the server's words.
-   */
-  /**
    * The address a create with no opinion lands at: inside the folder the
    * browser is standing in, numbered past whatever is already there.
    *
@@ -462,14 +450,6 @@ export function WorkspaceFilesPanel({
   )
 
   /**
-   * Apply whatever the rename dialog changed: the name through the source's
-   * workspace-side setter, the path through the same move the panel already
-   * performs. Both, in that order, when both changed — a failed move then
-   * leaves the new name applied, which is honest: the dialog stays open on
-   * the server's refusal and the field still shows what was typed.
-   */
-
-  /**
    * Pinning is settable here, on the object it acts on, because the ordering
    * it feeds (`compareDocumentEntries`) is applied here — the affordance does
    * not live in a menu elsewhere.
@@ -505,6 +485,18 @@ export function WorkspaceFilesPanel({
     [source, readList],
   )
 
+  /**
+   * Move a document and re-read the list.
+   *
+   * A move is the one action here that changes what every pane is showing —
+   * a subtree lands somewhere else entirely — so the list is re-read rather
+   * than patched. The selection follows the document to its new path,
+   * because losing it would leave the preview blank right when someone wants
+   * to see that the move landed.
+   *
+   * The rejection is re-thrown: the pane that asked owns the message, and
+   * this is the only place that knows it was the server's words.
+   */
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await source.renameDocumentPath(entry.path, newPath)

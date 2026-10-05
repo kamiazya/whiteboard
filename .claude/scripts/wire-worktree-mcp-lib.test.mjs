@@ -377,3 +377,32 @@ test('buildReRegisterCommand is the CONTRIBUTING first-clone registration, with 
     'claude mcp add --scope local --transport stdio whiteboard -- node "/my repo/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"',
   )
 })
+
+// --- a main slot naming a proxy that no longer exists ---
+import { danglingMainRegistration } from './wire-worktree-mcp-lib.mjs'
+
+test('danglingMainRegistration: only this script’s proxy registration, naming a missing script, is dangling', () => {
+  const mainRoot = resolve('/repo')
+  const goneScript = resolve(
+    '/repo/.claude/worktrees/gone/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs',
+  )
+  const proxy = { type: 'stdio', command: 'node', args: [goneScript] }
+  const withEntry = (entry) => ({ projects: { [mainRoot]: { mcpServers: { whiteboard: entry } } } })
+
+  const dangling = danglingMainRegistration({
+    config: withEntry(proxy),
+    mainRoot,
+    pathExists: () => false,
+  })
+  assert.equal(dangling?.script, goneScript)
+
+  assert.equal(
+    danglingMainRegistration({ config: withEntry(proxy), mainRoot, pathExists: () => true }),
+    null,
+  )
+  // Not this script's registration: put there by hand, so not this check's to judge.
+  const npx = { type: 'stdio', command: 'npx', args: ['@kamiazya/whiteboard-mcp@latest'] }
+  for (const config of [withEntry(npx), withEntry(undefined), { projects: {} }, null, {}]) {
+    assert.equal(danglingMainRegistration({ config, mainRoot, pathExists: () => false }), null)
+  }
+})

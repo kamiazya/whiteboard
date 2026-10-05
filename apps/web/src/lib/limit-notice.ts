@@ -7,6 +7,7 @@ import {
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
+  NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
 } from '@kamiazya/whiteboard-model'
@@ -49,9 +50,28 @@ export function pastedTextNotice(length: number): string {
   return `Not pasted: the text is ${pastLimit(length, NODE_TEXT_MAX_CHARS, 'node')}. Put it in a markdown document, or paste it in parts.`
 }
 
+/** What a paste or duplicate of copied elements would have done. */
+export type CopyVerb = 'pasted' | 'duplicated'
+
 /** A paste or duplicate of nodes that made nothing, naming the longest node's text. */
-export function copiedNodeTextNotice(verb: 'pasted' | 'duplicated', length: number): string {
+export function copiedNodeTextNotice(verb: CopyVerb, length: number): string {
   return `Not ${verb}: a node's text is ${pastLimit(length, NODE_TEXT_MAX_CHARS, 'node')}. Shorten it first.`
+}
+
+/** Which node a part of a location belongs to: a URL is a link's, a path or subpath a file's. */
+const LOCATION_OWNER = { URL: 'link', path: 'file', subpath: 'file' } as const
+
+/** The part of a node's location a notice names. */
+export type LocationPart = keyof typeof LOCATION_OWNER
+
+/** A paste or duplicate that made nothing, naming the longest URL, path or subpath it carried. */
+export function copiedLocationNotice(verb: CopyVerb, part: LocationPart, length: number): string {
+  return `Not ${verb}: a ${LOCATION_OWNER[part]}'s ${part} is ${pastLimit(length, NODE_LOCATION_MAX_CHARS, part)}. Shorten it first.`
+}
+
+/** A paste or duplicate that made nothing, naming the longest edge, line or frame label it carried. */
+export function copiedLabelNotice(verb: CopyVerb, length: number): string {
+  return `Not ${verb}: a label is ${pastLimit(length, LABEL_MAX_CHARS, 'label')}. Shorten it first.`
 }
 
 /** An edit to an edge, line or group label that was not made. */

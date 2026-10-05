@@ -79,7 +79,10 @@ the legacy row index keeps no pinned list, which is why it is a capability
 and not a method on the port). `describeDocumentTrashConformance` covers
 the `DocumentTrash` capability (list, restore, purge) the same way, with a
 required `evacuatedBlobCount` seam pinning that restore and purge destroy
-the evacuated bytes. `KeyedSerializer` is the one per-key, submission-ordered,
+the evacuated bytes. `describeDocumentDuplicatesConformance` covers
+`DocumentDuplicates` (a copy beside its source, named `(copy N)`, numbered
+inside the serialised write) with a REQUIRED content seam, since placement
+alone would pass an empty copy. `KeyedSerializer` is the one per-key, submission-ordered,
 non-poisoning async queue (the index's writes and apps/web's `LoroStore`).
 
 They must run unchanged in a browser like the rest of the package — the blob

@@ -12,12 +12,20 @@
  * the previous one's rows. A fresh name cannot be stale.
  */
 import {
+  documentContainers,
+  readMarkdownBody,
+  resolveWorkspaceDocument,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
+import {
+  describeDocumentDuplicatesConformance,
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
 import { BLOBS_STORE, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { inTransaction, request } from './idb-tx.js'
 
@@ -92,5 +100,33 @@ describe('FoldingBrowserIndex trash', () => {
       evacuatedBlobCount: () => blobCount(dbName),
       dispose: () => deleteDb(dbName),
     }
+  })
+})
+
+/** A document's body by path, through the workspace record this browser keeps. */
+function markdownContent(dbName: string) {
+  const docs = new BrowserWorkspaceDocs(dbName)
+  const at = async (workspaceId: string, path: string) => {
+    const doc = await docs.open(workspaceId)
+    const entry = doc === null ? null : resolveWorkspaceDocument(doc, path)
+    if (doc === null || entry === null) throw new Error(`no document at ${path}`)
+    return { doc, containers: documentContainers(doc, entry.documentId) }
+  }
+  return {
+    write: async (workspaceId: string, path: string, marker: string) => {
+      const { doc, containers } = await at(workspaceId, path)
+      writeMarkdownBody(containers, marker)
+      doc.commit()
+      await docs.save(workspaceId, doc)
+    },
+    read: async (workspaceId: string, path: string) =>
+      readMarkdownBody((await at(workspaceId, path)).containers),
+  }
+}
+
+describe('FoldingBrowserIndex duplicates', () => {
+  describeDocumentDuplicatesConformance(async () => {
+    const { index, dbName } = await freshIndex()
+    return { index, content: markdownContent(dbName), dispose: () => deleteDb(dbName) }
   })
 })

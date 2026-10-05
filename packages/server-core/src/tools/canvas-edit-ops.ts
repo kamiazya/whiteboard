@@ -266,12 +266,6 @@ const draftKeysBelongInside = (
 })
 
 /**
- * One step of a batch. The verbs are the ones the retired single-purpose
- * tools carried, so nothing an agent could do before is missing here — plus
- * `node.remove` / `edge.remove`, which had no tool at all: without them the
- * only way to delete anything is a whole-document replace.
- */
-/**
  * Where one id goes, a SELECTOR may go instead: every node inside a group,
  * or every node on the canvas. Measured before it existed: "colour every box
  * inside the Clients group" and "lock every item on the roadmap" each cost a
@@ -385,6 +379,12 @@ const nodePatchSchema = z
   )
   .strict()
 
+/**
+ * One step of a batch. The verbs are the ones the retired single-purpose
+ * tools carried, so nothing an agent could do before is missing here — plus
+ * `node.remove` / `edge.remove`, which had no tool at all: without them the
+ * only way to delete anything is a whole-document replace.
+ */
 const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object(

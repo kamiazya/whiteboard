@@ -71,12 +71,6 @@ export function linkTargets(
 }
 
 /**
- * The file-node picker's rows: the link targets under the field names the
- * picker speaks (`file`/`label`). Derived rather than built inline a third
- * time per page, so the three lists a document can appear in — link picker,
- * switcher, file-node picker — cannot label it three different ways.
- */
-/**
  * A row the file-node picker offers. Filed in `lib/` because it is a pure
  * data contract shared by the pages that build the rows and the picker that
  * reads them — layer-order forbids `lib/` reaching into `components/` for it.
@@ -96,6 +90,12 @@ export interface FileRefOption {
   readonly kind?: DocumentKind
 }
 
+/**
+ * The file-node picker's rows: the link targets under the field names the
+ * picker speaks (`file`/`label`). Derived rather than built inline a third
+ * time per page, so the three lists a document can appear in — link picker,
+ * switcher, file-node picker — cannot label it three different ways.
+ */
 export function fileRefOptions(targets: readonly LinkTarget[]): readonly FileRefOption[] {
   return targets.map((target) => ({ file: target.id, label: target.name, kind: target.kind }))
 }

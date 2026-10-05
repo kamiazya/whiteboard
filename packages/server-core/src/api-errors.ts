@@ -1,34 +1,32 @@
 import { z } from 'zod'
 
-/**
- * The ONE shape a daemon HTTP error body may take, as a union of the two
- * families the routes actually emit.
- *
- * It lives HERE, below every producer, rather than in `daemon-client` where
- * it started. `/api/v1` is served from this package and `daemon-client`
- * depends on it, so a contract filed with the browser CLIENT was out of
- * reach of half the routes it describes — `create-server.ts` answered nine
- * refusals with a raw `issues` array because the constructor was one layer
- * above it. `daemon-client`'s barrel re-exports the reader, the way it already
- * re-exports the `/api/v1` answers from here for exactly this reason.
- *
- * Two schemas over one declaration, because emitting and reading are
- * opposite jobs: `apiErrorBodySchema` is strict in its code family (what a
- * daemon may write) and `apiErrorReadSchema` tolerates what a newer daemon
- * added (what a client may meet).
- *
- * - `{ title }` — RFC 9457-flavoured Problem Details, used by the canvas
- *   CRUD routes. `title` is static, display-intended copy.
- * - `{ error, message? }` — the code+reason family used everywhere else.
- *   `message`, when present beside an `error` code, is daemon-authored
- *   display copy: a route puts the human-readable reason there and nowhere
- *   else.
- *
- * Each arm REQUIRES its discriminating field, so an out-of-contract body
- * fails to parse instead of vacuously succeeding — the previous
- * title-optional schema accepted every object and silently discarded the
- * reason of any body that spelled it differently.
- */
+// The ONE shape a daemon HTTP error body may take, as a union of the two
+// families the routes actually emit.
+//
+// It lives HERE, below every producer, rather than in `daemon-client` where
+// it started. `/api/v1` is served from this package and `daemon-client`
+// depends on it, so a contract filed with the browser CLIENT was out of
+// reach of half the routes it describes — `create-server.ts` answered nine
+// refusals with a raw `issues` array because the constructor was one layer
+// above it. `daemon-client`'s barrel re-exports the reader, the way it already
+// re-exports the `/api/v1` answers from here for exactly this reason.
+//
+// Two schemas over one declaration, because emitting and reading are
+// opposite jobs: `apiErrorBodySchema` is strict in its code family (what a
+// daemon may write) and `apiErrorReadSchema` tolerates what a newer daemon
+// added (what a client may meet).
+//
+// - `{ title }` — RFC 9457-flavoured Problem Details, used by the canvas
+//   CRUD routes. `title` is static, display-intended copy.
+// - `{ error, message? }` — the code+reason family used everywhere else.
+//   `message`, when present beside an `error` code, is daemon-authored
+//   display copy: a route puts the human-readable reason there and nowhere
+//   else.
+//
+// Each arm REQUIRES its discriminating field, so an out-of-contract body
+// fails to parse instead of vacuously succeeding — the previous
+// title-optional schema accepted every object and silently discarded the
+// reason of any body that spelled it differently.
 /**
  * A refusal CODE: lowercase snake_case, and nothing else.
  *

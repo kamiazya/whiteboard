@@ -30,7 +30,7 @@ export interface ApplyDocumentUpdateInput {
  * `DocumentEngineTrapError`: the instance traps on every later call, so
  * keeping it would leave the document unreadable until a restart. Bytes the
  * engine refuses are rethrown as they were, with the cached doc kept. An
- * update past the markdown size limit is `MarkdownBodyTooLargeError`, with
+ * update past a text bound is thrown as its `SyncWriteRefusalError`, with
  * the cached doc dropped and nothing saved.
  *
  * Returns the live cached doc instance (not a copy), so a caller can feed

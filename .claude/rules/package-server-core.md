@@ -216,17 +216,16 @@ is held (`.claude/rules/app-web.md`).
 What a CRDT update does to TEXT is judged once, by loro-adapter's
 `importWithinTextLimits`, which both keepers take (the browser through
 `syncTextLimitJudge`, which keeps a copy of the record in step rather than
-forking it per update): an insert run or markdown body past
-`MARKDOWN_MAX_CHARS` (`MarkdownBodyTooLargeError`, 413), node text added or
-grown past `NODE_TEXT_MAX_CHARS` (`NodeTextTooLargeError`), a link's URL or a
-file's path or subpath past `NODE_LOCATION_MAX_CHARS`
-(`NodeLocationTooLargeError`), a label past
-`LABEL_MAX_CHARS` (`LabelTooLargeError`) and a thread message past
-`COMMENT_MESSAGE_MAX_CHARS` (`CommentMessageTooLargeError`), each 413; into an empty
-document no run is judged, since nothing is replayed there.
+forking it per update). Each breach shape in `SYNC_TEXT_BREACH_CODES` (a
+run, a body, node text, a location, a label, a thread message) is answered 413
+by a `TextBreachRefusalError` built only by `textBreachRefusal(breach, at?)`,
+which promote also uses to name the document; into an empty document no run is
+judged, since nothing is replayed there.
 `importWithinSyncLimits` adds the workspace record's placement checks
-(`placementRefusal`): a node left unreadable (`UnreadableDocumentMetaError`), a
-document moved off the path grammar (`OffGrammarPathError`), a name grown past
+(`placementRefusal`): a node left unreadable — any write to a tree node's own
+map is node meta, timestamps and folder keys included
+(`UnreadableDocumentMetaError`), a document moved off the path grammar or past
+`DOCUMENT_PATH_MAX_LENGTH` (`OffGrammarPathError`), a name grown past
 `DOCUMENT_NAME_MAX_LENGTH` (`DocumentNameTooLongError`), each 400. Every refusal
 extends `SyncWriteRefusalError` and carries its own code and status; routes
 answer through `syncWriteAnswer`, never per-class arms. Costs are measured in
@@ -234,8 +233,9 @@ answer through `syncWriteAnswer`, never per-class arms. Costs are measured in
 
 One thing is WRITTEN on a CRDT update: `applyWorkspaceDocumentUpdate` names a
 note at a generated path after its heading (`seedNamesFromTitles`) before the
-save, as the browser keeper does in its own store. `applyDocumentUpdate`
-cannot — its seam reaches a projection that carries no name.
+save, as the browser keeper does (`seedNameFromTitle`). `applyDocumentUpdate`
+does not seed itself; the per-document save goes through loro-adapter's
+`writeDocumentContentAndName`, which does.
 
 ## Common mistakes (append as review finds them)
 

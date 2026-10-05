@@ -3,21 +3,19 @@ import { CONTENT_TIMESTAMPS_STORE, openWhiteboardDb } from './browser-idb.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 
-/**
- * What `DocumentIndex` deliberately does not own, for browser mode.
- *
- * The port answers placement, identity, kind and name. Two things a user still
- * needs are not in it, and are not gaps in it:
- *
- * - **which document a plain load resumes into.** A pointer, not a property of
- *   any document — the daemon has no equivalent because a URL always names one.
- * - **when a document was last edited.** The port's `DocumentEntry` carries no
- *   timestamp, and the daemon's own listing gets one from its store rather than
- *   its index. This is the browser's counterpart of that.
- *
- * Both are apps/web product concerns, so they live beside the port rather than
- * bending the contract around them.
- */
+// What `DocumentIndex` deliberately does not own, for browser mode.
+//
+// The port answers placement, identity, kind and name. Two things a user still
+// needs are not in it, and are not gaps in it:
+//
+// - **which document a plain load resumes into.** A pointer, not a property of
+//   any document — the daemon has no equivalent because a URL always names one.
+// - **when a document was last edited.** The port's `DocumentEntry` carries no
+//   timestamp, and the daemon's own listing gets one from its store rather than
+//   its index. This is the browser's counterpart of that.
+//
+// Both are apps/web product concerns, so they live beside the port rather than
+// bending the contract around them.
 
 /** Read only the envelope's timestamp field for each id, in one transaction. */
 async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<string, string>> {

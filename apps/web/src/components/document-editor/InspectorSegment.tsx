@@ -61,11 +61,6 @@ const GLYPHS = {
 } as const satisfies Record<InspectorKind, LucideIcon>
 
 /**
- * How each member says its count out loud. The wordings are the ones these
- * controls already carried, so a browser flow finding them by name keeps
- * finding them.
- */
-/**
  * Whether this member's count is a BACKLOG — things waiting on a person —
  * rather than a SIZE. The two are said differently ("N open" against
  * "(N)") and drawn differently (a backlog at nought shows nothing, because
@@ -81,6 +76,11 @@ function countIsBacklog(kind: InspectorKind): boolean {
   return kind === 'comments' || kind === 'proposals'
 }
 
+/**
+ * How each member says its count out loud. The wordings are the ones these
+ * controls already carried, so a browser flow finding them by name keeps
+ * finding them.
+ */
 function accessibleName(kind: InspectorKind, count: number | null | undefined): string {
   const label = INSPECTOR_CHROME[kind].label
   if (count === undefined || count === null) return label

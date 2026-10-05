@@ -19,6 +19,7 @@ import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
 import { loadThemeFont } from './widget/theme-font.js'
+import { toolErrorText } from './widget/tool-error-text.js'
 import { canvasViewCall, commentAddCall } from './widget/widget-tool-calls.js'
 
 declare global {
@@ -180,6 +181,18 @@ type OnValidResult = (
   style: SpatialRenderStyle | undefined,
 ) => void
 
+// What the person reads when a failure brings no reason of its own: a
+// rejected host call, or a result the server answered without text. Both
+// land on the comment control's alert line — the widget's one status line,
+// present whenever Refresh is, behind the same gate.
+const COMMENT_NOT_SENT = 'The comment could not be sent. Your text and spot are kept; try again.'
+const CANVAS_NOT_REFRESHED = 'The canvas could not be refreshed. This is the last copy that loaded.'
+
+/** The reason a result that did not apply gives, or `fallback` when it gives none. */
+function failureReason(result: unknown, fallback: string): string {
+  return (isErrorResult(result) ? toolErrorText(result) : undefined) ?? fallback
+}
+
 /** Counts applied results, so a late font load can tell whether it is stale. */
 let appliedGeneration = 0
 
@@ -188,10 +201,10 @@ function applyToolResult(
   container: HTMLElement,
   remount: (mount: () => CanvasViewerHandle) => void,
   onValidResult: OnValidResult,
-): void {
+): boolean {
   if (isErrorResult(payload)) {
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
-    return
+    return false
   }
   const { workspaceId, documentId, scene, references, threads, style, themeFont } =
     readCanvasViewResult(payload)
@@ -201,7 +214,7 @@ function applyToolResult(
     // keeps the current view on malformed payloads, which would otherwise
     // make a host sending the wrong shape look like a silent no-op.
     console.error('[whiteboard-widget] ignoring tool-result with invalid scene:', result.error)
-    return
+    return false
   }
   // References ride along with the scene: a file node pointing at a
   // markdown document renders that document's prose only if the server put
@@ -236,6 +249,7 @@ function applyToolResult(
       if (outcome === 'loaded' && generation === appliedGeneration) remount(mount)
     })
   }
+  return true
 }
 
 /**
@@ -342,13 +356,12 @@ async function mountFromHost(
       if (committed === undefined) return
       try {
         const result = await app.callServerTool(canvasViewCall(committed))
-        applyToolResult(result, container, remount, commitResult)
+        const applied = applyToolResult(result, container, remount, commitResult)
+        commentControl?.setError(applied ? undefined : failureReason(result, CANVAS_NOT_REFRESHED))
       } catch (err) {
-        // Network/host failure: the current view stays mounted (no remount
-        // was attempted) — nothing to recover here besides resetting the
-        // in-flight guard below. Logged so a failing host transport doesn't
-        // present as a dead button.
+        // Host failure: nothing was remounted, so the last view stays.
         console.error('[whiteboard-widget] refresh via host callServerTool failed:', err)
+        commentControl?.setError(CANVAS_NOT_REFRESHED)
       }
     }
 
@@ -392,7 +405,7 @@ async function mountFromHost(
       try {
         const result = await app.callServerTool(commentAddCall(committed, anchor, text))
         if (isErrorResult(result)) {
-          console.error('[whiteboard-widget] comment refused:', result)
+          commentControl?.setError(failureReason(result, COMMENT_NOT_SENT))
           return
         }
         commentControl?.clear()
@@ -402,6 +415,7 @@ async function mountFromHost(
         await performRefresh()
       } catch (err) {
         console.error('[whiteboard-widget] comment via host failed:', err)
+        commentControl?.setError(COMMENT_NOT_SENT)
       } finally {
         commentControl?.setBusy(false)
       }

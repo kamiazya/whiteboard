@@ -75,8 +75,10 @@ export type NodeResource = z.infer<typeof nodeResourceSchema>
  */
 export const NODE_LOCATION_MAX_CHARS = 8 * 1024
 
-const tooLong = (what: string) =>
-  `${what} is longer than the ${NODE_LOCATION_MAX_CHARS}-character limit`
+/** The location bound as every refusal of it ends, as `NODE_TEXT_LIMIT_PHRASE` is for a node's text. */
+export const NODE_LOCATION_LIMIT_PHRASE = `the ${NODE_LOCATION_MAX_CHARS}-character limit`
+
+const tooLong = (what: string) => `${what} is longer than ${NODE_LOCATION_LIMIT_PHRASE}`
 
 /**
  * A link's URL, a file's path and a file's subpath as a tool or route accepts

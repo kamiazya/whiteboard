@@ -1,7 +1,6 @@
 import {
   importWithinTextLimits,
   readWorkspaceDocuments,
-  type SyncTextBreach,
   unreadableWorkspaceNodes,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DOCUMENT_NAME_MAX_LENGTH, documentPathSchema } from '@kamiazya/whiteboard-model'
@@ -9,14 +8,10 @@ import type { Frontiers, LoroDoc } from 'loro-crdt'
 import { type CachedTarget, runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import {
-  CommentMessageTooLargeError,
   DocumentNameTooLongError,
-  LabelTooLargeError,
-  MarkdownBodyTooLargeError,
-  NodeLocationTooLargeError,
-  NodeTextTooLargeError,
   OffGrammarPathError,
   type SyncWriteRefusalError,
+  textBreachRefusal,
   UnreadableDocumentMetaError,
 } from './sync-write-refusals.js'
 
@@ -26,23 +21,6 @@ function refuse(target: CachedTarget, error: SyncWriteRefusalError): never {
   target.evict()
   log.warning('sync write refused', { ...target.fields, reason: error.message })
   throw error
-}
-
-/** The one refusal each way an update can break a text bound is answered with. */
-function breachRefusal(breach: SyncTextBreach): SyncWriteRefusalError {
-  switch (breach.shape) {
-    case 'node-text':
-      return new NodeTextTooLargeError(breach.nodeId, breach.chars, breach.container)
-    case 'node-location':
-      return new NodeLocationTooLargeError(breach.nodeId, breach.chars, breach.container)
-    case 'label':
-      return new LabelTooLargeError(breach.elementId, breach.chars, breach.container)
-    case 'comment-message':
-      return new CommentMessageTooLargeError(breach.messageId, breach.chars, breach.container)
-    case 'run':
-    case 'body':
-      return new MarkdownBodyTooLargeError(breach.shape, breach.chars, breach.container)
-  }
 }
 
 /** What a workspace record's tree says about its documents, as the placement checks compare it. */
@@ -106,9 +84,10 @@ function placementRefusal(
 }
 
 /**
- * Imports a client's update into a CACHED document unless it breaks the
- * markdown size limit, the node-text limit or, for a workspace record, what
- * the record's readers need of a node — in which case nothing of it is kept.
+ * Imports a client's update into a CACHED document unless it breaks a text
+ * bound (`SYNC_TEXT_BREACH_CODES` lists them) or, for a workspace record,
+ * what the record's readers need of a node — in which case nothing of it is
+ * kept, and the refusal is thrown as its `SyncWriteRefusalError`.
  *
  * What the update does to text is `importWithinTextLimits`'s judgement, the
  * one the browser keeper takes too; this adds what only the daemon's sync
@@ -134,7 +113,7 @@ export function importWithinSyncLimits(
     'importing an update into',
     () => importWithinTextLimits(doc, update),
   )
-  if (breach !== null) refuse(target, breachRefusal(breach))
+  if (breach !== null) refuse(target, textBreachRefusal(breach))
   if (!(options.workspaceRecord && touchesNodeMeta)) return
   const refusal = placementRefusal(doc, before, trapped)
   if (refusal !== null) refuse(target, refusal)

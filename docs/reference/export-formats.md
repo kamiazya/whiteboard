@@ -55,11 +55,13 @@ not:
   document, while a workspace with no documents yet takes it whole, since
   nothing is replayed there. The same `update` and `promote` refuse, with
   `400 {"error":"invalid_path"}`, an update or record that would put a document
-  at a path outside the path grammar; a document already at such a path can
-  still be moved to a valid one. The workspace document's `update` also
-  refuses, with `400 {"error":"unreadable_document_meta"}`, an update that
-  would leave a readable document with a kind, segment or id this server
-  cannot read — which would hide it and everything below it — and, with
+  at a path outside the path grammar or longer than 1,024 characters; a
+  document already at such a path can still be moved to a valid one. The
+  workspace document's `update` also refuses, with
+  `400 {"error":"unreadable_document_meta"}`, an update that would leave a
+  readable document or folder with meta this server cannot read — a document's
+  kind, segment, id or timestamps, or any key on a folder besides its segment —
+  which would hide it and everything below it — and, with
   `400 {"error":"document_name_too_long"}`, one that gives a document a name
   longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened.
@@ -108,6 +110,16 @@ grows one past it with `413` and `{"error":"node_location_too_large"}`, storing
 nothing; `promote` names the canvas that holds it. A browser-kept workspace
 refuses the same change the way it refuses an over-long node. A URL or path
 stored longer before the limit still reads, and can still be shortened.
+
+A text anchor's `prefix` and `suffix` — the context either side of a quoted
+passage — each carry at most **32 characters**. They tell one occurrence of a
+repeated passage from another, and finding the passage compares them against
+every occurrence, so their length is paid once per occurrence. `wb_thread_edit`
+refuses a longer one on `thread.add`, and `wb_body_edit` on `body.replace`,
+with "a text anchor's context is longer than the 32-character limit"; keep the
+characters nearest the passage. The editor writes 16. An anchor stored with a
+longer context still reads, and only its 32 characters nearest the passage
+count toward placing it.
 
 A document's display name carries at most **200 characters**, as a workspace
 name does, however it is written: the `name` of `wb_workspace_edit`

@@ -134,17 +134,6 @@ function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
 }
 
 /**
- * Copies every surviving `documents` row into the `DocumentIndex` stores, then
- * drops `documents`.
- *
- * The workspace rows come from the documents themselves rather than from a
- * hardcoded `'local'`: this store never held more than one workspace, but
- * reading it from the data is the version that stays correct if it ever did.
- * The literal `'local'` key below is still written unconditionally on every
- * upgrade — `rekeyBrowserWorkspace` (v13->v14, further down) is what absorbs
- * it onto the canonical id the browser UI actually opens.
- */
-/**
  * Moves every Loro content record into the `DocumentStore` port's store, and
  * its `updatedAt` into the content-timestamp store, then drops the old one.
  *
@@ -426,6 +415,17 @@ export function mintBrowserWorkspaceSegment(tx: IDBTransaction, done: () => void
   }
 }
 
+/**
+ * Copies every surviving `documents` row into the `DocumentIndex` stores, then
+ * drops `documents`.
+ *
+ * The workspace rows come from the documents themselves rather than from a
+ * hardcoded `'local'`: this store never held more than one workspace, but
+ * reading it from the data is the version that stays correct if it ever did.
+ * The literal `'local'` key below is still written unconditionally on every
+ * upgrade — `rekeyBrowserWorkspace` (v13->v14, further down) is what absorbs
+ * it onto the canonical id the browser UI actually opens.
+ */
 function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
   const documents = tx.objectStore('documents')
   const workspaces = tx.objectStore(WORKSPACES_STORE)

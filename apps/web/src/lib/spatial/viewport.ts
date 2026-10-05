@@ -163,12 +163,6 @@ export function frameViewport(
   }
 }
 
-/**
- * The viewport that pans (keeping zoom) so `box` sits centered on screen —
- * only when it does not already fit. Undefined is the no-op signal:
- * "already visible" (nothing to pan) or `containerSize: null` (root not yet
- * measured, nothing to pan against).
- */
 /** Breathing room left between a revealed box and the edge that hid it. */
 export const PAN_MARGIN_PX = 12
 
@@ -206,6 +200,9 @@ function shiftToReveal(start: number, end: number, min: number, max: number): nu
  * note is added, so the thing just made appears in the middle while
  * everything already on the canvas walks off under the hand of the person
  * who only added one node.
+ *
+ * Undefined is the no-op signal: "already visible" (nothing to pan) or
+ * `containerSize: null` (root not yet measured, nothing to pan against).
  */
 export function panToShowTarget(
   box: BBoxLike,

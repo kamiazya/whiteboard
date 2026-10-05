@@ -72,6 +72,38 @@ export function stdioProxyRootOf(entry) {
 }
 
 /**
+ * The main checkout's registration when it is this script's stdio proxy and the script it names
+ * is gone — what a worktree removed without the sweep leaves behind. The CLI does not check the
+ * path, so every session in the repository then starts without the whiteboard tools and nothing
+ * says why. Null when the slot is empty, not a proxy registration, or names a script that exists.
+ *
+ * The remedy is returned as commands rather than applied: it rewrites the user's ~/.claude.json,
+ * which is theirs to change.
+ *
+ * @param {{ config: unknown, mainRoot: string, pathExists: (path: string) => boolean, name?: string }} input
+ * @returns {{ script: string, message: string } | null}
+ */
+export function danglingMainRegistration({ config, mainRoot, pathExists, name = 'whiteboard' }) {
+  const projects = isPlainObject(config) && isPlainObject(config.projects) ? config.projects : {}
+  const key = Object.keys(projects).find(
+    (projectPath) => resolve(projectPath) === resolve(mainRoot),
+  )
+  const entry = key === undefined ? undefined : projects[key]?.mcpServers?.[name]
+  if (stdioProxyRootOf(entry) === null) return null
+  const script = resolve(String(entry.args[0]))
+  if (pathExists(script)) return null
+  return {
+    script,
+    message:
+      `"${name}" is registered to ${script}, which does not exist (a worktree removed without ` +
+      '`node .claude/scripts/cleanup-worktrees.mjs` leaves exactly this), so every Claude Code ' +
+      `session in this repository starts without the whiteboard tools. Register the main checkout ` +
+      `again from ${resolve(mainRoot)} — it rewrites ~/.claude.json, so it is left to you:\n` +
+      `  claude mcp remove ${name} -s local\n  ${buildReRegisterCommand(mainRoot)}`,
+  }
+}
+
+/**
  * Builds the argv for `claude mcp add`: everything after `--` is the stdio
  * server's own command line.
  *

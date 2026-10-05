@@ -486,6 +486,65 @@ test('main --sweep: a worktree-keyed removal leaves the main slot alone, so it p
   assert.ok(!logs.some((line) => /claude mcp add/.test(line)), JSON.stringify(logs))
 })
 
+// A worktree removed without the sweep leaves the repository's one slot naming a proxy that no
+// longer exists. Wiring the next worktree used to read that slot as "already registered" and say
+// so, while every session in the repository started with no whiteboard tools at all.
+function wireWithMainSlot({ mainEntry, pathExists }) {
+  const mainRoot = resolve('/repo')
+  const logs = []
+  let addSpawns = 0
+  return main({
+    argv: [resolve('/repo/.claude/worktrees/wt-a')],
+    isMainCheckoutOverride: false,
+    claudeCliAvailableOverride: true,
+    mainCheckoutRootOverride: mainRoot,
+    pathExists,
+    spawn: (_cmd, args) => {
+      if (args?.includes('add')) addSpawns += 1
+      return fakeSpawnOk()
+    },
+    readConfig: () => ({ projects: { [mainRoot]: { mcpServers: { whiteboard: mainEntry } } } }),
+    writeConfig: () => {
+      throw new Error('wiring must never rewrite ~/.claude.json itself')
+    },
+    log: (msg) => logs.push(msg),
+  }).then(() => ({ logs, addSpawns, mainRoot }))
+}
+
+test("main: a main slot naming a proxy that no longer exists prints the re-register command, not 'already registers'", async () => {
+  const gone = resolve('/repo/.claude/worktrees/gone')
+  const { logs, addSpawns, mainRoot } = await wireWithMainSlot({
+    mainEntry: stdioEntry(gone),
+    pathExists: (path) => !path.startsWith(gone),
+  })
+
+  assert.equal(addSpawns, 0, 'the slot is filled, so an add would fail with "already exists"')
+  assert.ok(!logs.some((line) => /already registers/.test(line)), JSON.stringify(logs))
+  const note = logs.find((line) => line.includes(join(gone, PROXY_SUFFIX)))
+  assert.ok(note, JSON.stringify(logs))
+  assert.ok(note.includes('claude mcp remove whiteboard -s local'), note)
+  assert.ok(
+    note.includes(
+      `claude mcp add --scope local --transport stdio whiteboard -- node "${join(mainRoot, PROXY_SUFFIX)}"`,
+    ),
+    note,
+  )
+})
+
+test("main: a main slot whose proxy exists is still left alone as 'already registers'", async () => {
+  const { logs, addSpawns } = await wireWithMainSlot({
+    mainEntry: stdioEntry(resolve('/repo')),
+    pathExists: () => true,
+  })
+
+  assert.equal(addSpawns, 0)
+  assert.ok(
+    logs.some((line) => /already registers/.test(line)),
+    JSON.stringify(logs),
+  )
+  assert.ok(!logs.some((line) => /claude mcp remove/.test(line)), JSON.stringify(logs))
+})
+
 // Both exit before any config or git access, but HOME is scratch anyway: this suite must never be
 // able to reach the developer's real ~/.claude.json.
 test('the CLI answers --help, and refuses a mistyped option or a surplus argument, before wiring or sweeping anything', () => {

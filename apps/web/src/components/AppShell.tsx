@@ -129,26 +129,6 @@ export interface AppShellProps {
 }
 
 /**
- * The app-level chrome, deliberately minimal: the signature mark and the
- * alpha honesty chip on the left, fullscreen and the settings gear (+
- * attention dot) on the right. Nothing else ever moves in here — context
- * and tools stay in the page's own surface, always visible (see DESIGN.md's
- * shell rule). Pages mount this shared component instead of owning any
- * brand, connection, fullscreen or settings chrome themselves.
- *
- * Fullscreen is the shell's because its subject is the APP — how much of
- * the screen it gets — which is the one thing that does not change when a
- * document opens. In fullscreen this row steps aside (the document's top
- * bar does too, reading the same state), leaving one floating way back out
- * beside Escape.
- *
- * The mark is the row's SUBJECT and its one state carrier. Left of the
- * spacer is "what you are working in"; right of it is the app and its own
- * state. There is no connection chip — a workspace's keeper and its
- * session are things about the workspace, so they belong on the thing that
- * names it rather than on a second widget at the other end of the row.
- */
-/**
  * The way back out of fullscreen.
  *
  * Both chrome rows are gone — the extra space is what fullscreen is
@@ -252,7 +232,28 @@ export function AppShell(props: AppShellProps) {
   return <ShellBar {...props} fullscreen={fullscreen} toggleRef={toggleRef} />
 }
 
-/** The chrome row: the mark, the alpha badge, and the two controls. */
+/**
+ * The chrome row: the mark, the alpha badge, and the two controls.
+ *
+ * The app-level chrome, deliberately minimal: the signature mark and the
+ * alpha honesty chip on the left, fullscreen and the settings gear (+
+ * attention dot) on the right. Nothing else ever moves in here — context
+ * and tools stay in the page's own surface, always visible (see DESIGN.md's
+ * shell rule). Pages mount this shared component instead of owning any
+ * brand, connection, fullscreen or settings chrome themselves.
+ *
+ * Fullscreen is the shell's because its subject is the APP — how much of
+ * the screen it gets — which is the one thing that does not change when a
+ * document opens. In fullscreen this row steps aside (the document's top
+ * bar does too, reading the same state), leaving one floating way back out
+ * beside Escape.
+ *
+ * The mark is the row's SUBJECT and its one state carrier. Left of the
+ * spacer is "what you are working in"; right of it is the app and its own
+ * state. There is no connection chip — a workspace's keeper and its
+ * session are things about the workspace, so they belong on the thing that
+ * names it rather than on a second widget at the other end of the row.
+ */
 function ShellBar({
   daemon,
   onWorkInBrowser,

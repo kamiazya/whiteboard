@@ -189,8 +189,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // over by the factory (`function-size-budget.test.ts` carries the same path
   // for `createDocumentSyncSession`). Raised by nine for the refused-write
   // handler and its dep: a backend message the session answers is a line of
-  // the handler table, and the recovery itself lives in the ledger.
-  'apps/web/src/lib/document-sync-session.ts': 1188,
+  // the handler table, and the recovery itself lives in the ledger. Raised by
+  // ten for `getDocumentName`, the record's name for the open document.
+  'apps/web/src/lib/document-sync-session.ts': 1198,
   // The markdown typesetter: one block per mdast kind, the inline run walker
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
@@ -208,8 +209,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // — measured before cutting, the search reads all three and none reads the
   // search, so the vocabulary went first and no module imports the file it
   // left. What remains over budget is the search's own, and the next shrink
-  // is the trial scorer as a module of its own.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1045,
+  // is the trial scorer as a module of its own. The anchor contract's doc sits
+  // here too, on `assignEdgeAnchors`, the export a reader hovers.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1063,
   // The gesture REDUCER: every pointer phase's decision for every tool and
   // every kind of element, each arm carrying the reason it is where it is.
   // What has already left: the per-kind hit-tests (`element-pick.ts`,

@@ -1,18 +1,6 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 
 /**
- * Markdown text cannot distinguish "explicitly null" from "absent" for any
- * optional field (title/alt/label/lang/meta), and a real remark
- * stringify->parse round trip always resolves `list.ordered`/`.spread` and
- * `listItem.checked` to concrete values rather than leaving them `undefined`
- * (mdast-util-from-markdown infers them from the marker/blank-line syntax it
- * sees). `normalizeMdast` canonicalizes exactly those representational
- * degrees of freedom so `normalizeMdast(parse(stringify(x))) ===
- * normalizeMdast(x)` compares semantic content, not incidental encoding
- * choices markdown has no room to preserve.
- */
-
-/**
  * The recursive walk below touches heterogeneous field values (child node
  * arrays, but also primitive fields like a table's `align` entries) whose
  * shape isn't known until runtime, so it operates on `unknown` and narrows
@@ -101,6 +89,17 @@ function normalizeNode(node: unknown): unknown {
   return normalized
 }
 
+/**
+ * Markdown text cannot distinguish "explicitly null" from "absent" for any
+ * optional field (title/alt/label/lang/meta), and a real remark
+ * stringify->parse round trip always resolves `list.ordered`/`.spread` and
+ * `listItem.checked` to concrete values rather than leaving them `undefined`
+ * (mdast-util-from-markdown infers them from the marker/blank-line syntax it
+ * sees). `normalizeMdast` canonicalizes exactly those representational
+ * degrees of freedom so `normalizeMdast(parse(stringify(x))) ===
+ * normalizeMdast(x)` compares semantic content, not incidental encoding
+ * choices markdown has no room to preserve.
+ */
 export function normalizeMdast(root: MdastRoot): MdastRoot {
   return normalizeNode(root) as MdastRoot
 }

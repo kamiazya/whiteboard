@@ -211,12 +211,6 @@ async function route(
 }
 
 /**
- * The `daemon` family. Each subcommand is read-only about the filesystem —
- * the data directory is RESOLVED here and never probed for writability,
- * because mkdir and write probes belong to the daemon's startup path, not to
- * a command an operator runs to ask a question.
- */
-/**
  * A refusal thrown from below — a daemon record this build cannot read or
  * interpret while its process may be running — is an answer for a person:
  * one stderr line and exit 1, never a stack trace, and stdout stays clean for
@@ -230,6 +224,12 @@ function reportDaemonRefusal(subcommand: DaemonSubcommand, err: unknown): number
   return 1
 }
 
+/**
+ * The `daemon` family. Each subcommand is read-only about the filesystem —
+ * the data directory is RESOLVED here and never probed for writability,
+ * because mkdir and write probes belong to the daemon's startup path, not to
+ * a command an operator runs to ask a question.
+ */
 async function dispatchDaemon(
   subcommand: DaemonSubcommand,
   rest: readonly string[],

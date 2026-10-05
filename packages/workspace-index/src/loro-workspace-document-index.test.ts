@@ -8,7 +8,13 @@
  * suite says so rather than a comment claiming it does.
  */
 
-import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  readMarkdownBody,
+  resolveWorkspaceDocument,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { BlobStore, RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
@@ -19,6 +25,7 @@ import {
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
+  describeDocumentDuplicatesConformance,
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
@@ -173,6 +180,37 @@ describe('LoroWorkspaceDocumentIndex trash', () => {
     return {
       index: new LoroWorkspaceDocumentIndex(docs, blobs, docs),
       evacuatedBlobCount: async () => blobs.size(),
+      dispose: async () => {},
+    }
+  })
+})
+
+/** A document's body by path, read and written through the record the index keeps. */
+function markdownContentSeam(docs: WorkspaceDocs) {
+  const at = async (workspaceId: string, path: string) => {
+    const doc = await docs.open(workspaceId)
+    const entry = doc === null ? null : resolveWorkspaceDocument(doc, path)
+    if (doc === null || entry === null) throw new Error(`no document at ${path}`)
+    return { doc, containers: documentContainers(doc, entry.documentId) }
+  }
+  return {
+    write: async (workspaceId: string, path: string, marker: string) => {
+      const { doc, containers } = await at(workspaceId, path)
+      writeMarkdownBody(containers, marker)
+      doc.commit()
+      await docs.save(workspaceId, doc)
+    },
+    read: async (workspaceId: string, path: string) =>
+      readMarkdownBody((await at(workspaceId, path)).containers),
+  }
+}
+
+describe('LoroWorkspaceDocumentIndex duplicates', () => {
+  describeDocumentDuplicatesConformance(async () => {
+    const docs = inMemoryWorkspaceDocs()
+    return {
+      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
+      content: markdownContentSeam(docs),
       dispose: async () => {},
     }
   })

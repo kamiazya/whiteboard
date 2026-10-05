@@ -43,6 +43,13 @@ async function answeringWriteRefusal(
 // Translation-only adapters (ADR-0018): the reads go through the
 // LiveDocuments seam, and the update path — lock bracket, import, persist,
 // evict-on-failure — lives in server-core's applyDocumentUpdate.
+//
+// No app surface writes through the per-document update: the editors sync the
+// workspace record, and a duplicate is its own route. It stays as the one HTTP
+// way to write ONE document's content by path, which the packaged server-mode
+// backup smoke, the sync-update cost measure and the daemon's own route tests
+// drive. Retiring it means moving those onto the workspace-document route
+// first, together with `sse-stream-hub`'s per-document `canvasDocUrl` branch.
 export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
   const deps = options.serverDeps

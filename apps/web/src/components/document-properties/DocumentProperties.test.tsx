@@ -319,6 +319,15 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   })
 })
 
+/** The text a screen reader reads as `element`'s description, through its `aria-describedby`. */
+function describedBy(element: HTMLElement): string {
+  return (element.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .filter((id) => id !== '')
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ')
+}
+
 describe('DocumentProperties title bound and refusal', () => {
   it('holds the title to the bound every keeper enforces on a name', () => {
     render(<DocumentProperties {...titleProps()} />)
@@ -340,6 +349,7 @@ describe('DocumentProperties title bound and refusal', () => {
       'You may not rename documents in this workspace',
     )
     expect(box.getAttribute('aria-invalid')).toBe('true')
+    expect(describedBy(box)).toBe('You may not rename documents in this workspace')
     expect(textboxValue(/title/i)).toBe('Release plan')
   })
 
@@ -357,6 +367,7 @@ describe('DocumentProperties title bound and refusal', () => {
       fireEvent.change(box, { target: { value: 'Plan' } })
     })
     expect(screen.queryByRole('alert')).toBeNull()
+    expect(box.hasAttribute('aria-describedby')).toBe(false)
   })
 
   it('answers with the outcome of the LATEST keystroke when an earlier one settles last', async () => {

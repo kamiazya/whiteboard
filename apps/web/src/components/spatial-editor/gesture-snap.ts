@@ -41,18 +41,6 @@ export interface SnapGestureResult {
 }
 
 /**
- * Nudges the POINTER, not the emitted command, so preview and commit see
- * the same value: the reducer derives both from `point`, and adjusting
- * only one of them would let the box render in one place and land in
- * another.
- *
- * Serves both gestures, but they snap DIFFERENT things: a move snaps the
- * box (three lines per axis — edge, centre, edge), a resize snaps only the
- * edge under the handle. Feeding a resize the move candidates would let
- * the box's own centre or far edge pull the handle, which reads as the
- * handle fighting the pointer.
- */
-/**
  * Snapping a RESIZE, which snaps the travelling EDGES rather than the box.
  *
  * Only the node being resized is excluded from the targets — nothing else
@@ -93,6 +81,18 @@ function snapResize(
   return { point, guides }
 }
 
+/**
+ * Nudges the POINTER, not the emitted command, so preview and commit see
+ * the same value: the reducer derives both from `point`, and adjusting
+ * only one of them would let the box render in one place and land in
+ * another.
+ *
+ * Serves both gestures, but they snap DIFFERENT things: a move snaps the
+ * box (three lines per axis — edge, centre, edge), a resize snaps only the
+ * edge under the handle. Feeding a resize the move candidates would let
+ * the box's own centre or far edge pull the handle, which reads as the
+ * handle fighting the pointer.
+ */
 export function snapGesturePoint(
   raw: Point,
   suspended: boolean,

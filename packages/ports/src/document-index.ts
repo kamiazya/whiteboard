@@ -275,13 +275,6 @@ export function compareDocumentPaths(left: string, right: string): number {
 }
 
 /**
- * Thrown when an operation names a workspace that does not exist.
- *
- * Workspaces never materialize implicitly here. A typo'd or hallucinated
- * workspaceId is otherwise indistinguishable from a new one, and the caller
- * gets a workspace nobody asked for with its data quietly inside.
- */
-/**
  * Cross-realm-safe guard for `WorkspaceNotFoundError`. `instanceof` alone is
  * a trap here: this class reaches a consumer through more than one module
  * graph (a bundler inlining one package while externalizing another, vitest
@@ -298,6 +291,13 @@ export function isWorkspaceNotFoundError(error: unknown): error is WorkspaceNotF
   )
 }
 
+/**
+ * Thrown when an operation names a workspace that does not exist.
+ *
+ * Workspaces never materialize implicitly here. A typo'd or hallucinated
+ * workspaceId is otherwise indistinguishable from a new one, and the caller
+ * gets a workspace nobody asked for with its data quietly inside.
+ */
 export class WorkspaceNotFoundError extends Error {
   constructor(readonly workspaceId: string) {
     super(`Workspace not found: "${workspaceId}". Create it before adding documents to it.`)

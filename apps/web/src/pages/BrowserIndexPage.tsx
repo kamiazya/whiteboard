@@ -109,13 +109,6 @@ async function deleteEach(
 }
 
 /**
- * What this page LISTS, and the reads that keep it current: the documents,
- * the trash count the onboarding decision consults, the workspace's own name,
- * and the files source the panel reads through. Held together because they
- * re-read together — on a workspace switch, on this page's own writes, and on
- * a Back that returns to this mount.
- */
-/**
  * The workspace's own display NAME. Its own chain, deliberately not folded
  * into the documents load: a name that will not load leaves the heading on
  * the handle, which is still true, and must not surface as "Failed to load
@@ -256,6 +249,13 @@ interface BrowserIndexListingInput {
   revision: BrowserIndexPageProps['revision']
 }
 
+/**
+ * What this page LISTS, and the reads that keep it current: the documents,
+ * the trash count the onboarding decision consults, the workspace's own name,
+ * and the files source the panel reads through. Held together because they
+ * re-read together — on a workspace switch, on this page's own writes, and on
+ * a Back that returns to this mount.
+ */
 function useBrowserIndexListing(props: BrowserIndexListingInput) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
   // Consulted only for the onboarding decision below: a workspace whose list

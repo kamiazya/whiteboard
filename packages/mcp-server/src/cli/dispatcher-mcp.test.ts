@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
+import { setStderrLogDestination } from '../server/log.js'
 import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 
 // Pin the runtime contract for `whiteboard mcp` at the dispatcher
@@ -41,6 +42,9 @@ async function runMcpAndCapture(
       stderrChunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
       return true
     })
+  // As in `captureStdio`: a record the logger writes is part of what this
+  // command puts on stderr, so the suite's mute must not hide it here.
+  const restoreStderrLog = setStderrLogDestination(true)
   try {
     // Fire-and-forget: the dispatcher's never-resolving branch keeps
     // the promise pending forever on the happy path, but anything
@@ -54,6 +58,7 @@ async function runMcpAndCapture(
     await new Promise((resolve) => setTimeout(resolve, 20))
     return { stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') }
   } finally {
+    restoreStderrLog()
     writeStdout.mockRestore()
     writeStderr.mockRestore()
   }

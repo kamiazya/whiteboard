@@ -45,7 +45,12 @@ export {
 } from './loro-bridge.js'
 export { MARKDOWN_BODY_NODE_ID, readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
-export { seedNameFromTitle, seedNamesFromTitles } from './name-from-title.js'
+export {
+  readWorkspaceDocumentName,
+  seedNameFromTitle,
+  seedNamesFromTitles,
+  writeDocumentContentAndName,
+} from './name-from-title.js'
 export {
   readProposals,
   setProposedChangeStatus,
@@ -64,6 +69,7 @@ export {
   type PassageRange,
   readThreadMarks,
 } from './thread-marks.js'
+export { duplicateWorkspaceDocument } from './workspace-duplicate.js'
 export {
   adoptWorkspaceDocument,
   type CreateWorkspaceDocumentInput,

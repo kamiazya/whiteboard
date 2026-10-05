@@ -1,16 +1,14 @@
 import { z } from 'zod'
 
-/**
- * OKF v0.2's trust family (SPEC §5.2): `generated` records how the current
- * content was produced, `verified` records who or what has confirmed it.
- * They are deliberately independent — content can change without being
- * re-confirmed, and a fact can be re-confirmed without being regenerated.
- *
- * These are ROOT frontmatter keys OKF itself defines, not extension facets
- * (ADR-0013's `{namespace}.{name}/v{n}` bucket) and not core facets: they
- * carry their own storage bucket precisely so a client rewriting its own
- * tags cannot delete a stamp it never wrote. See ADR-0016.
- */
+// OKF v0.2's trust family (SPEC §5.2): `generated` records how the current
+// content was produced, `verified` records who or what has confirmed it.
+// They are deliberately independent — content can change without being
+// re-confirmed, and a fact can be re-confirmed without being regenerated.
+//
+// These are ROOT frontmatter keys OKF itself defines, not extension facets
+// (ADR-0013's `{namespace}.{name}/v{n}` bucket) and not core facets: they
+// carry their own storage bucket precisely so a client rewriting its own
+// tags cannot delete a stamp it never wrote. See ADR-0016.
 
 /**
  * OKF §7's actor convention: `<producer>/<version>` for an agent or tool,

@@ -22,6 +22,13 @@ export interface RenameDocument {
   /** Opens the dialog on `entry`, clearing whatever refused the last attempt. */
   readonly open: (entry: WorkspaceDocumentEntry) => void
   readonly cancel: () => void
+  /**
+   * Apply whatever the rename dialog changed: the name through the source's
+   * workspace-side setter, the path through the same move the panel already
+   * performs. Both, in that order, when both changed — a failed move then
+   * leaves the new name applied, which is honest: the dialog stays open on
+   * the server's refusal and the field still shows what was typed.
+   */
   readonly submit: (
     entry: WorkspaceDocumentEntry,
     name: string | undefined,

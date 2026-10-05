@@ -39,21 +39,14 @@ const log = getLogger('canvas-edit')
 export { canvasEditInputSchema } from './canvas-edit-ops.js'
 export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.js'
 
-/**
- * One human-readable line for the toast a browser shows. Counted from the
- * OPS rather than from `touched`, because "added 3 nodes" and "moved 3
- * nodes" are the same set of ids and a human needs to know which happened.
- */
-/**
- * What a batch needs is decided from its OPS, and each of these is resolved
- * only when some op asks for it.
- *
- * This is the hottest write tool there is: the overwhelming majority of
- * batches move boxes and draw lines, and none of them should pay for a
- * vocabulary or a measurer they never mention. Inlined in `execute` the three
- * lazy resolutions read as incidental conditions; named, each carries the
- * reason it is lazy beside the predicate that decides it.
- */
+// What a batch needs is decided from its OPS, and each of these is resolved
+// only when some op asks for it.
+//
+// This is the hottest write tool there is: the overwhelming majority of
+// batches move boxes and draw lines, and none of them should pay for a
+// vocabulary or a measurer they never mention. Inlined in `execute` the three
+// lazy resolutions read as incidental conditions; named, each carries the
+// reason it is lazy beside the predicate that decides it.
 
 /**
  * The facets buckets a batch's ops write. Locks, tidy and comments carry none,
@@ -344,6 +337,11 @@ const SUMMARY_ORDER: readonly (readonly [SummaryBucket | 'locked' | 'unlocked', 
   ['resolved', 'resolved'],
 ]
 
+/**
+ * One human-readable line for the toast a browser shows. Counted from the
+ * OPS rather than from `touched`, because "added 3 nodes" and "moved 3
+ * nodes" are the same set of ids and a human needs to know which happened.
+ */
 function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
   const counts = new Map<string, number>()
   for (const op of ops) {

@@ -19,6 +19,7 @@ import {
   documentContainers,
   projectWorkspaceDocument,
   readSpatialCanvas,
+  readWorkspaceDocumentName,
   resolveWorkspaceDocumentById,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -206,6 +207,42 @@ describe('BrowserBackend', () => {
     await typed('# Weekly review\n\nNotes, edited.')
 
     expect(await nameNow()).toBe('Weekly')
+  })
+
+  // The same rule while the note stays open: the rename is written by the
+  // index, so the copy judging the next heading has to hear about it first.
+  it('keeps a name chosen while the note is open over a heading typed after it', async () => {
+    const handlers = makeHandlers()
+    const backend = new BrowserBackend({ documentId: ID_A, path: 'untitled', kind: 'markdown' })
+    await connectAndWait(backend, handlers)
+    const session = new LoroDoc()
+    session.import(deliveredSnapshot(handlers))
+    vi.mocked(handlers.onRemoteUpdate).mockImplementation((bytes) => session.import(bytes))
+    const type = async (body: string) => {
+      const from = session.version()
+      writeMarkdownBody(documentContainers(session, ID_A), body)
+      await backend.pushLocalUpdate(session.export({ mode: 'update', from }))
+    }
+    const index = new FoldingBrowserIndex()
+    const nameNow = async () =>
+      (await index.resolveDocumentById({ workspaceId: getBrowserWorkspaceId(), documentId: ID_A }))
+        ?.name
+    await type('# Weekly review\n')
+    expect(await nameNow()).toBe('Weekly review')
+
+    await index.setDocumentName({
+      workspaceId: getBrowserWorkspaceId(),
+      documentId: ID_A,
+      name: 'Weekly',
+    })
+    // The session holds the rename too, which is what an open title reads.
+    await vi.waitFor(() => expect(readWorkspaceDocumentName(session, ID_A)).toBe('Weekly'), {
+      timeout: WAIT_TIMEOUT,
+    })
+    await type('# Weekly review, edited\n')
+
+    expect(await nameNow()).toBe('Weekly')
+    backend.disconnect()
   })
 
   it('a readable legacy per-document record is folded in and served from the tree', async () => {

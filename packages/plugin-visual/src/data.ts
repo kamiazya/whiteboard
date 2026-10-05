@@ -65,6 +65,27 @@ export type VisualShapeFacet = z.infer<typeof visualShapeFacetSchema>
 export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
 
 /**
+ * `visual.ink/v0` — which strokes are ONE thing.
+ *
+ * A handwritten character is several strokes and a person means one mark by
+ * them: they select together, move together and are deleted together. The
+ * model has no container for that — a Group is a NODE holding nodes, and a
+ * stroke is a line — so the membership is written on each line instead, as
+ * the id of the group it belongs to.
+ *
+ * An id rather than a nesting, because strokes arrive one at a time: the
+ * writer of the second stroke knows which group it is joining and nothing
+ * has to be rewritten. Lines sharing an id are one object; a line carrying
+ * none is one object by itself, which is what ink from an import or an
+ * agent's write is.
+ */
+const visualInkFacetSchema = z.object({
+  group: z.string().min(1),
+})
+
+export const VISUAL_INK_KEY = 'visual.ink/v0'
+
+/**
  * `visual.axes/v0` — which of its own facets a canvas treats as SEMANTIC
  * AXES, so a reader can tell a distinction it means from a distinction it
  * merely draws.
@@ -86,27 +107,6 @@ export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
  * disabled, and losing the whole declaration to that would cost more than
  * the stray key does. A key no box carries simply contributes no partition.
  */
-/**
- * `visual.ink/v0` — which strokes are ONE thing.
- *
- * A handwritten character is several strokes and a person means one mark by
- * them: they select together, move together and are deleted together. The
- * model has no container for that — a Group is a NODE holding nodes, and a
- * stroke is a line — so the membership is written on each line instead, as
- * the id of the group it belongs to.
- *
- * An id rather than a nesting, because strokes arrive one at a time: the
- * writer of the second stroke knows which group it is joining and nothing
- * has to be rewritten. Lines sharing an id are one object; a line carrying
- * none is one object by itself, which is what ink from an import or an
- * agent's write is.
- */
-const visualInkFacetSchema = z.object({
-  group: z.string().min(1),
-})
-
-export const VISUAL_INK_KEY = 'visual.ink/v0'
-
 const visualAxesFacetSchema = z.object({
   axes: z.array(z.string().regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"')),
 })

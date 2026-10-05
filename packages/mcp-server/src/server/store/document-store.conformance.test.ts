@@ -19,6 +19,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import {
+  describeDocumentDuplicatesConformance,
   describeDocumentIndexConformance,
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
@@ -97,6 +98,18 @@ async function makeProductionIndex() {
   }
 }
 
+/** A document's body through the live-document seam every daemon route reads and saves by. */
+const liveMarkdownContent = {
+  async write(workspaceId: string, path: string, marker: string): Promise<void> {
+    const doc = await getDoc(workspaceId, path)
+    writeMarkdownBody(doc, marker)
+    await saveDocument(workspaceId, path, doc, { kind: 'markdown', overwrite: true })
+  },
+  async read(workspaceId: string, path: string): Promise<string> {
+    return readMarkdownBody(await getDoc(workspaceId, path))
+  },
+}
+
 /** Every file under the tenant's blob root: the trash suite trashes documents only, so each is an evacuation. */
 async function blobFileCount(): Promise<number> {
   try {
@@ -116,6 +129,30 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   describeDocumentTrashConformance(async () => {
     const { index, dispose } = await makeProductionIndex()
     return { index, dispose, evacuatedBlobCount: blobFileCount }
+  })
+  describeDocumentDuplicatesConformance(async () => {
+    const { index, dispose } = await makeProductionIndex()
+    return { index, dispose, content: liveMarkdownContent }
+  })
+
+  // The doc cache is keyed by path too, and a read lazily caches an empty
+  // document for a path nothing holds — so a copy landing where somebody had
+  // looked would be served as that empty phantom.
+  it('serves a copy as its content even after its path was read while empty', async () => {
+    const { index, dispose } = await makeProductionIndex()
+    try {
+      const workspaceId = 'ws-duplicate-phantom'
+      await index.createWorkspace({ workspaceId })
+      await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
+      await liveMarkdownContent.write(workspaceId, 'note', 'the source')
+      expect(readMarkdownBody(await getDoc(workspaceId, 'note-copy'))).toBe('')
+
+      await index.duplicateDocument({ workspaceId, path: 'note' })
+
+      await expect(liveMarkdownContent.read(workspaceId, 'note-copy')).resolves.toBe('the source')
+    } finally {
+      await dispose()
+    }
   })
 
   // The doc cache is keyed by path, so the document a delete leaves behind in

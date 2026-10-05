@@ -2,6 +2,7 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  SYNC_TEXT_BREACH_CODES,
   writeCommentThread,
   writeMarkdownBody,
   writeSpatialEdge,
@@ -10,6 +11,7 @@ import {
 import {
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
+  MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
@@ -267,15 +269,30 @@ describe('promoteWorkspace', () => {
   })
 
   /**
-   * The merge sees only a node, an element or a message by its key; the
-   * promoted record is what can say which canvas holds it, and a person
-   * fixing the record needs the canvas, not a key they never see.
+   * The merge sees only a container and a key; the promoted record is what
+   * can say which document holds it, and a person fixing the record needs
+   * the document, not a key they never see. One case per breach shape, keyed
+   * by the table every keeper answers them from, so a shape added there
+   * without a case here fails to compile.
    */
-  it.each([
-    {
-      bound: "a node's text",
-      code: 'node_text_too_large',
-      write: (board: ReturnType<typeof documentContainers>) =>
+  type Board = ReturnType<typeof documentContainers>
+  const breachCases = {
+    run: {
+      at: 'notes/roadmap',
+      write: (doc: Board) => doc.getText('body').insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
+    },
+    body: {
+      at: 'notes/roadmap',
+      // Pieces that never join into one run (each lands before the last),
+      // together past the limit; many short ones keep the replay cheap.
+      write: (doc: Board) => {
+        const piece = 'x'.repeat(MARKDOWN_MAX_CHARS / 16 + 1)
+        for (let i = 0; i < 16; i += 1) doc.getText('body').insert(0, piece)
+      },
+    },
+    'node-text': {
+      at: 'sketch',
+      write: (board: Board) =>
         writeSpatialNode(
           board,
           textNode({
@@ -288,10 +305,9 @@ describe('promoteWorkspace', () => {
           }),
         ),
     },
-    {
-      bound: "a file's path",
-      code: 'node_location_too_large',
-      write: (board: ReturnType<typeof documentContainers>) =>
+    'node-location': {
+      at: 'sketch',
+      write: (board: Board) =>
         writeSpatialNode(
           board,
           fileNode({
@@ -304,10 +320,9 @@ describe('promoteWorkspace', () => {
           }),
         ),
     },
-    {
-      bound: "an edge's label",
-      code: 'label_too_large',
-      write: (board: ReturnType<typeof documentContainers>) =>
+    label: {
+      at: 'sketch',
+      write: (board: Board) =>
         writeSpatialEdge(board, {
           id: 'e1',
           from: { node: 'a' },
@@ -315,10 +330,9 @@ describe('promoteWorkspace', () => {
           label: 'x'.repeat(LABEL_MAX_CHARS + 1),
         }),
     },
-    {
-      bound: 'a comment message',
-      code: 'comment_too_large',
-      write: (board: ReturnType<typeof documentContainers>) =>
+    'comment-message': {
+      at: 'sketch',
+      write: (board: Board) =>
         writeCommentThread(board, {
           id: 't1',
           anchor: { kind: 'document' },
@@ -326,10 +340,15 @@ describe('promoteWorkspace', () => {
           messages: [{ id: 'm1', body: 'x'.repeat(COMMENT_MESSAGE_MAX_CHARS + 1) }],
         }),
     },
-  ])('refuses a record whose canvas holds $bound past its bound, naming the canvas', async ({
-    code,
-    write,
-  }) => {
+  } satisfies Record<
+    keyof typeof SYNC_TEXT_BREACH_CODES,
+    { at: string; write: (doc: Board) => void }
+  >
+
+  it.each(
+    Object.keys(SYNC_TEXT_BREACH_CODES) as (keyof typeof SYNC_TEXT_BREACH_CODES)[],
+  )('refuses a record whose document holds a %s breach, naming the document', async (shape) => {
+    const { at, write } = breachCases[shape]
     const fake = fakes()
     const record = new LoroDoc()
     record.setPeerId(2n)
@@ -343,7 +362,7 @@ describe('promoteWorkspace', () => {
       documentId: SKETCH_ID,
       kind: 'spatial',
     })
-    write(documentContainers(record, SKETCH_ID))
+    write(documentContainers(record, at === 'sketch' ? SKETCH_ID : ROADMAP_ID))
     record.commit()
     const refusal = await promoteWorkspace(
       {
@@ -353,8 +372,9 @@ describe('promoteWorkspace', () => {
       },
       { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
     ).catch((err: unknown) => err)
-    expect(syncWriteAnswer(refusal)).toEqual({ code, status: 413 })
-    expect((refusal as Error).message).toMatch(/^The document at "sketch" /)
+    expect(syncWriteAnswer(refusal)).toEqual({ code: SYNC_TEXT_BREACH_CODES[shape], status: 413 })
+    expect(refusal).toMatchObject({ breach: { shape }, at: { path: at } })
+    expect((refusal as Error).message).toMatch(new RegExp(`^The document at "${at}" `))
     expect(fake.saves()).toBe(0)
   })
 })
