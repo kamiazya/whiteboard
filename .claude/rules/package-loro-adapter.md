@@ -36,6 +36,11 @@ implementations live in the composition roots.
   (`compareDocumentPaths`) and the error taxonomy, and now reads the tree
   instead of its own rows.
 
+- **A note's name from its heading** (`name-from-title.ts`, with
+  `title-from-body.ts`): the one judgement both keepers run —
+  `seedNameFromTitle` by id for the browser store, `seedNamesFromTitles(since)`
+  for the daemon's workspace update, which reads the touched nodes off the
+  update's operations rather than walking the tree (135 ms at 1000 documents).
 - **A stored plane key is skipped, never read.** The branch's `plane:` child map
   on a document's node is gone with the branch (ADR-0029), but a record
   written then still carries it, so `projectWorkspaceDocument` and

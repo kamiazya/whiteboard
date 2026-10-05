@@ -227,6 +227,11 @@ extends `SyncWriteRefusalError` and carries its own code and status; routes
 answer through `syncWriteAnswer`, never per-class arms. Costs are measured in
 `mcp-server/scripts/measure/sync-update-body-cost.mjs`.
 
+One thing is WRITTEN on a CRDT update: `applyWorkspaceDocumentUpdate` names a
+note at a generated path after its heading (`seedNamesFromTitles`) before the
+save, as the browser keeper does in its own store. `applyDocumentUpdate`
+cannot — its seam reaches a projection that carries no name.
+
 ## Common mistakes (append as review finds them)
 
 - Importing a store/sync implementation directly instead of taking it via

@@ -345,7 +345,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The Duplicate and Delete verbs' screen state and dialogs each live in
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
-  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 451,
+  'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 449,
   'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 521,
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
