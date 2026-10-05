@@ -61,7 +61,7 @@ export function EditorLock({ sync, onLeave, children }: EditorLockProps) {
 }
 
 /** Says the document is gone and that is why nothing can be typed, with the way out. */
-function RemovedNotice({ onLeave }: { onLeave: (() => void) | undefined }) {
+function RemovedNotice({ onLeave }: Readonly<{ onLeave: (() => void) | undefined }>) {
   return (
     <>
       <Trash2 aria-hidden="true" className="size-3.5 text-muted-foreground" />

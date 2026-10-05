@@ -1,5 +1,5 @@
 import { writeWorkspaceDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
-import { Loro } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
@@ -17,7 +17,7 @@ export async function seedWorkspaceDocumentContent(
   const docs = new BrowserWorkspaceDocs(dbName)
   const workspace = await openWorkspaceOrNull(docs)
   if (workspace === null) return false
-  const source = new Loro()
+  const source = new LoroDoc()
   source.import(content)
   if (!writeWorkspaceDocumentContent(workspace, documentId, source)) return false
   await docs.save(getBrowserWorkspaceId(), workspace)

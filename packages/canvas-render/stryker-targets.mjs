@@ -186,7 +186,7 @@ export function shardOf(files, spec, minutes = MINUTES) {
   if (match === null || shard < 1 || shard > total) {
     throw new Error(`shard spec must be "k/n" with 1 <= k <= n, got "${spec}"`)
   }
-  const unmeasured = files.filter((file) => !(minutes[file] > 0))
+  const unmeasured = files.filter((file) => (minutes[file] ?? 0) <= 0)
   if (unmeasured.length > 0) {
     throw new Error(
       `no recorded minutes for ${unmeasured.join(', ')} — add a figure to MINUTES in stryker-targets.mjs`,

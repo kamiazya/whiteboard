@@ -179,7 +179,7 @@ describe('a session whose document a peer deletes', () => {
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
 
     expect(s.session.getCanvas().nodes.map((node) => node.id)).toEqual(['kept'])
-    expect(s.pushed.length).toBe(pushesBefore)
+    expect(s.pushed).toHaveLength(pushesBefore)
     expect(s.persistence).not.toContain('saved')
   })
 
