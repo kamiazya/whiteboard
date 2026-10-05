@@ -14,6 +14,8 @@ import {
   commentThreadSchema,
   documentIdSchema,
   nodeText,
+  OPS_PER_CALL_LIMIT_PHRASE,
+  OPS_PER_CALL_MAX,
   okfActorInputSchema,
   resolveTextAnchor,
   type SpatialAnchor,
@@ -86,7 +88,10 @@ const threadEditInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    ops: z.array(threadOpSchema).min(1, 'give at least one op'),
+    ops: z
+      .array(threadOpSchema)
+      .min(1, 'give at least one op')
+      .max(OPS_PER_CALL_MAX, `more ops than ${OPS_PER_CALL_LIMIT_PHRASE}`),
   })
   .strict()
 type ThreadEditInput = z.infer<typeof threadEditInputSchema>

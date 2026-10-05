@@ -16,6 +16,8 @@ import {
   MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
   mintProposalId,
+  OPS_PER_CALL_LIMIT_PHRASE,
+  OPS_PER_CALL_MAX,
   type PassageOverlap,
   type PlacedPassage,
   type Proposal,
@@ -66,7 +68,10 @@ export const bodyEditInputSchema = z
     proposalId: z.string().min(1).optional(),
     /** Only meaningful when proposing; see `proposalAuthorSchema`. */
     author: proposalAuthorSchema,
-    ops: z.array(bodyEditOpSchema).min(1, 'a body edit carries at least one passage'),
+    ops: z
+      .array(bodyEditOpSchema)
+      .min(1, 'a body edit carries at least one passage')
+      .max(OPS_PER_CALL_MAX, `more passages than ${OPS_PER_CALL_LIMIT_PHRASE}`),
   })
   .strict()
 export type BodyEditInput = z.infer<typeof bodyEditInputSchema>
