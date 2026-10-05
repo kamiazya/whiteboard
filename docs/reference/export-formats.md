@@ -149,6 +149,14 @@ creates nothing, and through `/api/v1` the answer is
 `400 {"error":"okf_parse_failed"}` naming the `frontmatter-title` stage. A
 blank name still clears it, and a name stored before the limit still lists.
 
+A board declares at most **64** semantic axes in `visual.axes/v0` (the facet
+keys it treats as meaning, which the legend scores on every layout).
+`wb_facet_set` refuses a longer `axes` list with "more axes than the 64-axis
+limit for one board", writing nothing. A declaration stored longer before the
+limit still reads, and a declared key no box carries costs a render nothing.
+The bound is checked where a tool writes the facet; an editor's sync update is
+not judged against it, and a longer list arriving that way reads the same way.
+
 ## OKF frontmatter this server does not model
 
 OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))
@@ -185,6 +193,12 @@ it as OKF `generated.by` alongside the server's clock as `generated.at`. Use
   content, `verified` says who confirmed it, and they are different claims.
 - The actor is a **self-report**, exactly as it is in OKF. Trust tiers derived
   from it are advisory signals, not access control.
+- An actor carries at most **256 characters** — a name, which is stamped on
+  every document a batch writes. `wb_workspace_edit`, `POST
+  /api/v1/workspaces/{id}/documents`, and the `author` of `wb_thread_edit`,
+  `wb_canvas_edit` and `wb_body_edit` refuse a longer one with "an actor is
+  longer than the 256-character limit", writing nothing. A `generated.by`
+  stored longer, or written in a document's own frontmatter, still reads.
 
 Documents edited in the browser app do not yet carry `generated`; only writes
 through the daemon's tools do.
