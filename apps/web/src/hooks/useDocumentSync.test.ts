@@ -141,6 +141,20 @@ async function edit(
   })
 }
 
+/** Presses a Ctrl chord on the window, inside `act`, and hands back the event. */
+function pressCtrl(init: KeyboardEventInit): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  })
+  act(() => {
+    window.dispatchEvent(event)
+  })
+  return event
+}
+
 function dispatchCtrlZ(): void {
   window.dispatchEvent(
     new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
@@ -346,16 +360,7 @@ describe('useDocumentSync', () => {
     // And handed back rather than swallowed: with nothing to undo the
     // keystroke is the browser's, and claiming it would break undo in
     // whatever this page is embedded beside.
-    const event = new KeyboardEvent('keydown', {
-      key: 'z',
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true,
-    })
-    act(() => {
-      window.dispatchEvent(event)
-    })
-    expect(event.defaultPrevented).toBe(false)
+    expect(pressCtrl({ key: 'z' }).defaultPrevented).toBe(false)
   })
 
   it('undo republishes the canvas after a keyboard undo', async () => {
@@ -369,6 +374,37 @@ describe('useDocumentSync', () => {
     act(dispatchCtrlZ)
 
     expect(result.current.canvas.nodes[0]).toMatchObject({ x: 0, y: 0 })
+  })
+
+  // Both redo chords, since platforms disagree on which one a person reaches
+  // for. `key` arrives upper-case under Shift, so the case is folded first.
+  it.each([
+    ['Ctrl+Shift+Z', { key: 'Z', shiftKey: true }],
+    ['Ctrl+Y', { key: 'y' }],
+  ] as const)('%s redoes a keyboard undo', async (_, init) => {
+    const backend = makeFakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    await hydrate(backend, TEXT_CANVAS)
+    await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
+    act(dispatchCtrlZ)
+    expect(result.current.canvas.nodes[0]).toMatchObject({ x: 0, y: 0 })
+
+    const event = pressCtrl(init)
+
+    expect(result.current.canvas.nodes[0]).toMatchObject({ x: 10, y: 20 })
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('leaves a Ctrl chord that is neither undo nor redo to the browser', async () => {
+    const backend = makeFakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    await hydrate(backend, TEXT_CANVAS)
+    await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
+
+    const copy = pressCtrl({ key: 'c' })
+
+    expect(result.current.canvas.nodes[0]).toMatchObject({ x: 10, y: 20 })
+    expect(copy.defaultPrevented).toBe(false)
   })
 
   it('leaves Ctrl+Z alone while a restore is rewriting the document', async () => {

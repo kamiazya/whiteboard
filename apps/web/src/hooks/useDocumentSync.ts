@@ -173,9 +173,10 @@ function isEditingText(target: EventTarget | null): boolean {
 }
 
 /**
- * Undo/redo from the keyboard — SpatialEditor has no buttons of its own, so
- * this is the only entry point. The event is only swallowed when the step was
- * actually taken: with nothing to undo the keystroke belongs to the browser.
+ * Undo/redo from the keyboard; the pane's HistoryCluster buttons are the
+ * other entry point, through the same `undo`/`redo`. The event is only
+ * swallowed when the step was actually taken: with nothing to undo the
+ * keystroke belongs to the browser.
  */
 function handleUndoRedoKey(ev: KeyboardEvent, undo: () => boolean, redo: () => boolean): void {
   if (!(ev.ctrlKey || ev.metaKey)) return
@@ -547,8 +548,8 @@ export function useDocumentSync(
     [canvas],
   )
 
-  // Keyboard intercept for undo/redo — SpatialEditor has no undo/redo buttons
-  // of its own, so the keyboard is the only entry point. Off during a restore.
+  // Keyboard intercept for undo/redo. A window listener, so the editor's own
+  // focus handling never decides whether it fires. Off during a restore.
   useEffect(() => {
     if (restoreInProgress) return
     const onKeyDown = (ev: KeyboardEvent) => handleUndoRedoKey(ev, loroUndo, loroRedo)
