@@ -14,7 +14,12 @@
  * Emits the WHOLE list, never a patch: the caller decides what an empty list
  * means for its object (a removed field, everywhere it is stored).
  */
-import { compareCodeUnit, parseScopedTag, tagWriteSchema } from '@kamiazya/whiteboard-model'
+import {
+  compareCodeUnit,
+  parseScopedTag,
+  TAGS_PER_ELEMENT_MAX,
+  tagWriteSchema,
+} from '@kamiazya/whiteboard-model'
 import {
   type TagLibrary,
   type TagLibraryObjection,
@@ -23,6 +28,7 @@ import {
 import { X } from 'lucide-react'
 import { useId, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
+import { tagCountNotice } from '../../lib/limit-notice.js'
 
 export interface TagChipsEditorProps {
   readonly tags: readonly string[]
@@ -72,6 +78,26 @@ function tagCompletions(draft: string, suggestions: readonly string[]): string[]
   return [...offered].sort(compareCodeUnit)
 }
 
+/** Why `tag` may not join `tags`, in the words the row shows; null when it may. */
+function refusalOf(
+  tag: string,
+  tags: readonly string[],
+  library: TagLibrary | undefined,
+): string | null {
+  // The keeper refuses a set past the bound whole; saying so here keeps the
+  // draft rather than losing the write to a notice above the page.
+  if (tags.length >= TAGS_PER_ELEMENT_MAX) return tagCountNotice(tags.length + 1)
+  // The grammar is checked where a tag is WRITTEN (decision 1): a
+  // colon-bearing tag that is not key:value is refused with the rule.
+  const checked = tagWriteSchema.safeParse(tag)
+  if (!checked.success) return checked.error.issues[0]?.message ?? 'not a valid tag'
+  // The library's rule, judged on the set the thing would END UP carrying
+  // — the same judgement `wb_facet_set` refuses with — so a row and a
+  // tool cannot disagree about what the workspace admits.
+  const objection = library === undefined ? undefined : tagLibraryObjection(library, [...tags, tag])
+  return objection === undefined ? null : objectionSentence(objection)
+}
+
 export function TagChipsEditor({
   tags,
   onChange,
@@ -89,26 +115,12 @@ export function TagChipsEditor({
     // Blank and duplicate both mean "nothing to add" — emitting anyway would
     // write an identical list and, for a duplicate, a misleading one.
     if (tag === '' || tags.includes(tag)) return
-    // The grammar is checked where a tag is WRITTEN (decision 1): a
-    // colon-bearing tag that is not key:value is refused with the rule and
-    // the draft stays, so the person can fix it rather than retype it.
-    const checked = tagWriteSchema.safeParse(tag)
-    if (!checked.success) {
-      setRefusal(checked.error.issues[0]?.message ?? 'not a valid tag')
-      return
-    }
-    // The library's rule, judged on the set the thing would END UP carrying
-    // — the same judgement `wb_facet_set` refuses with — so a row and a
-    // tool cannot disagree about what the workspace admits.
-    const objection =
-      library === undefined ? undefined : tagLibraryObjection(library, [...tags, tag])
-    if (objection !== undefined) {
-      setRefusal(objectionSentence(objection))
-      return
-    }
+    // A refused tag keeps the draft, so the person can fix it rather than retype it.
+    const refused = refusalOf(tag, tags, library)
+    setRefusal(refused)
+    if (refused !== null) return
     onChange([...tags, tag])
     setDraft('')
-    setRefusal(null)
   }
 
   return (

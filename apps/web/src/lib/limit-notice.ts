@@ -10,6 +10,7 @@ import {
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
   type SyncWriteRefusalCode,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 
 // en-US whatever the browser's locale: a notice and the keeper's own message
@@ -82,6 +83,11 @@ export function labelNotice(length: number): string {
 /** An edit to a comment draft that was not made. */
 export function commentMessageNotice(length: number): string {
   return `Not added: the comment would be ${pastLimit(length, COMMENT_MESSAGE_MAX_CHARS, 'comment')}. ${COMMENT_MESSAGE_ADVICE}`
+}
+
+/** A tag the tag editor did not add, because the thing it tags already carries the most it may. */
+export function tagCountNotice(count: number): string {
+  return `Not added: that would be ${COUNT.format(count)} tags, past the ${COUNT.format(TAGS_PER_ELEMENT_MAX)}-tag limit for one document, board, node or edge. Remove one first.`
 }
 
 /**

@@ -1,8 +1,10 @@
 // The one tag control (ADR-0040 decision 6): a note's header, a box, an edge
 // and the board are all tagged through this, so what a chip looks like and
 // what Enter does is decided once.
+import { TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { tagCountNotice } from '../../lib/limit-notice.js'
 import { TagChipsEditor } from './TagChipsEditor.js'
 
 afterEach(cleanup)
@@ -109,5 +111,35 @@ describe('TagChipsEditor', () => {
       o.getAttribute('value'),
     )
     expect(offered).toEqual(['health:degraded', 'health:failing', 'health:ok'])
+  })
+
+  // Six renders of a thousand chips: 1.9-3.5 s measured at a load average of
+  // 19 on four cores, so the default 5 s is too near to be a ceiling.
+  it('takes tags up to the per-element bound and refuses the next with the notice, keeping the draft', {
+    timeout: 20_000,
+  }, () => {
+    const below = Array.from({ length: TAGS_PER_ELEMENT_MAX - 1 }, (_, i) => `t${i}`)
+    const onChange = vi.fn()
+    const { rerender, container } = render(
+      <TagChipsEditor tags={below} onChange={onChange} inputId="tag-box" />,
+    )
+    // A thousand chips make every role and label query walk them all, so the
+    // box and the notice are found by what only they carry.
+    const input = () => container.querySelector('#tag-box') as HTMLInputElement
+    const notice = () => container.querySelector('[role="alert"]')
+    const add = (value: string) => {
+      fireEvent.change(input(), { target: { value } })
+      fireEvent.keyDown(input(), { key: 'Enter' })
+    }
+    add('last')
+    expect(onChange).toHaveBeenLastCalledWith([...below, 'last'])
+    expect(notice()).toBeNull()
+
+    onChange.mockClear()
+    rerender(<TagChipsEditor tags={[...below, 'last']} onChange={onChange} inputId="tag-box" />)
+    add('over')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(notice()?.textContent).toBe(tagCountNotice(TAGS_PER_ELEMENT_MAX + 1))
+    expect(input().value).toBe('over')
   })
 })

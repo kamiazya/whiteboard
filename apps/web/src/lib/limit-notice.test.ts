@@ -5,6 +5,7 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
@@ -17,6 +18,7 @@ import {
   markdownBodyNotice,
   nodeTextEditNotice,
   pastedTextNotice,
+  tagCountNotice,
 } from './limit-notice.js'
 
 /** Every notice that names a count, with the bound it is about and the word for one of what it bounds. */
@@ -91,6 +93,12 @@ describe('limit notices', () => {
     const said = notice(max + 1)
     expect(said).toContain(`${enUs(max + 1)} characters`)
     expect(said).toContain(`past the ${enUs(max)}-character limit for one ${one}.`)
+  })
+
+  it('the tag count notice names the count and its own bound', () => {
+    const said = tagCountNotice(TAGS_PER_ELEMENT_MAX + 1)
+    expect(said).toContain(`${enUs(TAGS_PER_ELEMENT_MAX + 1)} tags`)
+    expect(said).toContain(`past the ${enUs(TAGS_PER_ELEMENT_MAX)}-tag limit`)
   })
 
   // The canvas element is a node in every other piece of the app's copy.
