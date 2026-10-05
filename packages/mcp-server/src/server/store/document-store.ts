@@ -10,10 +10,9 @@ import {
   readWorkspaceMeta,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
-  seedNameFromTitle,
   setWorkspaceLastCompactedAt,
   updateWorkspaceDocumentMeta,
-  writeWorkspaceDocumentContent,
+  writeDocumentContentAndName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
@@ -164,28 +163,6 @@ export async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspa
 }
 
 /**
- * Writes `doc` into the workspace tree as `documentId`'s content, and names a
- * note still at a generated path after its heading (`seedNameFromTitle`) —
- * false, with nothing written, when the tree holds no such document.
- *
- * Every daemon write of a document's content comes through here, so a note
- * is named however its body was written — a tool, `/api/v1`, a restore —
- * and not only by the page's sync route. A note an agent wrote would
- * otherwise stay `untitled` until a person's next unrelated keystroke named
- * it, which reads as a rename nobody made. Before the caller's save, so the
- * name rides the same write and its fan-out.
- */
-export function writeDocumentContent(
-  workspaceDoc: LoroDoc,
-  documentId: string,
-  doc: LoroDoc,
-): boolean {
-  if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)) return false
-  seedNameFromTitle(workspaceDoc, documentId)
-  return true
-}
-
-/**
  * Put this document's content in the workspace tree, creating its node when
  * the path is new.
  *
@@ -225,7 +202,7 @@ function placeDocumentInTree({
   } else if (requestedKind !== undefined && existingEntry.kind !== requestedKind) {
     updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: requestedKind })
   }
-  if (!writeDocumentContent(workspaceDoc, documentId, doc)) {
+  if (!writeDocumentContentAndName(workspaceDoc, documentId, doc)) {
     throw new ConflictError(
       `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
     )

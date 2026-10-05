@@ -132,6 +132,13 @@ export interface UseDocumentSyncResult {
    */
   facets: ExtensionFacets
   /**
+   * The name the workspace record holds for this document, on the same
+   * signal as `coreFacets`: `null` when it holds none, `undefined` when there
+   * is no record to read. What a title follows when the keeper names the
+   * document after its heading, or somebody renames it elsewhere.
+   */
+  documentName: string | null | undefined
+  /**
    * What a picture of this document would be drawn from, paired with the id
    * of the state it is. `null` until the first snapshot. See the callback for
    * why the two are read together rather than exposed separately.
@@ -281,6 +288,7 @@ export function useDocumentSync(
   const [bodyBinding, setBodyBinding] = useState<BodyBinding | null>(null)
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [facets, setFacetsState] = useState<ExtensionFacets>(EMPTY_FACETS)
+  const [documentName, setDocumentName] = useState<string | null | undefined>(undefined)
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
@@ -304,20 +312,17 @@ export function useDocumentSync(
     // all, when the backend goes to null.
     setLockedNodeIds(EMPTY_LOCKED_IDS)
     setLockedEdgeIds(EMPTY_LOCKED_IDS)
-    // Conversations belong to the session being torn down, exactly as the
-    // locks do — left standing they would be listed against whatever document
-    // is next, and with no successor session (backend going to null) nothing
-    // would ever publish over them.
+    // Conversations, their passages, the body, its facets and the name belong
+    // to the session being torn down, exactly as the locks do — left standing
+    // they would show against the next document, and with no successor
+    // session (backend going to null) nothing would ever publish over them.
     setAnnotations(EMPTY_ANNOTATIONS)
     setProposals(EMPTY_PROPOSALS)
-    // And where their passages were, which is about this document's body
-    // and means nothing against the next one's.
     setThreadMarks(EMPTY_MARKS)
-    // The body belongs to the session being torn down, exactly as the locks
-    // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
     setCoreFacetsState(undefined)
     setFacetsState(EMPTY_FACETS)
+    setDocumentName(undefined)
     // And the failure reason, for the same reason and with a sharper
     // consequence: it describes ONE document, and carried across a switch it
     // turns the next one — which may be perfectly readable — into an error
@@ -398,6 +403,7 @@ export function useDocumentSync(
       setBodyBinding(session.getBodyBinding())
       setCoreFacetsState(session.getCoreFacets())
       setFacetsState(session.getFacets())
+      setDocumentName(session.getDocumentName())
     })
     // Seed from the session as well as subscribing: hydration can complete
     // BEFORE this effect runs (the backend may deliver a snapshot
@@ -580,6 +586,7 @@ export function useDocumentSync(
     coreFacets,
     setCoreFacets,
     facets,
+    documentName,
     readOutlineSource,
     lockedEdgeIds,
     setEdgeLock,

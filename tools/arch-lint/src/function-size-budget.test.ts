@@ -320,7 +320,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // the locks lifted as sub-modules, the undo one handed `dropQueuedWrite`
   // rather than the queue itself. Both document pages already sit behind one
   // `DocumentBackend`, so that port is not what is left to do.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 864,
+  // Raised by five for `getDocumentName`: the record's name for the open
+  // document is a read of the session's own doc, the one place that holds it.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 869,
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 193,
@@ -402,7 +404,10 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/SettingsPage.tsx#GeneralSection': 112,
   'apps/web/src/pages/SettingsPage.tsx#SettingsPage': 280,
   'apps/web/src/pages/SettingsPage.tsx#sectionContent': 60,
-  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 400,
+  // Raised by six for `followRecordedName`, which has to sit beside the
+  // snapshot refs: a name the record holds is shown only while no rename of
+  // this page's own is pending or saving.
+  'apps/web/src/pages/use-browser-document-controller.ts#useBrowserDocumentController': 406,
   // `duplicateDocument` is one call into lib/duplicate-daemon-document.ts,
   // shared with the index page; what is here is the list refresh and the path
   // move, the same two steps `createDocument` ends with. `deleteDocument` is the

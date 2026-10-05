@@ -48,6 +48,12 @@ const workspaceBroadcastSchema = z.discriminatedUnion('type', [
     type: z.literal('document-removed'),
     path: z.string().min(1),
   }),
+  // The index renamed a document. No bytes: the index's save hands them to
+  // nobody, so a holder catches up from the stored record instead.
+  z.object({
+    type: z.literal('document-renamed'),
+    documentId: z.string().min(1),
+  }),
   // A deleted document is back at `path`, under the documentId it had.
   z.object({
     type: z.literal('document-restored'),
@@ -128,4 +134,14 @@ export function announceDocumentRemoved(workspaceId: string, path: string): void
  */
 export function announceDocumentRestored(workspaceId: string, path: string): void {
   announce(workspaceId, { type: 'document-restored', path })
+}
+
+/**
+ * The index named a document — the title box, the rename dialog, another
+ * tab's. A tab holding the record has not seen it: only a backend's own saves
+ * travel as bytes. Without this the keeper judged a heading against a copy
+ * that had never seen the chosen name, and named the note over it.
+ */
+export function announceDocumentRenamed(workspaceId: string, documentId: string): void {
+  announce(workspaceId, { type: 'document-renamed', documentId })
 }

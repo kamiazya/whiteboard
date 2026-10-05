@@ -119,6 +119,7 @@ function useBrowserDocument(
     deleteDocument,
     startFresh,
     renameDocument,
+    followRecordedName,
     listDocuments,
     createDocument,
     switchDocument,
@@ -305,6 +306,11 @@ function useBrowserDocument(
     readOutlineSource,
     persistence: syncPersistence,
   } = sync
+  // The keeper names a note after its heading inside the record, and another
+  // tab's import may carry a rename; the title follows either without a reload.
+  useEffect(() => {
+    if (sync.documentName !== undefined) followRecordedName(sync.documentName)
+  }, [sync.documentName, followRecordedName])
   // A note's body, read and written through the same session as a board: the
   // editor bound to the session's body text (each change at its own
   // position, committed on the session's debounce), `setBody` the whole-text

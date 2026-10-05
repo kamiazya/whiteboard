@@ -83,6 +83,8 @@ interface Props {
    * workspace (ADR-0009 decision 2) rather than by its content.
    */
   titleSlot?: (identity: DocumentIdentity) => ReactNode
+  /** The open document's name in the record the page syncs; see `useDocumentNames`. */
+  recordedName?: string | null | undefined
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -105,16 +107,15 @@ export default function WorkspaceTopBar({
   keeper = 'daemon',
   preview,
   titleSlot,
+  recordedName,
 }: Props) {
   const keptByBrowser = keeper === 'browser'
-  const daemonFetch = useDaemonApi()
-
   const { effectiveNames, renameDocument } = useDocumentNames({
     workspaceId,
     keptByBrowser,
-    daemonFetch,
+    daemonFetch: useDaemonApi(),
+    recorded: { path, name: recordedName },
   })
-
   const canvasCustomName = effectiveNames.documents[path]
 
   if (preview !== undefined) {

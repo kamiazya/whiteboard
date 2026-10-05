@@ -2,6 +2,8 @@ import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client
 import {
   projectWorkspaceDocument,
   readSpatialCanvas,
+  readWorkspaceDocumentName,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -123,6 +125,27 @@ describe('BrowserBackend.applyRestore', () => {
     // And the record on disk agrees, so a reload lands on the restored state.
     const reopened = await docs.open()
     expect(reopened && textOf(reopened, DOC_ID)).toBe('the checkpoint')
+  })
+
+  // The daemon's restore names the note after the heading it was restored to
+  // (`name-from-heading.daemon.test.ts`); the browser's must name it the same.
+  it('names an unnamed note after the heading it was restored to', async () => {
+    const docs = new InMemoryWorkspaceDocs()
+    const backend = new BrowserBackend(
+      { documentId: DOC_ID, path: 'untitled', kind: 'markdown' },
+      docs,
+    )
+    const { session, ready } = connectSession(backend)
+    await ready()
+    const past = new LoroDoc()
+    writeMarkdownBody(past, '# Weekly review\n\nbody')
+    past.commit()
+
+    await backend.applyRestore(past, 'v1')
+
+    expect(readWorkspaceDocumentName(session, DOC_ID)).toBe('Weekly review')
+    const reopened = await docs.open()
+    expect(reopened && readWorkspaceDocumentName(reopened, DOC_ID)).toBe('Weekly review')
   })
 
   it('completes the bracket when persistence fails, and the failure reaches the caller', async () => {

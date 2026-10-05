@@ -11,11 +11,11 @@ import {
   type SyncTextBreach,
   seedNameFromTitle,
   syncTextLimitJudge,
-  writeWorkspaceDocumentContent,
+  writeDocumentContentAndName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -127,6 +127,14 @@ function importFromAnotherTab(workspaceDoc: LoroDoc, bytes: Uint8Array): boolean
   }
 }
 
+/**
+ * A position no stored record is at — a generation is a count — so the first
+ * catch-up re-reads the whole record. Taking a real cursor when the record is
+ * opened would cost every open a read for the sake of a rename that may never
+ * come; a whole read, once, is merged idempotently.
+ */
+const WHOLE_RECORD: WorkspaceDocCursor = { generation: Number.NaN, afterSeq: null }
+
 export class BrowserBackend implements DocumentBackend {
   private readonly target: BrowserBackendTarget
   private readonly docs: WorkspaceDocs
@@ -141,6 +149,8 @@ export class BrowserBackend implements DocumentBackend {
   private _writeQueue: Promise<void> = Promise.resolve()
   /** This connection's end of the record's channel to the other tabs. */
   private broadcast: WorkspaceBroadcastEnd | null = null
+  /** How far into the stored record a catch-up has read this copy; null before the first. */
+  private cursor: WorkspaceDocCursor | null = null
 
   constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs, legacy?: LoroStore) {
     this.target = target
@@ -153,6 +163,7 @@ export class BrowserBackend implements DocumentBackend {
     this.disconnected = false
     this.handlers = handlers
     this.workspaceDoc = null
+    this.cursor = null
     // Fire synchronously so the caller can observe onConnected immediately.
     handlers.onConnected()
     this.loadAndDeliver(handlers).catch(() => {
@@ -205,11 +216,12 @@ export class BrowserBackend implements DocumentBackend {
    * workspace record's funnel fan the resulting ops to every client. Here
    * the live doc is this backend's own workspace record, and the one client
    * is the sync session holding its twin — so the same reconcile
-   * (`writeWorkspaceDocumentContent`, a diff and never a rewrite) runs on
+   * (`writeDocumentContentAndName`, a diff and never a rewrite) runs on
    * the record, the ops it produced are persisted, and those ops reach the
    * session the way a peer's would: as a remote update. Nothing rewinds in
    * a CRDT; the session's own later ops stay in its history and the restore
-   * is one more edit on top of them.
+   * is one more edit on top of them. The note is named after the heading it
+   * was restored to, as the daemon's restore names it.
    *
    * Bracketed with the restore events the daemon sends, so a page that
    * renders the restore overlay for a daemon restore renders it here too.
@@ -227,7 +239,7 @@ export class BrowserBackend implements DocumentBackend {
       handlers.onRestoreStarted(label === undefined ? {} : { label })
       try {
         const before = workspaceDoc.version()
-        writeWorkspaceDocumentContent(workspaceDoc, this.target.documentId, past)
+        writeDocumentContentAndName(workspaceDoc, this.target.documentId, past)
         const update = workspaceDoc.export({ mode: 'update', from: before })
         this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
         await touchContentTimestamp(this.target.documentId)
@@ -364,6 +376,7 @@ export class BrowserBackend implements DocumentBackend {
    */
   private receive(
     message: WorkspaceBroadcast,
+    workspaceId: string,
     workspaceDoc: LoroDoc,
     handlers: DocumentBackendHandlers,
   ): void {
@@ -372,12 +385,43 @@ export class BrowserBackend implements DocumentBackend {
       if (message.documentId === this.target.documentId) handlers.onVersionCreated(message.version)
       return
     }
+    if (message.type === 'document-renamed') {
+      if (message.documentId !== this.target.documentId) return
+      this._writeQueue = this._writeQueue.then(() =>
+        this.catchUpWithStore(workspaceId, workspaceDoc, handlers),
+      )
+      return
+    }
     // Path changes are for whoever holds work keyed by path, not for the record.
     if (message.type !== 'update') return
     this._writeQueue = this._writeQueue.then(() => {
       if (this.isStale(handlers)) return
       if (importFromAnotherTab(workspaceDoc, message.bytes)) handlers.onRemoteUpdate(message.bytes)
     })
+  }
+
+  /**
+   * Merges what the stored record gained since this copy last read it, and
+   * hands it on to the session. A rename is written by the index, whose save
+   * travels to nobody — and the name this keeper seeds from a heading is
+   * judged against THIS copy, so a copy that never saw the name somebody
+   * chose named the note over it. Queued like any write, and it never rejects
+   * the queue: a catch-up that failed leaves the copy where it was.
+   */
+  private async catchUpWithStore(
+    workspaceId: string,
+    workspaceDoc: LoroDoc,
+    handlers: DocumentBackendHandlers,
+  ): Promise<void> {
+    if (this.isStale(handlers)) return
+    try {
+      const caught = await this.docs.catchUp(workspaceId, workspaceDoc, this.cursor ?? WHOLE_RECORD)
+      this.cursor = caught.cursor
+      if (this.isStale(handlers)) return
+      for (const update of caught.updates) handlers.onRemoteUpdate(update)
+    } catch (err) {
+      getAppLogger('browser-backend').warn('catching up with the stored record failed', err)
+    }
   }
 
   /**
@@ -398,7 +442,7 @@ export class BrowserBackend implements DocumentBackend {
     const held: Uint8Array[] = []
     let delivered: LoroDoc | null = null
     this.broadcast = listenToWorkspace(workspaceId, (message) => {
-      if (delivered !== null) this.receive(message, delivered, handlers)
+      if (delivered !== null) this.receive(message, workspaceId, delivered, handlers)
       else if (message.type === 'update') held.push(message.bytes)
     })
     return (workspaceDoc) => {

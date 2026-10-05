@@ -50,6 +50,7 @@ import { IdbDocumentIndex } from './idb-document-index.js'
 import {
   announceDocumentMoved,
   announceDocumentRemoved,
+  announceDocumentRenamed,
   announceDocumentRestored,
 } from './workspace-broadcast.js'
 
@@ -229,7 +230,8 @@ export class FoldingBrowserIndex implements DocumentIndex, DocumentPins, Documen
 
   async setDocumentName(input: SetDocumentNameInput): Promise<void> {
     await this.ensureFolded()
-    return this.inner.setDocumentName(input)
+    await this.inner.setDocumentName(input)
+    announceDocumentRenamed(input.workspaceId, input.documentId)
   }
 
   async listPinnedDocuments(input: ListDocumentsInput): Promise<string[]> {

@@ -159,12 +159,11 @@ function DocumentHeader({
         >
           <WorkspaceTopBar
             // The merged header row's flexible middle: document identity
-            // (title, core facets, display settings) lives in the SAME
-            // row as workspace context. The NAME is the workspace's
-            // (ADR-0009 decision 2): the keeper either names documents
-            // through its own store or takes the identity the bar hands
-            // down from `/names` — never a `title` read out of the
-            // content, which `storedCoreFacetsSchema` has no room for.
+            // (title, core facets, display settings) shares the row with
+            // workspace context. The NAME is the workspace's (ADR-0009
+            // decision 2), from the keeper's store or the bar's `/names` and
+            // record — never a `title` read out of the content, which
+            // `storedCoreFacetsSchema` has no room for.
             titleSlot={(identity) => (
               <>
                 {model.properties.ready ? (
@@ -187,6 +186,7 @@ function DocumentHeader({
             )}
             workspaceId={topBar.workspaceId}
             path={topBar.path}
+            recordedName={model.sync.documentName}
             {...(topBar.keeper === undefined ? {} : { keeper: topBar.keeper })}
             {...(topBar.onNavigateBack === undefined
               ? {}

@@ -136,4 +136,25 @@ describe('useDocumentNames', () => {
     })
     expect(outcomes).toEqual(['Could not rename it.', 'Could not rename it.'])
   })
+
+  // The record the page syncs moves with every write; `/names` was read once.
+  it.each([
+    ['its name over the one /names answered', 'Weekly review', 'Weekly review'],
+    ['no name when it holds none', null, undefined],
+    ['the /names answer while it cannot say', undefined, 'From names'],
+  ])('reads the record for the open document: %s', async (_, recordedName, expected) => {
+    const daemonFetch = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ documents: { foo: 'From names', bar: 'Bar' }, pinned: [] }))
+    const { result } = renderHook(() =>
+      useDocumentNames({
+        workspaceId: 'ws1',
+        keptByBrowser: false,
+        daemonFetch,
+        recorded: { path: 'foo', name: recordedName },
+      }),
+    )
+    await waitFor(() => expect(result.current.effectiveNames.documents.bar).toBe('Bar'))
+    expect(result.current.effectiveNames.documents.foo).toBe(expected)
+  })
 })

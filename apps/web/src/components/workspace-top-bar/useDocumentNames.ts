@@ -29,6 +29,25 @@ interface UseDocumentNamesOptions {
    */
   keptByBrowser: boolean
   daemonFetch: typeof globalThis.fetch
+  /**
+   * What the workspace record the page syncs names the open document — the
+   * same record `/names` answers from, kept current by its update frames.
+   * `name` is `null` for an unnamed document and `undefined` while the record
+   * cannot say. Read once at open, `/names` stayed stale for a name the
+   * daemon seeded from a heading, an agent's rename, or another tab's.
+   */
+  recorded?: { readonly path: string; readonly name: string | null | undefined }
+}
+
+/** `names` with the record's word on one document, where it has one. */
+function withRecordedName(
+  names: WorkspaceNames,
+  recorded: UseDocumentNamesOptions['recorded'],
+): WorkspaceNames {
+  if (recorded === undefined || recorded.name === undefined) return names
+  const { [recorded.path]: _previous, ...others } = names.documents
+  const documents = recorded.name === null ? others : { ...others, [recorded.path]: recorded.name }
+  return { ...names, documents }
 }
 
 // Single owner of the workspaceNamesSchema-derived names state. Callers get
@@ -39,6 +58,7 @@ export function useDocumentNames({
   workspaceId,
   keptByBrowser,
   daemonFetch,
+  recorded,
 }: UseDocumentNamesOptions) {
   const [names, setNames] = useState<WorkspaceNames>(EMPTY_NAMES)
 
@@ -58,13 +78,11 @@ export function useDocumentNames({
     return () => {
       active = false
     }
-    // daemonFetch is stable per identity (module-level apiFetch, or the daemon
-    // page's memoized createDaemonFetch result), so including it does not
-    // refetch per render — and a genuinely new fetch identity (base URL or
-    // token change) must refetch to avoid serving stale names.
+    // daemonFetch is stable per identity (apiFetch, or the page's memoized
+    // createDaemonFetch), so this refetches only for a new base URL or token.
   }, [workspaceId, daemonFetch, keptByBrowser])
 
-  const effectiveNames = keptByBrowser ? EMPTY_NAMES : names
+  const effectiveNames = keptByBrowser ? EMPTY_NAMES : withRecordedName(names, recorded)
 
   // Daemon-mode rename commit: null once saved, else why not (the daemon's own
   // reason when it gave one). A browser-kept workspace never reaches it.
