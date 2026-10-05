@@ -38,8 +38,10 @@ implementations live in the composition roots.
 
 - **A note's name from its heading** (`name-from-title.ts`, with
   `title-from-body.ts`): the one judgement both keepers run —
-  `seedNameFromTitle` by id for the browser store and every daemon content write
-  (mcp-server's `writeDocumentContent`), `seedNamesFromTitles(since)`
+  `seedNameFromTitle` by id for the browser store's pushes,
+  `writeDocumentContentAndName` for every whole-content write either keeper
+  makes (the daemon's tools, `/api/v1` and restore, and the browser's restore),
+  `seedNamesFromTitles(since)`
   for the daemon's workspace update, which reads the touched nodes off the
   update's operations rather than walking the tree (135 ms at 1000 documents).
   A name somebody CHOSE carries `nameChosen: true` in the node meta, written

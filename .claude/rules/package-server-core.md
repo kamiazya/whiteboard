@@ -234,8 +234,8 @@ answer through `syncWriteAnswer`, never per-class arms. Costs are measured in
 One thing is WRITTEN on a CRDT update: `applyWorkspaceDocumentUpdate` names a
 note at a generated path after its heading (`seedNamesFromTitles`) before the
 save, as the browser keeper does (`seedNameFromTitle`). `applyDocumentUpdate`
-does not seed itself; the per-document save goes through mcp-server's
-`writeDocumentContent`, which does.
+does not seed itself; the per-document save goes through loro-adapter's
+`writeDocumentContentAndName`, which does.
 
 ## Common mistakes (append as review finds them)
 
