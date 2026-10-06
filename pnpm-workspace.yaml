@@ -121,6 +121,10 @@ overrides:
   # GHSA-x5fp-wj9c-mxmx + GHSA-4mjr-xmp4-gh2g: both cleared at 6.16.0 (reaches
   # the published runtime via express <- @modelcontextprotocol/sdk).
   qs@<6.16.0: ^6.16.0
+  # GHSA-jqcg-44mw-7w3h (critical): an IPv4-mapped address spoofs a trusted
+  # proxy, cleared at 2.0.8. Reaches the published runtime via express <-
+  # @modelcontextprotocol/sdk, and 2.0.8 is inside express's own ~2.0.7 range.
+  "proxy-addr@>=1.1.0 <2.0.8": ^2.0.8
   # GHSA-c83g-rgw3-j3cx + GHSA-73wf-gq98-2v4g (high): cleared at 4.28.7
   # (dev path via babel <- stryker; the alert pair still shows in the tab).
   browserslist@<4.28.7: ^4.28.7
