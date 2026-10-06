@@ -22,7 +22,7 @@ import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-mark
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
-import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
+import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
 import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -103,6 +103,8 @@ export interface MarkdownEditorProps {
    * bare `[[ULID]]` resolves and every embed stays a placeholder.
    */
   references?: ReferenceSeams
+  /** Colours a board the preview embeds by intent, as the canvas editor does. */
+  tagLibrary?: RenderMarkdownPreviewOptions['tagLibrary']
   /**
    * Documents this editor may link to. Supplied by the composition root,
    * which already holds the list its switcher shows. Absent (or empty) keeps
@@ -272,6 +274,7 @@ export function MarkdownEditor({
   meta,
   title,
   references,
+  tagLibrary,
   linkTargets,
   onOpenDocument,
   fragmentLoaders,
@@ -805,6 +808,7 @@ export function MarkdownEditor({
             references={references}
             renderMath={renderMath}
             renderDiagram={renderDiagram}
+            tagLibrary={tagLibrary}
           />
         )}
         {!previewEmpty && railAffordable && railHasScroll && railBlocks.length > 0 && (

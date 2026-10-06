@@ -3,7 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorProps } from '../spatial-editor/index.js'
 import { SpatialEditorPane, type SpatialEditorPassedThrough } from './SpatialEditorPane.js'
 
-const seen = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
+const seen = vi.hoisted(() => ({
+  props: null as Record<string, unknown> | null,
+  overlay: null as Record<string, unknown> | null,
+}))
+
+vi.mock('./NodeTextEditorOverlay.js', () => ({
+  NodeTextEditorOverlay: (props: Record<string, unknown>) => {
+    seen.overlay = props
+    return null
+  },
+}))
 
 vi.mock('../spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../spatial-editor/index.js')>()
@@ -45,35 +55,12 @@ const passedThrough: Required<SpatialEditorPassedThrough> = {
 
 afterEach(() => {
   seen.props = null
+  seen.overlay = null
 })
 
 describe('SpatialEditorPane', () => {
   it('forwards every prop it picks from the editor to the editor', () => {
-    render(
-      <SpatialEditorPane
-        editorKey="doc"
-        canvasLoaded
-        fileSeams={{
-          references: { entries: [], aliases: [], titles: [], extras: [] },
-          onAddImage: () => Promise.reject(new Error('unused')),
-          isImageFileRef: () => false,
-        }}
-        nodeInEditor={{
-          open: () => {},
-          editing: null,
-          commit: () => {},
-          close: () => {},
-          draft: () => {},
-          draftBodies: [],
-        }}
-        onOpenDocument={() => {}}
-        history={{ onUndo: () => {}, onRedo: () => {}, canUndo: false, canRedo: false }}
-        overlayTitle="Board"
-        linkTargets={[]}
-        className="pane"
-        {...passedThrough}
-      />,
-    )
+    renderPane(null)
     const props = seen.props
     expect(props).not.toBeNull()
     const dropped = Object.entries(passedThrough)
@@ -81,4 +68,38 @@ describe('SpatialEditorPane', () => {
       .map(([key]) => key)
     expect(dropped, 'picked by the pane but never handed to the editor').toEqual([])
   })
+
+  it(`hands the "open in editor" overlay the tag library the board is drawn with`, () => {
+    // A text node's `![[board]]` previews there, and is coloured as on the canvas.
+    renderPane({ id: 'n1', text: 'body' })
+    expect(seen.overlay?.tagLibrary).toBe(passedThrough.tagLibrary)
+  })
 })
+
+function renderPane(editing: { id: string; text: string } | null) {
+  render(
+    <SpatialEditorPane
+      editorKey="doc"
+      canvasLoaded
+      fileSeams={{
+        references: { entries: [], aliases: [], titles: [], extras: [] },
+        onAddImage: () => Promise.reject(new Error('unused')),
+        isImageFileRef: () => false,
+      }}
+      nodeInEditor={{
+        open: () => {},
+        editing,
+        commit: () => {},
+        close: () => {},
+        draft: () => {},
+        draftBodies: [],
+      }}
+      onOpenDocument={() => {}}
+      history={{ onUndo: () => {}, onRedo: () => {}, canUndo: false, canRedo: false }}
+      overlayTitle="Board"
+      linkTargets={[]}
+      className="pane"
+      {...passedThrough}
+    />,
+  )
+}

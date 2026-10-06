@@ -34,6 +34,7 @@ export interface MarkdownDocumentSession
     | 'theme'
     | 'meta'
     | 'references'
+    | 'tagLibrary'
     | 'linkTargets'
     | 'onOpenDocument'
     | 'autoFocus'

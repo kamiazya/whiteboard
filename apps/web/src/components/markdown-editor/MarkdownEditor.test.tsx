@@ -1,4 +1,5 @@
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -216,6 +217,40 @@ describe('MarkdownEditor', () => {
     const intercepted = !fireEvent.click(anchor)
     expect(onOpenDocument).toHaveBeenCalledWith(UUID)
     expect(intercepted).toBe(true)
+  })
+
+  it('colours a board the note embeds by the tag library it is given', async () => {
+    vi.useFakeTimers()
+    const BOARD = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const board = {
+      nodes: [
+        textNode({
+          id: 'db',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 120,
+          text: 'db',
+          tags: ['health:failing'],
+        }),
+      ],
+      edges: [],
+    }
+    const { getByTestId } = render(
+      <MarkdownEditor
+        value={`![[${BOARD}]]`}
+        onChange={() => {}}
+        references={referenceSeams(new Map([[BOARD, { name: 'Board', canvas: board }]]))}
+        tagLibrary={{ health: { exclusive: true, values: { failing: { color: '1' } } } }}
+        previewDebounceMs={150}
+      />,
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    const html = getByTestId('markdown-preview-pane').innerHTML
+    expect(html).toContain('>db<')
+    expect(html).toContain('#fee2e2')
   })
 
   it('renders the core facets as a document header in Read mode', () => {
