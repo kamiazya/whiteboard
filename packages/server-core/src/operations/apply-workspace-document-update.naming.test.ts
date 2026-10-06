@@ -85,7 +85,7 @@ describe('applyWorkspaceDocumentUpdate names a note after its heading', () => {
       update: typed(keeper.client, NOTE, '# Weekly review\n\nbody'),
     })
 
-    expect(result).toBe('applied')
+    expect(result).toMatchObject({ kind: 'applied' })
     expect(keeper.nameOf(NOTE)).toBe('Weekly review')
     // One write carrying the name, so the fan-out hands it to every replica.
     expect(keeper.saved).toEqual([JSON.stringify(['Weekly review'])])

@@ -2,6 +2,7 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  resolveWorkspaceDocumentById,
   SYNC_TEXT_BREACH_CODES,
   writeCommentThread,
   writeMarkdownBody,
@@ -177,6 +178,33 @@ describe('promoteWorkspace', () => {
       'notes/roadmap',
       'sketch',
     ])
+  })
+
+  // A move is not an edit: a promoted document reads as last edited when it
+  // was, not when it moved.
+  it('keeps the updatedAt each promoted document arrived with', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'notes/roadmap',
+      documentId: ROADMAP_ID,
+      kind: 'markdown',
+      createdAt: 1_000,
+    })
+    writeMarkdownBody(documentContainers(record, ROADMAP_ID), '# roadmap v1')
+    record.commit()
+
+    await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }) as Uint8Array, operator },
+    )
+
+    expect(resolveWorkspaceDocumentById(fake.workspaceDoc, ROADMAP_ID)?.updatedAt).toBe(1_000)
   })
 
   it('refuses bytes that are not a Loro snapshot before touching the workspace', async () => {

@@ -4,7 +4,6 @@ import {
   type PromoteWorkspaceResponse,
   promoteWorkspaceRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyWorkspaceDocumentUpdate,
   errorBody,
@@ -47,7 +46,7 @@ export interface WorkspaceDocumentRouterOptions {
 // applyWorkspaceDocumentUpdate.
 //
 // GET  /api/w/:workspaceId/workspace-document/snapshot
-// POST /api/w/:workspaceId/workspace-document/update?documentId=<ulid>
+// POST /api/w/:workspaceId/workspace-document/update
 /**
  * The preamble all three workspace-document routes share: the handle as
  * written is validated (so a malformed one keeps its 400), resolved to a
@@ -131,22 +130,22 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       } catch (err) {
         return answerWriteRefusal(c, err)
       }
-      if (result === 'malformed-update') {
+      if (result.kind === 'malformed-update') {
         return c.json({ title: 'Malformed workspace-document update' }, 400)
       }
 
-      // Signal the document the client says it is editing. The checkpoint
-      // lands once it goes quiet; failures never fail the update itself.
-      const documentId = c.req.query('documentId')
-      if (documentId !== undefined) {
+      // Signal every document the update edited, as the per-document route
+      // signals the one it wrote. The checkpoint lands once each goes quiet;
+      // failures never fail the update itself.
+      for (const { path } of result.edited) {
         void (async () => {
-          const workspaceDoc = await deps.workspaceDocuments.get(workspaceId)
-          const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
-          if (entry === null) return
-          const doc = await deps.liveDocuments.get(workspaceId, entry.path)
-          options.triggerAutoVersion(workspaceId, entry.path, doc)
+          const doc = await deps.liveDocuments.get(workspaceId, path)
+          options.triggerAutoVersion(workspaceId, path, doc)
         })().catch((err: unknown) => {
-          getLogger('document').error({ err: err as Error }, 'auto-version trigger failed')
+          getLogger('document').error(
+            { workspaceId, path, err: err as Error },
+            'auto-version trigger failed',
+          )
         })
       }
 
