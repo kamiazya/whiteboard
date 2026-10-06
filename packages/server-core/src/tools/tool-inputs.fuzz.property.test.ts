@@ -546,6 +546,23 @@ const emptyTally = (): Record<Outcome, number> => ({
 
 const catalogue = await seededTools()
 
+/**
+ * Every draw seeds a fresh workspace of Loro documents, and loro-crdt frees a
+ * document's wasm memory from a FinalizationRegistry callback, which runs on
+ * a task — never between the microtasks a property's draws are chained on.
+ * With no task boundary the wasm heap only grows: measured at 88KB a draw and
+ * never reclaimed, forced GC or not, until a `--repeats 20` run reached the
+ * wasm memory ceiling and every later draw died `RuntimeError: unreachable`
+ * in `new LoroDoc`. One task every hundred draws held it at 77MB.
+ */
+let drawsSinceTask = 0
+async function letFinalizersRun(): Promise<void> {
+  drawsSinceTask += 1
+  if (drawsSinceTask < 100) return
+  drawsSinceTask = 0
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 async function runOnce(
   key: string,
   tool: ToolLike,
@@ -555,6 +572,7 @@ async function runOnce(
 ): Promise<void> {
   // Fresh state per run: a write tool must not leave the next draw a
   // different document than the one every other draw sees.
+  await letFinalizersRun()
   const tools = await seededTools()
   const subject = (tools as Record<string, ToolLike>)[key]
   if (subject === undefined) throw new Error(`no tool at ${key}`)
