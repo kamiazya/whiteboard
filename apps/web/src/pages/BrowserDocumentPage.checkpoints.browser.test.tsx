@@ -13,7 +13,6 @@ import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { listenToWorkspace, type WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -259,7 +258,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
   it('leaves a checkpoint behind once a markdown document has been quiet', async () => {
     exercised.add('markdown/quiet-timer')
     const index = new FoldingBrowserIndex()
-    await seedIdbDocument(new IdbDocumentIndex(), {
+    await seedIdbDocument({
       path: 'note',
       kind: 'markdown',
       makeDefault: true,

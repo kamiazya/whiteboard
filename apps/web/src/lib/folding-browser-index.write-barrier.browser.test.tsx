@@ -13,6 +13,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -43,8 +44,7 @@ function settles(promise: Promise<unknown>): () => boolean {
 it('a tracked save loop and a later listing settle while every fold fails', async () => {
   const logged = expectLoggedFailures()
   const workspaceId = getBrowserWorkspaceId()
-  const legacy = new IdbDocumentIndex()
-  await legacy.createWorkspace({ workspaceId })
+  await new IdbDocumentIndex().createWorkspace({ workspaceId })
   const { documentId } = await new FoldingBrowserIndex().createDocument({
     workspaceId,
     path: 'note',
@@ -52,7 +52,7 @@ it('a tracked save loop and a later listing settle while every fold fails', asyn
   })
   // An unfolded row whose record cannot be read by a throw: every fold from
   // here on fails, and nothing settles the memo.
-  await legacy.createDocument({ workspaceId, path: 'old', kind: 'markdown' })
+  await seedLegacyRow({ workspaceId, path: 'old', kind: 'markdown' })
   vi.spyOn(LoroStore.prototype, 'load').mockRejectedValue(new Error('injected fold failure'))
 
   const index = new FoldingBrowserIndex()

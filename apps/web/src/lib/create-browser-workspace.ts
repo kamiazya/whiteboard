@@ -34,7 +34,7 @@ export interface CreateBrowserWorkspaceInput {
  * rename.
  */
 export async function createBrowserWorkspace(
-  index: DocumentIndex,
+  index: Pick<DocumentIndex, 'resolveWorkspace' | 'createWorkspace'>,
   { displayName }: CreateBrowserWorkspaceInput,
 ): Promise<WorkspaceEntry> {
   // Trimmed, because surrounding whitespace in a typed name is an accident

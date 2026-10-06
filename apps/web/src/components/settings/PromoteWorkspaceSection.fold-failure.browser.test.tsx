@@ -25,6 +25,7 @@ import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-st
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../../test-utils/seed-legacy-row.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 claimIsolatedWhiteboardDb('promote-fold-failure')
@@ -61,14 +62,7 @@ describe('PromoteWorkspaceSection under a failing fold', () => {
       path: 'held',
       kind: 'markdown',
     })
-    const legacy = new IdbDocumentIndex()
-    // `legacy` is the row-plane index, whose `WORKSPACES_STORE` row `tree`'s
-    // `ensureBrowserWorkspace` above never wrote — that call went through the
-    // tree-backed `FoldingBrowserIndex`, which registers a workspace as a
-    // `workspace-tree:<id>` sync record instead. The row-plane index has its
-    // own registry and needs it seeded explicitly.
-    await ensureBrowserWorkspace(legacy)
-    const entry = await legacy.createDocument({
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'legacy-only',
       kind: 'spatial',

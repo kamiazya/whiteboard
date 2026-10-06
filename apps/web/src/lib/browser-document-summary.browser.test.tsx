@@ -9,6 +9,7 @@
  */
 
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
@@ -18,18 +19,22 @@ import {
   listBrowserDocuments,
 } from './browser-document-summary.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = 'whiteboard-summary-test'
 
-async function seedWorkspace(): Promise<IdbDocumentIndex> {
+/**
+ * The index answers placement only; what this layer adds is read from the
+ * content stores under `DB_NAME`, so an in-memory index keeps the subject
+ * to that layer alone.
+ */
+async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
   // This file's DB is claimed by literal name rather than through
   // `claimIsolatedWhiteboardDb` (it predates that helper), so the
   // `getBrowserWorkspaceId()` seam is not set for it automatically — set it
   // fresh per test instead, matching what the seam-owning helper does.
   setBrowserWorkspaceIdForTests(generateDocumentId())
-  const index = new IdbDocumentIndex(DB_NAME)
+  const index = new InMemoryDocumentIndex()
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   return index
 }

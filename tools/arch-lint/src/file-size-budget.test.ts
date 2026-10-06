@@ -324,7 +324,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // registered passkey (ADR-0039: moving requires one), and claims the warn the
   // deferred-demote case provokes now that app-logger reaches the console.
   // so the deferred-demote case claims the warn it provokes (import + two lines).
-  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 887,
+  'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 880,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
   // The editor-state model and its coverage ledger: a `not modelled` entry
   // per command kind the model cannot drive, each a sentence somebody has to

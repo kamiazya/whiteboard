@@ -22,13 +22,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { hasLegacyRow, seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { getAppLogger } from './app-logger.js'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldOrServeTheTree } from './fold-workspace.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 import { LoroStore } from './loro-store.js'
 
@@ -53,13 +53,10 @@ async function contentTimestamp(documentId: string): Promise<unknown> {
 }
 
 async function seedDocument(path: string, text: string): Promise<string> {
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const entry = await index.createDocument({
-    workspaceId: getBrowserWorkspaceId(),
-    path,
-    kind: 'spatial',
-  })
+  const entry = await seedLegacyRow(
+    { workspaceId: getBrowserWorkspaceId(), path, kind: 'spatial' },
+    DB_NAME,
+  )
   const doc = new Loro()
   doc.getMap('nodes').set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text }))
   doc.commit()
@@ -100,13 +97,10 @@ it('is idempotent, and picks up documents created between runs', async () => {
 })
 
 it('skips an unreadable document rather than folding an empty one', async () => {
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const entry = await index.createDocument({
-    workspaceId: getBrowserWorkspaceId(),
-    path: 'damaged',
-    kind: 'spatial',
-  })
+  const entry = await seedLegacyRow(
+    { workspaceId: getBrowserWorkspaceId(), path: 'damaged', kind: 'spatial' },
+    DB_NAME,
+  )
   await new LoroStore(DB_NAME).save(entry.documentId, new Uint8Array([1, 2, 3]))
 
   const report = await foldWorkspaceDocuments(DB_NAME)
@@ -140,9 +134,7 @@ it('skips and keeps a row whose path the tree already holds under another id', a
   // Nothing of the row's is retired: its record is still the only home of
   // its content, and the row is what lists it.
   const workspaceId = getBrowserWorkspaceId()
-  expect(
-    await new IdbDocumentIndex(DB_NAME).resolveDocumentById({ workspaceId, documentId: rowId }),
-  ).not.toBeNull()
+  expect(await hasLegacyRow({ workspaceId, documentId: rowId }, DB_NAME)).toBe(true)
   expect((await new LoroStore(DB_NAME).load(rowId)).kind).toBe('ok')
   const reopened = await new BrowserWorkspaceDocs(DB_NAME).open(workspaceId)
   expect(
@@ -156,14 +148,11 @@ it('skips and keeps a row whose path the tree already holds under another id', a
 
 it('a fold-skipped delete retires the record before the row, and the listing clock last', async () => {
   const logged = expectLoggedFailures()
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const workspaceId = getBrowserWorkspaceId()
-  const { documentId } = await index.createDocument({
-    workspaceId,
-    path: 'damaged',
-    kind: 'spatial',
-  })
+  const { documentId } = await seedLegacyRow(
+    { workspaceId, path: 'damaged', kind: 'spatial' },
+    DB_NAME,
+  )
   // Unreadable, so the fold skips it and the legacy row stays its only home.
   await new LoroStore(DB_NAME).save(documentId, new Uint8Array([1, 2, 3]))
   expect(await contentTimestamp(documentId)).toBeTypeOf('string')
@@ -173,10 +162,10 @@ it('a fold-skipped delete retires the record before the row, and the listing clo
   // stays listed and deletable rather than leaving a record nothing names.
   vi.spyOn(LoroStore.prototype, 'retire').mockRejectedValueOnce(new Error('injected'))
   await expect(folding.deleteDocument({ workspaceId, path: 'damaged' })).rejects.toThrow('injected')
-  expect(await index.resolveDocumentById({ workspaceId, documentId })).not.toBeNull()
+  expect(await hasLegacyRow({ workspaceId, documentId }, DB_NAME)).toBe(true)
 
   await folding.deleteDocument({ workspaceId, path: 'damaged' })
-  expect(await index.resolveDocumentById({ workspaceId, documentId })).toBeNull()
+  expect(await hasLegacyRow({ workspaceId, documentId }, DB_NAME)).toBe(false)
   expect((await new LoroStore(DB_NAME).load(documentId)).kind).toBe('not-found')
   // No copy is left for the clock to date.
   expect(await contentTimestamp(documentId)).toBeUndefined()
@@ -187,20 +176,16 @@ it('a fold retires the row and record and keeps the listing clock of the tree co
   const documentId = await seedDocument('design', 'from design')
   expect((await foldWorkspaceDocuments(DB_NAME)).folded).toBe(1)
   const workspaceId = getBrowserWorkspaceId()
-  expect(
-    await new IdbDocumentIndex(DB_NAME).resolveDocumentById({ workspaceId, documentId }),
-  ).toBeNull()
+  expect(await hasLegacyRow({ workspaceId, documentId }, DB_NAME)).toBe(false)
   expect((await new LoroStore(DB_NAME).load(documentId)).kind).toBe('not-found')
   expect(await contentTimestamp(documentId)).toBeTypeOf('string')
 })
 
 it('a fold-skipped delete refuses a parent, as the port does, and retires nothing', async () => {
   const logged = expectLoggedFailures()
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const workspaceId = getBrowserWorkspaceId()
-  const parent = await index.createDocument({ workspaceId, path: 'a', kind: 'spatial' })
-  const child = await index.createDocument({ workspaceId, path: 'a/b', kind: 'spatial' })
+  const parent = await seedLegacyRow({ workspaceId, path: 'a', kind: 'spatial' }, DB_NAME)
+  const child = await seedLegacyRow({ workspaceId, path: 'a/b', kind: 'spatial' }, DB_NAME)
   for (const { documentId } of [parent, child]) {
     await new LoroStore(DB_NAME).save(documentId, new Uint8Array([1, 2, 3]))
   }
@@ -209,8 +194,6 @@ it('a fold-skipped delete refuses a parent, as the port does, and retires nothin
     new FoldingBrowserIndex(DB_NAME).deleteDocument({ workspaceId, path: 'a' }),
   ).rejects.toBeInstanceOf(DocumentHasDescendantsError)
   expect((await new LoroStore(DB_NAME).load(parent.documentId)).kind).toBe('corrupt-snapshot')
-  expect(
-    await index.resolveDocumentById({ workspaceId, documentId: parent.documentId }),
-  ).not.toBeNull()
+  expect(await hasLegacyRow({ workspaceId, documentId: parent.documentId }, DB_NAME)).toBe(true)
   expect(logged.join('\n')).toContain('startup fold left documents behind')
 })

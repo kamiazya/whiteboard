@@ -13,6 +13,7 @@
 // by idb-document-index/loro-store/browser-backend/browser-idb-migration
 // in the browser project.
 import 'fake-indexeddb/auto'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
@@ -22,13 +23,17 @@ import {
   listBrowserDocuments,
 } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = 'whiteboard-summary-test'
 
-async function seedWorkspace(): Promise<IdbDocumentIndex> {
-  const index = new IdbDocumentIndex(DB_NAME)
+/**
+ * The index answers placement only; what this layer adds is read from the
+ * content stores under `DB_NAME`, so an in-memory index keeps the subject
+ * to that layer alone.
+ */
+async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
+  const index = new InMemoryDocumentIndex()
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   return index
 }

@@ -3,10 +3,10 @@
  *
  * `describeDocumentStoreConformance`, `describeDocumentIndexConformance` and
  * `describeBlobStoreConformance` are what make two keepers' stores readings of
- * ONE contract rather than two. All twelve production implementers run one
- * today, but nothing tied `implements <Port>` to a call: two of the twelve
+ * ONE contract rather than two. All eleven production implementers run one
+ * today, but nothing tied `implements <Port>` to a call: two of them
  * (`SealedDocumentStore`, `WorkspaceRoutedDocumentStore`) were added after the
- * suites, each by someone remembering. A thirteenth that forgets reads exactly
+ * suites, each by someone remembering. A twelfth that forgets reads exactly
  * like one that ran it, because every other test of a store is green without.
  *
  * So the population is DERIVED (every `implements` of a port under
@@ -82,12 +82,6 @@ const CONFORMANCE_LEDGER: readonly LedgerEntry[] = [
     test: 'packages/ports/src/test-utils/in-memory-document-store.test.ts',
   },
   {
-    cls: 'IdbDocumentIndex',
-    port: 'DocumentIndex',
-    source: 'apps/web/src/lib/idb-document-index.ts',
-    test: 'apps/web/src/lib/idb-document-index.browser.test.tsx',
-  },
-  {
     cls: 'FoldingBrowserIndex',
     port: 'DocumentIndex',
     source: 'apps/web/src/lib/folding-browser-index.ts',
@@ -137,7 +131,7 @@ const NOT_A_STORE: readonly Exemption[] = [
   },
 ]
 
-const FLOOR_PRODUCTION_IMPLEMENTERS = 12
+const FLOOR_PRODUCTION_IMPLEMENTERS = 11
 
 function portsImplementedBy(node: ts.ClassLikeDeclaration): Port[] {
   const names = (node.heritageClauses ?? [])

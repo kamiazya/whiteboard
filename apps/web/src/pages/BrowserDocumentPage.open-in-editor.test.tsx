@@ -11,7 +11,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -50,8 +50,8 @@ describe('open in editor (page seam)', () => {
   })
 
   it("opens the page's editing surface on the node body the canvas hands over", async () => {
-    const store = new IdbDocumentIndex()
-    await seedIdbDocument(store, {
+    const store = new FoldingBrowserIndex()
+    await seedIdbDocument({
       path: 'board',
       name: 'Board',
       kind: 'spatial',

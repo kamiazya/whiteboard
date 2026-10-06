@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { hasLegacyRow, seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { browserDocumentCounts } from './browser-document-counts.js'
@@ -21,7 +22,6 @@ import { CONTENT_TIMESTAMPS_STORE, DOCUMENT_INDEX_STORE } from './browser-idb.js
 import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
@@ -29,19 +29,6 @@ import { loadDocumentContent } from './workspace-content.js'
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
 claimIsolatedWhiteboardDb('folding-browser-index')
-
-/** Rewrites a stored index row to the pre-kind shape (no `kind` recorded). */
-async function stripKindInPlace(documentId: string): Promise<void> {
-  await inTransaction(undefined, [DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
-    const store = tx.objectStore(DOCUMENT_INDEX_STORE)
-    const rows = (await request(store.getAll())) as { documentId: string; kind?: unknown }[]
-    for (const row of rows) {
-      if (row.documentId !== documentId) continue
-      const { kind: _kind, ...withoutKind } = row
-      await request(store.put(withoutKind))
-    }
-  })
-}
 
 /** One stored index row, raw, so a test can put it back the way a crash would leave it. */
 async function readRawRow(documentId: string): Promise<unknown> {
@@ -61,9 +48,7 @@ async function putRawRow(row: unknown): Promise<void> {
 
 /** A document as an older build left it: an index row and a per-document record. */
 async function seedLegacyDocument(path: string, text: string): Promise<string> {
-  const legacyIndex = new IdbDocumentIndex()
-  await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const entry = await legacyIndex.createDocument({
+  const entry = await seedLegacyRow({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'spatial',
@@ -106,9 +91,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
   it('lists a legacy per-document record after its startup fold, content included', async () => {
     // Seeded exactly as an older build left it: an index row and a
     // per-document Loro record, no workspace document anywhere.
-    const legacyIndex = new IdbDocumentIndex()
-    await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-    const entry = await legacyIndex.createDocument({
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'from-before',
       kind: 'spatial',
@@ -136,9 +119,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     // damaged-but-present"). This index IS the old path's successor, so the
     // fallback read is what keeps that sentence true — without it the
     // document vanishes from every listing while its bytes sit intact.
-    const legacyIndex = new IdbDocumentIndex()
-    await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-    const readable = await legacyIndex.createDocument({
+    const readable = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'readable',
       kind: 'spatial',
@@ -146,7 +127,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     const readableDoc = new Loro()
     writeSpatialCanvas(readableDoc, canvasWith('fine'))
     await new LoroStore().save(readable.documentId, readableDoc.export({ mode: 'snapshot' }))
-    const unreadable = await legacyIndex.createDocument({
+    const unreadable = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'unreadable',
       kind: 'spatial',
@@ -189,7 +170,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect(await listedIds(new FoldingBrowserIndex())).toEqual([documentId])
 
     const workspaceId = getBrowserWorkspaceId()
-    expect(await new IdbDocumentIndex().resolveDocumentById({ workspaceId, documentId })).toBeNull()
+    expect(await hasLegacyRow({ workspaceId, documentId })).toBe(false)
     expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
     expect(await textOf(documentId)).toBe('legacy content')
   })
@@ -264,21 +245,13 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
 
     expect(await listedIds(index)).toEqual([])
     expect(await listedIds(new FoldingBrowserIndex())).toEqual([])
-    expect(await new IdbDocumentIndex().resolveDocumentById({ workspaceId, documentId })).toBeNull()
+    expect(await hasLegacyRow({ workspaceId, documentId })).toBe(false)
   })
 
   it('a kindless legacy row stays invisible — our own pre-kind data defect', async () => {
     const logged = expectLoggedFailures()
-    const legacyIndex = new IdbDocumentIndex()
-    await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-    // createDocument requires a kind, so write the row the way the defect
-    // actually exists: created, then stripped in place.
-    const entry = await legacyIndex.createDocument({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'pre-kind',
-      kind: 'spatial',
-    })
-    await stripKindInPlace(entry.documentId)
+    // A row that records no kind, the shape the defect actually left.
+    const entry = await seedLegacyRow({ workspaceId: getBrowserWorkspaceId(), path: 'pre-kind' })
 
     const index = new FoldingBrowserIndex()
     expect(await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toEqual([])

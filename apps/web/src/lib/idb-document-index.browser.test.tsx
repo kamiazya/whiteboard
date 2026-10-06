@@ -1,39 +1,28 @@
 /**
- * The browser `DocumentIndex`, held to the port's own conformance suite.
- *
- * `describeDocumentIndexConformance` was written as a factory for exactly
- * this second implementation — its doc comment names it — so this file adds
- * no assertions of its own beyond the ones the contract already states. What
- * it does add is the IndexedDB-specific fixture: a real database per case,
- * deleted afterwards, because the conformance cases assume an index that
- * starts empty.
+ * The row store's reads, which are what the startup fold depends on: the
+ * listing it takes legacy rows from, and the retirement it ends each one
+ * with. Its registry half is held to the port's conformance suite through
+ * `FoldingBrowserIndex`, which keeps its workspaces here.
  */
 // Stays in REAL-browser mode on purpose: this file is part of the real-IDB
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. browser-document-summary.test.tsx.
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
-import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
+import { WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
-import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
 
 // Its OWN database, not the app's. Browser tests share an origin, so deleting
-// `whiteboard` between conformance cases would tear it out from under whatever
-// other file is mid-fixture — and the failure would land there, in a test that
-// did nothing wrong. Measured: it did exactly that to
+// `whiteboard` between cases would tear it out from under whatever other file
+// is mid-fixture — and the failure would land there, in a test that did
+// nothing wrong. Measured: it did exactly that to
 // `browser-idb-migration.browser.test.tsx`.
 const DB_NAME = 'whiteboard-document-index-conformance'
-
-/** A registry row as stored, bypassing the class's own validated write. */
-async function putRegistryRow(entry: WorkspaceEntry): Promise<void> {
-  await inTransaction(DB_NAME, [WORKSPACES_STORE], 'readwrite', async (tx) => {
-    await request(tx.objectStore(WORKSPACES_STORE).put(entry, entry.workspaceId))
-  })
-}
 
 describe('IdbDocumentIndex row hydration', () => {
   it('a malformed stored row fails the read loudly instead of flowing into the UI as a DocumentEntry', async () => {
@@ -62,17 +51,48 @@ describe('IdbDocumentIndex row hydration', () => {
   })
 })
 
-describe('IdbDocumentIndex', () => {
-  describeDocumentIndexConformance(async () => {
+describe('IdbDocumentIndex legacy rows', () => {
+  it('lists a workspace in path order and refuses one it does not know', async () => {
     await clearNamedDb(DB_NAME)
-    const index = new IdbDocumentIndex(DB_NAME)
-    return {
-      index,
-      dispose: () => clearNamedDb(DB_NAME),
-      // This index IS its own registry, one IndexedDB store, so the seam
-      // writes that store's row directly: `createWorkspace` refuses a layer
-      // the model refuses, and the seam stands for whatever a registry holds.
-      seedWorkspace: (entry) => putRegistryRow(entry),
+    try {
+      for (const path of ['b', 'a-b', 'a/c', 'a']) {
+        await seedLegacyRow({ workspaceId: 'ws', path, kind: 'spatial' }, DB_NAME)
+      }
+      const index = new IdbDocumentIndex(DB_NAME)
+      // The port's order, segment by segment, which is not IndexedDB's key
+      // order: that one puts `a-b` before `a/c`, since `-` sorts below `/`.
+      expect((await index.listDocuments({ workspaceId: 'ws' })).map((row) => row.path)).toEqual([
+        'a',
+        'a/c',
+        'a-b',
+        'b',
+      ])
+      // An error rather than an empty list, which a real but empty workspace
+      // would also answer — the fold tells the two apart by it.
+      await expect(index.listDocuments({ workspaceId: 'elsewhere' })).rejects.toBeInstanceOf(
+        WorkspaceNotFoundError,
+      )
+    } finally {
+      await clearNamedDb(DB_NAME)
+    }
+  })
+
+  it('retires the row an id names, below-path rows included, and again without complaint', async () => {
+    await clearNamedDb(DB_NAME)
+    try {
+      const parent = await seedLegacyRow({ workspaceId: 'ws', path: 'a', kind: 'spatial' }, DB_NAME)
+      await seedLegacyRow({ workspaceId: 'ws', path: 'a/b', kind: 'spatial' }, DB_NAME)
+      const index = new IdbDocumentIndex(DB_NAME)
+
+      await index.retireDocument({ workspaceId: 'ws', documentId: parent.documentId })
+      // An interrupted fold repeats its retirement, so a second one is a no-op.
+      await index.retireDocument({ workspaceId: 'ws', documentId: parent.documentId })
+
+      expect((await index.listDocuments({ workspaceId: 'ws' })).map((row) => row.path)).toEqual([
+        'a/b',
+      ])
+    } finally {
+      await clearNamedDb(DB_NAME)
     }
   })
 })

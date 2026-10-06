@@ -27,13 +27,13 @@ import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../../test-utils/seed-legacy-row.js'
 import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
@@ -172,9 +172,7 @@ async function seedImageOnSketch(sketchId: string): Promise<void> {
  * that deep-links straight to Settings sees before any page ran the fold.
  */
 async function seedPreFoldDocument(path: string): Promise<string> {
-  const index = new IdbDocumentIndex()
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const entry = await index.createDocument({
+  const entry = await seedLegacyRow({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'spatial',

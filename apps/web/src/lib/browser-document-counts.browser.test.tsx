@@ -11,6 +11,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { browserDocumentCounts } from './browser-document-counts.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -51,10 +52,9 @@ function spatialDoc(text: string): Loro {
  * workspace can have these — multi-workspace arrived after the tree did.
  */
 async function seedLegacy(workspaceId: string, paths: readonly string[]): Promise<void> {
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId })
+  await new IdbDocumentIndex(DB_NAME).createWorkspace({ workspaceId })
   for (const path of paths) {
-    const entry = await index.createDocument({ workspaceId, path, kind: 'spatial' })
+    const entry = await seedLegacyRow({ workspaceId, path, kind: 'spatial' }, DB_NAME)
     await new LoroStore(DB_NAME).save(
       entry.documentId,
       spatialDoc(path).export({ mode: 'snapshot' }),
@@ -118,12 +118,10 @@ it('counts a document the fold left behind, as the list does', async () => {
   await seedLegacy(ACTIVE, ['readable'])
   // An envelope from a build this one does not know: the fold skips it and
   // the legacy row keeps serving it, so the list still shows it.
-  const index = new IdbDocumentIndex(DB_NAME)
-  const damaged = await index.createDocument({
-    workspaceId: ACTIVE,
-    path: 'damaged',
-    kind: 'spatial',
-  })
+  const damaged = await seedLegacyRow(
+    { workspaceId: ACTIVE, path: 'damaged', kind: 'spatial' },
+    DB_NAME,
+  )
   await seedSyncDocument(damaged.documentId, { raw: { v: 99 } }, DB_NAME)
 
   const counts = await browserDocumentCounts(DB_NAME)

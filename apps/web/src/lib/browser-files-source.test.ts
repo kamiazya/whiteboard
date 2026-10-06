@@ -12,12 +12,15 @@ import {
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
+import type { DocumentEntry, ListDocumentsInput } from '@kamiazya/whiteboard-ports'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
@@ -59,9 +62,7 @@ describe('createBrowserFilesSource', () => {
     // A pre-collapse browser's world: an index row plus a content record,
     // nothing in the workspace tree. The default source folds on first read,
     // so the legacy document lists with its name and kind intact.
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'a',
       kind: 'spatial',
@@ -96,8 +97,7 @@ describe('createBrowserFilesSource', () => {
 
   it('creates a document with seeded content, like every other browser create', async () => {
     const source = createBrowserFilesSource()
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
+    await new IdbDocumentIndex().createWorkspace({ workspaceId: getBrowserWorkspaceId() })
 
     await source.createDocument('notes/plan', 'markdown')
 
@@ -146,9 +146,7 @@ describe('createBrowserFilesSource', () => {
 
   it('reads a markdown document body back', async () => {
     const source = createBrowserFilesSource()
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'n',
       kind: 'markdown',
@@ -167,9 +165,7 @@ describe('createBrowserFilesSource', () => {
   // test rather than a failing one (coverage-ledger.md).
   it('reads a markdown document’s facets back with its body', async () => {
     const source = createBrowserFilesSource()
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'marked',
       kind: 'markdown',
@@ -186,9 +182,7 @@ describe('createBrowserFilesSource', () => {
 
   it('answers the CURRENT spatial bytes, deltas folded in', async () => {
     const source = createBrowserFilesSource()
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 's',
       kind: 'spatial',
@@ -218,14 +212,12 @@ describe('createBrowserFilesSource tags', () => {
   beforeEach(clearWhiteboardDb)
 
   it('surfaces core-facet tags on markdown entries and omits them elsewhere', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const tagged = await index.createDocument({
+    const tagged = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'tagged',
       kind: 'markdown',
     })
-    await index.createDocument({
+    await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'plain',
       kind: 'markdown',
@@ -298,9 +290,9 @@ describe('createBrowserFilesSource trash', () => {
   })
 
   it('stays capability-less over an index that keeps no trash', async () => {
-    // The legacy row-plane index has no listTrash/restoreDocument, so the
-    // source must not offer the affordance it could not honour.
-    const source = createBrowserFilesSource({ index: new IdbDocumentIndex() })
+    // An index with no listTrash/restoreDocument, so the source must not
+    // offer the affordance it could not honour.
+    const source = createBrowserFilesSource({ index: new InMemoryDocumentIndex() })
     expect(source.listTrash).toBeUndefined()
     expect(source.restoreFromTrash).toBeUndefined()
   })
@@ -369,14 +361,12 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
   beforeEach(clearWhiteboardDb)
 
   it('lists a board’s own tags on its entry and counts every bearer in listTagsInUse', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const note = await index.createDocument({
+    const note = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'note',
       kind: 'markdown',
     })
-    const board = await index.createDocument({
+    const board = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'board',
       kind: 'spatial',
@@ -412,12 +402,11 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
   })
 
   it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
+    await new IdbDocumentIndex().createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     const store = new LoroStore()
     const before = createBrowserFilesSource()
     await expect(before.readTagLibrary?.()).resolves.toEqual({})
-    const library = await index.createDocument({
+    const library = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: TAG_LIBRARY_PATH,
       kind: 'markdown',
@@ -434,11 +423,10 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
   })
 
   it('reads the stencil library the document at the stencil library path declares, and answers none without one', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
+    await new IdbDocumentIndex().createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     const store = new LoroStore()
     await expect(createBrowserFilesSource().readStencilLibrary?.()).resolves.toEqual({})
-    const library = await index.createDocument({
+    const library = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: STENCIL_LIBRARY_PATH,
       kind: 'markdown',
@@ -454,11 +442,9 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
   })
 
   it('reads a library document whose stored bytes cannot be decoded as no library, not as a failure', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
     const store = new LoroStore()
     for (const path of [TAG_LIBRARY_PATH, STENCIL_LIBRARY_PATH]) {
-      const entry = await index.createDocument({
+      const entry = await seedLegacyRow({
         workspaceId: getBrowserWorkspaceId(),
         path,
         kind: 'markdown',
@@ -475,9 +461,13 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
 describe('createBrowserFilesSource tag cache', () => {
   beforeEach(clearWhiteboardDb)
 
-  /** Two tagged notes in the legacy row plane, whose content reads go through a counting store. */
+  /**
+   * Two tagged notes over an index with no workspace tree behind it, so every
+   * content read falls through to the per-document store — and through the
+   * counting one this hands the source.
+   */
   async function twoTaggedNotes() {
-    const index = new IdbDocumentIndex()
+    const index = new InMemoryDocumentIndex()
     await ensureBrowserWorkspace(index)
     const real = new LoroStore()
     const loads: string[] = []
@@ -553,9 +543,14 @@ describe('createBrowserFilesSource tag cache', () => {
   it('reads a document again when its row names a different kind, though its stamp stands', async () => {
     // A document that records no kind is whatever its row says, so what it
     // bears depends on the row as well as on the content.
-    const base = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(base)
-    const entry = await base.createDocument({
+    const rowKind: { value: DocumentKind } = { value: 'spatial' }
+    const index = new (class extends InMemoryDocumentIndex {
+      override async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
+        return (await super.listDocuments(input)).map((row) => ({ ...row, kind: rowKind.value }))
+      }
+    })()
+    await ensureBrowserWorkspace(index)
+    const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'shape-shifter',
       kind: 'spatial',
@@ -569,13 +564,6 @@ describe('createBrowserFilesSource tag cache', () => {
       edges: [],
     })
     await store.save(entry.documentId, doc.export({ mode: 'snapshot' }))
-    const rowKind: { value: DocumentKind } = { value: 'spatial' }
-    const index = Object.create(base, {
-      listDocuments: {
-        value: async (input: Parameters<typeof base.listDocuments>[0]) =>
-          (await base.listDocuments(input)).map((row) => ({ ...row, kind: rowKind.value })),
-      },
-    }) as IdbDocumentIndex
     const source = createBrowserFilesSource({
       index,
       clock: async () => new Map([[entry.documentId, 'stamp-1']]),
