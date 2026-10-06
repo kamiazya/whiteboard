@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -423,4 +423,69 @@ describe('docs/ contract', () => {
       'spell it `pnpm --filter <pkg> <script>`, or say it runs from the package dir',
     ).toEqual([])
   })
+
+  // `node <path>` resolves the path from the shell's directory, so a line
+  // copied into a root shell has to name a path from the root. The four
+  // smoke-wrapper lines in testing.md named `scripts/smoke/…`, which exists only
+  // under packages/mcp-server, and answered ERR_MODULE_NOT_FOUND from the root
+  // while nothing on the page said where to run them. A doc inside a package
+  // writes its paths from that package throughout, so its own directory counts.
+  it('every `node <relative path>` in tracked Markdown resolves from the root, or says where it runs', () => {
+    const files = trackedFiles(REPO_ROOT, '*.md').filter((path) => !path.includes('/adr/'))
+    expect(files.length).toBeGreaterThan(200)
+
+    let reached = 0
+    const stray: string[] = []
+    for (const path of files) {
+      const owner = /^((?:packages|apps|tools)\/[^/]+)\//.exec(path)?.[1]
+      for (const line of codeText(readFileSync(join(REPO_ROOT, path), 'utf8')).split('\n')) {
+        for (const script of nodeScriptPaths(line)) {
+          reached++
+          const cd = /\bcd\s+([^\s&;|)]+)\s*&&/.exec(line)?.[1]
+          const from = [REPO_ROOT, owner && join(REPO_ROOT, owner), cd && join(REPO_ROOT, cd)]
+          if (from.some((dir) => dir && existsSync(join(dir, script)))) continue
+          if (/docker exec|--filter|\s-C\s/.test(line)) continue
+          stray.push(`${path}: ${line.trim()}`)
+        }
+      }
+    }
+    expect(reached).toBeGreaterThan(20)
+    expect(stray, 'prefix it `cd <dir> &&`, or name the path from the root').toEqual([])
+  })
+
+  // A checkout build can carry migrations no release ships yet. Run against
+  // the default data dir (`~/.whiteboard`), it migrates the store an installed
+  // release also opens, and that release then refuses to start — with advice,
+  // pre-1.0, to delete the database. Every dev launcher points a checkout at
+  // `.dev-data` for this reason; a recipe that runs the built CLI by hand has to
+  // say where its data goes, or the reader who copies it pays.
+  it('every documented run of the built CLI outside a container sets WHITEBOARD_DATA_DIR', () => {
+    const files = trackedFiles(REPO_ROOT, '*.md').filter((path) => !path.includes('/adr/'))
+    let reached = 0
+    const unscoped: string[] = []
+    for (const path of files) {
+      for (const line of codeText(readFileSync(join(REPO_ROOT, path), 'utf8')).split('\n')) {
+        if (!nodeScriptPaths(line).some((script) => /(^|\/)dist\/(cli|server)\//.test(script)))
+          continue
+        if (/docker exec/.test(line)) continue
+        reached++
+        if (!/\bWHITEBOARD_DATA_DIR=/.test(line)) unscoped.push(`${path}: ${line.trim()}`)
+      }
+    }
+    expect(reached).toBeGreaterThanOrEqual(1)
+    expect(unscoped).toEqual([])
+  })
 })
+
+/**
+ * The script paths a line hands to `node`, skipping its options (and an
+ * option's value, as in `--import tsx/esm`). Absolute paths and placeholders
+ * name no file in this tree, so they are not returned.
+ */
+function nodeScriptPaths(line: string): string[] {
+  const script =
+    /\bnode\s+(?:-{1,2}[\w-]+(?:[= ](?!\S*\.(?:mjs|cjs|js|ts|mts)\b)\S+)?\s+)*([^\s`'"]+\.(?:mjs|cjs|js|ts|mts))\b/g
+  return [...line.matchAll(script)]
+    .map((m) => m[1] ?? '')
+    .filter((path) => !path.startsWith('/') && !/[<>$*{}~]/.test(path))
+}

@@ -84,7 +84,7 @@ pnpm mcp:inspect
 ## When To Use HTTP vs STDIO
 
 - Prefer HTTP (`/mcp`) for active development. The stdio proxy the client launches retries across daemon restarts, so a code change restarts the daemon without reconnecting the client; the daemon listens on an owner-only socket, not a TCP port.
-- Use stdio Inspector (`pnpm mcp:inspect:stdio`) only when debugging stdio-specific startup issues. It runs the stdio server from source; the packaged entry is the built CLI's `mcp` command (`node packages/mcp-server/dist/cli/index.js mcp` after `pnpm build`), which uses a packaged install's data dir — `~/.whiteboard` unless you set `WHITEBOARD_DATA_DIR`.
+- Use stdio Inspector (`pnpm mcp:inspect:stdio`) only when debugging stdio-specific startup issues. It runs the stdio server from source; the packaged entry is the built CLI's `mcp` command, run after `pnpm build` on a data dir of its own: `WHITEBOARD_DATA_DIR="$(mktemp -d)" node packages/mcp-server/dist/cli/index.js mcp` (or the checkout's `.dev-data`). Without `WHITEBOARD_DATA_DIR` it opens `~/.whiteboard`, the installed release's store, and a checkout build may carry migrations no release ships yet: once it migrates that store, the installed release refuses to start on it.
 
 ## Enable Request Logging
 
