@@ -105,7 +105,11 @@ What the library changes:
   document browser's cards, its preview pane and Peek, in an SVG or
   PNG export, by `wb_scene_render`, and in the inline view `canvas_view`
   shows in chat — so the legend lists the key because the library said so
-  rather than because someone coloured every box by hand. A colour set on the
+  rather than because someone coloured every box by hand. A board drawn
+  INSIDE another document is coloured the same way: a file node's
+  miniature, a `![[board]]` embed in a note or a text node, and the cached
+  copy you read while the daemon is unreachable. Its legend stays with the
+  board itself; the miniature carries the colours only. A colour set on the
   box itself always wins, and a box carrying two declared colours under two keys gets
   neither. The board reads the library when it opens, and the document
   browser when it is shown; after editing the `tags` document, reopen the

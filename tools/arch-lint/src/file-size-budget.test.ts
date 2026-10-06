@@ -152,7 +152,8 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // surface and the wiring, which this file is for. A budget met by trimming
   // the rationale beside that wiring buys lines at the price of what the
   // lines were for, so it is not met that way.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 879,
+  // +2: `tagLibrary`, so a board the preview embeds is coloured by intent.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 881,
   // The ink TERMS left for `edge-ink.ts` — how a path's ink is
   // measured, separately from what the named rules charge for it. The next
   // shrink is the PREFERENCE half (candidate generation, from
