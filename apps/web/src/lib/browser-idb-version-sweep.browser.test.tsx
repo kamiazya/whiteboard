@@ -20,11 +20,17 @@ import {
   SYNC_DOCUMENTS_STORE,
   SYNC_SNAPSHOT_CHUNKS_STORE,
   sweepVersionsWrittenBeforeDigests,
-  VERSION_DIGEST_DB_VERSION,
   VERSIONS_BY_DOCUMENT_INDEX,
   VERSIONS_STORE,
   WORKSPACES_STORE,
 } from './browser-idb.js'
+
+/**
+ * The version at which a saved point began carrying its content's digest —
+ * the sweep's own bound. Spelled as it stood, the way every migration
+ * fixture's version is: it is history, and does not move when head does.
+ */
+const VERSION_DIGEST_DB_VERSION = 19
 
 /** This file's own database: it parks one at an old version, so it must not be the shared one. */
 const SWEEP_DB = 'whiteboard-version-sweep-test'
