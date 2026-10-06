@@ -27,7 +27,7 @@ export interface PreviewPaneProps {
   /** Renders diagram fences; see render-preview.ts. */
   renderDiagram?: MdastLayoutOptions['renderDiagram']
   /** Colours an embedded board by intent; see render-preview.ts. */
-  tagLibrary?: RenderMarkdownPreviewOptions['tagLibrary']
+  tagLibrary?: NonNullable<RenderMarkdownPreviewOptions['tagLibrary']>
   /**
    * Filled with the current render's per-block scroll-sync anchors (see
    * render-preview.ts). A ref, not a callback into state: the consumer is

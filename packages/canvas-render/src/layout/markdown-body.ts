@@ -40,7 +40,7 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
    * by intent exactly as it is on its own page. The note itself has no boxes
    * to colour, so the typesetter never reads it.
    */
-  readonly tagLibrary?: SpatialLayoutOptions['tagLibrary']
+  readonly tagLibrary?: NonNullable<SpatialLayoutOptions['tagLibrary']>
 }
 
 /**

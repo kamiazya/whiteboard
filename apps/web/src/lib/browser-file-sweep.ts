@@ -105,15 +105,19 @@ function versionReads(
 ): NonNullable<FileReferenceReads['versions']> {
   let past: LoroDoc | null = null
   return {
-    list: async (holder) =>
-      rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
-    load: async (holder, versionId) => {
-      const row = rows.find((candidate) => candidate.id === versionId)
-      if (row === undefined) return null
-      past ??= record.fork()
-      past.checkout(decodeFrontiers(row.frontiers))
-      return projectWorkspaceDocument(past, holder.documentId)
-    },
+    list: (holder) =>
+      Promise.resolve(
+        rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
+      ),
+    // Through `then`, so a checkout that throws rejects the way an async read would.
+    load: (holder, versionId) =>
+      Promise.resolve().then(() => {
+        const row = rows.find((candidate) => candidate.id === versionId)
+        if (row === undefined) return null
+        past ??= record.fork()
+        past.checkout(decodeFrontiers(row.frontiers))
+        return projectWorkspaceDocument(past, holder.documentId)
+      }),
   }
 }
 

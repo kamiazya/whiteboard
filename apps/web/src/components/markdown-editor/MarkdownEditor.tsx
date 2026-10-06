@@ -104,7 +104,7 @@ export interface MarkdownEditorProps {
    */
   references?: ReferenceSeams
   /** Colours a board the preview embeds by intent, as the canvas editor does. */
-  tagLibrary?: RenderMarkdownPreviewOptions['tagLibrary']
+  tagLibrary?: NonNullable<RenderMarkdownPreviewOptions['tagLibrary']>
   /**
    * Documents this editor may link to. Supplied by the composition root,
    * which already holds the list its switcher shows. Absent (or empty) keeps

@@ -106,8 +106,9 @@ export function resolveDevBearerToken(env) {
  * @returns {{ command: string, args: string[], cwd: string }}
  */
 export function devServerSpawn(script, { packageRoot, token, execPath = process.execPath }) {
-  const [runner, entry, ...rest] = script.trim().split(/\s+/)
-  if (runner !== 'node' || entry === undefined || entry.startsWith('-')) {
+  const words = script.trim().split(/\s+/)
+  const [runner, entry, ...rest] = words
+  if (runner !== 'node' || words.length < 2 || entry.startsWith('-')) {
     throw new Error(
       `mcp:http:dev is no longer \`node <script> …\` (${script}), so the SessionStart hook cannot start it without pnpm`,
     )

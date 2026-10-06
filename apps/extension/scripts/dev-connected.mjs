@@ -24,12 +24,12 @@ import { resolveRepoRootFromGit } from '../../../packages/mcp-server/scripts/dev
 import { chromiumArgs, devToolsActivePortFile, installHost } from './dev-connected-lib.mjs'
 import { EXTENSION_DIR } from './smoke-kit.mjs'
 
-const USAGE = `usage: pnpm dev:connected [--headless] [--port=<n>] [--url=<dev server url>] [--cdp-port=<n>] [--chrome=<path>]
+const USAGE = `usage: pnpm dev:connected [--headless] [--port=<n>] [--url=<dev server url>] [--cdp-port=<n>]
   --headless   no window; attach over CDP (the printed endpoint) instead
   --port       the vite port to try first (default 5173; the next free one is taken)
   --url        use a dev server that is already running instead of starting one
   --cdp-port   the remote debugging port (default: any free one, printed)
-  --chrome     a Chromium that honours --load-extension (default: Playwright's)`
+WHITEBOARD_DEV_CONNECTED_CHROME names a Chromium that honours --load-extension (default: Playwright's)`
 
 const say = (line) => console.log(`[dev-connected] ${line}`)
 const fail = (line) => {
@@ -47,7 +47,6 @@ try {
       port: { type: 'string', default: '5173' },
       url: { type: 'string' },
       'cdp-port': { type: 'string', default: '0' },
-      chrome: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   }).values
@@ -92,10 +91,12 @@ const built = spawnSync(
 )
 if (built.status !== 0) fail('the extension did not build')
 
-const chromePath = options.chrome ?? chromium.executablePath()
+// From the environment rather than a flag: an executable path is not an
+// argument this launcher passes through from whoever runs it.
+const chromePath = process.env.WHITEBOARD_DEV_CONNECTED_CHROME || chromium.executablePath()
 if (!existsSync(chromePath)) {
   fail(
-    `no Chromium at ${chromePath} — run \`pnpm exec playwright install chromium\` once, or pass --chrome=<path>`,
+    `no Chromium at ${chromePath} — run \`pnpm exec playwright install chromium\` once, or set WHITEBOARD_DEV_CONNECTED_CHROME=<path>`,
   )
 }
 
@@ -116,7 +117,7 @@ async function cleanUp(code) {
   rmSync(profileDir, { recursive: true, force: true })
   process.exit(code)
 }
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => cleanUp(0))
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => void cleanUp(0))
 
 let plan
 try {
@@ -174,7 +175,7 @@ if (appUrl === undefined) {
   vite.once('exit', (code) => {
     if (!cleaningUp) {
       console.error(`[dev-connected] vite exited (${code})`)
-      cleanUp(1)
+      void cleanUp(1)
     }
   })
   appUrl = `http://localhost:${port}/`
@@ -207,13 +208,12 @@ browser.once('exit', (code, signal) => {
       !process.env.DISPLAY &&
       !process.env.WAYLAND_DISPLAY
     const hint = noDisplay ? ' (no display here: pass --headless)' : ''
-    console.error(
-      `[dev-connected] Chromium exited (${signal ?? `code ${code}`})${hint} — see ${logPath}`,
-    )
-    cleanUp(1)
+    const how = signal ?? `code ${code}`
+    console.error(`[dev-connected] Chromium exited (${how})${hint} — see ${logPath}`)
+    void cleanUp(1)
     return
   }
-  cleanUp(0)
+  void cleanUp(0)
 })
 
 const cdpPort = await waitFor(

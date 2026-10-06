@@ -230,7 +230,7 @@ dev MCP proxy shows up in the workspace.
   per-user registry key, which a throwaway profile cannot scope.
 - Not `WHITEBOARD_CHROME_PATH`: that is the test launcher's choice, usually
   branded Chrome or the headless shell, and neither loads an unpacked
-  extension. `--chrome=<path>` names another Chromium.
+  extension. `WHITEBOARD_DEV_CONNECTED_CHROME=<path>` names another Chromium.
 
 ## Cloudflare Pages header parity in local dev
 
