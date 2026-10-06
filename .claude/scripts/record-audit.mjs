@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url'
 import { parseScriptArgs } from './script-flags.mjs'
 
 // audit-nudge.mjs reads this log by kind, so a kind nothing reads is a row that
-// misleads rather than records.
-const KINDS = ['audit-triage', 'dogfood-triage']
+// misleads rather than records. That is why dogfood-triage is not one: no
+// cadence check reads it, and its runs need a browser MCP a session may not
+// have, so a nudge to run it would be one nobody could act on.
+const KINDS = ['audit-triage']
 const usage = `usage: record-audit.mjs <kind>   (kind: ${KINDS.join(' | ')})`
 
 const {

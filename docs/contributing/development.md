@@ -222,7 +222,7 @@ dev MCP proxy shows up in the workspace.
   run asks to connect again. The dev daemon is shared and keeps running.
 - It prints the app URL and a CDP endpoint (`--cdp-port=<n>` to pin it), which
   Playwright reaches with `chromium.connectOverCDP(<endpoint>)` and the
-  Playwright MCP server with `--cdp-endpoint=<endpoint>`.
+  Playwright MCP server with `--cdp-endpoint=<endpoint>` (next section).
 - It starts its own `vite` on the first free port from `--port` (5173). A
   dev server already on 5173 may be another checkout's, so it is reused only
   when named with `--url=<url>`.
@@ -231,6 +231,38 @@ dev MCP proxy shows up in the workspace.
 - Not `WHITEBOARD_CHROME_PATH`: that is the test launcher's choice, usually
   branded Chrome or the headless shell, and neither loads an unpacked
   extension. `WHITEBOARD_DEV_CONNECTED_CHROME=<path>` names another Chromium.
+
+### Give an agent session a browser (dogfooding)
+
+The `dogfood-triage` workflow and the review workflow's optional dogfood pass
+drive the app through the Playwright MCP server's browser tools. Nothing in this
+repository registers that server, and a session cannot add one mid-run: an MCP
+server's arguments are fixed when the client starts. So the browser is set up by
+**you, before the session starts**, in this order:
+
+1. Start the app on a pinned debugging port. Without `--cdp-port`, every run
+   picks a new free port, and a registration made for the last one points at
+   nothing:
+
+   ```bash
+   pnpm dev:connected --headless --cdp-port=9222
+   ```
+
+2. **Your step:** register the Playwright MCP server against that port, for
+   this checkout only. The agent does not do this, because it changes your
+   client's configuration:
+
+   ```bash
+   claude mcp add --scope local playwright -- npx -y @playwright/mcp@0.0.83 --cdp-endpoint=http://127.0.0.1:9222
+   ```
+
+3. **Your step:** start a new session. Its browser tools now drive the
+   Chromium that `dev:connected` opened, which is the one with the extension
+   loaded.
+
+Without these steps, the workflows stop and report a skip. They do not spend
+agents on a browser the session does not have. Remove the registration with
+`claude mcp remove --scope local playwright` when you are done.
 
 ## Cloudflare Pages header parity in local dev
 

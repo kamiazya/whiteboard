@@ -284,10 +284,12 @@ const dogfood = []
 if (DOGFOOD && APP_URL) {
   for (let i = 0; i < DOGFOOD_PERSONAS; i++) {
     const run = await agent(
-      `Live dogfood of THIS change as a real user. First read the diff (\`${GIT} diff ${RANGE}\`) to learn which flow it touches.${cwdHint} Then, as a plausible user (persona #${i + 1}; pick a realistic context/goal that exercises the touched flow), drive the running app at ${APP_URL} with the Playwright MCP browser tools and try to accomplish that goal end-to-end. Stay in character; record concrete friction (bug / missing affordance / confusing / slow / dead-end) the change introduced or left unaddressed, with repro. Be efficient (a handful of meaningful steps). If ${APP_URL} is unreachable, goalAchieved=skip with the reason.`,
+      `Live dogfood of THIS change as a real user. First read the diff (\`${GIT} diff ${RANGE}\`) to learn which flow it touches.${cwdHint} Then, as a plausible user (persona #${i + 1}; pick a realistic context/goal that exercises the touched flow), drive the running app at ${APP_URL} with the Playwright MCP browser tools and try to accomplish that goal end-to-end. Load those tools first (ToolSearch "playwright browser_navigate"); if no browser tool loads, goalAchieved=skip with a summary beginning "no browser tool" — never substitute curl, a scripted browser or reading the source. Stay in character; record concrete friction (bug / missing affordance / confusing / slow / dead-end) the change introduced or left unaddressed, with repro. Be efficient (a handful of meaningful steps). If ${APP_URL} is unreachable, goalAchieved=skip with the reason.`,
       { label: `dogfood:p${i + 1}`, phase: 'Dogfood', agentType: 'dogfood-persona', schema: DOGFOOD_SCHEMA },
     )
     if (run) dogfood.push(run)
+    // No browser (or no app) for one persona is none for the next: stop spending agents.
+    if (run && run.goalAchieved === 'skip') break
   }
 }
 
