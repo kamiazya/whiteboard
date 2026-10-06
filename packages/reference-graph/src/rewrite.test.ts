@@ -54,6 +54,42 @@ describe('rewriteDocumentReferences', () => {
     expect(nodeFile(byId('f') ?? canvas.nodes[0]!)).toBe('archive/login')
   })
 
+  it('answers false and writes nothing when a board names no moved alias', () => {
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'spatial')
+    writeSpatialCanvas(
+      doc,
+      spatialCanvasSchema.parse({
+        nodes: [textNode({ id: 't', x: 0, y: 0, width: 100, height: 40, text: 'see [[other]]' })],
+        edges: [],
+      }),
+    )
+    const before = doc.oplogVersion().encode()
+
+    expect(rewriteDocumentReferences(doc, PLAN, 'spatial')).toBe(false)
+    expect(doc.oplogVersion().encode()).toEqual(before)
+  })
+
+  // A document written before kinds existed records none, and neither does
+  // its row; the rest of the system reads it as a canvas, so the rewrite
+  // must too — a markdown write over it would replace its nodes with a body.
+  it('repoints a board that records no kind, as the canvas it reads as', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(
+      doc,
+      spatialCanvasSchema.parse({
+        nodes: [
+          textNode({ id: 't', x: 0, y: 0, width: 100, height: 40, text: 'see [[design/login]]' }),
+        ],
+        edges: [],
+      }),
+    )
+
+    expect(rewriteDocumentReferences(doc, PLAN, undefined)).toBe(true)
+    const [node] = readSpatialCanvas(doc).nodes
+    expect(node === undefined ? undefined : nodeText(node)).toBe('see [[archive/login]]')
+  })
+
   // The browser keeps every document as a node of one workspace record, so
   // the rewrite has to land in that node rather than in a standalone copy.
   it('rewrites a document held as a node of a workspace record', () => {
