@@ -19,7 +19,7 @@ describe('the delete confirmation with a count', () => {
         pending={{ displayName: '', count: 3 }}
         busy={false}
         error={null}
-        action="delete-documents-browser"
+        action="delete-documents"
         onCancel={noop}
         onConfirm={noop}
       />,
@@ -34,14 +34,14 @@ describe('the delete confirmation with a count', () => {
         pending={{ displayName: '', count: 2 }}
         busy={false}
         error={null}
-        action="delete-documents-browser"
+        action="delete-documents"
         onCancel={noop}
         onConfirm={noop}
       />,
     )
 
     expect(
-      screen.getByText(DESTRUCTIVE_COPY['delete-documents-browser']('documents'), { exact: false }),
+      screen.getByText(DESTRUCTIVE_COPY['delete-documents']('documents'), { exact: false }),
     ).toBeTruthy()
   })
 
@@ -51,7 +51,7 @@ describe('the delete confirmation with a count', () => {
         pending={{ displayName: 'Roadmap', kind: 'spatial' }}
         busy={false}
         error={null}
-        action="delete-document-browser"
+        action="delete-document"
         onCancel={noop}
         onConfirm={noop}
       />,
@@ -70,7 +70,7 @@ describe('the delete confirmation while the delete is in flight', () => {
         pending={{ displayName: 'Plan', kind: 'markdown' }}
         busy={busy}
         error={null}
-        action="delete-document-browser"
+        action="delete-document"
         onCancel={onCancel}
         onConfirm={onConfirm}
       />,

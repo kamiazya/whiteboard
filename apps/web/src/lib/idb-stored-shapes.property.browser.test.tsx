@@ -44,6 +44,7 @@ import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { DOCUMENT_FILES_STORE, openWhiteboardDb } from './browser-idb.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -215,20 +216,19 @@ describe('IdbDocumentIndex', () => {
       fc.uniqueArray(documentArb, { selector: (d) => d.path, minLength: 1, maxLength: 4 }),
     ],
     withDefaults({ numRuns: 15 }),
-  )('lists the workspace and its documents as they were created', async (workspace, docs) => {
+  )('lists the workspace and its legacy rows as they were written', async (workspace, docs) => {
     const index = new IdbDocumentIndex()
     const workspaceId = generateDocumentId()
     await index.createWorkspace({ workspaceId, ...workspace })
     expect(await index.listWorkspaces()).toContainEqual({ workspaceId, ...workspace })
     expect(await index.resolveWorkspace(workspaceId)).toEqual({ workspaceId, ...workspace })
 
-    const created: DocumentEntry[] = []
-    for (const doc of docs) created.push(await index.createDocument({ workspaceId, ...doc }))
+    // No build writes a row any more; the reader is what is under test, as
+    // the fold reads what older builds left.
+    const written: DocumentEntry[] = []
+    for (const doc of docs) written.push(await seedLegacyRow({ workspaceId, ...doc }))
     const listed = await index.listDocuments({ workspaceId })
-    expect([...listed].sort(byPath)).toEqual([...created].sort(byPath))
-    for (const entry of created) {
-      expect(await index.resolveDocument({ workspaceId, path: entry.path })).toEqual(entry)
-    }
+    expect([...listed].sort(byPath)).toEqual([...written].sort(byPath))
   })
 })
 

@@ -136,11 +136,15 @@ addenda of
   exported into content-addressed blob storage and recorded in the
   workspace's trash, so the file browser can list what went and restore it
   under the **same `documentId`** — anything that named the document (a
-  share link, an embed) resolves to it again after a restore. The trash
+  share link, an embed) resolves to it again after a restore. A document's
+  **saved versions stay with it in the trash**: they are keyed by that same
+  `documentId`, so a restore brings its history back too. This holds whether
+  the browser or the daemon keeps the workspace. The trash
   section appears only when it holds something. **Delete permanently** on a
   trash row is the one step with no way back: after a confirmation it removes
-  the row and the evacuated content, so the document can no longer be restored
-  and the images only it used are no longer kept for it. It does not rewrite
+  the row, the evacuated content and the document's saved versions, so the
+  document can no longer be restored and the images only it used are no
+  longer kept for it. It does not rewrite
   the workspace's change history — edits recorded there before the delete stay
   in it until that history is compacted. There is no automatic expiry: the
   trash keeps what it holds until someone restores or deletes it.
@@ -155,7 +159,8 @@ addenda of
   periodically **compacts** it: history older than anything still reachable
   is folded into the snapshot. What stays reachable is exactly what your
   saved versions point at — the record keeps history back to the oldest
-  version and nothing before that. Deleting old versions (or the automatic
+  version and nothing before that, counting the versions of a document in
+  the trash until it is deleted permanently. Deleting old versions (or the automatic
   version pruning) is therefore what lets compaction reclaim space; the
   oldest version is the whole answer.
 - Documents kept in the browser cross to a daemon by an explicit,

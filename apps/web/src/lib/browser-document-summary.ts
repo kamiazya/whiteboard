@@ -52,10 +52,10 @@ async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<str
 /**
  * A listing row: the index entry plus its content timestamp.
  *
- * `name` falls back to the path here rather than in the port. `DocumentEntry`
- * leaves it ABSENT when a document has none, precisely so a reader chooses;
- * a listing that invents one reads as though somebody typed the path in as a
- * title. Choosing is this layer's job.
+ * `name` is null when the document has none, as the daemon's listing says it.
+ * Substituting the path here would make a name somebody typed equal to the
+ * path indistinguishable from no name at all; a surface that needs a label
+ * asks `documentLabel` instead.
  *
  * A document with no content record reports the epoch rather than being
  * dropped: every create path seeds one, so it should not happen, but hiding a
@@ -67,7 +67,7 @@ function toSnapshot(entry: DocumentEntry, updatedAt: string | undefined): Docume
     documentId: entry.documentId,
     workspaceId: getBrowserWorkspaceId(),
     path: entry.path,
-    name: entry.name ?? entry.path,
+    name: entry.name ?? null,
     updatedAt: updatedAt ?? new Date(0).toISOString(),
     kind: entry.kind ?? 'spatial',
   }

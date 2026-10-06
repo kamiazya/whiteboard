@@ -24,6 +24,7 @@ import { chunkSnapshot, type SnapshotChunk } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
+import { legacyRowsOfBrowserWorkspace } from '../test-utils/seed-legacy-row.js'
 import {
   IdbDefaultDocumentPointer,
   idbContentClock,
@@ -78,9 +79,9 @@ const MIGRATION_DB = 'whiteboard-migration-test'
 beforeEach(resetBrowserWorkspaceIdForTests)
 
 /**
- * The migrated database read back through the production wiring, rather than
- * through a test double: what this file asserts is what a real user's next
- * session would see after the upgrade ran.
+ * The migrated rows read back the way the startup fold reads them, through
+ * the production summary layer: what this file asserts is what a real user's
+ * next session would see after the upgrade ran.
  *
  * `listDocuments`/`load` resolve the workspace id fresh (idempotent once
  * resolved for this test) before delegating, rather than assuming it is
@@ -88,12 +89,11 @@ beforeEach(resetBrowserWorkspaceIdForTests)
  * chain (`boot.ts`), which nothing in this file drives.
  */
 function migratedLocal() {
-  const index = new IdbDocumentIndex(MIGRATION_DB)
   const clock = idbContentClock(MIGRATION_DB)
-  const ready = () => resolveBrowserWorkspaceId(MIGRATION_DB)
+  const ready = () => legacyRowsOfBrowserWorkspace(MIGRATION_DB)
   return {
-    listDocuments: () => ready().then(() => listBrowserDocuments(index, clock)),
-    load: (documentId: string) => ready().then(() => loadBrowserDocument(index, documentId, clock)),
+    listDocuments: () => ready().then((index) => listBrowserDocuments(index, clock)),
+    load: (documentId: string) => ready().then((i) => loadBrowserDocument(i, documentId, clock)),
     getDefaultDocumentId: () => new IdbDefaultDocumentPointer(MIGRATION_DB).get(),
   }
 }

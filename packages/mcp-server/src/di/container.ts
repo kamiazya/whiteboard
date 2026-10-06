@@ -114,10 +114,9 @@ export function resolveServerDeps(
     embedder: resolveSearchEmbedder(scope.dataDir),
     // Wired here for the same reason clientNotifier is: it is this package's
     // own filesystem and doc cache, not an interchangeable implementation.
-    // Without it wbDocumentDelete removes the rows and leaves the
-    // thumbnails, the blob and a cached doc instance behind — the HTTP
-    // DELETE has always cleaned those up, and the two paths disagreeing is
-    // the defect this closes.
+    // Without it wbDocumentDelete would leave a cached doc instance behind,
+    // and the version rows of a delete nothing can restore — the HTTP
+    // DELETE cleans both up, and the two paths must not disagree.
     documentTeardown: createDocumentTeardown(scope),
     // Same reason as documentTeardown: this package's own op-log
     // maintenance, not an interchangeable implementation. Wired HERE rather

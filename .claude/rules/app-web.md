@@ -256,6 +256,14 @@ is null for markdown and for every outline, for the reason the theme axis is:
 neither is measured in a family a theme names. The cost is one redraw of the
 rows on screen per family that lands, once, at background priority.
 
+**And a `library` axis, for the same reason.** A board's uncoloured boxes draw
+in the colour the workspace's tag library declares for their tags, so
+`load-row-render.ts` reads the library once per loader (`readTagLibrary`),
+posts it on the `layout` request, and keys the picture by
+`tagLibraryKey(library)` — a digest of the declared colours alone, `''` when
+none are. Null for markdown and every outline: the outline request takes no
+library, so tree-row icons and the favicon still draw a box's own colour.
+
 The markdown PREVIEW pane's own prose is bundled-family too — no theme names a
 family for a note — but a board EMBEDDED in it does, so `render-preview.ts`
 passes `fontAvailable: hasLoadedFace` into `layoutMdastBlocks`, which forwards
@@ -363,8 +371,9 @@ back; until then the worker writes nothing for that document.
 `lib/idb-stored-shapes.property.browser.test.tsx` writes through each
 production writer and reads through its reader, against the real
 IndexedDB: the blob store, the document-file store (its v2 record and the
-v1 record it rewrites on read), the document index's workspace and
-document rows, the document store's snapshot and delta log, and the
+v1 record it rewrites on read), the document index's workspace rows
+and the legacy document rows it reads (written by `test-utils/seed-legacy-row.ts`,
+since no build writes one any more), the document store's snapshot and delta log, and the
 version store's rows. Inputs are drawn from the writer's input space, or
 from the port's schema where the writer takes one; a `z.custom` /
 `z.instanceof` field is overridden by path, since the walk cannot know
@@ -416,3 +425,6 @@ the how-to. A page test that holds the index's listing to model "the list
 has not arrived" must hold EVERY call, not the first — the page lists for
 its vocabulary too, and a held first call was that read while the page's
 own list took the fast path (`BrowserDocumentPage.stale-link.test.tsx`).
+The list surfaces (row thumbnail, preview pane, Peek) are the one other
+reader: `load-row-render.ts` is not a page and has no `model.tags`, and its
+render key must name the library before the worker is asked.

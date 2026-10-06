@@ -11,7 +11,7 @@
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { inPage, renderPage } from '../test-utils/daemon-page-harness.js'
@@ -50,7 +50,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 it('opens exactly one connection per canvas, and keeps it across a re-render', async () => {
-  const { rerender } = renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  const { rerender } = renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -59,7 +59,7 @@ it('opens exactly one connection per canvas, and keeps it across a re-render', a
   // A parent re-render handing over a fresh store instance — the injected
   // seam a future change would be tempted to key the backend on.
   await act(async () => {
-    rerender(inPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />))
+    rerender(inPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />))
   })
 
   expect(constructedFor).toHaveLength(1)

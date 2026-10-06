@@ -25,8 +25,8 @@ function incompressible(length: number): string {
     return (seed % 36).toString(36)
   }).join('')
 }
-const overLimit = `agent/${incompressible(OKF_ACTOR_MAX_CHARS)}`
 const atLimit = `agent/${incompressible(OKF_ACTOR_MAX_CHARS - 'agent/'.length)}`
+const overLimit = `${atLimit}x`
 
 const threadEditInputSchema = createThreadEditTool(makeTestDeps()).inputSchema
 
@@ -86,6 +86,16 @@ const WRITERS: ReadonlyArray<readonly [string, (actor: string) => unknown]> = [
       }),
   ],
   [
+    'wb_canvas_edit comment.add author',
+    (author) =>
+      canvasEditInputSchema.safeParse({
+        workspaceId: WS,
+        documentId: DOC,
+        mode: 'apply',
+        ops: [{ op: 'comment.add', comment: { text: 'hi', x: 0, y: 0, author } }],
+      }),
+  ],
+  [
     'wb_body_edit proposal author',
     (author) =>
       bodyEditInputSchema.safeParse({
@@ -116,6 +126,7 @@ describe('the length of an actor is declared once', () => {
     // A literal, not the constant: every other case reads the limit back
     // from itself, so a changed limit would pass them all.
     expect(OKF_ACTOR_MAX_CHARS).toBe(256)
+    expect([atLimit.length, overLimit.length]).toEqual([256, 257])
   })
 
   it.each(WRITERS)('%s refuses one character past the limit, in the same words', (_w, parse) => {

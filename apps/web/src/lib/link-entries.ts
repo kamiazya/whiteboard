@@ -1,5 +1,6 @@
 import type { UniqueNameEntry } from '@kamiazya/whiteboard-codec'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { documentLabel } from './document-label.js'
 import type { LinkTarget } from './link-target.js'
 
 /**
@@ -13,8 +14,8 @@ import type { LinkTarget } from './link-target.js'
 export type LinkableDocument = {
   readonly documentId: string
   readonly path: string
-  /** Absent (a daemon summary may carry none) → the path labels the link. */
-  readonly name?: string
+  /** Absent or null when the document has none → the path labels the link. */
+  readonly name?: string | null
   /** Optional to match LinkTarget and an older daemon's kind-less summary. */
   readonly kind?: DocumentKind
 }
@@ -39,7 +40,7 @@ export function linkEntries(documents: readonly LinkableDocument[]): readonly Un
 export function linkTitles(
   documents: readonly LinkableDocument[],
 ): (documentId: string) => string | undefined {
-  const byId = new Map(documents.map((entry) => [entry.documentId, entry.name ?? entry.path]))
+  const byId = new Map(documents.map((entry) => [entry.documentId, documentLabel(entry, 'path')]))
   return (documentId) => byId.get(documentId)
 }
 
@@ -63,7 +64,7 @@ export function linkTargets(
       {
         id: entry.documentId,
         path: entry.path,
-        name: entry.name ?? entry.path,
+        name: documentLabel(entry, 'path'),
         kind: entry.kind,
       },
     ]

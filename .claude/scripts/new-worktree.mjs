@@ -8,7 +8,9 @@
 //
 //   node .claude/scripts/new-worktree.mjs <name> [baseRef]      (baseRef default: freshly fetched origin/main)
 //
-// Remove when done: git worktree remove --force .claude/worktrees/<name>
+// Remove when done: `pnpm mcp:http:stop` inside it (its dev daemon has no idle timeout, and its
+// record goes with the worktree), then git worktree remove --force .claude/worktrees/<name> —
+// or let cleanup-worktrees.mjs do both once the branch is merged.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, cpSync as nodeCpSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -156,7 +158,9 @@ function main() {
 
   runWireStep({ scriptPath: resolve(__dirname, 'wire-worktree-mcp.mjs'), wtPath })
 
-  console.log(`  cleanup: git worktree remove --force ${wtPath}`)
+  console.log(
+    `  cleanup: (cd ${wtPath} && pnpm mcp:http:stop) && git worktree remove --force ${wtPath}`,
+  )
 }
 
 if (isRunAsScript(import.meta.url)) {

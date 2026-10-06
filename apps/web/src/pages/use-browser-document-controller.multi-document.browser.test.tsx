@@ -1,6 +1,6 @@
 /**
  * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createDocument /
- * switchDocument against the real IdbDocumentIndex + LoroStore, proving id-addressed
+ * switchDocument against the production FoldingBrowserIndex, proving id-addressed
  * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
 
@@ -9,7 +9,6 @@ import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { loadDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -38,8 +37,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('createDocument twice persists both, and listDocuments returns both by their real id', async () => {
-    const store = new IdbDocumentIndex()
-    const loro = new LoroStore()
+    const store = new FoldingBrowserIndex()
     const { result } = renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
 
@@ -59,14 +57,14 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     expect(list.find((c) => c.documentId === idA)?.name).toBe('Canvas A')
     expect(list.find((c) => c.documentId === idB)?.name).toBe('Canvas B')
 
-    // createDocument seeds an empty Loro doc so a switch onto a never-edited
+    // createDocument seeds an empty document so a switch onto a never-edited
     // canvas delivers a valid empty doc rather than not-found.
-    expect((await loro.load(idA)).kind).toBe('ok')
-    expect((await loro.load(idB)).kind).toBe('ok')
+    await expect(loadDocumentContent(idA)).resolves.not.toBeNull()
+    await expect(loadDocumentContent(idB)).resolves.not.toBeNull()
   })
 
   it('two documents hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
-    const store = new IdbDocumentIndex()
+    const store = new FoldingBrowserIndex()
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
@@ -98,7 +96,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('switchDocument swaps the current snapshot and the persisted default pointer, A -> B -> A', async () => {
-    const store = new IdbDocumentIndex()
+    const store = new FoldingBrowserIndex()
     const { result } = renderHook(() => useBrowserDocumentController(store))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
     const idA = result.current.snapshot!.documentId
@@ -121,10 +119,9 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
   })
 
-  // The legacy row index has no duplicate, so this runs on the index a page
-  // really holds. That the copy is a deep one — a later edit to the source
-  // leaves it as it was — is the DocumentDuplicates conformance suite's,
-  // which this index answers to.
+  // That the copy is a deep one — a later edit to the source leaves it as it
+  // was — is the DocumentDuplicates conformance suite's, which this index
+  // answers to.
   it('duplicate switches onto the copy the production index made', async () => {
     const index = new FoldingBrowserIndex()
     const { result } = renderHook(() => useBrowserDocumentController(index))

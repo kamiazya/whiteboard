@@ -24,7 +24,6 @@ import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { announceDocumentRenamed } from '../lib/workspace-broadcast.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
@@ -101,7 +100,7 @@ describe('BrowserDocumentPage title follows the record', () => {
   })
 
   it('shows the name a typed heading gives a fresh note', async () => {
-    await seedIdbDocument(new IdbDocumentIndex(), {
+    await seedIdbDocument({
       path: 'untitled',
       kind: 'markdown',
       makeDefault: true,
@@ -115,7 +114,7 @@ describe('BrowserDocumentPage title follows the record', () => {
   })
 
   it('keeps a name chosen in the title box over a later heading', async () => {
-    await seedIdbDocument(new IdbDocumentIndex(), {
+    await seedIdbDocument({
       path: 'untitled',
       kind: 'markdown',
       makeDefault: true,
@@ -147,7 +146,7 @@ describe('BrowserDocumentPage title follows the record', () => {
   // The title box reads empty for a name equal to the path, so the page's
   // heading is where an unnamed document's path shows.
   it('shows the path once the name is cleared elsewhere', async () => {
-    const documentId = await seedIdbDocument(new IdbDocumentIndex(), {
+    const documentId = await seedIdbDocument({
       path: 'weekly',
       name: 'Weekly review',
       kind: 'markdown',
@@ -170,7 +169,7 @@ describe('BrowserDocumentPage title follows the record', () => {
   })
 
   it('keeps a rename whose save is in flight over a name recorded elsewhere', async () => {
-    const documentId = await seedIdbDocument(new IdbDocumentIndex(), {
+    const documentId = await seedIdbDocument({
       path: 'weekly',
       name: 'Weekly review',
       kind: 'markdown',

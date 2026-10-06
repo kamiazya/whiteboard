@@ -34,7 +34,7 @@ import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 // `web-browser`'s wider one both live there. Measured: 36 of the project's 78
 // console records were this one line.
 vi.mock('../lib/fold-workspace.js', () => ({
-  foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
+  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
 }))
 
 vi.mock('../components/spatial-editor/index.js', () => ({

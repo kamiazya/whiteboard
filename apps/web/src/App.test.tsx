@@ -59,7 +59,7 @@ let throwInBrowserDocumentPage = false
 // five times and failed on the repeat, which is exactly the shape that job
 // exists to find.
 vi.mock('./lib/fold-workspace.js', () => ({
-  foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
+  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
 }))
 
 vi.mock('./pages/BrowserDocumentPage.js', () => ({

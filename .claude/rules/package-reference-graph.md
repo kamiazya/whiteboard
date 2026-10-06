@@ -22,6 +22,9 @@ paths:
   moved. The digest is a hash of the MERGED content, computed at read time by
   the same function on both keepers, so correctness depends neither on
   hooking every write path nor on any replica's word about when it wrote.
+- **What a rename does to a referring document** (`rewriteDocumentReferences`):
+  codec's plan applied in place over `DocumentContainers`, so both keepers
+  repoint a reference with one function. Saving stays the keeper's.
 - **What Link does to a source** (`linkifyMentionsIn`, `linkMarkupFor`):
   turning a document's unlinked mentions of another into links, over
   `DocumentContentSource`'s sibling seam `DocumentContainers`, so the same
@@ -48,9 +51,10 @@ paths:
   on `ContentFactsCache.stampOf` rather than a stamp of its own, so there is
   still ONE answer to "has this document changed" — and an edit invalidates
   the facts and everything derived from them in the same breath.
-- **Rewriting references** (`followReferencesAfterRename`). It WRITES
-  documents, so it is an operation of whoever keeps them; it stays in
-  `server-core` and reads its candidates from this package's cache.
+- **Applying a rename's rewrite** (`followReferencesAfterRename`). Finding
+  candidates, loading and saving are an operation of whoever keeps the
+  documents, so that stays in `server-core` (and in the browser files
+  source); the rewrite itself is `rewriteDocumentReferences`, above.
 - **Tool surfaces and routes** (`computeBacklinks`, `wb_document_search`).
   They are the daemon's answers to a request and compose what is here.
 

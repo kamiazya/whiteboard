@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import { assessRecordedDaemon, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
 import {
   devWrapperPidPath,
   ensureDevDataDirSecured,
@@ -32,17 +32,21 @@ if (!hadExplicitDataDirOverride) {
   ensureDevDataDirSecured(env.WHITEBOARD_DATA_DIR)
 }
 
-// Refused here, before a watcher exists: a second daemon cannot take the
+// Decided here, before a watcher exists: a second daemon cannot take the
 // socket anyway, and a wrapper started beside a running one would replace the
-// pid file `pnpm mcp:http:stop` signals and then sit under `tsx watch`
-// holding nothing. The same rule `whiteboard daemon run` applies.
+// pid file `pnpm mcp:http:stop` signals and then sit under `tsx watch` holding
+// nothing. A running daemon is handed over to rather than refused, so `pnpm dev`
+// and `pnpm mcp:debug:http` keep their other half beside the SessionStart
+// hook's daemon. "Running" is the one predicate the hook and the stop share.
 const running = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
-if (running !== null && isPidAlive(running.pid)) {
+const daemon = running === null ? null : await assessRecordedDaemon(running)
+if (running !== null && daemon?.running) {
+  const answering = daemon.answering ? '' : ' (busy: it did not answer its socket just now)'
   console.error(
-    `a dev daemon is already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid}) — ` +
-      'reuse it, or `pnpm mcp:http:stop` first.',
+    `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid})${answering} — ` +
+      'to run one in this terminal instead, `pnpm mcp:http:stop` first.',
   )
-  process.exit(1)
+  process.exit(0)
 }
 
 // Shell out to the real tsx CLI (not node's --watch + --import loader) so

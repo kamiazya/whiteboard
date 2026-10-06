@@ -29,7 +29,7 @@ import type { LoroStore } from './loro-store.js'
 // `web-browser`'s wider one both live there. Measured: 36 of the project's 78
 // console records were this one line.
 vi.mock('./fold-workspace.js', () => ({
-  foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
+  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
 }))
 
 const DOC_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'

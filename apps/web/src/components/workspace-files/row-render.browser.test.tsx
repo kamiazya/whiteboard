@@ -8,11 +8,14 @@
  * kind hides.
  */
 
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
+import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { createRowRenderLoader } from './load-row-render.js'
 
@@ -30,10 +33,28 @@ const canvas: SpatialCanvas = {
   ],
 } as SpatialCanvas
 
-function snapshotBytes(): Uint8Array {
+function snapshotBytes(board: SpatialCanvas = canvas): Uint8Array {
   const doc = new LoroDoc()
-  writeSpatialCanvas(doc, canvas)
+  writeSpatialCanvas(doc, board)
   return doc.export({ mode: 'snapshot' })
+}
+
+function sourceOf(
+  bytes: Uint8Array,
+  readTagLibrary?: () => Promise<TagLibrary>,
+): WorkspaceFilesSource {
+  return {
+    listDocuments: async () => [],
+    createDocument: async () => {},
+    renameDocumentPath: async () => {},
+    searchDocuments: async () => [],
+    setDocumentName: async () => {},
+    loadSpatialSnapshot: async () => bytes,
+    loadMarkdown: async () => {
+      throw new Error('a spatial document must not be read as OKF')
+    },
+    ...(readTagLibrary === undefined ? {} : { readTagLibrary }),
+  }
 }
 
 it('renders a spatial document from its snapshot bytes through the pool', async () => {
@@ -41,17 +62,7 @@ it('renders a spatial document from its snapshot bytes through the pool', async 
   const load = createRowRenderLoader({
     theme: 'light',
     broker: createInTabRenderBroker(),
-    source: {
-      listDocuments: async () => [],
-      createDocument: async () => {},
-      renameDocumentPath: async () => {},
-      searchDocuments: async () => [],
-      setDocumentName: async () => {},
-      loadSpatialSnapshot: async () => bytes,
-      loadMarkdown: async () => {
-        throw new Error('a spatial document must not be read as OKF')
-      },
-    },
+    source: sourceOf(bytes),
   })
 
   const drawn = await load({ documentId: 'd1', path: 'a/b', kind: 'spatial' })
@@ -62,4 +73,39 @@ it('renders a spatial document from its snapshot bytes through the pool', async 
   expect(drawn?.svg).toContain('Alpha')
   expect(drawn?.svg).toContain('Beta')
   expect(drawn?.bounds.w).toBeGreaterThan(0)
+}, 60_000)
+
+// The list draws a tagged board in the colour its workspace declares, as the
+// editor does: the same board grey in the list and green once opened is two
+// pictures of one document.
+it('draws a tagged board in the colour its tag library declares', async () => {
+  const tagged: SpatialCanvas = {
+    nodes: [
+      textNode({
+        id: 'api',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 120,
+        text: 'api',
+        tags: ['health:ok'],
+      }),
+    ],
+    edges: [],
+  }
+  const bytes = snapshotBytes(tagged)
+  const green = SPATIAL_LIGHT_PALETTE.presets['4'].fill
+  const draw = (readTagLibrary?: () => Promise<TagLibrary>) =>
+    createRowRenderLoader({
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      source: sourceOf(bytes, readTagLibrary),
+    })({ documentId: 'tagged', path: 'tagged', kind: 'spatial' })
+
+  const declared = await draw(async () => ({ health: { values: { ok: { color: '4' } } } }))
+  const undeclared = await draw()
+
+  expect(declared?.svg).toContain(green)
+  // The control: the colour comes from the library, not from the board.
+  expect(undeclared?.svg).not.toContain(green)
 }, 60_000)

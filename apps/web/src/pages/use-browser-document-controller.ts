@@ -278,9 +278,8 @@ export function useBrowserDocumentController(
           await indexRef.current.setDocumentName({
             workspaceId: getBrowserWorkspaceId(),
             documentId: snap.documentId,
-            // Omitted when it equals the path, which is how the index spells
-            // "no name of its own" — see `toSnapshot`'s fallback.
-            ...(snap.name === snap.path ? {} : { name: snap.name }),
+            // The index spells "no name of its own" as an omitted name.
+            ...(snap.name === null ? {} : { name: snap.name }),
           })
           setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
           return true
@@ -359,16 +358,14 @@ export function useBrowserDocumentController(
       // current before the immediate flushSave below reads it.
       const base = pendingSnapshotRef.current ?? snapshotRef.current
       if (base === null) return Promise.resolve()
-      // A cleared name becomes the PATH, not an 'untitled' sentinel: the
-      // index stores an unnamed document by omitting `name`, and the listing
-      // projects the path back. A literal sentinel was a third state that
-      // agreed with neither, and it stopped matching the moment paths started
-      // being numbered ('untitled-2' is an ordinary path, not a sentinel).
-      const normalized = name.trim() || base.path
+      // A cleared name becomes null, not an 'untitled' sentinel or the path:
+      // the index stores an unnamed document by omitting `name`, and either
+      // stand-in would make a name somebody typed equal to it read as none.
+      const normalized = name.trim() === '' ? null : name.trim()
       // Judged before the snapshot shows it: the index refuses the same bound
       // only after, as a failed save that degrades persistence and so blocks
-      // Delete. The path is exempt — it is stored as no name at all.
-      const bounded = normalized === base.path ? null : documentNameSchema.safeParse(normalized)
+      // Delete. No name is exempt — it is stored as no name at all.
+      const bounded = normalized === null ? null : documentNameSchema.safeParse(normalized)
       if (bounded?.success === false) return Promise.reject(bounded.error)
       const updated: DocumentSnapshot = {
         ...base,
@@ -394,8 +391,8 @@ export function useBrowserDocumentController(
     const base = snapshotRef.current
     if (base === null || pendingSnapshotRef.current !== null || savePromiseRef.current !== null)
       return
-    if (base.name === (name ?? base.path)) return
-    snapshotRef.current = { ...base, name: name ?? base.path }
+    if (base.name === name) return
+    snapshotRef.current = { ...base, name }
     setSnapshot(snapshotRef.current)
   }, [])
 

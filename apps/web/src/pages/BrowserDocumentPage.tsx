@@ -19,6 +19,7 @@ import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
+import { documentLabel } from '../lib/document-label.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
@@ -81,18 +82,6 @@ export interface BrowserDocumentPageProps {
 }
 
 /**
- * The canvas name as a TITLE.
- *
- * A name equal to the document's own path is one nobody chose: the index
- * stores an unnamed document by omitting `name`, and the listing projects the
- * path back so a row always has something to show. The title box wants the
- * opposite — the placeholder, not the address — so that case becomes empty.
- */
-function titleOf(name: string | null, path: string | null): string {
-  return name === null || name === path ? '' : name
-}
-
-/**
  * The browser keeper: the controller over IndexedDB, the spatial sync session
  * over `BrowserBackend`, the markdown body over its own Loro binding, and the
  * browser's version rows — answered to the shared `DocumentPage` as one model
@@ -142,7 +131,7 @@ function useBrowserDocument(
   // snapshot rather than looked up in the list, so it is known at the same
   // instant the id is, and so this effect does not re-fire every time the list
   // refreshes (which would overwrite a Back the user just performed).
-  const { documentPath, documentName, documentKind } = loaded
+  const { documentPath, documentKind } = loaded
   // The workspace's tag vocabulary (ADR-0040 decision 5), read through the
   // same files source the document browser uses over the same stores, once
   // per page — the browser keeper answers it by opening every document.
@@ -264,7 +253,7 @@ function useBrowserDocument(
         documentId: snap.documentId,
         path: snap.path,
         kind: snap.kind,
-        ...(snap.name === snap.path ? {} : { name: snap.name }),
+        ...(snap.name === null ? {} : { name: snap.name }),
       })
     },
     // Re-create backend only when documentId/kind changes; a null id means not-yet-loaded.
@@ -458,7 +447,6 @@ function useBrowserDocument(
     canvas: documentKind === 'spatial' ? canvas : null,
     duplicateDocument,
     deleteDocument,
-    deleteCopyId: 'delete-document-browser',
   })
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
@@ -484,13 +472,16 @@ function useBrowserDocument(
   // a name refused before it was written leaves that state alone.
   const onTitleChange = (next: string): Promise<string | null> =>
     renameDocument(next).then(() => null, refusalMessage)
-  const title = titleOf(documentName, documentPath)
-  const labels = documentLabels(documentId, documentName)
+  // The title box shows the placeholder for an unnamed document, never its
+  // address; every other surface that names it needs a word, so takes the path.
+  const title = editing.snapshot.name ?? ''
+  const label = documentLabel(editing.snapshot, 'path')
+  const labels = documentLabels(documentId, label)
 
   const model: DocumentPageModel = {
     scopeKey: documentId,
     documentKind,
-    srTitle: editing.snapshot.name,
+    srTitle: label,
     sync,
     markdown: {
       body: markdownBody,

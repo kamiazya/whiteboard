@@ -70,7 +70,15 @@ function log(message) {
 function ensureDaemon() {
   if (process.env.WHITEBOARD_PROXY_SKIP_ENSURE === '1') return Promise.resolve()
   return new Promise((resolveEnsure) => {
+    // Anchored on THIS checkout: the hook takes its checkout from
+    // CLAUDE_PROJECT_DIR (before its working directory), and a session opened
+    // in a linked worktree runs the main checkout's proxy — one registration
+    // per repository — with CLAUDE_PROJECT_DIR naming the worktree. Left
+    // inherited, the hook would start the worktree's daemon while every
+    // request here reads the main checkout's record. WHITEBOARD_DATA_DIR,
+    // when set, is inherited and wins on both sides alike.
     const hook = spawn(process.execPath, [resolve(SCRIPT_DIR, 'ensure-http-dev-daemon.mjs')], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: REPO_ROOT },
       stdio: ['ignore', 'ignore', 'inherit'],
     })
     // The hook waiting out readiness is best-effort here: per-request retry

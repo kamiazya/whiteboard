@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import type { DocumentRender } from './load-row-render.js'
 
@@ -31,9 +32,7 @@ export function PeekDialog({
     <Dialog open={document !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="flex max-h-[85vh] flex-col">
         <DialogHeader>
-          <DialogTitle>
-            {document === null ? '' : (document.name ?? document.path.split('/').at(-1))}
-          </DialogTitle>
+          <DialogTitle>{document === null ? '' : documentLabel(document, 'leaf')}</DialogTitle>
         </DialogHeader>
         {document !== null && (
           <DocumentPreview

@@ -14,8 +14,10 @@ import {
   commentThreadSchema,
   documentIdSchema,
   nodeText,
+  OPS_PER_CALL_LIMIT_PHRASE,
+  OPS_PER_CALL_MAX,
   okfActorInputSchema,
-  resolveTextAnchor,
+  placeTextAnchor,
   type SpatialAnchor,
   type TextAnchor,
   workspaceIdSchema,
@@ -86,7 +88,10 @@ const threadEditInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    ops: z.array(threadOpSchema).min(1, 'give at least one op'),
+    ops: z
+      .array(threadOpSchema)
+      .min(1, 'give at least one op')
+      .max(OPS_PER_CALL_MAX, `more ops than ${OPS_PER_CALL_LIMIT_PHRASE}`),
   })
   .strict()
 type ThreadEditInput = z.infer<typeof threadEditInputSchema>
@@ -112,16 +117,24 @@ function mintThreadId(taken: ReadonlySet<string>): string {
 }
 
 /**
- * Why an anchor names nothing on this document, or `undefined` when it names
- * something. Checked at write time because an orphaned thread (ADR-0026
- * decision 4) is what a LATER deletion leaves behind: opening one already
- * orphaned is a typo the caller reads back as success.
+ * The anchor as it is stored, or why it names nothing on this document.
+ * Checked at write time because an orphaned thread (ADR-0026 decision 4) is
+ * what a LATER deletion leaves behind: opening one already orphaned is a typo
+ * the caller reads back as success.
+ *
+ * A text anchor is stored at where its quote is (`placeTextAnchor`), from the
+ * one resolution that also decides whether it names anything.
  */
-function anchorRefusal(anchor: AnnotationAnchor, content: DocumentContent): string | undefined {
-  if (anchor.kind === 'document') return undefined
-  return anchor.kind === 'spatial'
-    ? spatialAnchorRefusal(anchor, content)
-    : textAnchorRefusal(anchor, content)
+function storedAnchor(
+  anchor: AnnotationAnchor,
+  content: DocumentContent,
+): { readonly anchor: AnnotationAnchor } | { readonly refusal: string } {
+  if (anchor.kind === 'document') return { anchor }
+  if (anchor.kind === 'spatial') {
+    const refusal = spatialAnchorRefusal(anchor, content)
+    return refusal === undefined ? { anchor } : { refusal }
+  }
+  return storedTextAnchor(anchor, content)
 }
 
 function spatialAnchorRefusal(anchor: SpatialAnchor, content: DocumentContent): string | undefined {
@@ -158,32 +171,16 @@ function quotedText(
   return text === undefined ? { refusal: `node "${nodeId}" is not a text node` } : { text }
 }
 
-function textAnchorRefusal(anchor: TextAnchor, content: DocumentContent): string | undefined {
+function storedTextAnchor(
+  anchor: TextAnchor,
+  content: DocumentContent,
+): { readonly anchor: TextAnchor } | { readonly refusal: string } {
   const quoted = quotedText(anchor.nodeId, content)
-  if ('refusal' in quoted) return quoted.refusal
-  if (resolveTextAnchor(quoted.text, anchor).kind === 'placed') return undefined
+  if ('refusal' in quoted) return quoted
+  const placed = placeTextAnchor(quoted.text, anchor)
+  if (placed !== undefined) return { anchor: placed }
   const where = anchor.nodeId === undefined ? 'body' : `text of node "${anchor.nodeId}"`
-  return `the passage ${JSON.stringify(anchor.quote.exact)} is not in the ${where}`
-}
-
-/**
- * The anchor as it is stored: a text anchor's offsets are moved to where its
- * quote is.
- *
- * The quote is what finds a passage — `resolveTextAnchor` takes stored offsets
- * as a shortcut and falls back to the quote when they select something else —
- * so offsets a caller miscounted are a hint the quote overrides. Storing them
- * as given would leave an anchor that contradicts itself; refusing would
- * reject a call over a number a reader never uses. Offsets that already select
- * the quote are kept, which is what keeps the chosen occurrence when the quote
- * appears more than once.
- */
-function storedAnchor(anchor: AnnotationAnchor, content: DocumentContent): AnnotationAnchor {
-  if (anchor.kind !== 'text') return anchor
-  const quoted = quotedText(anchor.nodeId, content)
-  if ('refusal' in quoted) return anchor
-  const placed = resolveTextAnchor(quoted.text, anchor)
-  return placed.kind === 'placed' ? { ...anchor, start: placed.start, end: placed.end } : anchor
+  return { refusal: `the passage ${JSON.stringify(anchor.quote.exact)} is not in the ${where}` }
 }
 
 /** Why a message body says nothing, or `undefined` when it says something. */
@@ -229,11 +226,13 @@ const THREAD_EDIT_HANDLERS: {
     if (held.has(id)) {
       throw new ThreadEditError(index, op.op, `thread "${id}" is already on this document`)
     }
-    const refusal = blankRefusal(op.body) ?? anchorRefusal(op.anchor, ctx.content)
-    if (refusal !== undefined) throw new ThreadEditError(index, op.op, refusal)
+    const blank = blankRefusal(op.body)
+    if (blank !== undefined) throw new ThreadEditError(index, op.op, blank)
+    const stored = storedAnchor(op.anchor, ctx.content)
+    if ('refusal' in stored) throw new ThreadEditError(index, op.op, stored.refusal)
     writeCommentThread(doc, {
       id,
-      anchor: storedAnchor(op.anchor, ctx.content),
+      anchor: stored.anchor,
       status: 'open',
       createdAt: now,
       messages: [

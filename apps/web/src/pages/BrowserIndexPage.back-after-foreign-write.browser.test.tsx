@@ -28,14 +28,11 @@ import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
-import { idbContentClock } from '../lib/browser-document-summary.js'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
-import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
 claimIsolatedWhiteboardDb('browserindexpage-backforeignwrite')
 
@@ -90,18 +87,16 @@ it('Back after a write this page did not make lists it', async () => {
   const router = renderApp('/')
   await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
 
-  // Written straight through the index, so this page's own `filesRevision`
-  // never moves — the whole point of the case.
-  const created = await createSeededDocument(
-    new IdbDocumentIndex(),
-    new LoroStore(),
-    idbContentClock(),
-  )
+  // Written straight into the stores, as an older build or another tab
+  // would, so this page's own `filesRevision` never moves — the whole point
+  // of the case. A legacy row the fold has not taken is still listed.
+  const path = 'untitled'
+  await seedIdbDocument({ path })
   expect(screen.queryByTestId('card-title')).toBeNull()
 
   // Leave for the editor and come back inside the chunk-load window, so the
   // page is never unmounted and only `revision` can tell it to re-read.
-  await router.navigate(documentPath(BROWSER_DEFAULT_SEGMENT, created.path))
+  await router.navigate(documentPath(BROWSER_DEFAULT_SEGMENT, path))
   await waitFor(() => expect(router.state.location.pathname).toMatch(/\/d\//), {
     timeout: 15_000,
   })

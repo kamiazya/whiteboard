@@ -59,6 +59,18 @@ const workspaceBroadcastSchema = z.discriminatedUnion('type', [
     type: z.literal('document-restored'),
     path: z.string().min(1),
   }),
+  // A new document — a create or a copy. Only a list has anything to do
+  // with it: no page holds a document that did not exist.
+  z.object({
+    type: z.literal('document-created'),
+    path: z.string().min(1),
+  }),
+  // The index pinned or unpinned a document. Placement in a list, nothing
+  // the document's content or its open page carries.
+  z.object({
+    type: z.literal('document-pinned'),
+    documentId: z.string().min(1),
+  }),
 ])
 
 export type WorkspaceBroadcast = z.infer<typeof workspaceBroadcastSchema>
@@ -144,4 +156,14 @@ export function announceDocumentRestored(workspaceId: string, path: string): voi
  */
 export function announceDocumentRenamed(workspaceId: string, documentId: string): void {
   announce(workspaceId, { type: 'document-renamed', documentId })
+}
+
+/** A create or a copy, so a list in this tab or another shows it. */
+export function announceDocumentCreated(workspaceId: string, path: string): void {
+  announce(workspaceId, { type: 'document-created', path })
+}
+
+/** A pin set or cleared, so a list in this tab or another moves the row. */
+export function announceDocumentPinned(workspaceId: string, documentId: string): void {
+  announce(workspaceId, { type: 'document-pinned', documentId })
 }

@@ -63,7 +63,7 @@ const snap: DocumentSnapshot = {
   documentId: '069CFJNRVY147ADGKPSWZ258BE',
   workspaceId: 'local',
   path: 'untitled',
-  name: 'untitled',
+  name: null,
   updatedAt: '2026-05-24T00:00:00.000Z',
   kind: 'spatial' as const,
 }
@@ -642,7 +642,7 @@ describe('BrowserDocumentPage', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
     })
     expect(heading()).toBe('untitled')
-    expect((await store.load('069CFJNRVY147ADGKPSWZ258BE'))?.name).toBe('untitled')
+    expect((await store.load('069CFJNRVY147ADGKPSWZ258BE'))?.name).toBeNull()
   })
 
   it('does not render an "Add rectangle" button — scene writes flow through SpatialEditor gestures', async () => {
@@ -708,6 +708,7 @@ describe('BrowserDocumentPage', () => {
     // on is the index's.
     const resolvers: Array<(list: DocumentEntry[]) => void> = []
     store.index.listDocuments = () => new Promise((resolve) => resolvers.push(resolve))
+    const row: DocumentEntry = { documentId: snap.documentId, path: snap.path, kind: snap.kind }
 
     await act(async () => {
       renderInRouter(
@@ -720,7 +721,7 @@ describe('BrowserDocumentPage', () => {
       )
     })
     await act(async () => {
-      resolvers[0]!([snap])
+      resolvers[0]!([row])
     })
 
     const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
@@ -741,7 +742,7 @@ describe('BrowserDocumentPage', () => {
     // afterwards, so a list-derived label would stay stale forever — the
     // open document's name must come from the loaded snapshot.
     await act(async () => {
-      resolvers[resolvers.length - 1]!([snap])
+      resolvers[resolvers.length - 1]!([row])
     })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
   })

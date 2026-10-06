@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
+import { documentLabel } from '../lib/document-label.js'
 import { cn } from '../lib/utils.js'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
 
@@ -184,7 +185,7 @@ export default function WorkspaceTopBar({
         )}
 
         {titleSlot?.({
-          name: canvasCustomName ?? path,
+          name: documentLabel({ name: canvasCustomName, path }, 'path'),
           ...(keptByBrowser ? {} : { onRename: (next: string) => renameDocument(path, next) }),
         })}
       </div>

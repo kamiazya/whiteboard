@@ -3,12 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 // The page, its source and the panel together — the seam the unit tests
@@ -23,9 +23,9 @@ afterEach(cleanup)
 
 describe('searching from the page', () => {
   it('finds a document by a word only its body carries', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
+    // Seeded as an older build left it; the page's own index folds it into
+    // the workspace tree on its first read.
+    const entry = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'untitled',
       kind: 'markdown',
@@ -37,7 +37,7 @@ describe('searching from the page', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <BrowserIndexPage index={index} onOpenDocument={vi.fn()} />
+        <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={vi.fn()} />
       </MemoryRouter>,
     )
     const box = await screen.findByLabelText('Search documents', undefined, { timeout: 10_000 })

@@ -649,7 +649,6 @@ function DocumentPageBody({
           )}
         </EditorLock>
       )}
-      {model.slots.footer}
     </DocumentPageShell>
   )
 }

@@ -102,6 +102,14 @@ function killQuietly(pid: number | undefined) {
 
 const itPosix = it.skipIf(process.platform === 'win32')
 
+/** A pid that named a process a moment ago and names none now. */
+function reapedPid(): Promise<number> {
+  const throwaway = spawn(process.execPath, ['-e', ''])
+  return new Promise((resolvePid) =>
+    throwaway.once('exit', () => resolvePid(throwaway.pid as number)),
+  )
+}
+
 function readSentinel<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T
 }
@@ -266,7 +274,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       const { token, dataDir, countSpawns, env } = await prepareHookRun()
       writeFileSync(
         join(dataDir, 'daemon.json'),
-        JSON.stringify({ pid: 999_999, token, socketPath: join(dataDir, 'gone.sock') }),
+        JSON.stringify({ pid: await reapedPid(), token, socketPath: join(dataDir, 'gone.sock') }),
       )
 
       const { exitCode, stderr } = await runHook({
@@ -276,6 +284,51 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
 
       expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
       expect(countSpawns()).toBe(1)
+    },
+  )
+
+  itPosix(
+    'stops waiting when the dev server it started exits, and says why in its own words',
+    async () => {
+      const { env } = await prepareHookRun()
+
+      const startedAt = Date.now()
+      const { exitCode, stderr } = await runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '20000',
+        FAKE_PNPM_BIND_FAILS: '1',
+      })
+
+      expect(exitCode).not.toBe(0)
+      expect(Date.now() - startedAt).toBeLessThan(6_000)
+      expect(stderr).toContain('[fake-pnpm-shim] failed to listen: EADDRINUSE')
+      expect(stderr).not.toContain('timed out')
+    },
+  )
+
+  itPosix(
+    'starts no second daemon beside one too busy to answer, and names it when it never does',
+    async () => {
+      const { token, dataDir, countSpawns, env } = await prepareHookRun()
+      writeFileSync(
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({
+          pid: process.pid,
+          token,
+          socketPath: join(dataDir, 'silent.sock'),
+          startedAt: new Date().toISOString(),
+        }),
+      )
+
+      const { exitCode, stderr } = await runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '800',
+      })
+
+      expect(exitCode).not.toBe(0)
+      expect(countSpawns()).toBe(0)
+      expect(stderr).toContain(`pid ${process.pid}`)
+      expect(stderr).toContain('MCP tools will be unavailable')
     },
   )
 
@@ -367,12 +420,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
     async () => {
       const { lockPath, countSpawns, env } = await prepareHookRun()
 
-      // A definitely-dead pid: reserve one by starting and killing a
-      // throwaway child, so this isn't a real live pid on the test machine.
-      const throwaway = spawn(process.execPath, ['-e', ''])
-      const deadPid = await new Promise<number>((resolvePid) => {
-        throwaway.once('exit', () => resolvePid(throwaway.pid as number))
-      })
+      const deadPid = await reapedPid()
 
       writeFileSync(lockPath, JSON.stringify({ pid: deadPid, startedAt: new Date().toISOString() }))
 

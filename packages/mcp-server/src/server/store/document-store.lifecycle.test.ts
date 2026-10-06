@@ -99,7 +99,7 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
   })
 
-  it('removes the tree entry and deletes version rows explicitly, leaving the workspace row and a sibling canvas untouched', async () => {
+  it('moves the tree entry to the trash with its version rows kept, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
@@ -117,12 +117,14 @@ describe('deleting a document', () => {
 
     await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
 
+    // Kept for a restore, which rejoins them under the same documentId; the
+    // trash purge is what removes them (routes/document/trash.test.ts).
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
       .where('documentId', '=', documentId)
       .execute()
-    expect(versionsAfter).toEqual([])
+    expect(versionsAfter).toHaveLength(1)
 
     // Content now lives in the workspace record: the tree node is gone and
     // the bytes were EVACUATED into the trash, not destroyed.
@@ -146,12 +148,11 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['canvas-b'])
   })
 
-  // The defect this closes: wbDocumentDelete removed the index row and the
-  // Libsql bytes and stopped there, so a document an agent deleted left its
-  // version rows and a cached doc instance behind — while the same document
-  // deleted through the HTTP route did not. Both paths now run the same
-  // teardown, and this asserts on what is LEFT, not on the tool answering
-  // { deleted: true }, which it did throughout the whole defect.
+  // wbDocumentDelete once removed the index row and the Libsql bytes and
+  // stopped there, leaving a cached doc instance behind that the HTTP route
+  // evicted. Both paths now run the same teardown, and this asserts on what
+  // is LEFT — the version row kept for a restore, the cache entry gone — not
+  // on the tool answering { deleted: true }, which it did throughout.
   it('leaves the same state when the delete comes through wbDocumentDelete as through the HTTP path', async () => {
     const { getDb } = await import('./db/index.js')
     const { peekDoc } = await import('./doc-cache.js')
@@ -183,7 +184,7 @@ describe('deleting a document', () => {
       .select(['id'])
       .where('id', '=', version.id)
       .execute()
-    expect(survivors).toEqual([])
+    expect(survivors).toEqual([{ id: version.id }])
     expect(peekDoc('session1', 'agent-deleted')).toBeUndefined()
     expect(await resolveDocumentIdAtPath('session1', 'agent-deleted')).toBeNull()
   })

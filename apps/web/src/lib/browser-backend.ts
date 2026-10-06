@@ -18,9 +18,9 @@ import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { BrowserWorkspaceDocs, saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { foldOrServeTheTree } from './fold-workspace.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 import {
   listenToWorkspace,
@@ -92,13 +92,15 @@ function refusalOf(breach: SyncTextBreach): SyncWriteRefusal {
  * skips them, since throwing here would reject the write queue and stop this
  * tab's own saves.
  */
-function importFromAnotherTab(workspaceDoc: LoroDoc, bytes: Uint8Array): boolean {
+function importFromAnotherTab(
+  workspaceDoc: LoroDoc,
+  bytes: Uint8Array,
+): 'merged' | 'pending' | 'skipped' {
   try {
-    workspaceDoc.import(bytes)
-    return true
+    return workspaceDoc.import(bytes).pending === null ? 'merged' : 'pending'
   } catch (err) {
     getAppLogger('browser-backend').warn('skipped an update from another tab', err)
-    return false
+    return 'skipped'
   }
 }
 
@@ -242,7 +244,7 @@ export class BrowserBackend implements DocumentBackend {
         const before = workspaceDoc.version()
         writeDocumentContentAndName(workspaceDoc, this.target.documentId, past)
         const update = workspaceDoc.export({ mode: 'update', from: before })
-        this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
+        await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
         await touchContentTimestamp(this.target.documentId)
         if (update.length > 0 && !this.isStale(handlers)) handlers.onRemoteUpdate(update)
       } finally {
@@ -299,7 +301,7 @@ export class BrowserBackend implements DocumentBackend {
       const before = workspaceDoc.oplogVersion()
       seedNameFromTitle(workspaceDoc, this.target.documentId)
       const named = workspaceDoc.oplogVersion().compare(before) !== 0
-      this.tellOtherTabs(await this.docs.save(workspaceId, workspaceDoc))
+      await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
       // The session reads the name (the open page's title follows it), and it
       // must HOLD those ops either way: every later edit anywhere depends on
       // them, and a doc missing a dependency keeps that edit pending.
@@ -350,9 +352,9 @@ export class BrowserBackend implements DocumentBackend {
     return this.disconnected || this.handlers !== handlers
   }
 
-  /** What this tab persisted, for the other tabs holding the record. */
-  private tellOtherTabs(persisted: Uint8Array | null): void {
-    if (persisted !== null) this.broadcast?.post({ type: 'update', bytes: persisted })
+  /** Persists the record and hands what it wrote to the other tabs holding it. */
+  private async saveAndTellOtherTabs(workspaceId: string, workspaceDoc: LoroDoc): Promise<void> {
+    await saveAndAnnounce(this.docs, workspaceId, workspaceDoc, this.broadcast)
   }
 
   /**
@@ -402,9 +404,15 @@ export class BrowserBackend implements DocumentBackend {
     }
     // Path changes are for whoever holds work keyed by path, not for the record.
     if (message.type !== 'update') return
-    this._writeQueue = this._writeQueue.then(() => {
+    this._writeQueue = this._writeQueue.then(async () => {
       if (this.isStale(handlers)) return
-      if (importFromAnotherTab(workspaceDoc, message.bytes)) handlers.onRemoteUpdate(message.bytes)
+      const merged = importFromAnotherTab(workspaceDoc, message.bytes)
+      if (merged === 'skipped') return
+      handlers.onRemoteUpdate(message.bytes)
+      // Bytes that build on record writes this copy never received — the
+      // index's create, move or pin, whose saves announce no bytes — stay
+      // pending until it has them, and the record does.
+      if (merged === 'pending') await this.catchUpWithStore(workspaceId, workspaceDoc, handlers)
     })
   }
 
@@ -465,18 +473,11 @@ export class BrowserBackend implements DocumentBackend {
   /**
    * Any per-document records first fold into the tree, so a document created
    * by an older build is served from the same place as everything else.
-   * Derived work list — a second connect finds nothing pending. Non-fatal on
-   * failure: the fold retries at the next connect, and `placeMissingDocument`
-   * still classifies this backend's own document — degrading the open over a
-   * fold hiccup would take the whole editor down for a step that is only
-   * migration.
+   * Derived work list — a second connect finds nothing pending. A failure
+   * leaves `placeMissingDocument` to classify this backend's own document.
    */
   private async foldLegacyRecords(): Promise<void> {
-    try {
-      await foldWorkspaceDocuments()
-    } catch (err) {
-      getAppLogger('browser-backend').warn('startup fold failed; continuing without it', err)
-    }
+    await foldOrServeTheTree(getAppLogger('browser-backend'))
   }
 
   private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
@@ -595,7 +596,7 @@ export class BrowserBackend implements DocumentBackend {
       if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
       return false
     }
-    await this.docs.save(getBrowserWorkspaceId(), workspaceDoc)
+    await this.saveAndTellOtherTabs(getBrowserWorkspaceId(), workspaceDoc)
     return true
   }
 }

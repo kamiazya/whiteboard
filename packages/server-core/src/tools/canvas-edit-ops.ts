@@ -24,6 +24,8 @@ import {
   nodeTextInputSchema,
   nodeUrlInputSchema,
   nonnegativeIntegerSchema,
+  OPS_PER_CALL_LIMIT_PHRASE,
+  OPS_PER_CALL_MAX,
   proposalSchema,
   RESOURCE_KINDS,
   sharedNodeFieldsSchema,
@@ -547,18 +549,14 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .strict(),
 ])
 
-/**
- * 200 is a ceiling on one request, not on a board: a batch past this size is
- * almost always a model looping, and a rejected oversized batch is cheaper
- * to recover from than a half-understood one.
- */
-const MAX_OPS = 200
-
 export const canvasEditInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
-    ops: z.array(canvasOpSchema).min(1).max(MAX_OPS),
+    ops: z
+      .array(canvasOpSchema)
+      .min(1)
+      .max(OPS_PER_CALL_MAX, `more ops than ${OPS_PER_CALL_LIMIT_PHRASE}`),
     /**
      * Whether this batch CHANGES the document or PROPOSES a change to it
      * (ADR-0029). A proposal is stored beside the content, drawn on the live

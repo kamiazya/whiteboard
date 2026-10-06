@@ -9,7 +9,7 @@ import {
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest'
 import { IdbDefaultDocumentPointer, listBrowserDocuments } from '../lib/browser-document-summary.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
@@ -39,7 +39,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
   })
 
   it('load: renders spatial editor container after initial load', async () => {
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
@@ -52,7 +52,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     // An unsized height chain collapses the container to 0px and the whiteboard
     // becomes invisible. The page must own its viewport height so the editor
     // area gets real geometry.
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
@@ -70,7 +70,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     // editor's bottom edge past the viewport. The grid shell gives the
     // header stack an auto row and the editor minmax(0,1fr) — the editor's
     // bottom must sit exactly at the viewport's bottom edge.
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       { timeout: 5000 },
@@ -108,7 +108,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
         <div style={{ height: BANNER_PX, flexShrink: 0 }} />
         <div style={{ minHeight: 0, flex: 1, overflow: 'hidden' }}>
           <MemoryRouter initialEntries={['/']}>
-            <BrowserDocumentPage store={new IdbDocumentIndex()} />
+            <BrowserDocumentPage store={new FoldingBrowserIndex()} />
           </MemoryRouter>
         </div>
       </div>,
@@ -127,7 +127,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
   })
 
   it('delete: the last canvas gives way to a fresh one, which survives a remount', async () => {
-    const store = new IdbDocumentIndex()
+    const store = new FoldingBrowserIndex()
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
@@ -160,7 +160,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     )
     const [fresh] = await listBrowserDocuments(store)
     cleanup()
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
@@ -179,7 +179,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
   // opens what is left, as a delete does, rather than an error screen whose
   // only way out is "Start fresh".
   it('open: a pointer naming a deleted document opens what is left', async () => {
-    const store = new IdbDocumentIndex()
+    const store = new FoldingBrowserIndex()
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
@@ -189,7 +189,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
     cleanup()
     await new IdbDefaultDocumentPointer().set('01ZZZZZZZZZZZZZZZZZZZZZZZZ')
 
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       { timeout: 5000 },
@@ -211,7 +211,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
       calls.push(url)
       return original(...args)
     })
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
@@ -227,7 +227,7 @@ describe('BrowserDocumentPage (browser — real IndexedDB)', () => {
   })
 
   it('does not render an "Add rectangle" button', async () => {
-    renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {

@@ -3,7 +3,8 @@ import type {
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { followWorkspaceWrites } from './follow-workspace-writes.js'
+import { followBrowserWorkspaceWrites, followWorkspaceWrites } from './follow-workspace-writes.js'
+import type { WorkspaceBroadcast } from './workspace-broadcast.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -82,5 +83,51 @@ describe('followWorkspaceWrites', () => {
     vi.advanceTimersByTime(1000)
     expect(f.onMoved).not.toHaveBeenCalled()
     expect(f.unsubscribe).toHaveBeenCalledTimes(1)
+  })
+})
+
+function followBrowser() {
+  let hear: (message: WorkspaceBroadcast) => void = () => {}
+  let listenedTo: string | undefined
+  const close = vi.fn()
+  const onMoved = vi.fn()
+  const stop = followBrowserWorkspaceWrites('ws-1', onMoved, (workspaceId, onMessage) => {
+    listenedTo = workspaceId
+    hear = onMessage
+    return { post: () => {}, close }
+  })
+  return {
+    onMoved,
+    stop,
+    close,
+    listenedTo: () => listenedTo,
+    hear: (message: WorkspaceBroadcast) => hear(message),
+  }
+}
+
+describe('followBrowserWorkspaceWrites', () => {
+  it('listens on the workspace it was given', () => {
+    expect(followBrowser().listenedTo()).toBe('ws-1')
+  })
+
+  it('reads once for a burst of announcements of any kind, after the burst', () => {
+    const f = followBrowser()
+    f.hear({ type: 'document-created', path: 'a' })
+    vi.advanceTimersByTime(60)
+    f.hear({ type: 'document-pinned', documentId: 'd' })
+    f.hear({ type: 'update', bytes: new Uint8Array([1]) })
+    vi.advanceTimersByTime(60)
+    expect(f.onMoved).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(200)
+    expect(f.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels a read still waiting out a burst, and closes its end, when stopped', () => {
+    const f = followBrowser()
+    f.hear({ type: 'document-renamed', documentId: 'd' })
+    f.stop()
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).not.toHaveBeenCalled()
+    expect(f.close).toHaveBeenCalledTimes(1)
   })
 })

@@ -11,17 +11,14 @@
 import 'fake-indexeddb/auto'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  ensureBrowserWorkspace,
-  IdbDefaultDocumentPointer,
-} from '../lib/browser-document-summary.js'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 
@@ -38,9 +35,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 async function seedDocumentWithContent(
   content: { raw: unknown } | { snapshot: Uint8Array },
 ): Promise<void> {
-  const index = new IdbDocumentIndex()
-  await ensureBrowserWorkspace(index)
-  const entry = await index.createDocument({
+  const entry = await seedLegacyRow({
     workspaceId: getBrowserWorkspaceId(),
     path: 'unreadable',
     name: 'Unreadable',
@@ -87,16 +82,14 @@ describe('a document this build cannot read', () => {
     // The reason is state, and state that nothing clears outlives what it was
     // about. A switch from an unreadable document to a sound one would carry
     // the first one's failure across and turn the second into an error screen.
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const broken = await index.createDocument({
+    const broken = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'broken',
       name: 'Broken',
       kind: 'spatial',
     })
     await seedSyncDocument(broken.documentId, { raw: { v: 99 } }, DB)
-    const sound = await index.createDocument({
+    const sound = await seedLegacyRow({
       workspaceId: getBrowserWorkspaceId(),
       path: 'sound',
       name: 'Sound',

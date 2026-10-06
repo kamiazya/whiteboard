@@ -16,6 +16,7 @@ import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-rea
 import { useEffect, useState } from 'react'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
 import { formatRelative } from './format-relative.js'
@@ -118,9 +119,7 @@ export function DocumentPreview({
       </div>
 
       <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="truncate text-sm font-medium">
-          {document.name ?? document.path.split('/').at(-1)}
-        </h2>
+        <h2 className="truncate text-sm font-medium">{documentLabel(document, 'leaf')}</h2>
         {/* The path is the address, not the name — so it goes here, quietly,
             where someone who needs it can read it. BOTH are edited in the
             Rename dialog, which is the one place that explains how they

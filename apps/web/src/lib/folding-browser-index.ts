@@ -4,16 +4,18 @@
  *
  * The tree only knows documents that are IN it, and an existing browser's
  * documents are per-document records until something folds them. The
- * document page's backend and the markdown hook each fold on their own load,
- * but the LIST page is often the first thing a returning user sees — served
- * straight from this index — so the fold has to gate the index itself or a
- * legacy user opens an empty gallery over a database full of documents.
+ * document backend folds when it opens a document, and the promote dialog
+ * before it counts; but the LIST page is often the first thing a returning
+ * user sees — served straight from this index — so the fold has to gate the
+ * index itself or a legacy user opens an empty gallery over a database full
+ * of documents.
  *
- * One shared promise, not a per-call fold: every method awaits the same
- * first run. A failure logs, clears the memo so a later call retries, and
- * lets the call proceed — the fold is migration, and refusing to list what
- * IS in the tree over a fold hiccup would be worse than a briefly
- * incomplete list.
+ * One shared promise, not a per-call fold. Listing and resolving documents
+ * wait for every index write this tab has issued and then for that run
+ * (`settledForRead`). Every other method but `renameWorkspace` waits for the
+ * run alone — writes above all, since the save loop that issues them is one
+ * of the writes a read waits for. A failure logs, clears the memo so a later
+ * call retries, and lets the call proceed (`foldOrServeTheTree`).
  */
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import {
@@ -23,10 +25,12 @@ import {
   type DeleteDocumentInput,
   type DocumentDuplicates,
   type DocumentEntry,
+  DocumentHasDescendantsError,
   type DocumentIndex,
   type DocumentPins,
   type DocumentTrash,
   type DuplicateDocumentInput,
+  findDescendantPath,
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
@@ -46,13 +50,15 @@ import {
 } from './browser-keeper-capacity.js'
 import { deleteVersionRowsOfDocument } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { foldOrServeTheTree, retireLegacyDocument } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore, touchContentTimestamp } from './loro-store.js'
+import { forgetContentTimestamp, touchContentTimestamp } from './loro-store.js'
 import { indexWritesSettled } from './pending-index-writes.js'
 import {
+  announceDocumentCreated,
   announceDocumentMoved,
+  announceDocumentPinned,
   announceDocumentRemoved,
   announceDocumentRenamed,
   announceDocumentRestored,
@@ -152,24 +158,23 @@ export class FoldingBrowserIndex
   }
 
   private ensureFolded(): Promise<void> {
-    this.folded ??= foldWorkspaceDocuments(this.dbName)
-      .then((report) => {
-        // A skipped document is one the fold left OUT of the tree — from
-        // here on it is invisible to every listing, so the count must reach
-        // a log even though the fold itself succeeded.
-        if (report.skipped > 0) {
-          log.warn('startup fold left documents behind', {
-            folded: report.folded,
-            skipped: report.skipped,
-          })
-        }
-      })
-      .catch((err: unknown) => {
-        log.warn('startup fold failed; the index serves what the tree holds', err)
+    this.folded ??= foldOrServeTheTree(log, this.dbName).then((report) => {
+      if (report === null) {
         // Cleared so the NEXT call retries — a transient failure must not
         // pin this session to an unfolded view forever.
         this.folded = null
-      })
+        return
+      }
+      // A skipped document is one the fold left OUT of the tree, served only
+      // by the fold-skipped fallback below, so the count must reach a log
+      // even though the fold itself succeeded.
+      if (report.skipped > 0) {
+        log.warn('startup fold left documents behind', {
+          folded: report.folded,
+          skipped: report.skipped,
+        })
+      }
+    })
     return this.folded
   }
 
@@ -197,7 +202,9 @@ export class FoldingBrowserIndex
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
     await this.ensureFolded()
     await this.admitOneMore(input.workspaceId)
-    return this.inner.createDocument(input)
+    const created = await this.inner.createDocument(input)
+    announceDocumentCreated(input.workspaceId, created.path)
+    return created
   }
 
   /**
@@ -210,6 +217,7 @@ export class FoldingBrowserIndex
     await this.admitOneMore(input.workspaceId)
     const copy = await this.inner.duplicateDocument(input)
     await touchContentTimestamp(copy.documentId, this.dbName)
+    announceDocumentCreated(input.workspaceId, copy.path)
     return copy
   }
 
@@ -271,7 +279,8 @@ export class FoldingBrowserIndex
 
   async setDocumentPinned(input: SetDocumentPinnedInput): Promise<void> {
     await this.ensureFolded()
-    return this.inner.setDocumentPinned(input)
+    await this.inner.setDocumentPinned(input)
+    announceDocumentPinned(input.workspaceId, input.documentId)
   }
 
   /** What deletes evacuated; not on the port — callers hold this class. */
@@ -305,6 +314,7 @@ export class FoldingBrowserIndex
     const purged = await this.inner.purgeTrashEntry(input)
     if (purged) {
       await deleteVersionRowsOfDocument(input.workspaceId, input.documentId, this.dbName)
+      await forgetContentTimestamp(input.documentId, this.dbName)
     }
     return purged
   }
@@ -316,11 +326,31 @@ export class FoldingBrowserIndex
     } else {
       // A fold-skipped document lives only in the legacy row; deleting it there
       // is what lets a user clear a damaged document instead of keeping an
-      // error screen forever. Its record goes too, once nothing names it: it
-      // has no trash to be restored from, and no row left to be listed by.
-      const row = await this.legacy.resolveDocument(input)
-      await this.legacy.deleteDocument(input)
-      if (row !== null) await new LoroStore(this.dbName).retire(row.documentId)
+      // error screen forever. It has no trash to be restored from, so it is
+      // retired outright — record, row and listing clock. Only a row the
+      // fallback LISTS: one whose id the tree holds is the fold's to retire.
+      const skipped = await this.foldSkippedRows(input.workspaceId)
+      const row = skipped.find((entry) => entry.path === input.path)
+      if (row !== undefined) {
+        // The port's delete refuses a parent; the retirement goes by id and
+        // would not, so the refusal is asked first.
+        const below = findDescendantPath(
+          skipped.map((entry) => ({ id: entry.documentId, path: entry.path })),
+          input.path,
+        )
+        if (below !== undefined) {
+          throw new DocumentHasDescendantsError(
+            input.path,
+            `Delete "${below}" and any others below it first.`,
+          )
+        }
+        await retireLegacyDocument({
+          workspaceId: input.workspaceId,
+          documentId: row.documentId,
+          keptByTree: false,
+          ...(this.dbName === undefined ? {} : { dbName: this.dbName }),
+        })
+      }
     }
     announceDocumentRemoved(input.workspaceId, input.path)
   }

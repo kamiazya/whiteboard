@@ -1,7 +1,11 @@
 import { documentContainers, readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { linkifyMentionsIn } from '@kamiazya/whiteboard-reference-graph'
-import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
+import {
+  BrowserWorkspaceDocs,
+  openWorkspaceOrNull,
+  saveAndAnnounce,
+} from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './loro-store.js'
 
@@ -15,7 +19,8 @@ import { touchContentTimestamp } from './loro-store.js'
  * is the browser's is WHERE the source lives: a node of this browser's
  * workspace record, edited in place and saved as an incremental update, so the
  * edit is an ordinary CRDT edit that merges with anyone else's rather than a
- * rewrite of the document.
+ * rewrite of the document — and announced, so a page open on the source shows
+ * the links without a reload.
  */
 export async function linkifyBrowserMentions(
   index: DocumentIndex,
@@ -46,7 +51,7 @@ export async function linkifyBrowserMentions(
     },
   )
   if (linked === 0) return 0
-  await docs.save(workspaceId, workspace)
+  await saveAndAnnounce(docs, workspaceId, workspace)
   await touchContentTimestamp(sourceDocumentId, dbName)
   return linked
 }

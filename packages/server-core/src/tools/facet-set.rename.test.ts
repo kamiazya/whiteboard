@@ -7,9 +7,9 @@ import {
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { type SpatialCanvas, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -103,5 +103,45 @@ describe('wb_facet_set rename', () => {
       }),
     )
     expect(result.updated[0]?.tags).toEqual(['b'])
+  })
+})
+
+describe('wb_facet_set rename — what a long rename list costs', () => {
+  const originalSet = Map.prototype.set
+  afterEach(() => {
+    Map.prototype.set = originalSet
+  })
+
+  // A rename list is compiled into its lookup ONCE per call, not once per
+  // element it is applied to: rebuilt per element, a board-wide rename costs
+  // elements x renames, which was 32 s for 2,000 nodes and 100,000 renames.
+  // Counted rather than timed, so the guard does not depend on the machine.
+  test('builds the rename lookup once, however many elements the board holds', async () => {
+    const nodes = 500
+    const tool = await board({
+      nodes: Array.from({ length: nodes }, (_, i) => box(`n${i}`, ['keep'])),
+      edges: [],
+    })
+    const rename = Array.from({ length: TAGS_PER_ELEMENT_MAX }, (_, i) => ({
+      from: `old${i}`,
+      to: 'new',
+    }))
+    let sets = 0
+    Map.prototype.set = function counted(this: Map<unknown, unknown>, key, value) {
+      sets += 1
+      return originalSet.call(this, key, value)
+    }
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { rename },
+    })
+    Map.prototype.set = originalSet
+
+    expect(result.updated).toHaveLength(1)
+    // One lookup holds `rename.length` entries; a rebuild per element would
+    // be `nodes` times that, twice over (the dry run and the write).
+    expect(sets).toBeLessThan(rename.length * 4)
   })
 })

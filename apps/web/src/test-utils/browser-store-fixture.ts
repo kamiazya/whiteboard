@@ -115,7 +115,7 @@ export class BrowserStoreDouble {
       documentId: snapshot.documentId,
       path: snapshot.path,
       kind: snapshot.kind,
-      ...(snapshot.name === snapshot.path ? {} : { name: snapshot.name }),
+      ...(snapshot.name === null ? {} : { name: snapshot.name }),
     })
     this.#stamps.set(snapshot.documentId, snapshot.updatedAt)
   }

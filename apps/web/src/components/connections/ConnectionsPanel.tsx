@@ -1,5 +1,6 @@
 import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { FileText, LayoutDashboard } from 'lucide-react'
+import { documentLabel } from '../../lib/document-label.js'
 
 export type ConnectionsBacklink = DocumentBacklinksResponse['backlinks'][number]
 
@@ -83,9 +84,12 @@ function SourceList({
               ) : (
                 <FileText aria-hidden="true" className="size-3.5 shrink-0" />
               )}
-              {entry.name ?? entry.path}
+              {documentLabel(entry, 'path')}
             </span>
-            {entry.contexts.slice(0, 2).map((context) => (
+            {/* Distinct excerpts: one source can reference this document twice
+                in the same words, and a repeated line adds nothing — it also
+                keeps the excerpt usable as its own key. */}
+            {[...new Set(entry.contexts)].slice(0, 2).map((context) => (
               <span key={context} className="text-muted-foreground truncate text-xs">
                 {context}
               </span>

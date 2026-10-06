@@ -34,7 +34,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -84,7 +84,7 @@ async function openDeleteDialog(): Promise<HTMLElement> {
  * then refuses — so a test can stand between a duplicate failing for one
  * document and its error being reported.
  */
-class HeldDuplicateIndex extends IdbDocumentIndex implements DocumentDuplicates {
+class HeldDuplicateIndex extends FoldingBrowserIndex implements DocumentDuplicates {
   private release: () => void = () => {}
   private readonly gate = new Promise<void>((resolve) => {
     this.release = resolve
@@ -131,14 +131,14 @@ describe('a destructive dialog does not outlive its document', () => {
   })
 
   it('confirming a delete opened on one document does not delete the one now on screen', async () => {
-    const store = new IdbDocumentIndex()
-    await seedIdbDocument(store, {
+    const store = new FoldingBrowserIndex()
+    await seedIdbDocument({
       path: 'opened-about',
       name: OPENED_ABOUT,
       kind: 'spatial',
       makeDefault: true,
     })
-    await seedIdbDocument(store, {
+    await seedIdbDocument({
       path: 'arrived-after',
       name: ARRIVED_AFTER,
       kind: 'spatial',
@@ -215,13 +215,13 @@ describe('a destructive dialog does not outlive its document', () => {
   })
   it('a duplicate that fails for one document does not report under the one now on screen', async () => {
     const store = new HeldDuplicateIndex()
-    await seedIdbDocument(store, {
+    await seedIdbDocument({
       path: 'opened-about',
       name: OPENED_ABOUT,
       kind: 'spatial',
       makeDefault: true,
     })
-    await seedIdbDocument(store, {
+    await seedIdbDocument({
       path: 'arrived-after',
       name: ARRIVED_AFTER,
       kind: 'spatial',
@@ -268,14 +268,14 @@ describe('a destructive dialog does not outlive its document', () => {
     ).toBeNull()
   })
   it('a body surface opened on one document does not stay open over the next', async () => {
-    const store = new IdbDocumentIndex()
-    await seedIdbDocument(store, {
+    const store = new FoldingBrowserIndex()
+    await seedIdbDocument({
       path: 'opened-about',
       name: OPENED_ABOUT,
       kind: 'spatial',
       makeDefault: true,
     })
-    await seedIdbDocument(store, {
+    await seedIdbDocument({
       path: 'arrived-after',
       name: ARRIVED_AFTER,
       kind: 'spatial',

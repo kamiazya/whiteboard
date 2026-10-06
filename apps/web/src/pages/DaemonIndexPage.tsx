@@ -18,6 +18,7 @@ import {
 } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
+import { documentLabel } from '../lib/document-label.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
@@ -89,7 +90,7 @@ const pathOf = (row: DocumentRow): string => row.path
 function listingRows(entries: readonly WorkspaceDocumentEntry[]): DocumentRow[] {
   return entries.map((entry) => ({
     path: entry.path,
-    displayName: entry.name ?? entry.path,
+    displayName: documentLabel(entry, 'path'),
     updatedAt: entry.updatedAt,
     ...(entry.kind === undefined ? {} : { kind: entry.kind }),
   }))

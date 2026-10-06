@@ -102,11 +102,23 @@ const restoreHandler =
       async (workspaceId, trash) => {
         const documentId = c.req.param('documentId') ?? ''
         const restored = await trash.restoreDocument({ workspaceId, documentId })
-        // null covers both "never in the trash" and "entry present but the
-        // evacuated bytes are gone" — either way there is nothing to bring
-        // back, and inventing a distinction here would promise recovery the
-        // store cannot deliver.
         if (restored === null) {
+          // null also answers an entry whose documentId the workspace already
+          // places — a merge from another replica can leave the row beside the
+          // live document. Nothing is missing there, so it is a conflict with
+          // what the workspace holds, said as one rather than as "nothing".
+          const placed = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })
+          if (placed !== null) {
+            return c.json(
+              {
+                title: `"${placed.path}" is already in this workspace, so there is nothing to restore`,
+              } satisfies ApiErrorBody,
+              409,
+            )
+          }
+          // The rest — never in the trash, or the evacuated bytes are gone —
+          // leave nothing to bring back, and telling them apart would promise
+          // a recovery the store cannot deliver.
           return c.json({ title: `Nothing restorable for "${documentId}"` }, 404)
         }
         const response: RestoreTrashResponse = {

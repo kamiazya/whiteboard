@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
@@ -36,7 +36,7 @@ function captureExportedBlobs(): { blobs: Blob[] } {
 }
 
 async function renderLoaded(): Promise<void> {
-  renderPage(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
+  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })

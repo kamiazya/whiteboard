@@ -22,7 +22,7 @@ import {
   reofferFailures,
 } from './pending-delete.js'
 
-/** Which keeper's sentence the confirmation shows, and which fallback it reports. */
+/** Which keeper's fallback a refusal reports. */
 type DeleteKeeper = 'browser' | 'daemon'
 
 const FALLBACK: Record<DeleteKeeper, string> = {
@@ -99,10 +99,9 @@ async function attempt(
   }
 }
 
-/** Which keeper's sentence the dialog shows, singular or bulk. */
-function actionFor(keeper: DeleteKeeper, pending: PendingDelete | null): DestructiveActionId {
-  const bulk = pending !== null && pending.paths.length > 1
-  return bulk ? `delete-documents-${keeper}` : `delete-document-${keeper}`
+/** Which sentence the dialog shows, singular or bulk — the same for either keeper. */
+function actionFor(pending: PendingDelete | null): DestructiveActionId {
+  return pending !== null && pending.paths.length > 1 ? 'delete-documents' : 'delete-document'
 }
 
 export function useDeleteDocuments(options: UseDeleteDocumentsOptions): DeleteDocumentsState {
@@ -148,7 +147,7 @@ export function useDeleteDocuments(options: UseDeleteDocumentsOptions): DeleteDo
       pending: dialogSubject(pendingDelete),
       busy: deleting,
       error: deleteError,
-      action: actionFor(options.keeper, pendingDelete),
+      action: actionFor(pendingDelete),
       onCancel,
       onConfirm,
     },

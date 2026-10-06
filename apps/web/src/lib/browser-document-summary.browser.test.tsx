@@ -9,6 +9,7 @@
  */
 
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
@@ -18,18 +19,22 @@ import {
   listBrowserDocuments,
 } from './browser-document-summary.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = 'whiteboard-summary-test'
 
-async function seedWorkspace(): Promise<IdbDocumentIndex> {
+/**
+ * The index answers placement only; what this layer adds is read from the
+ * content stores under `DB_NAME`, so an in-memory index keeps the subject
+ * to that layer alone.
+ */
+async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
   // This file's DB is claimed by literal name rather than through
   // `claimIsolatedWhiteboardDb` (it predates that helper), so the
   // `getBrowserWorkspaceId()` seam is not set for it automatically — set it
   // fresh per test instead, matching what the seam-owning helper does.
   setBrowserWorkspaceIdForTests(generateDocumentId())
-  const index = new IdbDocumentIndex(DB_NAME)
+  const index = new InMemoryDocumentIndex()
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   return index
 }
@@ -63,10 +68,10 @@ describe('browser document summary', () => {
     expect(Date.parse(row?.updatedAt ?? '')).toBeGreaterThan(0)
   })
 
-  it('falls back to the path when a document has no name of its own', async () => {
-    // `DocumentEntry.name` is ABSENT rather than defaulted, on purpose: a
-    // listing that invents one reads as though somebody typed the path in as
-    // a title. Choosing the fallback is this layer's job, not the port's.
+  it('says a document with no name of its own is unnamed, as the daemon does', async () => {
+    // Null, not the path: a listing that substituted the path could not tell
+    // a name somebody typed equal to it from no name at all. A surface that
+    // needs a label derives one through `documentLabel`.
     const index = await seedWorkspace()
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -76,7 +81,7 @@ describe('browser document summary', () => {
     await writeContent(entry.documentId)
 
     const [row] = await listBrowserDocuments(index, idbContentClock(DB_NAME))
-    expect(row?.name).toBe('archive/untitled')
+    expect(row?.name).toBeNull()
   })
 
   it('lists a document whose content was never written, rather than hiding it', async () => {

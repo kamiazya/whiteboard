@@ -114,9 +114,9 @@ stored longer before the limit still reads, and can still be shortened.
 One tag carries at most **1,024 characters**, and one document, board, node
 or edge at most **1,024 tags**. Every layout of a board reads each tag its
 boxes and edges carry to draw its legend. `wb_facet_set` refuses a longer tag
-in `tags.add` or `tags.rename`, more than 1,024 tags in one `tags.add`, and a
-change that would leave something carrying more than 1,024 — writing nothing
-for any document named. `wb_workspace_edit`'s `document.set` and
+in `tags.add` or `tags.rename`, more than 1,024 tags in one `tags.add`,
+`tags.remove` or `tags.rename`, and a change that would leave something
+carrying more than 1,024 — writing nothing for any document named. `wb_workspace_edit`'s `document.set` and
 `document.create` refuse a frontmatter `tags` list past either bound the same
 way. The daemon's sync routes refuse an update that adds a tag past the length
 or grows a node's, edge's or board's tags past the count with `413` and
@@ -156,6 +156,19 @@ limit for one board", writing nothing. A declaration stored longer before the
 limit still reads, and a declared key no box carries costs a render nothing.
 The bound is checked where a tool writes the facet; an editor's sync update is
 not judged against it, and a longer list arriving that way reads the same way.
+
+## How many ops one call may carry
+
+One call of an op-batch tool — `wb_canvas_edit`, `wb_body_edit` and
+`wb_thread_edit` — carries at most **200** ops. A larger batch is refused
+before any op is applied, with "more ops than the 200-op limit for one call"
+(`wb_body_edit` says "passages"); split it across calls, and pass the same
+`proposalId` to `wb_body_edit` to keep the passages in one proposal. A text
+op whose offsets do not select its quote is found by searching the whole body,
+so the bound is what keeps one call's cost near a second on the largest body a
+document may hold. `wb_body_edit` stores a proposed passage at the offsets its
+quote was found at, as `wb_thread_edit` does for a thread, so reading the
+proposal back does not search again.
 
 ## OKF frontmatter this server does not model
 

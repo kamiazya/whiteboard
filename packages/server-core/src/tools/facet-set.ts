@@ -59,7 +59,11 @@ const tagsChangeSchema = z
     add: tagListWriteSchema
       .optional()
       .describe('Tags to add; one already present is left where it is.'),
-    remove: z.array(z.string().min(1)).optional().describe('Tags to drop, by name.'),
+    remove: z
+      .array(z.string().min(1))
+      .max(TAGS_PER_ELEMENT_MAX, `more tags to remove than ${TAG_COUNT_LIMIT_PHRASE}`)
+      .optional()
+      .describe('Tags to drop, by name.'),
     /**
      * Vocabulary maintenance (ADR-0040 decision 5): a typo recovered, or two
      * spellings merged, across everything the named documents hold. Priced
@@ -74,6 +78,7 @@ const tagsChangeSchema = z
           })
           .strict(),
       )
+      .max(TAGS_PER_ELEMENT_MAX, `more tags to rename than ${TAG_COUNT_LIMIT_PHRASE}`)
       .optional()
       .describe(
         'Rename tags throughout the documents named — their own tags and every node and edge — or, with nodeId / edgeId, on that object alone.',
@@ -285,8 +290,9 @@ export function createFacetSetTool(deps: ServerDeps) {
   }
 }
 
-async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetSetOutput> {
-  refuseIncoherentRequest(input)
+async function setFacets(deps: ServerDeps, given: FacetSetInput): Promise<FacetSetOutput> {
+  refuseIncoherentRequest(given)
+  const input: FacetSetRequest = { ...given, tags: given.tags && tagEditOf(given.tags) }
   const registry = await registryForFacetWrites(deps, input.workspaceId, [input.facets])
   const { sets, deletions } = partitionFacetWrites(registry, input.facets, requiredTargetOf(input))
   refuseUnusableStencilLibrary(deps, sets)
@@ -330,7 +336,7 @@ async function setFacets(deps: ServerDeps, input: FacetSetInput): Promise<FacetS
  */
 type FacetWriteSite = 'node' | 'edge' | 'canvas' | 'document'
 
-function writeSiteOf(input: FacetSetInput, kind: DocumentKind | undefined): FacetWriteSite {
+function writeSiteOf(input: FacetSetRequest, kind: DocumentKind | undefined): FacetWriteSite {
   if (input.nodeId !== undefined) return 'node'
   if (input.edgeId !== undefined) return 'edge'
   if (input.target === 'canvas' || kind === 'spatial') return 'canvas'
@@ -356,7 +362,7 @@ function refuseIncoherentRequest(input: FacetSetInput): void {
 }
 
 /** What this write targets, which decides whether a facet may be written at all. */
-function requiredTargetOf(input: FacetSetInput): FacetTarget {
+function requiredTargetOf(input: FacetSetRequest): FacetTarget {
   if (input.nodeId !== undefined) return 'node'
   if (input.edgeId !== undefined) return 'edge'
   return input.target ?? 'document'
@@ -373,7 +379,7 @@ function requiredTargetOf(input: FacetSetInput): FacetTarget {
  * its documents here: a removal or a rename cannot grow a set, so every set
  * it writes passes and no document is loaded twice.
  */
-async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Promise<void> {
+async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetRequest): Promise<void> {
   for (const documentId of input.documentIds) {
     await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
   }
@@ -382,7 +388,7 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Pro
   const library = await workspaceTagLibrary(deps, input.workspaceId, 'deployment')
   const judgesLibrary = Object.keys(library).length > 0
   // Only `add` can grow a set; a batch with nothing to judge loads nothing.
-  if (!judgesLibrary && input.tags.add === undefined) return
+  if (!judgesLibrary && input.tags.add.length === 0) return
   for (const documentId of input.documentIds) {
     const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
     for (const { what, before, tags } of tagSetsAfter(doc, input, documentId)) {
@@ -401,9 +407,9 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetInput): Pro
  */
 function renameReaches(
   tags: readonly string[] | undefined,
-  rename: readonly { from: string }[],
+  renameTo: ReadonlyMap<string, string>,
 ): boolean {
-  return (tags ?? []).some((tag) => rename.some((entry) => entry.from === tag))
+  return (tags ?? []).some((tag) => renameTo.has(tag))
 }
 
 /**
@@ -414,10 +420,10 @@ function renameReaches(
  * Read from the document, and only for a write that can reach an element, so a
  * document-level tag or facet write loads nothing here.
  */
-async function refuseLockedTargets(deps: ServerDeps, input: FacetSetInput): Promise<void> {
-  const rename = input.tags?.rename ?? []
+async function refuseLockedTargets(deps: ServerDeps, input: FacetSetRequest): Promise<void> {
+  const rename = input.tags?.renameTo ?? new Map<string, string>()
   const reachesAnElement =
-    input.nodeId !== undefined || input.edgeId !== undefined || rename.length > 0
+    input.nodeId !== undefined || input.edgeId !== undefined || rename.size > 0
   if (!reachesAnElement) return
   for (const documentId of input.documentIds) {
     const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
@@ -427,8 +433,8 @@ async function refuseLockedTargets(deps: ServerDeps, input: FacetSetInput): Prom
 
 function refuseLockedIn(
   doc: LoroDoc,
-  input: FacetSetInput,
-  rename: readonly { from: string }[],
+  input: FacetSetRequest,
+  rename: ReadonlyMap<string, string>,
 ): void {
   const nodeLocks = readNodeLocks(doc)
   const edgeLocks = readEdgeLocks(doc)
@@ -487,7 +493,7 @@ const ELEMENT_TARGETS = {
  */
 async function setElementFacets(
   deps: ServerDeps,
-  input: FacetSetInput,
+  input: FacetSetRequest,
   documentId: string,
   doc: LoroDoc,
   kind: ReturnType<typeof readDocumentKind>,
@@ -530,7 +536,7 @@ async function setElementFacets(
 
 async function setOne(
   deps: ServerDeps,
-  input: FacetSetInput,
+  input: FacetSetRequest,
   documentId: string,
   sets: Record<string, unknown>,
   deletions: readonly string[],
@@ -580,7 +586,7 @@ async function setOne(
  */
 async function setCanvasFacets(
   deps: ServerDeps,
-  input: FacetSetInput,
+  input: FacetSetRequest,
   documentId: string,
   doc: LoroDoc,
   kind: ReturnType<typeof readDocumentKind>,
@@ -604,11 +610,11 @@ async function setCanvasFacets(
   const tags = input.tags === undefined ? undefined : applyTagChange(canvas.tags, input.tags)
   // A rename reaches every node and edge too: it is vocabulary
   // maintenance over the document, not a write to the board alone.
-  const renames = input.tags?.rename ?? []
+  const renames = input.tags && renamesOf(input.tags)
   const renamed = <T extends { readonly tags?: readonly string[] }>(element: T): T => {
-    if (renames.length === 0 || element.tags === undefined) return element
+    if (renames === undefined || element.tags === undefined) return element
     const { tags: _before, ...rest } = element
-    return { ...rest, ...withTags(applyTagChange(element.tags, { rename: renames })) } as T
+    return { ...rest, ...withTags(applyTagChange(element.tags, renames)) } as T
   }
   // The same canonical emptiness the web editor's `withCanvasFacet` keeps:
   // an empty bucket disappears, so a reverted canvas never carries a
@@ -628,7 +634,7 @@ async function setCanvasFacets(
 /** Write to the document's OKF frontmatter. */
 async function setDocumentFacets(
   deps: ServerDeps,
-  input: FacetSetInput,
+  input: FacetSetRequest,
   documentId: string,
   doc: LoroDoc,
   sets: Record<string, unknown>,
@@ -670,7 +676,7 @@ const tagSet = (what: string, current: readonly string[] | undefined, tags: stri
   tags,
 })
 
-function tagSetsAfter(doc: LoroDoc, input: FacetSetInput, documentId: string): TagSet[] {
+function tagSetsAfter(doc: LoroDoc, input: FacetSetRequest, documentId: string): TagSet[] {
   const change = input.tags
   if (change === undefined) return []
   const kind = readDocumentKind(doc)
@@ -693,8 +699,8 @@ function tagSetsAfter(doc: LoroDoc, input: FacetSetInput, documentId: string): T
  */
 function tagSetsAtElement(
   canvas: SpatialCanvas,
-  input: FacetSetInput,
-  change: NonNullable<FacetSetInput['tags']>,
+  input: FacetSetRequest,
+  change: TagEdit,
 ): TagSet[] {
   const element =
     input.nodeId !== undefined
@@ -710,56 +716,63 @@ function tagSetsAtElement(
  * vocabulary maintenance over the document, not a write to the board alone —
  * which is what `setCanvasFacets` does and therefore what this must refuse for.
  */
-function tagSetsAtCanvas(
-  canvas: SpatialCanvas,
-  change: NonNullable<FacetSetInput['tags']>,
-): TagSet[] {
+function tagSetsAtCanvas(canvas: SpatialCanvas, change: TagEdit): TagSet[] {
   const sets: TagSet[] = [tagSet('the board', canvas.tags, applyTagChange(canvas.tags, change))]
-  const rename = change.rename ?? []
-  if (rename.length === 0) return sets
+  const renames = renamesOf(change)
+  if (renames === undefined) return sets
   for (const node of canvas.nodes) {
     if (node.tags !== undefined) {
-      sets.push(tagSet(`node ${node.id}`, node.tags, applyTagChange(node.tags, { rename })))
+      sets.push(tagSet(`node ${node.id}`, node.tags, applyTagChange(node.tags, renames)))
     }
   }
   for (const edge of canvas.edges) {
     if (edge.tags !== undefined) {
-      sets.push(tagSet(`edge ${edge.id}`, edge.tags, applyTagChange(edge.tags, { rename })))
+      sets.push(tagSet(`edge ${edge.id}`, edge.tags, applyTagChange(edge.tags, renames)))
     }
   }
   return sets
 }
 
 /** The dry run for a frontmatter write. */
-function tagSetsAtDocument(
-  doc: LoroDoc,
-  documentId: string,
-  change: NonNullable<FacetSetInput['tags']>,
-): TagSet[] {
+function tagSetsAtDocument(doc: LoroDoc, documentId: string, change: TagEdit): TagSet[] {
   const core = readCoreFacets(doc)
   if (core === undefined) return []
   return [tagSet(`document ${documentId}`, core.tags, applyTagChange(core.tags, change))]
 }
 
 /**
+ * A `tags` change in the form applying it reads, built ONCE per call. It is
+ * applied to every node and edge a rename reaches, twice (dry run and write),
+ * so a lookup rebuilt per element cost elements x renames: 32 s for 2,000
+ * nodes and 100,000 renames, before the lists were bounded.
+ */
+interface TagEdit {
+  readonly add: readonly string[]
+  readonly remove: ReadonlySet<string>
+  readonly renameTo: ReadonlyMap<string, string>
+}
+type FacetSetRequest = Omit<FacetSetInput, 'tags'> & { readonly tags?: TagEdit }
+
+function tagEditOf(change: NonNullable<FacetSetInput['tags']>): TagEdit {
+  // Of two renames of one tag the first wins.
+  const renameTo = new Map<string, string>()
+  for (const { from, to } of change.rename ?? []) if (!renameTo.has(from)) renameTo.set(from, to)
+  return { add: change.add ?? [], remove: new Set(change.remove ?? []), renameTo }
+}
+
+/** The rename half alone — what reaches every node and edge — or `undefined` for none. */
+const renamesOf = (edit: TagEdit): TagEdit | undefined =>
+  edit.renameTo.size === 0 ? undefined : { add: [], remove: new Set(), renameTo: edit.renameTo }
+
+/**
  * The errand's shape applied to a stored set: drop what `remove` names,
  * then append what `add` names and the set does not yet hold — a tag added
  * twice is a no-op rather than a second copy (ADR-0040 decision 2).
  */
-function applyTagChange(
-  current: readonly string[] | undefined,
-  change: {
-    add?: readonly string[]
-    remove?: readonly string[]
-    rename?: readonly { from: string; to: string }[]
-  },
-): string[] {
+function applyTagChange(current: readonly string[] | undefined, edit: TagEdit): string[] {
   // Rename first, then remove, then add — so `rename` onto a tag already
   // present MERGES (one copy survives) and a removal names the new spelling.
   // Sets rather than list scans: the stored side may predate any bound.
-  const renameTo = new Map<string, string>()
-  for (const { from, to } of change.rename ?? []) if (!renameTo.has(from)) renameTo.set(from, to)
-  const remove = new Set(change.remove ?? [])
   const seen = new Set<string>()
   const result: string[] = []
   const keepFirst = (tag: string) => {
@@ -768,10 +781,10 @@ function applyTagChange(
     result.push(tag)
   }
   for (const tag of current ?? []) {
-    const renamed = renameTo.get(tag) ?? tag
-    if (!remove.has(renamed)) keepFirst(renamed)
+    const renamed = edit.renameTo.get(tag) ?? tag
+    if (!edit.remove.has(renamed)) keepFirst(renamed)
   }
-  for (const tag of change.add ?? []) keepFirst(tag)
+  for (const tag of edit.add) keepFirst(tag)
   return result
 }
 

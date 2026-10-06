@@ -2,7 +2,6 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
@@ -70,7 +69,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     // The kind-aware copy's whole point on this page — the markdown branch
     // must not inherit the spatial wording.
     const store = new FoldingBrowserIndex()
-    await seedIdbDocument(new IdbDocumentIndex(), {
+    await seedIdbDocument({
       path: 'meeting-notes',
       name: 'Meeting notes',
       kind: 'markdown',

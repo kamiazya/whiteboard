@@ -9,11 +9,10 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
-import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
 // Body search over a browser-kept workspace, against real IndexedDB: the browser ranks with
@@ -32,11 +31,12 @@ beforeEach(async () => {
   await clearWhiteboardDb()
 })
 
-async function seedMarkdown(index: IdbDocumentIndex, path: string, body: string): Promise<string> {
-  const entry = await index.createDocument({
+async function seedMarkdown(path: string, body: string, name?: string): Promise<string> {
+  const entry = await seedLegacyRow({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'markdown',
+    ...(name === undefined ? {} : { name }),
   })
   const doc = new Loro()
   writeDocumentKind(doc, 'markdown')
@@ -45,8 +45,8 @@ async function seedMarkdown(index: IdbDocumentIndex, path: string, body: string)
   return entry.documentId
 }
 
-async function seedSpatial(index: IdbDocumentIndex, path: string, canvas: SpatialCanvas) {
-  const entry = await index.createDocument({
+async function seedSpatial(path: string, canvas: SpatialCanvas) {
+  const entry = await seedLegacyRow({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'spatial',
@@ -59,10 +59,8 @@ async function seedSpatial(index: IdbDocumentIndex, path: string, canvas: Spatia
 
 describe('browser body search', () => {
   it('finds a document by a word that appears only in its body', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedMarkdown(index, 'notes/one', 'The quota exceeded error shows up on save.')
-    await seedMarkdown(index, 'notes/two', 'Nothing relevant here at all.')
+    await seedMarkdown('notes/one', 'The quota exceeded error shows up on save.')
+    await seedMarkdown('notes/two', 'Nothing relevant here at all.')
     const source = createBrowserFilesSource()
 
     const hits = await source.searchDocuments('quota')
@@ -72,9 +70,7 @@ describe('browser body search', () => {
   })
 
   it('searches a canvas through its node and edge labels', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedSpatial(index, 'diagrams/auth', {
+    await seedSpatial('diagrams/auth', {
       nodes: [textNode({ id: 'n1', text: 'Session handshake', x: 0, y: 0, width: 80, height: 40 })],
       edges: [
         {
@@ -99,15 +95,8 @@ describe('browser body search', () => {
     // What a Japanese reader types first is one character. Bigram-only
     // indexing answered nothing for it, and the panel had already shown the
     // document from its name — so the row appeared and then vanished.
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const id = await seedMarkdown(index, 'notes/kana', 'ひらがなだけの本文です。')
-    await index.setDocumentName({
-      workspaceId: getBrowserWorkspaceId(),
-      documentId: id,
-      name: 'たささたはな',
-    })
-    await seedMarkdown(index, 'notes/other', 'Nothing relevant here at all.')
+    await seedMarkdown('notes/kana', 'ひらがなだけの本文です。', 'たささたはな')
+    await seedMarkdown('notes/other', 'Nothing relevant here at all.')
     const source = createBrowserFilesSource()
 
     expect((await source.searchDocuments('た')).map((h) => h.document.path)).toEqual(['notes/kana'])
@@ -116,16 +105,12 @@ describe('browser body search', () => {
   })
 
   it('answers nothing for an empty query', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedMarkdown(index, 'solo', 'anything')
+    await seedMarkdown('solo', 'anything')
     expect(await createBrowserFilesSource().searchDocuments('   ')).toEqual([])
   })
 
   it('sees an edit without being told, and re-reads only what changed', async () => {
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const id = await seedMarkdown(index, 'draft', 'first wording')
+    const id = await seedMarkdown('draft', 'first wording')
     const source = createBrowserFilesSource()
     expect(await source.searchDocuments('rewritten')).toEqual([])
 
@@ -147,10 +132,8 @@ describe('browser body search', () => {
     // The corpus caches on the CONTENT stamp, and a rename does not move it.
     // Caching the path alongside the text would leave the search matching a
     // name the workspace no longer uses.
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedMarkdown(index, 'drafts/first', 'A body with no distinctive words.')
-    const source = createBrowserFilesSource({ index })
+    await seedMarkdown('drafts/first', 'A body with no distinctive words.')
+    const source = createBrowserFilesSource()
 
     expect((await source.searchDocuments('first', 20)).length).toBe(1)
     await source.renameDocumentPath('drafts/first', 'drafts/renamed')
@@ -163,11 +146,9 @@ describe('browser body search', () => {
     // The browser keeper has no embedder, so every hit here IS a lexical hit — the
     // rank is what says so, and its absence is what a semantic-only hit
     // from the daemon would carry.
-    const index = new IdbDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    await seedMarkdown(index, 'ranked/heavy', 'zarquon zarquon zarquon exceeded on save')
-    await seedMarkdown(index, 'ranked/light', 'a passing mention of zarquon')
-    const source = createBrowserFilesSource({ index })
+    await seedMarkdown('ranked/heavy', 'zarquon zarquon zarquon exceeded on save')
+    await seedMarkdown('ranked/light', 'a passing mention of zarquon')
+    const source = createBrowserFilesSource()
 
     const hits = await source.searchDocuments('zarquon', 20)
     expect(hits.map((hit) => hit.document.path)).toEqual(['ranked/heavy', 'ranked/light'])

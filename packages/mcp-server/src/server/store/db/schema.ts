@@ -23,9 +23,10 @@ interface WorkspacesTable {
 
 interface VersionsTable {
   id: string
-  // No FK since migration 0016 — delete paths sweep these rows explicitly
-  // (documentTeardown's bracket). Reads key on workspaceId, whose oplog the
-  // frontiers point into.
+  // No FK since migration 0016 — the rows are swept explicitly, by the trash
+  // purge for a document a delete evacuated (a restore rejoins them until
+  // then) and by documentTeardown's bracket for one it did not. Reads key on
+  // workspaceId, whose oplog the frontiers point into.
   documentId: string
   workspaceId: string
   auto: Bool

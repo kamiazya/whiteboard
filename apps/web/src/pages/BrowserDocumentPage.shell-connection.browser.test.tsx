@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testi
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppShell } from '../components/AppShell.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so the chip is laid out the way it ships.
@@ -25,7 +25,7 @@ function renderApp() {
         <div className="flex h-dvh flex-col">
           <AppShell daemon={false} />
           <div className="min-h-0 flex-1">
-            <BrowserDocumentPage store={new IdbDocumentIndex()} />
+            <BrowserDocumentPage store={new FoldingBrowserIndex()} />
           </div>
         </div>
       </MemoryRouter>

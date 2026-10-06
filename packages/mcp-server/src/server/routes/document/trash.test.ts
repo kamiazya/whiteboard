@@ -13,7 +13,12 @@ import {
   purgeTrashEntryResponseSchema,
   restoreTrashResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readSpatialCanvas,
+  readTrashEntries,
+  recordTrashEntry,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import {
@@ -84,6 +89,33 @@ async function servedTexts(app: App, WS: string, path: string): Promise<string[]
   const doc = new LoroDoc()
   doc.import(new Uint8Array(await snap.arrayBuffer()))
   return readSpatialCanvas(doc).nodes.map((node) => nodeText(node) ?? node.id)
+}
+
+async function saveVersion(app: App, WS: string, path: string): Promise<string> {
+  const saved = await app.request(`/api/workspaces/${WS}/documents/${path}/versions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  expect(saved.status).toBe(200)
+  return ((await saved.json()) as { version: { id: string } }).version.id
+}
+
+async function listedVersionIds(app: App, WS: string, path: string): Promise<string[]> {
+  const listed = await app.request(`/api/workspaces/${WS}/documents/${path}/versions`)
+  expect(listed.status).toBe(200)
+  return ((await listed.json()) as { versions: { id: string }[] }).versions.map((v) => v.id)
+}
+
+/** The stored rows themselves, so a row no listing can reach still counts. */
+async function versionRowDocumentIds(WS: string): Promise<string[]> {
+  const db = await getDb(tmp.dir)
+  const rows = await db
+    .selectFrom('versions')
+    .select(['documentId'])
+    .where('workspaceId', '=', WS)
+    .execute()
+  return rows.map((row) => row.documentId).sort()
 }
 
 /**
@@ -220,6 +252,75 @@ describe('trash routes', () => {
       method: 'POST',
     })
     expect(keptRestore.status).toBe(200)
+  })
+
+  it('answers 409, not 404, for a trash entry whose documentId the workspace already places', async () => {
+    const WS = 'ws-trash-restore-placed'
+    await saveDocument(WS, 'twice', canvasDoc('live copy'), { kind: 'spatial' })
+    const documentId = (await resolveDocumentIdAtPath(WS, 'twice')) as string
+    const deps = await realDeps()
+    const app = await appWithRealDeps(deps)
+    await app.request(`/api/workspaces/${WS}/documents/twice`, { method: 'DELETE' })
+    const record = await deps.workspaceDocuments.get(WS)
+    const [entry] = readTrashEntries(record)
+    if (entry === undefined) throw new Error('the delete recorded no trash entry')
+    await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, { method: 'POST' })
+    // The row a merge from another replica can leave beside the live
+    // document: same documentId, still in the trash.
+    const placed = await deps.workspaceDocuments.get(WS)
+    recordTrashEntry(placed, entry)
+    await deps.workspaceDocuments.save(WS, placed)
+
+    const again = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
+      method: 'POST',
+    })
+
+    expect(again.status).toBe(409)
+    expect(((await again.json()) as { title: string }).title).toContain('twice')
+    expect(await resolveDocumentIdAtPath(WS, 'twice')).toBe(documentId)
+  })
+
+  it('a restore from the trash brings the saved versions back with the document', async () => {
+    const WS = 'ws-trash-versions-restore'
+    await saveDocument(WS, 'doomed', canvasDoc('versioned'), { kind: 'spatial' })
+    const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
+    const app = await appWithRealDeps()
+    const versionId = await saveVersion(app, WS, 'doomed')
+
+    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    const restored = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
+      method: 'POST',
+    })
+
+    expect(restored.status).toBe(200)
+    expect(await listedVersionIds(app, WS, 'doomed')).toEqual([versionId])
+    // Listed AND openable: the version still reads the state it saved.
+    const past = await app.request(
+      `/api/workspaces/${WS}/documents/doomed/versions/${versionId}/document`,
+    )
+    expect(past.status).toBe(200)
+    expect(JSON.stringify(await past.json())).toContain('versioned')
+  })
+
+  it("purging a trashed document drops its saved versions, and only that document's", async () => {
+    const WS = 'ws-trash-versions-purge'
+    await saveDocument(WS, 'doomed', canvasDoc('to destroy'), { kind: 'spatial' })
+    await saveDocument(WS, 'kept', canvasDoc('stays'), { kind: 'spatial' })
+    const doomedId = await resolveDocumentIdAtPath(WS, 'doomed')
+    const keptId = await resolveDocumentIdAtPath(WS, 'kept')
+    const app = await appWithRealDeps()
+    await saveVersion(app, WS, 'doomed')
+    await saveVersion(app, WS, 'kept')
+    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    // Kept through the delete, so the purge below is what has to remove them.
+    expect(await versionRowDocumentIds(WS)).toEqual([doomedId, keptId].sort())
+
+    const purged = await app.request(`/api/workspaces/${WS}/trash/${doomedId}`, {
+      method: 'DELETE',
+    })
+
+    expect(purged.status).toBe(200)
+    expect(await versionRowDocumentIds(WS)).toEqual([keptId])
   })
 
   it('refuses to purge a live document, or an entry already purged, with a 404', async () => {

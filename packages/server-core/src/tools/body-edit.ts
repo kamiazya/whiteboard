@@ -16,9 +16,12 @@ import {
   MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
   mintProposalId,
+  OPS_PER_CALL_LIMIT_PHRASE,
+  OPS_PER_CALL_MAX,
   type PassageOverlap,
   type PlacedPassage,
   type Proposal,
+  placeTextAnchor,
   proposalSchema,
   resolveTextAnchor,
   textAnchorInputSchema,
@@ -66,7 +69,10 @@ export const bodyEditInputSchema = z
     proposalId: z.string().min(1).optional(),
     /** Only meaningful when proposing; see `proposalAuthorSchema`. */
     author: proposalAuthorSchema,
-    ops: z.array(bodyEditOpSchema).min(1, 'a body edit carries at least one passage'),
+    ops: z
+      .array(bodyEditOpSchema)
+      .min(1, 'a body edit carries at least one passage')
+      .max(OPS_PER_CALL_MAX, `more passages than ${OPS_PER_CALL_LIMIT_PHRASE}`),
   })
   .strict()
 export type BodyEditInput = z.infer<typeof bodyEditInputSchema>
@@ -131,11 +137,16 @@ function placeAll(
         `a markdown document has no node "${op.anchor.nodeId}"; omit nodeId to quote its body`,
       )
     }
-    const resolved = resolveTextAnchor(body, op.anchor)
-    if (resolved.kind !== 'placed') {
+    // Stored at where its quote resolved, so every later reader of the
+    // proposal takes the offsets' shortcut rather than searching the body.
+    const anchor = placeTextAnchor(body, op.anchor)
+    if (anchor === undefined) {
       throw new PassageNotApplicableError(op.id, 'its passage is no longer in the body')
     }
-    placed.push({ change: { ...op, status: 'open' }, at: resolved })
+    placed.push({
+      change: { ...op, anchor, status: 'open' },
+      at: { start: anchor.start, end: anchor.end },
+    })
   }
   return placed
 }

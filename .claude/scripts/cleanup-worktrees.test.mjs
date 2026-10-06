@@ -7,7 +7,7 @@
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
 
 import assert from 'node:assert/strict'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
   existsSync,
@@ -385,4 +385,103 @@ test('--help and an unrecognised option print usage and touch nothing: no fetch,
     assert.equal(existsSync(laneDir), true, `${flag} removed a worktree`)
     assert.equal(git(repoDir, ['rev-parse', 'origin/main']), mainBefore, `${flag} fetched`)
   }
+})
+
+// A worktree's dev daemon runs with no idle timeout, and its data dir is inside
+// the worktree: removing the directory first leaves the daemon, its watcher and
+// its wrapper alive with no record anything can find them by.
+const hasProc = existsSync('/proc/self/stat')
+
+/**
+ * Gives a merged lane a dev daemon's record naming a live stand-in, which
+ * writes into `marker` whether the lane still existed when it was signalled.
+ * `recordedAgoMs` dates the record: a stand-in that started after it is not
+ * the daemon the record describes.
+ */
+async function laneWithRecordedDaemon(name, { recordedAgoMs }) {
+  const { repoDir, laneDir } = squashMergedLane(name)
+  // The real repository ignores `.dev-data/`; without that the lane reads as dirty.
+  writeFileSync(join(repoDir, '.git', 'info', 'exclude'), '.dev-data/\n')
+  const dataDir = join(laneDir, '.dev-data')
+  mkdirSync(dataDir)
+  const marker = join(dirname(repoDir), `${name}.signalled`)
+  const standIn = spawn(
+    process.execPath,
+    [
+      '-e',
+      `const { existsSync, writeFileSync } = require('node:fs')
+process.on('SIGTERM', () => { writeFileSync(${JSON.stringify(marker)}, String(existsSync(${JSON.stringify(laneDir)}))); process.exit(0) })
+console.log('ready')
+setInterval(() => {}, 1000)`,
+    ],
+    { stdio: ['ignore', 'pipe', 'ignore'] },
+  )
+  after(() => standIn.kill('SIGKILL'))
+  await new Promise((ready) => standIn.stdout.once('data', ready))
+  writeFileSync(
+    join(dataDir, 'daemon.json'),
+    JSON.stringify({
+      pid: standIn.pid,
+      version: '0.0.0',
+      startedAt: new Date(Date.now() - recordedAgoMs).toISOString(),
+      socketPath: join(dataDir, 'gone.sock'),
+      token: 't',
+    }),
+  )
+  const exited = new Promise((done) => standIn.once('exit', done))
+  return { repoDir, laneDir, marker, standIn, exited }
+}
+
+/**
+ * A real run that leaves this process's event loop free: the stand-in daemon
+ * is this process's child, and an unreaped child still answers `kill(pid, 0)`,
+ * so a blocking run would watch it "outlive" its signal.
+ */
+function runRealAsync(repoDir) {
+  return new Promise((done, fail) => {
+    const run = spawn('node', [scriptPath], { cwd: repoDir, env: realEnv(repoDir) })
+    let stdout = ''
+    let stderr = ''
+    run.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    run.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    run.once('close', (status) =>
+      status === 0 ? done(stdout) : fail(new Error(`exit ${status}: ${stdout}${stderr}`)),
+    )
+  })
+}
+
+test('a real run stops a removed lane’s dev daemon before deleting the lane', {
+  skip: !hasProc,
+}, async () => {
+  const { repoDir, laneDir, marker, exited } = await laneWithRecordedDaemon('lane-daemon', {
+    recordedAgoMs: -1_000,
+  })
+
+  const out = await runRealAsync(repoDir)
+
+  assert.match(out, /stopped the dev daemon/)
+  assert.match(out, /removed lane-daemon/)
+  await exited
+  assert.equal(readFileSync(marker, 'utf-8'), 'true', 'signalled after the lane was gone')
+  assert.equal(existsSync(laneDir), false)
+})
+
+test('a real run signals no process that took over a stale record’s pid', {
+  skip: !hasProc,
+}, async () => {
+  const { repoDir, laneDir, marker, standIn } = await laneWithRecordedDaemon('lane-stale', {
+    recordedAgoMs: 60_000,
+  })
+
+  const out = await runRealAsync(repoDir)
+
+  assert.match(out, /not signalled/)
+  assert.match(out, /removed lane-stale/)
+  assert.equal(existsSync(marker), false)
+  assert.equal(standIn.exitCode, null)
+  assert.equal(existsSync(laneDir), false)
 })

@@ -6,6 +6,7 @@ import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
   readDocumentKind,
+  readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceMeta,
   resolveWorkspaceDocument,
@@ -394,6 +395,11 @@ export async function documentExists(
  * clean up the way the HTTP DELETE does instead of leaving a stale cache
  * entry behind.
  *
+ * Version rows outlive a delete that put the document in the trash: a
+ * restore brings it back under the same documentId the rows are keyed by,
+ * so they are its history, and `CacheCoherentDocumentIndex.purgeTrashEntry`
+ * is where they go. The browser keeper draws the line at the same point.
+ *
  * The row delete and the document delete are separate statements, not one
  * transaction — a crash between them leaves orphaned versions rows.
  * ponytail: acceptable while nothing lists rows by dangling documentId;
@@ -410,9 +416,11 @@ export function createDocumentTeardown(scope: StoreScope = globalStoreScope): Do
 
         // Version rows no longer cascade from a documents row (migration 0016
         // dropped the FK — a tree-only document has no row to cascade from), so
-        // delete-completeness for every delete path that runs through this
-        // bracket lives here.
-        await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
+        // delete-completeness lives here for a delete that left nothing a
+        // restore could bring back, and in the purge for one that did.
+        if (!(await isInTrash(workspaceId, documentId, scope))) {
+          await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
+        }
 
         // Force the next getDoc() to reload from disk (there is nothing left to
         // reload from — a fresh create should not inherit a doc instance that
@@ -423,6 +431,16 @@ export function createDocumentTeardown(scope: StoreScope = globalStoreScope): Do
       })
     },
   }
+}
+
+async function isInTrash(
+  workspaceId: string,
+  documentId: string,
+  scope: StoreScope,
+): Promise<boolean> {
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
+  if (workspaceDoc === null) return false
+  return readTrashEntries(workspaceDoc).some((entry) => entry.documentId === documentId)
 }
 
 export async function deleteDocument(

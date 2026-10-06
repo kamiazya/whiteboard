@@ -219,3 +219,22 @@ export function resolveTextAnchor(
   }
   return { kind: 'placed', start: best, end: best + exact.length }
 }
+
+/**
+ * The anchor as a writer stores it: re-stated at the offsets its quote
+ * resolves to in `text`, or `undefined` when the passage is not there.
+ *
+ * The quote is what finds a passage and the offsets are only the shortcut
+ * `resolveTextAnchor` tries first, so offsets a caller miscounted are a hint
+ * the quote overrides. Storing them as given would leave an anchor that
+ * contradicts itself, and every later reader would miss the shortcut and
+ * search the whole text again; refusing would reject a call over a number no
+ * reader relies on. Offsets that already select the quote are kept, which is
+ * what keeps the chosen occurrence of a quote that appears more than once.
+ */
+export function placeTextAnchor<A extends TextAnchor>(text: string, anchor: A): A | undefined {
+  const placed = resolveTextAnchor(text, anchor)
+  if (placed.kind !== 'placed') return undefined
+  if (placed.start === anchor.start && placed.end === anchor.end) return anchor
+  return { ...anchor, start: placed.start, end: placed.end }
+}

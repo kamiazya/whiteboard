@@ -10,6 +10,8 @@
  * what gets rewritten cannot drift from what resolves (ADR-0014's bar).
  * This module is only the server's application of that plan: find the
  * documents whose content names an affected alias, load each, rewrite, save.
+ * The rewrite itself is reference-graph's `rewriteDocumentReferences`, which
+ * the browser keeper applies to its workspace record too.
  *
  * Candidates come from the same stamp-validated `ContentFactsCache` that
  * serves backlinks, whose per-document `refs` hold each target AS WRITTEN —
@@ -22,20 +24,12 @@
  * one fewer silently broken link. The ids it could not repair are reported
  * to the caller, who owns deciding whether that is worth a log line.
  */
+import { type DocumentMove, planReferenceRewrite } from '@kamiazya/whiteboard-codec'
+import type { DocumentId } from '@kamiazya/whiteboard-model'
 import {
-  type DocumentMove,
-  planReferenceRewrite,
-  rewriteCanvasReferences,
-  rewriteReferenceTargets,
-} from '@kamiazya/whiteboard-codec'
-import {
-  readDocumentContent,
-  writeMarkdownBody,
-  writeSpatialNode,
-} from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
-import type { ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
-import type { LoroDoc } from 'loro-crdt'
+  type ContentFactsCache,
+  rewriteDocumentReferences,
+} from '@kamiazya/whiteboard-reference-graph'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { factsCacheFor } from './content-source.js'
@@ -94,7 +88,7 @@ export async function followReferencesAfterRename(
         input.workspaceId,
         entry.documentId as DocumentId,
       )
-      if (!rewriteDocument(doc, plan, entry.kind)) continue
+      if (!rewriteDocumentReferences(doc, plan, entry.kind)) continue
       await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId as DocumentId, doc)
       updated.push(entry.documentId)
     } catch {
@@ -102,38 +96,4 @@ export async function followReferencesAfterRename(
     }
   }
   return { updatedDocumentIds: updated, failedDocumentIds: failed }
-}
-
-/**
- * Rewrites one document's reference targets in place, by its kind, and says
- * whether anything changed — so the caller saves only what moved.
- *
- * The kind is `readDocumentContent`'s to decide, so a document that records
- * none is rewritten as the canvas the rest of the system reads it as: a
- * markdown write over one would replace its nodes with a body.
- */
-function rewriteDocument(
-  doc: LoroDoc,
-  plan: ReadonlyMap<string, string>,
-  entryKind: DocumentKind | undefined,
-): boolean {
-  const content = readDocumentContent(doc, entryKind)
-  if (content.kind === 'spatial') {
-    const result = rewriteCanvasReferences(content.canvas, plan)
-    if (!result.changed) return false
-    // Targeted writes, never a whole-canvas resync: readSpatialCanvas drops
-    // records the current schema cannot parse, and writing the whole canvas
-    // back would DELETE them.
-    for (const node of result.changedNodes) writeSpatialNode(doc, node)
-    return true
-  }
-  const { body } = content
-  const next = rewriteReferenceTargets(body, plan)
-  // Totality rather than a reachable case: the scan and the rewrite share
-  // `scanReferences`, so a body holding a ref the plan names is a body the
-  // rewrite changes. Kept because it costs a comparison and a caller that
-  // saved an unchanged document would report it as updated.
-  if (next === body) return false
-  writeMarkdownBody(doc, next)
-  return true
 }

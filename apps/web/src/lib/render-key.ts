@@ -8,7 +8,8 @@
  * the wrong picture rather than failing.
  */
 
-import { type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
+import { compareCodeUnit, type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ResolvedTheme } from './theme.js'
 
@@ -85,6 +86,15 @@ export const renderKeySchema = z.object({
    * per family that lands, once, at background priority.
    */
   fonts: z.string().nullable(),
+  /**
+   * Which colours the workspace's tag library declared when the picture was
+   * drawn (`tagLibraryKey`), and NULL for markdown, which has no box to
+   * colour. A spatial board's uncoloured boxes are drawn in the colour the
+   * library declares for their tags, so without this axis an edit to the
+   * library would leave every remembered picture — on disk, past the tab —
+   * in a colour the workspace no longer declares.
+   */
+  library: z.string().nullable(),
 })
 
 export type RenderKey = z.infer<typeof renderKeySchema>
@@ -127,6 +137,7 @@ export function renderKeyOf(
   subject: RenderKeySubject,
   theme: ResolvedTheme,
   fonts: string,
+  library: string,
 ): RenderKey {
   const spatial = subject.kind === 'spatial'
   return {
@@ -141,7 +152,42 @@ export function renderKeyOf(
     // Same asymmetry, same reason: only a spatial picture can be drawn in a
     // family a theme names.
     fonts: spatial ? fonts : null,
+    // And again: only a spatial picture has boxes a declaration colours.
+    library: spatial ? library : null,
   }
+}
+
+/** Hex characters of the digest a library is keyed by: 64 bits, a bounded path segment. */
+const LIBRARY_KEY_LENGTH = 16
+
+/**
+ * The `library` axis for a workspace's tag library: '' when it declares no
+ * colour, so a workspace without one keys exactly like a library that is
+ * absent, and otherwise a digest of the colours alone.
+ *
+ * Only the declared colours, because only they reach a picture: a key that
+ * changed with a description would throw away every thumbnail for an edit
+ * nobody can see. Sorted, because the library arrives in whatever order its
+ * document was written and the same declarations must name one entry.
+ * Hashed rather than spelled out, because the axis is a segment of a file
+ * name in the worker's store and a library has no upper size.
+ */
+export async function tagLibraryKey(library: TagLibrary): Promise<string> {
+  const declared: string[] = []
+  for (const [key, declaration] of Object.entries(library)) {
+    for (const [value, valueDeclaration] of Object.entries(declaration.values ?? {})) {
+      if (valueDeclaration.color !== undefined) {
+        declared.push(`${key}:${value}=${valueDeclaration.color}`)
+      }
+    }
+  }
+  if (declared.length === 0) return ''
+  declared.sort(compareCodeUnit)
+  const canonical = new TextEncoder().encode(declared.join('\n'))
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', canonical))
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, LIBRARY_KEY_LENGTH)
 }
 
 /**
@@ -167,6 +213,9 @@ export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
     // measured in the bundled family. Neither changes when a theme's face
     // lands, so an axis would only double the entries.
     fonts: null,
+    // An outline's rectangles carry a box's own colour only — the outline
+    // request takes no library — so there is nothing for this axis to name.
+    library: null,
   }
 }
 
@@ -249,6 +298,7 @@ export function renderKeyPath(key: RenderKey): string {
     segment(version),
     ...(key.theme === null ? [] : [key.theme]),
     ...(key.fonts === null ? [] : [segment(key.fonts)]),
+    ...(key.library === null ? [] : [segment(key.library)]),
   ].join('-')
   // The pipeline sits under the build id and above the kind, so a sweep can
   // drop one family the way it can already drop one build: a directory.

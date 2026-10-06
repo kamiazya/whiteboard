@@ -6,16 +6,27 @@
 // window. Each stdin JSON-RPC line becomes one authenticated POST /mcp on
 // the socket the daemon record names; connection failures retry within a
 // budget instead of failing the client.
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { type ChildProcessWithoutNullStreams, execFileSync, spawn } from 'node:child_process'
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
 
 const PROXY_SCRIPT_PATH = resolve(import.meta.dirname, 'mcp-http-stdio-proxy.mjs')
+const SCRIPT_FLAGS_PATH = join(repoRoot(), '.claude/scripts/script-flags.mjs')
 const TOKEN = 'proxy-test-token'
 
 let child: ChildProcessWithoutNullStreams | null = null
@@ -172,5 +183,83 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     proc.stdin.end()
     expect(await exited).toBe(0)
     child = null
+  })
+})
+
+/** A throwaway git checkout, removed after the test. */
+function scratchCheckout(prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix))
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }))
+  execFileSync('git', ['init', '-q', root])
+  return root
+}
+
+/**
+ * A checkout carrying copies of these dev scripts at their real relative paths
+ * — a symlink would not do, because node resolves an ES module through it to
+ * the real file, whose checkout is this one.
+ */
+function checkoutWithDevScripts(): { root: string; proxy: string } {
+  const root = scratchCheckout('wb-proxy-a-')
+  const devDir = join(root, 'packages/mcp-server/scripts/dev')
+  cpSync(import.meta.dirname, devDir, {
+    recursive: true,
+    filter: (source) => !source.endsWith('.ts'),
+  })
+  mkdirSync(join(root, '.claude/scripts'), { recursive: true })
+  cpSync(SCRIPT_FLAGS_PATH, join(root, '.claude/scripts/script-flags.mjs'))
+  return { root, proxy: join(devDir, 'mcp-http-stdio-proxy.mjs') }
+}
+
+/** A `pnpm` on PATH that starts the fake daemon, never a real one. */
+function pnpmShimDir(checkoutRoot: string): string {
+  const shimDir = mkdtempSync(join(tmpdir(), 'wb-proxy-shim-'))
+  cleanups.push(() => rmSync(shimDir, { recursive: true, force: true }))
+  const shim = join(checkoutRoot, 'packages/mcp-server/scripts/dev/test-utils/fake-pnpm-shim.mjs')
+  writeFileSync(join(shimDir, 'pnpm'), `#!/bin/sh\nexec node "${shim}" "$@"\n`)
+  chmodSync(join(shimDir, 'pnpm'), 0o755)
+  return shimDir
+}
+
+function killRecordedDaemon(dataDir: string) {
+  try {
+    process.kill(JSON.parse(readFileSync(join(dataDir, 'daemon.json'), 'utf8')).pid, 'SIGKILL')
+  } catch {
+    /* no record, or already gone */
+  }
+}
+
+// One `whiteboard` registration serves a repository (wire-worktree-mcp.mjs),
+// and it holds the MAIN checkout's proxy, so a session opened in a linked
+// worktree runs that proxy with the worktree as its working directory and
+// CLAUDE_PROJECT_DIR. The proxy reads the main checkout's record; the daemon it
+// ensures has to be that one too, or the session's every request waits for a
+// record nothing will write.
+describe.skipIf(process.platform === 'win32')('mcp-http-stdio-proxy ensure step', () => {
+  it("ensures the daemon of the proxy's own checkout, not the session's", async () => {
+    const a = checkoutWithDevScripts()
+    const b = scratchCheckout('wb-proxy-b-')
+    cleanups.push(() => killRecordedDaemon(join(a.root, '.dev-data')))
+    cleanups.push(() => killRecordedDaemon(join(b, '.dev-data')))
+    const { WHITEBOARD_DATA_DIR: _unset, ...inherited } = process.env
+    child = spawn(process.execPath, [a.proxy], {
+      cwd: b,
+      env: {
+        ...inherited,
+        CLAUDE_PROJECT_DIR: b,
+        PATH: `${pnpmShimDir(a.root)}:${process.env.PATH ?? ''}`,
+        WHITEBOARD_TOKEN: TOKEN,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '5000',
+        WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: '2000',
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/list' })}\n`)
+    const response = JSON.parse(await nextStdoutLine(child))
+
+    expect(existsSync(join(b, '.dev-data'))).toBe(false)
+    expect(existsSync(join(a.root, '.dev-data', 'daemon.json'))).toBe(true)
+    expect(response).toHaveProperty('result')
   })
 })

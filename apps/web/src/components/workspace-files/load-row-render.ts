@@ -31,13 +31,14 @@
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
-import { cacheKeyFor, renderKeyOf } from '../../lib/render-key.js'
+import { cacheKeyFor, renderKeyOf, tagLibraryKey } from '../../lib/render-key.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { loadThemeFontFromSource, themeFacesKey } from '../../lib/theme-fonts.js'
 import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
@@ -66,10 +67,14 @@ export interface RowRenderDeps {
     maxWidth: number,
     cacheKey?: string,
   ) => Promise<DocumentRender | null>
-  /** Takes the stored SNAPSHOT — the worker decodes it, not this thread. */
+  /**
+   * Takes the stored SNAPSHOT — the worker decodes it, not this thread — and
+   * the workspace's tag library, whose declared colours the board is drawn in.
+   */
   readonly renderSpatial?: (
     snapshot: Uint8Array,
     theme: ResolvedTheme,
+    tagLibrary: TagLibrary,
     cacheKey?: string,
   ) => Promise<DocumentRender | null>
 }
@@ -98,6 +103,7 @@ async function renderMarkdownInPool(
 async function renderSpatialInPool(
   snapshot: Uint8Array,
   theme: ResolvedTheme,
+  tagLibrary: TagLibrary,
   cacheKey?: string,
 ): Promise<DocumentRender | null> {
   const reply = await sharedLayoutWorkerPool().run<LayoutResponse>(
@@ -106,6 +112,7 @@ async function renderSpatialInPool(
       id: nextLayoutRequestId(),
       snapshot,
       theme,
+      tagLibrary,
       ...(cacheKey === undefined ? {} : { cacheKey }),
     },
     'background',
@@ -147,30 +154,81 @@ function renderedKind(document: WorkspaceDocumentEntry): DocumentKind {
   }
 }
 
-export function createRowRenderLoader(deps: RowRenderDeps) {
-  const produce = async (
-    document: WorkspaceDocumentEntry,
-    cacheKey: string | undefined,
-  ): Promise<DocumentRender | null> => {
-    if (renderedKind(document) === 'markdown') {
-      const { body } = await deps.source.loadMarkdown(document)
-      if (body.trim() === '') return null
-      return await (deps.renderMarkdown ?? renderMarkdownInPool)(body, ROW_LAYOUT_WIDTH, cacheKey)
-    }
+interface KeyedLibrary {
+  readonly library: TagLibrary
+  /** `tagLibraryKey(library)`, computed once beside it. */
+  readonly key: string
+}
 
-    const snapshot = await deps.source.loadSpatialSnapshot(document)
-    return await (deps.renderSpatial ?? renderSpatialInPool)(snapshot, deps.theme, cacheKey)
+/**
+ * The workspace's tag library, or `{}` when the keeper cannot answer: a
+ * library that will not read leaves the boxes in their own colours, which
+ * is a plainer picture and never a missing one.
+ */
+async function readKeyedLibrary(source: WorkspaceFilesSource): Promise<KeyedLibrary> {
+  // Remembered for the loader's life, so a rejection here would cost every
+  // board its picture rather than its colours.
+  try {
+    const library = (await source.readTagLibrary?.()) ?? {}
+    return { library, key: await tagLibraryKey(library) }
+  } catch {
+    return { library: {}, key: '' }
   }
+}
+
+/**
+ * Once per loader, which is once per panel and theme: the library is the
+ * workspace's, so a folder of fifty boards is one read, and it changes when
+ * someone edits the `tags` document — rare, and picked up the next time the
+ * panel is built, as the editor picks it up when a board opens.
+ */
+function libraryReader(source: WorkspaceFilesSource): () => Promise<KeyedLibrary> {
+  let keyed: Promise<KeyedLibrary> | undefined
+  return () => {
+    keyed ??= readKeyedLibrary(source)
+    return keyed
+  }
+}
+
+async function produce(
+  deps: RowRenderDeps,
+  document: WorkspaceDocumentEntry,
+  tagLibrary: TagLibrary,
+  cacheKey: string | undefined,
+): Promise<DocumentRender | null> {
+  if (renderedKind(document) === 'markdown') {
+    const { body } = await deps.source.loadMarkdown(document)
+    if (body.trim() === '') return null
+    return await (deps.renderMarkdown ?? renderMarkdownInPool)(body, ROW_LAYOUT_WIDTH, cacheKey)
+  }
+
+  const snapshot = await deps.source.loadSpatialSnapshot(document)
+  return await (deps.renderSpatial ?? renderSpatialInPool)(
+    snapshot,
+    deps.theme,
+    tagLibrary,
+    cacheKey,
+  )
+}
+
+export function createRowRenderLoader(deps: RowRenderDeps) {
+  const libraryOnce = libraryReader(deps.source)
 
   return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
     // The catch stays OUTSIDE the broker: a rejection must not be remembered
     // as an answer, so the broker is allowed to see it and forget the entry,
     // and the totality this loader promises is restored here.
     try {
+      const kind = renderedKind(document)
+      // Awaited before the key is built, because the key names the library.
+      // Markdown draws no box a declaration could colour, so it neither
+      // waits for the library nor is keyed by it.
+      const { library, key: libraryKey } =
+        kind === 'spatial' ? await libraryOnce() : { library: {}, key: '' }
       const key = renderKeyOf(
         {
           documentId: document.documentId,
-          kind: renderedKind(document),
+          kind,
           // The CONTENT's identity, never the stamp: a merge can change the
           // one and leave the other where it was (see document-entry.ts).
           ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
@@ -180,8 +238,9 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
         // surface that asks again after a face landed must produce a
         // different key, and the loader outlives the landing.
         themeFacesKey(),
+        libraryKey,
       )
-      return await deps.broker.render(key, () => produce(document, cacheKeyFor(key)))
+      return await deps.broker.render(key, () => produce(deps, document, library, cacheKeyFor(key)))
     } catch {
       return null
     }

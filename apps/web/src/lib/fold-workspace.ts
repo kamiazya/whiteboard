@@ -17,23 +17,30 @@
  * A row the record answers for is RETIRED — its per-document record, then
  * the row itself — only after the tree that holds its content is saved. A
  * crash in between leaves the row naming an id the tree already has, which
- * the next run retires without adopting again. Unreadable and pre-kind rows
- * are never retired here: the old record is still their only home.
+ * the next run retires without adopting again. Unreadable and pre-kind rows,
+ * and a row whose path the tree holds under another document, are never
+ * retired here: the old record is still their only home.
  */
 import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
+import { type AppLogger, getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore } from './loro-store.js'
+import { forgetContentTimestamp, LoroStore } from './loro-store.js'
 import { documentIdsInRecord } from './workspace-record-ids.js'
+
+const log = getAppLogger('fold-workspace')
 
 export interface FoldReport {
   /** Documents carried into the workspace document by THIS run. */
   folded: number
-  /** Rows left alone: no readable content, or no recorded kind to adopt under. */
+  /**
+   * Rows left alone: no readable content, no recorded kind to adopt under, or
+   * a path the tree already holds under another document.
+   */
   skipped: number
 }
 
@@ -69,11 +76,19 @@ async function adoptRow(
   source.import(loaded.snapshot)
   for (const delta of loaded.deltas ?? []) source.import(delta)
   const { path, documentId, name } = entry
-  adoptWorkspaceDocument(
+  const adopted = adoptWorkspaceDocument(
     workspace,
     { path, documentId, kind: kind.data, ...(name === undefined ? {} : { name }) },
     source,
   )
+  // Null when the tree already holds ANOTHER document at this path. The row
+  // is then skipped like an unreadable one: retiring it would delete the only
+  // copy of a document the tree never took, and the fold-skipped listing is
+  // what keeps it reachable beside the one that holds the path.
+  if (adopted === null) {
+    log.warn('a legacy document met a taken path; it stays where it is', { documentId, path })
+    return false
+  }
   return true
 }
 
@@ -88,7 +103,7 @@ async function adoptRow(
  */
 const running = new Map<string, Promise<FoldReport>>()
 
-export function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
+function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
   const key = dbName ?? ''
   const joined = running.get(key)
   if (joined !== undefined) return joined
@@ -97,8 +112,30 @@ export function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
   return run
 }
 
+/**
+ * The fold as every surface runs it. It is migration, so a failure is logged
+ * under the caller's name and the caller goes on with what the tree holds — a
+ * briefly incomplete or undercounted view, never a surface that refuses to
+ * open over a step that only tidies storage. Null on failure; the next caller
+ * to ask runs it again, since the work list is derived.
+ */
+export async function foldOrServeTheTree(
+  log: AppLogger,
+  dbName?: string,
+): Promise<FoldReport | null> {
+  try {
+    return await foldWorkspaceDocuments(dbName)
+  } catch (err) {
+    log.warn('startup fold failed; serving what the tree holds', err)
+    return null
+  }
+}
+
 async function foldOnce(dbName?: string): Promise<FoldReport> {
-  const index = new IdbDocumentIndex(dbName)
+  // No write barrier on these reads (see pending-index-writes.ts): nothing
+  // tracked there adds a legacy row — this build writes none — and a tracked
+  // save loop can be the caller this run is answering.
+  const index = new IdbDocumentIndex(dbName, { readsAwaitIssuedWrites: false })
   const entries = await legacyRows(index)
   if (entries === null) return { folded: 0, skipped: 0 }
 
@@ -107,12 +144,6 @@ async function foldOnce(dbName?: string): Promise<FoldReport> {
   const workspace = await docs.create(workspaceId)
   const held = documentIdsInRecord(workspace)
   const loroStore = new LoroStore(dbName)
-  const retire = async (documentId: string): Promise<void> => {
-    // The record before the row: a crash between the two leaves the row,
-    // which the next run retires again, never a record nothing names.
-    await loroStore.retire(documentId)
-    await index.retireDocument({ workspaceId, documentId })
-  }
 
   let folded = 0
   let skipped = 0
@@ -128,7 +159,36 @@ async function foldOnce(dbName?: string): Promise<FoldReport> {
       held.add(entry.documentId)
       folded += 1
     }
-    await retire(entry.documentId)
+    await retireLegacyDocument({
+      workspaceId,
+      documentId: entry.documentId,
+      keptByTree: true,
+      ...(dbName === undefined ? {} : { dbName }),
+    })
   }
   return { folded, skipped }
+}
+
+/**
+ * Retires one legacy document: its per-document record, then its row, then —
+ * when no copy is left — its listing clock. The one way it is done, by the
+ * fold and by the delete of a document the fold skipped.
+ *
+ * The record before the row: a crash between the two leaves a row whose
+ * record is gone, still listed and retired again by whoever meets it next,
+ * never a record no row names, which nothing would ever find to sweep.
+ *
+ * `keptByTree`: the workspace record answers for this id, as a document or a
+ * trash entry. The content timestamp then dates THAT copy and stays.
+ */
+export async function retireLegacyDocument(input: {
+  workspaceId: string
+  documentId: string
+  keptByTree: boolean
+  dbName?: string
+}): Promise<void> {
+  const { workspaceId, documentId, keptByTree, dbName } = input
+  await new LoroStore(dbName).retire(documentId)
+  await new IdbDocumentIndex(dbName).retireDocument({ workspaceId, documentId })
+  if (!keptByTree) await forgetContentTimestamp(documentId, dbName)
 }

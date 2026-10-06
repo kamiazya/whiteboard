@@ -10,14 +10,24 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
 
 const WRAPPER = resolve(import.meta.dirname, 'with-dev-data-dir.mjs')
 const STOP = resolve(import.meta.dirname, 'stop-http-dev-daemon.mjs')
 
 const cleanups: Array<() => unknown> = []
+// Last registered runs first: a process is killed before the checkout holding
+// its pid file is removed.
 afterEach(() => {
-  for (const cleanup of cleanups.splice(0)) cleanup()
+  for (const cleanup of cleanups.splice(0).reverse()) cleanup()
 })
+
+/** Kills whatever pid `pidFile` names, if the child got as far as writing it. */
+function killRecordedChild(pidFile: string) {
+  if (!existsSync(pidFile)) return
+  const pid = Number(readFileSync(pidFile, 'utf8'))
+  if (alive(pid)) process.kill(pid, 'SIGKILL')
+}
 
 /** A checkout whose `tsx` writes its pid, then runs until signalled — and exits with `exitCode` if told to. */
 function fakeCheckout(): { cwd: string; pidFile: string } {
@@ -73,6 +83,24 @@ function runStop(cwd: string): Promise<{ status: number | null; stdout: string; 
       stderr += chunk
     })
     stop.once('close', (status) => done({ status, stdout, stderr }))
+  })
+}
+
+function runWrapper(cwd: string): Promise<{ status: number | null; stderr: string }> {
+  return new Promise((done) => {
+    const wrapper = spawn(process.execPath, [WRAPPER], {
+      cwd,
+      env: { ...process.env, WHITEBOARD_DATA_DIR: join(cwd, 'data') },
+    })
+    cleanups.push(() => {
+      killRecordedChild(join(cwd, 'child.pid'))
+      wrapper.kill('SIGKILL')
+    })
+    let stderr = ''
+    wrapper.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    wrapper.once('close', (status) => done({ status, stderr }))
   })
 }
 
@@ -155,12 +183,14 @@ describe("pnpm mcp:http:stop stops this checkout's dev daemon through the wrappe
   })
 })
 
-// A second start on a data dir whose record names a live daemon has nothing to
-// serve: its daemon could not take the socket. What it must not do is clobber
-// the running one's bookkeeping on the way out — the record is how every client
+// A second start on a data dir whose daemon is running has nothing to serve:
+// its daemon could not take the socket. It hands over to the running one and
+// succeeds, so `pnpm dev` and `pnpm mcp:debug:http` keep their other half
+// beside the SessionStart hook's daemon. What it must not do is clobber the
+// running one's bookkeeping on the way out — the record is how every client
 // finds the daemon, and the pid file is what `pnpm mcp:http:stop` signals.
 describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running', () => {
-  it('refuses before starting a watcher, and leaves the running pair the record and pid file', async () => {
+  it('reuses it without starting a watcher, and leaves the running pair the record and pid file', async () => {
     const { wrapper, childPid, cwd } = await startWrapper()
     const recordPath = join(cwd, 'data', 'daemon.json')
     const pidPath = join(cwd, 'data', 'dev-wrapper.pid')
@@ -173,11 +203,115 @@ describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running',
       timeout: 10_000,
     })
 
-    expect(second.status).not.toBe(0)
-    expect(second.stderr).toMatch(/already running/)
+    expect(second.status, second.stderr).toBe(0)
+    expect(second.stderr).toMatch(new RegExp(`reusing the dev daemon .*pid ${childPid}`))
     expect(second.stderr).toMatch(/pnpm mcp:http:stop/)
     expect(JSON.parse(readFileSync(recordPath, 'utf8')).pid).toBe(childPid)
     expect(readFileSync(pidPath, 'utf8')).toBe(String(wrapper.pid))
     expect(alive(childPid)).toBe(true)
   })
+
+  it('reuses a daemon that answers its socket, and starts no watcher', async () => {
+    const { cwd, pidFile } = fakeCheckout()
+    const socketPath = join(cwd, 'data', 'daemon.sock')
+    const responder = await startFakeMcpResponder({ socketPath, token: 't' })
+    cleanups.push(() => void responder.close())
+    writeFileSync(
+      join(cwd, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: process.pid,
+        socketPath,
+        token: 't',
+        startedAt: new Date().toISOString(),
+      }),
+    )
+
+    const second = await runWrapper(cwd)
+
+    expect(second.status, second.stderr).toBe(0)
+    expect(second.stderr).toMatch(/reusing the dev daemon/)
+    expect(existsSync(pidFile)).toBe(false)
+  })
 })
+
+// A daemon killed outright leaves its record behind. Nothing holds the socket,
+// so refusing — or "reusing" — that record would leave the checkout with no
+// daemon at all until someone deletes the file by hand. Needs no /proc: a
+// reaped pid is dead on every platform.
+describe('a data dir whose record names a pid that has exited', () => {
+  it('the wrapper starts the dev server instead of reusing the stale record', async () => {
+    const { cwd, pidFile } = fakeCheckout()
+    const reaped = spawnSync(process.execPath, ['-e', '']).pid
+    writeFileSync(
+      join(cwd, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: reaped,
+        socketPath: join(cwd, 'data', 'gone.sock'),
+        token: 't',
+        startedAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    )
+    const wrapper = spawn(process.execPath, [WRAPPER], {
+      cwd,
+      env: { ...process.env, WHITEBOARD_DATA_DIR: join(cwd, 'data') },
+      stdio: 'ignore',
+    })
+    let exited = false
+    wrapper.once('exit', () => {
+      exited = true
+    })
+    cleanups.push(() => {
+      killRecordedChild(pidFile)
+      wrapper.kill('SIGKILL')
+    })
+    await until(() => existsSync(pidFile) || exited, 'the wrapper to start its child or exit')
+    expect(existsSync(pidFile), 'the wrapper exited without starting its child').toBe(true)
+  })
+})
+
+describe.skipIf(!existsSync('/proc/self/stat'))(
+  'a data dir whose record names a pid an unrelated process has taken',
+  () => {
+    /** A record left by a daemon that died a minute ago, its pid now a stand-in's. */
+    function staleRecordInCheckout(): { cwd: string; pidFile: string; standIn: ChildProcess } {
+      const checkout = fakeCheckout()
+      const standIn = spawn('sleep', ['30'], { stdio: 'ignore' })
+      cleanups.push(() => standIn.kill('SIGKILL'))
+      writeFileSync(
+        join(checkout.cwd, 'data', 'daemon.json'),
+        JSON.stringify({
+          pid: standIn.pid,
+          socketPath: join(checkout.cwd, 'data', 'gone.sock'),
+          token: 't',
+          startedAt: new Date(Date.now() - 60_000).toISOString(),
+        }),
+      )
+      return { ...checkout, standIn }
+    }
+
+    it('the wrapper starts the dev server instead of refusing', async () => {
+      const { cwd, pidFile } = staleRecordInCheckout()
+      const wrapper = spawn(process.execPath, [WRAPPER], {
+        cwd,
+        env: { ...process.env, WHITEBOARD_DATA_DIR: join(cwd, 'data') },
+        stdio: 'ignore',
+      })
+      cleanups.push(() => {
+        killRecordedChild(pidFile)
+        wrapper.kill('SIGKILL')
+      })
+      await until(() => existsSync(pidFile), 'the wrapper to start its child')
+      expect(wrapper.exitCode).toBeNull()
+    })
+
+    it('pnpm mcp:http:stop signals nothing, and says why', async () => {
+      const { cwd, standIn } = staleRecordInCheckout()
+      const stop = await runStop(cwd)
+      expect(stop.status, stop.stderr).toBe(0)
+      expect(stop.stdout).toMatch(/started after the record was written/)
+      expect(stop.stdout).toMatch(/not signalled/)
+      expect(standIn.exitCode).toBeNull()
+      expect(alive(standIn.pid as number)).toBe(true)
+    })
+  },
+)

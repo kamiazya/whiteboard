@@ -136,6 +136,33 @@ describe('the connections opener', () => {
     expect(screen.getByRole('button', { name: /connections/i }).textContent).toContain('0')
   })
 
+  it('shows a repeated excerpt once, and the next distinct one beside it', () => {
+    // One source can reference this document twice in the same words; two
+    // identical lines tell the reader nothing the first did not.
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      render(
+        <ConnectionsPanel
+          backlinks={[
+            {
+              documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+              path: 'notes',
+              kind: 'markdown' as const,
+              contexts: ['see [[plan]]', 'see [[plan]]', 'and [[plan]] again'],
+            },
+          ]}
+          onOpen={() => {}}
+        />,
+      )
+      const panel = screen.getByRole('region', { name: /connections/i })
+      expect(panel.textContent?.split('see [[plan]]').length).toBe(2)
+      expect(panel.textContent).toContain('and [[plan]] again')
+      expect(error).not.toHaveBeenCalled()
+    } finally {
+      error.mockRestore()
+    }
+  })
+
   it('stays quiet while backlinks are not loaded yet', () => {
     render(<Connections backlinks={null} onOpen={() => {}} />)
     expect(screen.getByRole('button', { name: /connections/i }).hasAttribute('disabled')).toBe(true)

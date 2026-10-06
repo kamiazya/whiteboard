@@ -5,9 +5,14 @@
  * The HTTP path wraps its whole sequence in `withWorkspaceWriteLock`. The
  * agent path does not: only the index's row delete takes the lock, from
  * inside. Without the teardown taking the lock around the WHOLE sequence, a
- * version saved by a concurrent writer lands after the sweep and outlives
- * the document it belongs to — a row nothing can reach, since 0016 dropped
- * the cascade that used to collect it.
+ * version saved by a concurrent writer could land beside a document that is
+ * already gone — a row nothing can reach, since 0016 dropped the cascade
+ * that used to collect it.
+ *
+ * A delete into the trash KEEPS the document's rows, because a restore
+ * rejoins them; the purge is what removes them. So "no orphan" is asserted
+ * at the point nothing can bring the document back: after the purge, or
+ * after a delete that left no trash entry.
  *
  * Deterministic rather than racy: the writer holds the lock across the
  * whole window, so the interleaving is imposed instead of hoped for.
@@ -15,6 +20,8 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -46,7 +53,7 @@ describe('wbDocumentDelete', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('leaves no version row behind for a version saved while the delete is in flight', async () => {
+  it('leaves no version row behind once the purge runs, for a version saved while the delete is in flight', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
@@ -93,11 +100,46 @@ describe('wbDocumentDelete', () => {
     const versionId = await writer
     await deleted
 
-    const survivors = await db
+    const rowsOf = () =>
+      db.selectFrom('versions').select(['documentId']).where('id', '=', versionId).execute()
+    // Kept with the trashed document, keyed by the id a restore brings back.
+    expect(await rowsOf()).toEqual([{ documentId: created.documentId }])
+    if (!hasDocumentTrash(deps.documentIndex)) throw new Error('store-local index has a trash')
+    await deps.documentIndex.purgeTrashEntry({
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    })
+    expect(await rowsOf()).toEqual([])
+  })
+
+  it('sweeps the version rows of a delete that left nothing in the trash to restore', async () => {
+    await prepareDataDir(tempDir)
+    const db = await getDb(tempDir)
+    const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'gone',
+      kind: 'spatial',
+    })
+    await new FileVersionStore().save('ws-1', 'gone', new LoroDoc(), { auto: false })
+
+    // Removes the node the way no trash-recording delete does, so nothing
+    // is left that a restore could rejoin the rows to.
+    await deps.documentTeardown.around(
+      { workspaceId: 'ws-1', documentId: created.documentId, path: 'gone' },
+      async () => {
+        const record = await deps.workspaceDocuments.get('ws-1')
+        expect(deleteWorkspaceNodeAtPath(record, 'gone')).toBe(true)
+        await deps.workspaceDocuments.save('ws-1', record)
+      },
+    )
+
+    const rows = await db
       .selectFrom('versions')
       .select(['id'])
-      .where('id', '=', versionId)
+      .where('documentId', '=', created.documentId)
       .execute()
-    expect(survivors).toEqual([])
+    expect(rows).toEqual([])
   })
 })

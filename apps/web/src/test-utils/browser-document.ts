@@ -18,6 +18,7 @@ import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { indexWritesSettled } from '../lib/pending-index-writes.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { settleAutoCheckpoints } from '../pages/use-auto-checkpoint.js'
 
@@ -64,9 +65,11 @@ const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
  * accident because it would delete `undefined`.
  */
 export async function clearWhiteboardDb(): Promise<void> {
-  // A page torn down a moment ago may still be taking its pending checkpoint;
-  // deleting the database under it makes that save warn in the NEXT test.
+  // A page torn down a moment ago may still be taking its pending checkpoint,
+  // or finishing a queued rename (its save loop outlives the unmount);
+  // deleting the database under either makes that save warn in the NEXT test.
   await settleAutoCheckpoints()
+  await indexWritesSettled()
   return deleteAndKeepDeleted(whiteboardDbName())
 }
 

@@ -1,6 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { RefObject } from 'react'
-import { DESTRUCTIVE_COPY, type DestructiveActionId } from '../../lib/destructive-copy.js'
+import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { kindNoun } from '../../lib/kind-noun.js'
 import {
   AlertDialog,
@@ -18,16 +18,6 @@ export interface DeleteOpenDocumentDialogProps {
   readonly onOpenChange: (open: boolean) => void
   /** Only for the wording: "Delete this note?" against "…this canvas?". */
   readonly documentKind: DocumentKind
-  /**
-   * Which sentence this keeper owes. A browser workspace keeps no versions,
-   * so its copy does not warn about losing them; the daemon's does. Taking
-   * the id rather than the built string keeps `destructive-copy-surface`'s
-   * scan pointed at the one place the wording lives.
-   */
-  readonly copyId: Extract<
-    DestructiveActionId,
-    'delete-document-browser' | 'delete-document-daemon'
-  >
   /** The kebab to hand focus back to — see `onCloseAutoFocus` below. */
   readonly triggerRef: RefObject<HTMLButtonElement | null>
   readonly onConfirm: () => void
@@ -37,7 +27,6 @@ export function DeleteOpenDocumentDialog({
   open,
   onOpenChange,
   documentKind,
-  copyId,
   triggerRef,
   onConfirm,
 }: DeleteOpenDocumentDialogProps) {
@@ -54,7 +43,7 @@ export function DeleteOpenDocumentDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
           <AlertDialogDescription>
-            {DESTRUCTIVE_COPY[copyId](kindNoun(documentKind))}
+            {DESTRUCTIVE_COPY['delete-document'](kindNoun(documentKind))}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

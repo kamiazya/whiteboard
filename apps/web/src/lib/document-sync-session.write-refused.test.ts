@@ -33,7 +33,7 @@ import type { LoroStore } from './loro-store.js'
 // jsdom has no IndexedDB, so the startup fold and the timestamp touch are
 // replaced by their outcome; see browser-backend.read-failure.test.ts.
 vi.mock('./fold-workspace.js', () => ({
-  foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
+  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
 }))
 vi.mock('./loro-store.js', () => ({ LoroStore: class {}, touchContentTimestamp: async () => {} }))
 

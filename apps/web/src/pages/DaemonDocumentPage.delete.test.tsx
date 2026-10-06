@@ -118,10 +118,9 @@ describe('deleting a daemon-kept document from its own page', () => {
     })
 
     const dialog = await screen.findByRole('alertdialog')
-    // The DAEMON's sentence, from the one place it is written: a daemon
-    // delete loses the saved versions, which the browser's does not say
-    // because a browser delete keeps its version rows for a restore.
-    expect(dialog.textContent).toContain(DESTRUCTIVE_COPY['delete-document-daemon']('note'))
+    // The one delete sentence, from the one place it is written: a daemon
+    // delete keeps the saved versions for a restore, as a browser one does.
+    expect(dialog.textContent).toContain(DESTRUCTIVE_COPY['delete-document']('note'))
 
     // Once it is gone the list holds only the sibling, which is where the
     // page has to land — a document page has nothing to show otherwise.
