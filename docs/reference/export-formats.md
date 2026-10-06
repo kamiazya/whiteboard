@@ -100,12 +100,13 @@ refuses an over-long node: nothing is saved, the page goes back to what is
 stored, and the notice says why. A label or message stored longer before the
 limit still reads, and can still be shortened.
 
-A link node's URL, a file node's path and a file node's subpath each carry at
-most **8,192 characters**. Each is drawn as the node's label on every render,
-at the same per-character cost as a label; 8,192 leaves room for long signed or
-query-heavy URLs. `wb_canvas_edit` refuses a longer `url`, `file` or `subpath`
-on `node.add` and `node.patch`, and the web app's link dialog stops taking
-characters at the limit. The daemon's sync routes refuse an update that adds or
+A link node's URL, a file node's path, a file node's subpath and a group's
+`background` image each carry at most **8,192 characters**. The first three
+are drawn as the node's label on every render, at the same per-character cost
+as a label, and a background is a location of the same kind; 8,192 leaves room
+for long signed or query-heavy URLs. `wb_canvas_edit` refuses a longer `url`,
+`file`, `subpath` or `background` on `node.add` and `node.patch`, and the web
+app's link dialog stops taking characters at the limit. The daemon's sync routes refuse an update that adds or
 grows one past it with `413` and `{"error":"node_location_too_large"}`, storing
 nothing; `promote` names the canvas that holds it. A browser-kept workspace
 refuses the same change the way it refuses an over-long node. A URL or path
@@ -156,6 +157,32 @@ limit for one board", writing nothing. A declaration stored longer before the
 limit still reads, and a declared key no box carries costs a render nothing.
 The bound is checked where a tool writes the facet; an editor's sync update is
 not judged against it, and a longer list arriving that way reads the same way.
+
+## How long an id may be
+
+An id a caller chooses for something it creates carries at most **256
+characters**: a node's, an edge's or a line's `id` on `wb_canvas_edit`'s
+`node.add`, `edge.add` and `line.add`, a comment's `id` on `comment.add`, a
+`threadId` on `wb_thread_edit`'s `thread.add`, a change's `id` on
+`wb_body_edit`'s `body.replace`, and the `proposalId` either tool takes. A
+longer one is refused with "an id is longer than the 256-character limit for
+one id" before anything is written. Ids the server mints are 26 characters or
+fewer. An id stored longer before the limit still reads, and an op that NAMES
+an existing element — a patch, a removal, an edge end, a reply — still takes
+it. `wb_body_edit` likewise refuses an `assumed` passage longer than the
+262,144-character limit for one document, since no passage of a body is
+longer than the body.
+
+The daemon's sync routes — a document's `update`, the workspace document's
+`update` and `promote` — refuse with `413` and
+`{"error":"container_name_too_long"}`, storing nothing, an update that brings
+a container into the record under a name longer than **1,024 characters**. A
+comment thread and a proposal are each a container named by its id, so this
+is how an over-long thread or proposal id arriving by sync is answered; kept,
+a name far enough past it would leave a record that no keeper can load, every
+document in the workspace with it. A container stored under a longer name
+before the bound still takes a write. A browser-kept workspace refuses the
+same change the way it refuses an over-long node.
 
 ## How many ops one call may carry
 

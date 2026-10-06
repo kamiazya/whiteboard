@@ -11,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   COMMENT_MESSAGE_MAX_CHARS,
+  CONTAINER_NAME_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
@@ -372,6 +373,17 @@ describe('promoteWorkspace', () => {
     tags: {
       at: 'sketch',
       write: (board: Board) => board.getMap('canvas').set('tags', ['x'.repeat(TAG_MAX_CHARS + 1)]),
+    },
+    'container-name': {
+      at: 'sketch',
+      // A thread is a container named by its id, so an id this long names it past the bound.
+      write: (board: Board) =>
+        writeCommentThread(board, {
+          id: 't'.repeat(CONTAINER_NAME_MAX_CHARS),
+          anchor: { kind: 'document' },
+          status: 'open',
+          messages: [{ id: 'm1', body: 'hello' }],
+        }),
     },
   } satisfies Record<
     keyof typeof SYNC_TEXT_BREACH_CODES,

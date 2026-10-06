@@ -9,6 +9,7 @@ import {
 import {
   type AnnotationAnchor,
   annotationAnchorInputSchema,
+  annotationIdInputSchema,
   annotationIdSchema,
   commentMessageInputSchema,
   commentThreadSchema,
@@ -60,7 +61,7 @@ const threadOpSchema = z.discriminatedUnion('op', [
     .object({
       op: z.literal('thread.add'),
       /** Minted when absent, so a caller never has to invent an id. */
-      threadId: annotationIdSchema.optional(),
+      threadId: annotationIdInputSchema.optional(),
       anchor: annotationAnchorInputSchema,
       body: commentMessageInputSchema,
       author: okfActorInputSchema.optional(),

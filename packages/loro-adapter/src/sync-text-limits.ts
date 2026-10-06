@@ -6,6 +6,7 @@
 // browser-kept workspace to the daemon would otherwise trip over.
 import {
   COMMENT_MESSAGE_MAX_CHARS,
+  CONTAINER_NAME_MAX_CHARS,
   growsPast,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
@@ -25,6 +26,7 @@ import type {
   TextOp,
   VersionVector,
 } from 'loro-crdt'
+import { heldBefore, longNameBreach, type NameSuspect, nameSuspectsOf } from './container-names.js'
 import {
   CANVAS_KEY,
   CANVAS_TAGS_FIELD,
@@ -42,13 +44,14 @@ import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
  * Why a sync update was refused: one insert longer than `MARKDOWN_MAX_CHARS`
  * (`run`), a markdown body it left past that limit and longer than it was
  * (`body`), a node's text it added or grew past `NODE_TEXT_MAX_CHARS`
- * (`node-text`), a link's URL or a file's path or subpath past
- * `NODE_LOCATION_MAX_CHARS` (`node-location`), an edge's, line's or group's
+ * (`node-text`), a link's URL, a file's path or subpath or a group's
+ * background past `NODE_LOCATION_MAX_CHARS` (`node-location`), an edge's, line's or group's
  * label past `LABEL_MAX_CHARS` (`label`), a comment message past
- * `COMMENT_MESSAGE_MAX_CHARS` (`comment-message`), or a node's, edge's or
+ * `COMMENT_MESSAGE_MAX_CHARS` (`comment-message`), a node's, edge's or
  * board's tags past `TAGS_PER_ELEMENT_MAX` in number or with one past
- * `TAG_MAX_CHARS` (`tags`). Lengths are UTF-16 units, the length every limit
- * counts.
+ * `TAG_MAX_CHARS` (`tags`), or a container it brought in named past
+ * `CONTAINER_NAME_MAX_CHARS` (`container-name`). Lengths are UTF-16 units,
+ * the length every limit counts.
  */
 export type SyncTextBreach =
   | {
@@ -91,6 +94,12 @@ export type SyncTextBreach =
       readonly elementId: string | null
       readonly container: ContainerID
     }
+  | {
+      readonly shape: 'container-name'
+      readonly chars: number
+      /** The container whose name is past the bound. */
+      readonly container: ContainerID
+    }
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -105,6 +114,7 @@ export const SYNC_TEXT_BREACH_CODES = {
   label: 'label_too_large',
   'comment-message': 'comment_too_large',
   tags: 'tags_too_large',
+  'container-name': 'container_name_too_long',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
 
 export interface SyncTextJudgement {
@@ -138,7 +148,9 @@ function nodeTextLength(value: unknown): number {
 
 /**
  * A node value's longest location as every reader lifts it: the resource's
- * `location` or `subpath`, or the legacy `url`, `file` or `subpath` field.
+ * `location` or `subpath`, the legacy `url`, `file` or `subpath` field, or a
+ * group's `background` — an image location every reader of image references
+ * follows.
  */
 function nodeLocationLength(value: unknown): number {
   if (typeof value !== 'object' || value === null) return 0
@@ -146,7 +158,7 @@ function nodeLocationLength(value: unknown): number {
   return Math.max(
     fieldLength(resource, 'location'),
     fieldLength(resource, 'subpath'),
-    ...['url', 'file', 'subpath'].map((field) => fieldLength(value, field)),
+    ...['url', 'file', 'subpath', 'background'].map((field) => fieldLength(value, field)),
   )
 }
 
@@ -271,8 +283,15 @@ const BOUNDED_VALUES: readonly BoundedValue[] = [
   ),
 ]
 
-/** No map value shorter than this can breach any bound above. */
-const SMALLEST_VALUE_BOUND = Math.min(...BOUNDED_VALUES.map((bound) => bound.max))
+/**
+ * No update this short can breach any bound above, nor name a container past
+ * `CONTAINER_NAME_MAX_CHARS` (`sync-text-limits.container-names.test.ts` pins
+ * that encoding).
+ */
+const SMALLEST_VALUE_BOUND = Math.min(
+  CONTAINER_NAME_MAX_CHARS,
+  ...BOUNDED_VALUES.map((bound) => bound.max),
+)
 
 /** Unicode scalar values, the unit Loro's counters and text positions advance by. */
 function scalarLength(text: string): number {
@@ -303,6 +322,8 @@ interface UpdateWrites {
    * `BOUNDED_VALUES`' bounds, by `container key bound`.
    */
   longValues: Map<string, LongValue>
+  /** Where the update may bring in a container named past `CONTAINER_NAME_MAX_CHARS`. */
+  names: NameSuspect[]
   touchesNodeMeta: boolean
 }
 
@@ -341,12 +362,14 @@ function readWrites(doc: LoroDoc, json: JsonSchema): UpdateWrites {
     longestRun: { units: 0, container: null },
     net: new Map(),
     longValues: new Map(),
+    names: [],
     touchesNodeMeta: false,
   }
   for (const change of json.changes) {
     const peer = change.id.slice(change.id.indexOf('@') + 1)
     for (const op of change.ops) {
       writes.touchesNodeMeta ||= touchesMeta(doc, op, nodeMaps)
+      writes.names.push(...nameSuspectsOf(op))
       if (op.container.endsWith(':Map')) readMapWrite(writes, op)
       else if (op.container.endsWith(':Text')) readTextWrite(writes, runs, peer, op)
     }
@@ -487,8 +510,14 @@ export function importWithinTextLimits(doc: LoroDoc, update: Uint8Array): SyncTe
   const before = new Map(
     replays ? [...writes.longValues].map(([id, value]) => [id, lengthIn(doc, value)]) : [],
   )
+  const namedBefore = replays ? heldBefore(doc, writes.names) : new Set<ContainerID>()
   if (replays) doc.attach()
-  return judged(bodyBreach(doc, writes.net) ?? valueBreach(doc, writes.longValues, before))
+  const longName = longNameBreach(doc, writes.names, namedBefore)
+  return judged(
+    longName === null
+      ? (bodyBreach(doc, writes.net) ?? valueBreach(doc, writes.longValues, before))
+      : { shape: 'container-name', ...longName },
+  )
 }
 
 /**

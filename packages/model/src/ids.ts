@@ -24,6 +24,49 @@ export const documentIdSchema = z.string().regex(ULID_PATTERN, 'must be a canoni
 export const nodeIdSchema = z.string().min(1, 'node id must not be empty')
 
 /**
+ * The most characters an id a caller CHOOSES may have when it is written — a
+ * node's, an edge's, a line's, a comment's, a thread's, a proposal's or a
+ * change's. Minted ids are 21 (nanoid) to 26 (ULID) characters, so 256 holds
+ * any id a person or an agent picks on purpose.
+ *
+ * An id is not free text: it is a key in the record, it is repeated in every
+ * answer that names its element (measured: one node with a 1 Mi-character id
+ * made a `wb_canvas_edit` answer 2 MB, and three edges to it 4 MB), and a
+ * thread's or a proposal's id names a container of its own, which
+ * `CONTAINER_NAME_MAX_CHARS` bounds. The stored shapes stay unbounded: an
+ * element written before the limit must still read and still take an edit.
+ */
+export const ID_MAX_CHARS = 256
+
+/** The id bound as every refusal of it ends, as `NODE_TEXT_LIMIT_PHRASE` is for a node's text. */
+export const ID_LIMIT_PHRASE = `the ${ID_MAX_CHARS}-character limit for one id`
+
+/** A node's, edge's or line's id as a tool accepts it for an element it creates. */
+export const nodeIdInputSchema = nodeIdSchema.max(
+  ID_MAX_CHARS,
+  `an id is longer than ${ID_LIMIT_PHRASE}`,
+)
+
+/**
+ * The longest name a sync write may give a container it brings into a
+ * record, in UTF-16 code units.
+ *
+ * Loro writes a root container's name whole into every snapshot, and a
+ * mergeable child — a comment thread, a proposal and the maps inside them —
+ * is a root named by its parent and its key. Measured on loro-crdt 1.13.6: a
+ * snapshot holding a name of 65,531 UTF-8 bytes imports and one byte more
+ * does not, while the updates that wrote it still do — so one such write is
+ * kept, and every document of the workspace is unreadable from the next
+ * load on. A UTF-16 unit is at most three UTF-8 bytes, so 1,024 sits far
+ * inside that, and it holds the deepest name this codebase writes with ids at
+ * `ID_MAX_CHARS` (a thread's messages: about 300).
+ */
+export const CONTAINER_NAME_MAX_CHARS = 1024
+
+/** The container-name bound as every refusal of it ends. */
+export const CONTAINER_NAME_LIMIT_PHRASE = `the ${CONTAINER_NAME_MAX_CHARS}-character limit for the name of one container; a thread or a proposal is named by its id`
+
+/**
  * Legacy workspace identifier shape, retained for the live data both
  * keepers already hold on disk today (the daemon's `workspaces.id` column,
  * the browser's hard-coded `'local'`). This codifies the contract already

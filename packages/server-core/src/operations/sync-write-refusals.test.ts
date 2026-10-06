@@ -2,6 +2,8 @@ import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboar
 import {
   COMMENT_MESSAGE_LIMIT_PHRASE,
   COMMENT_MESSAGE_MAX_CHARS,
+  CONTAINER_NAME_LIMIT_PHRASE,
+  CONTAINER_NAME_MAX_CHARS,
   commentMessageInputSchema,
   LABEL_LIMIT_PHRASE,
   LABEL_MAX_CHARS,
@@ -65,6 +67,8 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
       elementId: 'n1',
       container: MAP,
     }),
+  'container-name': () =>
+    textBreachRefusal({ shape: 'container-name', chars: 70_000, container: MAP }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
@@ -212,5 +216,25 @@ describe('a refused run found in a resolved document', () => {
 
   it('says nothing of the body today when the caller did not measure it', () => {
     expect(run({ path: 'notes/a' })).not.toContain('though its body is')
+  })
+})
+
+describe('a refused container name', () => {
+  const refusal = (at?: refusals.RefusedIn) =>
+    textBreachRefusal(
+      { shape: 'container-name', chars: CONTAINER_NAME_MAX_CHARS + 1, container: MAP },
+      at,
+    ).message
+
+  it('says how long the name is and ends on the bound, never quoting the name', () => {
+    expect(refusal()).toBe(
+      `This update would bring in a container named with ${CONTAINER_NAME_MAX_CHARS + 1} characters, past ${CONTAINER_NAME_LIMIT_PHRASE}`,
+    )
+  })
+
+  it('names the document holding it, once resolved', () => {
+    expect(refusal({ path: 'boards/ops' })).toBe(
+      `The document at "boards/ops" holds a container named with ${CONTAINER_NAME_MAX_CHARS + 1} characters, past ${CONTAINER_NAME_LIMIT_PHRASE}`,
+    )
   })
 })

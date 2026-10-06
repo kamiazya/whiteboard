@@ -38,6 +38,8 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
   document_name_too_long: 'It would give a document a name longer than a name may be.',
   invalid_path:
     'It would put a document at a path that is too long, or that holds something other than letters, digits and hyphens.',
+  container_name_too_long:
+    'It would add a comment thread, a proposal or another part of a document under an id longer than one may be.',
   unreadable_document_meta:
     'It would leave documents in this workspace that could not be read, hiding them.',
 }

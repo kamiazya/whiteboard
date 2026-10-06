@@ -5,7 +5,7 @@
 
 import { namespacedIdSchema } from '@kamiazya/whiteboard-facet-engine'
 import {
-  annotationIdSchema,
+  annotationIdInputSchema,
   canvasCommentDraftSchema,
   canvasEdgeSchema,
   canvasLineSchema,
@@ -15,7 +15,9 @@ import {
   labelInputSchema,
   linePatchFieldsSchema,
   type NodeResource,
+  nodeBackgroundInputSchema,
   nodeFileInputSchema,
+  nodeIdInputSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nodePositionSchema,
@@ -93,10 +95,17 @@ const WRITE_EXTENSION = {
  */
 const WRITE_LABEL = { label: labelInputSchema.optional() } as const
 
+/**
+ * The id a draft may name for the element it creates, held to its write
+ * bound for the reason the label is: the stored element keeps an unbounded
+ * id, and an op that NAMES an existing element keeps taking any.
+ */
+const WRITE_ID = { id: nodeIdInputSchema.optional() } as const
+
 const draftBase = sharedNodeFieldsSchema
   .omit(STORED_EXTENSION_FIELDS)
   .partial(DRAFT_OPTIONAL)
-  .extend(WRITE_EXTENSION)
+  .extend({ ...WRITE_EXTENSION, ...WRITE_ID })
 
 /**
  * What a node SHOWS is a RESOURCE in the model now
@@ -132,7 +141,7 @@ const linkOption = draftBase.extend({
 const groupOption = draftBase.extend({
   type: z.literal('group'),
   ...WRITE_LABEL,
-  background: z.string().optional(),
+  background: nodeBackgroundInputSchema.optional(),
   backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
 })
 
@@ -220,8 +229,7 @@ export function draftContent(draft: NodeDraft): {
 // does: the stored edge's `.catch` would drop a malformed bucket unseen.
 const edgeDraftSchema = canvasEdgeSchema
   .omit({ tags: true })
-  .extend({ ...WRITE_EXTENSION, ...WRITE_LABEL })
-  .partial({ id: true })
+  .extend({ ...WRITE_EXTENSION, ...WRITE_LABEL, ...WRITE_ID })
 
 /**
  * Ink, which an edge cannot be: a LINE's ends are a node or a bare POINT, so
@@ -229,9 +237,7 @@ const edgeDraftSchema = canvasEdgeSchema
  * ([ADR-0038](../../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2).
  */
-const lineDraftSchema = canvasLineSchema
-  .extend({ ...WRITE_EXTENSION, ...WRITE_LABEL })
-  .partial({ id: true })
+const lineDraftSchema = canvasLineSchema.extend({ ...WRITE_EXTENSION, ...WRITE_LABEL, ...WRITE_ID })
 
 // The patches are the model's, which proposals store too, so the write-side
 // `facets` is laid over them here rather than in the model, where the
@@ -371,6 +377,7 @@ const nodePatchSchema = z
       file: nodeFileInputSchema.optional(),
       subpath: nodeSubpathInputSchema.optional(),
       url: nodeUrlInputSchema.optional(),
+      background: nodeBackgroundInputSchema.optional(),
     },
     {
       error: (issue: { code: string; keys?: readonly string[] }) =>
@@ -592,7 +599,7 @@ export const canvasEditInputSchema = z
      * already carries REPLACES that change rather than stacking a second
      * opinion beside it.
      */
-    proposalId: annotationIdSchema.optional(),
+    proposalId: annotationIdInputSchema.optional(),
     /** Only meaningful with `mode: 'propose'`; see `proposalAuthorSchema`. */
     author: proposalAuthorSchema,
     /**

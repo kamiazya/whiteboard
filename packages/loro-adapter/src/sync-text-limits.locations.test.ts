@@ -1,5 +1,5 @@
 import { NODE_LOCATION_MAX_CHARS, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, linkNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { DocumentContainers } from './containers.js'
@@ -82,6 +82,24 @@ describe('a node location written through a sync update', () => {
       shape: 'node-location',
       chars: NODE_LOCATION_MAX_CHARS + 1,
       nodeId: 'f',
+    })
+  })
+
+  it("refuses a group's background past the location limit", () => {
+    // A background is an image location every reader of image references
+    // follows, so it is a location like a file's path.
+    const base = record()
+    const update = updateFrom(base, (board) =>
+      writeSpatialNode(
+        board,
+        groupNode({ id: 'g', x: 600, ...BOX, background: 'a'.repeat(NODE_LOCATION_MAX_CHARS + 1) }),
+      ),
+    )
+    expect(judged(base, update)).toEqual({
+      shape: 'node-location',
+      chars: NODE_LOCATION_MAX_CHARS + 1,
+      nodeId: 'g',
+      container: expect.any(String),
     })
   })
 
