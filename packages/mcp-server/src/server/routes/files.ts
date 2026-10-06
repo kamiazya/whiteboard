@@ -182,13 +182,10 @@ export function createFilesRouter(options: FilesRouterOptions) {
   })
 
   // POST /api/workspaces/:workspaceId/files/purge-dangling
-  // Delete files under <workspaceId>/files/ that nothing a user can still
-  // reach names: every live document by id (a shadowed one too), every
-  // trashed document's evacuated bytes, the saved versions of every
-  // document a path reaches, and what an undecided proposal in any of them
-  // would draw — `scanFileReferences`' set. A trashed or shadowed
-  // document's versions are not reached yet (file-gc.ts's `versionReads`).
-  // Idempotent; a file goes only once nothing in that set points at it.
+  // Delete the files nothing a user can still reach names — live documents
+  // by id, trash bytes, saved versions of a document a path reaches (not a
+  // trashed or shadowed one's yet: file-gc.ts's `versionReads`), and what an
+  // open proposal in any of them would draw. Idempotent.
   app.post('/api/workspaces/:workspaceId/files/purge-dangling', async (c) => {
     const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
     if ('refusal' in address) return address.refusal
@@ -197,14 +194,10 @@ export function createFilesRouter(options: FilesRouterOptions) {
       const result = await purgeDanglingFiles(workspaceId, { versionStore, scope })
       return c.json(result)
     } catch (err) {
-      // 503: some unit the scan must judge — a saved version, a trash
-      // entry's bytes, a workspace node — could not be read, so nothing was
-      // deleted. That includes a unit whose stored bytes are corrupt: the
-      // scan does not tell corrupt from unreadable, and either way the
-      // answer is to purge nothing. A retry helps only when the failure was
-      // transient; the log names the unit ('skipped version', 'skipped
-      // trash entry'). 500: the workspace record itself will not decode, so
-      // there is no reference set at all.
+      // 503: a unit the scan must judge (version, trash bytes, node) could
+      // not be read — corrupt or not, nothing was deleted, and a retry helps
+      // only if the failure was transient; the log names the unit. 500: the
+      // workspace record will not decode, so there is no reference set.
       const incompleteScanBody = incompleteFileGcScanErrorBody(err)
       if (incompleteScanBody) return c.json(incompleteScanBody, 503)
       const body = corruptStoredDataBody(err)

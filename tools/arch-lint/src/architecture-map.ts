@@ -100,7 +100,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
   'routes/files.ts -> file-gc',
-  'routes/files.ts -> version-store',
   'routes/files.ts -> workspace-lock',
   // Mechanics kept outside `store/`, counted since the scan learned to look
   // for them. Each is a row-keeping store or a disk layout a route holds by
@@ -223,8 +222,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Then 27 -> 26, when the two export routes' reach into `output-path` became
  * the one request helper both call.
+ *
+ * Then 26 -> 25, when the files router took the purge's own version-reader
+ * type from `file-gc` instead of naming the whole version store.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 26
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 25
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
