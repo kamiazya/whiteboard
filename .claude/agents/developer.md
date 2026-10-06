@@ -30,7 +30,7 @@ You implement ONE well-scoped change with strict TDD and the whiteboard repo's d
 - Server code never calls `console.*` — use `getLogger(...)` from the nearest `log.js`.
 - Keep at least one nearest-layer test for the root cause. Passing tests alone are not sufficient; note any manual verification still owed to the integrator.
 - Comments: enduring **why** only — no PR/issue/tmp references, no narrative.
-- If a worktree cwd is given, run git as `git -C <cwd>` and edit files under that path. Note: worktrees lack `node_modules`, so prefer running tests on the main tree unless deps are installed there.
+- If a worktree cwd is given, run git as `git -C <cwd>`, edit files under that path, and run every pnpm/vitest/node command as `cd <cwd> && …` — `new-worktree.mjs` installs a worktree's own `node_modules`, and from the main tree a relative path runs the main tree's copy of the file.
 
 ## Report (structured)
 

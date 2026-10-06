@@ -60,9 +60,13 @@ const DOCS = !!A.docs
 
 log(`dev-loop start: task="${TASK}" baseRef=${BASE} cwd=${CWD || '(repo root)'} skipDesign=${SKIP_DESIGN} maxFix=${MAX_FIX} specLen=${SPEC.length}`)
 
-const cwdNote = CWD
-  ? ` Work inside the worktree at ${CWD}: run git as \`${GIT} ...\`, and create/edit files under that path (use absolute paths).`
-  : ''
+// Mirrors .claude/workflows/lib/worktree-cwd.mjs (the sandbox has no import); worktree-cwd.test.mjs
+// holds this copy to it.
+function worktreeCwdNote(cwd) {
+  if (!cwd) return ''
+  return ` Work inside the worktree at ${cwd}: run git as \`git -C ${cwd} ...\`, create/edit files under that path (use absolute paths), and run every pnpm/vitest/node command as \`cd ${cwd} && …\` — from anywhere else a relative path runs the main checkout's copy of the file, green on code you never changed.`
+}
+const cwdNote = worktreeCwdNote(CWD)
 const disciplineNote =
   'Follow AGENTS.md: Zod as the single source of truth for cross-boundary contracts (annotate execute returns with z.infer), never call console.* in server code (use getLogger), keep changes immutable, and keep at least one nearest-layer test for the root cause.'
 
