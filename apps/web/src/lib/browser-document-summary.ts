@@ -100,9 +100,10 @@ export function idbContentClock(dbName?: string): ContentClock {
  * The port distinguishes an absent workspace from an empty one — a list
  * against an unknown id is a `WorkspaceNotFoundError`, not `[]` — and nothing
  * on the browser side owns "first run". So every path that would be the first
- * to touch the index calls this first. It is a `put`, so calling it on every
- * create costs one no-op write and removes the need for anyone to know
- * whether they are first.
+ * to touch the index calls this first. Creating a workspace that exists
+ * leaves it alone — identity a rename wrote included — so calling it on
+ * every create costs a read and removes the need for anyone to know whether
+ * they are first.
  */
 export async function ensureBrowserWorkspace(index: DocumentIndex): Promise<void> {
   await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })

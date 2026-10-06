@@ -321,9 +321,10 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
     }
   })
 
-  // Delete a document: row (versions cascade via FK), .loro blob, and
-  // doc-cache entry. Idempotent-shaped 404 for a
-  // missing canvas rather than a throw.
+  // Delete a document: evacuate it into the trash, then drop its doc-cache
+  // entry. Its saved versions stay while the trash holds it, so a restore
+  // rejoins them; a purge is what deletes them. Idempotent-shaped 404 for a
+  // missing document rather than a throw.
   //
   // An ADAPTER over `wbDocumentDelete` (ADR-0018), not a second
   // implementation of it. The two were separate sequences performing the
