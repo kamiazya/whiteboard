@@ -153,7 +153,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     await waitForTitle('untitled')
   })
 
-  it("whitespace-only commit persists 'untitled' and restores it on remount", async () => {
+  it('a whitespace-only commit clears the name, and the remount shows it unnamed', async () => {
     await renderLoaded()
     // Commit a real name first so the remount assertion below can distinguish
     // "restored the whitespace-commit's normalized value" from "never persisted
