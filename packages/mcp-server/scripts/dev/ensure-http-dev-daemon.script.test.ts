@@ -1,6 +1,7 @@
 // Subprocess-level tests of the SessionStart hook entrypoint. Runs the real
-// ensure-http-dev-daemon.mjs as a child process against a PATH-shimmed
-// `pnpm` (never a real build) plus a fake daemon on a socket, so
+// ensure-http-dev-daemon.mjs as a child process with a fake dev server
+// standing in for the package script's wrapper (WHITEBOARD_DEV_SERVER_STAND_IN
+// — never a real build) plus a fake daemon on a socket, so
 // the wait-for-ready behavior is exercised the same way a client's session
 // start actually does: wait for the hook process to exit, not for a unit
 // under test to return a promise.
@@ -8,15 +9,7 @@
 // No .cmd counterpart exists for the shim, so this suite only runs on POSIX.
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -44,19 +37,6 @@ async function countingTcpListener(): Promise<{
   const address = server.address()
   const port = typeof address === 'object' && address !== null ? address.port : 0
   return { port, connections: () => count, server }
-}
-
-/**
- * Writes a POSIX `pnpm` wrapper into a fresh temp dir that execs node
- * directly against fake-pnpm-shim.mjs, and returns that dir for prepending
- * onto the spawned hook's PATH.
- */
-function writePnpmShimDir(): string {
-  const shimDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-shim-'))
-  const shimPath = join(shimDir, 'pnpm')
-  writeFileSync(shimPath, `#!/bin/sh\nexec node "${SHIM_ENTRY_PATH}" "$@"\n`)
-  chmodSync(shimPath, 0o755)
-  return shimDir
 }
 
 function runHook(env: NodeJS.ProcessEnv): Promise<{
@@ -140,7 +120,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   })
 
   /**
-   * Makes a temp data dir and a PATH shim dir (both registered for cleanup),
+   * Makes a temp data dir (registered for cleanup),
    * and returns the env every hook run shares. Per-case behavior is layered
    * on by spreading extra FAKE_PNPM_* / WHITEBOARD_DEV_READY_TIMEOUT_MS
    * entries over `env`.
@@ -156,8 +136,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   }> {
     const token = randomUUID()
     const dataDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-data-'))
-    const shimDir = writePnpmShimDir()
-    cleanupDirs.push(dataDir, shimDir)
+    cleanupDirs.push(dataDir)
     const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
     const invokedSentinelDir = join(dataDir, 'invoked-sentinels')
     cleanupSentinelDirs.push(invokedSentinelDir)
@@ -174,7 +153,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       countSpawns,
       env: {
         ...process.env,
-        PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+        WHITEBOARD_DEV_SERVER_STAND_IN: SHIM_ENTRY_PATH,
         WHITEBOARD_TOKEN: token,
         WHITEBOARD_DATA_DIR: dataDir,
         FAKE_PNPM_INVOKED_SENTINEL: invokedSentinelPath,

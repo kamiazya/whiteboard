@@ -1,17 +1,20 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseDaemonSubcommandArgs } from '../../src/cli/argv.js'
 import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
 import {
-  buildMcpHttpDevSpawnArgs,
   DEFAULT_READY_TIMEOUT_MS,
   describeTokenConflict,
+  devServerSpawn,
   refusalLine,
   resolveDevBearerToken,
   resolveReadyTimeoutMs,
   waitForDaemon,
 } from './ensure-http-dev-daemon-lib.mjs'
+
+const PACKAGE_ROOT = join(repoRoot(), 'packages/mcp-server')
 
 describe('HTTP dev daemon startup', () => {
   it('uses the current Codex hooks feature flag', async () => {
@@ -142,21 +145,72 @@ describe('resolveDevBearerToken', () => {
   })
 })
 
-describe('buildMcpHttpDevSpawnArgs', () => {
-  it('injects --token when token differs from the package-script default', () => {
-    const args = buildMcpHttpDevSpawnArgs('my-custom-token')
-    expect(args).toContain('--token=my-custom-token')
+describe('devServerSpawn', () => {
+  const EXEC = '/usr/bin/node'
+
+  async function packageScript(): Promise<string> {
+    const manifest = JSON.parse(await readFile(join(PACKAGE_ROOT, 'package.json'), 'utf8'))
+    return manifest.scripts['mcp:http:dev']
+  }
+
+  // The hook starts the wrapper itself instead of through pnpm, whose processes sat idle for
+  // the daemon's whole life. What it starts has to stay what the script says.
+  it("runs exactly the package script's command, minus pnpm", async () => {
+    const script = await packageScript()
+    const [runner, entry, ...args] = script.split(/\s+/)
+
+    const spawn = devServerSpawn(script, {
+      packageRoot: PACKAGE_ROOT,
+      token: 'whiteboard-dev',
+      execPath: EXEC,
+    })
+
+    expect(runner).toBe('node')
+    expect(spawn).toEqual({
+      command: EXEC,
+      args: [join(PACKAGE_ROOT, entry ?? ''), ...args],
+      cwd: PACKAGE_ROOT,
+    })
+    expect(existsSync(spawn.args[0] ?? '')).toBe(true)
   })
 
-  it('does NOT inject --token when token is the package-script default', () => {
-    // pnpm mcp:http:dev already passes --token=whiteboard-dev; no duplication needed
-    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev')
-    expect(args.some((a) => a.startsWith('--token='))).toBe(false)
+  it('carries a custom token in place of the one the script bakes in', async () => {
+    const { args } = devServerSpawn(await packageScript(), {
+      packageRoot: PACKAGE_ROOT,
+      token: 'my-custom-token',
+      execPath: EXEC,
+    })
+
+    expect(args.filter((arg) => arg.startsWith('--token='))).toEqual(['--token=my-custom-token'])
+  })
+
+  it('adds the token when the script carries none', () => {
+    const { args } = devServerSpawn('node x.mjs', {
+      packageRoot: '/p',
+      token: 't',
+      execPath: EXEC,
+    })
+
+    expect(args).toEqual([join('/p', 'x.mjs'), '--token=t'])
+  })
+
+  it('refuses a script that is not a plain node invocation', () => {
+    expect(() =>
+      devServerSpawn('tsx watch src/server/daemon-entry.ts', {
+        packageRoot: '/p',
+        token: 't',
+        execPath: EXEC,
+      }),
+    ).toThrow(/node <script>/)
   })
 
   // The daemon listens on its data dir's socket and no TCP port (ADR-0050).
-  it('hands the spawned daemon no port', () => {
-    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev')
+  it('hands the spawned daemon no port', async () => {
+    const { args } = devServerSpawn(await packageScript(), {
+      packageRoot: PACKAGE_ROOT,
+      token: 'whiteboard-dev',
+      execPath: EXEC,
+    })
     expect(args.some((a) => a.startsWith('--port'))).toBe(false)
   })
 })

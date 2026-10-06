@@ -1,3 +1,5 @@
+import { resolve } from 'node:path'
+
 // Upper bound on how long ensure-http-dev-daemon.mjs waits for a spawned
 // daemon to answer. tsx + happy-dom + canvas + resvg cold start + node_modules
 // linking can take ~10-15s on slow machines, so leave generous headroom —
@@ -80,7 +82,7 @@ const PACKAGE_SCRIPT_DEFAULT_TOKEN = 'whiteboard-dev'
 
 /**
  * Resolves the dev bearer token from env, falling back to the value that
- * `pnpm mcp:http:dev` bakes in via `--token=whiteboard-dev`. Extracted as
+ * `mcp:http:dev` bakes in via `--token=whiteboard-dev`. Extracted as
  * a pure function so the resolution logic is testable without module reload.
  *
  * @param {Record<string, string | undefined>} env
@@ -91,21 +93,30 @@ export function resolveDevBearerToken(env) {
 }
 
 /**
- * Builds the pnpm argument list for spawning `pnpm mcp:http:dev`.
- * Appends `--token=<value>` only when the token differs from the value
- * already baked into the package script (`--token=whiteboard-dev`), so
- * a custom WHITEBOARD_TOKEN is honoured without duplicating the flag on
- * the default path.
+ * How to start the `mcp:http:dev` package script without pnpm: `node <script>
+ * <args>`, read from the script itself so the hook cannot start something the
+ * script no longer says. Going through `pnpm` kept two pnpm processes (and a
+ * shell) idle under every dev daemon for its whole life, about 220 MB of PSS.
  *
- * @param {string} token
- * @returns {string[]}
+ * `token` replaces the `--token=` the script bakes in, or is added when it
+ * has none, so the daemon is started with the token its clients send.
+ *
+ * @param {string} script the package script, e.g. `node scripts/dev/with-dev-data-dir.mjs --token=…`
+ * @param {{ packageRoot: string, token: string, execPath?: string }} options
+ * @returns {{ command: string, args: string[], cwd: string }}
  */
-export function buildMcpHttpDevSpawnArgs(token) {
-  const base = ['mcp:http:dev']
-  if (token !== PACKAGE_SCRIPT_DEFAULT_TOKEN) {
-    base.push(`--token=${token}`)
+export function devServerSpawn(script, { packageRoot, token, execPath = process.execPath }) {
+  const [runner, entry, ...rest] = script.trim().split(/\s+/)
+  if (runner !== 'node' || entry === undefined || entry.startsWith('-')) {
+    throw new Error(
+      `mcp:http:dev is no longer \`node <script> …\` (${script}), so the SessionStart hook cannot start it without pnpm`,
+    )
   }
-  return base
+  const tokenFlag = `--token=${token}`
+  const args = rest.some((arg) => arg.startsWith('--token='))
+    ? rest.map((arg) => (arg.startsWith('--token=') ? tokenFlag : arg))
+    : [...rest, tokenFlag]
+  return { command: execPath, args: [resolve(packageRoot, entry), ...args], cwd: packageRoot }
 }
 
 /**

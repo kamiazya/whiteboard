@@ -2,8 +2,8 @@
 // consent: `--help` is a question and a typo such as `--quite` is not "start it anyway".
 //
 // Everything runs against a scratch WHITEBOARD_DATA_DIR. The stop script is aimed at a sacrificial
-// process the test owns (named by a daemon record it wrote), and the ensure script at a PATH-shimmed
-// `pnpm`, so neither case can touch a real daemon.
+// process the test owns (named by a daemon record it wrote), and the ensure script at a fake dev
+// server standing in for the package script's wrapper, so neither case can touch a real daemon.
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -84,9 +84,6 @@ describe('dev daemon scripts refuse what they do not recognise', () => {
     ] as const) {
       itPosix(`${flag} exits ${expectedStatus} and spawns nothing`, () => {
         const dataDir = scratchDir('ensure-flags-data-')
-        const shimDir = scratchDir('ensure-flags-shim-')
-        const shimPath = join(shimDir, 'pnpm')
-        writeFileSync(shimPath, `#!/bin/sh\nexec node "${SHIM_ENTRY_PATH}" "$@"\n`, { mode: 0o755 })
         const spawnedDir = join(dataDir, 'spawned')
 
         const result = spawnSync(process.execPath, [ENSURE_SCRIPT, flag], {
@@ -95,7 +92,7 @@ describe('dev daemon scripts refuse what they do not recognise', () => {
           timeout: 20_000,
           env: {
             ...process.env,
-            PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+            WHITEBOARD_DEV_SERVER_STAND_IN: SHIM_ENTRY_PATH,
             WHITEBOARD_DATA_DIR: dataDir,
             WHITEBOARD_DEV_READY_TIMEOUT_MS: '3000',
             FAKE_PNPM_INVOKED_SENTINEL_DIR: spawnedDir,
