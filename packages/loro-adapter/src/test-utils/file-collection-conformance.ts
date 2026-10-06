@@ -84,16 +84,7 @@ export const FILE_COLLECTION_CONFORMANCE: FileCollectionScenario = {
   ],
   kept: ['img-live', 'img-proposed', 'img-then', 'img-trashed', 'img-trashed-then'],
   collected: ['img-dismissed', 'img-orphan', 'img-purged'],
-  knownDivergences: [
-    {
-      keeper: 'daemon',
-      fileId: 'img-trashed-then',
-      reaches: 'collected',
-      why:
-        "the daemon's version store lists a history by PATH, and a trashed document has none, " +
-        "so its saved versions are not walked; the browser's rows are keyed by document id",
-    },
-  ],
+  knownDivergences: [],
 }
 
 /** What `keeper` is expected to keep and drop, its known divergences applied. */

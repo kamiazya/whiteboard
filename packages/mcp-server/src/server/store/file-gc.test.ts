@@ -259,15 +259,7 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_brk', 'really-dangling', '.png', 33)
 
     const fakeStore = {
-      list: async () => [
-        {
-          id: 'v-broken',
-          path: 'broken',
-          createdAt: '2026-04-25T00:00:00.000Z',
-          elementCount: 1,
-          auto: false,
-        },
-      ],
+      listIdsByDocument: async () => ['v-broken'],
       load: async () => {
         throw new Error('frontier rows missing')
       },
@@ -426,7 +418,7 @@ describe('purgeDanglingFiles', () => {
     // reordering the scan back in front of the readdir turns this test red.
     await saveDocument('ws_noscan', 'page', makeSpatialDocWithImage('never-uploaded'))
     const exploding = {
-      list: async () => {
+      listIdsByDocument: async () => {
         throw new Error('the reference scan ran when it should have been skipped')
       },
     } as unknown as InstanceType<typeof FileVersionStore>
@@ -448,15 +440,7 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_nullver', 'really-dangling-3', '.png', 11)
 
     const fakeStore = {
-      list: async () => [
-        {
-          id: 'v-missing',
-          path: 'page',
-          createdAt: '2026-04-25T00:00:00.000Z',
-          elementCount: 1,
-          auto: false,
-        },
-      ],
+      listIdsByDocument: async () => ['v-missing'],
       load: async () => null,
     }
 
@@ -674,7 +658,7 @@ it('stands down when another instance writes while the pass is deciding', async 
 
   let wrote = false
   const versionStore = {
-    list: async () => {
+    listIdsByDocument: async () => {
       // Inside the collect, exactly once: the window the fence exists for.
       if (!wrote) {
         wrote = true

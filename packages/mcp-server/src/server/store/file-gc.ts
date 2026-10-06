@@ -24,10 +24,10 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Garbage-collect files in a workspace's files directory that no document
 // uses. Used means referenced by a live document, a trashed one (a restore
-// brings it back under the same id) or a saved version of a document a path
-// reaches (`versionReads` says which are not). The version store is
-// required: a pass without it would delete what a version restore brings
-// back, and walking it costs one Loro fork+checkout per version.
+// brings it back under the same id) or a saved version of either. The
+// version store is required: a pass without it would delete what a version
+// restore brings back, and walking it costs one Loro fork+checkout per
+// version.
 //
 // A scan that cannot read something it must judge (a version, a trash entry,
 // a workspace node this build does not understand) refuses to purge rather
@@ -137,22 +137,16 @@ async function collectReferencedFileIds(
 }
 
 /**
- * The version store as the scan reads it.
- *
- * ponytail: this store addresses a history by PATH, so a trashed document's
- * versions — and a shadowed one's, whose path names another document — are
- * not reached here. The browser keeper's rows are keyed by document id and do
- * reach them; listing by `documentId` is the upgrade that closes the gap.
- * `file-collection-conformance` records the difference as a known divergence,
- * so closing it fails that scenario until the entry goes.
+ * The version store as the scan reads it. Listed by document id, not path:
+ * a trashed document has no path and a shadowed one's names another
+ * document, yet a restore brings either back with its versions.
  */
 function versionReads(
   workspaceId: string,
   versionStore: GcVersionReader,
 ): NonNullable<FileReferenceReads['versions']> {
   return {
-    list: async (holder) =>
-      holder.trashed ? [] : (await versionStore.list(workspaceId, holder.path)).map((v) => v.id),
+    list: (holder) => versionStore.listIdsByDocument(workspaceId, holder.documentId),
     load: (_holder, versionId) => versionStore.load(workspaceId, versionId),
   }
 }
@@ -186,7 +180,7 @@ function logUnjudged(workspaceId: string, target: UnjudgedFileHolder): void {
  * caller (and a test double) supplies what the scan uses, and a new method on
  * `VersionStore` does not reach a fake that cannot know it.
  */
-export type GcVersionReader = Pick<VersionStore, 'list' | 'load'>
+export type GcVersionReader = Pick<VersionStore, 'listIdsByDocument' | 'load'>
 
 export interface PurgeFilesOptions {
   versionStore: GcVersionReader

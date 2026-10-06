@@ -60,6 +60,11 @@ export type { OperatorInfo, VersionEntry }
 export interface VersionStore extends VersionHistory {
   // `list` answers a mutable array, which narrows the seam's readonly one.
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
+  // The ids of every saved version of one document, addressed by its id
+  // rather than a path: a trashed document has no path, and a shadowed one's
+  // path resolves to another document, yet both keep their versions — what
+  // file collection must still walk.
+  listIdsByDocument(workspaceId: string, documentId: string): Promise<string[]>
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
@@ -449,6 +454,21 @@ export class FileVersionStore implements VersionStore {
       .execute()
     return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }
+
+  async listIdsByDocument(workspaceId: string, documentId: string): Promise<string[]> {
+    validateWorkspaceId(workspaceId)
+    const db = await this.scope.db()
+    const rows = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+      .orderBy('createdAt', 'desc')
+      .orderBy(sql`rowid`, 'desc')
+      .execute()
+    return rows.map((row) => row.id)
+  }
+
   async pruneSandwichedAutoVersions(
     workspaceId: string,
     path: string,
