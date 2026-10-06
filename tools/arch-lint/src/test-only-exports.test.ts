@@ -65,7 +65,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/extension/src/page-relay.ts#readPageEnvelope',
   'apps/web/src/boot-splash.ts#elapsedSinceFirstPaint',
   'apps/web/src/boot-splash.ts#splashHoldMs',
-  'apps/web/src/boot.ts#servedByServerKeeper',
   'apps/web/src/components/ErrorBoundary.tsx#errorBoundaryLog',
   'apps/web/src/components/FontsCard.tsx#formatSize',
   'apps/web/src/components/annotations/ThreadMessage.tsx#THREAD_MESSAGE_ACTION_CLASS',
@@ -362,7 +361,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 156
+const DEBT_CEILING = 155
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 24

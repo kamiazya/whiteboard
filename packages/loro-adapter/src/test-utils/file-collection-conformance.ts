@@ -10,7 +10,7 @@
  * stories; each interprets every step, so a step one keeper cannot take
  * fails its suite instead of being skipped.
  */
-export type FileCollectionStep =
+type FileCollectionStep =
   /** An upload old enough that no grace window still covers it. */
   | { readonly op: 'upload'; readonly fileId: string }
   | { readonly op: 'create'; readonly path: string; readonly draws: readonly string[] }
