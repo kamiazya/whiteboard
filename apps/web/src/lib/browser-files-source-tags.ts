@@ -6,7 +6,8 @@ import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 type TagBearers = ReturnType<typeof tagBearersOf>
 
-interface ReadDocument {
+/** One document read from the store, with its content already read as the half its kind names. */
+export interface ReadDocument {
   documentId: string
   doc: LoroDoc
   content: DocumentContent

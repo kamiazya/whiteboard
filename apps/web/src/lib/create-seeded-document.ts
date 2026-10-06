@@ -1,4 +1,5 @@
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
 import {
   type ContentClock,
   ensureBrowserWorkspace,
@@ -12,17 +13,14 @@ import type { DocumentSnapshot } from './whiteboard-client.js'
 import { touchIfWorkspaceBacked } from './workspace-content.js'
 
 /**
- * Create a document AND seed its content record, as one operation.
+ * Create a document AND seed its content record, as one operation, at the
+ * next free `untitled` at the workspace root.
  *
  * The seed is not optional bookkeeping. `updatedAt` now comes from the content
  * record's own envelope — the metadata row has no timestamp of its own, and
  * the port's `DocumentEntry` carries none — so a document created without one
  * has no last-edited time to report. It is also what lets a switch onto a
  * never-edited document find something to load.
- *
- * Every create path seeds through `seedCreatedDocument` — this one, and the
- * Files panel's, which names its own path — so the choice between the record
- * and the per-document store is made once.
  */
 export async function createSeededDocument(
   index: DocumentIndex,
@@ -31,22 +29,41 @@ export async function createSeededDocument(
   name?: string,
   kind: DocumentSnapshot['kind'] = 'spatial',
 ): Promise<DocumentSnapshot> {
-  await ensureBrowserWorkspace(index)
-  const trimmed = name?.trim()
-  const entry = await index.createDocument({
-    workspaceId: getBrowserWorkspaceId(),
-    // The next free `untitled` at the workspace root.
-    path: newDocumentPathIn(
-      '',
-      (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path),
-    ),
+  // A workspace not made yet lists as nothing taken, which is what it holds.
+  const path = newDocumentPathIn(
+    '',
+    (await listBrowserDocuments(index, clock).catch(() => [])).map((row) => row.path),
+  )
+  const entry = await createSeededDocumentAt(index, loro, {
+    path,
     kind,
-    ...(trimmed ? { name: trimmed } : {}),
+    ...(name === undefined ? {} : { name }),
   })
-  await seedCreatedDocument(index, loro, entry)
   const snap = await loadBrowserDocument(index, entry.documentId, clock)
   if (snap === null) throw new Error('created document vanished before it could be read')
   return snap
+}
+
+/**
+ * The same create at a path the caller names — the Files panel's. Every
+ * create path comes through here, so the name is normalised and the choice
+ * between the record and the per-document store is made once.
+ */
+export async function createSeededDocumentAt(
+  index: DocumentIndex,
+  loro: LoroStoreLike,
+  input: { readonly path: string; readonly kind: DocumentKind; readonly name?: string },
+): Promise<DocumentEntry> {
+  await ensureBrowserWorkspace(index)
+  const trimmed = input.name?.trim()
+  const entry = await index.createDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path: input.path,
+    kind: input.kind,
+    ...(trimmed ? { name: trimmed } : {}),
+  })
+  await seedCreatedDocument(index, loro, entry)
+  return entry
 }
 
 /**
@@ -62,7 +79,7 @@ export async function createSeededDocument(
  * The index row is rolled back if the content write fails, so a failed create
  * never leaves a document with nothing behind it.
  */
-export async function seedCreatedDocument(
+async function seedCreatedDocument(
   index: DocumentIndex,
   loro: LoroStoreLike,
   entry: { readonly documentId: string; readonly path: string },

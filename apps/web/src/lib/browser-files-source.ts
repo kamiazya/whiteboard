@@ -36,19 +36,15 @@ import {
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
-import {
-  type ContentClock,
-  ensureBrowserWorkspace,
-  idbContentClock,
-} from './browser-document-summary.js'
-import { createTagBearersCache } from './browser-files-source-tags.js'
+import { type ContentClock, idbContentClock } from './browser-document-summary.js'
+import { createTagBearersCache, type ReadDocument } from './browser-files-source-tags.js'
 import {
   BrowserWorkspaceDocs,
   openWorkspaceOrNull,
   saveAndAnnounce,
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { seedCreatedDocument } from './create-seeded-document.js'
+import { createSeededDocumentAt } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import {
   type LoadedMarkdown,
@@ -63,13 +59,6 @@ import {
   loadDocumentContent,
   projectDocumentContent,
 } from './workspace-content.js'
-
-/** One document read from the store, with its content already read as the half its kind names. */
-interface LoadedDocument {
-  documentId: string
-  doc: LoroDoc
-  content: DocumentContent
-}
 
 type ReadableEntry = { documentId: string; path: string; kind?: DocumentKind }
 
@@ -92,16 +81,14 @@ async function loadCurrentDocFrom(
 
 /**
  * Every document's content, read and its KIND resolved, skipping what this
- * build cannot read.
+ * build cannot read. The tag-bearers cache is what walks it.
  *
- * Four methods here each wrote this walk out — list, load, branch on
- * markdown vs spatial — and the branch is the one place the two stop being
- * interchangeable, so `readDocumentContent` makes it: the document's own
+ * The kind is `readDocumentContent`'s to decide — the document's own
  * recorded kind, the index row's after it, and a canvas for a document that
- * names neither. Skipping rather than failing is the rule everywhere it
- * appears, and for one reason: a rename that repairs nine references of ten
- * beats one that repairs none, and a panel that lists a tagless row beats
- * one that does not open.
+ * names neither — since that branch is where markdown and spatial stop being
+ * interchangeable. A document that cannot be read is skipped rather than
+ * failing the walk: a panel that lists a tagless row beats one that does not
+ * open.
  *
  * The workspace record is opened once for the walk, and only if a document is
  * read at all.
@@ -109,7 +96,7 @@ async function loadCurrentDocFrom(
 async function* readDocumentsFrom(
   loro: LoroStoreLike,
   entries: readonly ReadableEntry[],
-): AsyncGenerator<LoadedDocument> {
+): AsyncGenerator<ReadDocument> {
   const record = lazyContentRecord()
   for (const entry of entries) {
     let doc: LoroDoc
@@ -303,11 +290,7 @@ export function createBrowserFilesSource(
     moves: readonly DocumentMove[],
   ): Promise<void> {
     const plan = planReferenceRewrite({
-      entries: entriesBefore.map((entry) => ({
-        id: entry.documentId,
-        path: entry.path,
-        ...(entry.name === undefined ? {} : { name: entry.name }),
-      })),
+      entries: entriesBefore.map((entry) => ({ id: entry.documentId, path: entry.path })),
       moves,
     })
     if (plan.size === 0) return
@@ -418,15 +401,11 @@ export function createBrowserFilesSource(
     },
 
     async createDocument(path: string, kind: DocumentKind, name?: string): Promise<void> {
-      await ensureBrowserWorkspace(index)
-      const trimmed = name?.trim()
-      const entry = await index.createDocument({
-        workspaceId: getBrowserWorkspaceId(),
+      await createSeededDocumentAt(index, loro, {
         path,
         kind,
-        ...(trimmed ? { name: trimmed } : {}),
+        ...(name === undefined ? {} : { name }),
       })
-      await seedCreatedDocument(index, loro, entry)
     },
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {
