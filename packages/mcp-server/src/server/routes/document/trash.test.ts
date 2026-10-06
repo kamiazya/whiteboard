@@ -336,6 +336,9 @@ describe('trash routes', () => {
     await saveDocument(WS, 'live', canvasDoc('still here'), { kind: 'spatial' })
     const liveId = await resolveDocumentIdAtPath(WS, 'live')
     const app = await appWithRealDeps()
+    // A saved version, so the refusal below has something it must not sweep:
+    // the purge drops a document's versions only once it really purged one.
+    await saveVersion(app, WS, 'live')
 
     const live = await app.request(`/api/workspaces/${WS}/trash/${liveId}`, { method: 'DELETE' })
 
@@ -344,6 +347,7 @@ describe('trash routes', () => {
       trashPurgeRefusal(liveId as string).title,
     )
     expect(await resolveDocumentIdAtPath(WS, 'live')).toBe(liveId)
+    expect(await versionRowDocumentIds(WS)).toEqual([liveId])
     expect(
       (
         await app.request(`/api/workspaces/${WS}/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV`, {
