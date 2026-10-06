@@ -18,12 +18,12 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { hasLegacyRow, seedLegacyRow as writeLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldOrServeTheTree } from './fold-workspace.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = claimIsolatedWhiteboardDb('fold-workspace-guards')
@@ -46,13 +46,10 @@ function canvasHolding(text: string): Loro {
 
 /** One legacy row and its per-document record, the way a pre-fold build wrote them. */
 async function seedLegacyRow(path: string): Promise<{ documentId: string; doc: Loro }> {
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const entry = await index.createDocument({
-    workspaceId: getBrowserWorkspaceId(),
-    path,
-    kind: 'spatial',
-  })
+  const entry = await writeLegacyRow(
+    { workspaceId: getBrowserWorkspaceId(), path, kind: 'spatial' },
+    DB_NAME,
+  )
   const doc = canvasHolding(path)
   await new LoroStore(DB_NAME).save(entry.documentId, doc.export({ mode: 'snapshot' }))
   return { documentId: entry.documentId, doc }
@@ -91,19 +88,14 @@ it('a row whose document the tree already holds is retired, not adopted a second
 
   expect(await treeDocumentIds()).toEqual([documentId])
   expect((await new LoroStore(DB_NAME).load(documentId)).kind).toBe('not-found')
-  expect(
-    await new IdbDocumentIndex(DB_NAME).resolveDocumentById({ workspaceId, documentId }),
-  ).toBeNull()
+  expect(await hasLegacyRow({ workspaceId, documentId }, DB_NAME)).toBe(false)
 })
 
 it('folds the edits a legacy record holds only in its delta log', async () => {
-  const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-  const { documentId } = await index.createDocument({
-    workspaceId: getBrowserWorkspaceId(),
-    path: 'design',
-    kind: 'spatial',
-  })
+  const { documentId } = await writeLegacyRow(
+    { workspaceId: getBrowserWorkspaceId(), path: 'design', kind: 'spatial' },
+    DB_NAME,
+  )
   const doc = canvasHolding('snapshot')
   const snapshot = doc.export({ mode: 'snapshot' })
   const before = doc.oplogVersion()
