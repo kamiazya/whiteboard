@@ -28,6 +28,7 @@ import { purgeDanglingFiles } from '../server/store/file-gc.js'
 import { createFileGcSweeper } from '../server/store/file-gc-sweeper.js'
 import { loadWorkspaceNames, setWorkspaceName } from '../server/store/names-store.js'
 import { storeScope } from '../server/store/store-scope.js'
+import { FileVersionStore } from '../server/store/version-store.js'
 import { _clearWorkspaceDocCacheForTests } from '../server/store/workspace-doc-cache.js'
 import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
@@ -155,7 +156,11 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
     const files = scope.layout.workspaceFilesDir('ws-1')
     await mkdir(files, { recursive: true })
     await writeFile(join(files, 'dangling.png'), 'x')
-    const purged = await purgeDanglingFiles('ws-1', { scope, graceMs: 0 })
+    const purged = await purgeDanglingFiles('ws-1', {
+      versionStore: new FileVersionStore(scope),
+      scope,
+      graceMs: 0,
+    })
 
     expect(purged.purgedCount).toBe(1)
     expect(await readdir(files)).toEqual([])

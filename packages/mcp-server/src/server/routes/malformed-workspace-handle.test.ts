@@ -10,7 +10,12 @@
  */
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from './_test-helpers.js'
+import {
+  resolveTestServerDeps,
+  testFilesRouterOptions,
+  testStoreScope,
+  withTempDataDir,
+} from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-malformed-handle-')
 
@@ -63,7 +68,7 @@ describe('a malformed workspace handle', () => {
   for (const { method, path, body } of ROUTES) {
     it(`is a 400 { error, message } on ${method} ${path.replace(MALFORMED, ':workspaceId')}`, async () => {
       const app = createDocumentRouter({ scope: testStoreScope(), serverDeps, versionStore })
-      app.route('/', createFilesRouter({ scope: testStoreScope(tmp.dir) }))
+      app.route('/', createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir))))
       const res = await app.request(path, {
         method,
         ...(body === undefined ? {} : { body, headers: { 'Content-Type': 'application/json' } }),

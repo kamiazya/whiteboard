@@ -10,6 +10,7 @@ import { createDataLayout } from '../tenant/data-layout.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import type { DocumentRouterOptions } from './document.js'
+import type { FilesRouterOptions } from './files.js'
 
 /**
  * Registers per-test temp-dir lifecycle (beforeEach create, afterEach rm).
@@ -130,4 +131,13 @@ export function testDocumentRouterOptions(
 ): DocumentRouterOptions {
   const scope = options.scope ?? testStoreScope()
   return { ...options, scope, versionStore: options.versionStore ?? new FileVersionStore(scope) }
+}
+
+/**
+ * The options `createFilesRouter` takes: `scope` and the version store the
+ * root builds over it, which the purge requires for the reason the document
+ * router does.
+ */
+export function testFilesRouterOptions(scope: StoreScope = testStoreScope()): FilesRouterOptions {
+  return { scope, versionStore: new FileVersionStore(scope) }
 }

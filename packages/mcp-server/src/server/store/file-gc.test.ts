@@ -31,6 +31,11 @@ const { makeSpatialDoc, makeSpatialDocWithImage, setSpatialDocImage } = await im
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
+/** The version store every production caller passes, over this test's data dir. */
+function withVersions(extra: { graceMs?: number } = {}) {
+  return { versionStore: new FileVersionStore(), ...extra }
+}
+
 const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
 const { createWorkspaceDocumentAtPath, writeWorkspaceDocumentContent } = await import(
   '@kamiazya/whiteboard-loro-adapter'
@@ -122,7 +127,7 @@ describe('purgeDanglingFiles', () => {
     await saveDocument('ws_nodes', 'page', makeSpatialDocWithImage('asset-x'))
     await seedFile('ws_nodes', 'asset-x', '.png', 500)
 
-    const result = await purgeDanglingFiles('ws_nodes')
+    const result = await purgeDanglingFiles('ws_nodes', withVersions())
 
     expect(result.purgedCount).toBe(0)
     const remaining = (
@@ -142,7 +147,7 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_a', 'orphan-1', '.png', 1000)
     await seedFile('ws_a', 'orphan-2', '.jpg', 500)
 
-    const result = await purgeDanglingFiles('ws_a')
+    const result = await purgeDanglingFiles('ws_a', withVersions())
 
     expect(result.purgedCount).toBe(2)
     expect(result.purgedBytes).toBe(1500)
@@ -159,14 +164,14 @@ describe('purgeDanglingFiles', () => {
     await saveDocument('ws_legacy', 'page', makeDocWithImage('legacy-image'))
     await seedFile('ws_legacy', 'legacy-image', '.png', 321)
 
-    const result = await purgeDanglingFiles('ws_legacy')
+    const result = await purgeDanglingFiles('ws_legacy', withVersions())
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(321)
   })
 
   it('returns zero counts for a workspace with no files dir yet', async () => {
-    const result = await purgeDanglingFiles('ws_empty')
+    const result = await purgeDanglingFiles('ws_empty', withVersions())
     expect(result).toEqual({ purgedCount: 0, purgedBytes: 0 })
   })
 
@@ -178,7 +183,7 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_mixed', 'nodes-ref', '.png', 20)
     await seedFile('ws_mixed', 'unrelated-orphan', '.png', 30)
 
-    const result = await purgeDanglingFiles('ws_mixed')
+    const result = await purgeDanglingFiles('ws_mixed', withVersions())
 
     expect(result.purgedCount).toBe(2)
     expect(result.purgedBytes).toBe(40)
@@ -203,7 +208,7 @@ describe('purgeDanglingFiles', () => {
     )
     await seedFile('ws_precision', 'some-canvas', '.png', 42)
 
-    const result = await purgeDanglingFiles('ws_precision')
+    const result = await purgeDanglingFiles('ws_precision', withVersions())
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(42)
@@ -304,7 +309,7 @@ describe('purgeDanglingFiles', () => {
     await seedFreshFile('ws_grace', 'pending', '.png', 64)
     await seedFile('ws_grace', 'old-orphan', '.png', 32)
 
-    const result = await purgeDanglingFiles('ws_grace')
+    const result = await purgeDanglingFiles('ws_grace', withVersions())
     // old-orphan is past the grace window, gone. pending is fresh —
     // preserved this round.
     expect(result.purgedCount).toBe(1)
@@ -320,7 +325,7 @@ describe('purgeDanglingFiles', () => {
     // files in the same call. Used by the tests above for the same
     // reason.
     await seedFreshFile('ws_grace0', 'fresh-orphan', '.png', 16)
-    const result = await purgeDanglingFiles('ws_grace0', { graceMs: 0 })
+    const result = await purgeDanglingFiles('ws_grace0', withVersions({ graceMs: 0 }))
     expect(result.purgedCount).toBe(1)
     const remaining = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_grace0'))
     expect(remaining).toEqual([])
@@ -331,7 +336,7 @@ describe('purgeDanglingFiles', () => {
     process.env.WHITEBOARD_FILE_GC_GRACE_MS = '0'
     try {
       await seedFreshFile('ws_env', 'fresh-orphan', '.png', 8)
-      const result = await purgeDanglingFiles('ws_env')
+      const result = await purgeDanglingFiles('ws_env', withVersions())
       expect(result.purgedCount).toBe(1)
     } finally {
       if (previous === undefined) delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
@@ -367,7 +372,10 @@ describe('purgeDanglingFiles', () => {
       for (const raw of ['1h', '30m', '2s', '1e3', '-1', '1.5']) {
         process.env.WHITEBOARD_FILE_GC_GRACE_MS = raw
         await seedFreshFile(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`, 'fresh', '.png', 8)
-        const result = await purgeDanglingFiles(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`)
+        const result = await purgeDanglingFiles(
+          `ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`,
+          withVersions(),
+        )
         // A freshly-written file is inside the default one-hour window, so a
         // correctly-parsed setting purges nothing. Under the old parse `1h`
         // became 1ms and this file was deleted.
@@ -400,7 +408,7 @@ describe('purgeDanglingFiles', () => {
 
     // Kick the save first so it acquires the lock; then kick the purge.
     const savePromise = saveDocument('ws_race', 'page', next, { overwrite: true })
-    const purgePromise = purgeDanglingFiles('ws_race')
+    const purgePromise = purgeDanglingFiles('ws_race', withVersions())
     const [, purgeResult] = await Promise.all([savePromise, purgePromise])
 
     expect(purgeResult.purgedCount).toBe(0)
@@ -490,7 +498,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     )
     await seedFile('ws_bg', 'bg-1', '.png', 700)
 
-    const result = await purgeDanglingFiles('ws_bg')
+    const result = await purgeDanglingFiles('ws_bg', withVersions())
 
     expect(result.purgedCount).toBe(0)
     expect(await remainingFiles('ws_bg')).toEqual(['bg-1.png'])
@@ -503,7 +511,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     await saveDocument('ws_md', 'note', doc, { kind: 'markdown' })
     await seedFile('ws_md', 'md-1', '.png', 300)
 
-    const result = await purgeDanglingFiles('ws_md')
+    const result = await purgeDanglingFiles('ws_md', withVersions())
 
     expect(result.purgedCount).toBe(0)
     expect(await remainingFiles('ws_md')).toEqual(['md-1.png'])
@@ -516,7 +524,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     await deleteDocument('ws_trash', 'page')
     expect(await listDocuments('ws_trash')).toEqual([])
 
-    const result = await purgeDanglingFiles('ws_trash')
+    const result = await purgeDanglingFiles('ws_trash', withVersions())
 
     expect(result.purgedCount).toBe(0)
     expect(await remainingFiles('ws_trash')).toEqual(['asset-t.png'])
@@ -533,13 +541,13 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     await seedFile('ws_purged', 'asset-o', '.png', 700)
     const documentId = await resolveDocumentIdAtPath('ws_purged', 'page')
     await deleteDocument('ws_purged', 'page')
-    expect((await purgeDanglingFiles('ws_purged')).purgedCount).toBe(0)
+    expect((await purgeDanglingFiles('ws_purged', withVersions())).purgedCount).toBe(0)
 
     const index = await workspaceTreeIndex(globalStoreScope)
     expect(
       await index.purgeTrashEntry({ workspaceId: 'ws_purged', documentId: documentId ?? '' }),
     ).toBe(true)
-    const result = await purgeDanglingFiles('ws_purged')
+    const result = await purgeDanglingFiles('ws_purged', withVersions())
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(500)
@@ -579,7 +587,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
       await docs.save('ws_unreadable', workspaceDoc)
       await seedFile('ws_unreadable', 'asset-x', '.png', 500)
 
-      await expect(purgeDanglingFiles('ws_unreadable')).rejects.toBeInstanceOf(
+      await expect(purgeDanglingFiles('ws_unreadable', withVersions())).rejects.toBeInstanceOf(
         IncompleteFileGcScanError,
       )
       expect(await remainingFiles('ws_unreadable')).toEqual(['asset-x.png'])
@@ -617,7 +625,7 @@ describe('purgeDanglingFiles across instances', () => {
     // that references the blob is in it.
     expect((await listDocuments(workspaceId)).map((entry) => entry.path)).toContain('theirs')
 
-    await purgeDanglingFiles(workspaceId, { graceMs: 0 })
+    await purgeDanglingFiles(workspaceId, withVersions({ graceMs: 0 }))
     expect(await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId))).toContain(
       'theirs.png',
     )
@@ -635,7 +643,7 @@ describe('purgeDanglingFiles across instances', () => {
       makeSpatialDoc({ nodes: [], edges: [] }),
     )
 
-    const result = await purgeDanglingFiles(workspaceId, { graceMs: 0 })
+    const result = await purgeDanglingFiles(workspaceId, withVersions({ graceMs: 0 }))
     expect(result.purgedCount).toBe(1)
     expect(
       await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, workspaceId)),
@@ -715,7 +723,7 @@ it('stands down while a backup is assembling this data directory', async () => {
   await seedFile(workspaceId, 'orphan', '.png', 64)
 
   const result = await withBackupMarker(tempDir, () =>
-    purgeDanglingFiles(workspaceId, { graceMs: 0 }),
+    purgeDanglingFiles(workspaceId, withVersions({ graceMs: 0 })),
   )
 
   expect(result.skippedReason).toBe('backup-in-progress')
@@ -733,7 +741,7 @@ it('collects again once the backup has finished', async () => {
   await seedFile(workspaceId, 'orphan', '.png', 64)
 
   await withBackupMarker(tempDir, async () => {})
-  const result = await purgeDanglingFiles(workspaceId, { graceMs: 0 })
+  const result = await purgeDanglingFiles(workspaceId, withVersions({ graceMs: 0 }))
 
   expect(result.skippedReason).toBeUndefined()
   expect(result.purgedCount).toBe(1)
