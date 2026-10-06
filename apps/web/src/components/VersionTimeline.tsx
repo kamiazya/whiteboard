@@ -2,6 +2,7 @@ import type {
   OperatorInfo,
   VersionEntry,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardContent } from '../components/ui/card.js'
@@ -44,6 +45,12 @@ export interface VersionPreviewSession {
 interface Props {
   workspaceId: string
   path: string
+  /**
+   * Which kind of document the history is of. A row's element count is a
+   * count of a board's nodes, so a note's rows carry none: every one would
+   * read 0, which says nothing about a note. Absent keeps the count.
+   */
+  documentKind?: DocumentKind
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
   /**
@@ -91,11 +98,14 @@ function versionTitleOrNull(version: VersionEntry | undefined): string | null {
 function VersionRow({
   version,
   current,
+  counted,
   restoredFromTitle,
   onOpen,
 }: {
   version: VersionEntry
   current: boolean
+  /** Whether the element count means anything for this document's kind. */
+  counted: boolean
   restoredFromTitle: string | null
   onOpen: () => void
 }) {
@@ -103,7 +113,7 @@ function VersionRow({
     version.label ? versionTime(version.createdAt) : null,
     versionAuthor(version.operator),
     version.attestation === undefined ? null : 'verified',
-    `${version.elementCount} els`,
+    counted ? `${version.elementCount} els` : null,
   ].filter((part) => part !== null)
 
   return (
@@ -244,6 +254,7 @@ function RowShell({
 export default function VersionTimeline({
   workspaceId,
   path,
+  documentKind,
   onRestored,
   onPreview,
   refreshSignal,
@@ -500,6 +511,7 @@ export default function VersionTimeline({
                 key={v.id}
                 version={v}
                 current={previewing?.id === v.id}
+                counted={documentKind !== 'markdown'}
                 restoredFromTitle={
                   v.restoredFrom === undefined
                     ? null
