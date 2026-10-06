@@ -23,8 +23,17 @@ after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
 })
 
+// stderr is captured, never echoed: git narrates clones and branch switches there, and a
+// failing call still carries it in the thrown error's message.
+const QUIET = ['ignore', 'pipe', 'pipe']
+
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, env: isolatedGitEnv(), encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, {
+    cwd,
+    env: isolatedGitEnv(),
+    encoding: 'utf-8',
+    stdio: QUIET,
+  }).trim()
 }
 
 function commitFile(repo, name, content, message) {
@@ -47,7 +56,11 @@ function makeRepoPair() {
   execFileSync('git', ['init', '-b', 'main', origin], { env: isolatedGitEnv(), encoding: 'utf-8' })
   configureIdentity(origin)
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { env: isolatedGitEnv(), encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], {
+    env: isolatedGitEnv(),
+    encoding: 'utf-8',
+    stdio: QUIET,
+  })
   configureIdentity(work)
   return { origin, work }
 }

@@ -13,7 +13,7 @@
 // without a bad-fixture line for it fails this suite by itself, which is the
 // property a hand-written list cannot have.
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -76,8 +76,11 @@ function lint(file, plugin) {
     }),
   )
   try {
+    // An explicit stdio keeps biome's stderr in `err.stderr` only; execFileSync's default
+    // also echoes it to this process's.
     execFileSync(join(REPO_ROOT, 'node_modules/.bin/biome'), ['lint', '--config-path', dir, file], {
       encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
     return ''
   } catch (err) {
@@ -125,6 +128,21 @@ for (const { plugin, bad, good } of PLUGINS) {
     assert.doesNotMatch(out, PLUGIN_DIAGNOSTIC, out)
   })
 }
+
+// A green run prints only results. The bad fixtures are MEANT to trip biome,
+// and its diagnostics are captured and asserted on above; echoed to the
+// parent as well, each one reads like a failure in a passing run — "Some
+// errors were emitted while running checks", once per bad fixture.
+test('a passing fixture case writes nothing to the stderr of the run', () => {
+  const run = spawnSync(
+    process.execPath,
+    ['--test-name-pattern', '^test-flake-shapes\\.grit: the bad fixture', import.meta.filename],
+    { cwd: REPO_ROOT, encoding: 'utf8' },
+  )
+  assert.equal(run.status, 0, `${run.stdout}${run.stderr}`)
+  assert.match(run.stdout, /pass 1\b/, 'the name pattern selected no case, so nothing was measured')
+  assert.equal(run.stderr, '')
+})
 
 /**
  * A plugin's `includes` patterns, as biome.json declares them.
@@ -189,6 +207,7 @@ for (const { plugin, bad, probe } of PLUGINS.filter((entry) => entry.probe !== u
         execFileSync(join(REPO_ROOT, 'node_modules/.bin/biome'), ['lint', probe], {
           cwd: REPO_ROOT,
           encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
         })
       } catch (err) {
         out = `${err.stdout ?? ''}${err.stderr ?? ''}`

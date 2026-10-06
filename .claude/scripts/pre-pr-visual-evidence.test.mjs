@@ -27,7 +27,11 @@ after(() => {
 
 /** Scratch-repo git, and the hook's own, run without the contributor's global config. */
 const gitEnv = isolatedGitEnv()
-const git = (cwd, args) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf-8' }).trim()
+// stderr is captured, never echoed: git narrates clones and branch switches there, and a
+// failing call still carries it in the thrown error's message.
+const QUIET = ['ignore', 'pipe', 'pipe']
+const git = (cwd, args) =>
+  execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf-8', stdio: QUIET }).trim()
 
 function commitFile(repo, name, content, message) {
   mkdirSync(dirname(join(repo, name)), { recursive: true })
@@ -46,7 +50,7 @@ function makeRepoPair(changed) {
   git(origin, ['config', 'user.email', 'test@example.com'])
   git(origin, ['config', 'user.name', 'test'])
   commitFile(origin, 'base.txt', 'base\n', 'base')
-  execFileSync('git', ['clone', origin, work], { env: gitEnv, encoding: 'utf-8' })
+  execFileSync('git', ['clone', origin, work], { env: gitEnv, encoding: 'utf-8', stdio: QUIET })
   git(work, ['config', 'user.email', 'test@example.com'])
   git(work, ['config', 'user.name', 'test'])
   git(work, ['checkout', '-b', 'feat'])
