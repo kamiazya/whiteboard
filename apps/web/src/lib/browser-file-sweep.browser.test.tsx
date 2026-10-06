@@ -7,6 +7,7 @@ import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { FILE_COLLECTION_CONFORMANCE } from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -147,5 +148,57 @@ describe('sweepUnreferencedFiles', () => {
       reason: 'unfolded-documents',
     })
     expect(await bytesHeld('img-legacy')).toBe(true)
+  })
+})
+
+describe('sweepUnreferencedFiles on the cross-keeper scenario', () => {
+  beforeEach(clearWhiteboardDb)
+
+  // The daemon takes the same steps in file-gc.conformance.test.ts.
+  it('reaches the verdict every keeper reaches', async () => {
+    const index = new FoldingBrowserIndex()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    const ids = new Map<string, string>()
+    for (const step of FILE_COLLECTION_CONFORMANCE.steps) {
+      switch (step.op) {
+        case 'upload':
+          await upload(step.fileId)
+          break
+        case 'create': {
+          const { documentId } = await index.createDocument({
+            workspaceId,
+            path: step.path,
+            kind: 'spatial',
+          })
+          ids.set(step.path, documentId)
+          await draw(documentId, step.draws)
+          break
+        }
+        case 'draw':
+          await draw(ids.get(step.path) ?? '', step.draws)
+          break
+        case 'save-version':
+          await versions.save(workspaceId, step.path)
+          break
+        case 'delete':
+          await index.deleteDocument({ workspaceId, path: step.path })
+          break
+        case 'purge': {
+          const documentId = ids.get(step.path) ?? ''
+          expect(await index.purgeTrashEntry({ workspaceId, documentId })).toBe(true)
+          break
+        }
+      }
+    }
+
+    const result = await sweepUnreferencedFiles()
+
+    const collected = FILE_COLLECTION_CONFORMANCE.collected.map((id) => newImageRef(id))
+    expect(result.kind === 'swept' ? [...result.deleted].sort() : result).toEqual(collected.sort())
+    for (const fileId of FILE_COLLECTION_CONFORMANCE.kept) {
+      expect(await bytesHeld(fileId), fileId).toBe(true)
+    }
   })
 })

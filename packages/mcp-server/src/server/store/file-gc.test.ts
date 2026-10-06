@@ -588,9 +588,9 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
 })
 
 /**
- * ADR-0020. GC judges "referenced" from `listDocuments` / `loadDocument`,
- * which read `openWorkspaceDocIfStored`. That answers the cached workspace
- * document, and a cache that trusted itself was authoritative only while one
+ * ADR-0020. GC judges "referenced" from `openWorkspaceDocIfStored`, which
+ * answers the cached workspace document, and a cache that trusted itself was
+ * authoritative only while one
  * process wrote: a pass on instance A could not see a document instance B
  * created, and unlinked B's blobs as dangling, for as long as nothing caught
  * A up. The cache now follows the record on every access, so the view a pass
