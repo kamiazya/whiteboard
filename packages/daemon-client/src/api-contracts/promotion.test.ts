@@ -57,13 +57,21 @@ describe('promotion schemas', () => {
       attested: true,
       recorded: ['01BRWAAAAAAAAAAAAAAAAAAAA0'],
       shadowed: [],
-      trashStored: [],
-      versionsKept: [],
+      trashStored: ['01BRWAAAAAAAAAAAAAAAAAAAA1'],
+      versionsKept: ['01BRWVERSAAAAAAAAAAAAAAAA0'],
     }
     expect(roundtrip(promoteWorkspaceResponseSchema, valid)).toEqual(valid)
     expect(promoteWorkspaceResponseSchema.safeParse({ ...valid, ok: false }).success).toBe(false)
     // A landed move must not read as failed because a newer daemon says more.
     const withExtra = promoteWorkspaceResponseSchema.safeParse({ ...valid, mergedAt: 'later' })
     expect(withExtra.success && withExtra.data).toEqual(valid)
+    // A keeper that does not say what it holds is read as holding none of it,
+    // which keeps the sender's copy rather than deleting it on a guess.
+    const { trashStored: _trash, versionsKept: _versions, ...silent } = valid
+    expect(promoteWorkspaceResponseSchema.parse(silent)).toEqual({
+      ...valid,
+      trashStored: [],
+      versionsKept: [],
+    })
   })
 })

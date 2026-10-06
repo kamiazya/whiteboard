@@ -166,10 +166,11 @@ addenda of
 - Documents kept in the browser cross to a daemon by an explicit,
   user-initiated **move of the whole workspace** (Settings → Connections →
   "This workspace"): the browser's workspace record merges into the chosen
-  daemon workspace, so every `documentId`, the full edit history, and
-  referenced images carry over, and a path both sides hold is surfaced as
-  shadowed rather than renamed. Once every document and image is verified
-  on the daemon, the old browser record is deleted and the browser keeps a
+  daemon workspace, so every `documentId` and the full edit history carry
+  over, with the trash (its documents' bytes, so they stay restorable), the
+  saved versions, and every image any of them uses; a path both sides hold
+  is surfaced as shadowed rather than renamed. Once the daemon reports
+  holding all of it, the old browser record is deleted and the browser keeps a
   cached replica of the daemon workspace instead (read-only when the daemon
   is unreachable); continuing from the daemon is a reload the user takes.
   If anything could not be verified, the browser copy is kept unchanged and

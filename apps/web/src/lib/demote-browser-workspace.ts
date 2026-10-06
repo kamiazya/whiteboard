@@ -4,16 +4,19 @@
  * deleted — the replica is the local copy, so keeping the original would be
  * the frozen fork this decision exists to end.
  *
- * The gate is the caller's (every blob transferred, and `replicaCarriesAll`
- * against the replica read back from this browser's own store — never
- * against the response that was just imported, which proves only that the
- * network worked). What this module owns is the deletion's shape:
+ * The gate is the caller's, and it asks the KEEPER, never this browser's own
+ * leftovers: every image transferred, every trash entry's bytes and every
+ * saved version the daemon reports holding after it stored them (the
+ * promotion's `leftBehind` is empty), and `replicaCarriesAll` against the
+ * replica read back from this browser's own store — never against the
+ * response that was just imported, which proves only that the network
+ * worked. What this module owns is the deletion's shape:
  *
  * - Only the workspace-keyed rows die: the record (the `workspace-tree`
- *   docRef) and the registry row. Planes keyed by DOCUMENT id — images,
- *   versions — are shared with the replica, whose documents kept their ids
- *   through the move, so deleting them would hollow out the very copy that
- *   justified the deletion.
+ *   docRef) and the registry row. The browser's image bytes, trash bytes and
+ *   version rows are left where they are, but nothing a replica opens reads
+ *   them — its pages ask the daemon — so what the move guarantees is that
+ *   the daemon holds them, not that this browser still serves them.
  * - The registry is never left empty: `resolveBrowserWorkspaceId` throws on
  *   an empty registry (re-minting is an upgrade-time step), so deleting the
  *   last row would leave the browser keeper unbootable. A fresh empty

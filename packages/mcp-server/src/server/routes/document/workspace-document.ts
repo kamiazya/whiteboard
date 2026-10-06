@@ -118,6 +118,63 @@ function decodeCarried(body: PromoteWorkspaceRequest) {
   }
 }
 
+// Promotion (ADR-0023): the browser keeper's whole record merged in, as the
+// update route would merge it, with the trash bytes and saved versions it
+// points at, plus one explicit human checkpoint per promoted document — the
+// promote is a person's explicit act.
+//
+// No keeper here holds a passkey pin (ADR-0050 decision 3 retired the local
+// daemon's, and server mode never had any), so an attestation can name no
+// credential this keeper knows. It is refused before the merge rather than
+// dropped: a refused promote changes nothing, and a caller that sent
+// evidence is told it was not checked instead of reading `attested: false`
+// as a verdict.
+//
+// POST /api/w/:workspaceId/workspace-document/promote
+function promoteHandler(options: WorkspaceDocumentRouterOptions) {
+  return async (c: Context): Promise<Response> => {
+    const admitted = await admittedWorkspace(c, options.serverDeps)
+    if ('refusal' in admitted) return admitted.refusal
+    const { workspaceId, deps } = admitted
+    const body = await readJsonBody(c, promoteWorkspaceRequestSchema, PROMOTE_BODY)
+    if ('refusal' in body) return body.refusal
+    if (body.data.attestation !== undefined) {
+      return c.json({ error: 'attestation_rejected', message: 'unknownCredential' }, 403)
+    }
+    const snapshot = new Uint8Array(Buffer.from(body.data.snapshot, 'base64url'))
+    const carried = decodeCarried(body.data)
+
+    // The device that wrote the row (ADR-0035 decision 2), as every other
+    // human row this daemon writes.
+    const operator: OperatorInfo = {
+      kind: 'human',
+      displayName: defaultHumanDisplayName(),
+      ...(options.daemonActor === undefined ? {} : { actor: options.daemonActor }),
+    }
+    let result: Awaited<ReturnType<typeof promoteWorkspace>>
+    try {
+      result = await promoteWorkspace(deps, { workspaceId, snapshot, operator, ...carried })
+    } catch (err) {
+      return answerWriteRefusal(c, err)
+    }
+    if (result.kind === 'malformed-snapshot') {
+      return c.json({ title: 'Malformed workspace record snapshot' }, 400)
+    }
+    if (result.kind === 'unmatched-carried') {
+      return c.json(errorBody('invalid_body', result.reason), 400)
+    }
+    const response: PromoteWorkspaceResponse = {
+      ok: true,
+      attested: false,
+      recorded: [...result.recorded],
+      shadowed: [...result.shadowed],
+      trashStored: [...result.trashStored],
+      versionsKept: [...result.versionsKept],
+    }
+    return c.json(response)
+  }
+}
+
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
   const app = new Hono()
 
@@ -169,63 +226,10 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
     },
   )
 
-  // Promotion (ADR-0023): the browser keeper's whole record merged in, as the
-  // update route would merge it, with the trash bytes and saved versions it
-  // points at, plus one explicit human checkpoint per promoted document — the
-  // promote is a person's explicit act.
-  //
-  // No keeper here holds a passkey pin (ADR-0050 decision 3 retired the local
-  // daemon's, and server mode never had any), so an attestation can name no
-  // credential this keeper knows. It is refused before the merge rather than
-  // dropped: a refused promote changes nothing, and a caller that sent
-  // evidence is told it was not checked instead of reading `attested: false`
-  // as a verdict.
-  //
-  // POST /api/w/:workspaceId/workspace-document/promote
   app.post(
     '/api/w/:workspaceId/workspace-document/promote',
     limitBody(PROMOTE_REQUEST_LIMIT_BYTES, 'Promotion'),
-    async (c) => {
-      const admitted = await admittedWorkspace(c, options.serverDeps)
-      if ('refusal' in admitted) return admitted.refusal
-      const { workspaceId, deps } = admitted
-      const body = await readJsonBody(c, promoteWorkspaceRequestSchema, PROMOTE_BODY)
-      if ('refusal' in body) return body.refusal
-      if (body.data.attestation !== undefined) {
-        return c.json({ error: 'attestation_rejected', message: 'unknownCredential' }, 403)
-      }
-      const snapshot = new Uint8Array(Buffer.from(body.data.snapshot, 'base64url'))
-      const carried = decodeCarried(body.data)
-
-      // The device that wrote the row (ADR-0035 decision 2), as every other
-      // human row this daemon writes.
-      const operator: OperatorInfo = {
-        kind: 'human',
-        displayName: defaultHumanDisplayName(),
-        ...(options.daemonActor === undefined ? {} : { actor: options.daemonActor }),
-      }
-      let result: Awaited<ReturnType<typeof promoteWorkspace>>
-      try {
-        result = await promoteWorkspace(deps, { workspaceId, snapshot, operator, ...carried })
-      } catch (err) {
-        return answerWriteRefusal(c, err)
-      }
-      if (result.kind === 'malformed-snapshot') {
-        return c.json({ title: 'Malformed workspace record snapshot' }, 400)
-      }
-      if (result.kind === 'unmatched-carried') {
-        return c.json(errorBody('invalid_body', result.reason), 400)
-      }
-      const response: PromoteWorkspaceResponse = {
-        ok: true,
-        attested: false,
-        recorded: [...result.recorded],
-        shadowed: [...result.shadowed],
-        trashStored: [...result.trashStored],
-        versionsKept: [...result.versionsKept],
-      }
-      return c.json(response)
-    },
+    promoteHandler(options),
   )
 
   return app

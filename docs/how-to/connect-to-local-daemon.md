@@ -173,14 +173,23 @@ one step from **Settings → Connections → This workspace**:
    **Reload and continue from the daemon** to switch to working from the
    daemon, or keep working in the browser.
 
-The move carries your documents, their full edit history, and the images
-they reference. Documents keep their identity, so links between them keep
-working on the daemon. If a path already exists in the chosen daemon
-workspace, both versions are kept and the pre-existing one is marked
-*shadowed* — nothing is renamed or overwritten.
+The move carries your documents and their edit history, the **Trash**
+(so a trashed document can still be restored on the daemon), every **saved
+version** with its label, and every image any of these use — including an
+image only a trashed document or an older version shows. Documents keep
+their identity, so links between them keep working on the daemon. If a
+path already exists in the chosen daemon workspace, both versions are kept
+and the pre-existing one is marked *shadowed* — nothing is renamed or
+overwritten. Your saved versions keep their dates; the move adds one more,
+marking the move itself.
 
-Once every document and image is confirmed on the daemon, the old browser
-copy is removed: the daemon is the workspace's one keeper, and this browser
+A trashed document so large it does not fit in the move with everything
+else stays behind, and so does anything this browser cannot read; the
+result names each one when the move finishes, and the browser copy is kept
+so nothing is lost.
+
+Once the daemon confirms it holds every document, image, trashed document
+and saved version that moved, the old browser copy is removed: the daemon is the workspace's one keeper, and this browser
 keeps a **cached replica** instead — it opens read-only when the daemon
 cannot be reached, so your data stays viewable offline. What it shows
 depends on what is actually on this device and what the daemon last said:

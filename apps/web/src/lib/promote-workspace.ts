@@ -18,9 +18,11 @@
  *
  * The core move is a CRDT merge of the record's snapshot: the daemon's
  * promote route imports exactly these bytes the way its sync surface would
- * (mcp-server's promote-workspace.test.ts pins identity, shadowed
+ * (mcp-server's workspace-promote.test.ts pins identity, shadowed
  * collisions, idempotent retry and the unregistered-target 404), and writes
- * one explicit human checkpoint per promoted document.
+ * one explicit human checkpoint per promoted document. Beside the record
+ * travel the planes it only points at — each trash entry's evacuated bytes
+ * and the saved version rows — and every image any of them names.
  *
  * No passkey assertion travels with it. The only destination is the daemon
  * on this machine, which has one person — the owner who alone can reach its
@@ -41,18 +43,29 @@ import {
   promoteWorkspaceResponseSchema,
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import {
+  PROMOTE_REQUEST_LIMIT_BYTES,
+  type PromotedTrashBytes,
+  type PromotedVersion,
+  type PromoteWorkspaceRequest,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import {
   collectImageRefIds,
   documentContainers,
+  readTrashEntries,
   readWorkspaceDocuments,
+  scanFileReferences,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import type { LoroDoc } from 'loro-crdt'
+import { savedVersionReads, savedVersionRows, type VersionRow } from './browser-version-store.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
 import { daemonContractError } from './daemon-contract-error.js'
 import { DocumentFileStore } from './document-file-store.js'
+import { IdbBlobStore } from './idb-blob-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 
 export interface PromoteWorkspaceOptions {
@@ -113,6 +126,14 @@ export type PromoteWorkspaceResult =
         missing: string[]
         failed: Array<{ fileId: string; reason: string }>
       }
+      /**
+       * What this browser keeps that the keeper did not verifiably take —
+       * trash an entry's bytes could not come with, saved versions, a part
+       * of the record no reader could judge — one sentence per cause. The
+       * browser copy is the only one of these, so it must stay while any is
+       * listed.
+       */
+      leftBehind: string[]
     }
   | { kind: 'failed'; reason: string }
 
@@ -135,16 +156,17 @@ export async function promoteWorkspace(
 }
 
 /**
- * The image references the record's documents carry, each mapped to its
- * owning document's path (the address the daemon's file route wants). The
- * walk itself is collectImageRefIds — shared with the daemon-side GC's
- * live-state pass, so the two sides cannot drift on what counts as a live
- * reference: image nodes, frame backgrounds, and inline images in a text node
- * or a markdown document's body.
+ * Every image the workspace still needs — its live documents, its trash and
+ * its saved versions, by `scanFileReferences`, the definition both keepers'
+ * file collections judge by — each mapped to a document path for the
+ * daemon's file route. Files there are kept per workspace and the path in the
+ * address is only checked for its grammar, so an image no live document
+ * names goes under the path of whatever named it first.
  */
-function collectImageRefs(
-  record: Parameters<typeof readWorkspaceDocuments>[0],
+function imageAddresses(
+  record: LoroDoc,
   entries: ReturnType<typeof readWorkspaceDocuments>,
+  scan: FileReferenceScan,
 ): Map<string, string> {
   const refs = new Map<string, string>()
   for (const entry of entries) {
@@ -152,7 +174,147 @@ function collectImageRefs(
       if (!refs.has(fileId)) refs.set(fileId, entry.path)
     }
   }
+  const fallback = entries[0]?.path ?? readTrashEntries(record)[0]?.path
+  for (const fileId of scan.referenced) {
+    if (!refs.has(fileId) && fallback !== undefined) refs.set(fileId, fallback)
+  }
   return refs
+}
+
+type FileReferenceScan = Awaited<ReturnType<typeof scanFileReferences>>
+
+/** What travels beside the record, and what is left behind with a reason. */
+interface CarriedPlanes {
+  readonly trash: PromotedTrashBytes[]
+  readonly versions: PromotedVersion[]
+  readonly leftBehind: string[]
+  readonly scan: FileReferenceScan
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+/** The wire form of a version row: no device, which only a keeper can back with a key. */
+function promotedVersion(row: VersionRow): PromotedVersion {
+  let operator: PromotedVersion['operator']
+  if (row.operator !== undefined) {
+    const { actor: _device, ...stated } = row.operator
+    operator = stated
+  }
+  return {
+    id: row.id,
+    documentId: row.documentId,
+    createdAt: Math.trunc(row.createdAt),
+    auto: row.auto === true,
+    ...(row.label === undefined ? {} : { label: row.label }),
+    ...(operator === undefined ? {} : { operator }),
+    ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),
+    frontiers: bytesToBase64Url(row.frontiers),
+  }
+}
+
+/**
+ * Reads the planes the record only points at — each trash entry's bytes and
+ * the saved versions — through the same scan that finds the images, so what
+ * is carried is exactly what was judged. Fails closed: a version or a trash
+ * entry the scan could not read is left behind and named, never sent.
+ */
+async function readCarriedPlanes(
+  record: LoroDoc,
+  sourceWorkspaceId: string,
+): Promise<CarriedPlanes> {
+  const blobStore = new IdbBlobStore()
+  const trashBytes = new Map<string, Uint8Array>()
+  const rows = await savedVersionRows(sourceWorkspaceId)
+  const scan = await scanFileReferences(record, {
+    trashBytes: async (entry) => {
+      const bytes = (await blobStore.get({ ref: entry.blob }))?.bytes ?? null
+      if (bytes !== null) trashBytes.set(entry.documentId, bytes)
+      return bytes
+    },
+    versions: savedVersionReads(record, rows),
+  })
+  const leftBehind: string[] = []
+  const unjudgedTrash = new Set(
+    scan.unjudged.flatMap((held) => (held.kind === 'trash' ? [held.documentId] : [])),
+  )
+  const trash: PromotedTrashBytes[] = []
+  for (const entry of readTrashEntries(record)) {
+    const bytes = trashBytes.get(entry.documentId)
+    if (bytes === undefined || unjudgedTrash.has(entry.documentId)) {
+      leftBehind.push(`the trashed document "${entry.path}" cannot be read in this browser`)
+    } else trash.push({ documentId: entry.documentId, bytes: bytesToBase64Url(bytes) })
+  }
+  const unjudgedVersions = new Set(
+    scan.unjudged.flatMap((held) => (held.kind === 'version' ? [held.versionId] : [])),
+  )
+  if (unjudgedVersions.size > 0) {
+    leftBehind.push(
+      `${plural(unjudgedVersions.size, 'saved version', 'saved versions')} could not be read`,
+    )
+  }
+  if (scan.unjudged.some((held) => held.kind === 'unreadable-node')) {
+    leftBehind.push('part of the workspace could not be read by this version of the app')
+  }
+  const holders = new Set([
+    ...readWorkspaceDocuments(record).map((entry) => entry.documentId),
+    ...trash.map((carried) => carried.documentId),
+  ])
+  const versions = rows
+    .filter((row) => holders.has(row.documentId) && !unjudgedVersions.has(row.id))
+    .map(promotedVersion)
+  return { trash, versions, leftBehind, scan }
+}
+
+/**
+ * The request body, inside the ceiling the keeper refuses past. The record
+ * and the version rows are small beside a document's evacuated bytes, so
+ * trash entries are what gives way: each that does not fit is left behind and
+ * named, and the move goes ahead with the rest.
+ */
+function fittedBody(
+  snapshot: string,
+  planes: CarriedPlanes,
+): { body: PromoteWorkspaceRequest; leftBehind: string[] } {
+  const encoder = new TextEncoder()
+  const base: PromoteWorkspaceRequest = { snapshot, trash: [], versions: planes.versions }
+  let size = encoder.encode(JSON.stringify(base)).byteLength
+  const trash: PromotedTrashBytes[] = []
+  let tooLarge = 0
+  for (const carried of planes.trash) {
+    // The item plus the comma that joins it to the one before.
+    const itemSize = encoder.encode(JSON.stringify(carried)).byteLength + 1
+    if (size + itemSize > PROMOTE_REQUEST_LIMIT_BYTES) tooLarge += 1
+    else {
+      trash.push(carried)
+      size += itemSize
+    }
+  }
+  const leftBehind =
+    tooLarge === 0
+      ? []
+      : [
+          `${plural(tooLarge, 'trashed document is', 'trashed documents are')} too large to move with the rest`,
+        ]
+  return { body: { ...base, trash }, leftBehind }
+}
+
+/** What the keeper's own read-back says it did not take of what was sent. */
+function unconfirmed(
+  body: PromoteWorkspaceRequest,
+  answer: { trashStored: readonly string[]; versionsKept: readonly string[] },
+): string[] {
+  const stored = new Set(answer.trashStored)
+  const kept = new Set(answer.versionsKept)
+  const trash = (body.trash ?? []).filter((carried) => !stored.has(carried.documentId)).length
+  const versions = (body.versions ?? []).filter((version) => !kept.has(version.id)).length
+  return [
+    ...(trash === 0
+      ? []
+      : [`${plural(trash, 'trashed document', 'trashed documents')} did not reach the daemon`]),
+    ...(versions === 0
+      ? []
+      : [`${plural(versions, 'saved version', 'saved versions')} did not reach the daemon`]),
+  ]
 }
 
 type PromotedBlobs = Extract<PromoteWorkspaceResult, { kind: 'ok' }>['blobs']
@@ -216,17 +378,25 @@ async function promoteWorkspaceUnsafe(
   // acceptance tests hold the route to that.
   const entries = readWorkspaceDocuments(record)
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
-
-  const snapshot = new Uint8Array(record.export({ mode: 'snapshot' }))
+  // Its own failure, not the network one the outer catch reports: nothing
+  // has left the browser yet, and a retry would not be cured by a connection.
+  const planes = await readCarriedPlanes(record, sourceWorkspaceId).catch(() => null)
+  if (planes === null) {
+    return { kind: 'failed', reason: 'This browser could not read its workspace to move it.' }
+  }
+  const fitted = fittedBody(
+    bytesToBase64Url(new Uint8Array(record.export({ mode: 'snapshot' }))),
+    planes,
+  )
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
-  // plus the explicit checkpoints a person's move leaves behind.
+  // plus the planes beside it and the checkpoints a person's move leaves.
   const promoteUrl = `${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`
   const res = await fetch(promoteUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
+    body: JSON.stringify(fitted.body),
   })
   if (!res.ok) {
     return { kind: 'failed', reason: await failureReason(res) }
@@ -253,7 +423,7 @@ async function promoteWorkspaceUnsafe(
   // happened.
   onProgress?.('blobs')
   const blobs = await transferImages(fetch, keeperBaseUrl, workspaceId, fileStore, [
-    ...collectImageRefs(record, entries),
+    ...imageAddresses(record, entries, planes.scan),
   ])
 
   return {
@@ -262,5 +432,10 @@ async function promoteWorkspaceUnsafe(
     promotedDocumentIds,
     shadowedPaths,
     blobs,
+    leftBehind: [
+      ...planes.leftBehind,
+      ...fitted.leftBehind,
+      ...unconfirmed(fitted.body, promoted.data),
+    ],
   }
 }

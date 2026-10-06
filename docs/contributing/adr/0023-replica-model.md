@@ -107,6 +107,25 @@ is what they come back to.
 > deleted: the move preserves document ids, so the replica's documents
 > share them.
 
+> **Correction, 2026-10-06.** The last sentence above was wrong, and the
+> gate it described let a verified move lose data. The browser's saved
+> versions are keyed by the BROWSER workspace id, and nothing a replica opens
+> reads them or the browser's image and trash bytes — a replica's pages ask
+> the daemon. The move also carried only the record and the images live
+> documents name, so a trashed document arrived listed but unrestorable, the
+> saved versions stayed behind, and an image only a trashed document or a
+> version named was swept afterwards — and the demote then deleted the copy
+> that still held them. The move now carries each trash entry's evacuated
+> bytes and every saved version row beside the record, judged by the daemon
+> against the record before it merges (`promote-carried.ts`), and uploads
+> every image `scanFileReferences` finds across live documents, trash and
+> versions. The demote runs only once the daemon reports holding every trash
+> entry and version it was sent, read back from its own stores; anything it
+> does not confirm, or that this browser could not read, keeps the browser
+> copy and is named in the report. What the move guarantees is that the
+> daemon holds everything that moved — not that this browser still serves
+> any of it.
+
 ### 3. Replica edits are data-plane only
 
 While the keeper is unreachable, a replica MAY keep taking document edits:

@@ -21,7 +21,7 @@ export { base64urlSchema }
  * store, and without them the daemon lists the entry but cannot restore it.
  * The daemon stores them only when they hash to the digest the entry names.
  */
-export const promotedTrashBytesSchema = z
+const promotedTrashBytesSchema = z
   .object({
     documentId: z.string().min(1),
     bytes: base64urlSchema,
@@ -43,7 +43,7 @@ const promotedVersionIdSchema = z.string().max(64).regex(WORKSPACE_ID_PATTERN)
  * The operator is the request form — no `actor`: the device a row names is
  * one the keeper can back with a key, which a carried row cannot.
  */
-export const promotedVersionSchema = z
+const promotedVersionSchema = z
   .object({
     id: promotedVersionIdSchema,
     documentId: z.string().min(1),
@@ -97,10 +97,12 @@ export const promoteWorkspaceResponseSchema = z.object({
   shadowed: z.array(z.string()),
   /**
    * The trash entries whose bytes the daemon holds after the move, read back
-   * from its blob store rather than echoed from the request.
+   * from its blob store rather than echoed from the request. Absent reads as
+   * none held — the answer that keeps the sender's copy, which is the safe
+   * one for a keeper that does not say.
    */
-  trashStored: z.array(z.string()),
+  trashStored: z.array(z.string()).default([]),
   /** The carried version ids the daemon's history holds for this workspace, read back likewise. */
-  versionsKept: z.array(z.string()),
+  versionsKept: z.array(z.string()).default([]),
 })
 export type PromoteWorkspaceResponse = z.infer<typeof promoteWorkspaceResponseSchema>

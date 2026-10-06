@@ -1,4 +1,6 @@
 // @vitest-environment node
+// The move reads the trash bytes and version rows from IndexedDB before it posts.
+import 'fake-indexeddb/auto'
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
