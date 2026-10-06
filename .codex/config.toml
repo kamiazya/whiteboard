@@ -36,7 +36,7 @@ matcher = "*"
 [[hooks.SessionStart.hooks]]
 type = "command"
 command = 'node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs" --quiet'
-# `ensure-http-dev-daemon.mjs` waits up to 30s for `pnpm mcp:http:dev` to
+# `ensure-http-dev-daemon.mjs` waits up to 30s for the `mcp:http:dev` dev server to
 # answer on its socket on cold checkouts, so the hook timeout must be at
 # least that long — otherwise the hook is killed mid-wait while the daemon
 # is still warming up.
