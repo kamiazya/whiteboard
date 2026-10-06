@@ -24,7 +24,11 @@
  * ponytail: a per-document record that stays unreadable keeps every sweep
  * standing down; clearing it (Start fresh, or deleting it) lets them run.
  */
-import { projectWorkspaceDocument, scanFileReferences } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  type FileReferenceReads,
+  projectWorkspaceDocument,
+  scanFileReferences,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
@@ -82,6 +86,37 @@ function signatureOf(record: LoroDoc): string {
   return JSON.stringify(record.oplogFrontiers())
 }
 
+/**
+ * Between two units of the scan, so a sweep over a long history leaves the
+ * page its input and paints: each unit is one synchronous WASM read.
+ */
+function yieldToPage(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/**
+ * The version rows as the scan reads them: each one's frontier checked out of
+ * ONE fork of the record, rather than a fork per version — a fork copies the
+ * whole workspace, and a checkout moves the one it has.
+ */
+function versionReads(
+  record: LoroDoc,
+  rows: Awaited<ReturnType<typeof savedVersionFrontiers>>,
+): NonNullable<FileReferenceReads['versions']> {
+  let past: LoroDoc | null = null
+  return {
+    list: async (holder) =>
+      rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
+    load: async (holder, versionId) => {
+      const row = rows.find((candidate) => candidate.id === versionId)
+      if (row === undefined) return null
+      past ??= record.fork()
+      past.checkout(decodeFrontiers(row.frontiers))
+      return projectWorkspaceDocument(past, holder.documentId)
+    },
+  }
+}
+
 /** What every workspace this browser keeps names, or why it cannot say. */
 async function scanBrowserWorkspaces(
   workspaceIds: readonly string[],
@@ -105,17 +140,8 @@ async function scanBrowserWorkspaces(
     const rows = await savedVersionFrontiers(workspaceId, dbName)
     const scan = await scanFileReferences(record, {
       trashBytes: async (entry) => (await blobs.get({ ref: entry.blob }))?.bytes ?? null,
-      versions: {
-        list: async (holder) =>
-          rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
-        load: async (holder, versionId) => {
-          const row = rows.find((candidate) => candidate.id === versionId)
-          if (row === undefined) return null
-          const past = record.fork()
-          past.checkout(decodeFrontiers(row.frontiers))
-          return projectWorkspaceDocument(past, holder.documentId)
-        },
-      },
+      versions: versionReads(record, rows),
+      between: yieldToPage,
     })
     if (scan.unjudged.length > 0) {
       log.warn('file sweep stood down: part of a workspace could not be read', {

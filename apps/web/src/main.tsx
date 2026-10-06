@@ -1,6 +1,7 @@
-import { startBootSequence } from './boot.js'
+import { servedByServerKeeper, startBootSequence } from './boot.js'
 import { applyThemeClass, readPersistedTheme, resolveTheme } from './hooks/useThemeMode.js'
 import './index.css'
+import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 import { initInstallPromptCapture } from './lib/install-prompt-store.js'
 import { installMobileAppShellGuards } from './lib/mobile-app-shell.js'
 import { purgeLegacyReconnectCredentials } from './lib/purge-legacy-reconnect-credentials.js'
@@ -32,3 +33,7 @@ if (!rootEl) throw new Error('Root element #root not found')
 // real sequence. See its module comment for why a rejection there must not
 // block this call.
 void startBootSequence({ rootEl })
+
+// A keeper that serves this shell keeps the files itself; only the browser
+// keeper's own uploads are this page's to reclaim.
+if (!servedByServerKeeper()) scheduleFileSweep()

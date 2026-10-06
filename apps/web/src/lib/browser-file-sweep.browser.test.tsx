@@ -128,6 +128,20 @@ describe('sweepUnreferencedFiles', () => {
     expect(await bytesHeld('img-then')).toBe(true)
   })
 
+  it('keeps what each of several saved versions draws', async () => {
+    for (const id of ['img-v1', 'img-v2', 'img-v3']) await upload(id)
+    const { index, workspaceId, documentId } = await seedDocument('page', ['img-v1'])
+    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    await versions.save(workspaceId, 'page')
+    await draw(documentId, ['img-v2'])
+    await versions.save(workspaceId, 'page')
+    await draw(documentId, ['img-v3'])
+    await versions.save(workspaceId, 'page')
+    await draw(documentId, [])
+
+    expect(await sweepUnreferencedFiles()).toEqual({ kind: 'swept', deleted: [] })
+  })
+
   it('keeps an upload inside the grace window, whose node is not saved yet', async () => {
     await seedDocument('page', [])
     await upload('img-fresh', Date.now())
