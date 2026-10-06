@@ -21,7 +21,12 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { resolveRepoRootFromGit } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
-import { chromiumArgs, devToolsActivePortFile, installHost } from './dev-connected-lib.mjs'
+import {
+  chromiumArgs,
+  devServerUrl,
+  devToolsActivePortFile,
+  installHost,
+} from './dev-connected-lib.mjs'
 import { EXTENSION_DIR } from './smoke-kit.mjs'
 
 const USAGE = `usage: pnpm dev:connected [--headless] [--port=<n>] [--url=<dev server url>] [--cdp-port=<n>]
@@ -57,6 +62,13 @@ try {
 if (options.help) {
   console.log(USAGE)
   process.exit(0)
+}
+let namedUrl
+try {
+  namedUrl = options.url === undefined ? undefined : devServerUrl(options.url)
+} catch (err) {
+  console.error(`[dev-connected] ${err.message}`)
+  process.exit(2)
 }
 if (process.platform === 'win32') {
   fail(
@@ -160,7 +172,7 @@ async function waitFor(what, isReady, timeoutMs) {
 // 4. A dev server of this checkout's own. One already on 5173 is not reused
 //    unless named with --url: it may be another checkout's, serving that
 //    checkout's code, and nothing it answers says which.
-let appUrl = options.url
+let appUrl = namedUrl
 if (appUrl === undefined) {
   let port = Number(options.port)
   while (!(await portIsFree(port))) port += 1

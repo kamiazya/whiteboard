@@ -73,6 +73,27 @@ export function chromiumArgs({
   ]
 }
 
+/**
+ * The `--url` a person names, as a web address Chromium can only open. It is
+ * the last argument Chromium is given, so anything else — a value starting
+ * `--` above all — would be read as a flag rather than a page.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+export function devServerUrl(raw) {
+  let parsed
+  try {
+    parsed = new URL(raw)
+  } catch {
+    throw new Error(`--url must be an http(s) address, not ${JSON.stringify(raw)}`)
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`--url must be an http(s) address, not ${JSON.stringify(raw)}`)
+  }
+  return parsed.href
+}
+
 /** Where Chromium records the CDP port it chose for `--remote-debugging-port=0`. */
 export function devToolsActivePortFile(profileDir) {
   return join(profileDir, 'DevToolsActivePort')

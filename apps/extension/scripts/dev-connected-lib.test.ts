@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { chromiumArgs, connectedHostInstall, installHost } from './dev-connected-lib.mjs'
+import {
+  chromiumArgs,
+  connectedHostInstall,
+  devServerUrl,
+  installHost,
+} from './dev-connected-lib.mjs'
 
 const NATIVE_HOST_MANIFEST = 'io.github.kamiazya.whiteboard.json'
 
@@ -67,6 +72,22 @@ describe('chromiumArgs', () => {
     expect(args).toContain('--headless')
     expect(args).toContain('--no-sandbox')
     expect(args).toContain('--remote-debugging-port=9333')
+  })
+})
+
+describe('devServerUrl', () => {
+  it('passes an http(s) address through as a normalised URL', () => {
+    expect(devServerUrl('http://localhost:5173')).toBe('http://localhost:5173/')
+    expect(devServerUrl('https://example.test/app')).toBe('https://example.test/app')
+  })
+
+  it.each([
+    '--remote-allow-origins=*',
+    'file:///etc/passwd',
+    'javascript:alert(1)',
+    'localhost:5173',
+  ])('refuses %s, which Chromium would read as a flag or a non-web page', (raw) => {
+    expect(() => devServerUrl(raw)).toThrow(/http/)
   })
 })
 
