@@ -234,6 +234,41 @@ describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running',
   })
 })
 
+// A daemon killed outright leaves its record behind. Nothing holds the socket,
+// so refusing — or "reusing" — that record would leave the checkout with no
+// daemon at all until someone deletes the file by hand. Needs no /proc: a
+// reaped pid is dead on every platform.
+describe('a data dir whose record names a pid that has exited', () => {
+  it('the wrapper starts the dev server instead of reusing the stale record', async () => {
+    const { cwd, pidFile } = fakeCheckout()
+    const reaped = spawnSync(process.execPath, ['-e', '']).pid
+    writeFileSync(
+      join(cwd, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: reaped,
+        socketPath: join(cwd, 'data', 'gone.sock'),
+        token: 't',
+        startedAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    )
+    const wrapper = spawn(process.execPath, [WRAPPER], {
+      cwd,
+      env: { ...process.env, WHITEBOARD_DATA_DIR: join(cwd, 'data') },
+      stdio: 'ignore',
+    })
+    let exited = false
+    wrapper.once('exit', () => {
+      exited = true
+    })
+    cleanups.push(() => {
+      killRecordedChild(pidFile)
+      wrapper.kill('SIGKILL')
+    })
+    await until(() => existsSync(pidFile) || exited, 'the wrapper to start its child or exit')
+    expect(existsSync(pidFile), 'the wrapper exited without starting its child').toBe(true)
+  })
+})
+
 describe.skipIf(!existsSync('/proc/self/stat'))(
   'a data dir whose record names a pid an unrelated process has taken',
   () => {

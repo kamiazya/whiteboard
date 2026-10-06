@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { daemonRecordSchema } from '../../src/daemon/daemon-record-schema.js'
 import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.js'
 import { fc, fcTest, withDefaults } from '../../src/shared/test-utils/fast-check.js'
@@ -64,10 +64,29 @@ describe('readDaemonRecord against the daemon record schema', () => {
 describe("isPidAlive against the daemon's own", () => {
   it('gives the same answer for every kind of pid', () => {
     const reaped = spawnSync(process.execPath, ['-e', '']).pid
-    const pids = [process.pid, process.ppid, reaped, 0, -1, -process.pid, Number.NaN, Infinity]
+    // pid 1 exists everywhere and, for any user but root, answers EPERM.
+    const pids = [process.pid, process.ppid, 1, reaped, 0, -1, -process.pid, Number.NaN, Infinity]
     expect(pids.map(isPidAlive)).toEqual(pids.map(daemonIsPidAlive))
     expect(isPidAlive(process.pid)).toBe(true)
     expect(isPidAlive(0)).toBe(false)
+  })
+
+  // The answer the comparison above reaches only when not run as root, held
+  // here for every user: a pid that exists but is not ours to signal is a
+  // daemon that may be running, and calling it dead starts a second one.
+  it.each([
+    ['EPERM', true],
+    ['ESRCH', false],
+    ['EINVAL', false],
+  ] as const)('reads a probe failing with %s as the daemon does', (code, alive) => {
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error(code), { code })
+    })
+    try {
+      expect([isPidAlive(4242), daemonIsPidAlive(4242)]).toEqual([alive, alive])
+    } finally {
+      kill.mockRestore()
+    }
   })
 })
 
