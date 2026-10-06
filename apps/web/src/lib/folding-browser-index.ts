@@ -337,6 +337,20 @@ export class FoldingBrowserIndex
     if (purged) {
       await deleteVersionRowsOfDocument(input.workspaceId, input.documentId, this.dbName)
       await forgetContentTimestamp(input.documentId, this.dbName)
+      // The purge is when this document's images stop being named by
+      // anything, so they are reclaimed now rather than at the next page
+      // load. Not awaited: the purge has landed whatever the sweep finds, and
+      // a sweep that cannot judge stands down by itself. Reached by a dynamic
+      // import, like the page-load sweep, so loading the index does not load
+      // the scan.
+      void import('./browser-file-sweep.js')
+        .then(({ sweepUnreferencedFiles }) =>
+          sweepUnreferencedFiles(this.dbName === undefined ? {} : { dbName: this.dbName }),
+        )
+        .then(
+          (result) => log.info('file sweep after purge finished', result),
+          (err: unknown) => log.warn('file sweep after purge failed', { err }),
+        )
     }
     return purged
   }
