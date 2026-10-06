@@ -17,11 +17,17 @@ import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client
 import {
   documentContainers,
   readDocumentContent,
+  readFacets,
   readWorkspaceDocuments,
   reconcileSpatialCanvas,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  readTagLibrary,
+  TAG_LIBRARY_PATH,
+  type TagLibrary,
+} from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { linkTitles } from './link-entries.js'
@@ -81,6 +87,25 @@ export function writeReplicaSpatial(
   next: SpatialCanvas,
 ): void {
   reconcileSpatialCanvas(documentContainers(record, documentId), prev, next)
+}
+
+/**
+ * The workspace's tag library as the replica holds it: what the document at
+ * `tags` declares, read from the record at the same well-known path both
+ * keepers read it from. Empty for a replica without one, and for one that
+ * does not read — a board stays drawable when a document elsewhere is wrong.
+ */
+export function replicaTagLibrary(
+  record: ReplicaRecord,
+  entries: readonly WorkspaceDocumentEntry[],
+): TagLibrary {
+  const library = entries.find((entry) => entry.path === TAG_LIBRARY_PATH)
+  if (library === undefined) return readTagLibrary(undefined)
+  try {
+    return readTagLibrary(readFacets(documentContainers(record, library.documentId)))
+  } catch {
+    return readTagLibrary(undefined)
+  }
 }
 
 /**
