@@ -24,6 +24,14 @@ vi.mock('../../lib/browser-workspaces.js', () => ({
   listBrowserWorkspaces: () => listBrowserWorkspaces(),
 }))
 
+const browserDocumentCounts = vi.fn(
+  async (): Promise<ReadonlyMap<string, number>> => new Map([['ws-browser', 2]]),
+)
+
+vi.mock('../../lib/browser-document-counts.js', () => ({
+  browserDocumentCounts: () => browserDocumentCounts(),
+}))
+
 vi.mock('../../lib/replica-store.js', () => ({
   openDocumentStore: () => ({ deleteDoc }),
 }))
@@ -52,6 +60,7 @@ beforeEach(() => {
   createUserSettingsStore().reset()
   deleteDoc.mockClear()
   listBrowserWorkspaces.mockClear()
+  browserDocumentCounts.mockClear()
 })
 
 afterEach(() => {
@@ -79,6 +88,48 @@ it('offers no delete for the only copy of a browser-kept workspace', async () =>
   // rather than offering a button that has to refuse.
   expect(row.querySelector('button')).toBeNull()
   expect(row.textContent).toContain('the only copy of it anywhere')
+})
+
+it('says how much a browser-kept workspace holds', async () => {
+  render(<LocalCopiesCard settingsStore={seedReplicas()} />)
+  const row = await screen.findByTestId('local-copy-ws-browser')
+  await waitFor(() => expect(row.textContent).toContain('2 documents'))
+})
+
+// What a demote leaves behind when it moved the last browser workspace: a
+// fresh, empty "default" beside the cached replica of the daemon's own
+// "default". Calling the empty one "the only copy of it anywhere" put two
+// rows of one name side by side making opposite claims about nothing.
+it('says an empty browser workspace is empty, not that it is the only copy of anything', async () => {
+  listBrowserWorkspaces.mockResolvedValueOnce([
+    { workspaceId: 'ws-fresh', segment: 'default', displayName: 'default' },
+  ])
+  browserDocumentCounts.mockResolvedValueOnce(new Map([['ws-fresh', 0]]))
+  const store = createUserSettingsStore()
+  store.update((current) =>
+    withReplicaEntry(current, 'ws-daemon-default', {
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+      syncedAt: new Date().toISOString(),
+      displayName: 'default',
+    }),
+  )
+  render(<LocalCopiesCard settingsStore={store} />)
+
+  const fresh = await screen.findByTestId('local-copy-ws-fresh')
+  await waitFor(() => expect(fresh.textContent).toMatch(/Kept in this browser.*empty/))
+  expect(fresh.textContent).not.toContain('only copy')
+  // The two rows of one name each say which keeper they belong to.
+  expect(screen.getByTestId('local-copy-ws-daemon-default').textContent).toMatch(
+    /Cached from .*127\.0\.0\.1:3099/,
+  )
+})
+
+it('keeps the browser rows when their documents cannot be counted', async () => {
+  browserDocumentCounts.mockRejectedValueOnce(new ReferenceError('indexedDB is not defined'))
+  render(<LocalCopiesCard settingsStore={seedReplicas()} />)
+  const row = await screen.findByTestId('local-copy-ws-browser')
+  expect(row.textContent).toContain('the only copy of it anywhere')
+  expect(row.textContent).not.toMatch(/documents?\b/)
 })
 
 it('refuses to delete the copy the session is reading', async () => {
