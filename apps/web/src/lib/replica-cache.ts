@@ -23,6 +23,7 @@ import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { cacheReplicaImages } from './replica-images.js'
 import { markReplica, openDocumentStore, replicaKeyStatus } from './replica-store.js'
 import { stopReplicaReadableOffline } from './replica-unlock.js'
 import { forgetReplicaEntry } from './replicas.js'
@@ -100,6 +101,27 @@ async function openForMerge(
   }
 }
 
+/**
+ * The images the record names, cached beside it. Best-effort: a pull whose
+ * images could not be stored still landed the record, and the page labels
+ * what it cannot draw.
+ */
+async function cacheImagesBesideRecord(
+  options: CacheDaemonWorkspaceOptions,
+  record: LoroDoc,
+): Promise<void> {
+  const { fetch, daemonBaseUrl, workspaceId } = options
+  try {
+    await cacheReplicaImages({ fetch, daemonBaseUrl, workspaceId, record })
+  } catch (err) {
+    log.warn('replica images were not cached', {
+      daemonBaseUrl,
+      workspaceId,
+      name: err instanceof Error ? err.name : typeof err,
+    })
+  }
+}
+
 export async function cacheDaemonWorkspace(
   options: CacheDaemonWorkspaceOptions,
 ): Promise<CacheDaemonWorkspaceResult> {
@@ -121,6 +143,7 @@ export async function cacheDaemonWorkspace(
     const doc = await openForMerge(workspaceDocs, workspaceId, daemonBaseUrl)
     doc.import(bytes)
     await workspaceDocs.save(workspaceId, doc)
+    await cacheImagesBesideRecord(options, doc)
     const held = replicaKeyStatus(daemonBaseUrl, workspaceId)
     return {
       kind: 'ok',

@@ -7,7 +7,10 @@
  * decision 3) writes the record and only the record.
  */
 import {
+  imageTargets,
   type LoadedReference,
+  type ReferenceExtra,
+  type ReferenceGraph,
   type ReferenceWire,
   referenceTargets,
   referenceWire,
@@ -109,6 +112,20 @@ export function replicaTagLibrary(
 }
 
 /**
+ * What a picture this device holds no bytes for reads as, in place of its
+ * raw `asset:` id — the cache is bounded and a fetch can fail, so a replica
+ * can name an image it cannot draw.
+ */
+export const REPLICA_IMAGE_UNAVAILABLE = 'Image unavailable offline'
+
+/** The selected document's reference graph, and the pictures drawing it needs. */
+export interface ReplicaReferences {
+  readonly graph: ReferenceGraph
+  /** Every image reference the graph draws, as written (`asset:<id>`). */
+  readonly images: readonly string[]
+}
+
+/**
  * What the selected document points at, resolved out of the replica itself.
  *
  * Seeded from what the SELECTED document says, then walked the way every
@@ -118,19 +135,17 @@ export function replicaTagLibrary(
  * record, which is what makes references work on the one page that exists
  * BECAUSE the daemon is unreachable.
  */
-export function replicaReferenceWire({
+export function replicaReferenceGraph({
   record,
   entries,
   selected,
   resolveAlias,
-  resolveTitle,
 }: {
   record: ReplicaRecord
   entries: readonly WorkspaceDocumentEntry[]
   selected: WorkspaceDocumentEntry
   resolveAlias: ReturnType<typeof createUniqueNameResolver>
-  resolveTitle: ReturnType<typeof linkTitles>
-}): ReferenceWire {
+}): ReplicaReferences {
   const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
   const load = (target: string): LoadedReference | null => {
     const entry = byId.get(resolveAlias(target) ?? target) ?? byId.get(target)
@@ -152,5 +167,29 @@ export function replicaReferenceWire({
     if (wanted.length === 0) break
     for (const target of wanted) graph.set(target, load(target))
   }
-  return referenceWire(graph, { resolveAlias, resolveTitle })
+  return { graph, images: imageTargets({ ...seeds, loaded: graph }) }
+}
+
+/**
+ * The graph as the wire the editors draw from. `images` maps a written image
+ * reference to the URL of its cached bytes; absent while those are still being
+ * read, so a picture is not called unavailable before the cache has answered.
+ */
+export function replicaReferenceWire({
+  references,
+  resolveAlias,
+  resolveTitle,
+  images,
+}: {
+  references: ReplicaReferences
+  resolveAlias: ReturnType<typeof createUniqueNameResolver>
+  resolveTitle: ReturnType<typeof linkTitles>
+  images?: ReadonlyMap<string, string>
+}): ReferenceWire {
+  const extras = new Map<string, ReferenceExtra>()
+  for (const ref of images === undefined ? [] : references.images) {
+    const href = images?.get(ref)
+    extras.set(ref, href === undefined ? { label: REPLICA_IMAGE_UNAVAILABLE } : { image: { href } })
+  }
+  return referenceWire(references.graph, { resolveAlias, resolveTitle, extras })
 }

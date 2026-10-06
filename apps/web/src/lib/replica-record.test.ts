@@ -6,13 +6,15 @@ import {
   readSpatialCanvas,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { linkEntries, linkTitles } from './link-entries.js'
 import {
+  REPLICA_IMAGE_UNAVAILABLE,
   readReplicaContent,
   replicaEntries,
+  replicaReferenceGraph,
   replicaReferenceWire,
   writeReplicaMarkdown,
   writeReplicaSpatial,
@@ -21,6 +23,8 @@ import {
 const MD = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const SP = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
 const LINKER = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
+const CACHED = 'asset:0b9a6c1e-1111-4222-8333-444455556666'
+const UNCACHED = 'asset:0b9a6c1e-1111-4222-8333-777788889999'
 
 function record(): LoroDoc {
   const doc = new LoroDoc()
@@ -88,13 +92,58 @@ describe('replica record', () => {
     }))
     const selected = entries.find((e) => e.documentId === LINKER)
     if (selected === undefined) throw new Error('fixture lost its linker')
+    const resolveAlias = createUniqueNameResolver(linkEntries(linkable))
     const wire = replicaReferenceWire({
-      record: doc,
-      entries,
-      selected,
-      resolveAlias: createUniqueNameResolver(linkEntries(linkable)),
+      references: replicaReferenceGraph({ record: doc, entries, selected, resolveAlias }),
+      resolveAlias,
       resolveTitle: linkTitles(linkable),
     })
     expect(JSON.stringify(wire)).toContain('# Plan')
+  })
+
+  it('draws a cached image, and labels one this device does not hold as unavailable', () => {
+    const doc = record()
+    const prev = readSpatialCanvas(documentContainers(doc, SP))
+    const images = [CACHED, UNCACHED].map((file, i) =>
+      fileNode({ id: `i${i}`, x: i * 120, y: 0, width: 100, height: 100, file }),
+    )
+    writeReplicaSpatial(doc, SP, prev, { ...prev, nodes: [...prev.nodes, ...images] })
+    const entries = replicaEntries(doc)
+    const selected = entries.find((e) => e.documentId === SP)
+    if (selected === undefined) throw new Error('fixture lost its canvas')
+    const linkable = entries.map((e) => ({ documentId: e.documentId, path: e.path }))
+    const resolveAlias = createUniqueNameResolver(linkEntries(linkable))
+    const references = replicaReferenceGraph({ record: doc, entries, selected, resolveAlias })
+    expect(references.images).toEqual([CACHED, UNCACHED])
+
+    const wire = replicaReferenceWire({
+      references,
+      resolveAlias,
+      resolveTitle: linkTitles(linkable),
+      images: new Map([[CACHED, 'blob:cached']]),
+    })
+    expect(new Map(wire.extras)).toEqual(
+      new Map([
+        [CACHED, { image: { href: 'blob:cached' } }],
+        [UNCACHED, { label: REPLICA_IMAGE_UNAVAILABLE }],
+      ]),
+    )
+  })
+
+  it('adds no image extra while the cached images are still being read', () => {
+    const doc = record()
+    const prev = readSpatialCanvas(documentContainers(doc, SP))
+    const image = fileNode({ id: 'i0', x: 0, y: 0, width: 100, height: 100, file: CACHED })
+    writeReplicaSpatial(doc, SP, prev, { ...prev, nodes: [...prev.nodes, image] })
+    const entries = replicaEntries(doc)
+    const selected = entries.find((e) => e.documentId === SP)
+    if (selected === undefined) throw new Error('fixture lost its canvas')
+    const resolveAlias = createUniqueNameResolver(linkEntries([]))
+    const wire = replicaReferenceWire({
+      references: replicaReferenceGraph({ record: doc, entries, selected, resolveAlias }),
+      resolveAlias,
+      resolveTitle: linkTitles([]),
+    })
+    expect(wire.extras).toEqual([])
   })
 })
