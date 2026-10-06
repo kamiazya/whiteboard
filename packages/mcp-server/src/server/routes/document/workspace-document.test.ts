@@ -221,6 +221,9 @@ it('a malformed workspace-document update is a 400, not a daemon crash', async (
     body: new Uint8Array([1, 2, 3, 4]),
   })
   expect(res.status).toBe(400)
+  // The per-document route's answer to the same bytes, so the two sync routes
+  // speak one body family for one refusal.
+  expect(await res.json()).toMatchObject({ error: 'invalid_body' })
 })
 
 /**

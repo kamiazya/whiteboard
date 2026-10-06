@@ -131,7 +131,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         return answerWriteRefusal(c, err)
       }
       if (result.kind === 'malformed-update') {
-        return c.json({ title: 'Malformed workspace-document update' }, 400)
+        return c.json(errorBody('invalid_body', 'Malformed workspace-document update'), 400)
       }
 
       // Signal every document the update edited, as the per-document route
