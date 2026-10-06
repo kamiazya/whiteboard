@@ -10,6 +10,7 @@ import {
   SPATIAL_THEME_FONT_FAMILY,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { MCP_SCENE_APPEARANCE } from './compose-canvas-scene.js'
 
 /**
@@ -35,6 +36,11 @@ export interface ComposeMarkdownSceneOptions {
    * board gets rendered on its own. Absent declares the bundled family alone.
    */
   readonly fontAvailable?: (family: string) => boolean
+  /**
+   * The workspace's tag library, so a canvas the body embeds is coloured by
+   * intent as it is rendered on its own (ADR-0040 decision 5).
+   */
+  readonly tagLibrary?: TagLibrary
 }
 
 /**
@@ -57,5 +63,6 @@ export function composeMarkdownScene(
     ...(options?.references !== undefined ? { references: options.references } : {}),
     ...(options?.style !== undefined ? { style: options.style } : {}),
     ...(options?.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),
+    ...(options?.tagLibrary !== undefined ? { tagLibrary: options.tagLibrary } : {}),
   })
 }

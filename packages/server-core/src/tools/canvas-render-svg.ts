@@ -1,4 +1,4 @@
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
 import {
   renderSceneToSvg,
   type Scene,
@@ -14,6 +14,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
@@ -92,9 +93,10 @@ async function markdownScene(
   fontAvailable: ReturnType<typeof fontAvailableOf>,
 ): Promise<Scene> {
   const body = readMarkdownBody(doc)
-  const references = input.embedReferences
-    ? (await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })).seams
+  const loaded = input.embedReferences
+    ? await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })
     : undefined
+  const references = loaded?.seams
   const whole = resolveReferences(parseMarkdownBody(body), references?.resolveAlias)
   const root = input.fragment === undefined ? whole : selectMarkdownSection(whole, input.fragment)
   if (root === undefined) {
@@ -104,6 +106,7 @@ async function markdownScene(
     references,
     style: input.style,
     fontAvailable,
+    ...(await drawnTagLibrary(deps, input.workspaceId, [], loaded?.graph)),
   })
   return scene
 }
@@ -121,19 +124,15 @@ async function canvasScene(
   if (part === undefined) {
     throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'spatial')
   }
-  const references = input.embedReferences
-    ? (await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })).seams
+  const loaded = input.embedReferences
+    ? await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })
     : undefined
   const scene = composeCanvasScene(part, measure, {
-    references,
+    references: loaded?.seams,
     style: input.style,
     fontAvailable,
-    // Colour by intent (ADR-0040 decision 5). Read only for a board
-    // that carries a tag: finding a library is a listing plus a
-    // read, and an untagged board has nothing a library could colour.
-    ...(carriesATag(part)
-      ? { tagLibrary: await workspaceTagLibrary(deps, input.workspaceId, 'deployment') }
-      : {}),
+    // Colour by intent (ADR-0040 decision 5).
+    ...(await drawnTagLibrary(deps, input.workspaceId, [part], loaded?.graph)),
     // The export draws what the editor draws: a thread about a passage
     // of a node's text is a highlight behind those words, a node set
     // an outline around them.
@@ -183,4 +182,22 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
   }
 }
 
-/** Whether anything on the board carries a tag — the only case a tag library can change the picture. */
+/**
+ * The workspace's tag library, when anything this render DRAWS carries a
+ * tag: the document's own canvas, or a canvas it draws inside itself — an
+ * untagged host still draws a tagged board in a file node or an embed.
+ * Finding a library is a listing plus a read, so a render whose every canvas
+ * is untagged (the common one) pays neither.
+ */
+async function drawnTagLibrary(
+  deps: ServerDeps,
+  workspaceId: string,
+  own: readonly SpatialCanvas[],
+  graph: ReferenceGraph | undefined,
+): Promise<{ tagLibrary?: TagLibrary }> {
+  const referenced = [...(graph?.values() ?? [])].flatMap((ref) =>
+    ref?.canvas === undefined ? [] : [ref.canvas],
+  )
+  if (![...own, ...referenced].some(carriesATag)) return {}
+  return { tagLibrary: await workspaceTagLibrary(deps, workspaceId, 'deployment') }
+}

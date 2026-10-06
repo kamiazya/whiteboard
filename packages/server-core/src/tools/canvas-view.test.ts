@@ -14,6 +14,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
@@ -486,7 +487,7 @@ describe('canvas_view and the workspace tag library', () => {
       ...(color === undefined ? {} : { color }),
     })
 
-  async function seedBoard(nodes: ReturnType<typeof box>[], withLibrary: boolean) {
+  async function seedBoard(nodes: SpatialCanvas['nodes'], withLibrary: boolean) {
     const store = new FakeDocumentStore()
     store.documentIndex.seed({
       workspaceId: WORKSPACE_ID,
@@ -549,6 +550,27 @@ describe('canvas_view and the workspace tag library', () => {
   test('sends a tagged board uncoloured when the workspace declares no library', async () => {
     const result = await view(await seedBoard([box('a', 0, ['health:ok'])], false))
     expect(colourOf(result, 'a')).toBeUndefined()
+  })
+
+  test('sends a board the canvas draws inside itself coloured the same way', async () => {
+    // The host carries no tag: what it draws in a file node does.
+    const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W6'
+    const host = fileNode({ id: 'f', x: 0, y: 0, width: 300, height: 200, file: BOARD_ID })
+    const store = await seedBoard([host], true)
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'inner',
+      documentId: BOARD_ID,
+      kind: 'spatial',
+    })
+    await seedDoc(store, BOARD_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, { nodes: [box('db', 0, ['health:failing'])], edges: [] })
+    })
+    const result = await view(store)
+    const inner = canvasViewOutputSchema.parse(result).references[BOARD_ID]?.canvas
+    expect(inner?.nodes.map((node) => node.id)).toEqual(['db'])
+    expect(inner?.nodes[0]?.color).toBe('1')
   })
 
   test('lists the workspace only for a board that carries a tag', async () => {

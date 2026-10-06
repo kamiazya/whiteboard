@@ -8,7 +8,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
@@ -460,5 +460,89 @@ describe('wb_scene_render and a workspace tag library (ADR-0040 decision 5)', ()
     }
     await render(store)
     expect(listings).toBe(0)
+  })
+})
+
+// A board drawn INSIDE the rendered document is coloured by the library as it
+// is on its own: the host carrying no tag does not mean nothing it draws does.
+describe('wb_scene_render colours a board it draws inside another document', () => {
+  const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W6'
+  const TAGS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W7'
+  const FAILING_FILL = '#fee2e2'
+
+  async function workspaceWithTaggedBoard(
+    host: (doc: Parameters<Parameters<typeof seedDoc>[2]>[0]) => void,
+  ) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, host)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, BOARD_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 'db',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 50,
+            text: 'db',
+            tags: ['health:failing'],
+          }),
+        ],
+        edges: [],
+      })
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: BOARD_ID,
+      path: 'board',
+      kind: 'spatial',
+    })
+    await seedDoc(store, TAGS_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeFacets(doc, {
+        [VISUAL_TAGS_KEY]: { keys: { health: { values: { failing: { color: '1' } } } } },
+      } as never)
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: TAGS_ID,
+      path: TAG_LIBRARY_PATH,
+      kind: 'markdown',
+    })
+    return store
+  }
+  const render = (store: FakeDocumentStore, embedReferences: boolean) =>
+    createCanvasRenderSvgTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences,
+      style: 'clean',
+    })
+
+  test('an untagged board embedding a tagged one draws the declared fill', async () => {
+    const store = await workspaceWithTaggedBoard((doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 400, height: 300, file: BOARD_ID })],
+        edges: [],
+      })
+    })
+    const { svg } = await render(store, true)
+    expect(svg).toContain('>db<')
+    expect(svg).toContain(FAILING_FILL)
+    // The miniature is coloured, never legended: the host's corner is the host's.
+    expect(svg).not.toContain('data-wb-legend')
+  })
+
+  test(`a note's ![[board]] draws the declared fill`, async () => {
+    const store = await workspaceWithTaggedBoard((doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeMarkdownBody(doc, `# Status\n\n![[${BOARD_ID}]]\n`)
+    })
+    const { svg } = await render(store, true)
+    expect(svg).toContain('>db<')
+    expect(svg).toContain(FAILING_FILL)
   })
 })

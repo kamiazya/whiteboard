@@ -3,6 +3,7 @@ import {
   type LoadedReferenceWire,
   loadedReferenceToWire,
   loadedReferenceWireSchema,
+  type ReferenceGraph,
   referenceTargets,
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
@@ -65,7 +66,8 @@ export const canvasViewOutputSchema = z
     threads: z.array(commentThreadSchema),
     /**
      * File reference -> what it resolves to. Keyed by the raw `file` value
-     * on the node, which is what the widget's seam is called with.
+     * on the node, which is what the widget's seam is called with. A
+     * referenced canvas carries its declared colours the way `scene` does.
      */
     references: z.record(z.string(), loadedReferenceWireSchema),
     /** The caller's `style`, echoed so the widget draws the look that was asked for. */
@@ -100,18 +102,35 @@ function referenceWireEntry(
 }
 
 /**
- * `canvas` with the colour its tags declare in the workspace's library — the
- * same read `wb_scene_render` makes, and for the same reason: a library is a
- * listing plus a document read, and an untagged board has nothing one could
- * colour.
+ * What the widget draws — `canvas` and every canvas the reference graph
+ * loaded — each with the colour its tags declare in the workspace's library,
+ * so a board drawn inside a file node or an embed is coloured as it is on its
+ * own. The library is read only when one of them carries a tag — the same
+ * rule `wb_scene_render` follows, since a library is a listing plus a
+ * document read and an untagged board has nothing one could colour.
  */
-async function declaredColoursOf(
+async function colouredDrawing(
   deps: ServerDeps,
   workspaceId: string,
   canvas: SpatialCanvas,
-): Promise<SpatialCanvas> {
-  if (!carriesATag(canvas)) return canvas
-  return withDeclaredColours(canvas, await workspaceTagLibrary(deps, workspaceId, 'deployment'))
+): Promise<{ canvas: SpatialCanvas; graph: ReferenceGraph }> {
+  const { graph } = await loadReferenceGraph(deps, workspaceId, { canvases: [canvas] })
+  const referenced = [...graph.values()].flatMap((ref) =>
+    ref?.canvas === undefined ? [] : [ref.canvas],
+  )
+  if (![canvas, ...referenced].some(carriesATag)) return { canvas, graph }
+  const library = await workspaceTagLibrary(deps, workspaceId, 'deployment')
+  return {
+    canvas: withDeclaredColours(canvas, library),
+    graph: new Map(
+      [...graph].map(([target, ref]) => [
+        target,
+        ref?.canvas === undefined
+          ? ref
+          : { ...ref, canvas: withDeclaredColours(ref.canvas, library) },
+      ]),
+    ),
+  }
 }
 
 /**
@@ -139,7 +158,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
-      const { graph } = await loadReferenceGraph(deps, input.workspaceId, { canvases: [canvas] })
+      const drawn = await colouredDrawing(deps, input.workspaceId, canvas)
       // Resolved from the style the CALLER asked for, not from the document's
       // facet alone: a canvas naming a theme drawn under the bundled look
       // has nothing to fetch, and a `style` naming a theme the document does
@@ -154,7 +173,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // ADR-0037 this was the same object; now the model carries `comments`,
         // `facets` and `embed` as its own fields and the format carries them
         // under its extension key.
-        scene: toJsonCanvas(await declaredColoursOf(deps, input.workspaceId, canvas)),
+        scene: toJsonCanvas(drawn.canvas),
         threads: readAnnotations(doc),
         ...(input.style === undefined ? {} : { style: input.style }),
         ...(themeFont === undefined ? {} : { themeFont }),
@@ -169,7 +188,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // it through `wb_scene_render`, which passes the whole bundle.
         references: Object.fromEntries(
           referenceTargets({ canvases: [canvas] }).flatMap((target) =>
-            referenceWireEntry(target, graph.get(target)),
+            referenceWireEntry(target, drawn.graph.get(target)),
           ),
         ),
       }
