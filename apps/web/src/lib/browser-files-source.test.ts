@@ -19,7 +19,7 @@ import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plu
 import type { DocumentEntry, ListDocumentsInput } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -357,6 +357,41 @@ describe('createBrowserFilesSource search', () => {
 
     const hits = await source.searchDocuments('zebracrossing')
     expect(hits.map((hit) => hit.document.path)).toEqual(['notes/quarterly'])
+  })
+
+  // Each source caches its corpus per document against the content stamp, so
+  // a reference another source's rename rewrote reaches this one's search
+  // through that stamp alone. The clock is pinned so the two writes cannot
+  // land in the same millisecond and stamp alike.
+  it('searches the reference a rename in another source rewrote', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
+      const searching = createBrowserFilesSource()
+      const renaming = createBrowserFilesSource()
+      await searching.createDocument('design/login', 'markdown')
+      await searching.createDocument('notes', 'markdown')
+      const notes = (await searching.listDocuments()).find((entry) => entry.path === 'notes')
+      const doc = new Loro()
+      writeMarkdownBody(doc, 'see [[design/login]] for the flow')
+      expect(
+        await seedWorkspaceDocumentContent(
+          notes?.documentId ?? '',
+          doc.export({ mode: 'snapshot' }),
+        ),
+      ).toBe(true)
+      const paths = async (query: string) =>
+        (await searching.searchDocuments(query)).map((hit) => hit.document.path)
+      // Searched once first, so the old body is what the corpus holds.
+      expect(await paths('flow')).toEqual(['notes'])
+
+      vi.setSystemTime(new Date('2026-09-01T00:00:01.000Z'))
+      await renaming.renameDocumentPath('design/login', 'archive/login')
+
+      expect(await paths('archive')).toContain('notes')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

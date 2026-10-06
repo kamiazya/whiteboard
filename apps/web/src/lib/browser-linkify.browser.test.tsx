@@ -4,12 +4,13 @@ import {
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
+import { createBrowserFilesSource } from './browser-files-source.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
@@ -63,6 +64,31 @@ describe("the browser keeper's Link on a mention", () => {
     const after = await read(beta)
     expect(after.backlinks.map((entry) => entry.path)).toEqual(['gamma'])
     expect(after.unlinkedMentions).toEqual([])
+  })
+
+  // Search caches each document's text against its content stamp, so the
+  // link reaches a search that already read the source only if the stamp
+  // moved. The clock is pinned so the seed and the link cannot stamp alike.
+  it('moves the content stamp, so a search that read the source finds the link', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
+      const index = new FoldingBrowserIndex()
+      await ensureBrowserWorkspace(index)
+      const zebra = await note(index, 'design/zebra', 'Login Flow', 'The target.')
+      const notes = await note(index, 'notes', 'Notes', 'We discussed the Login Flow today.')
+      const source = createBrowserFilesSource({ index })
+      const paths = async (query: string) =>
+        (await source.searchDocuments(query)).map((hit) => hit.document.path)
+      expect(await paths('discussed')).toEqual(['notes'])
+
+      vi.setSystemTime(new Date('2026-09-01T00:00:01.000Z'))
+      expect(await linkifyBrowserMentions(index, notes, zebra)).toBe(1)
+
+      expect(await paths('zebra')).toContain('notes')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('writes nothing when the source has nothing to link', async () => {
