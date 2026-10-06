@@ -1,12 +1,20 @@
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { newImageRef, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import shippedHeaders from '../../public/_headers?raw'
+import { DocumentFileStore } from '../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { LoroStore } from '../lib/loro-store.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
@@ -42,17 +50,28 @@ async function renderLoaded(): Promise<void> {
   })
 }
 
+/** The page on a markdown note: loaded once its source pane has mounted. */
+async function renderNoteLoaded(): Promise<void> {
+  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  await waitFor(() => expect(document.querySelector('.cm-content')).not.toBeNull(), {
+    timeout: 10_000,
+  })
+}
+
 // Export moved into the canvas row's "More actions" kebab (the canvas-level
 // operations home). Opening a Radix dropdown occasionally does not register
 // on the first pointerdown the first time in a given real-browser test file
 // (never reproduces in jsdom) — retry with a full remount rather than let
 // that tooling artifact fail a real behavioral assertion.
-async function openExportMenuItem(label: string): Promise<HTMLElement> {
+async function openExportMenuItem(
+  label: string,
+  remount: () => Promise<void> = renderLoaded,
+): Promise<HTMLElement> {
   let item: HTMLElement | undefined
   for (let attempt = 0; attempt < 8 && !item; attempt++) {
     if (attempt > 0) {
       cleanup()
-      await renderLoaded()
+      await remount()
     }
     const allKebabs = await waitFor(() => screen.getAllByLabelText('More actions'), {
       timeout: 5000,
@@ -156,5 +175,139 @@ describe('BrowserDocumentPage export (browser — real SpatialEditor, no Excalid
 
     expect(screen.queryByText(/excalidraw/i)).toBeNull()
     expect(screen.queryByText(/export as json/i)).toBeNull()
+  })
+})
+
+/** Seeds a document's content through the same store the page loads it from. */
+async function seedContent(documentId: string, write: (doc: Loro) => void): Promise<void> {
+  const doc = new Loro()
+  write(doc)
+  await new LoroStore().save(documentId, doc.export({ mode: 'snapshot' }))
+}
+
+/** Exports SVG through the menu and answers the downloaded document's text. */
+async function exportSvgText(remount?: () => Promise<void>): Promise<string> {
+  const { blobs } = captureExportedBlobs()
+  const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  fireEvent.pointerUp(await openExportMenuItem('Export as SVG', remount))
+  await waitFor(() => expect(clickSpy).toHaveBeenCalled(), { timeout: EXPORT_TIMEOUT_MS })
+  const blob = blobs[blobs.length - 1]
+  expect(blob?.type).toBe('image/svg+xml')
+  return (await blob?.text()) ?? ''
+}
+
+/** A real PNG, drawn rather than hand-encoded, so the bytes decode. */
+async function redPng(): Promise<Blob> {
+  const canvas = document.createElement('canvas')
+  canvas.width = 40
+  canvas.height = 30
+  const ctx = canvas.getContext('2d')
+  if (ctx === null) throw new Error('no 2D context')
+  ctx.fillStyle = '#ff0000'
+  ctx.fillRect(0, 0, 40, 30)
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+  if (blob === null) throw new Error('toBlob produced nothing')
+  return blob
+}
+
+/**
+ * The deployed page's `connect-src`, enforced on this one: the test page has
+ * no policy of its own, and the export reads pictures under the one the app
+ * ships with — a fetch of a `blob:` URL passed here and failed in the app.
+ * A meta policy cannot be lifted once set, which is fine for the rest of
+ * this file: nothing below fetches anything the shipped policy refuses.
+ */
+function enforceShippedConnectPolicy(): void {
+  const policy = shippedHeaders
+    .split('\n')
+    .find((line) => line.trim().startsWith('Content-Security-Policy:'))
+  const connect = policy
+    ?.split(';')
+    .map((directive) => directive.trim())
+    .find((directive) => directive.startsWith('connect-src '))
+  if (connect === undefined) throw new Error('no connect-src in the shipped _headers')
+  const meta = document.createElement('meta')
+  meta.httpEquiv = 'Content-Security-Policy'
+  meta.content = connect
+  document.head.append(meta)
+}
+
+function editorSurfaceText(): string {
+  return screen.getByTestId('spatial-editor-container').textContent ?? ''
+}
+
+describe('BrowserDocumentPage export draws what the screen shows', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  it('a markdown note exports its body, not an empty 1x1 picture', async () => {
+    const noteId = await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
+    await seedContent(noteId, (doc) => {
+      doc.getText('body').insert(0, '# Exportedheading\n\nSome exported prose.\n')
+    })
+    await renderNoteLoaded()
+
+    const svg = await exportSvgText(renderNoteLoaded)
+    const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement
+    expect(root.textContent).toContain('Exportedheading')
+    expect(Number(root.getAttribute('width'))).toBeGreaterThan(1)
+    expect(Number(root.getAttribute('height'))).toBeGreaterThan(1)
+  })
+
+  it('a stored image exports as inline bytes, not its asset id', async () => {
+    const ref = newImageRef(crypto.randomUUID())
+    await new DocumentFileStore().put(ref, {
+      mimeType: 'image/png',
+      blob: await redPng(),
+      created: Date.now(),
+    })
+    const boardId = await seedIdbDocument({ path: 'board', makeDefault: true })
+    const board: SpatialCanvas = {
+      nodes: [fileNode({ id: 'pic', x: 0, y: 0, width: 240, height: 180, file: ref })],
+      edges: [],
+    }
+    await seedContent(boardId, (doc) => writeSpatialCanvas(doc, board))
+    enforceShippedConnectPolicy()
+    await renderLoaded()
+    // The editor has the picture before the export is asked for it.
+    await waitFor(
+      () => {
+        const image = document.querySelector('[data-testid="spatial-editor-container"] image')
+        expect(image?.getAttribute('href')).toMatch(/^blob:/)
+      },
+      { timeout: 10_000 },
+    )
+
+    const svg = await exportSvgText()
+    expect(svg).toMatch(/<image [^>]*href="data:image\/png;base64,/)
+    expect(svg).not.toContain('blob:')
+    expect(svg).not.toContain('asset:')
+  })
+
+  it('a file node exports the note it points at, as the editor draws it', async () => {
+    const noteId = await seedIdbDocument({ path: 'pointed-note', kind: 'markdown' })
+    await seedContent(noteId, (doc) => {
+      doc.getText('body').insert(0, 'Unmistakablefilebody prose.\n')
+    })
+    const boardId = await seedIdbDocument({ path: 'board', makeDefault: true })
+    const board: SpatialCanvas = {
+      nodes: [fileNode({ id: 'ref', x: 0, y: 0, width: 320, height: 200, file: noteId })],
+      edges: [],
+    }
+    await seedContent(boardId, (doc) => writeSpatialCanvas(doc, board))
+    await renderLoaded()
+    await waitFor(() => expect(editorSurfaceText()).toContain('Unmistakablefilebody'), {
+      timeout: 10_000,
+    })
+
+    const svg = await exportSvgText()
+    const root = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement
+    expect(root.textContent).toContain('Unmistakablefilebody')
   })
 })

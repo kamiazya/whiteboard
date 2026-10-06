@@ -1,3 +1,5 @@
+import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import {
   type ComponentProps,
   lazy,
@@ -31,6 +33,7 @@ import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useWhiteboardCommands } from '../hooks/use-whiteboard-commands.js'
+import type { SceneExportOptions } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { fileRefOptions } from '../lib/link-entries.js'
@@ -302,6 +305,35 @@ function markdownPaneProps({
 }
 
 /**
+ * What the saved picture is drawn with: the kind, and the same reference
+ * bundle, conversations and tag library the surface on screen draws with —
+ * a note's from its body, a canvas's from its file seams — so a person
+ * exports what they are looking at rather than the document stripped of
+ * everything it points at.
+ */
+function exportOptions({
+  documentKind,
+  references,
+  fileSeams,
+  threads,
+  model,
+}: {
+  documentKind: DocumentKind
+  references: ReturnType<typeof useReferenceSeams>
+  fileSeams: ReturnType<typeof useDocumentFileSeams>
+  threads: DocumentPageModel['threads']
+  model: DocumentPageModel
+}): SceneExportOptions {
+  return {
+    kind: documentKind,
+    references:
+      documentKind === 'markdown' ? references : referenceSeamsFromWire(fileSeams.references),
+    threads: threads.annotations,
+    ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
+  }
+}
+
+/**
  * The agent-touch sets a keeper supplied, each omitted when absent — the
  * editor's props are optional without `undefined`, so a bare pass-through
  * would not type-check.
@@ -445,15 +477,6 @@ function DocumentPageBody({
 
   const nodeInEditor = useNodeInEditor(sync.canvas, sync.onChange, model.scopeKey)
 
-  const { exportError, handleExport } = useSceneExport({
-    // The saved picture draws by the library too, so what a person exports
-    // from the editor is what the daemon's export and the screen show.
-    onExport: (format) =>
-      sync.exportScene(format, model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
-    filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
-    log,
-  })
-
   // The seams themselves are backend-agnostic (see use-document-file-seams.ts);
   // the keeper supplies the binding and the staleness stamps that make an
   // edit made elsewhere show up on the next refresh.
@@ -477,6 +500,16 @@ function DocumentPageBody({
     // The same adapter the board resolves its pictures through, so a body's
     // inline attachment previews here instead of drawing the written path.
     loadImage: (ref) => files.adapter.loadImageUrl(ref),
+  })
+
+  const { exportError, handleExport } = useSceneExport({
+    onExport: (format) =>
+      sync.exportScene(
+        format,
+        exportOptions({ documentKind, references, fileSeams, threads, model }),
+      ),
+    filenameBase: sanitizeExportFilenameBase(model.exportFilenameBase),
+    log,
   })
 
   const commands = useWhiteboardCommands({

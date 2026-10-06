@@ -399,11 +399,28 @@ next start.
 
 ## Web app exports
 
-The web editor's canvas row (More actions → Export) saves the current canvas as
-SVG or PNG, rendered with the light palette regardless of the UI mode so an
+The web editor's document row (More actions → Export) saves the open document
+as SVG or PNG, rendered with the light palette regardless of the UI mode so an
 export's bytes never depend on a display preference — and with the document's
 theme, if it names one, since that is part of the document rather than of the
 display.
+
+The export draws what the editor shows, including what the document points at:
+
+- **A canvas** exports with its pictures, the note or board a file node points
+  at, what a text node embeds with `![[…]]`, and the highlights of comment
+  threads about a passage. A file node pointing at another board draws its
+  miniature whatever its size on screen, as the daemon's export does.
+- **A markdown note** exports as its laid-out body, at the 720-pixel page
+  width `wb_scene_render` uses, with its math blocks, Mermaid diagrams,
+  pictures and embeds drawn as the preview draws them.
+
+Stored pictures are written into the file as PNG `data:` URIs, so a saved SVG
+shows them anywhere it is opened. They are re-encoded from the pixels the
+editor shows, so a photo takes more space than its original file and an
+animated picture keeps its first frame. A picture whose PNG would be larger
+than the 16 MiB upload limit, or one that cannot be read, is left out rather
+than linked.
 
 The PNG a browser export produces carries the editor's own font inside the
 image data it rasterises from, so it draws the text the editor showed rather
@@ -415,13 +432,14 @@ without it gets a smaller file.
 document on the clipboard as plain text — the quickest way to hand the exact
 canvas to another tool or a debugging session from any device.
 
-**PNG exports carry their document**: the file embeds the canvas's JSON Canvas
+**PNG exports of a canvas carry their document**: the file embeds the canvas's JSON Canvas
 document (extended mode, `x-whiteboard` included) in a PNG `iTXt` chunk under
 the `whiteboard` keyword — the same pattern
 draw.io uses. A shared PNG therefore carries its exact node coordinates and edges, not just
 pixels; any PNG chunk reader can recover the document, and image viewers ignore
 the chunk. Unlike draw.io, the app does not open such a PNG back as an
-editable canvas: a PNG dropped into the editor is inserted as an image.
+editable canvas: a PNG dropped into the editor is inserted as an image. A
+markdown note has no JSON Canvas form, so its PNG is the picture alone.
 
 There is currently no raster (PNG) export tool and no tool that returns image
 bytes as MCP `ImageContent` — `wb_scene_render` is the closest equivalent for

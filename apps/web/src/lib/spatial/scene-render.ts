@@ -13,7 +13,8 @@ import type {
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import {
@@ -69,10 +70,34 @@ export function renderCanvasToSvg(
   return renderCanvasToSvgWith(canvas, options)
 }
 
-/** The saved document: the editor's layout, with its legend in its band. */
+/** What a saved picture of a canvas is drawn with beside the canvas itself. */
+export interface CanvasExportOptions {
+  readonly measure: MeasureText
+  /** The bundle the editor resolves file nodes, embeds and pictures through. */
+  readonly references?: ReferenceSeams
+  /** The canvas's conversations, for the passage highlights the editor draws. */
+  readonly threads?: readonly CommentThread[]
+  /** The workspace's colour by intent (ADR-0040 decision 5), part of the picture. */
+  readonly tagLibrary?: TagLibrary
+}
+
+/**
+ * The saved document: the editor's layout, with its legend in its band.
+ *
+ * Pinned to the light theme: a saved artifact's bytes must never depend on a
+ * display preference. Every file node is drawn in full, by intrinsic size:
+ * the editor's on-screen gate depends on a zoom a saved file does not have,
+ * and this is the policy the daemon's export takes.
+ */
 export function renderCanvasForExport(
   canvas: SpatialCanvas,
-  options: RenderCanvasOptions,
+  { measure, references, threads, tagLibrary }: CanvasExportOptions,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
-  return renderCanvasForExportWith(canvas, options)
+  return renderCanvasForExportWith(canvas, {
+    measure,
+    theme: 'light',
+    ...(references === undefined ? {} : { references, expandFileNode: () => true }),
+    ...(threads === undefined ? {} : { threads }),
+    ...(tagLibrary === undefined ? {} : { tagLibrary }),
+  })
 }

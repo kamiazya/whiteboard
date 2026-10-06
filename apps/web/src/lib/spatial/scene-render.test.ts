@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
@@ -154,6 +154,22 @@ describe('renderCanvasForExport', () => {
     expect(exported.svg).toContain('>health<')
     expect(exported.bounds.x).toBeLessThan(editor.bounds.x)
     expect(exported.bounds.w).toBeGreaterThan(editor.bounds.w)
+  })
+  it("draws the highlight behind a thread's passage, as the editor does", () => {
+    const board: SpatialCanvas = {
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 50, text: 'ship the plan' })],
+      edges: [],
+    }
+    const thread: CommentThread = {
+      id: 't1',
+      anchor: { kind: 'text', nodeId: 'a', quote: { exact: 'plan' }, start: 0, end: 1 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'about it' }],
+    }
+    const rects = (svg: string) => svg.match(/<rect /g)?.length ?? 0
+    const plain = renderCanvasForExport(board, { measure: fakeMeasure })
+    const threaded = renderCanvasForExport(board, { measure: fakeMeasure, threads: [thread] })
+    expect(rects(threaded.svg)).toBeGreaterThan(rects(plain.svg))
   })
   it('an untagged board exports the same envelope the editor draws', () => {
     const plain: SpatialCanvas = {

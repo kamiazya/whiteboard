@@ -1,7 +1,5 @@
-import {
-  createBrowserMeasureText,
-  withViewerFontEmbedded,
-} from '@kamiazya/whiteboard-canvas-viewer'
+import type { ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
@@ -16,6 +14,11 @@ import type {
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
+import {
+  type DocumentExportFormat,
+  renderMarkdownForExport,
+  savedPicture,
+} from '../lib/document-export.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import {
   type BackendErrorReason,
@@ -25,12 +28,9 @@ import {
 } from '../lib/document-sync-session.js'
 import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
-import { embedTextInPng } from '../lib/png-embed.js'
-import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
-import { themeFacesNamedBy } from '../lib/theme-fonts.js'
 import { dismissWriteRefusal, showWriteRefusal } from '../lib/write-refusal-store.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
@@ -40,12 +40,19 @@ export type { UseDocumentSyncOptions }
 // module; the canonical definition lives in lib/document-sync-types.ts
 // alongside the session module that also needs it.
 
-// canvas-render's SVG backend + this hook's own Canvas-2D raster path are the
-// only export routes now that Excalidraw's exportToBlob/exportToSvg are gone.
-export type SceneExportFormat = 'png' | 'svg'
+export type SceneExportFormat = DocumentExportFormat
 
-/** What an export from the editor takes beside its format. */
-interface SceneExportOptions {
+/**
+ * What an export from the editor takes beside its format: what the surface
+ * on screen draws with. The kind is REQUIRED — a note has no canvas, and an
+ * export that defaulted to one drew a blank picture of it.
+ */
+export interface SceneExportOptions {
+  readonly kind: DocumentKind
+  /** The bundle the editor resolves file nodes, embeds and pictures through. */
+  readonly references?: ReferenceSeams
+  /** A canvas's conversations, for the passage highlights the editor draws. */
+  readonly threads?: readonly CommentThread[]
   readonly tagLibrary?: TagLibrary
 }
 
@@ -151,7 +158,7 @@ export interface UseDocumentSyncResult {
   // null when the requested format is unavailable in this environment (e.g.
   // 'png' with no real Canvas 2D context, such as jsdom) — callers treat
   // that the same as "export unavailable right now" rather than throwing.
-  exportScene: (format: SceneExportFormat, options?: SceneExportOptions) => Promise<Blob | null>
+  exportScene: (format: SceneExportFormat, options: SceneExportOptions) => Promise<Blob | null>
 }
 
 /** Stable identity so an unlocked canvas never re-renders the editor. */
@@ -520,51 +527,29 @@ export function useDocumentSync(
     return sessionRef.current?.canRedo() ?? false
   }, [])
 
-  // Derives the export blob from the hook-owned canvas value — no imperative
-  // editor handle involved, so exportScene works identically whether or not
-  // a SpatialEditor is currently mounted.
+  // Reads the document from the session at the moment of the export — no
+  // imperative editor handle involved, so exportScene works identically
+  // whether or not an editor is currently mounted.
   const exportScene = useCallback(
-    async (format: SceneExportFormat, options: SceneExportOptions = {}): Promise<Blob | null> => {
-      const exportedCanvas = sessionRef.current?.getCanvas() ?? canvas
-      const { svg, bounds } = renderCanvasForExport(exportedCanvas, {
-        measure: createBrowserMeasureText(),
-        // Pinned to 'light' regardless of the UI theme: an exported SVG/PNG
-        // is a saved artifact, and a user's display preference must never
-        // change its bytes.
-        theme: 'light',
-        // The library's colour by intent is part of the picture (ADR-0040
-        // decision 5), so the saved artifact carries it like the daemon's.
-        ...(options.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
-      })
-      if (format === 'svg') {
-        return new Blob([svg], { type: 'image/svg+xml' })
+    async (format: SceneExportFormat, options: SceneExportOptions): Promise<Blob | null> => {
+      const session = sessionRef.current
+      if (options.kind === 'markdown') {
+        const body = session?.getMarkdownBody() ?? markdownBody
+        return savedPicture(format, await renderMarkdownForExport(body, options))
       }
-      // The face has to travel INSIDE the document: `ensureViewerFontLoaded`
-      // registers it on this page, and an `<img>`-rendered SVG cannot see the
-      // page's fonts, so without this the exported PNG is drawn in whatever
-      // system font the browser picks — not the one on screen.
-      const png = await rasterizeSvgToPng(
-        // The theme's family travels the same way the vendored face does,
-        // and only when this picture names it: a held face is megabytes.
-        await withViewerFontEmbedded(svg, themeFacesNamedBy(svg)),
-        Math.max(1, Math.round(bounds.w)),
-        Math.max(1, Math.round(bounds.h)),
-      )
-      if (png === null) return null
-      // Editable PNG (the draw.io pattern): embed the extended JSON Canvas
-      // document in an iTXt chunk, so the exported image carries its own
-      // source — exact coordinates included — under the `whiteboard` key.
-      const bytes = new Uint8Array(await png.arrayBuffer())
-      const embedded = embedTextInPng(
-        bytes,
-        'whiteboard',
-        serializeSpatial(exportedCanvas, 'extended'),
-      )
-      // Copy into a fresh ArrayBuffer-backed view: Blob's lib.dom typing
-      // rejects ArrayBufferLike-backed Uint8Arrays.
-      return new Blob([Uint8Array.from(embedded)], { type: 'image/png' })
+      const exported = session?.getCanvas() ?? canvas
+      const drawn = renderCanvasForExport(exported, {
+        ...options,
+        measure: createBrowserMeasureText(),
+      })
+      return savedPicture(format, drawn, {
+        // Editable PNG (the draw.io pattern): the extended JSON Canvas
+        // document rides in an iTXt chunk under `whiteboard`, so the image
+        // carries its own source, exact coordinates included.
+        source: () => serializeSpatial(exported, 'extended'),
+      })
     },
-    [canvas],
+    [canvas, markdownBody],
   )
 
   // Keyboard intercept for undo/redo. A window listener, so the editor's own
