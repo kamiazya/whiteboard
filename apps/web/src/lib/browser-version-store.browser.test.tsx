@@ -243,9 +243,8 @@ describe('has this state already been checkpointed', () => {
    * which index a caller passed.
    *
    * `DocumentEntry.contentDigest` is optional on the port because an index
-   * that does not hold the content cannot derive one — and this app wires
-   * exactly such an index (`IdbDocumentIndex`, used by `browser-workspaces`
-   * and by the document page's own tests). A store that read the digest off
+   * that does not hold the content cannot derive one — and this app's legacy
+   * rows were exactly that. A store that read the digest off
    * the placement answered `undefined === <digest>` forever under one of
    * them: every save refused or every point read as changed, depending on
    * which way it was written. Both are silent in the app and neither is

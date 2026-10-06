@@ -371,8 +371,9 @@ back; until then the worker writes nothing for that document.
 `lib/idb-stored-shapes.property.browser.test.tsx` writes through each
 production writer and reads through its reader, against the real
 IndexedDB: the blob store, the document-file store (its v2 record and the
-v1 record it rewrites on read), the document index's workspace and
-document rows, the document store's snapshot and delta log, and the
+v1 record it rewrites on read), the document index's workspace rows
+and the legacy document rows it reads (written by `test-utils/seed-legacy-row.ts`,
+since no build writes one any more), the document store's snapshot and delta log, and the
 version store's rows. Inputs are drawn from the writer's input space, or
 from the port's schema where the writer takes one; a `z.custom` /
 `z.instanceof` field is overridden by path, since the walk cannot know

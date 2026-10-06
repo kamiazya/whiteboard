@@ -255,6 +255,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/ports/src/document-path-tree.ts#planSubtreeMove':
+    'the subtree-move plan the in-memory DocumentIndex double executes; no production keeper moves rows by path any more (the browser tree index moves nodes), so the port double is its one reader',
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
     'the one await a test has over a flush an unmount released, so clearing the database cannot race the checkpoint being taken; production never deletes storage under a page it just left',
   'packages/daemon-client/src/api-contracts/document.ts#updateDocumentResponseSchema':

@@ -128,9 +128,9 @@ export class BrowserVersionStore {
       // Taken from the RECORD, through the projection this save already made
       // for the element count — never from the index. `DocumentEntry`'s
       // digest is optional because an index that does not hold the content
-      // cannot derive one, and this app wires exactly such an index
-      // (`IdbDocumentIndex`, which `browser-workspaces.ts` uses); depending on
-      // it here meant a markdown note could not be checkpointed at all. The
+      // cannot derive one, and this app's legacy rows were exactly that;
+      // depending on it here meant a markdown note could not be checkpointed
+      // at all. The
       // record is the one place that always holds the content, and
       // `content-digest.hosts.test.ts` pins that a projection and the tree
       // node it came from answer the same digest.
