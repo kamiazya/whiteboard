@@ -267,8 +267,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 114,
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
-  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#DocumentRow': 57,
-  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#TreeItem': 51,
+  'apps/web/src/components/workspace-files/WorkspaceFileTree.tsx#DocumentRow': 54,
   // The two list effects do not repeat one another on a mount; the lines are the
   // guard plus the paragraph saying which run it skips and which it must not.
   // The toolbar, the refusals, the object pane, the card menu's items and each

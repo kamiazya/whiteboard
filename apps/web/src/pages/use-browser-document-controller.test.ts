@@ -53,7 +53,7 @@ const snap: DocumentSnapshot = {
   documentId: C1,
   workspaceId: getBrowserWorkspaceId(),
   path: 'untitled',
-  name: 'untitled',
+  name: null,
   updatedAt: '2026-05-24T00:00:00.000Z',
   kind: 'spatial' as const,
 }
@@ -106,8 +106,8 @@ describe('useBrowserDocumentController', () => {
       }),
     )
     await act(async () => {})
-    expect(result.current.snapshot).not.toBeNull()
-    expect(result.current.snapshot?.name).toBe('untitled')
+    expect(result.current.snapshot?.path).toBe('untitled')
+    expect(result.current.snapshot?.name).toBeNull()
   })
 
   it('loads existing canvas from store on mount', async () => {
@@ -500,7 +500,7 @@ describe('useBrowserDocumentController', () => {
     expect(result2.current.snapshot?.name).toBe('Racing name')
   })
 
-  it('renameDocument with whitespace-only input falls back to "untitled" and persists that, not empty', async () => {
+  it('renameDocument with whitespace-only input clears the name and persists no name, not empty', async () => {
     const named: DocumentSnapshot = { ...snap, name: 'My canvas' }
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
@@ -516,13 +516,12 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       result.current.renameDocument('   ')
     })
-    expect(result.current.snapshot?.name).toBe('untitled')
+    expect(result.current.snapshot?.name).toBeNull()
     const loaded = await store.load(C1)
-    expect(loaded?.name).toBe('untitled')
-    expect(loaded?.name).not.toBe('')
+    expect(loaded?.name).toBeNull()
   })
 
-  it('renameDocument with empty string also falls back to "untitled"', async () => {
+  it('renameDocument with empty string also clears the name', async () => {
     const named: DocumentSnapshot = { ...snap, name: 'My canvas' }
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(C1)
@@ -538,7 +537,7 @@ describe('useBrowserDocumentController', () => {
     await act(async () => {
       result.current.renameDocument('')
     })
-    expect(result.current.snapshot?.name).toBe('untitled')
+    expect(result.current.snapshot?.name).toBeNull()
   })
 
   it('renameDocument before the initial load resolves is a safe no-op', async () => {
@@ -874,10 +873,9 @@ describe('useBrowserDocumentController', () => {
       expect(loro.saved.some((s) => s.id === created!.documentId)).toBe(true)
     })
 
-    it('createDocument defaults the name to "untitled" when none is given', async () => {
-      // Seeded, so the mount does not take 'untitled' for itself first: an
-      // unnamed document reads as its path, and the index refuses to hand out
-      // the same path twice.
+    it('createDocument with no name places an unnamed document at "untitled"', async () => {
+      // Seeded, so the mount does not take 'untitled' for itself first: the
+      // index refuses to hand out the same path twice.
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save({ ...snap, path: 'existing', name: 'Existing' })
@@ -894,7 +892,8 @@ describe('useBrowserDocumentController', () => {
       await act(async () => {
         created = await result.current.createDocument()
       })
-      expect(created?.name).toBe('untitled')
+      expect(created?.path).toBe('untitled')
+      expect(created?.name).toBeNull()
     })
 
     it('createDocument rolls back the metadata row when the Loro write fails', async () => {

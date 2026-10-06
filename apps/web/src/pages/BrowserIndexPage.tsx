@@ -24,6 +24,7 @@ import {
   subscribeBrowserWorkspaceIdentity,
 } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
+import { documentLabel } from '../lib/document-label.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { followBrowserWorkspaceWrites } from '../lib/follow-workspace-writes.js'
@@ -470,7 +471,7 @@ export function BrowserIndexPage({
     deleteEach: async (paths) => deleteEach(index, pointer, paths, await pointer.get()),
     lookup: (path) => {
       const row = snapshots?.find((snapshot) => snapshot.path === path)
-      return row === undefined ? undefined : { displayName: row.name, kind: row.kind }
+      return row && { displayName: documentLabel(row, 'path'), kind: row.kind }
     },
     refresh: refreshAfterDelete,
   })

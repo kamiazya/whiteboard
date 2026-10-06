@@ -16,6 +16,7 @@ import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
 import { linkifyDocumentMentions } from '../lib/daemon-api-client.js'
+import { documentLabel } from '../lib/document-label.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
 import type { DaemonPageState } from './daemon-page-state.js'
 import { DaemonTerminalScreen, membershipRefusedScreen } from './daemon-terminal-screens.js'
@@ -197,7 +198,10 @@ export function daemonDocumentLabels(
       commandCanvas: null,
     }
   }
-  const name = (names.recorded === undefined ? names.listed : names.recorded) ?? canvas.path
+  const name = documentLabel(
+    { name: names.recorded === undefined ? names.listed : names.recorded, path: canvas.path },
+    'path',
+  )
   return {
     documentKey: documentSyncKey(canvas.workspaceId, canvas.path),
     scopeKey: `${canvas.workspaceId}:${canvas.path}`,

@@ -1063,8 +1063,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
 
-    // Still the path, projected by `entry.name ?? entry.path` — nobody named
-    // it, and prose is not a title.
-    expect((await markdownRow())?.name).toBe('untitled')
+    // Still unnamed — nobody named it, and prose is not a title.
+    expect((await markdownRow())?.name).toBeNull()
   })
 })

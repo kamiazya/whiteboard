@@ -63,10 +63,10 @@ describe('browser document summary', () => {
     expect(Date.parse(row?.updatedAt ?? '')).toBeGreaterThan(0)
   })
 
-  it('falls back to the path when a document has no name of its own', async () => {
-    // `DocumentEntry.name` is ABSENT rather than defaulted, on purpose: a
-    // listing that invents one reads as though somebody typed the path in as
-    // a title. Choosing the fallback is this layer's job, not the port's.
+  it('says a document with no name of its own is unnamed, as the daemon does', async () => {
+    // Null, not the path: a listing that substituted the path could not tell
+    // a name somebody typed equal to it from no name at all. A surface that
+    // needs a label derives one through `documentLabel`.
     const index = await seedWorkspace()
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -76,7 +76,7 @@ describe('browser document summary', () => {
     await writeContent(entry.documentId)
 
     const [row] = await listBrowserDocuments(index, idbContentClock(DB_NAME))
-    expect(row?.name).toBe('archive/untitled')
+    expect(row?.name).toBeNull()
   })
 
   it('lists a document whose content was never written, rather than hiding it', async () => {

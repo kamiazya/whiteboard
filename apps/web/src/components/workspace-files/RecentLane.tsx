@@ -1,6 +1,7 @@
 import { FileText, LayoutGrid } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 
 export interface RecentLaneProps {
   /** The listing as loaded. Recorded ids are resolved against it. */
@@ -66,9 +67,7 @@ export function RecentLane({ documents, recentIds, onOpen, renderThumbnail }: Re
               {/* The display name, with the path's last segment as the label
                 for a document nobody named — never a name invented from the
                 path, which is the same rule the cards below follow. */}
-              <span className="truncate px-2 py-1 text-xs">
-                {entry.name ?? entry.path.split('/').at(-1)}
-              </span>
+              <span className="truncate px-2 py-1 text-xs">{documentLabel(entry, 'leaf')}</span>
             </button>
           )
         })}

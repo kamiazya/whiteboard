@@ -26,7 +26,12 @@ export const documentSnapshotSchema = z
     documentId: documentIdSchema,
     workspaceId: workspaceIdSchema,
     path: documentPathSchema,
-    name: z.string(),
+    /**
+     * The document's own display name, or null when it has none — the
+     * daemon's spelling of unnamed. A surface that must still call it
+     * something asks `documentLabel` for the path's stand-in.
+     */
+    name: z.string().nullable(),
     updatedAt: z.string(),
     /**
      * Which editor opens this document. Defaulted because content lives in

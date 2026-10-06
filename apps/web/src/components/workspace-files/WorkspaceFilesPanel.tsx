@@ -3,6 +3,7 @@ import { messageOf } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { WorkspaceMissingError } from '../../lib/files-source.js'
 import { newDocumentPathIn } from '../../lib/new-document-path.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
@@ -251,7 +252,7 @@ export function WorkspaceFilesPanel({
     // document. A plural dialog reading "Delete 1 document?" would be a
     // second confirmation that has to agree in number for no gain.
     if (only !== undefined && onRequestDelete !== undefined) {
-      onRequestDelete(only.path, only.name ?? only.path, only.kind)
+      onRequestDelete(only.path, documentLabel(only, 'path'), only.kind)
       return
     }
     onRequestDeleteMany?.(paths)

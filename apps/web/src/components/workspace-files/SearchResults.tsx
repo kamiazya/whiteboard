@@ -17,6 +17,7 @@ import { LayoutGrid, List } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { useLongPressMenu } from './use-long-press.js'
 
@@ -204,7 +205,7 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 }
 
 function titleOf(entry: WorkspaceDocumentEntry): string {
-  return entry.name ?? entry.path.split('/').at(-1) ?? entry.path
+  return documentLabel(entry, 'leaf')
 }
 
 export function SearchResults({

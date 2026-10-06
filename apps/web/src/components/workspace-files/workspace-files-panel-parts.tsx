@@ -15,6 +15,7 @@ import {
 import type { ComponentProps } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import type { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -148,7 +149,7 @@ export function PanelPreview({
         ? {}
         : {
             onDelete: (entry: WorkspaceDocumentEntry) =>
-              onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
+              onRequestDelete(entry.path, documentLabel(entry, 'path'), entry.kind),
           })}
       className="h-full"
     />
@@ -358,7 +359,7 @@ export function cardMenuItemsFor(
             label: 'Delete',
             icon: <Trash2 />,
             danger: true,
-            onSelect: () => onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
+            onSelect: () => onRequestDelete(entry.path, documentLabel(entry, 'path'), entry.kind),
           },
         ]),
   ]

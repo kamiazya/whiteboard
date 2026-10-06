@@ -1,6 +1,7 @@
 import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { folderContents } from './folder-contents.js'
 import { formatRelative } from './format-relative.js'
@@ -205,7 +206,7 @@ function DocumentCard({
         <span className="flex min-w-0 items-center gap-1">
           <KindBadge kind={entry.kind} />
           <span data-testid="card-title" className="truncate text-sm">
-            {entry.name ?? entry.path.split('/').at(-1)}
+            {documentLabel(entry, 'leaf')}
           </span>
           {entry.shadowed && (
             <span

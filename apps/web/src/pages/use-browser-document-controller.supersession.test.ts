@@ -15,7 +15,7 @@ const snap: DocumentSnapshot = {
   documentId: C1,
   workspaceId: getBrowserWorkspaceId(),
   path: 'untitled',
-  name: 'untitled',
+  name: null,
   updatedAt: '2026-05-24T00:00:00.000Z',
   kind: 'spatial' as const,
 }

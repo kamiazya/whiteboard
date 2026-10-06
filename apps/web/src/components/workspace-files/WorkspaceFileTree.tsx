@@ -2,6 +2,7 @@ import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { documentLabel } from '../../lib/document-label.js'
 import { cn } from '../../lib/utils.js'
 import { TreeItemShell } from './TreeItemShell.js'
 import { useLongPressMenu } from './use-long-press.js'
@@ -87,7 +88,6 @@ function buildTree(documents: readonly WorkspaceDocumentEntry[]): TreeNode[] {
  */
 function DocumentRow({
   document,
-  name,
   onOpen,
   onActivate,
   onDocumentContextMenu,
@@ -95,8 +95,6 @@ function DocumentRow({
   selectedPath,
 }: {
   document: WorkspaceDocumentEntry
-  /** The path segment, shown when the document carries no display name. */
-  name: string
   onOpen: (document: WorkspaceDocumentEntry) => void
   onActivate?: (document: WorkspaceDocumentEntry) => void
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
@@ -138,7 +136,7 @@ function DocumentRow({
       {/* The display name, which is what every other surface shows and
           what a `[[reference]]` resolves by. The segment is the
           fallback, not the label. */}
-      <span className="truncate">{document.name ?? name}</span>
+      <span className="truncate">{documentLabel(document, 'leaf')}</span>
     </button>
   )
 }
@@ -181,7 +179,7 @@ function TreeItem({
     <TreeItemShell
       path={node.path}
       name={node.name}
-      label={node.canvas?.name ?? node.name}
+      label={node.canvas === null ? node.name : documentLabel(node.canvas, 'leaf')}
       hasChildren={node.children.length > 0}
       row={
         node.canvas === null ? (
@@ -189,7 +187,6 @@ function TreeItem({
         ) : (
           <DocumentRow
             document={node.canvas}
-            name={node.name}
             onOpen={onOpen}
             onActivate={onActivate}
             onDocumentContextMenu={onDocumentContextMenu}
