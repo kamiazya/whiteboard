@@ -106,8 +106,8 @@ function readWorkspaceRow(value: unknown): WorkspaceEntry {
 export class IdbDocumentIndex {
   /**
    * `dbName`: only tests pass this; see `openWhiteboardDb`'s note on why it
-   * exists. `readsAwaitIssuedWrites: false` is the startup fold's alone — see
-   * `tx`.
+   * exists. `readsAwaitIssuedWrites: false` is for reads a tracked writer can
+   * reach — the startup fold's, and `FoldingBrowserIndex`'s own — see `tx`.
    */
   constructor(
     private readonly dbName?: string,
@@ -127,8 +127,8 @@ export class IdbDocumentIndex {
     if (mode === 'readwrite') {
       return trackIndexWrite(inTransaction(this.dbName, stores, mode, body))
     }
-    // The fold reads without waiting because a tracked write can be what is
-    // running it: the save loop's rename asks for the fold, and a fold read
+    // Some reads go without waiting because a tracked write can be what is
+    // running them: the save loop's rename asks for the fold, and a fold read
     // that waited here would wait on that loop, which waits on the fold.
     if (this.options.readsAwaitIssuedWrites === false) {
       return inTransaction(this.dbName, stores, mode, body)
