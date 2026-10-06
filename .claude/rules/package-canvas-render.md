@@ -1672,3 +1672,4 @@ resolves the theme: a live drag drew edges in the stored colour over a
 committed scene that drew them by intent, and the live-drag parity property
 now draws a library and tagged edges (its stub resolver reads `edge.color`,
 or the step would be invisible to it). In the mutation lane.
+Nested canvases too (`layoutSpatialCanvasInternalScene`).

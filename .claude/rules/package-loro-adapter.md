@@ -43,7 +43,8 @@ implementations live in the composition roots.
   makes outside this package (the daemon's saves, tools, `/api/v1` and restore,
   and the browser's restore — `document-content-write-one-place.test.ts` keeps
   the bare write inside; duplicate and adopt supply the name themselves),
-  `seedNamesFromTitles(since)`
+  `seedNamesFromTitles(touched)` over `documentsTouchedSince`
+  (`touched-documents.ts`, which also answers `stampEditedDocuments`)
   for the daemon's workspace update, which reads the touched nodes off the
   update's operations rather than walking the tree (135 ms at 1000 documents).
   A name somebody CHOSE carries `nameChosen: true` in the node meta, written
@@ -52,6 +53,13 @@ implementations live in the composition roots.
   "Weekly" under `# Weekly review` read as a half-typed heading. Unmarked names
   keep the prefix-follow, old records are not migrated, and an OKF `title`
   equal to the stored name is not a choice (server-core's `applyOkfTitle`).
+- **Which uploaded files a workspace still names** (`file-references.ts`):
+  `scanFileReferences` walks live documents by id (shadowed ones too), trash
+  entries' evacuated bytes, and the saved versions a keeper supplies through
+  `FileReferenceReads`, and reports what it could not read as `unjudged` so
+  a deleting caller fails closed. The daemon's `file-gc.ts` and the browser's
+  `browser-file-sweep.ts` both judge by it;
+  `test-utils/file-collection-conformance` is the scenario both run.
 - **A duplicate is one record change** (`workspace-duplicate.ts`), written
   through the projection rather than `copyNodeData`, so the source's id,
   segment, name, timestamps and plane keys stay behind.
