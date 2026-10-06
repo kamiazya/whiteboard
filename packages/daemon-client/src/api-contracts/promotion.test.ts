@@ -24,12 +24,41 @@ describe('promotion schemas', () => {
     expect(promoteWorkspaceRequestSchema.safeParse({ ...bare, label: 'x' }).success).toBe(false)
   })
 
+  it('roundtrips the trash bytes and version rows a move carries beside the record', () => {
+    const version = {
+      id: '01BRWVERSAAAAAAAAAAAAAAAA0',
+      documentId: '01BRWAAAAAAAAAAAAAAAAAAAA0',
+      createdAt: 1_000,
+      auto: false,
+      label: 'as drafted',
+      operator: { kind: 'human' as const, displayName: 'Yuki' },
+      frontiers: 'AQID',
+    }
+    const carried = {
+      snapshot: 'c25hcHNob3Q',
+      trash: [{ documentId: '01BRWAAAAAAAAAAAAAAAAAAAA1', bytes: 'Ynl0ZXM' }],
+      versions: [version],
+    }
+    expect(roundtrip(promoteWorkspaceRequestSchema, carried)).toEqual(carried)
+    const refused = (versions: unknown[]) =>
+      promoteWorkspaceRequestSchema.safeParse({ ...carried, versions }).success
+    // A device the keeper cannot back with a key is not carried in.
+    expect(refused([{ ...version, operator: { kind: 'human', actor: 'did:key:z6Mk' } }])).toBe(
+      false,
+    )
+    // An id the daemon's version store could not key a row by.
+    expect(refused([{ ...version, id: 'not/an/id' }])).toBe(false)
+    expect(refused([{ ...version, label: '' }])).toBe(false)
+  })
+
   it('roundtrips the response', () => {
     const valid: PromoteWorkspaceResponse = {
       ok: true,
       attested: true,
       recorded: ['01BRWAAAAAAAAAAAAAAAAAAAA0'],
       shadowed: [],
+      trashStored: [],
+      versionsKept: [],
     }
     expect(roundtrip(promoteWorkspaceResponseSchema, valid)).toEqual(valid)
     expect(promoteWorkspaceResponseSchema.safeParse({ ...valid, ok: false }).success).toBe(false)

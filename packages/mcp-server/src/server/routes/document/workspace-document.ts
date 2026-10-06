@@ -1,6 +1,8 @@
 import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
+  PROMOTE_REQUEST_LIMIT_BYTES,
+  type PromoteWorkspaceRequest,
   type PromoteWorkspaceResponse,
   promoteWorkspaceRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
@@ -21,10 +23,6 @@ import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { CONTENT_BODY_LIMIT_BYTES, limitBody } from '../body-limit.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
 import { defaultHumanDisplayName } from './_shared.js'
-
-// The same record, base64url-inflated by 4/3 inside a JSON body, rounded up to
-// 3/2 of the content ceiling.
-const WORKSPACE_DOC_PROMOTE_LIMIT_BYTES = (CONTENT_BODY_LIMIT_BYTES * 3) / 2
 
 export interface WorkspaceDocumentRouterOptions {
   triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
@@ -93,14 +91,31 @@ function answerWriteRefusal(c: Context, err: unknown): Response {
   return c.json(errorBody(answer.code, (err as Error).message), answer.status)
 }
 
+// The contract's ceiling, which the sender fits its body to — derived there
+// from the same file ceiling CONTENT_BODY_LIMIT_BYTES is.
 const PROMOTE_BODY: ReadJsonBodyOptions = {
   voice: 'code',
-  maxBytes: WORKSPACE_DOC_PROMOTE_LIMIT_BYTES,
+  maxBytes: PROMOTE_REQUEST_LIMIT_BYTES,
   refuseShape: () =>
     errorBody(
       'invalid_body',
-      'snapshot must be base64url and attestation, if present, a WebAuthn assertion',
+      'snapshot must be base64url, attestation, if present, a WebAuthn assertion, and trash and versions the carried planes',
     ),
+}
+
+/** The planes carried beside the record, their base64url decoded. */
+function decodeCarried(body: PromoteWorkspaceRequest) {
+  const bytes = (text: string) => new Uint8Array(Buffer.from(text, 'base64url'))
+  return {
+    trash: (body.trash ?? []).map((carried) => ({
+      documentId: carried.documentId,
+      bytes: bytes(carried.bytes),
+    })),
+    versions: (body.versions ?? []).map((version) => ({
+      ...version,
+      frontiers: bytes(version.frontiers),
+    })),
+  }
 }
 
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
@@ -155,8 +170,9 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
   )
 
   // Promotion (ADR-0023): the browser keeper's whole record merged in, as the
-  // update route would merge it, plus one explicit human checkpoint per
-  // promoted document — the promote is a person's explicit act.
+  // update route would merge it, with the trash bytes and saved versions it
+  // points at, plus one explicit human checkpoint per promoted document — the
+  // promote is a person's explicit act.
   //
   // No keeper here holds a passkey pin (ADR-0050 decision 3 retired the local
   // daemon's, and server mode never had any), so an attestation can name no
@@ -168,7 +184,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
   // POST /api/w/:workspaceId/workspace-document/promote
   app.post(
     '/api/w/:workspaceId/workspace-document/promote',
-    limitBody(WORKSPACE_DOC_PROMOTE_LIMIT_BYTES, 'Promotion'),
+    limitBody(PROMOTE_REQUEST_LIMIT_BYTES, 'Promotion'),
     async (c) => {
       const admitted = await admittedWorkspace(c, options.serverDeps)
       if ('refusal' in admitted) return admitted.refusal
@@ -179,6 +195,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         return c.json({ error: 'attestation_rejected', message: 'unknownCredential' }, 403)
       }
       const snapshot = new Uint8Array(Buffer.from(body.data.snapshot, 'base64url'))
+      const carried = decodeCarried(body.data)
 
       // The device that wrote the row (ADR-0035 decision 2), as every other
       // human row this daemon writes.
@@ -189,18 +206,23 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       }
       let result: Awaited<ReturnType<typeof promoteWorkspace>>
       try {
-        result = await promoteWorkspace(deps, { workspaceId, snapshot, operator })
+        result = await promoteWorkspace(deps, { workspaceId, snapshot, operator, ...carried })
       } catch (err) {
         return answerWriteRefusal(c, err)
       }
       if (result.kind === 'malformed-snapshot') {
         return c.json({ title: 'Malformed workspace record snapshot' }, 400)
       }
+      if (result.kind === 'unmatched-carried') {
+        return c.json(errorBody('invalid_body', result.reason), 400)
+      }
       const response: PromoteWorkspaceResponse = {
         ok: true,
         attested: false,
         recorded: [...result.recorded],
         shadowed: [...result.shadowed],
+        trashStored: [...result.trashStored],
+        versionsKept: [...result.versionsKept],
       }
       return c.json(response)
     },

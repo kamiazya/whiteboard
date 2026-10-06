@@ -1,6 +1,6 @@
 import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
-import type { VersionHistory } from '../server-deps.js'
+import type { AdoptedVersion, VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
 
 /**
@@ -17,6 +17,8 @@ import type { VersionEntry } from '../versions/version-entry.js'
  */
 export class FakeVersionHistory implements VersionHistory {
   readonly saves: { path: string; options: Parameters<VersionHistory['save']>[3] }[] = []
+  /** Rows another keeper saved, by id — a second adopt of one id keeps the first. */
+  readonly adopted = new Map<string, AdoptedVersion>()
   private readonly rows = new Map<string, { entry: VersionEntry; snapshot: Uint8Array }>()
   private next = 0
 
@@ -50,6 +52,10 @@ export class FakeVersionHistory implements VersionHistory {
   }
   async loadWorkspaceAt(): Promise<LoroDoc | null> {
     return null
+  }
+  async adopt(_workspaceId: string, rows: readonly AdoptedVersion[]): Promise<readonly string[]> {
+    for (const row of rows) if (!this.adopted.has(row.id)) this.adopted.set(row.id, row)
+    return rows.map((row) => row.id).filter((id) => this.adopted.has(id))
   }
   async list(_workspaceId: string, path: string): Promise<readonly VersionEntry[]> {
     return [...this.rows.values()]

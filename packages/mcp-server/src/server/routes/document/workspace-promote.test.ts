@@ -4,19 +4,25 @@
  * pin (ADR-0050 decision 3), so an attestation sent beside the bytes names a
  * credential nothing here can check, and is refused before anything lands.
  */
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promoteWorkspaceResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
   createWorkspaceDocumentAtPath,
+  deleteWorkspaceNodeAtPath,
   documentContainers,
+  exportWorkspaceSubtree,
+  readMarkdownBody,
+  recordTrashEntry,
+  writeMarkdownBody,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   resolveTestServerDeps,
@@ -170,5 +176,131 @@ it('refuses a record whose canvas holds a node past its bound, naming the canvas
   expect(body.error).toBe('node_text_too_large')
   // The canvas a person can open, not only a node key they never see.
   expect(body.message).toMatch(/^The document at "sketch" /)
+  expect(await documents()).toEqual([])
+})
+
+const GONE_ID = '01BRWAAAAAAAAAAAAAAAAAAAA2'
+const DRAFTED_VERSION_ID = '01BRWVERSAAAAAAAAAAAAAAAA0'
+
+/**
+ * A browser record holding one live note with a labelled saved version taken
+ * before its last edit, and one trashed note evacuated the way the browser
+ * keeper deletes: the subtree exported, its sha-256 recorded on the entry.
+ */
+function browserRecordWithTrashAndVersion() {
+  const doc = new LoroDoc()
+  doc.setPeerId(2n)
+  createWorkspaceDocumentAtPath(doc, {
+    path: 'notes/roadmap',
+    documentId: ROADMAP_ID,
+    kind: 'markdown',
+  })
+  writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# as drafted')
+  doc.commit()
+  const drafted = encodeFrontiers(doc.oplogFrontiers())
+  writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# after the meeting')
+  createWorkspaceDocumentAtPath(doc, { path: 'gone', documentId: GONE_ID, kind: 'markdown' })
+  writeMarkdownBody(documentContainers(doc, GONE_ID), '# trashed in the browser')
+  doc.commit()
+  const evacuated = exportWorkspaceSubtree(doc, 'gone')
+  if (evacuated === null) throw new Error('no subtree to evacuate')
+  deleteWorkspaceNodeAtPath(doc, 'gone')
+  recordTrashEntry(doc, {
+    documentId: GONE_ID,
+    path: 'gone',
+    deletedAt: 1,
+    blob: { algorithm: 'sha-256', digestHex: createHash('sha256').update(evacuated).digest('hex') },
+  })
+  doc.commit()
+  return {
+    snapshot: b64u(new Uint8Array(doc.export({ mode: 'snapshot' }))),
+    trash: [{ documentId: GONE_ID, bytes: b64u(evacuated) }],
+    versions: [
+      {
+        id: DRAFTED_VERSION_ID,
+        documentId: ROADMAP_ID,
+        createdAt: 1_000,
+        auto: false,
+        label: 'as drafted',
+        frontiers: b64u(drafted),
+      },
+    ],
+  }
+}
+
+it('carries a trashed document so the daemon restores it with its content', async () => {
+  const { app, promote } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  const res = await promote(record)
+  expect(res.status).toBe(200)
+  expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
+
+  const restored = await app.request(`/api/workspaces/session1/trash/${GONE_ID}/restore`, {
+    method: 'POST',
+  })
+  expect(restored.status).toBe(200)
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
+    '# trashed in the browser',
+  )
+})
+
+it('refuses trash bytes that are not what the entry names, and merges nothing', async () => {
+  const { promote, documents } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  const res = await promote({
+    ...record,
+    trash: [{ documentId: GONE_ID, bytes: b64u(new Uint8Array([1, 2, 3])) }],
+  })
+  expect(res.status).toBe(400)
+  expect(await documents()).toEqual([])
+})
+
+it('carries saved versions: listed for their document, label kept, restorable to their content', async () => {
+  const { app, promote } = harness()
+  const res = await promote(browserRecordWithTrashAndVersion())
+  expect(res.status).toBe(200)
+  expect(promoteWorkspaceResponseSchema.parse(await res.json()).versionsKept).toEqual([
+    DRAFTED_VERSION_ID,
+  ])
+
+  const listed = await new FileVersionStore().list('session1', 'notes/roadmap')
+  // The browser's row and the move's own checkpoint, newest first.
+  expect(listed.map((entry) => entry.label ?? null)).toEqual([null, 'as drafted'])
+  expect(listed[1]?.id).toBe(DRAFTED_VERSION_ID)
+  expect(listed[1]?.createdAt).toBe(new Date(1_000).toISOString())
+
+  const restored = await app.request(
+    `/api/workspaces/session1/documents/notes/roadmap/versions/${DRAFTED_VERSION_ID}/restore`,
+    { method: 'POST' },
+  )
+  expect(restored.status).toBe(200)
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  expect(readMarkdownBody(documentContainers(workspaceDoc, ROADMAP_ID))).toBe('# as drafted')
+})
+
+it('keeps a re-run idempotent: the carried version is not listed twice', async () => {
+  const { promote } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  expect((await promote(record)).status).toBe(200)
+  expect((await promote(record)).status).toBe(200)
+  const listed = await new FileVersionStore().list('session1', 'notes/roadmap')
+  expect(listed.filter((entry) => entry.id === DRAFTED_VERSION_ID)).toHaveLength(1)
+})
+
+it('refuses a version whose frontier the record does not hold, and merges nothing', async () => {
+  const { promote, documents } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  const stranger = new LoroDoc()
+  stranger.setPeerId(9n)
+  stranger.getText('t').insert(0, 'elsewhere')
+  stranger.commit()
+  const res = await promote({
+    ...record,
+    versions: [
+      { ...record.versions[0], frontiers: b64u(encodeFrontiers(stranger.oplogFrontiers())) },
+    ],
+  })
+  expect(res.status).toBe(400)
   expect(await documents()).toEqual([])
 })

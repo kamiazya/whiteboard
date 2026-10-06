@@ -23,6 +23,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
@@ -84,6 +85,7 @@ function fakes(peer = 1n) {
   workspaceDoc.commit()
   const live = new FakeLiveDocuments()
   const versions = new FakeVersionHistory()
+  const blobs = new FakeBlobStore()
   let saves = 0
   let evictions = 0
   const workspaceDocuments: WorkspaceDocuments = {
@@ -105,6 +107,7 @@ function fakes(peer = 1n) {
   return {
     live: live as LiveDocuments,
     versions,
+    blobs,
     workspaceDocuments,
     workspaceDoc,
     saves: () => saves,
@@ -124,6 +127,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: browserRecord(), operator, attestation },
     )
@@ -149,6 +153,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: browserRecord(), operator },
     )
@@ -167,6 +172,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: browserRecord(1n), operator },
     )
@@ -201,6 +207,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }) as Uint8Array, operator },
     )
@@ -215,6 +222,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: new Uint8Array([1, 2, 3, 4]), operator },
     )
@@ -238,6 +246,7 @@ describe('promoteWorkspace', () => {
           evictProjections: () => dropped.push('projections'),
         },
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: browserRecord(), operator },
     ).catch((err: unknown) => err)
@@ -258,6 +267,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: browserRecord(), operator },
     ).catch((err: unknown) => err)
@@ -285,6 +295,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
     ).catch((err: unknown) => err)
@@ -414,6 +425,7 @@ describe('promoteWorkspace', () => {
         liveDocuments: fake.live,
         workspaceDocuments: fake.workspaceDocuments,
         versions: fake.versions,
+        blobStore: fake.blobs,
       },
       { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }), operator },
     ).catch((err: unknown) => err)

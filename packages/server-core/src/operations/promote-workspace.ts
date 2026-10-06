@@ -4,6 +4,12 @@ import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io
 import type { ServerDeps } from '../server-deps.js'
 import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
+import {
+  type CarriedTrashBytes,
+  type CarriedVersion,
+  judgeCarried,
+  storeCarriedTrash,
+} from './promote-carried.js'
 import { TextBreachRefusalError, textBreachRefusal } from './sync-write-refusals.js'
 
 export interface PromoteWorkspaceInput {
@@ -14,10 +20,16 @@ export interface PromoteWorkspaceInput {
   readonly operator: OperatorInfo
   /** Their evidence, when the route asked for and verified one. */
   readonly attestation?: Attestation
+  /** Evacuated bytes for the record's trash entries; see `promote-carried.ts`. */
+  readonly trash?: readonly CarriedTrashBytes[]
+  /** The versions the browser keeper saved of the record's documents. */
+  readonly versions?: readonly CarriedVersion[]
 }
 
 export type PromoteWorkspaceResult =
   | { kind: 'malformed-snapshot' }
+  /** What was carried beside the record does not match it; nothing was merged. */
+  | { kind: 'unmatched-carried'; reason: string }
   | {
       kind: 'promoted'
       /** The documents the record carried, each now with an explicit checkpoint. */
@@ -29,6 +41,10 @@ export type PromoteWorkspaceResult =
        * won the address, which is not the one that was promoted.
        */
       shadowed: readonly string[]
+      /** Trash entries whose bytes the daemon now holds, read back from the blob store. */
+      trashStored: readonly string[]
+      /** Carried version ids the daemon's history holds, read back from it. */
+      versionsKept: readonly string[]
     }
 
 /**
@@ -94,9 +110,12 @@ function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
 
 /**
  * Promotion (ADR-0023): a browser-kept workspace record merged into a daemon
- * workspace, followed by what ADR-0039 decision 8 says a person's explicit
- * act leaves behind — one explicit (`auto: false`) checkpoint per promoted
- * document, carrying the attestation when there is one. The merge is
+ * workspace, with the trash bytes and saved versions it points at, followed
+ * by what ADR-0039 decision 8 says a person's explicit act leaves behind —
+ * one explicit (`auto: false`) checkpoint per promoted document, carrying the
+ * attestation when there is one. That checkpoint stays beside the carried
+ * history rather than being replaced by it: the carried rows record what the
+ * browser saved, and the move is a separate act by a named person. The merge is
  * `applyWorkspaceDocumentUpdate`'s and byte-identical to the sync surface's;
  * what this operation adds is the enumeration of what arrived and the rows.
  * It is merged as a TRANSFER: a promoted document keeps the `updatedAt` it
@@ -119,12 +138,17 @@ function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
  * refusal is re-raised naming the promoted document.
  */
 export async function promoteWorkspace(
-  deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions'>,
+  deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions' | 'blobStore'>,
   input: PromoteWorkspaceInput,
 ): Promise<PromoteWorkspaceResult> {
   const incoming = readIncoming(input)
   if (incoming === null) return { kind: 'malformed-snapshot' }
   const promoted = readWorkspaceDocuments(incoming).map((entry) => entry.documentId)
+  const carried = await judgeCarried(incoming, {
+    trash: input.trash ?? [],
+    versions: input.versions ?? [],
+  })
+  if (carried.kind === 'refused') return { kind: 'unmatched-carried', reason: carried.reason }
 
   const applied = await applyWorkspaceDocumentUpdate(deps, {
     workspaceId: input.workspaceId,
@@ -138,6 +162,10 @@ export async function promoteWorkspace(
   // The LISTING, not a by-id lookup: only the walk that sees every sibling
   // can say which document at a contested path is the shadowed one.
   const merged = await deps.workspaceDocuments.get(input.workspaceId)
+  const trashStored = await storeCarriedTrash(deps.blobStore, merged, carried.trash)
+  // Before the move's own checkpoints, so the history lists in the order it
+  // was taken: the carried rows keep their createdAt and the move's is now.
+  const versionsKept = await deps.versions.adopt(input.workspaceId, carried.versions)
   const byId = new Map(readWorkspaceDocuments(merged).map((entry) => [entry.documentId, entry]))
   const recorded: string[] = []
   const shadowed: string[] = []
@@ -156,5 +184,5 @@ export async function promoteWorkspace(
     })
     recorded.push(documentId)
   }
-  return { kind: 'promoted', recorded, shadowed }
+  return { kind: 'promoted', recorded, shadowed, trashStored, versionsKept }
 }

@@ -31,5 +31,7 @@ export function agentVersionHistory(store: VersionStore, daemonActor?: string): 
     load: (workspaceId, id) => store.load(workspaceId, id),
     loadWorkspaceAt: (workspaceId, id) => store.loadWorkspaceAt(workspaceId, id),
     list: (workspaceId, path) => store.list(workspaceId, path),
+    // Carried rows keep the operator they were saved with — an agent did not take them.
+    adopt: (workspaceId, rows) => store.adopt(workspaceId, rows),
   }
 }

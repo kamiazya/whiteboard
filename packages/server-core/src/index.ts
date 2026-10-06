@@ -31,6 +31,7 @@ export {
 } from './search/eval.js'
 export type { QueryCategory } from './search/search-corpus.js'
 export type {
+  AdoptedVersion,
   AgentActivity,
   CanvasClientNotifier,
   DocumentTeardown,
