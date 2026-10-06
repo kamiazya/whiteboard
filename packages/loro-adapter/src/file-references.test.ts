@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentContainers } from './containers.js'
 import { type FileReferenceReads, scanFileReferences } from './file-references.js'
 import { writeSpatialCanvas } from './loro-bridge.js'
+import { writeProposal } from './proposals.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
+  documentContainers,
   exportWorkspaceSubtree,
   projectWorkspaceDocument,
   recordTrashEntry,
@@ -60,6 +62,28 @@ describe('scanFileReferences', () => {
     const scan = await scanFileReferences(record, { trashBytes: noTrash })
 
     expect(scan.referenced).toEqual(new Set(['img-live']))
+    expect(scan.unjudged).toEqual([])
+  })
+
+  it('keeps an image only an undecided proposal names, so adopting it draws', async () => {
+    const record = new LoroDoc()
+    place(record, 'live', LIVE, 'img-live')
+    const node = fileNode({
+      id: 'n-p',
+      file: newImageRef('img-proposed'),
+      x: 20,
+      y: 0,
+      width: 9,
+      height: 9,
+    })
+    writeProposal(documentContainers(record, LIVE), {
+      id: 'p1',
+      changes: [{ id: 'c1', status: 'open', op: 'node.add', node }],
+    })
+
+    const scan = await scanFileReferences(record, { trashBytes: noTrash })
+
+    expect(scan.referenced).toEqual(new Set(['img-live', 'img-proposed']))
     expect(scan.unjudged).toEqual([])
   })
 

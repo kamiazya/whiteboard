@@ -4,10 +4,15 @@
  * entry or a saved version does.
  */
 import {
+  projectWorkspaceDocument,
+  writeProposal,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { FILE_COLLECTION_CONFORMANCE } from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
+import {
+  conformanceVerdictFor,
+  FILE_COLLECTION_CONFORMANCE,
+} from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -49,23 +54,53 @@ async function bytesHeld(fileId: string): Promise<boolean> {
   return (await new IdbBlobStore().has({ ref })).exists
 }
 
+function imageNodes(fileIds: readonly string[]) {
+  return fileIds.map((id, i) =>
+    fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 20, y: 0, width: 10, height: 10 }),
+  )
+}
+
 function drawing(fileIds: readonly string[]): LoroDoc {
   const doc = new LoroDoc()
-  writeSpatialCanvas(doc, {
-    nodes: fileIds.map((id, i) =>
-      fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 20, y: 0, width: 10, height: 10 }),
-    ),
-    edges: [],
-  })
+  writeSpatialCanvas(doc, { nodes: imageNodes(fileIds), edges: [] })
   return doc
 }
 
-async function draw(documentId: string, fileIds: readonly string[]): Promise<void> {
+/** Rewrites one document's content the way the editor's save does. */
+async function rewrite(documentId: string, edit: (current: LoroDoc | null) => LoroDoc) {
   const docs = new BrowserWorkspaceDocs()
   const record = await docs.open(getBrowserWorkspaceId())
   if (record === null) throw new Error('no record')
-  writeWorkspaceDocumentContent(record, documentId, drawing(fileIds))
+  writeWorkspaceDocumentContent(
+    record,
+    documentId,
+    edit(projectWorkspaceDocument(record, documentId)),
+  )
   await docs.save(getBrowserWorkspaceId(), record)
+}
+
+async function draw(documentId: string, fileIds: readonly string[]): Promise<void> {
+  await rewrite(documentId, () => drawing(fileIds))
+}
+
+async function propose(
+  documentId: string,
+  fileIds: readonly string[],
+  status: 'open' | 'dismissed',
+): Promise<void> {
+  await rewrite(documentId, (current) => {
+    if (current === null) throw new Error(`no document ${documentId}`)
+    writeProposal(current, {
+      id: `p-${fileIds.join('-')}`,
+      changes: imageNodes(fileIds).map((node) => ({
+        id: `c-${node.id}`,
+        status,
+        op: 'node.add' as const,
+        node,
+      })),
+    })
+    return current
+  })
 }
 
 async function seedDocument(path: string, fileIds: readonly string[]) {
@@ -193,6 +228,9 @@ describe('sweepUnreferencedFiles on the cross-keeper scenario', () => {
         case 'draw':
           await draw(ids.get(step.path) ?? '', step.draws)
           break
+        case 'propose':
+          await propose(ids.get(step.path) ?? '', step.draws, step.status)
+          break
         case 'save-version':
           await versions.save(workspaceId, step.path)
           break
@@ -209,9 +247,10 @@ describe('sweepUnreferencedFiles on the cross-keeper scenario', () => {
 
     const result = await sweepUnreferencedFiles()
 
-    const collected = FILE_COLLECTION_CONFORMANCE.collected.map((id) => newImageRef(id))
+    const verdict = conformanceVerdictFor('browser')
+    const collected = verdict.collected.map((id) => newImageRef(id))
     expect(result.kind === 'swept' ? [...result.deleted].sort() : result).toEqual(collected.sort())
-    for (const fileId of FILE_COLLECTION_CONFORMANCE.kept) {
+    for (const fileId of verdict.kept) {
       expect(await bytesHeld(fileId), fileId).toBe(true)
     }
   })

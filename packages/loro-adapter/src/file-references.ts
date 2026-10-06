@@ -4,11 +4,13 @@
  *
  * A file is needed while anything a user can still reach names it: a live
  * document, a trashed one (a restore brings it back under the same id), or a
- * saved version of either. Each keeper stores those three differently — the
- * daemon in SQLite rows and a blob directory, the browser in IndexedDB — so
- * the I/O arrives as `FileReferenceReads` and the judgement stays here. Two
- * hand-written copies of this walk are how one keeper learns a new place an
- * image can sit and the other deletes it.
+ * saved version of either. Each is read through `collectImageRefIds`, so a
+ * picture an undecided proposal in it would draw counts as named. Each
+ * keeper stores those three differently — the daemon in SQLite rows and a
+ * blob directory, the browser in IndexedDB — so the I/O arrives as
+ * `FileReferenceReads` and the judgement stays here. Two hand-written copies
+ * of this walk are how one keeper learns a new place an image can sit and
+ * the other deletes it.
  *
  * Fail closed: what cannot be read is reported in `unjudged` rather than
  * read as "names nothing", and a caller that deletes must refuse to while
