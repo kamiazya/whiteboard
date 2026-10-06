@@ -35,6 +35,12 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
    * family the note's realm never measured (ADR-0030 decision 9).
    */
   readonly fontAvailable?: SpatialLayoutOptions['fontAvailable']
+  /**
+   * The workspace's tag library, forwarded so an embedded board is coloured
+   * by intent exactly as it is on its own page. The note itself has no boxes
+   * to colour, so the typesetter never reads it.
+   */
+  readonly tagLibrary?: SpatialLayoutOptions['tagLibrary']
 }
 
 /**
@@ -53,7 +59,7 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
  */
 export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOptions): Scene {
   const options = withReferenceSeams(input)
-  const { canvasAppearance, style, fontAvailable, ...rest } = options
+  const { canvasAppearance, style, fontAvailable, tagLibrary, ...rest } = options
   return typesetMdastBlocks(root, {
     layoutEmbeddedCanvas: (canvas, box) =>
       fitSceneIntoBox(
@@ -78,6 +84,7 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
 const FORWARDED_TO_EMBEDDED_CANVAS = [
   'style',
   'fontAvailable',
+  'tagLibrary',
   'highlightCode',
   'renderMath',
   'renderDiagram',
