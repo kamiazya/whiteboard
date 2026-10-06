@@ -25,6 +25,7 @@
  * standing down; clearing it (Start fresh, or deleting it) lets them run.
  */
 import {
+  DEFAULT_FILE_GRACE_MS,
   type FileReferenceReads,
   projectWorkspaceDocument,
   scanFileReferences,
@@ -42,9 +43,6 @@ import { inTransaction, request } from './idb-tx.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
 const log = getAppLogger('browser-file-sweep')
-
-/** The daemon's default, for the same upload -> save window. */
-const DEFAULT_GRACE_MS = 60 * 60 * 1000
 
 export type BrowserFileSweepResult =
   | { kind: 'swept'; deleted: readonly string[] }
@@ -188,7 +186,7 @@ export async function sweepUnreferencedFiles(
   if (!(await recordsUnmoved(keys, scan.signatures, dbName))) {
     return { kind: 'stood-down', reason: 'record-moved' }
   }
-  const createdBefore = (options.now ?? Date.now)() - (options.graceMs ?? DEFAULT_GRACE_MS)
+  const createdBefore = (options.now ?? Date.now)() - (options.graceMs ?? DEFAULT_FILE_GRACE_MS)
   // A document names an image by its reference (`asset:<id>`), which is also
   // the key the editor stores it under; the scan answers the bare id.
   const keep = (fileId: string) =>

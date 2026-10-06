@@ -24,6 +24,7 @@ export {
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
 export { isEngineTrap } from './engine-trap.js'
 export {
+  DEFAULT_FILE_GRACE_MS,
   type FileReferenceHolder,
   type FileReferenceReads,
   scanFileReferences,

@@ -168,7 +168,9 @@ export class DocumentFileStore {
 
   /**
    * Drops every reference `keep` does not claim that was stored before
-   * `createdBefore`, each through `delete`, and answers the ids dropped.
+   * `createdBefore`, each the way `delete` drops one, and answers the ids
+   * dropped. Through `deleteUnlocked`, not `delete`: this already holds the
+   * files lock `delete` would wait on.
    *
    * The age is what covers an upload whose document has not been saved yet:
    * the image is stored first and the node naming it arrives with the next

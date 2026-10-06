@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import type { BrowserFileSweepResult } from './browser-file-sweep.js'
-import { scheduleFileSweep } from './file-sweep-schedule.js'
+import { scheduleFileSweep, sweepAfterPurge } from './file-sweep-schedule.js'
 
 const swept: BrowserFileSweepResult = { kind: 'swept', deleted: [] }
 
@@ -26,5 +27,23 @@ describe('scheduleFileSweep', () => {
     const wait = vi.fn()
     scheduleFileSweep({ sweep: async () => swept, wait })
     expect(wait).not.toHaveBeenCalled()
+  })
+})
+
+describe('sweepAfterPurge', () => {
+  it('sweeps at once, against the database the purge wrote to', () => {
+    const sweep = vi.fn(async (_dbName?: string) => swept)
+
+    sweepAfterPurge('whiteboard-under-test', { sweep })
+
+    expect(sweep).toHaveBeenCalledExactlyOnceWith('whiteboard-under-test')
+  })
+
+  it('reports a failed sweep rather than throwing into the purge', async () => {
+    expect(() =>
+      sweepAfterPurge(undefined, { sweep: async () => Promise.reject(new Error('idb closed')) }),
+    ).not.toThrow()
+
+    await expectLoggedFailure('file sweep after purge failed')
   })
 })

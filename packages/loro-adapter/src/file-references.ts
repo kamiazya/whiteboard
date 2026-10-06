@@ -30,6 +30,15 @@ import {
   unreadableWorkspaceNodes,
 } from './workspace-tree.js'
 
+/**
+ * How old an upload nothing names must be before a collection deletes it, by
+ * default. An image is stored first and the node naming it arrives with the
+ * next save, so a fresh upload is unnamed by construction; this window is
+ * what keeps it. One value for both keepers, so they cannot drift apart —
+ * the daemon lets an operator override it (`WHITEBOARD_FILE_GC_GRACE_MS`).
+ */
+export const DEFAULT_FILE_GRACE_MS = 60 * 60 * 1000
+
 /** A document whose saved versions are asked for. */
 export interface FileReferenceHolder {
   readonly documentId: string

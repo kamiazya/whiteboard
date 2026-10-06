@@ -3,6 +3,7 @@ import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
+  DEFAULT_FILE_GRACE_MS,
   type FileReferenceReads,
   scanFileReferences,
   type UnjudgedFileHolder,
@@ -203,8 +204,6 @@ export interface PurgeFilesOptions {
   scope?: StoreScope
 }
 
-const DEFAULT_GRACE_MS = 60 * 60 * 1000
-
 /**
  * Delete the uploads nothing points at any more, and report what went.
  *
@@ -279,7 +278,7 @@ function resolveGraceMs(options: PurgeFilesOptions): number {
   // the fallback below.
   const parsed = parseFileGcGraceMs(process.env)
   if (parsed.ok && parsed.value !== null) return parsed.value
-  return DEFAULT_GRACE_MS
+  return DEFAULT_FILE_GRACE_MS
 }
 
 export async function purgeDanglingFiles(
