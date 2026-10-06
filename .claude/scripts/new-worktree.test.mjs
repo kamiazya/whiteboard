@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
@@ -60,75 +60,22 @@ test('runWireStep: reports success when the wire script exits zero', () => {
   assert.equal(result.success, true)
 })
 
-// --- pre-seeding the built dist ---
-import { seedBuiltDist, seedsThisPath } from './new-worktree.mjs'
-
-// `dist` is gitignored, so a fresh worktree has no built server; the copy lets it run one before
-// its first build. The path stays `dist/cli/index.js`: prepend-cli-shebang, check-release-artifacts
-// and three distribution smokes pin it.
-test('seeds the built dist when the main checkout has one', () => {
-  const copies = []
-  const ok = seedBuiltDist({
-    mainRoot: '/repo',
-    worktreeRoot: '/wt',
-    existsSync: (p) => p === '/repo/packages/mcp-server/dist',
-    cpSync: (from, to, options) => copies.push([from, to, options]),
-    log: () => {},
-  })
-  assert.equal(ok, true)
-  assert.equal(copies.length, 1)
-  assert.deepEqual(copies[0].slice(0, 2), [
-    '/repo/packages/mcp-server/dist',
-    '/wt/packages/mcp-server/dist',
-  ])
-  // The copy is filtered, and by the exported rule rather than by a second
-  // copy of it — see the next test for what that rule refuses.
-  assert.equal(copies[0][2].recursive, true)
-  assert.equal(copies[0][2].filter, seedsThisPath)
-})
-
-// `dist/web-app` is the built web app three browser smokes SERVE as the
-// subject under test, so seeding it makes a fresh worktree test whatever the
-// main checkout last built. Measured once: 9 of 18 read-plane checks failed
-// on pristine main until the app was rebuilt in the worktree, and 37 of 37
-// passed after.
-test('the seed carries the CLI it exists for and never the built web app', () => {
-  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/cli/index.js'), true)
-  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/widget/entry.js'), true)
-  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/web-app'), false)
-  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/web-app/index.html'), false)
-  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/web-app/assets/App-1.js'), false)
-  // A path that merely CONTAINS the word is not the directory.
-  assert.equal(seedsThisPath('/repo/packages/mcp-server/dist/cli/web-apps.js'), true)
-})
-
-test('skips silently when the main checkout has no build yet', () => {
-  const copies = []
-  const ok = seedBuiltDist({
-    mainRoot: '/repo',
-    worktreeRoot: '/wt',
-    existsSync: () => false,
-    cpSync: (from, to) => copies.push([from, to]),
-    log: () => {},
-  })
-  assert.equal(ok, false)
-  assert.deepEqual(copies, [])
-})
-
-// Seeding is an optimisation, never a reason a worktree fails to be created.
-test('a copy failure is reported and swallowed', () => {
-  const logs = []
-  const ok = seedBuiltDist({
-    mainRoot: '/repo',
-    worktreeRoot: '/wt',
-    existsSync: () => true,
-    cpSync: () => {
-      throw new Error('disk full')
-    },
-    log: (m) => logs.push(m),
-  })
-  assert.equal(ok, false)
-  assert.ok(logs.some((m) => m.includes('disk full')))
+// A worktree starts with NO `packages/mcp-server/dist`, never a copy of the main checkout's.
+// A copy is whatever the main checkout last built — another commit, any number of days old — and
+// every dist-based check in the worktree (`pnpm mcp:http`, the packaged distribution smokes) runs
+// it without a word. Measured: a copy missing the source's two newest migrations made
+// `pnpm mcp:http` refuse the worktree's own `.dev-data`, advising an upgrade to a release that did
+// not ship them either. With no dist, each of those checks says "run `pnpm build`" instead.
+//
+// The copy existed to quiet pnpm's ENOENT warning for the unlinkable `whiteboard` bin
+// (`dist/cli/index.js`). Measured since under pnpm 11, a fresh worktree's first install with no
+// dist at all prints no such warning: no workspace package depends on @kamiazya/whiteboard-mcp,
+// so nothing links its bin. If that warning returns, a placeholder file at that one path quiets it
+// without handing the worktree a stale build.
+test('creating a worktree copies no build into it', () => {
+  const source = readFileSync(scriptPath, 'utf-8')
+  assert.doesNotMatch(source, /cpSync|copyFileSync/)
+  assert.doesNotMatch(source, /mcp-server\/dist/)
 })
 
 // An unrecognised option must never become a branch name or a base ref: `--help` is a question,

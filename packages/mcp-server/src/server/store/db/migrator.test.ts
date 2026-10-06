@@ -88,7 +88,9 @@ describe('runMigrations', () => {
   // A DB whose migration log records a name AFTER the last one this build
   // ships was written by a newer release. The remedy is to upgrade the older
   // build; deleting the database would destroy documents that a newer build
-  // reads fine.
+  // reads fine. In a source checkout the newer side is usually the checkout's
+  // own unreleased migration, which no published release ships yet, so the
+  // message names the rebuild as well.
   it('tells an older build to upgrade, never to delete, when the database records a newer migration', async () => {
     await prepareDataDir(tempDir)
     const db = await seedUnknownMigration('0099-from-a-newer-release')
@@ -99,6 +101,7 @@ describe('runMigrations', () => {
     expect(message).toMatch(/newer/i)
     expect(message).toMatch(/upgrade/i)
     expect(message).toContain('@kamiazya/whiteboard-mcp')
+    expect(message).toContain('pnpm build')
     expect(message).toContain('0099-from-a-newer-release')
     expect(message).toContain('/srv/wb-data/whiteboard.db')
     expect(message).not.toMatch(/remov|delet|re-create|disposable/i)

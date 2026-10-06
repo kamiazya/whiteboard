@@ -13,7 +13,7 @@
 // record goes with the worktree), then git worktree remove --force .claude/worktrees/<name> —
 // or let cleanup-worktrees.mjs do both once the branch is merged.
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, cpSync as nodeCpSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isRunAsScript } from '../../tools/checks/src/is-run-as-script.mjs'
@@ -51,65 +51,6 @@ export function runWireStep({
   } catch (err) {
     log(`[new-worktree] failed to wire Claude Code MCP for ${wtPath} (${err.message}). ${fallback}`)
     return { success: false }
-  }
-}
-
-/**
- * Copy the main checkout's built `packages/mcp-server/dist` into a fresh worktree, so it can run
- * the built server (`dist/cli/index.js`) before anything has been built there. `dist` is
- * gitignored, so a new worktree has none.
- *
- * Never load-bearing: an absent build or a failed copy is logged and skipped, because a worktree
- * that exists without this is still a working worktree. The copy is a starting point, not a
- * substitute for building — anything editing mcp-server rebuilds anyway.
- *
- * `dist/web-app` is the ONE subtree that argument does not cover, so it is never seeded. It is not
- * tooling the worktree runs: it is the built web app a server-mode daemon SERVES, so a smoke
- * over it has it as the subject under test. Seeded, a
- * fresh worktree tests whatever bundle the main checkout last built — from another branch, any
- * number of days old — and says nothing about the tree it is in.
- *
- * Measured, when the read-plane smoke still served it: a worktree at pristine `origin/main` failed
- * `smoke:read-plane` 9 of 18 checks, and the
- * same worktree at the same commit passed 37 of 37 after `pnpm --filter @kamiazya/whiteboard-web
- * build`, twice. That cost one investigation of the app (three refuted hypotheses about the
- * membership gate) before anybody suspected the bundle. Each of those smokes already stops with
- * "run `pnpm build`" when the directory is absent, so not seeding it turns a silent wrong answer
- * into that instruction.
- *
- * @returns {boolean} whether a dist was seeded
- */
-/**
- * Whether one path inside the main checkout's `dist` is carried into a worktree.
- *
- * Exported for its test: the rule is one line and the reason it exists is the paragraph above
- * `seedBuiltDist`, so what a test can hold is that the built web app is refused and the CLI the
- * seed exists for is not.
- */
-export function seedsThisPath(src) {
-  return !/(^|[\\/])web-app([\\/]|$)/.test(src)
-}
-
-export function seedBuiltDist({
-  mainRoot,
-  worktreeRoot,
-  existsSync: exists = existsSync,
-  cpSync = nodeCpSync,
-  log = (msg) => console.warn(msg),
-}) {
-  const from = `${mainRoot}/packages/mcp-server/dist`
-  if (!exists(from)) return false
-  try {
-    cpSync(from, `${worktreeRoot}/packages/mcp-server/dist`, {
-      recursive: true,
-      filter: seedsThisPath,
-    })
-    return true
-  } catch (err) {
-    log(
-      `[new-worktree] could not seed the built dist (${err.message}) — pnpm will warn about the unlinkable \`whiteboard\` bin; harmless.`,
-    )
-    return false
   }
 }
 
@@ -151,7 +92,6 @@ function main() {
   const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
   if (!baseArg) run('git', ['-C', repoRoot, 'fetch', 'origin'])
   run('git', ['-C', repoRoot, 'worktree', 'add', wtPath, '-b', name, base])
-  seedBuiltDist({ mainRoot: repoRoot, worktreeRoot: wtPath })
   run('pnpm', ['--dir', wtPath, 'install', '--prefer-offline'])
 
   console.log(`\nready worktree: ${wtPath}`)

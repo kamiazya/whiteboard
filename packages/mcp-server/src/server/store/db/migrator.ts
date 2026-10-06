@@ -45,7 +45,8 @@ function incompatibleDatabaseMessage(unknown: readonly string[], where: string):
       `The database at ${where} was migrated by a newer release of whiteboard: it records ` +
       `${newer.join(', ')}, which this build (last migration ${lastShipped}) does not ship. ` +
       'Upgrade this build to the latest @kamiazya/whiteboard-mcp (for example ' +
-      '`npx -y @kamiazya/whiteboard-mcp@latest`) and stop any older daemon on the same data ' +
+      '`npx -y @kamiazya/whiteboard-mcp@latest`) — or, in a source checkout, rebuild it with ' +
+      '`pnpm build` — and stop any older daemon on the same data ' +
       'directory. Keep the database as it is: it holds your documents and the newer build ' +
       'reads it unchanged.'
     )
