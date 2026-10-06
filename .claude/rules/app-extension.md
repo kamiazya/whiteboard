@@ -76,7 +76,7 @@ addendum decision 5), and a store signs what it publishes.
 - `pnpm dev:connected` (root) is the same wiring for a person or an agent:
   this checkout's dev daemon, the development build, the host registered
   inside a throwaway Chromium profile only, `vite`, and Playwright's Chromium
-  (`--headless` prints a CDP endpoint). `scripts/dev-connected-lib.test.ts`
+  (`--headless` prints a CDP endpoint). `apps/extension/scripts/dev-connected-lib.test.ts`
   pins that the install never reaches a user-level manifest dir.
 
 ## Tests
