@@ -13,6 +13,7 @@ import {
   seedNamesFromTitles,
   writeDocumentContentAndName,
 } from './name-from-title.js'
+import { documentsTouchedSince } from './touched-documents.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
@@ -153,7 +154,7 @@ describe('a chosen name', () => {
     const since = workspace.oplogVersion()
     workspace.import(update)
 
-    seedNamesFromTitles(workspace, since)
+    seedNamesFromTitles(workspace, documentsTouchedSince(workspace, since))
 
     expect(nameOf(workspace)).toBe('Weekly')
   })
@@ -175,7 +176,7 @@ describe('seedNamesFromTitles', () => {
     const since = workspace.oplogVersion()
     workspace.import(update)
 
-    seedNamesFromTitles(workspace, since)
+    seedNamesFromTitles(workspace, documentsTouchedSince(workspace, since))
 
     expect(nameOf(workspace)).toBe('Weekly review')
   })
@@ -183,7 +184,7 @@ describe('seedNamesFromTitles', () => {
   it('leaves alone a document nothing since `since` wrote to', () => {
     const workspace = workspaceWith('untitled', '# Weekly review\n')
 
-    seedNamesFromTitles(workspace, workspace.oplogVersion())
+    seedNamesFromTitles(workspace, documentsTouchedSince(workspace, workspace.oplogVersion()))
 
     expect(nameOf(workspace)).toBeUndefined()
   })
@@ -201,7 +202,7 @@ describe('seedNamesFromTitles', () => {
     workspace.import(replica.export({ mode: 'update', from }))
     expect(nameOf(workspace)).toBeUndefined()
 
-    seedNamesFromTitles(workspace, since)
+    seedNamesFromTitles(workspace, documentsTouchedSince(workspace, since))
 
     expect(nameOf(workspace)).toBe('Weekly review')
   })
@@ -217,7 +218,7 @@ describe('seedNamesFromTitles', () => {
     workspace.import(replica.export({ mode: 'update', from }))
     const after = workspace.oplogVersion().toJSON()
 
-    seedNamesFromTitles(workspace, since)
+    seedNamesFromTitles(workspace, documentsTouchedSince(workspace, since))
 
     expect(workspace.oplogVersion().toJSON()).toEqual(after)
   })
@@ -229,7 +230,7 @@ describe('seedNamesFromTitles', () => {
     workspace.import(update)
     const after = workspace.oplogVersion().toJSON()
 
-    seedNamesFromTitles(workspace, since)
+    seedNamesFromTitles(workspace, documentsTouchedSince(workspace, since))
 
     expect(workspace.oplogVersion().toJSON()).toEqual(after)
   })

@@ -69,6 +69,11 @@ export {
   type PassageRange,
   readThreadMarks,
 } from './thread-marks.js'
+export {
+  documentsTouchedSince,
+  stampEditedDocuments,
+  type TouchedDocument,
+} from './touched-documents.js'
 export { duplicateWorkspaceDocument } from './workspace-duplicate.js'
 export {
   adoptWorkspaceDocument,
