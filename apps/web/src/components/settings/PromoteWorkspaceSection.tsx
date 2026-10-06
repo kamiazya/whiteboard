@@ -102,6 +102,22 @@ function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
 }
 
 /**
+ * Whether the move left anything only the browser copy holds — the demote
+ * gate, deliberately strict. `missing` gates alongside `failed` because the
+ * file store folds read errors into "missing", so those references may be
+ * retryable and the source record is the retry vehicle. `leftBehind` gates
+ * for the same reason: a trash entry or a saved version the daemon did not
+ * confirm holding exists only in the copy the demote would delete.
+ */
+function leftAnythingBehind(outcome: Extract<PromoteWorkspaceResult, { kind: 'ok' }>): boolean {
+  return (
+    outcome.blobs.failed.length > 0 ||
+    outcome.blobs.missing.length > 0 ||
+    outcome.leftBehind.length > 0
+  )
+}
+
+/**
  * The demote pull (ADR-0023 decision 2): cache the daemon's merged record
  * back into this browser's planes, and delete the source record only once
  * that cache is proven to carry everything.
@@ -118,22 +134,6 @@ function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
  * (the browser copy stays, as in any other unverified-replica case) and a
  * later visit re-asks.
  */
-/**
- * Whether the move left anything only the browser copy holds — the demote
- * gate, deliberately strict. `missing` gates alongside `failed` because the
- * file store folds read errors into "missing", so those references may be
- * retryable and the source record is the retry vehicle. `leftBehind` gates
- * for the same reason: a trash entry or a saved version the daemon did not
- * confirm holding exists only in the copy the demote would delete.
- */
-function leftAnythingBehind(outcome: Extract<PromoteWorkspaceResult, { kind: 'ok' }>): boolean {
-  return (
-    outcome.blobs.failed.length > 0 ||
-    outcome.blobs.missing.length > 0 ||
-    outcome.leftBehind.length > 0
-  )
-}
-
 async function cacheAndMaybeDemote({
   fetchImpl,
   daemonBaseUrl,

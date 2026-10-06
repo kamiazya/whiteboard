@@ -21,13 +21,13 @@ export { base64urlSchema }
  * store, and without them the daemon lists the entry but cannot restore it.
  * The daemon stores them only when they hash to the digest the entry names.
  */
-const promotedTrashBytesSchema = z
+const promotedTrashBytesRequestSchema = z
   .object({
     documentId: z.string().min(1),
     bytes: base64urlSchema,
   })
   .strict()
-export type PromotedTrashBytes = z.infer<typeof promotedTrashBytesSchema>
+export type PromotedTrashBytes = z.infer<typeof promotedTrashBytesRequestSchema>
 
 /** A version id the daemon can key a row by — the character class its validator admits. */
 const promotedVersionIdSchema = z.string().max(64).regex(WORKSPACE_ID_PATTERN)
@@ -43,7 +43,7 @@ const promotedVersionIdSchema = z.string().max(64).regex(WORKSPACE_ID_PATTERN)
  * The operator is the request form — no `actor`: the device a row names is
  * one the keeper can back with a key, which a carried row cannot.
  */
-const promotedVersionSchema = z
+const promotedVersionRequestSchema = z
   .object({
     id: promotedVersionIdSchema,
     documentId: z.string().min(1),
@@ -57,7 +57,7 @@ const promotedVersionSchema = z
     frontiers: base64urlSchema,
   })
   .strict()
-export type PromotedVersion = z.infer<typeof promotedVersionSchema>
+export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 
 /**
  * The most a promote request body may carry: the content ceiling, which a
@@ -83,8 +83,8 @@ export const promoteWorkspaceRequestSchema = z
     snapshot: base64urlSchema,
     /** Present when the browser could ask a passkey; absent is honest, not a failure. */
     attestation: attestationSchema.optional(),
-    trash: z.array(promotedTrashBytesSchema).optional(),
-    versions: z.array(promotedVersionSchema).optional(),
+    trash: z.array(promotedTrashBytesRequestSchema).optional(),
+    versions: z.array(promotedVersionRequestSchema).optional(),
   })
   .strict()
 export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSchema>
