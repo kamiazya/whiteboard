@@ -4,7 +4,9 @@
 // proposal, the maps inside them — is a root named by its parent and its key.
 // A name long enough breaks the snapshot for every document in the record
 // while the update that wrote it still imports, so the bound is held where
-// an update arrives rather than where a record is read back.
+// an update arrives rather than where a record is read back. A plain child
+// under a long key is held to it too: a content copy rebuilds it as a
+// mergeable child, named by that key.
 import { CONTAINER_NAME_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import type { ContainerID, JsonSchema, LoroDoc, LoroMap, MapOp } from 'loro-crdt'
 
@@ -95,6 +97,17 @@ export function heldBefore(doc: LoroDoc, suspects: readonly NameSuspect[]): Set<
   return held
 }
 
+/**
+ * The name a suspect's container carries, or would carry once copied. A child
+ * a peer's op id names carries none in this record, but a content copy
+ * rebuilds a nested map as a mergeable child, a root named by its key — so a
+ * key past the bound names a container past it whatever kind it is now.
+ */
+function nameChars(container: ContainerID, key: string | undefined): number {
+  const own = nameLength(container)
+  return own === 0 && key !== undefined ? key.length : own
+}
+
 /** The first container the update brought in under a name past the bound, judged on the state after it. */
 export function longNameBreach(
   doc: LoroDoc,
@@ -104,7 +117,7 @@ export function longNameBreach(
   for (const suspect of suspects) {
     const container = containerAt(doc, suspect)
     if (container === undefined || before.has(container)) continue
-    const chars = nameLength(container)
+    const chars = nameChars(container, suspect.key)
     if (chars > CONTAINER_NAME_MAX_CHARS) return { chars, container }
   }
   return null

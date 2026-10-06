@@ -1,6 +1,7 @@
 /**
- * A container name past `CONTAINER_NAME_MAX_CHARS` on the workspace-document
- * sync route, over the real router and a real store.
+ * A container name past `CONTAINER_NAME_MAX_CHARS` on the sync routes, over
+ * the real router and a real store — and the copies (duplicate, trash) of a
+ * record that holds one from before the bound.
  *
  * Loro keeps such an update and then cannot read the snapshot it is saved
  * into, so the cost of letting one through is not one document but the whole
@@ -12,6 +13,11 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  documentDuplicateApiUrl,
+  documentRecordApiUrl,
+  trashRestoreApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { syncWriteRefusalOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
 import {
   documentContainers,
@@ -21,7 +27,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
@@ -140,6 +146,92 @@ describe('a workspace-document update naming a container past its bound', () => 
     )
 
     expect(taken.status).toBe(200)
+    expect(await nodesAfterRestart()).toEqual(['n-a'])
+  })
+})
+
+/**
+ * A plain map nested under a key past the bound. It is named by a peer's op
+ * id, so the record holding it opens; but a copy — the tree write behind the
+ * per-document route, a duplicate, the trash — rebuilds a nested map as a
+ * mergeable child, a root named by its key.
+ */
+const LONG_KEY = 'k'.repeat(70_000)
+function nestUnderLongKey(plane: LoroMap): void {
+  plane.setContainer(LONG_KEY, new LoroMap()).set('a', 1)
+}
+
+describe('a sync update nesting a container under a key past the bound', () => {
+  it.each([
+    'nodes',
+    'threads',
+    'facets',
+  ])('answers 413 on the workspace-document route for one under %s', async (plane) => {
+    const { app, documentId, post } = await setup()
+
+    const refused = await post((doc) =>
+      nestUnderLongKey(documentContainers(doc, documentId).getMap(plane)),
+    )
+
+    expect(refused.status).toBe(413)
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('container_name_too_long')
+    expect(await nodesAfterRestart()).toEqual(['n-a'])
+    const snapshot = await app.request(`/api/w/${WS}/workspace-document/snapshot`)
+    expect(snapshot.status).toBe(200)
+  })
+
+  it('answers 413 on the per-document route', async () => {
+    const { app } = await setup()
+    const res = await app.request(`/api/w/${WS}/document/c/snapshot`)
+    const peer = LoroDoc.fromSnapshot(new Uint8Array(await res.arrayBuffer()))
+    const from = peer.version()
+    nestUnderLongKey(peer.getMap('nodes'))
+    peer.commit()
+
+    const refused = await app.request(`/api/w/${WS}/document/c/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(peer.export({ mode: 'update', from })),
+    })
+
+    expect(refused.status).toBe(413)
+    expect(syncWriteRefusalOf(await refused.json()).code).toBe('container_name_too_long')
+    expect(await nodesAfterRestart()).toEqual(['n-a'])
+  })
+})
+
+describe('a record holding a container under a key past the bound from before it', () => {
+  /** Plants the key straight into the stored record, as a write before the bound did. */
+  async function plantedSetup() {
+    const context = await setup()
+    const record = await serverDeps.workspaceDocuments.get(WS)
+    nestUnderLongKey(documentContainers(record, context.documentId).getMap('threads'))
+    record.commit()
+    await serverDeps.workspaceDocuments.save(WS, record)
+    serverDeps.workspaceDocuments.evictProjections(WS)
+    expect(await nodesAfterRestart()).toEqual(['n-a'])
+    return context
+  }
+
+  it('duplicates the document and still opens', async () => {
+    const { app } = await plantedSetup()
+
+    const duplicated = await app.request(documentDuplicateApiUrl(WS, 'c'), { method: 'POST' })
+
+    expect(duplicated.status).toBe(200)
+    expect(await nodesAfterRestart()).toEqual(['n-a'])
+    const copy = await loadDocument(WS, 'c-copy')
+    expect(readSpatialCanvas(copy).nodes.map((node) => node.id)).toEqual(['n-a'])
+  })
+
+  it('restores the document from the trash and still opens', async () => {
+    const { app, documentId } = await plantedSetup()
+
+    const deleted = await app.request(documentRecordApiUrl(WS, 'c'), { method: 'DELETE' })
+    expect(deleted.status).toBe(200)
+    const restored = await app.request(trashRestoreApiUrl(WS, documentId), { method: 'POST' })
+
+    expect(restored.status).toBe(200)
     expect(await nodesAfterRestart()).toEqual(['n-a'])
   })
 })

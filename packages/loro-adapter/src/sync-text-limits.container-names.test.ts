@@ -2,7 +2,7 @@ import { CONTAINER_NAME_MAX_CHARS, ID_MAX_CHARS } from '@kamiazya/whiteboard-mod
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeCommentThread } from './comment-threads.js'
-import { PROPOSALS_KEY, THREADS_KEY } from './containers.js'
+import { FACETS_KEY, NODES_KEY, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
 import { openMergeableMap } from './mergeable-containers.js'
 import {
   importWithinTextLimits,
@@ -170,6 +170,58 @@ describe('a container name brought in by a sync update', () => {
     expect(judged(base, update)).toMatchObject({ shape: 'container-name' })
   })
 
+  describe('a plain container nested under a long key', () => {
+    // Such a child is named by a peer's op id, so the record holding it
+    // opens — but every content copy rebuilds a nested map as a mergeable
+    // child, a root named by its key, and a long enough key then leaves a
+    // record no keeper can load.
+    const nestUnder = (plane: string, key: string) => (doc: LoroDoc) => {
+      const child = documentContainers(doc, DOC_ID).getMap(plane).setContainer(key, new LoroMap())
+      child.set('a', 1)
+    }
+
+    it.each([
+      [NODES_KEY, CONTAINER_NAME_MAX_CHARS + 1],
+      [THREADS_KEY, CONTAINER_NAME_MAX_CHARS + 1],
+      [FACETS_KEY, CONTAINER_NAME_MAX_CHARS + 1],
+      [NODES_KEY, 70_000],
+    ])('refuses one under %s with a %i-character key', (plane, chars) => {
+      const base = record()
+      const update = updateFrom(base, nestUnder(plane, 'k'.repeat(chars)))
+      expect(judged(base, update)).toEqual({
+        shape: 'container-name',
+        chars,
+        container: expect.any(String),
+      })
+    })
+
+    it('takes one under a key of exactly the limit', () => {
+      const base = record()
+      const update = updateFrom(base, nestUnder(NODES_KEY, 'k'.repeat(CONTAINER_NAME_MAX_CHARS)))
+      expect(judged(base, update)).toBeNull()
+    })
+
+    it('takes a plain value under a key past the limit', () => {
+      const base = record()
+      const update = updateFrom(base, (doc) =>
+        documentContainers(doc, DOC_ID)
+          .getMap(NODES_KEY)
+          .set('k'.repeat(CONTAINER_NAME_MAX_CHARS + 1), { a: 1 }),
+      )
+      expect(judged(base, update)).toBeNull()
+    })
+
+    it('takes a write into one the record already holds', () => {
+      const key = 'k'.repeat(CONTAINER_NAME_MAX_CHARS + 100)
+      const base = record(nestUnder(NODES_KEY, key))
+      const update = updateFrom(base, (doc) => {
+        const held = documentContainers(doc, DOC_ID).getMap(NODES_KEY).get(key) as LoroMap
+        held.set('a', 2)
+      })
+      expect(judged(base, update)).toBeNull()
+    })
+  })
+
   it('needs more bytes than the limit to name a container past it', () => {
     // The judge answers an update no longer than the limit without applying
     // it, so no shorter update may name a container past the limit — the
@@ -184,6 +236,9 @@ describe('a container name brought in by a sync update', () => {
         const nested = new LoroMap()
         const parent = threadsOf(doc).setContainer('p', nested)
         parent.ensureMergeableMap('k'.repeat(CONTAINER_NAME_MAX_CHARS))
+      },
+      (doc: LoroDoc) => {
+        threadsOf(doc).setContainer('k'.repeat(CONTAINER_NAME_MAX_CHARS + 1), new LoroMap())
       },
     ]
     for (const edit of shapes) {

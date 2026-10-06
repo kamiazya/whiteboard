@@ -180,9 +180,13 @@ a container into the record under a name longer than **1,024 characters**. A
 comment thread and a proposal are each a container named by its id, so this
 is how an over-long thread or proposal id arriving by sync is answered; kept,
 a name far enough past it would leave a record that no keeper can load, every
-document in the workspace with it. A container stored under a longer name
-before the bound still takes a write. A browser-kept workspace refuses the
-same change the way it refuses an over-long node.
+document in the workspace with it. A container of any kind nested under a key
+longer than 1,024 characters is refused the same way, because copying the
+document — a save, a duplicate, a trip through the trash — would give the
+copy a name that long. A container stored under a longer name or key before
+the bound still takes a write, and a copy of its document stays readable. A
+browser-kept workspace refuses the same change the way it refuses an
+over-long node.
 
 ## How many ops one call may carry
 
