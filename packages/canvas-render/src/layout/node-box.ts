@@ -13,6 +13,7 @@
 import {
   frameLabel,
   isFrame,
+  isImageRef,
   nodeFile,
   nodeSubpath,
   nodeUrl,
@@ -267,6 +268,16 @@ export function placeAboveNode(node: SpatialNode, content: Scene): readonly Scen
   )
 }
 
+/**
+ * What an image node is called when its picture is not drawn: an image
+ * reference is a storage id (`asset:<uuid>`) that names nothing a reader
+ * knows, so the alt text stands in for it, and "Image" when there is none.
+ */
+function imageLabel(resolved: ResolvedReference | undefined): string {
+  const alt = resolved?.image?.alt?.trim()
+  return alt !== undefined && alt.length > 0 ? alt : 'Image'
+}
+
 /** The readable label of a non-text node, or `undefined` when it has none. */
 export function labelOf(
   node: SpatialNode,
@@ -277,7 +288,7 @@ export function labelOf(
     // The raw reference is an opaque id — useless to a reader — and the
     // subpath is moot without a target, so neither appears.
     if (resolved?.missing === true) return 'Missing reference'
-    const base = resolved?.label ?? file
+    const base = resolved?.label ?? (isImageRef(file) ? imageLabel(resolved) : file)
     const subpath = nodeSubpath(node)
     return subpath ? `${base}${subpath}` : base
   }

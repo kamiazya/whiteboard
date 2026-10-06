@@ -25,7 +25,8 @@ no need to switch to a browser tab to see what the agent drew.
   web app. The server reads the library, since the widget has no store to read it from.
 - Its **file references resolved**: a node pointing at a markdown document in the
   same workspace shows that document's prose, and every reference is labelled with
-  its readable name rather than its raw id. The widget has no store of its own, so
+  its readable name rather than its raw id. An image is not drawn in the view, so its
+  box reads "Image" rather than the image's storage id. The widget has no store of its own, so
   the server resolves these and sends them in the tool result alongside the scene.
 - One self-contained viewer bundle — no daemon credentials, tokens, or
   base URLs are ever passed into the widget. The widget only ever receives the scene
