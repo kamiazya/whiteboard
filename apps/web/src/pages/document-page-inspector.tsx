@@ -180,6 +180,7 @@ export function inspectorPanelsFor(deps: {
         <VersionPanel
           workspaceId={versions.workspaceId}
           path={versions.path}
+          documentKind={documentKind}
           onRestored={sync.clearLocalUndo}
           onPreview={setPreview}
           refreshSignal={versionRefreshSignal}
