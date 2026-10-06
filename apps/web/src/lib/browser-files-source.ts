@@ -4,6 +4,10 @@ import {
   planReferenceRewrite,
 } from '@kamiazya/whiteboard-codec'
 import {
+  trashPurgeRefusal,
+  trashRestoreRefusal,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import {
   type DocumentContent,
   documentContainers,
   readDocumentContent,
@@ -223,15 +227,9 @@ function trashMembers(
       if (restored !== null) return
       // null means nothing came back — surfacing it is what lets the
       // section show its restore error instead of silently reloading
-      // with the row still there. The two keepers refuse alike: an id the
-      // workspace already places is the daemon's 409, anything else its 404.
+      // with the row still there, in the words the daemon refuses with.
       const placed = await index.resolveDocumentById({ workspaceId, documentId })
-      if (placed !== null) {
-        throw new Error(
-          `"${placed.path}" is already in this workspace, so there is nothing to restore`,
-        )
-      }
-      throw new Error(`Nothing restorable for "${documentId}"`)
+      throw new Error(trashRestoreRefusal(documentId, placed?.path ?? null).title)
     },
     async purgeFromTrash(documentId) {
       // false means the trash held no such entry; rejecting is what the
@@ -240,7 +238,7 @@ function trashMembers(
         workspaceId: getBrowserWorkspaceId(),
         documentId,
       })
-      if (!purged) throw new Error(`Nothing in the trash for "${documentId}"`)
+      if (!purged) throw new Error(trashPurgeRefusal(documentId).title)
     },
   }
 }

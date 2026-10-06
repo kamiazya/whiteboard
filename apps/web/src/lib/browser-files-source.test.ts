@@ -4,6 +4,10 @@
  */
 import 'fake-indexeddb/auto'
 import {
+  trashPurgeRefusal,
+  trashRestoreRefusal,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import {
   writeCoreFacets,
   writeFacets,
   writeMarkdownBody,
@@ -258,21 +262,23 @@ describe('createBrowserFilesSource trash', () => {
     expect(await source.listTrash?.()).toEqual([])
   })
 
-  it('rejects a restore that brought nothing back, so the UI can say so', async () => {
+  it('rejects a restore or purge that found nothing, so the UI can say so', async () => {
     // The index answers null for an id that is not in the trash; swallowing
     // that resolves the button's promise and the section reloads with the
     // row still there — a silent no-op. The daemon path already rejects
-    // (its route 404s); the browser path must agree.
+    // (its route 404s, in the same words); the browser path must agree.
     const index = new FoldingBrowserIndex()
     await ensureBrowserWorkspace(index)
     const source = createBrowserFilesSource({ index })
+    const absent = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-    await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow(
-      'Nothing restorable',
+    await expect(source.restoreFromTrash?.(absent)).rejects.toThrow(
+      trashRestoreRefusal(absent, null).title,
     )
+    await expect(source.purgeFromTrash?.(absent)).rejects.toThrow(trashPurgeRefusal(absent).title)
   })
 
-  // The daemon answers 409 with this sentence for the same case: the id is
+  // The daemon answers 409 in the same words for the same case: the id is
   // live, so the restore has nothing to bring back and "not found" would lie.
   it('refuses to restore a document the workspace already places, naming its path', async () => {
     const index = new FoldingBrowserIndex()
@@ -285,7 +291,7 @@ describe('createBrowserFilesSource trash', () => {
     const source = createBrowserFilesSource({ index })
 
     await expect(source.restoreFromTrash?.(entry.documentId)).rejects.toThrow(
-      '"notes/live" is already in this workspace, so there is nothing to restore',
+      trashRestoreRefusal(entry.documentId, 'notes/live').title,
     )
   })
 
