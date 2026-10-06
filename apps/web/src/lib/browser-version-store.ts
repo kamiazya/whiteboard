@@ -337,8 +337,8 @@ export async function deleteVersionRowsOfDocument(
 }
 
 /**
- * Every saved version of one workspace, whole — what a promotion carries to
- * the keeper the workspace moves to. A row that fails the schema is skipped
+ * Every saved version of one workspace, whole — what a move carries to the
+ * keeper the workspace goes to, and what the file sweep checks out. A row that fails the schema is skipped
  * exactly as the History panel skips it: a version nobody can list is one
  * nobody can restore.
  */
@@ -356,22 +356,11 @@ export async function savedVersionRows(
 }
 
 /**
- * Every saved version of one workspace, as the document it belongs to and the
- * frontier it points at — what the file sweep checks out to learn which images
- * a past state draws.
- */
-export async function savedVersionFrontiers(
-  workspaceId: string,
-  dbName?: string,
-): Promise<ReadonlyArray<Pick<VersionRow, 'id' | 'documentId' | 'frontiers'>>> {
-  const rows = await savedVersionRows(workspaceId, dbName)
-  return rows.map(({ id, documentId, frontiers }) => ({ id, documentId, frontiers }))
-}
-
-/**
- * The saved versions as `scanFileReferences` reads them: each frontier
- * checked out of ONE fork of the record, rather than a fork per version — a
- * fork copies the whole workspace, and a checkout moves the one it has.
+ * The saved versions as `scanFileReferences` reads them — what the file sweep
+ * and a promotion check out to learn which images a past state draws. Each
+ * frontier is checked out of ONE fork of the record rather than a fork per
+ * version: a fork copies the whole workspace, and a checkout moves the one it
+ * has.
  */
 export function savedVersionReads(
   record: LoroDoc,
