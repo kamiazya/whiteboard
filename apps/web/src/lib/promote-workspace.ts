@@ -47,7 +47,7 @@ import {
   documentContainers,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
@@ -167,7 +167,12 @@ async function transferImages(
 ): Promise<PromotedBlobs> {
   const blobs: PromotedBlobs = { transferred: [], missing: [], failed: [] }
   for (const [fileId, path] of refs) {
-    const blob = await fileStore.get(fileId)
+    // The store is keyed by the reference the document carries — what the
+    // editor's upload writes — while the scan and the daemon's file route
+    // speak the bare id. Read under the bare id, every real picture is
+    // `missing`, and a missing picture holds the browser copy back from
+    // demotion for good.
+    const blob = await fileStore.get(newImageRef(fileId))
     if (blob === null) {
       blobs.missing.push(fileId)
       continue

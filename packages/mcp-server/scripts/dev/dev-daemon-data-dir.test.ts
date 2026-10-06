@@ -1,9 +1,12 @@
 /**
- * Every script that starts the daemon for DEVELOPMENT goes through
- * `with-dev-data-dir.mjs`, or says why it does not.
+ * Every script that boots a store for DEVELOPMENT goes through a launcher
+ * that points it at the checkout's `.dev-data`, or says why it does not.
  *
- * The wrapper is what keeps a dev session out of the real `~/.whiteboard`
- * (and gives it this worktree's marker).
+ * The launcher is what keeps a dev session out of the real `~/.whiteboard`
+ * (and gives it this worktree's marker). The daemon is not the only thing
+ * that opens a store: the stdio server does too, and an unreleased migration
+ * run against the real data dir leaves the installed release refusing to
+ * start on it.
  * `mcp:http:dev` has always run through it; `dev` — the daemon half of
  * `pnpm dev`, the command `development.md` names first — ran
  * `tsx watch src/server/daemon-entry.ts` directly, so the most obvious way to
@@ -15,7 +18,7 @@
  * `notice` level precisely because misdirected persistence is expensive to
  * spot afterwards. This is the rung above that log.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -28,53 +31,85 @@ const scripts: Record<string, string> = JSON.parse(
 ).scripts
 
 /**
- * A script that starts the daemon: either it names the entry point, or it
- * names the wrapper whose whole job is spawning that entry point. Matching
- * the entry alone would MISS every wrapped script — leaving a probe that
- * finds only the unwrapped ones and a count that cannot tell an empty tree
- * from a clean one.
+ * The launchers that set `WHITEBOARD_DATA_DIR` to the checkout's `.dev-data`
+ * before anything opens a store. Each is read below to prove it still does,
+ * so a name on this list cannot stand in for a launcher that stopped.
  */
-function startsTheDaemon(command: string): boolean {
-  return command.includes('daemon-entry') || command.includes('with-dev-data-dir.mjs')
+const DEV_DATA_DIR_LAUNCHERS = [
+  'with-dev-data-dir.mjs',
+  'run-built-daemon.mjs',
+  'run-source-stdio.mjs',
+]
+
+/**
+ * A script that boots a store: it names an entry that opens one (the daemon's
+ * or the stdio server's), or a launcher whose whole job is running one.
+ * Matching the entries alone would MISS every launched script — leaving a
+ * probe that finds only the unlaunched ones and a count that cannot tell an
+ * empty tree from a clean one.
+ */
+function bootsAStore(command: string): boolean {
+  return (
+    command.includes('daemon-entry') ||
+    command.includes('mcp/stdio.ts') ||
+    DEV_DATA_DIR_LAUNCHERS.some((launcher) => command.includes(launcher))
+  )
+}
+
+function setsTheDevDataDir(launcher: string): boolean {
+  const path = resolve(PACKAGE_ROOT, 'scripts/dev', launcher)
+  return existsSync(path) && readFileSync(path, 'utf8').includes('resolveDevDataDirEnv(')
+}
+
+// Only a launcher that really sets the dir counts as routing a script through
+// it, so a listed launcher that stopped names every script it fronts below.
+const SETTING_LAUNCHERS = DEV_DATA_DIR_LAUNCHERS.filter(setsTheDevDataDir)
+
+function isLaunched(command: string): boolean {
+  return SETTING_LAUNCHERS.some((launcher) => command.includes(launcher))
 }
 
 /**
- * The scripts that start the daemon WITHOUT the wrapper, each with the reason
- * it is right that they do. Guarded from both sides: an entry naming a script
- * that no longer exists, or one that has since been wrapped, fails too.
+ * The scripts that boot a store WITHOUT a launcher, each with the reason it is
+ * right that they do. Guarded from both sides: an entry naming a script that
+ * no longer exists, or one that has since been launched, fails too.
  */
 const UNWRAPPED_ON_PURPOSE: Record<string, string> = {
   daemon:
     'the PACKAGED daemon (`dist/`), which is what an installed copy runs — its data dir is the install’s, not a checkout’s',
 }
 
-describe('dev scripts that start the daemon', () => {
-  const starting = Object.entries(scripts).filter(([, command]) => startsTheDaemon(command))
+describe('dev scripts that boot a store', () => {
+  const starting = Object.entries(scripts).filter(([, command]) => bootsAStore(command))
 
   // Without this, a rename of the entry point leaves every assertion below
   // passing over an empty set — which reads exactly like a clean tree.
   it('reaches the scripts that start it at all', () => {
     expect(starting.map(([name]) => name)).toEqual(
-      expect.arrayContaining(['daemon', 'mcp:http:dev']),
+      expect.arrayContaining(['daemon', 'mcp:http:dev', 'mcp:http', 'mcp', 'mcp:inspect:stdio']),
     )
   })
 
-  it('routes each one through with-dev-data-dir.mjs, or records why not', () => {
+  it('routes each one through a dev-data-dir launcher, or records why not', () => {
     const unexplained = starting
-      .filter(([, command]) => !command.includes('with-dev-data-dir.mjs'))
+      .filter(([, command]) => !isLaunched(command))
       .filter(([name]) => !(name in UNWRAPPED_ON_PURPOSE))
       .map(([name, command]) => `${name}: ${command}`)
 
     expect(unexplained).toEqual([])
   })
 
-  it('holds no exemption for a script that is gone or has since been wrapped', () => {
+  it('holds no exemption for a script that is gone or has since been launched', () => {
     const stale = Object.keys(UNWRAPPED_ON_PURPOSE).filter((name) => {
       const command = scripts[name]
-      return command === undefined || command.includes('with-dev-data-dir.mjs')
+      return command === undefined || isLaunched(command)
     })
 
     expect(stale).toEqual([])
+  })
+
+  it('names launchers that each set the dev data dir', () => {
+    expect(DEV_DATA_DIR_LAUNCHERS.filter((launcher) => !setsTheDevDataDir(launcher))).toEqual([])
   })
 
   it('has a real reason on every exemption', () => {

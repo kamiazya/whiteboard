@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 
-// Test double for `pnpm mcp:http:dev`, invoked by ensure-http-dev-daemon.mjs
-// via a PATH-shimmed `pnpm` wrapper (see ensure-http-dev-daemon.script.test.ts).
+// Test double for the dev server `mcp:http:dev` starts, which
+// ensure-http-dev-daemon.mjs runs in place of the package script's wrapper
+// when WHITEBOARD_DEV_SERVER_STAND_IN names it (see
+// ensure-http-dev-daemon.script.test.ts). Named for the `pnpm` it once stood
+// in for, as are its FAKE_PNPM_* variables.
 // Simulates a dev daemon's build-then-bind startup shape without paying for
 // a real tsx/canvas/resvg cold start, so the wait-path and timeout-path
 // tests run in well under the mcp-node project's 10s testTimeout.
 //
 // Behavior is entirely env-driven so the test controls timing without
-// touching argv (which the real pnpm script also receives --token= for):
+// touching argv (which receives the package script's arguments, --token= among them):
 //   FAKE_PNPM_INVOKED_SENTINEL     - path written immediately on
 //     invocation, so a test can assert this process was (or was not) ever
 //     spawned.
 //   FAKE_PNPM_INVOKED_SENTINEL_DIR - directory that gets one uniquely
 //     named JSON file per invocation, so a concurrency test can COUNT how
-//     many times `pnpm mcp:http:dev` was actually spawned (the single-file
+//     many times the dev server was actually spawned (the single-file
 //     sentinel above can only tell you "at least once").
 //   FAKE_PNPM_BIND_DELAY_MS        - ms to sleep before binding (default 0).
 //   FAKE_PNPM_BIND_FAILS           - when set, throws EADDRINUSE from the

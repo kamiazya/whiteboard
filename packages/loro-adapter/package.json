@@ -12,6 +12,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./test-utils/file-collection-conformance": {
+      "types": "./src/test-utils/file-collection-conformance.ts",
+      "import": "./src/test-utils/file-collection-conformance.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

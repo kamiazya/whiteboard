@@ -144,7 +144,6 @@ export const updateDocumentResponseSchema = z.object({
   ok: z.literal(true),
 })
 
-// DELETE /api/workspaces/:workspaceId/documents/:path — success body.
 // The trash: what a delete evacuated, listed for a human and restorable by
 // documentId. Metadata only — blob digests are the store's business and
 // never cross this boundary.
@@ -170,6 +169,35 @@ export const purgeTrashEntryResponseSchema = z.object({
   purged: z.object({ documentId: z.string().min(1) }),
 })
 
+/**
+ * What a trash restore that brings nothing back answers, said once for both
+ * keepers: the daemon's route sends it as the error body's title, the
+ * browser's files source throws it. `placedPath` is where the workspace
+ * already places this id — a merge from another replica can leave a trash
+ * row beside the live document. Nothing is missing then, so it is a conflict
+ * with what the workspace holds, not "nothing". Anything else — never in the
+ * trash, or the evacuated bytes are gone — leaves nothing to bring back, and
+ * telling those apart would promise a recovery the store cannot deliver.
+ */
+export function trashRestoreRefusal(
+  documentId: string,
+  placedPath: string | null,
+): { status: 404 | 409; title: string } {
+  if (placedPath !== null) {
+    return {
+      status: 409,
+      title: `"${placedPath}" is already in this workspace, so there is nothing to restore`,
+    }
+  }
+  return { status: 404, title: `Nothing restorable for "${documentId}"` }
+}
+
+/** What a purge of an id the trash does not hold answers, for both keepers. */
+export function trashPurgeRefusal(documentId: string): { status: 404; title: string } {
+  return { status: 404, title: `Nothing in the trash for "${documentId}"` }
+}
+
+// DELETE /api/workspaces/:workspaceId/documents/:path — success body.
 export const deleteDocumentResponseSchema = z.object({
   ok: z.literal(true),
 })

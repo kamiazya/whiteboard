@@ -40,6 +40,7 @@ function docWithLegacyShape(): LoroDoc {
     height: 10,
     'x-whiteboard': { facets: { 'visual.text/v0': { align: 'center' } } },
   })
+  doc.getMap('nodes').set('n3', PINNED_EMBED_NODE)
   doc.getMap('edges').set('e1', {
     id: 'e1',
     from: { node: 'n1' },
@@ -52,15 +53,38 @@ function docWithLegacyShape(): LoroDoc {
   return doc
 }
 
+/** An embed pinned to a version, stored under the old key. */
+const PINNED_EMBED_NODE = {
+  id: 'n3',
+  type: 'text',
+  text: 'pinned',
+  x: 100,
+  y: 100,
+  width: 10,
+  height: 10,
+  'x-whiteboard': {
+    kind: 'embed',
+    documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+    versionRef: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
+  },
+}
+
 describe('a record written under the pre-ADR-0037 extension key still reads', () => {
   const canvas = readSpatialCanvas(docWithLegacyShape() as never)
 
-  it('keeps both nodes rather than dropping the ones carrying the old key', () => {
-    expect(canvas.nodes.map((node) => node.id)).toEqual(['n1', 'n2'])
+  it('keeps every node rather than dropping the ones carrying the old key', () => {
+    expect(canvas.nodes.map((node) => node.id)).toEqual(['n1', 'n2', 'n3'])
   })
 
   it("lifts a node's embed out of the extension's embed arm", () => {
     expect(canvas.nodes[0]?.embed).toEqual({ documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' })
+  })
+
+  it('lifts the version an embed was pinned to', () => {
+    expect(canvas.nodes[2]?.embed).toEqual({
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      versionRef: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
+    })
   })
 
   it("lifts a node's facets, with or without an embed beside them", () => {

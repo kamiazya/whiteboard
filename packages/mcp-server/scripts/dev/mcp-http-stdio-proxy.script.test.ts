@@ -8,7 +8,6 @@
 // budget instead of failing the client.
 import { type ChildProcessWithoutNullStreams, execFileSync, spawn } from 'node:child_process'
 import {
-  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -206,19 +205,19 @@ function checkoutWithDevScripts(): { root: string; proxy: string } {
     recursive: true,
     filter: (source) => !source.endsWith('.ts'),
   })
+  // The hook reads the package script it starts from the checkout's manifest.
+  cpSync(
+    resolve(import.meta.dirname, '../../package.json'),
+    join(root, 'packages/mcp-server/package.json'),
+  )
   mkdirSync(join(root, '.claude/scripts'), { recursive: true })
   cpSync(SCRIPT_FLAGS_PATH, join(root, '.claude/scripts/script-flags.mjs'))
   return { root, proxy: join(devDir, 'mcp-http-stdio-proxy.mjs') }
 }
 
-/** A `pnpm` on PATH that starts the fake daemon, never a real one. */
-function pnpmShimDir(checkoutRoot: string): string {
-  const shimDir = mkdtempSync(join(tmpdir(), 'wb-proxy-shim-'))
-  cleanups.push(() => rmSync(shimDir, { recursive: true, force: true }))
-  const shim = join(checkoutRoot, 'packages/mcp-server/scripts/dev/test-utils/fake-pnpm-shim.mjs')
-  writeFileSync(join(shimDir, 'pnpm'), `#!/bin/sh\nexec node "${shim}" "$@"\n`)
-  chmodSync(join(shimDir, 'pnpm'), 0o755)
-  return shimDir
+/** The fake daemon the hook starts in place of the real wrapper, in `checkoutRoot`'s copy. */
+function fakeDevServer(checkoutRoot: string): string {
+  return join(checkoutRoot, 'packages/mcp-server/scripts/dev/test-utils/fake-pnpm-shim.mjs')
 }
 
 function killRecordedDaemon(dataDir: string) {
@@ -247,7 +246,7 @@ describe.skipIf(process.platform === 'win32')('mcp-http-stdio-proxy ensure step'
       env: {
         ...inherited,
         CLAUDE_PROJECT_DIR: b,
-        PATH: `${pnpmShimDir(a.root)}:${process.env.PATH ?? ''}`,
+        WHITEBOARD_DEV_SERVER_STAND_IN: fakeDevServer(a.root),
         WHITEBOARD_TOKEN: TOKEN,
         WHITEBOARD_DEV_READY_TIMEOUT_MS: '5000',
         WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: '2000',

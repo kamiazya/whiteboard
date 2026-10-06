@@ -6,10 +6,11 @@ import {
   writeProposal,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  annotationIdInputSchema,
   applyPassages,
   type BodyProposedChange,
   bodyChangeConflicts,
-  bodyReplaceChangeSchema,
+  bodyReplaceChangeInputSchema,
   documentIdSchema,
   findPassageOverlap,
   growsPast,
@@ -24,7 +25,6 @@ import {
   placeTextAnchor,
   proposalSchema,
   resolveTextAnchor,
-  textAnchorInputSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -36,17 +36,8 @@ import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.j
 import { proposalAuthorSchema } from './proposal-author.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
-/**
- * One proposed passage as a CALLER sends it: the model's own `body.replace`
- * minus `status`, which is a verdict the document keeps rather than something
- * an agent declares. Omitted from the model schema rather than restated, so
- * the wire shape and the shape a person's card decides on cannot drift. The
- * anchor is the model's own text arm in its input form, whose context is
- * bounded on the way in while a stored one is not.
- */
-const bodyEditOpSchema = bodyReplaceChangeSchema
-  .omit({ status: true })
-  .extend({ anchor: textAnchorInputSchema.describe('Which passage to replace.') })
+/** One proposed passage as a caller sends it: the model's own input form of `body.replace`. */
+const bodyEditOpSchema = bodyReplaceChangeInputSchema
 type BodyEditOp = z.infer<typeof bodyEditOpSchema>
 
 export const bodyEditInputSchema = z
@@ -66,7 +57,7 @@ export const bodyEditInputSchema = z
      * REQUEST, which often takes more than one call). Absent, a proposing
      * call opens its own.
      */
-    proposalId: z.string().min(1).optional(),
+    proposalId: annotationIdInputSchema.optional(),
     /** Only meaningful when proposing; see `proposalAuthorSchema`. */
     author: proposalAuthorSchema,
     ops: z

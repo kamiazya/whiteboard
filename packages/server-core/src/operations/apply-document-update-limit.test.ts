@@ -192,7 +192,7 @@ describe('a workspace-document sync update', () => {
 
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
 
     expect(storedWorkspaceBody(store)).toHaveLength(MARKDOWN_MAX_CHARS)
   })
@@ -203,7 +203,7 @@ describe('a workspace-document sync update', () => {
 
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
 
     expect(storedWorkspaceBody(store)).toHaveLength(MARKDOWN_MAX_CHARS + 5)
   })
@@ -289,7 +289,7 @@ describe.each([
 
     if (after === null)
       await expect(applied).rejects.toMatchObject({ name: 'MarkdownBodyTooLargeError' })
-    else await expect(applied).resolves.toBe('applied')
+    else await expect(applied).resolves.toMatchObject({ kind: 'applied' })
     expect(storedWorkspaceBody(store)).toHaveLength(after ?? before)
   })
 
@@ -453,7 +453,7 @@ describe('a workspace-document sync update that moves a path', () => {
 
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
     expect(storedPathsOf(store)).toEqual(['meeting-notes'])
   })
 
@@ -466,7 +466,7 @@ describe('a workspace-document sync update that moves a path', () => {
 
     await expect(
       applyWorkspaceDocumentUpdate(workspaceDeps(store), { workspaceId: WS, update }),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
     expect(storedWorkspaceBody(store)).toBe('more body')
   })
 

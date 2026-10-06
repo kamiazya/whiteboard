@@ -4,6 +4,6 @@ export default defineProject({
   test: {
     name: 'extension-node',
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
   },
 })

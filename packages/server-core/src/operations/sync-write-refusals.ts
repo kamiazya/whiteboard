@@ -5,6 +5,7 @@
 import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
 import {
   COMMENT_MESSAGE_LIMIT_PHRASE,
+  CONTAINER_NAME_LIMIT_PHRASE,
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
   LABEL_LIMIT_PHRASE,
@@ -131,9 +132,10 @@ class NodeTextTooLargeError extends TextBreachRefusalError {
 }
 
 /**
- * A link's URL or a file's path or subpath added or grown past
- * `NODE_LOCATION_MAX_CHARS` — the bound every tool write holds, since each
- * render of the board lays it out again as the node's label.
+ * A link's URL, a file's path or subpath or a group's background added or
+ * grown past `NODE_LOCATION_MAX_CHARS` — the bound every tool write holds,
+ * since each render of the board lays a location out again as the node's
+ * label, and every reader of image references follows a background.
  */
 class NodeLocationTooLargeError extends TextBreachRefusalError {
   readonly code = SYNC_TEXT_BREACH_CODES['node-location']
@@ -212,6 +214,29 @@ class TagsTooLargeError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A container brought into the record under a name past
+ * `CONTAINER_NAME_MAX_CHARS` — a comment thread or a proposal opened under an
+ * id that long, or a root no writer opens. Kept, a long enough name leaves a
+ * record no keeper can load, so it is refused however it arrives. The message
+ * gives the name's length and never the name: it may be tens of thousands of
+ * characters.
+ */
+class ContainerNameTooLongError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['container-name']
+
+  constructor(
+    readonly breach: BreachOf<'container-name'>,
+    readonly at?: RefusedIn,
+  ) {
+    const named = `a container named with ${breach.chars} characters`
+    super(
+      valueRefusalMessage(at, `bring in ${named}`, `holds ${named}`, CONTAINER_NAME_LIMIT_PHRASE),
+    )
+    this.name = 'ContainerNameTooLongError'
+  }
+}
+
 /** The one refusal each way a write can break a text bound is answered with, naming `at` once known. */
 export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextBreachRefusalError {
   switch (breach.shape) {
@@ -225,6 +250,8 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new CommentMessageTooLargeError(breach, at)
     case 'tags':
       return new TagsTooLargeError(breach, at)
+    case 'container-name':
+      return new ContainerNameTooLongError(breach, at)
     case 'run':
     case 'body':
       return new MarkdownBodyTooLargeError(breach, at)

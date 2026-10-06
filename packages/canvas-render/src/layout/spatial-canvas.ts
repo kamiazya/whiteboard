@@ -377,12 +377,17 @@ function withSpatialReferenceSeams(options: SpatialLayoutOptions): SpatialLayout
   }
 }
 
-/** The embed path needs only the scene; the anchor map is per-top-level-canvas. */
+/**
+ * The embed path needs only the scene; the anchor map is per-top-level-canvas.
+ * Every nested canvas enters here, so the library's colours are applied here
+ * once — a board drawn inside another document is coloured as on its own page.
+ */
 function layoutSpatialCanvasInternalScene(
-  canvas: SpatialCanvas,
+  stored: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): Scene {
-  return layoutSpatialCanvasInternal(canvas, resolved).scene
+  return layoutSpatialCanvasInternal(withDeclaredColours(stored, resolved.tagLibrary), resolved)
+    .scene
 }
 
 /**

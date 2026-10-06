@@ -11,7 +11,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    // The script tests import `scripts/*.mjs`; without it each import is an
+    // implicit-any error. Unchecked: the scripts run as plain node.
+    "allowJs": true,
+    "checkJs": false
   },
-  "include": ["src", "vite.config.ts", "vitest.node.config.ts"]
+  "include": ["src", "scripts/**/*.test.ts", "vite.config.ts", "vitest.node.config.ts"]
 }

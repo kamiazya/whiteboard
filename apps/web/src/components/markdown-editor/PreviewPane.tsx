@@ -6,7 +6,11 @@ import type {
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
-import { type PreviewBlockAnchor, renderMarkdownPreview } from '../../lib/render-preview.js'
+import {
+  type PreviewBlockAnchor,
+  type RenderMarkdownPreviewOptions,
+  renderMarkdownPreview,
+} from '../../lib/render-preview.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 
@@ -22,6 +26,8 @@ export interface PreviewPaneProps {
   renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences; see render-preview.ts. */
   renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /** Colours an embedded board by intent; see render-preview.ts. */
+  tagLibrary?: NonNullable<RenderMarkdownPreviewOptions['tagLibrary']>
   /**
    * Filled with the current render's per-block scroll-sync anchors (see
    * render-preview.ts). A ref, not a callback into state: the consumer is
@@ -66,6 +72,7 @@ export function PreviewPane({
   references,
   renderMath,
   renderDiagram,
+  tagLibrary: library,
   anchorsRef,
   blocksRef,
 }: PreviewPaneProps) {
@@ -79,8 +86,9 @@ export function PreviewPane({
         theme,
         renderMath,
         renderDiagram,
+        tagLibrary: library,
       }),
-    [value, measure, maxWidth, background, references, theme, renderMath, renderDiagram],
+    [value, measure, maxWidth, background, references, theme, renderMath, renderDiagram, library],
   )
   useEffect(() => {
     if (anchorsRef) anchorsRef.current = anchors

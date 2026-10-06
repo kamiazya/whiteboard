@@ -334,3 +334,24 @@ export async function deleteVersionRowsOfDocument(
     for (const id of ids) await request(store.delete(id))
   })
 }
+
+/**
+ * Every saved version of one workspace, as the document it belongs to and the
+ * frontier it points at — what the file sweep checks out to learn which images
+ * a past state draws. A row that fails the schema is skipped exactly as the
+ * History panel skips it: a version nobody can list is one nobody can restore.
+ */
+export async function savedVersionFrontiers(
+  workspaceId: string,
+  dbName?: string,
+): Promise<ReadonlyArray<Pick<VersionRow, 'id' | 'documentId' | 'frontiers'>>> {
+  const raw = await inTransaction(dbName, [VERSIONS_STORE], 'readonly', (tx) =>
+    request(tx.objectStore(VERSIONS_STORE).getAll()),
+  )
+  return (raw as unknown[]).flatMap((value) => {
+    const parsed = versionRowSchema.safeParse(value)
+    if (!parsed.success || parsed.data.workspaceId !== workspaceId) return []
+    const { id, documentId, frontiers } = parsed.data
+    return [{ id, documentId, frontiers }]
+  })
+}

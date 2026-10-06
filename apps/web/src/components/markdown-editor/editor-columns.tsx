@@ -153,6 +153,7 @@ export function PreviewColumn({
   references,
   renderMath,
   renderDiagram,
+  tagLibrary,
 }: {
   value: string
   mode: MarkdownViewMode
@@ -172,6 +173,7 @@ export function PreviewColumn({
   references: Parameters<typeof PreviewPane>[0]['references']
   renderMath: Parameters<typeof PreviewPane>[0]['renderMath']
   renderDiagram: Parameters<typeof PreviewPane>[0]['renderDiagram']
+  tagLibrary: Parameters<typeof PreviewPane>[0]['tagLibrary']
 }) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
@@ -206,6 +208,7 @@ export function PreviewColumn({
             references={references}
             renderMath={renderMath}
             renderDiagram={renderDiagram}
+            tagLibrary={tagLibrary}
             anchorsRef={anchorsRef}
             blocksRef={blocksRef}
           />

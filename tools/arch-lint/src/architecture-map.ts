@@ -344,6 +344,11 @@ export const SUBPATH_POLICY: Readonly<Record<string, SubpathPolicy>> = {
     consumers: [],
     reason: TEST_ONLY_HELPER,
   },
+  '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance': {
+    consumers: [],
+    reason:
+      "a scenario both keepers' file-collection tests take through their own stores; data for tests, nothing a shipped file reads",
+  },
   '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper': {
     consumers: [],
     reason: TEST_ONLY_HELPER,

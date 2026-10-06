@@ -1,7 +1,7 @@
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
-import { DOCUMENT_FILES_STORE } from './browser-idb.js'
+import { DOCUMENT_FILES_STORE, whiteboardDbName } from './browser-idb.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { inTransaction, request } from './idb-tx.js'
 
@@ -22,9 +22,8 @@ import { inTransaction, request } from './idb-tx.js'
  * the spot — the bytes are already in hand, and `BlobStore.put` is idempotent,
  * so the migration costs one write the first time an old image is displayed.
  *
- * ponytail: a v1 record nobody ever reads is never converted. That is
- * acceptable because it is exactly the record a reference-sweeping GC would
- * collect anyway; if a sweep is ever written, it converts the remainder.
+ * A v1 record nobody ever reads is never converted, and need not be: the
+ * reference sweep (`browser-file-sweep.ts`) drops it once nothing names it.
  *
  * An unknown/newer version is a cache miss (`get` resolves null) rather than a
  * crash.
@@ -45,6 +44,21 @@ export const documentFileRecordSchema = z.union([
 ])
 
 type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
+
+/**
+ * Serialises a write of a reference against a sweep's delete, in every tab.
+ *
+ * Two ids can name one blob, and `put` writes the bytes before the mapping.
+ * Unserialised, a sweep dropping the last OTHER mapping to those bytes sees
+ * no reference to them in between, deletes them, and the mapping `put` then
+ * writes names nothing. A Web Lock spans tabs, which a module-level promise
+ * would not; where the API is absent (jsdom) the call runs unserialised.
+ */
+function withFilesLock<T>(dbName: string | undefined, run: () => Promise<T>): Promise<T> {
+  const locks = globalThis.navigator?.locks
+  if (locks === undefined) return run()
+  return locks.request(`whiteboard:document-files:${dbName ?? whiteboardDbName()}`, run)
+}
 
 /**
  * The document's file references: a fileId -> `BlobRef` mapping over the
@@ -72,7 +86,11 @@ export class DocumentFileStore {
     private readonly dbName?: string,
   ) {}
 
-  async put(
+  put(fileId: string, entry: { mimeType: string; blob: Blob; created: number }): Promise<void> {
+    return withFilesLock(this.dbName, () => this.putUnlocked(fileId, entry))
+  }
+
+  private async putUnlocked(
     fileId: string,
     entry: { mimeType: string; blob: Blob; created: number },
   ): Promise<void> {
@@ -144,7 +162,42 @@ export class DocumentFileStore {
    * refcount — is a second piece of state that can disagree with the mapping
    * it counts. Revisit if a real corpus makes the scan visible.
    */
-  async delete(fileId: string): Promise<void> {
+  delete(fileId: string): Promise<void> {
+    return withFilesLock(this.dbName, () => this.deleteUnlocked(fileId))
+  }
+
+  /**
+   * Drops every reference `keep` does not claim that was stored before
+   * `createdBefore`, each through `delete`, and answers the ids dropped.
+   *
+   * The age is what covers an upload whose document has not been saved yet:
+   * the image is stored first and the node naming it arrives with the next
+   * save, so a fresh reference is unclaimed by construction. A record that
+   * does not parse is left where it is — this store cannot say how old it is.
+   */
+  sweep(keep: (fileId: string) => boolean, createdBefore: number): Promise<string[]> {
+    return withFilesLock(this.dbName, async () => {
+      const candidates = await inTransaction(
+        this.dbName,
+        [DOCUMENT_FILES_STORE],
+        'readonly',
+        async (tx) => {
+          const store = tx.objectStore(DOCUMENT_FILES_STORE)
+          const keys = await request(store.getAllKeys())
+          const rows = await request(store.getAll())
+          return keys.flatMap((key, i) => {
+            const parsed = documentFileRecordSchema.safeParse(rows[i])
+            if (typeof key !== 'string' || !parsed.success) return []
+            return parsed.data.created < createdBefore && !keep(key) ? [key] : []
+          })
+        },
+      )
+      for (const fileId of candidates) await this.deleteUnlocked(fileId)
+      return candidates
+    })
+  }
+
+  private async deleteUnlocked(fileId: string): Promise<void> {
     const removed = await inTransaction(
       this.dbName,
       [DOCUMENT_FILES_STORE],

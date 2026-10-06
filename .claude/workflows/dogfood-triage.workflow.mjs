@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Persona-driven exploratory dogfooding of the whole running product via real browser, then triage friction into dedup-aware, classified, verified findings filed as whiteboard documents',
   whenToUse:
-    'Periodically or pre-release, to find real user friction (not diff-scoped). Requires the web app + MCP daemon already running. Pass args:{personaCount?, appUrl?, existingIssues?, theme?}.',
+    'Periodically or pre-release, to find real user friction (not diff-scoped). Requires the web app + MCP daemon already running: `pnpm dev` for a browser-kept app, or `pnpm dev:connected --headless` for one connected to the dev daemon — pass its printed app URL as appUrl and start the Playwright MCP with `--cdp-endpoint=<its printed CDP endpoint>`, since that browser is the only one with the extension loaded. Pass args:{personaCount?, appUrl?, existingIssues?, theme?}.',
   phases: [
     { title: 'Personas', detail: 'invent diverse user personas + their jobs-to-be-done' },
     { title: 'Dogfood', detail: 'each persona drives the real browser end-to-end (sequential — browser is a shared singleton)' },
@@ -25,8 +25,9 @@ const A = (() => {
   }
 })()
 const PERSONA_COUNT = A.personaCount || 3
+// `pnpm dev:connected` starts vite on the first free port from 5173, so its printed URL is the one to pass.
 const APP_URL = A.appUrl || 'http://localhost:5173'
-// existingIssues: array of short titles/slugs already filed as whiteboard documents, for dedup.
+// existingIssues: array of short titles or names already filed as whiteboard documents, for dedup.
 const EXISTING = Array.isArray(A.existingIssues) ? A.existingIssues : []
 // theme: optional nudge so successive runs explore different angles (e.g. 'mobile', 'first-run', 'power-user').
 const THEME = A.theme || 'a broad mix of first-time and returning users'

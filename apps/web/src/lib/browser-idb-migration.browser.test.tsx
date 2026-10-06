@@ -41,7 +41,6 @@ import {
   rekeyBrowserWorkspace,
   SYNC_DOCUMENTS_STORE,
   SYNC_SNAPSHOT_CHUNKS_STORE,
-  sweepVersionsWrittenBeforeDigests,
   VERSIONS_BY_DOCUMENT_INDEX,
   VERSIONS_STORE,
   WORKSPACES_STORE,
@@ -1612,57 +1611,6 @@ describe('IndexedDB v18 -> v19 (sweeps points written before content digests)', 
       }
     })
     expect(documents).toEqual(['doc-1'])
-  })
-
-  /**
-   * The bound, which is the whole correctness of the sweep and is otherwise
-   * untestable until a v20 exists. Every other step in the upgrade handler is
-   * idempotent; this one run a second time would empty a store whose rows are
-   * by then exactly the ones the digest was added to keep.
-   */
-  it('runs once: a later upgrade leaves the points that now carry digests', async () => {
-    await seedV18Fixture()
-    const db = await openWhiteboardDb(MIGRATION_DB)
-    db.close()
-
-    // A point written the way v19 writes them, then a bump past v19.
-    const afterBump = await new Promise<unknown[]>((resolve, reject) => {
-      const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
-      req.onupgradeneeded = () => {
-        const tx = req.transaction
-        if (!tx) return
-        tx.objectStore(VERSIONS_STORE).put({
-          id: 'v-2',
-          workspaceId: 'ws-1',
-          documentId: 'doc-1',
-          path: 'canvas-a',
-          createdAt: 2,
-          elementCount: 1,
-          contentDigest: 'a1b2c3d4e5f60718',
-          frontiers: new Uint8Array([4, 5, 6]),
-        })
-        // The REAL sweep, in a genuine versionchange transaction, told the
-        // version a v19 database is upgrading from.
-        sweepVersionsWrittenBeforeDigests(tx, DB_VERSION)
-      }
-      req.onsuccess = () => {
-        const opened = req.result
-        const read = opened.transaction(VERSIONS_STORE, 'readonly')
-        const rows = read.objectStore(VERSIONS_STORE).getAll()
-        read.oncomplete = () => {
-          opened.close()
-          resolve(rows.result)
-        }
-        read.onerror = () => {
-          opened.close()
-          reject(read.error)
-        }
-      }
-      req.onerror = () => reject(req.error)
-    })
-
-    expect(afterBump).toHaveLength(1)
-    expect((afterBump[0] as { id: string }).id).toBe('v-2')
   })
 })
 

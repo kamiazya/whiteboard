@@ -33,7 +33,7 @@ const isProduction = (path: string): boolean =>
 const PROBES: readonly { readonly name: string; readonly pattern: RegExp }[] = [
   {
     name: 'a name falling back to a path',
-    pattern: /\.name\s*\?\?\s*[\w$][\w$.?]*\.path\b/,
+    pattern: /\.name\s*(?:\?\?|\|\|)\s*[\w$][\w$.?]*\.path\b/,
   },
   {
     name: "a path's last segment as a label",
@@ -50,8 +50,17 @@ const PROBE_FIXTURES: Readonly<
   Record<string, { readonly caught: readonly string[]; readonly passed: readonly string[] }>
 > = {
   'a name falling back to a path': {
-    caught: ['entry.name ?? entry.path', 'node.canvas?.name ?? node.canvas.path'],
-    passed: ["entry.name ?? 'Untitled'", 'row.path === path', 'here?.name ?? fallback'],
+    caught: [
+      'entry.name ?? entry.path',
+      'node.canvas?.name ?? node.canvas.path',
+      'entry.name || entry.path',
+    ],
+    passed: [
+      "entry.name ?? 'Untitled'",
+      "entry.name || 'Untitled'",
+      'row.path === path',
+      'here?.name ?? fallback',
+    ],
   },
   "a path's last segment as a label": {
     caught: ["path.split('/').at(-1)", 'doc.path.split("/").pop()'],

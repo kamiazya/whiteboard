@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Local AI-dev-flow helper (lives under .claude/, which is tracked in git and shared with every clone — ADR-0003).
 // Create a ready-to-develop git worktree: branch off a base ref, then `pnpm install`
-// (warm pnpm store ~6s) so tests/typecheck run isolated inside it. This is what makes
+// (warm pnpm store ~6s) so tests/typecheck run isolated inside it — run as `cd <worktree> && …`,
+// since from the main tree a relative path runs the main tree's copy. This is what makes
 // PARALLEL dev-loops possible — each runs in its own worktree, so none contends on the
 // main working tree. The integrator launches a dev-loop with cwd=<this path>, and
 // reconciles the branches before folding.
@@ -21,10 +22,12 @@ import { parseScriptArgs } from './script-flags.mjs'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 /**
- * Auto-wires the new worktree's Claude Code session to its own stdio
- * proxy — see wire-worktree-mcp.mjs for the mechanism (a --scope local
- * `claude mcp add` under the tracked entry's own name, which cleanly
- * shadows the tracked .mcp.json entry). This step must never abort worktree
+ * Makes sure the repository's one Claude Code `whiteboard` registration
+ * exists — the MAIN checkout's stdio proxy, which every worktree session
+ * shares, not one of the worktree's own. See wire-worktree-mcp.mjs for the
+ * mechanism (a --scope local `claude mcp add` under the tracked entry's own
+ * name, keyed by the main checkout, which cleanly shadows the tracked
+ * .mcp.json entry; a filled slot is left alone). This step must never abort worktree
  * setup: a missing `claude` CLI, an existing conflicting registration, or
  * even a crash in the wire script itself (e.g. a broken relative import)
  * should surface as a warning, not stop the worktree from being usable.

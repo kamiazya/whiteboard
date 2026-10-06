@@ -191,8 +191,13 @@ sources have changed or been deleted since the document's own `generated.at`.
 A bare string (`- apps/web/src/main.tsx`) is read the same way as an OKF
 `- resource:` entry — half this backlog is written that way, and the two name
 the same path. It reads the MAIN checkout's daemon whatever worktree it runs
-in, because that is the one every session's MCP client reaches
+in, because that is the one every Claude Code session's MCP client reaches
 (`wire-worktree-mcp` registers only the main checkout's proxy: the CLI keeps one slot per repository).
+Codex does not: `.codex/config.toml` resolves its proxy with
+`git rev-parse --show-toplevel`, so a Codex session opened in a linked
+worktree files tickets into THAT worktree's `.dev-data` — which this script
+never reads and `git worktree remove` deletes. File tickets from Codex in the
+main checkout.
 No new storage: `sources` rides the preserved-root-keys bucket, `generated.at`
 is stamped by the write, and git already knows what moved. It also runs on
 SessionStart, quietly, so a stale issue announces itself rather than waiting to

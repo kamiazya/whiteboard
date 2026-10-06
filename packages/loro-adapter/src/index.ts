@@ -23,6 +23,12 @@ export {
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
 export { isEngineTrap } from './engine-trap.js'
+export {
+  type FileReferenceHolder,
+  type FileReferenceReads,
+  scanFileReferences,
+  type UnjudgedFileHolder,
+} from './file-references.js'
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,
@@ -69,6 +75,11 @@ export {
   type PassageRange,
   readThreadMarks,
 } from './thread-marks.js'
+export {
+  documentsTouchedSince,
+  stampEditedDocuments,
+  type TouchedDocument,
+} from './touched-documents.js'
 export { duplicateWorkspaceDocument } from './workspace-duplicate.js'
 export {
   adoptWorkspaceDocument,

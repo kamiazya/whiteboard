@@ -9,7 +9,10 @@ import type { MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
 import { MarkdownEditor } from '../markdown-editor/MarkdownEditor.js'
 
 export interface NodeTextEditorOverlayProps
-  extends Pick<MarkdownEditorProps, 'theme' | 'references' | 'linkTargets' | 'initialViewMode'> {
+  extends Pick<
+    MarkdownEditorProps,
+    'theme' | 'references' | 'tagLibrary' | 'linkTargets' | 'initialViewMode'
+  > {
   /**
    * Follows a wiki link out of this surface. Without it the editor's preview
    * lets the anchor through and the browser navigates to a bare document id,

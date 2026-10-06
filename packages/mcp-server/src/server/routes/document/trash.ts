@@ -9,10 +9,12 @@
  * composition with no trash capability is 501.
  */
 
-import type {
-  ListTrashResponse,
-  PurgeTrashEntryResponse,
-  RestoreTrashResponse,
+import {
+  type ListTrashResponse,
+  type PurgeTrashEntryResponse,
+  type RestoreTrashResponse,
+  trashPurgeRefusal,
+  trashRestoreRefusal,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
@@ -104,22 +106,10 @@ const restoreHandler =
         const restored = await trash.restoreDocument({ workspaceId, documentId })
         if (restored === null) {
           // null also answers an entry whose documentId the workspace already
-          // places — a merge from another replica can leave the row beside the
-          // live document. Nothing is missing there, so it is a conflict with
-          // what the workspace holds, said as one rather than as "nothing".
+          // places; the refusal tells that conflict apart from "nothing".
           const placed = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })
-          if (placed !== null) {
-            return c.json(
-              {
-                title: `"${placed.path}" is already in this workspace, so there is nothing to restore`,
-              } satisfies ApiErrorBody,
-              409,
-            )
-          }
-          // The rest — never in the trash, or the evacuated bytes are gone —
-          // leave nothing to bring back, and telling them apart would promise
-          // a recovery the store cannot deliver.
-          return c.json({ title: `Nothing restorable for "${documentId}"` }, 404)
+          const refusal = trashRestoreRefusal(documentId, placed?.path ?? null)
+          return c.json({ title: refusal.title } satisfies ApiErrorBody, refusal.status)
         }
         const response: RestoreTrashResponse = {
           restored: { documentId: restored.documentId, path: restored.path },
@@ -141,7 +131,8 @@ const purgeHandler =
         // the same id is not, so this cannot be turned into a way to destroy
         // something nobody deleted.
         if (!(await trash.purgeTrashEntry({ workspaceId, documentId }))) {
-          return c.json({ title: `Nothing in the trash for "${documentId}"` }, 404)
+          const refusal = trashPurgeRefusal(documentId)
+          return c.json({ title: refusal.title } satisfies ApiErrorBody, refusal.status)
         }
         const response: PurgeTrashEntryResponse = { purged: { documentId } }
         return c.json(response)

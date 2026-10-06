@@ -128,7 +128,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
       { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
       { workspaceId: WS, update: workspaceUpdateBytes('canvas-a') },
     )
-    expect(result).toBe('applied')
+    expect(result).toMatchObject({ kind: 'applied' })
     expect(fake.wasSaved()).toBe(true)
     expect(readWorkspaceDocuments(fake.workspaceDoc).map((d) => d.path)).toEqual(['canvas-a'])
     // Dropped INSIDE the lock: a reader grabbing a stale per-document
@@ -149,7 +149,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
       { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
       { workspaceId: WS, update: new Uint8Array([1, 2, 3, 4]) },
     )
-    expect(result).toBe('malformed-update')
+    expect(result).toEqual({ kind: 'malformed-update' })
     expect(fake.wasSaved()).toBe(false)
     expect(fake.wasEvicted()).toBe(false)
   })
@@ -189,7 +189,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
       { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
       { workspaceId: WS, update: new Uint8Array([1, 2, 3, 4]) },
     )
-    expect(result).toBe('malformed-update')
+    expect(result).toEqual({ kind: 'malformed-update' })
     expect(fake.dropped).toEqual([])
     expect(await fake.workspaceDocuments.get(WS)).toBe(cached)
   })

@@ -3,25 +3,17 @@ import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
-  collectImageRefIds,
-  importWorkspaceSubtree,
-  projectWorkspaceDocument,
-  readTrashEntries,
-  unreadableWorkspaceNodes,
+  type FileReferenceReads,
+  scanFileReferences,
+  type UnjudgedFileHolder,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
 import { blobsRoot } from '../tenant/data-layout.js'
 import { validateWorkspaceId } from '../validators.js'
 import { backupIsInProgress } from './backup-in-progress.js'
-import {
-  catchUpWorkspaceDoc,
-  listDocuments,
-  loadDocument,
-  openWorkspaceDocIfStored,
-} from './document-store.js'
+import { catchUpWorkspaceDoc, openWorkspaceDocIfStored } from './document-store.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
@@ -62,15 +54,6 @@ function workspaceFilesDir(scope: StoreScope, workspaceId: string): string {
   )
 }
 
-// Walk a single doc state and collect the fileIds it references —
-// collectImageRefIds, the walk shared with the browser's promote transfer so
-// the two sides cannot drift on what counts as a live reference. The retired
-// 'elements' list is not walked: nothing converts it into nodes and no reader
-// draws it, so an image only it names is unreachable.
-function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
-  for (const id of collectImageRefIds(doc)) sink.add(id)
-}
-
 // Internal-only description of a document/version that GC could not safely
 // inspect. Not a persisted or wire type, so no Zod schema — kept as a
 // discriminated union purely to make the fail-closed reason legible in logs
@@ -80,8 +63,6 @@ type SkippedScanTarget =
   | { kind: 'unreadable-node'; treeId: string }
   | { kind: 'trash'; documentId: string; cause: unknown }
 
-// Walk every document in the workspace (live state plus past versions) and
-// collect referenced fileIds.
 export class IncompleteFileGcScanError extends Error {
   constructor(
     public readonly workspaceId: string,
@@ -110,16 +91,20 @@ export function incompleteFileGcScanErrorBody(
 }
 
 /**
- * Every fileId any state of this workspace still points at.
+ * Every fileId any state of this workspace still points at — live documents,
+ * trashed ones and saved versions, judged by `scanFileReferences`, the
+ * definition the browser keeper's sweep shares. This side supplies the
+ * reads: the stored record, the trash bytes in the blob directory, and the
+ * version store.
  *
- * **The `yieldToLoop()` calls are load-bearing, not tidiness.** This is the
- * expensive half of a purge — a fork and checkout of the workspace record per
- * version of every document — and every one of those is a
+ * **The `yieldToLoop()` between units is load-bearing, not tidiness.** This
+ * is the expensive half of a purge — a fork and checkout of the workspace
+ * record per version of every document — and every one of those is a
  * synchronous WASM call. The `await`s around them look like they let the
- * daemon breathe and do not: `loadDocument` answers from the cached workspace
- * document and `versionStore.load` goes through a native binding, so nothing
- * in the chain ever reaches the timer phase, and the whole scan runs as one
- * unbroken stall.
+ * daemon breathe and do not: the record is answered from the cached
+ * workspace document and `versionStore.load` goes through a native binding,
+ * so nothing in the chain ever reaches the timer phase, and the whole scan
+ * runs as one unbroken stall.
  *
  * Measured at 5 documents x 20 versions, a fixture smaller than a real
  * workspace: 7690ms elapsed, 7670ms of it with the loop running nothing, in a
@@ -142,110 +127,66 @@ async function collectReferencedFileIds(
   scope: StoreScope,
   versionStore?: GcVersionReader,
 ): Promise<Set<string>> {
-  const referenced = new Set<string>()
-  const skipped: SkippedScanTarget[] = []
-  await collectFromRecord(workspaceId, scope, referenced, skipped)
-  const documents = await listDocuments(workspaceId, scope)
-  for (const { path } of documents) {
-    // One per scan unit: document, version. See above.
-    await yieldToLoop()
-    const live = await loadDocument(workspaceId, path, scope)
-    collectFromDoc(live, referenced)
-
-    if (!versionStore) continue
-    const versions = await versionStore.list(workspaceId, path)
-    for (const v of versions) {
-      await yieldToLoop()
-      // load() forks the live doc internally and checks out the version's
-      // frontiers. If a version cannot be inspected (missing frontier
-      // rows, corrupt data, or load() itself reporting the version does
-      // not exist even though list() just returned it) we record it as
-      // skipped — the file referenced only by that version would
-      // otherwise look dangling and be deleted permanently. Fail-closed
-      // at the caller below; a silent skip here is equivalent to
-      // "treat it as referencing nothing", which is the exact bug this
-      // guards against.
-      try {
-        const past = await versionStore.load(workspaceId, v.id)
-        if (past === null) {
-          throw new Error('versionStore.load returned null for a version list() just reported')
-        }
-        collectFromDoc(past, referenced)
-      } catch (err) {
-        log.warning({ workspaceId, path, versionId: v.id, err }, 'skipped version')
-        skipped.push({ kind: 'version', path, versionId: v.id, cause: err })
-      }
-    }
-  }
-  if (skipped.length > 0) {
-    throw new IncompleteFileGcScanError(workspaceId, skipped)
-  }
-  return referenced
-}
-
-/**
- * What the workspace record keeps beyond the live listing: nodes the listing
- * cannot read, and the trash.
- *
- * A node this build cannot read is absent from the listing, and so are its
- * documents' images — a purge would read that absence as "nothing uses them".
- * Fail closed like an unreadable version: a build that cannot read a node
- * cannot say what the node keeps.
- */
-async function collectFromRecord(
-  workspaceId: string,
-  scope: StoreScope,
-  sink: Set<string>,
-  skipped: SkippedScanTarget[],
-): Promise<void> {
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return
-  for (const treeId of unreadableWorkspaceNodes(workspaceDoc)) {
-    log.warning({ workspaceId, treeId }, 'unreadable workspace node')
-    skipped.push({ kind: 'unreadable-node', treeId })
-  }
-  await collectFromTrash(workspaceId, workspaceDoc, scope, sink, skipped)
-}
-
-/**
- * What a deleted document still points at. Delete evacuates a document into
- * the trash, which expires nothing on its own, and a restore brings it back
- * under the same id: a file only a trashed document names is not dangling.
- * A permanent delete removes the trash row, which is what ends that claim —
- * the next pass finds no entry to read.
- *
- * A trash row whose bytes are gone is stepped over — restore answers "nothing
- * restorable" for it, so there is nothing for its images to be kept for. Bytes
- * that exist but cannot be read are fail-closed like an unreadable version.
- */
-async function collectFromTrash(
-  workspaceId: string,
-  workspaceDoc: LoroDoc,
-  scope: StoreScope,
-  sink: Set<string>,
-  skipped: SkippedScanTarget[],
-): Promise<void> {
-  const entries = readTrashEntries(workspaceDoc)
-  if (entries.length === 0) return
+  const record = await openWorkspaceDocIfStored(workspaceId, scope)
+  if (record === null) return new Set()
   const blobs = new FsBlobStore(blobsRoot(scope.dataDir, scope.layout.tenantId), scope.dataDir)
-  for (const entry of entries) {
-    await yieldToLoop()
-    try {
+  const scan = await scanFileReferences(record, {
+    between: () => yieldToLoop(),
+    trashBytes: async (entry) => {
       const stored = await blobs.get({ ref: entry.blob })
       if (stored === null) {
         log.warning({ workspaceId, documentId: entry.documentId }, 'trash entry has no bytes')
-        continue
       }
-      const scratch = new LoroDoc()
-      if (importWorkspaceSubtree(scratch, stored.bytes) === null) {
-        throw new Error('trash bytes hold no document')
-      }
-      const content = projectWorkspaceDocument(scratch, entry.documentId)
-      if (content === null) throw new Error('trash bytes hold a different document')
-      collectFromDoc(content, sink)
-    } catch (err) {
-      log.warning({ workspaceId, documentId: entry.documentId, err }, 'skipped trash entry')
-      skipped.push({ kind: 'trash', documentId: entry.documentId, cause: err })
+      return stored?.bytes ?? null
+    },
+    ...(versionStore === undefined ? {} : { versions: versionReads(workspaceId, versionStore) }),
+  })
+  const skipped = scan.unjudged.map((target) => skippedTarget(workspaceId, target))
+  if (skipped.length > 0) {
+    throw new IncompleteFileGcScanError(workspaceId, skipped)
+  }
+  return scan.referenced
+}
+
+/**
+ * The version store as the scan reads it.
+ *
+ * ponytail: this store addresses a history by PATH, so a trashed document's
+ * versions — and a shadowed one's, whose path names another document — are
+ * not reached here. The browser keeper's rows are keyed by document id and do
+ * reach them; listing by `documentId` is the upgrade that closes the gap.
+ */
+function versionReads(
+  workspaceId: string,
+  versionStore: GcVersionReader,
+): NonNullable<FileReferenceReads['versions']> {
+  return {
+    list: async (holder) =>
+      holder.trashed ? [] : (await versionStore.list(workspaceId, holder.path)).map((v) => v.id),
+    load: (_holder, versionId) => versionStore.load(workspaceId, versionId),
+  }
+}
+
+/**
+ * Logged as it is reported: a scan that could not read something it must
+ * judge refuses the whole purge, and the log is where an operator learns
+ * which target held it back.
+ */
+function skippedTarget(workspaceId: string, target: UnjudgedFileHolder): SkippedScanTarget {
+  switch (target.kind) {
+    case 'unreadable-node':
+      log.warning({ workspaceId, treeId: target.treeId }, 'unreadable workspace node')
+      return target
+    case 'trash':
+      log.warning(
+        { workspaceId, documentId: target.documentId, err: target.cause },
+        'skipped trash entry',
+      )
+      return target
+    case 'version': {
+      const { path, versionId, cause } = target
+      log.warning({ workspaceId, path, versionId, err: cause }, 'skipped version')
+      return { kind: 'version', path, versionId, cause }
     }
   }
 }

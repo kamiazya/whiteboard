@@ -1,4 +1,9 @@
-import { seedNamesFromTitles } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  documentsTouchedSince,
+  seedNamesFromTitles,
+  stampEditedDocuments,
+  type TouchedDocument,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -11,7 +16,22 @@ export interface ApplyWorkspaceDocumentUpdateInput {
   readonly workspaceId: string
   /** A workspace-granularity Loro update as the client exported it. */
   readonly update: Uint8Array
+  /**
+   * `'edit'` (the default): the update is somebody editing, so every document
+   * whose content it wrote takes a fresh `updatedAt`. `'transfer'`: a whole
+   * record moved in from another keeper (a promotion), whose documents carry
+   * their own clocks — the move is not an edit, and stamping it would make
+   * every promoted document read "edited just now".
+   */
+  readonly origin?: 'edit' | 'transfer'
 }
+
+/** A document whose content an applied update wrote. */
+type EditedDocument = Pick<TouchedDocument, 'documentId' | 'path'>
+
+type ApplyWorkspaceDocumentUpdateResult =
+  | { readonly kind: 'applied'; readonly edited: readonly EditedDocument[] }
+  | { readonly kind: 'malformed-update' }
 
 /**
  * Applies a client's workspace-granularity Loro update and persists it — the
@@ -37,6 +57,10 @@ export interface ApplyWorkspaceDocumentUpdateInput {
  * A note at a generated path is named after its heading here, as the
  * browser keeper names it in its own store's write (`seedNameFromTitle`).
  *
+ * The update does not say which documents it edits, so they are read off its
+ * operations (`documentsTouchedSince`) — once, for the naming, the
+ * `updatedAt` stamp, and the answer: `edited` is what a caller checkpoints.
+ *
  * THE OPERATION HOLDS THE LOCK — `liveDocuments.withWriteLock`, because the
  * workspace write lock is one lock however many seams touch the workspace.
  * Import, save AND projection eviction all run inside the hold: a
@@ -48,7 +72,7 @@ export interface ApplyWorkspaceDocumentUpdateInput {
 export async function applyWorkspaceDocumentUpdate(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments'>,
   input: ApplyWorkspaceDocumentUpdateInput,
-): Promise<'applied' | 'malformed-update'> {
+): Promise<ApplyWorkspaceDocumentUpdateResult> {
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
     const doc = await deps.workspaceDocuments.get(workspaceId)
@@ -72,16 +96,22 @@ export async function applyWorkspaceDocumentUpdate(
         updateBytes: update.byteLength,
         err,
       })
-      return 'malformed-update'
+      return { kind: 'malformed-update' }
     }
-    // Before the save, so the name rides the same write and its fan-out
-    // hands it back to the replica that typed the heading.
-    runEvictingOnEngineTrap(target, 'importing an update into', () =>
-      seedNamesFromTitles(doc, since),
-    )
+    // Before the save, so the name and the stamp ride the same write and its
+    // fan-out hands them back to the replica that made the edit.
+    const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
+      const found = documentsTouchedSince(doc, since)
+      seedNamesFromTitles(doc, found)
+      if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
+      return found
+    })
     // Fan-out to subscribers happens inside save.
     await deps.workspaceDocuments.save(workspaceId, doc)
     deps.workspaceDocuments.evictProjections(workspaceId)
-    return 'applied'
+    const edited = touched
+      .filter((each) => each.contentWritten)
+      .map(({ documentId, path }) => ({ documentId, path }))
+    return { kind: 'applied', edited }
   })
 }

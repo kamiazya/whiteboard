@@ -10,12 +10,19 @@
  * index itself or a legacy user opens an empty gallery over a database full
  * of documents.
  *
- * One shared promise, not a per-call fold. Listing and resolving documents
- * wait for every index write this tab has issued and then for that run
- * (`settledForRead`). Every other method but `renameWorkspace` waits for the
- * run alone — writes above all, since the save loop that issues them is one
- * of the writes a read waits for. A failure logs, clears the memo so a later
- * call retries, and lets the call proceed (`foldOrServeTheTree`).
+ * One shared promise, not a per-call fold. A failure logs, clears the memo so
+ * a later call retries, and lets the call proceed (`foldOrServeTheTree`).
+ *
+ * What each method waits for, which is what makes it safe to call from a
+ * promise registered with the write barrier (`pending-index-writes.ts`):
+ * only `listDocuments`, `resolveDocument` and `resolveDocumentById` wait for
+ * every index write this tab has issued, then for the run
+ * (`settledForRead`). Every other method waits for the run alone, and so
+ * does every read one of them makes on its own behalf — the capacity count,
+ * the fold-skipped rows, the workspaces registry — through `legacy`, which
+ * never waits at the barrier. `renameWorkspace` does not even wait for the
+ * run. So any method but those three may be called by a tracked writer such
+ * as the document controller's save loop.
  */
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import {
@@ -80,7 +87,12 @@ export class FoldingBrowserIndex
     options: { capacity?: KeeperCapacity } = {},
   ) {
     this.capacity = options.capacity ?? browserKeeperCapacity()
-    this.legacy = new IdbDocumentIndex(dbName)
+    // No barrier on its reads: they serve writes and workspace reads, which
+    // a tracked writer may make (see the header). Sound for the reason the
+    // fold's own reads are: what the barrier adds over IndexedDB's own
+    // transaction order is the writes queued but not yet issued, and those
+    // are document renames, which touch neither a legacy row nor the registry.
+    this.legacy = new IdbDocumentIndex(dbName, { readsAwaitIssuedWrites: false })
     this.inner = new LoroWorkspaceDocumentIndex(
       new BrowserWorkspaceDocs(dbName),
       new IdbBlobStore(dbName),
@@ -105,7 +117,10 @@ export class FoldingBrowserIndex
   // silent disappearance. A pre-kind row stays invisible — that is this
   // project's own pre-release data defect, ignored by standing decision.
 
-  /** Legacy rows serving documents the tree does not hold, valid-kind only. */
+  /**
+   * Legacy rows serving documents the tree does not hold, valid-kind only.
+   * Waits for no writes: a document read settles first, and a write must not.
+   */
   private async foldSkippedRows(workspaceId: string): Promise<DocumentEntry[]> {
     let rows: DocumentEntry[]
     try {
@@ -148,9 +163,9 @@ export class FoldingBrowserIndex
   /**
    * What a document read waits for: the fold, and every index write this tab
    * has issued or queued (`pending-index-writes.ts`). Without the second, the
-   * listing taken as a page closes answers from before its last rename. Reads
-   * only: the save loop registered there calls `setDocumentName`, and a write
-   * that waited here would wait on itself.
+   * listing taken as a page closes answers from before its last rename. The
+   * three document reads only: the save loop registered there calls
+   * `setDocumentName`, and a write that waited here would wait on itself.
    */
   private async settledForRead(): Promise<void> {
     await indexWritesSettled()
@@ -230,7 +245,9 @@ export class FoldingBrowserIndex
    * write queue if it ever needs to be exact.
    */
   private async admitOneMore(workspaceId: string): Promise<void> {
-    const held = await this.listDocuments({ workspaceId })
+    // Counted past the barrier, not through `listDocuments`: a create can be
+    // made by a tracked writer, and the count would then wait on that writer.
+    const held = await this.documentsHeld({ workspaceId })
     if (held.length >= this.capacity.limit) {
       throw new WorkspaceCapacityReachedError(this.capacity.limit)
     }
@@ -254,6 +271,11 @@ export class FoldingBrowserIndex
 
   async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
     await this.settledForRead()
+    return this.documentsHeld(input)
+  }
+
+  /** The tree's documents and the fold-skipped rows, with no wait of its own. */
+  private async documentsHeld(input: ListDocumentsInput): Promise<DocumentEntry[]> {
     const fromTree = await this.inner.listDocuments(input)
     const skipped = await this.foldSkippedRows(input.workspaceId)
     if (skipped.length === 0) return fromTree
@@ -315,6 +337,20 @@ export class FoldingBrowserIndex
     if (purged) {
       await deleteVersionRowsOfDocument(input.workspaceId, input.documentId, this.dbName)
       await forgetContentTimestamp(input.documentId, this.dbName)
+      // The purge is when this document's images stop being named by
+      // anything, so they are reclaimed now rather than at the next page
+      // load. Not awaited: the purge has landed whatever the sweep finds, and
+      // a sweep that cannot judge stands down by itself. Reached by a dynamic
+      // import, like the page-load sweep, so loading the index does not load
+      // the scan.
+      void import('./browser-file-sweep.js')
+        .then(({ sweepUnreferencedFiles }) =>
+          sweepUnreferencedFiles(this.dbName === undefined ? {} : { dbName: this.dbName }),
+        )
+        .then(
+          (result) => log.info('file sweep after purge finished', result),
+          (err: unknown) => log.warn('file sweep after purge failed', { err }),
+        )
     }
     return purged
   }

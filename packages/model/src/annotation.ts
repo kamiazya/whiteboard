@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { boundsOf } from './bounds.js'
 import { compareCodeUnit } from './compare.js'
-import { nodeIdSchema } from './ids.js'
+import { ID_LIMIT_PHRASE, ID_MAX_CHARS, nodeIdSchema } from './ids.js'
 import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import type { CanvasComment } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
@@ -13,6 +13,17 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
  * a node and the two must be free to diverge.
  */
 export const annotationIdSchema = z.string().min(1, 'annotation id must not be empty')
+
+/**
+ * An annotation id as a tool accepts it for a thread, a proposal or a change
+ * it creates: a thread's and a proposal's id names a container of its own, so
+ * it is held to `ID_MAX_CHARS` where it is written. One stored longer before
+ * the limit still reads, and is still named by a reply or a verdict.
+ */
+export const annotationIdInputSchema = annotationIdSchema.max(
+  ID_MAX_CHARS,
+  `an id is longer than ${ID_LIMIT_PHRASE}`,
+)
 
 /**
  * The most characters of `prefix` or `suffix` that count toward telling one

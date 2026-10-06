@@ -143,12 +143,18 @@ describe('setHeadingLevel', () => {
     expect(heading('- [ ] item', 2, 7)).toBe('- ## item')
   })
 
+  it('keeps the checkboxes a demotion to body text covers', () => {
+    const doc = '# title\n- [ ] item'
+    expect(heading(doc, 0, 0, doc.length)).toBe('title\n- [ ] item')
+  })
+
   it('reports unhandled when every covered line already sits at that level', () => {
     expect(heading('## already', 2, 4)).toBeNull()
     expect(heading('plain', 0, 2)).toBeNull()
   })
 
   it('rejects a level outside markdown headings instead of writing seven hashes', () => {
+    expect(heading('body', 6, 1)).toBe('###### body')
     expect(heading('body', 7, 1)).toBeNull()
     expect(heading('body', -1, 1)).toBeNull()
   })

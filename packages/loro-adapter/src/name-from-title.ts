@@ -2,10 +2,11 @@
 // keeper: the browser's store and the daemon, which names on every content
 // write, take the same bytes, so a note typed into at `untitled` must come out
 // named the same way whichever of them keeps it.
-import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from 'loro-crdt'
+import type { LoroDoc, LoroTreeNode } from 'loro-crdt'
 import { LoroText } from 'loro-crdt'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { titleFromMarkdownBody } from './title-from-body.js'
+import type { TouchedDocument } from './touched-documents.js'
 import {
   WORKSPACE_TREE_KEY,
   workspaceNodeMetaSchema,
@@ -160,28 +161,16 @@ function documentNode(workspace: LoroDoc, documentId: string): LoroTreeNode | un
 }
 
 /**
- * `seedNameFromTitle` for every document the operations after `since` wrote
- * to — the shape a keeper taking a whole workspace update needs, since the
- * update does not say which document it is about.
- *
- * Read off the operations rather than the tree, so the cost follows the
- * update: a walk of the tree reads every document's content, which on a
- * large workspace is a per-keystroke cost the bytes did not ask for.
+ * `seedNameFromTitle` for every document a workspace import touched
+ * (`documentsTouchedSince`) — the shape a keeper taking a whole workspace
+ * update needs, since the update does not say which document it is about.
+ * Every touched node is judged, not only one whose content moved: clearing a
+ * name is a write to the node itself, and a still-generated path is what says
+ * the heading may name it again.
  */
-export function seedNamesFromTitles(workspace: LoroDoc, since: VersionVector): void {
-  const containers = new Set<ContainerID>()
-  const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
-  for (const change of changes) for (const op of change.ops) containers.add(op.container)
-  const nodes = new Set<TreeID>()
-  for (const container of containers) {
-    // A node's own map and every container under it sit at `[tree, <node>, …]`.
-    const path = workspace.getPathToContainer(container)
-    if (path !== undefined && path.length >= 2 && path[0] === WORKSPACE_TREE_KEY) {
-      nodes.add(path[1] as TreeID)
-    }
-  }
+export function seedNamesFromTitles(workspace: LoroDoc, touched: readonly TouchedDocument[]): void {
   const tree = workspace.getTree(WORKSPACE_TREE_KEY)
-  for (const id of nodes) {
+  for (const { node: id } of touched) {
     const node = tree.getNodeByID(id)
     if (node !== undefined) seedNode(node)
   }

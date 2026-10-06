@@ -455,9 +455,10 @@ export async function deleteDocument(
 
   // The same bracket wbDocumentDelete runs in (server-core's
   // document-crud.ts) — deliberately, so no delete path can skip the
-  // cleanup. The bracket takes the
-  // workspace write lock and deletes the versions rows after the document
-  // goes (migration 0016 dropped the cascade).
+  // cleanup. The bracket takes the workspace write lock, and after the
+  // document goes it deletes the versions rows only when the trash holds
+  // nothing a restore could rejoin them to (migration 0016 dropped the
+  // cascade, so nothing else would).
   return createDocumentTeardown(scope).around({ workspaceId, documentId, path }, async () => {
     // The tree node goes through the index's delete, which EVACUATES the
     // content into the trash before removing anything — the daemon's delete

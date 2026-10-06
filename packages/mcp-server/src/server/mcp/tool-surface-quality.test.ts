@@ -182,7 +182,7 @@ describe('what the tool table costs to read', () => {
         // +202 on both and +1 parameter: `author`, who is proposing, shared with
         // wb_canvas_edit's propose path. A proposal stored no author, so a person
         // deciding on one could not tell which agent asked.
-        visibleBytes: 2926, // +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +16 both: `author`'s 256 `maxLength`; +15 both: `ops`' 200 `maxItems`, the op ceiling shared with wb_canvas_edit
+        visibleBytes: 2977, // +51 both: `maxLength` 256 on `proposalId` and a change's `id` (+16 each), `assumed` at the 262144 body bound (+19); +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +16 both: `author`'s 256 `maxLength`; +15 both: `ops`' 200 `maxItems`, the op ceiling shared with wb_canvas_edit
         // +1,396 wire, and it is the registration's PRICE rather than its
         // saving: a named subschema costs a `$defs` entry plus a `$ref`
         // wherever it is used, so a tool that uses one ONCE pays more than
@@ -221,7 +221,7 @@ describe('what the tool table costs to read', () => {
         // unmoved, which is what makes both safe on a table a model reads.
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 17957,
+        wireBytes: 18008,
         descriptionWords: 112,
         parameters: 19,
         undescribed: 7,
@@ -414,7 +414,7 @@ describe('what the tool table costs to read', () => {
         // for the four sites the retired composite left inline.
         // +58, wire too: a node's `embed` and a comment draft publish `additionalProperties: false` (C10, one level down).
         // +55 wire too, +9 words: explicit propose refuses comments/locks/tidy/region.set, not "whatever the mode".
-        visibleBytes: 15507, // +51 node text's `maxLength` (3 ops); +119 a label's (6) and a comment's (1); +102 a url's, file's and subpath's (node.add, node.patch); +16 `author`'s 256, +16 again for comment.add's
+        visibleBytes: 15669, // +162 both: `maxLength` 256 on every id a batch creates (node.add's four arms, edge.add, line.add, comment.add) and `proposalId`, +16 each; a group's `background` at the 8192 location bound on node.add and node.patch, +17 each; +51 node text's `maxLength` (3 ops); +119 a label's (6) and a comment's (1); +102 a url's, file's and subpath's (node.add, node.patch); +16 `author`'s 256, +16 again for comment.add's
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -428,7 +428,7 @@ describe('what the tool table costs to read', () => {
         // here through the echo this tool's output carries.
         // +221 wire: its answer is the board it produced, and the snapshot now
         // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
-        wireBytes: 34579, // +119: the label and comment message bounds, as visible; +102 the location bounds, as visible; +32 the proposal and comment author bounds, as visible
+        wireBytes: 34741, // +162: the id and background bounds, as visible; +119: the label and comment message bounds, as visible; +102 the location bounds, as visible; +32 the proposal and comment author bounds, as visible
         descriptionWords: 178,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -692,10 +692,10 @@ describe('what the tool table costs to read', () => {
         // status, every message with author and time) where it was a count,
         // so "Returns every thread the document holds" is true. The
         // description now names the read that writes nothing.
-        visibleBytes: 3600, // +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`
+        visibleBytes: 3616, // +16 both: thread.add's `threadId` at the id bound's `maxLength` 256; +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 6279,
+        wireBytes: 6295,
         descriptionWords: 138,
         parameters: 32,
         undescribed: 25,
@@ -983,7 +983,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 41584, // +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32)
+      visibleBytes: 41813, // +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32)
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1009,7 +1009,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, each the same bytes as visible.
-      wireBytes: 132930, // +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
+      wireBytes: 133159, // +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

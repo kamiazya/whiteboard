@@ -99,6 +99,9 @@ function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
  * document, carrying the attestation when there is one. The merge is
  * `applyWorkspaceDocumentUpdate`'s and byte-identical to the sync surface's;
  * what this operation adds is the enumeration of what arrived and the rows.
+ * It is merged as a TRANSFER: a promoted document keeps the `updatedAt` it
+ * arrived with, because moving it is not editing it, and the explicit rows
+ * below stand in for the automatic checkpoint an edit would take.
  *
  * The documents are read off the INCOMING record, not the merged one: the
  * target's own documents were not promoted and get no row for it. The rows
@@ -126,10 +129,11 @@ export async function promoteWorkspace(
   const applied = await applyWorkspaceDocumentUpdate(deps, {
     workspaceId: input.workspaceId,
     update: input.snapshot,
+    origin: 'transfer',
   }).catch((err: unknown) => {
     throw namedInRecord(incoming, err)
   })
-  if (applied === 'malformed-update') return { kind: 'malformed-snapshot' }
+  if (applied.kind === 'malformed-update') return { kind: 'malformed-snapshot' }
 
   // The LISTING, not a by-id lookup: only the walk that sees every sibling
   // can say which document at a contested path is the shadowed one.

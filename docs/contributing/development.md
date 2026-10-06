@@ -52,7 +52,7 @@ The daemon listens on an owner-only Unix socket (a named pipe on Windows) whose 
 
 > **Auto-start:** The repo's `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`) reads the daemon record in this checkout's data dir and pings `/api/runtime/ping` over the socket it names. If no daemon is running — no record, or a record a crashed daemon left behind (the rule is below) — it spawns the daemon, and waits until the ping answers, when Claude Code or Codex opens the repo. If the dev server it spawned exits first, it stops waiting at once and prints that server's own last line (the full output is in `tmp/logs/mcp-http-dev.log`); a daemon that is running but slow to answer is waited for, never doubled. If the daemon does not start automatically (hooks disabled, or project not yet trusted), run `pnpm mcp:http:dev` manually in a separate terminal before making MCP calls. A daemon that answers but was started with a different token than `WHITEBOARD_TOKEN` (default `whiteboard-dev`) is reported rather than reused, because it would refuse every request the proxy sends.
 
-> **Data lives in `.dev-data/`, not your real `~/.whiteboard`:** `pnpm dev` and `pnpm mcp:http:dev` (and anything that shells out to either — `mcp:debug:http`, the `SessionStart` hook) run through `packages/mcp-server/scripts/dev/with-dev-data-dir.mjs`, which sets `WHITEBOARD_DATA_DIR` to `<repo root>/.dev-data` unless you already set it yourself. This keeps dev canvases, the SQLite metadata DB, and daemon tokens out of the real `~/.whiteboard` a packaged (npm/Docker/stdio) install uses. Launching from a `git worktree` gets that worktree's own `.dev-data` — intentional, so parallel dev-loop lanes never share (or corrupt) each other's canvas data. If you have existing dev data under `~/.whiteboard` from before this change, move its *contents* into `.dev-data` at the repo root — the `SessionStart` hook typically creates an empty `.dev-data/` before you get to this step, so a plain `mv ~/.whiteboard .dev-data` nests the old directory one level too deep (`.dev-data/.whiteboard/whiteboard.db` instead of `.dev-data/whiteboard.db`) and your canvases will look missing. From the repo root:
+> **Data lives in `.dev-data/`, not your real `~/.whiteboard`:** `pnpm dev` and `pnpm mcp:http:dev` (and anything that shells out to either — `mcp:debug:http`, the `SessionStart` hook) run through `packages/mcp-server/scripts/dev/with-dev-data-dir.mjs`, which sets `WHITEBOARD_DATA_DIR` to `<repo root>/.dev-data` unless you already set it yourself. The other commands that open a store set the same directory themselves: `pnpm mcp` and `pnpm mcp:inspect:stdio` (the stdio server from source, `run-source-stdio.mjs`) and `pnpm mcp:http` (the built daemon, `run-built-daemon.mjs`). This keeps dev canvases, the SQLite metadata DB, and daemon tokens out of the real `~/.whiteboard` a packaged (npm/Docker/stdio) install uses. Launching from a `git worktree` gets that worktree's own `.dev-data` — intentional, so parallel dev-loop lanes never share (or corrupt) each other's canvas data. If you have existing dev data under `~/.whiteboard` from before this change, move its *contents* into `.dev-data` at the repo root — the `SessionStart` hook typically creates an empty `.dev-data/` before you get to this step, so a plain `mv ~/.whiteboard .dev-data` nests the old directory one level too deep (`.dev-data/.whiteboard/whiteboard.db` instead of `.dev-data/whiteboard.db`) and your canvases will look missing. From the repo root:
 
 ```bash
 mkdir -p .dev-data && mv ~/.whiteboard/* ~/.whiteboard/.[!.]* .dev-data/ 2>/dev/null; rmdir ~/.whiteboard
@@ -201,6 +201,37 @@ through the development build of the extension, which also admits
   and `FIREFOX_BIN` or found on `PATH`. Mozilla's own Linux tarball and a
   geckodriver release both work unpacked anywhere.
 
+### Run the web app against the dev daemon
+
+```bash
+pnpm dev:connected              # a Chromium window
+pnpm dev:connected --headless   # no window; attach over CDP instead
+```
+
+It ensures this checkout's dev daemon, builds the extension's development
+build, registers the native host for this checkout's data dir (`.dev-data`, or
+`WHITEBOARD_DATA_DIR`), starts `vite` for `apps/web`, and opens Playwright's
+Chromium on the app with the extension loaded. In the app, **Connect through
+the extension** reaches the daemon, so a document an agent creates through the
+dev MCP proxy shows up in the workspace.
+
+- The host is registered inside a throwaway Chromium profile
+  (`<profile>/NativeMessagingHosts`), never in a browser of yours, so your
+  own registration for `~/.whiteboard` is left alone. The profile is removed
+  on exit (close the window, or Ctrl-C), and with it the connection: the next
+  run asks to connect again. The dev daemon is shared and keeps running.
+- It prints the app URL and a CDP endpoint (`--cdp-port=<n>` to pin it), which
+  Playwright reaches with `chromium.connectOverCDP(<endpoint>)` and the
+  Playwright MCP server with `--cdp-endpoint=<endpoint>`.
+- It starts its own `vite` on the first free port from `--port` (5173). A
+  dev server already on 5173 may be another checkout's, so it is reused only
+  when named with `--url=<url>`.
+- Linux and macOS only: on Windows, Chromium finds a native host through a
+  per-user registry key, which a throwaway profile cannot scope.
+- Not `WHITEBOARD_CHROME_PATH`: that is the test launcher's choice, usually
+  branded Chrome or the headless shell, and neither loads an unpacked
+  extension. `WHITEBOARD_DEV_CONNECTED_CHROME=<path>` names another Chromium.
+
 ## Cloudflare Pages header parity in local dev
 
 `apps/web/public/_headers` (security headers, CSP) is only served by
@@ -222,7 +253,7 @@ Two layers close that gap:
 
 ```bash
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket); with this checkout's dev daemon already running, its daemon half reuses it and exits 0 while Vite keeps running — only a half that FAILS ends the other
-pnpm mcp             # MCP server only (tsx)
+pnpm mcp             # the stdio MCP server only, from source (tsx), on .dev-data
 pnpm build           # dist/server (apps/web's `build` ends with `copy-into-mcp-dist.mjs`, which copies dist/web-app in)
 pnpm build:mcp       # the server alone: canvas-viewer's widget first, then `@kamiazya/whiteboard-mcp`'s build (a `pnpm --filter` build does not build its workspace dependencies, so the bare filter form fails on a clean checkout with "widget build output not found")
 pnpm test            # optional: every Vitest project at once; CI runs the matrix

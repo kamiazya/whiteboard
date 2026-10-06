@@ -1,6 +1,12 @@
 import { z } from 'zod'
-import { annotationIdSchema, textAnchorSchema } from './annotation.js'
+import {
+  annotationIdInputSchema,
+  annotationIdSchema,
+  textAnchorInputSchema,
+  textAnchorSchema,
+} from './annotation.js'
 import { nodeIdSchema } from './ids.js'
+import { MARKDOWN_LIMIT_PHRASE, MARKDOWN_MAX_CHARS } from './markdown.js'
 import {
   canvasColorSchema,
   canvasEdgeSchema,
@@ -138,10 +144,12 @@ const proposedChangeStatusSchema = z.enum(['open', 'adopted', 'dismissed'])
 
 export type ProposedChangeStatus = z.infer<typeof proposedChangeStatusSchema>
 
+const CHANGE_ID_DESCRIPTION = 'Your id for this change; any short unique string.'
+
 /** What every change carries regardless of verb: its own identity and its verdict. */
 const changeIdentity = {
   /** The change's own id — what an Adopt or a Dismiss names. */
-  id: annotationIdSchema.describe('Your id for this change; any short unique string.'),
+  id: annotationIdSchema.describe(CHANGE_ID_DESCRIPTION),
   status: proposedChangeStatusSchema,
 } as const
 
@@ -168,6 +176,9 @@ const PRIOR_SCOPE_MESSAGE = {
   message: 'a prior value may only name fields the change itself sets',
 } as const
 
+const ASSUMED_PASSAGE_DESCRIPTION =
+  'What the passage said when you wrote this; refused by name if it has changed since.'
+
 /**
  * Prose (ADR-0029 decision 6): a range of body text and the text intended to
  * replace it. `text` and `assumed` are both allowed to be empty — an
@@ -180,19 +191,36 @@ const PRIOR_SCOPE_MESSAGE = {
  * agent puts on the wire and what a person's card shows cannot drift into
  * two descriptions of one thing.
  */
-export const bodyReplaceChangeSchema = z
+const bodyReplaceChangeSchema = z
   .object({
     ...changeIdentity,
     op: z.literal('body.replace'),
     anchor: textAnchorSchema.describe('Which passage to replace.'),
     text: z.string().describe('What the passage becomes; empty deletes it.'),
-    assumed: z
-      .string()
-      .describe(
-        'What the passage said when you wrote this; refused by name if it has changed since.',
-      ),
+    assumed: z.string().describe(ASSUMED_PASSAGE_DESCRIPTION),
   })
   .strict()
+
+/**
+ * One proposed passage as a CALLER sends it: the change above minus `status`,
+ * which is a verdict the document keeps rather than something an agent
+ * declares, with what it writes held to its write bounds. Omitted and
+ * narrowed from the stored shape rather than restated, so the wire shape and
+ * the shape a person's card decides on cannot drift — and the stored one
+ * stays unbounded, since a proposal written before a bound must still read.
+ *
+ * `assumed` is bounded by the body it quotes: a passage is part of a body, so
+ * no true prior is longer than a body may be, and an unbounded one is stored
+ * whole on every proposal and repeated in every answer naming it.
+ */
+export const bodyReplaceChangeInputSchema = bodyReplaceChangeSchema.omit({ status: true }).extend({
+  id: annotationIdInputSchema.describe(CHANGE_ID_DESCRIPTION),
+  anchor: textAnchorInputSchema.describe('Which passage to replace.'),
+  assumed: z
+    .string()
+    .max(MARKDOWN_MAX_CHARS, `a passage's prior text is longer than ${MARKDOWN_LIMIT_PHRASE}`)
+    .describe(ASSUMED_PASSAGE_DESCRIPTION),
+})
 
 /**
  * One anchored change. The union is CLOSED, so every renderer's switch over

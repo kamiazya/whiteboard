@@ -11,7 +11,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
-| `packages/loro-adapter` | LoroDoc<->model bridge | model, loro-crdt, zod |
+| `packages/loro-adapter` | LoroDoc<->model bridge, and which uploaded files a workspace still names (`scanFileReferences`, both keepers' file collection) | model, loro-crdt, zod |
 | `packages/reference-graph` | what documents point at: per-document facts, the backlink/mention aggregate, and the digest-validated cache over one keeper port | model, codec, ports, loro-adapter, search, loro-crdt, zod |
 | `packages/workspace-index` | the `DocumentIndex` port over a workspace's Loro tree — one implementation for both roots, since a tree-backed index differs between them in nothing | model, ports, loro-adapter, loro-crdt |
 | `packages/history` | a document's history as pure mechanics over the workspace record: the checkpoint scheduler, version retention, and frontier encoding. Both keepers run them; where the rows live stays in each root. Branch operations and merge planning lived here until ADR-0029 retired the branch | model, loro-crdt |

@@ -92,6 +92,15 @@ export const nodeSubpathInputSchema = z
   .startsWith('#')
   .max(NODE_LOCATION_MAX_CHARS, tooLong("a file's subpath"))
 
+/**
+ * A group's background image as a tool or route accepts it. It is a location
+ * like a file's path — the image a frame draws behind its members, which
+ * every reader of image references follows — so it shares that bound.
+ */
+export const nodeBackgroundInputSchema = z
+  .string()
+  .max(NODE_LOCATION_MAX_CHARS, tooLong("a group's background"))
+
 export interface ResourceKindSpec {
   /** What a resource of this kind is emitted with. */
   readonly mimeType: string

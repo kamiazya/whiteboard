@@ -31,8 +31,15 @@ const scriptPath = resolve(__dirname, 'cleanup-worktrees.mjs')
 const scratchDirs = []
 
 /** The fixtures' git, and the script's own, without the contributor's global config. */
+// stderr is captured, never echoed: `clone --quiet` still warns about an empty origin there,
+// and a failing call still carries it in the thrown error's message.
 function git(cwd, args) {
-  return execFileSync('git', args, { cwd, env: isolatedGitEnv(), encoding: 'utf-8' }).trim()
+  return execFileSync('git', args, {
+    cwd,
+    env: isolatedGitEnv(),
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
 }
 
 function makeScratch() {

@@ -1,5 +1,6 @@
 import {
   NODE_LOCATION_MAX_CHARS,
+  nodeBackgroundInputSchema,
   nodeFileInputSchema,
   nodeSubpathInputSchema,
   nodeUrlInputSchema,
@@ -56,6 +57,12 @@ const LOCATION_WRITERS: ReadonlyArray<
       canvasBatch({ op: 'node.add', node: { type: 'file', file: 'notes', subpath, ...box } }),
   ],
   [
+    'node.add (group) background',
+    fileOf,
+    nodeBackgroundInputSchema,
+    (background) => canvasBatch({ op: 'node.add', node: { type: 'group', background, ...box } }),
+  ],
+  [
     'node.patch url',
     urlOf,
     nodeUrlInputSchema,
@@ -72,6 +79,12 @@ const LOCATION_WRITERS: ReadonlyArray<
     subpathOf,
     nodeSubpathInputSchema,
     (subpath) => canvasBatch({ op: 'node.patch', id: 'n', patch: { subpath } }),
+  ],
+  [
+    'node.patch background',
+    fileOf,
+    nodeBackgroundInputSchema,
+    (background) => canvasBatch({ op: 'node.patch', id: 'n', patch: { background } }),
   ],
 ]
 
@@ -98,5 +111,6 @@ describe('the size of a node location is declared once', () => {
     expect(bounded('url')).toBe(2)
     expect(bounded('file')).toBe(2)
     expect(bounded('subpath')).toBe(2)
+    expect(bounded('background')).toBe(2)
   })
 })

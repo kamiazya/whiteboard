@@ -288,6 +288,7 @@ function markdownPaneProps({
     meta: markdown.meta,
     ...(markdown.title === undefined ? {} : { title: markdown.title }),
     references,
+    ...(model.tags === undefined ? {} : { tagLibrary: model.tags.library }),
     linkTargets: files.pickerTargets,
     onOpenDocument: model.openDocument,
     threads: threads.annotations,

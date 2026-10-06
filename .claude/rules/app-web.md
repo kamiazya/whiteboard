@@ -415,8 +415,11 @@ what is in use (`listTagsInUse`) and what the library declares
 (`readTagLibrary`) — from the keeper's `WorkspaceFilesSource`, once per
 source, and the page hands the value down as `model.tags`: to the editor
 (`tagLibrary` for the layout, the drag overlay and the export taken from
-the editor; `tagSuggestions` for the Facets panel's row), to the board's
-display settings and to the note header's row. The judgement a row refuses
+the editor; `tagSuggestions` for the Facets panel's row), to the markdown
+editor's preview (so a `![[board]]` in a note is coloured as on the canvas),
+to the board's display settings and to the note header's row. The offline
+ReplicaReadPage has no keeper source and reads the same `tags` document out
+of the replica record (`replicaTagLibrary`). The judgement a row refuses
 with is plugin-visual's `tagLibraryObjection`, the one `wb_facet_set` uses,
 so a row and the tool cannot admit different tags. Once per source and
 never per document, because the browser keeper answers the in-use list by

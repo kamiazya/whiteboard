@@ -137,9 +137,11 @@ describe('a workspace-document sync update that writes a node meta', () => {
     seed.commit()
     const store = new StoredDoc(seed)
 
-    await expect(send(store, (doc) => setNodeMeta(doc, DOC_ID, 'name', 'Renamed'))).resolves.toBe(
-      'applied',
-    )
+    await expect(
+      send(store, (doc) => setNodeMeta(doc, DOC_ID, 'name', 'Renamed')),
+    ).resolves.toMatchObject({
+      kind: 'applied',
+    })
     expect(readWorkspaceDocuments(store.get()).map((entry) => entry.name)).toEqual(['Renamed'])
   })
 
@@ -163,12 +165,12 @@ describe('a workspace-document sync update that writes a node meta', () => {
 
     await expect(
       send(store, (doc) => documentContainers(doc, DOC_ID).getText('body').insert(0, 'more ')),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
     await expect(
       send(store, (doc) =>
         setNodeMeta(doc, DOC_ID, 'name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH + 10)),
       ),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
   })
 
   it('a name stored longer before the bound, left as it was, while another node meta is written, is applied', async () => {
@@ -179,9 +181,11 @@ describe('a workspace-document sync update that writes a node meta', () => {
     seed.commit()
     const store = new StoredDoc(seed)
 
-    await expect(send(store, (doc) => setNodeMeta(doc, OTHER_ID, 'name', 'Renamed'))).resolves.toBe(
-      'applied',
-    )
+    await expect(
+      send(store, (doc) => setNodeMeta(doc, OTHER_ID, 'name', 'Renamed')),
+    ).resolves.toMatchObject({
+      kind: 'applied',
+    })
   })
 
   it('a name of exactly DOCUMENT_NAME_MAX_LENGTH is applied', async () => {
@@ -189,6 +193,6 @@ describe('a workspace-document sync update that writes a node meta', () => {
 
     await expect(
       send(store, (doc) => setNodeMeta(doc, DOC_ID, 'name', 'n'.repeat(DOCUMENT_NAME_MAX_LENGTH))),
-    ).resolves.toBe('applied')
+    ).resolves.toMatchObject({ kind: 'applied' })
   })
 })

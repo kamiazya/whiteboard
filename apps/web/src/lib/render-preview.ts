@@ -18,6 +18,7 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { outlineFromScene } from './document-outline.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
@@ -45,6 +46,11 @@ export interface RenderMarkdownPreviewOptions {
   readonly renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences (canvas-render's layout seam, threaded verbatim). */
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /**
+   * The workspace's tag library, so a board embedded in the note is coloured
+   * by intent exactly as the editor colours it (ADR-0040 decision 5).
+   */
+  readonly tagLibrary?: TagLibrary
 }
 
 /**
@@ -110,6 +116,7 @@ export function renderMarkdownPreview(
     theme,
     renderMath,
     renderDiagram,
+    tagLibrary,
   }: RenderMarkdownPreviewOptions,
 ): RenderedMarkdownPreview {
   const scene = layoutScene(value, {
@@ -119,6 +126,7 @@ export function renderMarkdownPreview(
     theme,
     renderMath,
     renderDiagram,
+    tagLibrary,
   })
   const keyed = renderSceneToKeyedSvg(scene, { padding: PREVIEW_PADDING_PX, background })
   return { keyed, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
@@ -185,6 +193,7 @@ function layoutScene(
     theme,
     renderMath,
     renderDiagram,
+    tagLibrary,
   }: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Scene {
   try {
@@ -216,6 +225,7 @@ function layoutScene(
         ...(references !== undefined ? { references } : {}),
         ...(renderMath !== undefined ? { renderMath } : {}),
         ...(renderDiagram !== undefined ? { renderDiagram } : {}),
+        ...(tagLibrary !== undefined ? { tagLibrary } : {}),
       },
     )
   } catch {

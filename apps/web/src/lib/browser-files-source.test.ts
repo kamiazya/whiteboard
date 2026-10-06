@@ -4,6 +4,10 @@
  */
 import 'fake-indexeddb/auto'
 import {
+  trashPurgeRefusal,
+  trashRestoreRefusal,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import {
   writeCoreFacets,
   writeFacets,
   writeMarkdownBody,
@@ -15,7 +19,7 @@ import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plu
 import type { DocumentEntry, ListDocumentsInput } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -258,21 +262,23 @@ describe('createBrowserFilesSource trash', () => {
     expect(await source.listTrash?.()).toEqual([])
   })
 
-  it('rejects a restore that brought nothing back, so the UI can say so', async () => {
+  it('rejects a restore or purge that found nothing, so the UI can say so', async () => {
     // The index answers null for an id that is not in the trash; swallowing
     // that resolves the button's promise and the section reloads with the
     // row still there — a silent no-op. The daemon path already rejects
-    // (its route 404s); the browser path must agree.
+    // (its route 404s, in the same words); the browser path must agree.
     const index = new FoldingBrowserIndex()
     await ensureBrowserWorkspace(index)
     const source = createBrowserFilesSource({ index })
+    const absent = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-    await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow(
-      'Nothing restorable',
+    await expect(source.restoreFromTrash?.(absent)).rejects.toThrow(
+      trashRestoreRefusal(absent, null).title,
     )
+    await expect(source.purgeFromTrash?.(absent)).rejects.toThrow(trashPurgeRefusal(absent).title)
   })
 
-  // The daemon answers 409 with this sentence for the same case: the id is
+  // The daemon answers 409 in the same words for the same case: the id is
   // live, so the restore has nothing to bring back and "not found" would lie.
   it('refuses to restore a document the workspace already places, naming its path', async () => {
     const index = new FoldingBrowserIndex()
@@ -285,7 +291,7 @@ describe('createBrowserFilesSource trash', () => {
     const source = createBrowserFilesSource({ index })
 
     await expect(source.restoreFromTrash?.(entry.documentId)).rejects.toThrow(
-      '"notes/live" is already in this workspace, so there is nothing to restore',
+      trashRestoreRefusal(entry.documentId, 'notes/live').title,
     )
   })
 
@@ -351,6 +357,41 @@ describe('createBrowserFilesSource search', () => {
 
     const hits = await source.searchDocuments('zebracrossing')
     expect(hits.map((hit) => hit.document.path)).toEqual(['notes/quarterly'])
+  })
+
+  // Each source caches its corpus per document against the content stamp, so
+  // a reference another source's rename rewrote reaches this one's search
+  // through that stamp alone. The clock is pinned so the two writes cannot
+  // land in the same millisecond and stamp alike.
+  it('searches the reference a rename in another source rewrote', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
+      const searching = createBrowserFilesSource()
+      const renaming = createBrowserFilesSource()
+      await searching.createDocument('design/login', 'markdown')
+      await searching.createDocument('notes', 'markdown')
+      const notes = (await searching.listDocuments()).find((entry) => entry.path === 'notes')
+      const doc = new Loro()
+      writeMarkdownBody(doc, 'see [[design/login]] for the flow')
+      expect(
+        await seedWorkspaceDocumentContent(
+          notes?.documentId ?? '',
+          doc.export({ mode: 'snapshot' }),
+        ),
+      ).toBe(true)
+      const paths = async (query: string) =>
+        (await searching.searchDocuments(query)).map((hit) => hit.document.path)
+      // Searched once first, so the old body is what the corpus holds.
+      expect(await paths('flow')).toEqual(['notes'])
+
+      vi.setSystemTime(new Date('2026-09-01T00:00:01.000Z'))
+      await renaming.renameDocumentPath('design/login', 'archive/login')
+
+      expect(await paths('archive')).toContain('notes')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

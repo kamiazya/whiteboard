@@ -19,12 +19,17 @@
  * A tracked promise must never WAIT here, by itself or through a read it
  * makes: reads wait here, so it would wait on itself. That is narrower than
  * "never reads". The registrants are the index's own write transactions and
- * the document controller's save loop, and the loop's rename asks the folding
- * index for the startup fold, which reads the legacy rows. That read is the
- * one that does not wait (`IdbDocumentIndex`'s `readsAwaitIssuedWrites`),
- * sound because nothing registered here adds a legacy row; and the folding
- * index's writes wait for the fold alone, never for the reads' barrier. A
- * tracked caller that reaches any other read reopens the deadlock.
+ * the document controller's save loop, which calls back into the folding
+ * index. So the folding index waits here in exactly three methods — its
+ * document reads, `listDocuments`, `resolveDocument` and
+ * `resolveDocumentById` — and every other method, with every read it makes on
+ * its own behalf (the startup fold's legacy rows, the capacity count, the
+ * fold-skipped rows, the workspaces registry), goes past the barrier
+ * (`IdbDocumentIndex`'s `readsAwaitIssuedWrites: false`). That is sound
+ * because the writes queued here are document renames, which change none of
+ * those. A tracked caller that reaches one of the three reopens the deadlock;
+ * `folding-browser-index.write-barrier.browser.test.tsx` calls every other
+ * method from a tracked promise.
  */
 const issued = new Set<Promise<unknown>>()
 

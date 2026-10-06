@@ -34,6 +34,7 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
@@ -51,6 +52,7 @@ import {
   readReplicaContent,
   replicaEntries,
   replicaReferenceWire,
+  replicaTagLibrary,
   writeReplicaMarkdown,
   writeReplicaSpatial,
 } from '../lib/replica-record.js'
@@ -257,7 +259,7 @@ function useReplicaRecord({
   }, [workspaceId, daemonBaseUrl, attempt, withheld])
 }
 
-/** The link table and reference seams the editor draws this replica with. */
+/** The link table, reference seams and tag library the editors draw this replica with. */
 function useReplicaSeams(state: LoadState, selected: WorkspaceDocumentEntry | undefined) {
   const linkable = useMemo(
     (): readonly LinkableDocument[] =>
@@ -292,7 +294,13 @@ function useReplicaSeams(state: LoadState, selected: WorkspaceDocumentEntry | un
     () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
     [references],
   )
-  return { seams, references }
+  // Read once per record, as the keeper pages read theirs once per source:
+  // the library changes when someone edits the `tags` document, which is rare.
+  const tagLibrary = useMemo(
+    () => (state.kind === 'ready' ? replicaTagLibrary(state.record, state.entries) : undefined),
+    [state],
+  )
+  return { seams, references, tagLibrary }
 }
 
 /**
@@ -370,6 +378,7 @@ interface ReplicaReaderProps {
   onSpatialChange: (next: SpatialCanvas) => void
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
+  tagLibrary: TagLibrary | undefined
   saveFailed: boolean
   onRetrySave: () => void
 }
@@ -436,6 +445,7 @@ function ReplicaReader({
   onSpatialChange,
   seams,
   references,
+  tagLibrary,
   saveFailed,
   onRetrySave,
 }: ReplicaReaderProps) {
@@ -473,6 +483,7 @@ function ReplicaReader({
               value={draft}
               onChange={onDraftChange}
               references={seams}
+              tagLibrary={tagLibrary}
             />
           )}
           {content?.kind === 'spatial' && spatialDraft !== null && (
@@ -486,6 +497,7 @@ function ReplicaReader({
               defaultTool="select"
               className="h-full"
               references={references}
+              tagLibrary={tagLibrary}
             />
           )}
         </div>
@@ -600,7 +612,7 @@ export function ReplicaReadPage({
   // entries — so a `[[...]]` written here resolves by the rules the rest of
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
-  const { seams, references } = useReplicaSeams(state, selected)
+  const drawnWith = useReplicaSeams(state, selected)
   const { content, draft, spatialDraft, onDraftChange, onSpatialChange } = useReplicaEditing({
     state,
     selected,
@@ -631,8 +643,7 @@ export function ReplicaReadPage({
           spatialDraft={spatialDraft}
           onDraftChange={onDraftChange}
           onSpatialChange={onSpatialChange}
-          seams={seams}
-          references={references}
+          {...drawnWith}
           saveFailed={saveFailed}
           onRetrySave={retrySave}
         />

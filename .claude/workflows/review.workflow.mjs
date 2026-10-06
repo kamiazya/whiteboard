@@ -94,7 +94,13 @@ const optionalLane = (run) => run().catch(() => null)
 const scopeHint = FILES
   ? `Scope: the following files only — ${FILES.join(', ')}.`
   : `Scope: discover the changed files yourself with \`${GIT} diff --name-only ${RANGE}\`.`
-const cwdHint = CWD ? ` All paths are under ${CWD}; run git as \`${GIT} ...\` and Read files at that absolute path.` : ''
+// Mirrors .claude/workflows/lib/worktree-cwd.mjs (the sandbox has no import); worktree-cwd.test.mjs
+// holds this copy to it.
+function worktreeCwdHint(cwd) {
+  if (!cwd) return ''
+  return ` All paths are under ${cwd}; run git as \`git -C ${cwd} ...\`, Read files at that absolute path, and run every pnpm/vitest/node command as \`cd ${cwd} && …\` — from anywhere else a relative path runs the main checkout's copy of the file.`
+}
+const cwdHint = worktreeCwdHint(CWD)
 const diffHint = `Read the actual diff with \`${GIT} diff ${RANGE}\` (and surrounding context via Read on each file).${cwdHint} ${scopeHint} Only report issues introduced or left unaddressed by THIS diff, not pre-existing debt.`
 
 // --- schemas ---

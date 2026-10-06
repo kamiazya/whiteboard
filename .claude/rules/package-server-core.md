@@ -77,7 +77,11 @@ paths:
   `node.splice`, `edge.remove`, `comment.resolve` and `region.set` never
   reached the answering path. `OP_REACH` is the ledger over those arms in
   the repo's sense (`coverage-ledger.md`): read off the schema in both
-  directions, `answers` checked against the run, and a `refused-only:`
+  directions, `answers` checked against the run at a tenth of the arm's draws
+  (`ANSWER_FLOOR` — a one-answer floor failed main on a seed where
+  `edge.patch` answered 0 of 60; the fix for a sparse row is a denser
+  generator that builds its precondition, never more runs or a pinned seed),
+  and a `refused-only:`
   entry says why the seeding cannot reach an arm and is checked to still be
   true. **A new arm needs the seeded workspace to be able to REACH it**, not
   only an entry: `line.patch` and `line.remove` were declared `answers` and
@@ -85,7 +89,8 @@ paths:
   A board with one line, plus the same per-arm steer the edge ops get, is
   what turned the claim true — the ledger reporting "claimed to answer,
   never did" is what caught it, and it reads like a broken op rather than an
-  empty fixture. The `afterAll` also fails when a whole tool never answered, so a
+  empty fixture. The `afterAll` also fails when a whole tool answers under a tenth of its
+  draws, so a
   tool added to the record that the seeding cannot reach is visible rather
   than green; `FUZZ_TALLY=1` prints each tool's tally, its refusal reasons
   and the shapes it answered with. The refusing doubles this lane does not
@@ -217,7 +222,8 @@ What a CRDT update does to TEXT is judged once, by loro-adapter's
 `importWithinTextLimits`, which both keepers take (the browser through
 `syncTextLimitJudge`, which keeps a copy of the record in step rather than
 forking it per update). Each breach shape in `SYNC_TEXT_BREACH_CODES` (a
-run, a body, node text, a location, a label, a thread message, an element's tags) is answered 413
+run, a body, node text, a location, a label, a thread message, an element's tags, a container name past
+`CONTAINER_NAME_MAX_CHARS`) is answered 413
 by a `TextBreachRefusalError` built only by `textBreachRefusal(breach, at?)`,
 which promote also uses to name the document; into an empty document no run is
 judged, since nothing is replayed there.
@@ -231,9 +237,14 @@ extends `SyncWriteRefusalError` and carries its own code and status; routes
 answer through `syncWriteAnswer`, never per-class arms. Costs are measured in
 `mcp-server/scripts/measure/sync-update-body-cost.mjs`.
 
-One thing is WRITTEN on a CRDT update: `applyWorkspaceDocumentUpdate` names a
-note at a generated path after its heading (`seedNamesFromTitles`) before the
-save, as the browser keeper does (`seedNameFromTitle`). `applyDocumentUpdate`
+Two things are WRITTEN on a CRDT update, both before the save and both from
+one read of the imported ops (`documentsTouchedSince`): a note at a generated
+path is named after its heading (`seedNamesFromTitles`), as the browser keeper
+does (`seedNameFromTitle`), and every document whose content the update wrote
+takes a fresh `updatedAt` (`stampEditedDocuments`) — except under
+`origin: 'transfer'` (promotion), which keeps the arriving clocks. The edited
+documents are answered as `edited`, which the daemon's route checkpoints.
+`applyDocumentUpdate`
 does not seed itself; the per-document save goes through loro-adapter's
 `writeDocumentContentAndName`, which does.
 

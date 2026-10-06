@@ -108,11 +108,13 @@ describe('the backup subprocess', () => {
     })
   })
 
-  it('fails when the child exits non-zero', async () => {
+  // A well-formed result on stdout does not rescue a failed exit: the exit
+  // code is the child's own verdict, and the output may be a partial write.
+  it('fails when the child exits non-zero, even with a readable result printed', async () => {
     const outcome = await runBackupInSubprocess({
       dataDir: '/data',
       outputDir: '/backups/one',
-      spawnBackup: spawnReturning({ stderr: 'backup refused: …\n', code: 1 }),
+      spawnBackup: spawnReturning({ stdout: OK_JSON, stderr: 'backup refused: …\n', code: 1 }),
     })
     expect(outcome.kind).toBe('error')
   })
@@ -127,6 +129,18 @@ describe('the backup subprocess', () => {
       dataDir: '/data',
       outputDir: '/backups/one',
       spawnBackup: spawnReturning({ stdout: 'not json', code: 0 }),
+    })
+    expect(outcome.kind).toBe('error')
+  })
+
+  it('fails when the child exits zero with JSON this version does not understand', async () => {
+    const outcome = await runBackupInSubprocess({
+      dataDir: '/data',
+      outputDir: '/backups/one',
+      spawnBackup: spawnReturning({
+        stdout: JSON.stringify({ schemaVersion: 99, ok: true, operation: 'backup' }),
+        code: 0,
+      }),
     })
     expect(outcome.kind).toBe('error')
   })

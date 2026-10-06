@@ -2,6 +2,7 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  resolveWorkspaceDocumentById,
   SYNC_TEXT_BREACH_CODES,
   writeCommentThread,
   writeMarkdownBody,
@@ -10,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   COMMENT_MESSAGE_MAX_CHARS,
+  CONTAINER_NAME_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
@@ -179,6 +181,33 @@ describe('promoteWorkspace', () => {
     ])
   })
 
+  // A move is not an edit: a promoted document reads as last edited when it
+  // was, not when it moved.
+  it('keeps the updatedAt each promoted document arrived with', async () => {
+    const fake = fakes()
+    const record = new LoroDoc()
+    record.setPeerId(2n)
+    createWorkspaceDocumentAtPath(record, {
+      path: 'notes/roadmap',
+      documentId: ROADMAP_ID,
+      kind: 'markdown',
+      createdAt: 1_000,
+    })
+    writeMarkdownBody(documentContainers(record, ROADMAP_ID), '# roadmap v1')
+    record.commit()
+
+    await promoteWorkspace(
+      {
+        liveDocuments: fake.live,
+        workspaceDocuments: fake.workspaceDocuments,
+        versions: fake.versions,
+      },
+      { workspaceId: WS, snapshot: record.export({ mode: 'snapshot' }) as Uint8Array, operator },
+    )
+
+    expect(resolveWorkspaceDocumentById(fake.workspaceDoc, ROADMAP_ID)?.updatedAt).toBe(1_000)
+  })
+
   it('refuses bytes that are not a Loro snapshot before touching the workspace', async () => {
     const fake = fakes()
     const result = await promoteWorkspace(
@@ -344,6 +373,17 @@ describe('promoteWorkspace', () => {
     tags: {
       at: 'sketch',
       write: (board: Board) => board.getMap('canvas').set('tags', ['x'.repeat(TAG_MAX_CHARS + 1)]),
+    },
+    'container-name': {
+      at: 'sketch',
+      // A thread is a container named by its id, so an id this long names it past the bound.
+      write: (board: Board) =>
+        writeCommentThread(board, {
+          id: 't'.repeat(CONTAINER_NAME_MAX_CHARS),
+          anchor: { kind: 'document' },
+          status: 'open',
+          messages: [{ id: 'm1', body: 'hello' }],
+        }),
     },
   } satisfies Record<
     keyof typeof SYNC_TEXT_BREACH_CODES,

@@ -57,7 +57,7 @@ What each does:
 - `pnpm mcp:http:dev`: starts the local daemon in watch mode; it serves `/mcp` on its owner-only socket (a named pipe on Windows) and listens on no TCP port (ADR-0050)
 - Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). It forwards over the owner-only socket the daemon names in `<dataDir>/daemon.json` (`socketPath`, ADR-0050 decision 2): while there is no record — the daemon is starting, or between the halves of a watch restart — a request waits within the retry budget for one to appear. A client on that socket still sends the bearer token, since the socket serves the same app with the same checks — `curl --unix-socket <path> http://localhost/mcp …`. Claude Code reads the proxy from a LOCAL-scope registration (`claude mcp add --scope local … mcp-http-stdio-proxy.mjs`, once per checkout), which shadows `.mcp.json`'s published `npx` definition; `settings.json` has no `mcpServers` field, so never define servers there. Inspector goes through the same proxy.
 - `pnpm mcp:inspect`: starts the official MCP Inspector UI on the same stdio proxy, so it reaches this checkout's dev daemon over its socket (starting one if none answers). Inspector has no Unix-socket transport of its own.
-- `pnpm mcp:inspect:stdio`: starts Inspector against the raw stdio MCP entrypoint
+- `pnpm mcp:inspect:stdio`: starts Inspector against the stdio MCP server run from SOURCE, on this checkout's `.dev-data` (`run-source-stdio.mjs`) — not the packaged entry
 - `pnpm mcp:debug:http`: runs `mcp:http:dev` and Inspector together for quick iteration. With this checkout's dev daemon already running (the `SessionStart` hook's, say), the daemon half reuses it and exits 0 — `reusing the dev daemon already running for <data dir> (pid N)` — and Inspector reaches that daemon; `pnpm mcp:http:stop` first to watch a daemon's output in this terminal
 
 ## First-Pass HTTP Debug Loop
@@ -84,11 +84,11 @@ pnpm mcp:inspect
 ## When To Use HTTP vs STDIO
 
 - Prefer HTTP (`/mcp`) for active development. The stdio proxy the client launches retries across daemon restarts, so a code change restarts the daemon without reconnecting the client; the daemon listens on an owner-only socket, not a TCP port.
-- Use stdio Inspector only when validating the standalone packaged MCP entrypoint or debugging stdio-specific startup issues.
+- Use stdio Inspector (`pnpm mcp:inspect:stdio`) only when debugging stdio-specific startup issues. It runs the stdio server from source; the packaged entry is the built CLI's `mcp` command (`node packages/mcp-server/dist/cli/index.js mcp` after `pnpm build`), which uses a packaged install's data dir — `~/.whiteboard` unless you set `WHITEBOARD_DATA_DIR`.
 
 ## Enable Request Logging
 
-Set `MCP_HTTP_DEBUG=1` before starting the HTTP daemon. The `SessionStart` hook has usually started one already without it, and a second start on the same data dir refuses rather than replacing it, so stop the running one first:
+Set `MCP_HTTP_DEBUG=1` before starting the HTTP daemon. The `SessionStart` hook has usually started one already without it, and a second start on the same data dir reuses the running one and exits 0 rather than replacing it, so stop the running one first:
 
 ```bash
 pnpm mcp:http:stop

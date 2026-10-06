@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 // Idempotent: if this checkout's dev daemon is not answering, start
-// `pnpm mcp:http:dev` detached and wait until it does, so the next MCP
-// request connects immediately.
+// `mcp:http:dev` detached and wait until it does, so the next MCP
+// request connects immediately. The package script is run as the `node`
+// command it names rather than through pnpm (devServerSpawn says why).
+//
+// WHITEBOARD_DEV_SERVER_STAND_IN names a node script started in place of the
+// script's wrapper, with the same arguments: the subprocess tests' fake
+// daemon, so no test can start a real one.
 //
 // "Answering" means the daemon record in this checkout's data dir names a
 // socket, and /api/runtime/ping answers on it (ADR-0050 decision 2). The
@@ -30,8 +35,8 @@ import {
   resolveSpawnLockStaleMs,
 } from './dev-spawn-lock-lib.mjs'
 import {
-  buildMcpHttpDevSpawnArgs,
   describeTokenConflict,
+  devServerSpawn,
   refusalLine,
   resolveDevBearerToken,
   resolveReadyTimeoutMs,
@@ -53,7 +58,7 @@ const { flags } = parseScriptArgs({
 
 const REPO_ROOT = resolveHookProjectRoot(process.env, process.cwd())
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
-// Upper bound on how long we'll wait for `pnpm mcp:http:dev` to answer.
+// Upper bound on how long we'll wait for `mcp:http:dev` to answer.
 // Defaults to 30s (tsx + happy-dom + canvas + resvg cold start +
 // node_modules linking can take ~10-15s on slow machines, so leave generous
 // headroom — the hook is only invoked once per session start, so this isn't
@@ -64,7 +69,7 @@ const READY_POLL_INTERVAL_MS = 200
 // The token this checkout's clients (the stdio proxy) send. Set
 // WHITEBOARD_TOKEN in the shell to use a custom token; when a custom value is
 // set the spawned daemon receives an explicit --token flag that overrides the
-// default baked into the pnpm script, keeping the two in sync.
+// default baked into the package script, keeping the two in sync.
 const DEV_BEARER_TOKEN = resolveDevBearerToken(process.env)
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
 const LOG_PATH = join(LOG_DIR, 'mcp-http-dev.log')
@@ -205,16 +210,23 @@ async function runAsWinner() {
   await mkdir(LOG_DIR, { recursive: true })
   const logFile = await open(LOG_PATH, 'a')
   const logOffset = (await logFile.stat()).size
-  const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  const packageRoot = join(REPO_ROOT, 'packages/mcp-server')
+  const manifest = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
+  const server = devServerSpawn(manifest.scripts['mcp:http:dev'], {
+    packageRoot,
+    token: DEV_BEARER_TOKEN,
+  })
+  const standIn = process.env.WHITEBOARD_DEV_SERVER_STAND_IN
+  const args = standIn ? [standIn, ...server.args.slice(1)] : server.args
 
-  const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN), {
-    cwd: REPO_ROOT,
+  const child = spawn(server.command, args, {
+    cwd: server.cwd,
     detached: true,
     stdio: ['ignore', logFile.fd, logFile.fd],
     env: process.env,
   })
   child.on('error', (err) => {
-    console.error(`[ensure-http-dev-daemon] failed to spawn ${pnpmCmd}: ${err.message}`)
+    console.error(`[ensure-http-dev-daemon] failed to spawn ${args[0]}: ${err.message}`)
     process.exit(1)
   })
   await logFile.close()
@@ -242,9 +254,7 @@ async function runAsWinner() {
   // Detach now that we know the daemon is up — keeps the parent shell free
   // to disconnect without taking the child down with it.
   child.unref()
-  info(
-    `[ensure-http-dev-daemon] started ${pnpmCmd} mcp:http:dev (pid ${child.pid}) — log: ${LOG_PATH}`,
-  )
+  info(`[ensure-http-dev-daemon] started mcp:http:dev (pid ${child.pid}) — log: ${LOG_PATH}`)
   process.exit(0)
 }
 

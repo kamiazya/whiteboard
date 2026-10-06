@@ -100,7 +100,7 @@ export function SpatialEditorPane({
   // picked, typed and silently dropped.
   ...editorProps
 }: SpatialEditorPaneProps) {
-  const { canvas, theme } = editorProps
+  const { canvas, theme, tagLibrary } = editorProps
   // The overlay's markdown editor reads the seams as functions; it builds
   // them from the same wire the canvas posts to its worker.
   const overlaySeams = useMemo(
@@ -139,6 +139,7 @@ export function SpatialEditorPane({
           initialText={nodeInEditor.editing.text}
           theme={theme}
           references={overlaySeams}
+          tagLibrary={tagLibrary}
           linkTargets={linkTargets}
           onCommit={nodeInEditor.commit}
           onClose={nodeInEditor.close}

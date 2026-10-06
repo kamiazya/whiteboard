@@ -111,16 +111,19 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // in the app, and the next cut is a further layer rather than another slot
   // (measured: lifting a slot moves the complexity by about one, because the
   // condition that decides whether to render it stays).
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 616,
+  // +2: `tagLibrary`, handed to the preview column.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx#MarkdownEditor': 618,
   // Both are the editor's own JSX, one level out: a column is a frame plus
   // the branches that decide what it draws, and those branches were the
   // editor's complexity rather than its structure.
-  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 80,
+  // +3: `tagLibrary`, threaded to the preview pane.
+  'apps/web/src/components/markdown-editor/editor-columns.tsx#PreviewColumn': 83,
   'apps/web/src/components/markdown-editor/editor-columns.tsx#SourceColumn': 53,
   'apps/web/src/components/markdown-editor/MarkdownVerbBar.tsx#MarkdownVerbBar': 60,
   'apps/web/src/components/markdown-editor/MinimapRail.tsx#MinimapRail': 80,
   'apps/web/src/components/markdown-editor/PassageProposalCard.tsx#PassageProposalCard': 63,
-  'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 52,
+  // +2: `tagLibrary`, so an embedded board is coloured by intent.
+  'apps/web/src/components/markdown-editor/PreviewPane.tsx#PreviewPane': 54,
   'apps/web/src/components/markdown-editor/SourcePane.tsx#SourcePane': 258,
   'apps/web/src/components/markdown-editor/TouchFormattingBarPanel.tsx#TouchFormattingBarPanel': 128,
   'apps/web/src/components/markdown-editor/annotation-decorations.ts#annotationDecorations': 74,
@@ -391,8 +394,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 70,
   'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 54,
   // The read surface: the banner, the tree and the editor. JSX, and the
-  // three are what a replica IS to a reader.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 72,
+  // three are what a replica IS to a reader. +3: the replica's tag library,
+  // handed to both editors.
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 75,
   // Presentation only — the logic is `useTransferHandshake`. Six stages, each
   // a short branch, and the offer and the report already live in their own
   // components; the page is the switch between them.
