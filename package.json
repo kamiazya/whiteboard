@@ -32,6 +32,7 @@
     "verify:git-hooks": "node packages/mcp-server/scripts/verify-git-hooks.mjs",
     "typecheck": "pnpm -r typecheck",
     "dev": "concurrently --kill-others-on-fail -n web,mcp -c blue,green \"pnpm --filter @kamiazya/whiteboard-web dev\" \"pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev\"",
+    "dev:connected": "node apps/extension/scripts/dev-connected.mjs",
     "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",
     "mcp:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http",
     "mcp:http:dev": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev",

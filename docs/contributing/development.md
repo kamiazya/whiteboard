@@ -201,6 +201,37 @@ through the development build of the extension, which also admits
   and `FIREFOX_BIN` or found on `PATH`. Mozilla's own Linux tarball and a
   geckodriver release both work unpacked anywhere.
 
+### Run the web app against the dev daemon
+
+```bash
+pnpm dev:connected              # a Chromium window
+pnpm dev:connected --headless   # no window; attach over CDP instead
+```
+
+It ensures this checkout's dev daemon, builds the extension's development
+build, registers the native host for this checkout's data dir (`.dev-data`, or
+`WHITEBOARD_DATA_DIR`), starts `vite` for `apps/web`, and opens Playwright's
+Chromium on the app with the extension loaded. In the app, **Connect through
+the extension** reaches the daemon, so a document an agent creates through the
+dev MCP proxy shows up in the workspace.
+
+- The host is registered inside a throwaway Chromium profile
+  (`<profile>/NativeMessagingHosts`), never in a browser of yours, so your
+  own registration for `~/.whiteboard` is left alone. The profile is removed
+  on exit (close the window, or Ctrl-C), and with it the connection: the next
+  run asks to connect again. The dev daemon is shared and keeps running.
+- It prints the app URL and a CDP endpoint (`--cdp-port=<n>` to pin it), which
+  Playwright reaches with `chromium.connectOverCDP(<endpoint>)` and the
+  Playwright MCP server with `--cdp-endpoint=<endpoint>`.
+- It starts its own `vite` on the first free port from `--port` (5173). A
+  dev server already on 5173 may be another checkout's, so it is reused only
+  when named with `--url=<url>`.
+- Linux and macOS only: on Windows, Chromium finds a native host through a
+  per-user registry key, which a throwaway profile cannot scope.
+- Not `WHITEBOARD_CHROME_PATH`: that is the test launcher's choice, usually
+  branded Chrome or the headless shell, and neither loads an unpacked
+  extension. `--chrome=<path>` names another Chromium.
+
 ## Cloudflare Pages header parity in local dev
 
 `apps/web/public/_headers` (security headers, CSP) is only served by
