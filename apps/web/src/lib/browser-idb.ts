@@ -39,6 +39,7 @@ export {
   mintBrowserWorkspaceSegment,
   rekeyBrowserWorkspace,
   sweepVersionsWrittenBeforeDigests,
+  VERSION_DIGEST_DB_VERSION,
 } from './browser-idb-upgrades.js'
 
 const DB_NAME = 'whiteboard'

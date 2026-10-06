@@ -458,7 +458,7 @@ function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
 }
 
 /** The version at which a saved point began carrying its content's digest. */
-const VERSION_DIGEST_DB_VERSION = 19
+export const VERSION_DIGEST_DB_VERSION = 19
 
 /**
  * v19's sweep: empty the `versions` store of every point written before a row
