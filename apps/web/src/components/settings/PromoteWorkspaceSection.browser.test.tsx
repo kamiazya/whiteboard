@@ -148,7 +148,7 @@ async function seedTwoDocuments(): Promise<{ roadmapId: string; sketchId: string
 
 /** Gives the sketch a stored image, so promotion has a real blob phase. */
 async function seedImageOnSketch(sketchId: string): Promise<void> {
-  await new DocumentFileStore().put('img-1', {
+  await new DocumentFileStore().put(newImageRef('img-1'), {
     mimeType: 'image/png',
     blob: new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
     created: Date.now(),

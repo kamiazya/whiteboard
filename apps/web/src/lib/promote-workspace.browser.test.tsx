@@ -15,7 +15,7 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
+import { base64UrlToBytes, imageRefId, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -26,6 +26,7 @@ import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-conte
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BROWSER_FILE_ADAPTER } from './document-embed-content.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { countBrowserWorkspaceDocuments, promoteWorkspace } from './promote-workspace.js'
@@ -122,18 +123,17 @@ describe('promoteWorkspace', () => {
     // The spatial document references a stored image — its bytes live in the
     // browser's file store, OUTSIDE the record, so promotion must move them
     // through the daemon's file route.
+    // Stored through the editor's own upload seam, so the key it lands under
+    // is the one a real picture has — not one a test chose to match the read.
     const imageBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3])
-    const FILE_ID = 'promoted-image-1'
-    await new DocumentFileStore().put(FILE_ID, {
-      mimeType: 'image/png',
-      blob: new Blob([imageBytes], { type: 'image/png' }),
-      created: Date.now(),
-    })
+    const stored = await BROWSER_FILE_ADAPTER.storeImage(
+      new File([imageBytes], 'picture.png', { type: 'image/png' }),
+    )
+    if (!stored.ok) throw new Error(stored.reason)
+    const FILE_ID = imageRefId(stored.ref)
     const content = new LoroDoc()
     writeSpatialCanvas(content, {
-      nodes: [
-        fileNode({ id: 'img', file: newImageRef(FILE_ID), x: 0, y: 0, width: 10, height: 10 }),
-      ],
+      nodes: [fileNode({ id: 'img', file: stored.ref, x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
     expect(
@@ -246,7 +246,7 @@ describe('promoteWorkspace', () => {
       kind: 'spatial',
     })
     for (const image of images) {
-      await new DocumentFileStore().put(image.id, {
+      await new DocumentFileStore().put(newImageRef(image.id), {
         mimeType: image.type,
         blob: image.blob,
         created: Date.now(),
