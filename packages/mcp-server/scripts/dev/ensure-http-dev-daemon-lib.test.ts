@@ -123,8 +123,8 @@ describe('refusalLine', () => {
   })
 
   it('answers null when the dev server said nothing of its own', () => {
-    expect(refusalLine('Exit status 1\n[ELIFECYCLE] Command failed with exit code 1.\n')).toBe(null)
-    expect(refusalLine('')).toBe(null)
+    expect(refusalLine('Exit status 1\n[ELIFECYCLE] Command failed with exit code 1.\n')).toBeNull()
+    expect(refusalLine('')).toBeNull()
   })
 })
 

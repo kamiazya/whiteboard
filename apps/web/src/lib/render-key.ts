@@ -182,7 +182,8 @@ export async function tagLibraryKey(library: TagLibrary): Promise<string> {
     }
   }
   if (declared.length === 0) return ''
-  const canonical = new TextEncoder().encode(declared.sort(compareCodeUnit).join('\n'))
+  declared.sort(compareCodeUnit)
+  const canonical = new TextEncoder().encode(declared.join('\n'))
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', canonical))
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0'))
     .join('')

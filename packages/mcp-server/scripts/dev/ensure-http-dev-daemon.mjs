@@ -156,8 +156,9 @@ function failReadyTimeout() {
 async function failSpawnedExit(how, logOffset) {
   const log = await readFile(LOG_PATH).catch(() => Buffer.alloc(0))
   const why = refusalLine(log.subarray(logOffset).toString('utf8'))
+  const reason = why === null ? '' : `: ${why}`
   console.error(
-    `[ensure-http-dev-daemon] the dev server exited (${how}) before its daemon answered${why === null ? '' : `: ${why}`} — full log: ${LOG_PATH}. ` +
+    `[ensure-http-dev-daemon] the dev server exited (${how}) before its daemon answered${reason} — full log: ${LOG_PATH}. ` +
       'MCP tools will be unavailable for this session.',
   )
   process.exit(1)

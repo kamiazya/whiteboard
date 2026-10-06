@@ -301,6 +301,7 @@ describe.skipIf(!existsSync('/proc/self/stat'))(
         wrapper.kill('SIGKILL')
       })
       await until(() => existsSync(pidFile), 'the wrapper to start its child')
+      expect(wrapper.exitCode).toBeNull()
     })
 
     it('pnpm mcp:http:stop signals nothing, and says why', async () => {

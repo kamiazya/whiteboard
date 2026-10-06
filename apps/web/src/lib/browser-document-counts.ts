@@ -35,17 +35,19 @@ export async function browserDocumentCounts(dbName?: string): Promise<ReadonlyMa
   // tree as it stands, which the index logs.
   const index = new FoldingBrowserIndex(dbName)
   const counts = new Map<string, number>()
-  for (const workspace of await index.listWorkspaces()) {
+  const countOne = async (workspaceId: string): Promise<void> => {
     // Per workspace, so one unreadable record costs its own row and not the
     // whole popover. A workspace with no record yet is 0 rather than absent:
     // it exists and holds nothing, which is the row a person needs to see.
     try {
-      const rows = await index.listDocuments({ workspaceId: workspace.workspaceId })
-      counts.set(workspace.workspaceId, rows.length)
+      const rows = await index.listDocuments({ workspaceId })
+      counts.set(workspaceId, rows.length)
     } catch (err) {
-      if (isWorkspaceNotFoundError(err)) counts.set(workspace.workspaceId, 0)
-      else log.warn('could not count a workspace', workspace.workspaceId, err)
+      if (isWorkspaceNotFoundError(err)) counts.set(workspaceId, 0)
+      else log.warn('could not count a workspace', workspaceId, err)
     }
   }
+  const workspaces = await index.listWorkspaces()
+  await Promise.all(workspaces.map((workspace) => countOne(workspace.workspaceId)))
   return counts
 }

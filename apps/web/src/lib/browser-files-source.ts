@@ -324,11 +324,9 @@ export function createBrowserFilesSource(
     }
     if (rewritten.length === 0) return
     await saveAndAnnounce(docs, workspaceId, workspace)
-    for (const documentId of rewritten) {
-      await touchContentTimestamp(documentId)
-      // The content moved, so the search corpus entry for it is stale.
-      corpus.delete(documentId)
-    }
+    await Promise.all(rewritten.map((documentId) => touchContentTimestamp(documentId)))
+    // The content moved, so the search corpus entries for it are stale.
+    for (const documentId of rewritten) corpus.delete(documentId)
   }
 
   const loadCurrentDoc = (entry: WorkspaceDocumentEntry, record?: () => Promise<ContentRecord>) =>
