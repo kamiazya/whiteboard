@@ -157,7 +157,5 @@ export interface DocumentPageModel {
     readonly afterMenu?: ReactNode
     /** Rendered INSTEAD of the editor row (an empty state). */
     readonly replaceEditor?: ReactNode
-    /** After the editor row, inside the shell (a toast). */
-    readonly footer?: ReactNode
   }
 }
