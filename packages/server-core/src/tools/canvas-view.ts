@@ -23,7 +23,7 @@ import { loadDocument } from '../document-io.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
-import { carriesATag, workspaceTagLibrary } from './tag-library.js'
+import { taggedDrawingLibrary } from './tag-library.js'
 
 export const canvasViewInputSchema = z
   .object({
@@ -105,9 +105,8 @@ function referenceWireEntry(
  * What the widget draws — `canvas` and every canvas the reference graph
  * loaded — each with the colour its tags declare in the workspace's library,
  * so a board drawn inside a file node or an embed is coloured as it is on its
- * own. The library is read only when one of them carries a tag — the same
- * rule `wb_scene_render` follows, since a library is a listing plus a
- * document read and an untagged board has nothing one could colour.
+ * own. The library is read only when one of them carries a tag
+ * (`taggedDrawingLibrary`, the rule `wb_scene_render` reads through too).
  */
 async function colouredDrawing(
   deps: ServerDeps,
@@ -115,11 +114,8 @@ async function colouredDrawing(
   canvas: SpatialCanvas,
 ): Promise<{ canvas: SpatialCanvas; graph: ReferenceGraph }> {
   const { graph } = await loadReferenceGraph(deps, workspaceId, { canvases: [canvas] })
-  const referenced = [...graph.values()].flatMap((ref) =>
-    ref?.canvas === undefined ? [] : [ref.canvas],
-  )
-  if (![canvas, ...referenced].some(carriesATag)) return { canvas, graph }
-  const library = await workspaceTagLibrary(deps, workspaceId, 'deployment')
+  const library = await taggedDrawingLibrary(deps, workspaceId, [canvas], graph)
+  if (library === undefined) return { canvas, graph }
   return {
     canvas: withDeclaredColours(canvas, library),
     graph: new Map(

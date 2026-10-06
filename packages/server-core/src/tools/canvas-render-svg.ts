@@ -24,7 +24,7 @@ import { loadReferenceGraph } from '../render/reference-graph.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import { unknownStyleRefusal } from '../render/unknown-style.js'
 import type { ServerDeps } from '../server-deps.js'
-import { carriesATag, workspaceTagLibrary } from './tag-library.js'
+import { taggedDrawingLibrary } from './tag-library.js'
 
 /**
  * `DocRef`'s document arm carries `workspaceId` (the record a consumer
@@ -182,22 +182,13 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
   }
 }
 
-/**
- * The workspace's tag library, when anything this render DRAWS carries a
- * tag: the document's own canvas, or a canvas it draws inside itself — an
- * untagged host still draws a tagged board in a file node or an embed.
- * Finding a library is a listing plus a read, so a render whose every canvas
- * is untagged (the common one) pays neither.
- */
+/** The tag library as a spread for the scene options: present only when `drawsATag` says one is read. */
 async function drawnTagLibrary(
   deps: ServerDeps,
   workspaceId: string,
   own: readonly SpatialCanvas[],
   graph: ReferenceGraph | undefined,
 ): Promise<{ tagLibrary?: TagLibrary }> {
-  const referenced = [...(graph?.values() ?? [])].flatMap((ref) =>
-    ref?.canvas === undefined ? [] : [ref.canvas],
-  )
-  if (![...own, ...referenced].some(carriesATag)) return {}
-  return { tagLibrary: await workspaceTagLibrary(deps, workspaceId, 'deployment') }
+  const tagLibrary = await taggedDrawingLibrary(deps, workspaceId, own, graph)
+  return tagLibrary === undefined ? {} : { tagLibrary }
 }

@@ -11,6 +11,7 @@
  * — the write check below, `wb_facet_list`'s answer, the layout's colour by
  * intent — takes it as a value.
  */
+import type { ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   readTagLibrary,
@@ -82,18 +83,41 @@ export function refuseAgainstLibrary(
   )
 }
 
-/**
- * Whether a render of this canvas can read anything from a library: the
- * board, a node or an edge carries a tag. A caller asks this BEFORE
- * loading the library, so an untagged board — the common one — costs no
- * listing and no document read.
- */
-export function carriesATag(canvas: SpatialCanvas): boolean {
+/** Whether one canvas can read anything from a library: the board, a node or an edge carries a tag. */
+function carriesATag(canvas: SpatialCanvas): boolean {
   return (
     (canvas.tags?.length ?? 0) > 0 ||
     canvas.nodes.some((node) => (node.tags?.length ?? 0) > 0) ||
     canvas.edges.some((edge) => (edge.tags?.length ?? 0) > 0)
   )
+}
+
+/**
+ * Whether a render can read anything from the workspace's tag library: a
+ * canvas it DRAWS carries a tag — one it draws itself (`own`), or one its
+ * reference graph loaded, since an untagged host still draws a tagged board
+ * inside a file node or an embed. Every renderer gates its library read on
+ * this, BEFORE loading it, so an untagged render (the common one) costs no
+ * listing and no document read, and two renderers cannot disagree about
+ * which boards are coloured.
+ */
+export function drawsATag(own: readonly SpatialCanvas[], graph?: ReferenceGraph): boolean {
+  if (own.some(carriesATag)) return true
+  for (const loaded of graph?.values() ?? []) {
+    if (loaded?.canvas !== undefined && carriesATag(loaded.canvas)) return true
+  }
+  return false
+}
+
+/** The workspace's tag library when the render can read one (`drawsATag`), else `undefined` unread. */
+export async function taggedDrawingLibrary(
+  deps: ServerDeps,
+  workspaceId: string,
+  own: readonly SpatialCanvas[],
+  graph?: ReferenceGraph,
+): Promise<TagLibrary | undefined> {
+  if (!drawsATag(own, graph)) return undefined
+  return workspaceTagLibrary(deps, workspaceId, 'deployment')
 }
 
 /**
