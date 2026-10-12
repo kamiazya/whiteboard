@@ -173,7 +173,10 @@ export async function connectBrowserSession(webSocketDebuggerUrl) {
       else waiter?.answer(message.result)
       return
     }
-    handlers.get(message.method)?.(message.params)
+    // Only an event this module subscribed to is dispatched: the method name
+    // comes off the wire, so it is a key to look up, never a call target.
+    const handler = typeof message.method === 'string' ? handlers.get(message.method) : undefined
+    if (typeof handler === 'function') handler(message.params)
   })
   socket.addEventListener('close', () => {
     for (const waiter of pending.values()) waiter.refuse(new Error('CDP connection closed'))
