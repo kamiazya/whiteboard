@@ -443,7 +443,11 @@ describe('docs/ contract', () => {
           reached++
           const cd = /\bcd\s+([^\s&;|)]+)\s*&&/.exec(line)?.[1]
           const from = [REPO_ROOT, owner && join(REPO_ROOT, owner), cd && join(REPO_ROOT, cd)]
-          if (from.some((dir) => dir && existsSync(join(dir, script)))) continue
+          // A build output exists only after a build, and this asks where the
+          // path is written FROM, so `dist/` is judged by the package beside it.
+          const built = /^(.*?)\/dist\//.exec(script)?.[1]
+          const target = built === undefined ? script : join(built, 'package.json')
+          if (from.some((dir) => dir && existsSync(join(dir, target)))) continue
           if (/docker exec|--filter|\s-C\s/.test(line)) continue
           stray.push(`${path}: ${line.trim()}`)
         }
