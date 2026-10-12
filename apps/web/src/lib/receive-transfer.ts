@@ -28,6 +28,7 @@
  * would report a malformed-message error for traffic that was never this
  * session's, in words about the wrong thing.
  */
+import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
   collectImageRefIds,
   documentContainers,
@@ -63,6 +64,9 @@ export type OfferedTransfer =
       documentCount: number
       /** Likewise a claim: the receiver reports what it really merged. */
       sourceWorkspaceId: string
+      /** The planes beside the record, passed on to this keeper's promote as they came. */
+      trash?: PromoteWorkspaceRequest['trash']
+      versions?: PromoteWorkspaceRequest['versions']
     }
   /** Not this session's business; nothing is shown. */
   | { kind: 'ignored' }
@@ -114,6 +118,8 @@ export function readOfferedTransfer(
     snapshot: offer.snapshot,
     documentCount: offer.documentCount,
     sourceWorkspaceId: offer.sourceWorkspaceId,
+    ...(offer.trash === undefined ? {} : { trash: offer.trash }),
+    ...(offer.versions === undefined ? {} : { versions: offer.versions }),
   }
 }
 

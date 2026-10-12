@@ -24,9 +24,11 @@
 
 import { isLoopbackHostname } from '@kamiazya/whiteboard-daemon-client/loopback-host'
 import { bytesToHex } from '@kamiazya/whiteboard-model'
+import type { z } from 'zod'
 import {
   CROSS_ORIGIN_TRANSFER_PROTOCOL,
   type TransferResponse,
+  type transferRequestSchema,
   transferResponseSchema,
   transferWindowUrl,
 } from './cross-origin-transfer-protocol.js'
@@ -41,12 +43,17 @@ export type SendTransferResult =
   | Omit<Extract<TransferResponse, { ok: true }>, 'type' | 'nonce'>
   | { ok: false; reason: string }
 
-/** What the offer carries, read from this browser's own record. */
-export interface TransferPayload {
+type TransferOffer = Extract<z.infer<typeof transferRequestSchema>, { type: 'transfer-offer' }>
+
+/**
+ * What the offer carries, read from this browser's own record — the offer
+ * minus its handshake fields — plus what this browser could not carry, which
+ * stays here and is added to whatever the keeper reports back.
+ */
+export type TransferPayload = Omit<TransferOffer, 'type' | 'protocol' | 'nonce' | 'snapshot'> & {
+  /** Any buffer: the receiver's schema checks the bytes, not the realm or the buffer kind. */
   snapshot: Uint8Array
-  /** For the receiver's confirmation copy; it reports what REALLY merged. */
-  documentCount: number
-  sourceWorkspaceId: string
+  leftBehind?: readonly string[]
 }
 
 export interface SendTransferOptions {
@@ -97,13 +104,22 @@ export function sendTransfer(options: SendTransferOptions): Promise<SendTransfer
   }
 
   let offered = false
+  let leftHere: readonly string[] = []
   return talkTo<SendTransferResult>(popup, options.closedPollMs ?? 500, {
     onMessage: (event, talk) => {
       const read = readHandshakeMessage(event, destination, nonce)
-      if (read.kind === 'result') talk.settle(read.result)
+      if (read.kind === 'result') talk.settle(withLeftHere(read.result, leftHere))
       else if (read.kind === 'ready' && !offered) {
         offered = true
-        offerRecord(talk, read.protocol, { popup, destination, nonce, payload: options.payload })
+        offerRecord(talk, read.protocol, {
+          popup,
+          destination,
+          nonce,
+          payload: options.payload,
+          onPosted: (left) => {
+            leftHere = left
+          },
+        })
       }
     },
     onClosed: (talk) =>
@@ -114,6 +130,12 @@ export function sendTransfer(options: SendTransferOptions): Promise<SendTransfer
           : 'The window was closed before the transfer started, so nothing was sent.',
       }),
   })
+}
+
+/** The keeper's report, with what never left this browser named first. */
+function withLeftHere(result: SendTransferResult, leftHere: readonly string[]): SendTransferResult {
+  if (!result.ok || leftHere.length === 0) return result
+  return { ...result, leftBehind: [...leftHere, ...(result.leftBehind ?? [])] }
 }
 
 interface Talk<T> {
@@ -170,6 +192,7 @@ function offerRecord(
     destination: string
     nonce: string
     payload: Promise<TransferPayload>
+    onPosted: (leftBehind: readonly string[]) => void
   },
 ): void {
   if (protocol !== CROSS_ORIGIN_TRANSFER_PROTOCOL) {
@@ -180,13 +203,16 @@ function offerRecord(
     (payload) => {
       // The person may have closed the window while the record was read.
       if (talk.settled) return
+      // What could not be carried is this side's to report, not the offer's.
+      const { leftBehind = [], ...carried } = payload
+      to.onPosted(leftBehind)
       to.popup.postMessage(
         {
           type: 'transfer-offer',
           protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
           nonce: to.nonce,
-          ...payload,
-        },
+          ...carried,
+        } satisfies Omit<TransferOffer, 'snapshot'> & { snapshot: Uint8Array },
         to.destination,
       )
     },

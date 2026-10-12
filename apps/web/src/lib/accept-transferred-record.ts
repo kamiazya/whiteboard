@@ -14,6 +14,12 @@
  * sender brings. No passkey is asked: no keeper pins one
  * (ADR-0050), and every keeper refuses a promote carrying an attestation.
  *
+ * WHAT TRAVELS BESIDE THE RECORD. Each trash entry's evacuated bytes and the
+ * sender's saved versions, posted on in the promote body as they arrived, so
+ * a trashed document restores here and the history lists. What this keeper
+ * does not report holding afterwards is `leftBehind`, the way a promote
+ * reports it.
+ *
  * WHAT DOES NOT TRAVEL. Image bytes live in the SENDING browser's file store,
  * outside the record, and this window is at another origin and cannot read
  * it. So the honest report is a COUNT of what the merged record points at —
@@ -25,10 +31,12 @@ import {
   promoteWorkspaceResponseSchema,
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
+import { unconfirmedPlanes } from './carried-planes.js'
 import { listDocuments } from './daemon-api-client.js'
 import { daemonContractError } from './daemon-contract-error.js'
 import { imagesTheRecordReferences } from './receive-transfer.js'
@@ -44,6 +52,12 @@ export type AcceptTransferResult =
       attested: boolean
       /** What the record points at and this keeper does not have (see the header). */
       imagesMissing: string[]
+      /**
+       * Of the trash bytes and saved versions the offer carried, what this
+       * keeper did not report holding afterwards — its own read-back, never
+       * the request echoed.
+       */
+      leftBehind: string[]
     }
   | { ok: false; reason: string }
 
@@ -53,6 +67,10 @@ export interface AcceptTransferOptions {
   /** The workspace here to merge INTO — a promote merges into an existing one. */
   workspaceId: string
   snapshot: Uint8Array
+  /** Each trash entry's evacuated bytes, so the entry restores here. */
+  trash?: PromoteWorkspaceRequest['trash']
+  /** The sender's saved versions, so the history arrives with the record. */
+  versions?: PromoteWorkspaceRequest['versions']
 }
 
 export async function acceptTransferredRecord(
@@ -68,7 +86,7 @@ export async function acceptTransferredRecord(
 }
 
 async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTransferResult> {
-  const { fetch, workspaceId, snapshot } = options
+  const { fetch, workspaceId, snapshot, trash = [], versions = [] } = options
 
   const arriving = readArrivingRecord(snapshot)
   if (arriving === null) {
@@ -77,10 +95,11 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
   const { promotedDocumentIds, imagesMissing } = arriving
 
   const promoteUrl = workspaceDocumentApiUrl(workspaceId, 'promote')
+  const body: PromoteWorkspaceRequest = { snapshot: bytesToBase64Url(snapshot), trash, versions }
   const res = await fetch(promoteUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     return { ok: false, reason: await failureReason(res) }
@@ -106,6 +125,7 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
     shadowedPaths,
     attested: promoted.data.attested,
     imagesMissing,
+    leftBehind: unconfirmedPlanes(body, promoted.data, 'the keeper'),
   }
 }
 

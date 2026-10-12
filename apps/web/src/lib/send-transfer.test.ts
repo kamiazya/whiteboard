@@ -287,6 +287,43 @@ describe('sending a transfer through a window at the destination', () => {
     })
   })
 
+  it('keeps what this browser could not carry out of the offer and names it first in the report', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer({
+      ...baseOptions(popup),
+      payload: Promise.resolve({
+        snapshot: Uint8Array.from([1]),
+        documentCount: 1,
+        sourceWorkspaceId: 'ws-here',
+        leftBehind: ['the trashed document "big" is too large to move with the rest'],
+      }),
+    })
+    arrive(KEEPER, {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    })
+    await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
+    expect(popup.posted[0]?.[0]).not.toHaveProperty('leftBehind')
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: ['a'],
+      shadowedPaths: [],
+      attested: false,
+      leftBehind: ['1 saved version did not reach the keeper'],
+    })
+    await expect(sent).resolves.toMatchObject({
+      ok: true,
+      leftBehind: [
+        'the trashed document "big" is too large to move with the rest',
+        '1 saved version did not reach the keeper',
+      ],
+    })
+  })
+
   it('stops polling the window once a result settles the attempt', async () => {
     vi.useFakeTimers()
     const popup = fakePopup()
