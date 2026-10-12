@@ -6,6 +6,7 @@ import {
   type ReplicaSaveHealth,
   type ReplicaSaveQueue,
 } from '../lib/replica-save-queue.js'
+import { unmarkReplica } from '../lib/replica-store.js'
 import { listenToWorkspace } from '../lib/workspace-broadcast.js'
 import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
 
@@ -56,6 +57,11 @@ export function useReplicaSaveQueue(workspaceId: string) {
  * in this tab or another). The page's record is the whole workspace, so a
  * save from it would write everything back; the queue stops on the news
  * rather than on the refusal its next save would meet.
+ *
+ * The news also drops this tab's replica mark. `forgetReplicaCopy` drops only
+ * the deleting tab's; a mark left here goes on admitting a mint under an id
+ * whose claim is gone (`refuseUnlessHeld`), so a pull or save in this tab
+ * would write the copy back where no listing names it.
  */
 function useCopyRemovedLock(
   workspaceId: string,
@@ -65,7 +71,9 @@ function useCopyRemovedLock(
 ): void {
   useEffect(() => {
     const end = listenToWorkspace(workspaceId, (message) => {
-      if (message.type === 'workspace-removed') markCopyRemoved()
+      if (message.type !== 'workspace-removed') return
+      unmarkReplica(workspaceId)
+      markCopyRemoved()
     })
     return () => end.close()
   }, [workspaceId, markCopyRemoved])
