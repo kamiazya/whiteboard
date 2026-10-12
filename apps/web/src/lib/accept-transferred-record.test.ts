@@ -29,7 +29,7 @@ function validSnapshot(): Uint8Array {
 
 const GARBAGE = Uint8Array.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x02, 0x03])
 
-const promoted = () => jsonResponse({ ok: true, attested: false, recorded: [], shadowed: [] })
+const promoted = () => jsonResponse({ ok: true, recorded: [], shadowed: [] })
 
 function keeper(handlers: {
   promote: () => Response | Promise<Response>
@@ -92,8 +92,8 @@ describe('acceptTransferredRecord refusals', () => {
   it.each([
     {
       name: 'an ok answer that fails the promote schema',
-      promote: () => jsonResponse({ ok: true, attested: 'yes' }),
-      path: 'attested',
+      promote: () => jsonResponse({ ok: true, recorded: 'yes' }),
+      path: 'recorded',
     },
     {
       name: 'an ok answer that is not JSON',
@@ -143,7 +143,6 @@ describe('acceptTransferredRecord on a landed merge', () => {
       ok: true,
       promotedDocumentIds: [DOCUMENT_ID],
       shadowedPaths: ['notes/roadmap'],
-      attested: false,
     })
   })
 

@@ -120,8 +120,8 @@ export function useTransferHandshake({
       shadowed: outcome.shadowedPaths,
     })
     if (opener) {
-      // The keeper's own read-back, whole: ids, collisions, attestation,
-      // missing images and the carried planes it did not report holding.
+      // The keeper's own read-back, whole: ids, collisions, missing images
+      // and the carried planes it did not report holding.
       postTransferResult(opener, session, { ...outcome, workspaceId: targetId })
     }
   }, [session, fetchFn, targetId, opener])

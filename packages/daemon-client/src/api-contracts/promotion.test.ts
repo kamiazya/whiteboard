@@ -7,19 +7,12 @@ import {
 import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('promotion schemas', () => {
-  const attestation = {
-    kind: 'webauthn' as const,
-    credentialId: 'Y3JlZA',
-    authenticatorData: 'YXV0aA',
-    clientDataJSON: 'Y2xpZW50',
-    signature: 'c2ln',
-  }
-
-  it('roundtrips a request with and without an attestation, and refuses a padded snapshot', () => {
+  it('roundtrips a bare request, and refuses a padded snapshot or a key it does not name', () => {
     const bare = { snapshot: 'c25hcHNob3Q' }
     expect(roundtrip(promoteWorkspaceRequestSchema, bare)).toEqual(bare)
-    const attested = { ...bare, attestation }
-    expect(roundtrip(promoteWorkspaceRequestSchema, attested)).toEqual(attested)
+    // No keeper holds a passkey pin to check one against (ADR-0050 decision 3).
+    const attestation = { kind: 'webauthn', credentialId: 'Y3JlZA' }
+    expect(promoteWorkspaceRequestSchema.safeParse({ ...bare, attestation }).success).toBe(false)
     expect(promoteWorkspaceRequestSchema.safeParse({ snapshot: 'c25hcA==' }).success).toBe(false)
     expect(promoteWorkspaceRequestSchema.safeParse({ ...bare, label: 'x' }).success).toBe(false)
   })
@@ -54,7 +47,6 @@ describe('promotion schemas', () => {
   it('roundtrips the response', () => {
     const valid: PromoteWorkspaceResponse = {
       ok: true,
-      attested: true,
       recorded: ['01BRWAAAAAAAAAAAAAAAAAAAA0'],
       shadowed: [],
       trashStored: ['01BRWAAAAAAAAAAAAAAAAAAAA1'],

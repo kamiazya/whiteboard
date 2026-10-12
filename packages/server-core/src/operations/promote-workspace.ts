@@ -2,7 +2,7 @@ import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard
 import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import type { Attestation, OperatorInfo } from '../versions/version-entry.js'
+import type { OperatorInfo } from '../versions/version-entry.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import {
   type CarriedTrashBytes,
@@ -18,8 +18,6 @@ export interface PromoteWorkspaceInput {
   readonly snapshot: Uint8Array
   /** The person who promoted, as the route states them (ADR-0039 decision 8). */
   readonly operator: OperatorInfo
-  /** Their evidence, when the route asked for and verified one. */
-  readonly attestation?: Attestation
   /** Evacuated bytes for the record's trash entries; see `promote-carried.ts`. */
   readonly trash?: readonly CarriedTrashBytes[]
   /** The versions the browser keeper saved of the record's documents. */
@@ -112,10 +110,10 @@ function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
  * Promotion (ADR-0023): a browser-kept workspace record merged into a daemon
  * workspace, with the trash bytes and saved versions it points at, followed
  * by what ADR-0039 decision 8 says a person's explicit act leaves behind —
- * one explicit (`auto: false`) checkpoint per promoted document, carrying the
- * attestation when there is one. That checkpoint stays beside the carried
- * history rather than being replaced by it: the carried rows record what the
- * browser saved, and the move is a separate act by a named person. The merge is
+ * one explicit (`auto: false`) checkpoint per promoted document. That
+ * checkpoint stays beside the carried history rather than being replaced by
+ * it: the carried rows record what the browser saved, and the move is a
+ * separate act by a named person. The merge is
  * `applyWorkspaceDocumentUpdate`'s and byte-identical to the sync surface's;
  * what this operation adds is the enumeration of what arrived and the rows.
  * It is merged as a TRANSFER: a promoted document keeps the `updatedAt` it
@@ -180,7 +178,6 @@ export async function promoteWorkspace(
     await deps.versions.save(input.workspaceId, entry.path, doc, {
       auto: false,
       operator: input.operator,
-      ...(input.attestation === undefined ? {} : { attestation: input.attestation }),
     })
     recorded.push(documentId)
   }

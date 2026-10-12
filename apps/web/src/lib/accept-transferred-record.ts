@@ -11,8 +11,8 @@
  *
  * WHO AUTHORISES IT. The person signed in to THIS keeper, through the
  * session `fetch` carries — the keeper's own authority, not evidence the
- * sender brings. No passkey is asked: no keeper pins one
- * (ADR-0050), and every keeper refuses a promote carrying an attestation.
+ * sender brings. No passkey is asked: no keeper pins one (ADR-0050), and
+ * the promote contract has no place for an attestation.
  *
  * WHAT TRAVELS BESIDE THE RECORD. Each trash entry's evacuated bytes and the
  * sender's saved versions, posted on in the promote body as they arrived, so
@@ -48,8 +48,6 @@ export type AcceptTransferResult =
       promotedDocumentIds: string[]
       /** Paths this keeper's own post-merge list reports as contested. */
       shadowedPaths: string[]
-      /** The keeper's own word on attestation — `false` from every keeper today. */
-      attested: boolean
       /** What the record points at and this keeper does not have (see the header). */
       imagesMissing: string[]
       /**
@@ -123,7 +121,6 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
     ok: true,
     promotedDocumentIds,
     shadowedPaths,
-    attested: promoted.data.attested,
     imagesMissing,
     leftBehind: unconfirmedPlanes(body, promoted.data, 'the keeper'),
   }

@@ -32,7 +32,7 @@ describe('promoteWorkspace, answered with a promote body its contract refuses', 
     const record = recordWithOneDocument()
 
     const result = await promoteWorkspace({
-      fetch: (async () => jsonResponse({ ok: true, attested: 'yes' })) as typeof fetch,
+      fetch: (async () => jsonResponse({ ok: true, recorded: 'yes' })) as typeof fetch,
       keeperBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws-daemon',
       workspaceDocs: { open: async () => record } as unknown as WorkspaceDocs,
@@ -42,6 +42,6 @@ describe('promoteWorkspace, answered with a promote body its contract refuses', 
       kind: 'failed',
       reason: 'The daemon answered the move with an unexpected response.',
     })
-    await expectLoggedFailure('/workspace-document/promote failed its contract at attested')
+    await expectLoggedFailure('/workspace-document/promote failed its contract at recorded')
   })
 })

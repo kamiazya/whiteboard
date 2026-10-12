@@ -51,7 +51,6 @@ function daemonStub(options: { confirms: boolean }) {
       promotes.push(body)
       return Response.json({
         ok: true,
-        attested: false,
         recorded: [],
         shadowed: [],
         trashStored: options.confirms ? (body.trash ?? []).map((each) => each.documentId) : [],

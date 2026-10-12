@@ -124,8 +124,6 @@ export const transferResponseSchema = z.discriminatedUnion('ok', [
     promotedDocumentIds: z.array(z.string()),
     /** Paths the merge left contested; surfaced, never auto-resolved (ADR-0023). */
     shadowedPaths: z.array(z.string()),
-    /** Whether the receiving keeper verified a passkey assertion of its own. */
-    attested: z.boolean(),
     /**
      * Images the merged record POINTS AT and the destination does not have.
      *

@@ -107,7 +107,7 @@ it('merges the record and leaves one explicit human checkpoint per document', as
   const snapshot = browserSnapshot()
   const res = await promote({ snapshot: b64u(snapshot) })
   expect(res.status).toBe(200)
-  expect(promoteWorkspaceResponseSchema.parse(await res.json()).attested).toBe(false)
+  promoteWorkspaceResponseSchema.parse(await res.json())
   expect(await documents()).toHaveLength(2)
   const versions = await new FileVersionStore().list('session1', 'sketch')
   expect(versions).toHaveLength(1)
@@ -116,7 +116,7 @@ it('merges the record and leaves one explicit human checkpoint per document', as
   expect(versions[0]?.attestation).toBeUndefined()
 })
 
-it('refuses an attestation, since no passkey is pinned here, and merges nothing', async () => {
+it('refuses an attestation as a body outside the contract, since no passkey is pinned here, and merges nothing', async () => {
   const { promote, documents } = harness()
   const snapshot = browserSnapshot()
   const res = await promote({
@@ -129,8 +129,8 @@ it('refuses an attestation, since no passkey is pinned here, and merges nothing'
       signature: 'c2ln',
     },
   })
-  expect(res.status).toBe(403)
-  expect(await res.json()).toEqual({ error: 'attestation_rejected', message: 'unknownCredential' })
+  expect(res.status).toBe(400)
+  expect(((await res.json()) as { error: string }).error).toBe('invalid_body')
   expect(await documents()).toEqual([])
   expect(await new FileVersionStore().list('session1', 'sketch')).toEqual([])
 })
@@ -303,4 +303,27 @@ it('refuses a version whose frontier the record does not hold, and merges nothin
   })
   expect(res.status).toBe(400)
   expect(await documents()).toEqual([])
+})
+
+it('confirms every carried version on a re-run after the daemon took a checkpoint of its own', async () => {
+  const { promote } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  const { label: _label, ...base } = record.versions[0] ?? {}
+  // The browser keeps the same cap the daemon does, so it can carry a full one.
+  const autos = Array.from({ length: 50 }, (_, i) => ({
+    ...base,
+    id: `01BRWAUTOAAAAAAAAAAAAAA${String(i).padStart(3, '0')}`,
+    auto: true,
+    createdAt: 1_000 + i,
+  }))
+  const body = { ...record, versions: autos }
+  const ids = autos.map((version) => version.id)
+  const first = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
+  expect([...first.versionsKept].sort()).toEqual(ids)
+
+  const doc = await serverDeps.liveDocuments.get('session1', 'notes/roadmap')
+  await serverDeps.versions.save('session1', 'notes/roadmap', doc, { auto: true })
+
+  const second = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
+  expect([...second.versionsKept].sort()).toEqual(ids)
 })

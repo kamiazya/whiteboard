@@ -165,7 +165,7 @@ export const RULES: Record<string, Rule> = {
   },
   'POST /api/w/:workspaceId/workspace-document/promote': {
     refusesOnly:
-      'a schema-drawn snapshot is random base64url and never a Loro record; the merge, the rows and the attestation verdicts are routes/document/workspace-promote.test.ts',
+      'a schema-drawn snapshot is random base64url and never a Loro record; the merge, the rows and the carried planes are routes/document/workspace-promote.test.ts',
     body: promoteWorkspaceRequestSchema,
   },
   'GET /api/sync/stream': { skip: 'holds the response open until the client goes away' },
