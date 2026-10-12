@@ -22,6 +22,43 @@ describe('scheduleFileSweep', () => {
     expect(sweep).toHaveBeenCalledTimes(1)
   })
 
+  describe('by default, late after load and then in an idle slot', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('asks for an idle slot thirty seconds after load, due within a minute', () => {
+      vi.useFakeTimers()
+      vi.stubGlobal('indexedDB', {})
+      const idle = vi.fn<(run: () => void, options: { timeout: number }) => number>(() => 1)
+      vi.stubGlobal('requestIdleCallback', idle)
+      const sweep = vi.fn(async () => swept)
+
+      scheduleFileSweep({ sweep })
+      vi.advanceTimersByTime(29_999)
+      expect(idle).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1)
+      expect(idle).toHaveBeenCalledExactlyOnceWith(expect.any(Function), { timeout: 60_000 })
+      expect(sweep).not.toHaveBeenCalled()
+
+      idle.mock.calls[0]?.[0]()
+      expect(sweep).toHaveBeenCalledTimes(1)
+    })
+
+    it('sweeps at thirty seconds where the browser has no idle callback', () => {
+      vi.useFakeTimers()
+      vi.stubGlobal('indexedDB', {})
+      vi.stubGlobal('requestIdleCallback', undefined)
+      const sweep = vi.fn(async () => swept)
+
+      scheduleFileSweep({ sweep })
+      vi.advanceTimersByTime(29_999)
+      expect(sweep).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(1)
+      expect(sweep).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('schedules nothing where the browser keeps no IndexedDB', () => {
     vi.stubGlobal('indexedDB', undefined)
     const wait = vi.fn()

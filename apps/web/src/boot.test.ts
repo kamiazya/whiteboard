@@ -6,7 +6,7 @@
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { servedByServerKeeper, startBootSequence } from './boot.js'
+import { startBootSequence } from './boot.js'
 import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './lib/browser-workspace-docs.js'
 import {
@@ -15,9 +15,13 @@ import {
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from './lib/browser-workspace-id.js'
+import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import { clearNamedDb } from './test-utils/browser-document.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
+
+// A spy, so no boot in this file arms the real page-load sweep's timer.
+vi.mock('./lib/file-sweep-schedule.js', () => ({ scheduleFileSweep: vi.fn() }))
 
 const REAL_DB_NAME = 'whiteboard-boot-test'
 
@@ -251,19 +255,31 @@ describe('startBootSequence — the address chooses which workspace boots', () =
   })
 })
 
-describe('servedByServerKeeper', () => {
+describe('startBootSequence — the page-load file sweep', () => {
   afterEach(() => {
     delete (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__
+    vi.mocked(scheduleFileSweep).mockClear()
   })
 
+  const boot = () =>
+    startBootSequence({
+      rootEl: rootEl(),
+      resolveWorkspaceId: async () => 'ws',
+      loadFont: async () => {},
+      dismissSplash: async () => {},
+      render: () => {},
+    })
+
+  // Only a shell marked `keeper: 'server'` is one a server keeper serves.
   it.for([
-    [undefined, false],
-    [null, false],
-    [{}, false],
-    [{ keeper: 'daemon' }, false],
-    [{ keeper: 'server' }, true],
-  ] as const)('reads %j as a server keeper: %s', ([config, expected]) => {
+    [undefined, true],
+    [null, true],
+    [{}, true],
+    [{ keeper: 'daemon' }, true],
+    [{ keeper: 'server' }, false],
+  ] as const)('with runtime config %j, schedules the sweep: %s', async ([config, scheduled]) => {
     ;(window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__ = config
-    expect(servedByServerKeeper()).toBe(expected)
+    await boot()
+    expect(vi.mocked(scheduleFileSweep).mock.calls.length).toBe(scheduled ? 1 : 0)
   })
 })
