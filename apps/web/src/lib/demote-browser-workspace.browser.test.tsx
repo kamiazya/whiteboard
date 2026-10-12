@@ -160,6 +160,15 @@ describe('demoteBrowserWorkspace, what the old record named', () => {
 
     expect(await new IdbBlobStore().get({ ref: entry.blob })).not.toBeNull()
   })
+
+  it('re-points the identity at a remaining workspace and mints none', async () => {
+    const { sourceId, neighbourId } = await seedTwoWorkspaces()
+
+    await demoteBrowserWorkspace(sourceId)
+
+    expect(await registryRows()).toEqual([neighbourId])
+    expect(getBrowserWorkspaceId()).toBe(neighbourId)
+  })
 })
 
 describe('demoteBrowserWorkspace, beside a neighbour that will not open', () => {
