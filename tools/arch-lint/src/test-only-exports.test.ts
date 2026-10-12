@@ -190,6 +190,8 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/ports/src/tokens.ts#defineToken',
   'packages/reference-graph/src/linkify.ts#linkMarkupFor',
   'packages/reference-graph/src/reference-aggregate.ts#ReferenceAggregate',
+  'packages/search/src/full-text.ts#tokenize',
+  'packages/search/src/full-text.ts#tokenizeForIndex',
   'packages/server-core/src/tools/document-set.ts#documentSetInputSchema',
   'packages/server-core/src/tools/facet-set.ts#DocumentHasNoFrontmatterError',
   'packages/server-core/src/tools/facet-set.ts#FacetSetNeedsPayloadError',
@@ -231,8 +233,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
   'packages/mcp-server/src/server/app-types.ts#ServerModeAppOptions',
   'packages/scene/src/scene-graph.ts#ShapeId',
-  'packages/search/src/full-text.ts#tokenize',
-  'packages/search/src/full-text.ts#tokenizeForIndex',
   'packages/server-core/src/tools/canvas-edit-placement.ts#PLACEMENT_COLUMNS',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewInputSchema',
   'packages/server-core/src/tools/canvas-view.ts#canvasViewOutputSchema',
@@ -346,10 +346,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 153
+const DEBT_CEILING = 155
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 23
+const PUBLISHED_CEILING = 21
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

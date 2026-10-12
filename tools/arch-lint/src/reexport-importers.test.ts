@@ -50,10 +50,6 @@ const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
     "decision: the icon-name catalogue is part of the plugin's data surface; catalog.test.ts holds it to LUCIDE_ICONS",
   'packages/server-core/src/index.ts#apiErrorBodySchema':
     'decision: the strict refusal-body contract a daemon emits, published from the package root; the route fuzz holds every refusal to it',
-  'packages/search/src/index.ts#tokenize':
-    'debt: search-quality tests only; full-text.ts uses it in place',
-  'packages/search/src/index.ts#tokenizeForIndex':
-    'debt: search-quality tests only; full-text.ts uses it in place',
   'packages/server-core/src/index.ts#getLogger':
     'debt: tests only; every shipped caller imports log.js inside the package',
   'packages/server-core/src/index.ts#canvasEditInputSchema':
@@ -233,7 +229,7 @@ describe('package entries forward only names someone imports through them', () =
   })
 
   it('holds the test-only ledger at its size, so it only shrinks', () => {
-    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(16)
+    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(14)
     for (const reason of Object.values(TEST_ONLY_FORWARDS)) {
       expect(reason).toMatch(/^(?:decision|debt): \S/)
     }

@@ -21,7 +21,7 @@
 //     paying and stage 0 is the whole feature.
 
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
-import { tokenize, tokenizeForIndex } from '@kamiazya/whiteboard-search'
+import { tokenize, tokenizeForIndex } from '@kamiazya/whiteboard-search/full-text'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
