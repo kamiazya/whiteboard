@@ -68,8 +68,18 @@ describe('spliceText', () => {
   // '😀' (U+1F600) / '𐘀' (U+10600) share the trailing \uDE00 — which Loro
   // refuses outright ("Cannot insert or delete utf-16 in the middle of the
   // codepoint"). Plain fc.string() pairs almost never produce either.
+  //
+  // Pairs are also assembled from halves at both ENDS of each surrogate range
+  // (\uD800/\uDBFF leading, \uDC00/\uDFFF trailing) beside a mid-range one,
+  // so an off-by-one in either range check is drawn often enough to fail.
+  const surrogatePair = fc
+    .tuple(fc.constantFrom(0xd800, 0xd83d, 0xdbff), fc.constantFrom(0xdc00, 0xde00, 0xdfff))
+    .map(([high, low]) => String.fromCharCode(high, low))
   const text = fc
-    .array(fc.constantFrom('a', 'b', '😀', '😁', '\u{10600}', '👍🏽', '\n'), { maxLength: 12 })
+    .array(
+      fc.oneof(fc.constantFrom('a', 'b', '😀', '😁', '\u{10600}', '👍🏽', '\n'), surrogatePair),
+      { maxLength: 12 },
+    )
     .map((parts) => parts.join(''))
 
   fcTest.prop([text, text, text, text], withDefaults())(
@@ -91,6 +101,20 @@ describe('spliceText', () => {
     body.insert(0, 'x😀y')
     expect(spliceText(body, 'x\u{10600}y')).toBe(true)
     expect(body.toString()).toBe('x\u{10600}y')
+  })
+
+  // Each pair shares one half that sits at an END of its surrogate range.
+  it.each([
+    ['leading \\uD800', 'x\u{10000}y', 'x\u{10001}y'],
+    ['leading \\uDBFF', 'x\u{10FFFE}y', 'x\u{10FFFF}y'],
+    ['trailing \\uDC00', 'x\u{1F000}y', 'x\u{1F400}y'],
+    ['trailing \\uDFFF', 'x\u{1F3FF}y', 'x\u{1FBFF}y'],
+  ])('replaces a character sharing the range-end half %s', (_half, current, next) => {
+    const doc = new LoroDoc()
+    const body = doc.getText('body')
+    body.insert(0, current)
+    expect(spliceText(body, next)).toBe(true)
+    expect(body.toString()).toBe(next)
   })
 
   it('replaces one emoji with another that shares its leading unit', () => {
