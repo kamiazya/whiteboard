@@ -93,7 +93,13 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
   const { promotedDocumentIds, imagesMissing } = arriving
 
   const promoteUrl = workspaceDocumentApiUrl(workspaceId, 'promote')
-  const body: PromoteWorkspaceRequest = { snapshot: bytesToBase64Url(snapshot), trash, versions }
+  // An empty plane is left out: a keeper that predates the planes refuses the
+  // keys, and an absent plane already means none.
+  const body: PromoteWorkspaceRequest = {
+    snapshot: bytesToBase64Url(snapshot),
+    ...(trash.length === 0 ? {} : { trash }),
+    ...(versions.length === 0 ? {} : { versions }),
+  }
   const res = await fetch(promoteUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
