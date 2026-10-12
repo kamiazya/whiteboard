@@ -101,6 +101,21 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       expect(await store.listIdsByDocument('ws-a', row.documentId)).toEqual([])
     })
 
+    it("is not in this workspace's history under the same document id", async () => {
+      await edit('ws-a', 'a')
+      const saved = await store.save('ws-a', 'doc', new LoroDoc(), { auto: false })
+      const own = await handle.db
+        .selectFrom('versions')
+        .selectAll()
+        .where('id', '=', saved.id)
+        .executeTakeFirstOrThrow()
+      await handle.db
+        .insertInto('versions')
+        .values({ ...own, id: 'foreign-same-document', workspaceId: 'ws-b' })
+        .execute()
+      expect((await store.list('ws-a', 'doc')).map((entry) => entry.id)).toEqual([saved.id])
+    })
+
     it('is not loaded', async () => {
       const id = await foreignVersionId()
       await expect(store.load('ws-a', id)).resolves.toBeNull()

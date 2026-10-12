@@ -451,6 +451,7 @@ export class FileVersionStore implements VersionStore {
     const rows = await db
       .selectFrom('versions')
       .selectAll()
+      .where('workspaceId', '=', workspaceId)
       .where('documentId', '=', documentId)
       .orderBy('createdAt', 'desc')
       // Two saves in one millisecond share a createdAt, and the id is a
