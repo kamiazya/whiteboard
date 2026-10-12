@@ -8,7 +8,7 @@
 // jsdom + fake-indexeddb: this is IndexedDB persistence logic, not browser layout.
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -30,20 +30,6 @@ async function registryRows(): Promise<string[]> {
       db.transaction([WORKSPACES_STORE]).objectStore(WORKSPACES_STORE).getAllKeys(),
     )
     return keys.map(String)
-  } finally {
-    db.close()
-  }
-}
-
-async function seedWorkspace(workspaceId: string): Promise<void> {
-  const db = await openWhiteboardDb()
-  try {
-    const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
-    tx.objectStore(WORKSPACES_STORE).put({ workspaceId, segment: 'other' }, workspaceId)
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-    })
   } finally {
     db.close()
   }
@@ -72,7 +58,7 @@ describe('demoteBrowserWorkspace over the registry', () => {
   it('re-points at a remaining workspace rather than minting one', async () => {
     const sourceId = await resolveBrowserWorkspaceId()
     await new BrowserWorkspaceDocs().create(sourceId)
-    await seedWorkspace('01ARZ3NDEKTSV4RRFFQ69G5FAZ')
+    await registerTestWorkspace({ workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAZ', segment: 'other' })
 
     await demoteBrowserWorkspace(sourceId)
 

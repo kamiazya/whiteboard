@@ -15,7 +15,6 @@ import { Loro } from 'loro-crdt'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import {
   BROWSER_DEFAULT_SEGMENT,
-  openWhiteboardDb,
   SYNC_DOCUMENTS_STORE,
   WORKSPACES_STORE,
   whiteboardDbName,
@@ -23,6 +22,7 @@ import {
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { inTransaction } from '../lib/idb-tx.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { indexWritesSettled } from '../lib/pending-index-writes.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
@@ -80,29 +80,29 @@ export async function clearWhiteboardDb(): Promise<void> {
 }
 
 /**
- * Registers the test seam's workspace in the claimed database, as boot's
- * resolve finds a production one already registered. A workspace record is
- * minted only under an id the registry (or a replica claim) holds, so a
- * suite whose backend writes the record before any index call has created
- * the workspace needs the row first — after `clearWhiteboardDb`, which
- * deletes it.
+ * Registers a workspace in the claimed database, as boot's resolve finds a
+ * production one already registered. A workspace record is minted only under
+ * an id the registry (or a replica claim) holds, so a suite whose backend
+ * writes the record before any index call has created the workspace needs
+ * the row first — after `clearWhiteboardDb`, which deletes it.
+ *
+ * Defaults to the test seam's own workspace. An options OBJECT rather than
+ * positional parameters for the reason `clearWhiteboardDb` takes none: passed
+ * point-free to a hook, the test context lands in the first parameter, and
+ * read as an object it names nothing, so the defaults still hold.
+ *
+ * The row is written raw, not through the index's `createWorkspace`, so a
+ * suite can seed what a stored record may hold rather than only what the
+ * writer would accept today.
  */
-export async function registerTestWorkspace(): Promise<void> {
-  const workspaceId = getBrowserWorkspaceId()
-  const db = await openWhiteboardDb()
-  try {
-    const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
-    tx.objectStore(WORKSPACES_STORE).put(
-      { workspaceId, segment: BROWSER_DEFAULT_SEGMENT },
-      workspaceId,
-    )
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error ?? new Error('registering the test workspace failed'))
-    })
-  } finally {
-    db.close()
-  }
+export async function registerTestWorkspace(
+  options: { workspaceId?: string; segment?: string } = {},
+): Promise<void> {
+  const workspaceId = options.workspaceId ?? getBrowserWorkspaceId()
+  const segment = options.segment ?? BROWSER_DEFAULT_SEGMENT
+  await inTransaction(undefined, [WORKSPACES_STORE], 'readwrite', async (tx) => {
+    tx.objectStore(WORKSPACES_STORE).put({ workspaceId, segment }, workspaceId)
+  })
 }
 
 /**
