@@ -65,7 +65,8 @@ export function registerToolWithAnnotations<
   name: string,
   config: {
     description?: string
-    inputSchema?: I
+    // Required: the SDK calls a schemaless tool as `(ctx)`, not `(args, ctx)`.
+    inputSchema: I
     outputSchema?: O
     // MCP Apps (SEP-1865) tool-linkage metadata, e.g.
     // `{ ui: { resourceUri: 'ui://whiteboard/canvas-view' } }` — see
@@ -106,11 +107,10 @@ export function registerToolWithAnnotations<
     args: InferToolArgs<I>,
     extra: Parameters<typeof handler>[1],
   ): Promise<unknown> => {
-    const rawRequestId = (extra as { requestId?: unknown })?.requestId
-    const requestId =
-      typeof rawRequestId === 'string' || typeof rawRequestId === 'number'
-        ? String(rawRequestId)
-        : undefined
+    // The JSON-RPC id joins this span to the client's own request log. Read
+    // defensively: an attribute must never be the reason a tool call fails.
+    const rawRequestId = extra?.mcpReq?.id
+    const requestId = rawRequestId === undefined ? undefined : String(rawRequestId)
     return mcpTracer().startActiveSpan(
       `mcp.tool.call ${name}`,
       {
