@@ -1,0 +1,233 @@
+/**
+ * A name a package entry re-exports has someone importing it through that
+ * entry.
+ *
+ * Knip credits a re-export to its origin, so a barrel line forwarding a name
+ * every importer takes from somewhere else is invisible to it as long as the
+ * origin is used anywhere — and every field a contract retires leaves exactly
+ * that behind. This scan reads each `exports` entry of a workspace manifest
+ * that lands on a source file, lists what that file forwards (`export { x }
+ * from`, and `export { x }` of an imported binding), and fails on a forwarded
+ * name no file imports through the entry, by its package specifier or by a
+ * relative path to the same file.
+ *
+ * It errs toward false negatives: an entry that anything reaches wholesale —
+ * `import * as`, `export * from`, a dynamic `import()` — counts every name as
+ * used, and an import is matched by text, so a quoted one in a comment counts.
+ * `export *` in the entry itself is not judged, since it forwards no name.
+ */
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, normalize } from 'node:path'
+import ts from '@typescript/typescript6'
+import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
+import { workspaceEntries } from './module-exports-resolve.js'
+import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
+import { isTestPath } from './source-scan.js'
+
+/**
+ * Forwarded names with no importer, as `<entry path>#<name>`, each with why.
+ * Shrink-only: an entry that gains an importer or goes away fails as stale.
+ */
+const UNIMPORTED: Readonly<Record<string, string>> = {
+  'packages/server-core/src/index.ts#DocumentEngineTrapError':
+    'debt: every user imports it from document-io.js inside the package; drop the re-export',
+}
+
+const SOURCE_DIRS = ['apps', 'packages', 'tools', 'scripts', '.claude/scripts']
+const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'tmp', '.git', 'worktrees', 'coverage'])
+
+interface SourceFile {
+  readonly path: string
+  readonly text: string
+}
+
+function readSources(): SourceFile[] {
+  return SOURCE_DIRS.filter((dir) => existsSync(join(REPO_ROOT, dir)))
+    .flatMap((dir) =>
+      walk(join(REPO_ROOT, dir), {
+        include: (path) => /\.(tsx?|mts|mjs|js|cjs)$/.test(path) && !path.endsWith('.d.ts'),
+        skip: (_path, name) => SKIPPED_DIRS.has(name),
+      }),
+    )
+    .map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
+}
+
+function readEntries(): Map<string, string> {
+  const manifests = ['apps', 'packages'].flatMap((group) =>
+    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => `${group}/${entry.name}`)
+      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json')))
+      .map((dir) => ({ dir, text: readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf8') })),
+  )
+  return workspaceEntries(manifests)
+}
+
+/** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import. */
+function forwardedNames(path: string, text: string): string[] {
+  const source = parseSource(path, text, false)
+  const imported = new Set<string>()
+  for (const statement of source.statements) {
+    const bindings = ts.isImportDeclaration(statement)
+      ? statement.importClause?.namedBindings
+      : undefined
+    if (bindings !== undefined && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) imported.add(element.name.text)
+    }
+  }
+  return source.statements.flatMap((statement) => {
+    if (!ts.isExportDeclaration(statement)) return []
+    const clause = statement.exportClause
+    if (clause === undefined || !ts.isNamedExports(clause)) return []
+    return clause.elements
+      .filter(
+        (element) =>
+          statement.moduleSpecifier !== undefined ||
+          imported.has((element.propertyName ?? element.name).text),
+      )
+      .map((element) => element.name.text)
+  })
+}
+
+const NAMED =
+  /(?:import|export)\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g
+const DESTRUCTURED_DYNAMIC = /\{([^}]*)\}\s*=\s*await\s+import\(\s*['"]([^'"]+)['"]\s*\)/g
+const NAMESPACE = /import\s+(?:type\s+)?\*\s+as\s+([\w$]+)\s+from\s*['"]([^'"]+)['"]/g
+const WHOLESALE = [
+  /export\s+(?:type\s+)?\*(?:\s+as\s+[\w$]+)?\s+from\s*['"]([^'"]+)['"]/g,
+  /import\(\s*['"]([^'"]+)['"]\s*\)/g,
+]
+
+/** `a`, `type a`, `a as b` and `a: b` each name `a`. */
+function bindingNames(list: string): string[] {
+  return list
+    .split(',')
+    .map((part) =>
+      part
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+|\s*:\s*/)[0]
+        ?.trim(),
+    )
+    .filter((name): name is string => name !== undefined && /^[\w$]+$/.test(name))
+}
+
+/** The repo path a specifier written in `from` lands on, if it is relative. */
+function relativeTarget(from: string, spec: string): string[] {
+  if (!spec.startsWith('.')) return []
+  const base = normalize(join(dirname(from), spec)).replaceAll('\\', '/')
+  const stem = base.replace(/\.(?:js|mjs|ts|tsx)$/, '')
+  return [base, `${stem}.ts`, `${stem}.tsx`, `${base}/index.ts`]
+}
+
+/** For each entry file, the names imported through it, or `'*'` when something takes it wholesale. */
+function importsByEntry(
+  files: readonly SourceFile[],
+  entries: ReadonlyMap<string, string>,
+): Map<string, Set<string>> {
+  const entryFiles = new Set(entries.values())
+  const byEntry = new Map<string, Set<string>>()
+  const land = (from: string, spec: string): string | undefined =>
+    entries.get(spec) ?? relativeTarget(from, spec).find((path) => entryFiles.has(path))
+  const add = (entry: string, name: string) => {
+    const names = byEntry.get(entry) ?? new Set<string>()
+    names.add(name)
+    byEntry.set(entry, names)
+  }
+  for (const { path, text } of files) {
+    const reach = (spec: string | undefined, names: readonly string[]) => {
+      const entry = spec === undefined ? undefined : land(path, spec)
+      if (entry === undefined || entry === path) return
+      for (const name of names) add(entry, name)
+    }
+    for (const [, names, spec] of text.matchAll(NAMED)) reach(spec, bindingNames(names ?? ''))
+    for (const [, names, spec] of text.matchAll(DESTRUCTURED_DYNAMIC)) {
+      reach(spec, bindingNames(names ?? ''))
+    }
+    // A namespace is read by member; one passed around whole (a test walking
+    // a barrel's exports, say) consumes every name only when it ships.
+    for (const [, name, spec] of text.matchAll(NAMESPACE)) {
+      const alias = (name ?? '').replaceAll('$', '\\$')
+      const members = [...text.matchAll(new RegExp(`\\b${alias}\\.([\\w$]+)`, 'g'))]
+      const bare = text.split(new RegExp(`\\b${alias}\\b(?!\\.)`)).length > 2
+      reach(spec, [
+        ...members.map(([, name]) => name ?? ''),
+        ...(bare && !isTestPath(path) ? ['*'] : []),
+      ])
+    }
+    if (isTestPath(path)) continue
+    for (const pattern of WHOLESALE) {
+      for (const [, spec] of text.matchAll(pattern)) reach(spec, ['*'])
+    }
+  }
+  return byEntry
+}
+
+function unimportedForwards(): string[] {
+  const entries = readEntries()
+  const files = readSources()
+  const imports = importsByEntry(files, entries)
+  const text = new Map(files.map((file) => [file.path, file.text]))
+  return [...new Set(entries.values())].sort().flatMap((entry) => {
+    const used = imports.get(entry)
+    if (used?.has('*') === true) return []
+    const source = text.get(entry)
+    if (source === undefined) return []
+    return forwardedNames(entry, source)
+      .filter((name) => used?.has(name) !== true)
+      .map((name) => `${entry}#${name}`)
+  })
+}
+
+describe('package entries forward only names someone imports through them', () => {
+  it('finds no forwarded name without an importer', () => {
+    const offenders = unimportedForwards().filter((key) => !(key in UNIMPORTED))
+    expect(offenders).toEqual([])
+  })
+
+  it('keeps no ledgered entry that has gained an importer or gone', () => {
+    const current = new Set(unimportedForwards())
+    expect(Object.keys(UNIMPORTED).filter((key) => !current.has(key))).toEqual([])
+  })
+
+  it('reaches the barrels it judges, so a clean scan is not a blind one', () => {
+    const entries = readEntries()
+    expect(entries.size).toBeGreaterThan(40)
+    const barrel = 'packages/daemon-client/src/api-contracts/index.ts'
+    const forwarded = forwardedNames(barrel, readFileSync(join(REPO_ROOT, barrel), 'utf8'))
+    expect(forwarded).toContain('apiErrorReason')
+    const used = importsByEntry(readSources(), entries).get(barrel)
+    expect(used?.has('apiErrorReason')).toBe(true)
+    // A test walking the barrel whole must not excuse every name in it.
+    expect(used?.has('*')).toBe(false)
+  })
+
+  it('reads both forwarding forms, and every import form that takes a name', () => {
+    expect(
+      forwardedNames(
+        'a.ts',
+        "import { x, y } from './x.js'\nconst z = 1\nexport { x, z }\nexport { a as b, type c } from './a.js'",
+      ),
+    ).toEqual(['x', 'b', 'c'])
+    const entries = new Map([['@s/p', 'p/index.ts']])
+    const found = importsByEntry(
+      [
+        { path: 'q.ts', text: "import D, { type a, b as c } from '@s/p'" },
+        { path: 'p/t.ts', text: "export { e } from './index.js'" },
+      ],
+      entries,
+    ).get('p/index.ts')
+    expect([...(found ?? [])].sort()).toEqual(['a', 'b', 'e'])
+    expect(
+      importsByEntry([{ path: 'r.ts', text: "await import('@s/p')" }], entries).get('p/index.ts'),
+    ).toEqual(new Set(['*']))
+    const namespaced = (path: string) =>
+      importsByEntry(
+        [{ path, text: "import * as ns from '@s/p'\nns.f()\nObject.keys(ns)" }],
+        entries,
+      ).get('p/index.ts')
+    expect(namespaced('s.ts')).toEqual(new Set(['f', '*']))
+    expect(namespaced('s.test.ts')).toEqual(new Set(['f']))
+  })
+})
