@@ -13,7 +13,13 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
-import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
+import {
+  BROWSER_DEFAULT_SEGMENT,
+  openWhiteboardDb,
+  SYNC_DOCUMENTS_STORE,
+  WORKSPACES_STORE,
+  whiteboardDbName,
+} from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
@@ -71,6 +77,32 @@ export async function clearWhiteboardDb(): Promise<void> {
   await settleAutoCheckpoints()
   await indexWritesSettled()
   return deleteAndKeepDeleted(whiteboardDbName())
+}
+
+/**
+ * Registers the test seam's workspace in the claimed database, as boot's
+ * resolve finds a production one already registered. A workspace record is
+ * minted only under an id the registry (or a replica claim) holds, so a
+ * suite whose backend writes the record before any index call has created
+ * the workspace needs the row first — after `clearWhiteboardDb`, which
+ * deletes it.
+ */
+export async function registerTestWorkspace(): Promise<void> {
+  const workspaceId = getBrowserWorkspaceId()
+  const db = await openWhiteboardDb()
+  try {
+    const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
+    tx.objectStore(WORKSPACES_STORE).put(
+      { workspaceId, segment: BROWSER_DEFAULT_SEGMENT },
+      workspaceId,
+    )
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } finally {
+    db.close()
+  }
 }
 
 /**

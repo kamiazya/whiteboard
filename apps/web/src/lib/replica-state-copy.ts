@@ -79,3 +79,12 @@ export const REPLICA_SAVE_FAILED_COPY = {
   body: 'Your latest edits are in this tab only, so they will not reach the daemon when it returns. Keep this tab open and try saving again.',
   action: 'Try saving again',
 } as const
+
+/**
+ * What the replica page says once this browser's copy was deleted while the
+ * page held it — in Settings, in this tab or another. Worded like the
+ * document page's own lock for a document deleted elsewhere: the edits on
+ * screen have nowhere to go, and the daemon still keeps the workspace.
+ */
+export const REPLICA_COPY_REMOVED_COPY =
+  "This browser's copy of this workspace was deleted elsewhere, so it can no longer be edited here. The daemon still keeps the workspace."

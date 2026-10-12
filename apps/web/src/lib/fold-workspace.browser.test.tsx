@@ -19,7 +19,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentHasDescendantsError } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { hasLegacyRow, seedLegacyRow } from '../test-utils/seed-legacy-row.js'
@@ -41,7 +41,10 @@ async function foldWorkspaceDocuments(dbName: string) {
   return report
 }
 
-beforeEach(clearWhiteboardDb)
+beforeEach(async () => {
+  await clearWhiteboardDb()
+  await registerTestWorkspace()
+})
 afterEach(() => {
   vi.restoreAllMocks()
 })

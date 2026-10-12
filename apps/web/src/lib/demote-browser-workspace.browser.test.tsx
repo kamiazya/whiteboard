@@ -200,6 +200,32 @@ describe('demoteBrowserWorkspace, beside a neighbour that will not open', () => 
   })
 })
 
+describe('demoteBrowserWorkspace, a moved record that will not open', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    resetBrowserWorkspaceIdForTests()
+  })
+
+  it('still deletes its saved versions, and says what it left', async () => {
+    const { sourceId, neighbourId, entry } = await seedTwoWorkspaces()
+    const garbage = chunkSnapshot(new Uint8Array([1, 2, 3, 4]), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
+    await openDocumentStore().saveSnapshot({
+      docRef: { kind: 'workspace-tree', workspaceId: sourceId },
+      ...garbage,
+      frontier: new Uint8Array(),
+    })
+    const logged = expectLoggedFailures()
+
+    await demoteBrowserWorkspace(sourceId)
+
+    expect(await savedVersionRows(sourceId)).toEqual([])
+    expect(await savedVersionRows(neighbourId)).toHaveLength(1)
+    // What only the record could name is unjudgeable, so it stays — and is said.
+    expect(await new IdbBlobStore().get({ ref: entry.blob })).not.toBeNull()
+    expect(logged.join('\n')).toContain('could not be read')
+  })
+})
+
 describe('demoteBrowserWorkspace, another tab still holding the record', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -322,6 +348,9 @@ describe('replicaCarriesAll', () => {
 
   it('answers by membership of every promoted id', async () => {
     const docs = new BrowserWorkspaceDocs()
+    // Registered so the record may be minted at all; which keeper holds it
+    // is not what this asks.
+    await new FoldingBrowserIndex().createWorkspace({ workspaceId: 'ws-replica' })
     const record = await docs.create('ws-replica')
     // A record with no documents: ids are absent, so nothing is carried.
     writeDocumentKind(record, 'markdown')

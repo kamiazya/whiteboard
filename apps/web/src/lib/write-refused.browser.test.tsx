@@ -13,7 +13,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WriteRefusedNotice } from '../components/connection/WriteRefusedNotice.js'
 import { type UseDocumentSyncResult, useDocumentSync } from '../hooks/useDocumentSync.js'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserBackend } from './browser-backend.js'
@@ -42,7 +42,10 @@ function NotePage({
   return <WriteRefusedNotice />
 }
 
-beforeEach(clearWhiteboardDb)
+beforeEach(async () => {
+  await clearWhiteboardDb()
+  await registerTestWorkspace()
+})
 afterEach(async () => {
   cleanup()
   await clearWhiteboardDb()

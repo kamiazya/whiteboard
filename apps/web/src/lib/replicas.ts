@@ -97,12 +97,8 @@ export function listReplicas(settings: UserSettings): ReplicaMatch[] {
  * Drops one workspace's registry claim. The FIRST of the two steps a delete
  * takes, and never the whole delete: this record's own schema says a missing
  * entry means "claim no cache", not "the bytes are gone", so the caller
- * deletes the record too.
- *
- * Claim first, bytes second — the order `demoteBrowserWorkspace` takes, for
- * its reason: a failure between the two leaves bytes nothing points at,
- * which the next pull overwrites, whereas the reverse leaves a claim
- * pointing at a record that is gone and every reader of it has to cope.
+ * deletes the record too. That caller is `browser-workspace-removal.ts`
+ * (`forgetReplicaCopy`), which owns the claim-first order and its reason.
  */
 export function forgetReplicaEntry(current: UserSettings, workspaceId: string): UserSettings {
   const replicas = current.storage.replicas

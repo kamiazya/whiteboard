@@ -191,6 +191,19 @@ export function markReplica(workspaceId: string, daemonBaseUrl: string): void {
 }
 
 /**
+ * Drops the mark with the copy it stood for. Kept, it would go on admitting
+ * a write under an id whose claim is gone — a copy nobody can list or delete.
+ */
+export function unmarkReplica(workspaceId: string): void {
+  pending.delete(workspaceId)
+}
+
+/** Whether this tab holds `workspaceId` as a daemon workspace's replica — a mark or a claim. */
+export function isReplicaCopy(workspaceId: string): boolean {
+  return replicaDaemonBaseUrl(workspaceId) !== undefined
+}
+
+/**
  * "Stop using this daemon" from Settings. Drops the connection SYNCHRONOUSLY
  * when it is the one being disconnected, then forgets its keys — App's own
  * `connectReplicaKeeper(null)` follows on the next render, but a load in

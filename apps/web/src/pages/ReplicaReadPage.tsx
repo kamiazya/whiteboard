@@ -40,6 +40,7 @@ import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import { Button } from '../components/ui/button.js'
 import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
+import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
@@ -59,9 +60,9 @@ import {
   writeReplicaMarkdown,
   writeReplicaSpatial,
 } from '../lib/replica-record.js'
-import { createReplicaSaveQueue, type ReplicaSaveHealth } from '../lib/replica-save-queue.js'
 import {
   lockedDetail,
+  REPLICA_COPY_REMOVED_COPY,
   REPLICA_SAVE_FAILED_COPY,
   REPLICA_STATE_COPY,
 } from '../lib/replica-state-copy.js'
@@ -149,28 +150,6 @@ function ReplicaActionPanel({
       )}
     </div>
   )
-}
-
-/**
- * The replica's save queue (`lib/replica-save-queue.ts`) over React state:
- * whether the last save landed, and the two actions a page takes on it.
- *
- * The unmount FLUSHES rather than cancels — the daemon returning is exactly
- * what unmounts this page, and that moment must not eat the last debounce
- * window of typing.
- */
-function useReplicaSaveQueue(workspaceId: string) {
-  const [health, setHealth] = useState<ReplicaSaveHealth>('ok')
-  const queue = useMemo(
-    () =>
-      createReplicaSaveQueue<ReplicaRecord>({
-        save: (record) => new BrowserWorkspaceDocs().save(workspaceId, record),
-        onHealth: setHealth,
-      }),
-    [workspaceId],
-  )
-  useEffect(() => () => queue.flush(), [queue])
-  return { scheduleSave: queue.schedule, retrySave: queue.retry, saveFailed: health === 'failed' }
 }
 
 /**
@@ -570,6 +549,15 @@ function ReplicaReader({
   )
 }
 
+/** The page once this browser's copy is gone: no editor, since nothing typed could be kept. */
+function ReplicaCopyRemovedNotice() {
+  return (
+    <p className="p-4 text-sm text-muted-foreground" data-testid="replica-state-copy-removed">
+      {REPLICA_COPY_REMOVED_COPY}
+    </p>
+  )
+}
+
 /**
  * What the live region says. Mounted before it speaks
  * (polite-live-region.test.ts): a role="status" region that arrives already
@@ -588,12 +576,15 @@ function replicaLiveStatus({
   reconnecting,
   pageState,
   lockedLine,
+  copyRemoved,
 }: {
   state: LoadState
   reconnecting: boolean
   pageState: ReturnType<typeof replicaPageState> | null
   lockedLine: string | undefined
+  copyRemoved: boolean
 }): string | null {
+  if (copyRemoved) return REPLICA_COPY_REMOVED_COPY
   if (state.kind === 'loading') return 'Loading…'
   if (reconnecting) return 'Reconnecting…'
   if (pageState === 'removed') return REPLICA_STATE_COPY.removed.body
@@ -620,7 +611,7 @@ export function ReplicaReadPage({
   const [reconnecting, setReconnecting] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
-  const { scheduleSave, retrySave, saveFailed } = useReplicaSaveQueue(workspaceId)
+  const { scheduleSave, retrySave, saveFailed, copyRemoved } = useReplicaSaveQueue(workspaceId)
 
   useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState })
 
@@ -631,7 +622,9 @@ export function ReplicaReadPage({
   // with is what re-reads it.
   const remembered = isReplicaReadableOffline(daemonBaseUrl, workspaceId)
   const pageState =
-    state.kind === 'loading' ? null : replicaPageState({ key: keyInputFor(state), remembered })
+    state.kind === 'loading' || copyRemoved
+      ? null
+      : replicaPageState({ key: keyInputFor(state), remembered })
 
   /**
    * The cold start (ADR-0042 decision 6). No `forget` first, unlike
@@ -684,8 +677,7 @@ export function ReplicaReadPage({
   })
 
   const lockedLine = state.kind === 'withheld' ? lockedDetail(state.reason) : undefined
-
-  const liveStatus = replicaLiveStatus({ state, reconnecting, pageState, lockedLine })
+  const liveStatus = replicaLiveStatus({ state, reconnecting, pageState, lockedLine, copyRemoved })
 
   return (
     <div className="flex h-full flex-col" data-testid="replica-read-page">
@@ -693,6 +685,7 @@ export function ReplicaReadPage({
         {liveStatus ?? ''}
       </p>
       {state.kind === 'loading' && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
+      {copyRemoved && <ReplicaCopyRemovedNotice />}
       {pageState === 'readable' && state.kind === 'ready' && (
         <ReplicaReader
           entries={state.entries}

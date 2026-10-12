@@ -19,7 +19,7 @@ import {
 } from './browser-workspace-id.js'
 import { demoteBrowserWorkspace } from './demote-browser-workspace.js'
 import { request } from './idb-tx.js'
-import { isWorkspaceRemovedError, refuseIfRemoved } from './workspace-tombstone.js'
+import { isWorkspaceRemovedError, refuseUnlessHeld } from './workspace-tombstone.js'
 
 claimIsolatedWhiteboardDb('demotebrowserworkspacejsdom')
 
@@ -63,7 +63,7 @@ describe('demoteBrowserWorkspace over the registry', () => {
     await demoteBrowserWorkspace(sourceId)
 
     expect(await docs.open(sourceId)).toBeNull()
-    const refused = await refuseIfRemoved(sourceId).catch((err: unknown) => err)
+    const refused = await refuseUnlessHeld(sourceId, false).catch((err: unknown) => err)
     expect(isWorkspaceRemovedError(refused)).toBe(true)
     await expect(docs.create(sourceId)).rejects.toSatisfy(isWorkspaceRemovedError)
     expect(await registryRows()).not.toContain(sourceId)
@@ -90,6 +90,6 @@ describe('demoteBrowserWorkspace over the registry', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).not.toBe(sourceId)
     expect(getBrowserWorkspaceId()).toBe(rows[0])
-    await expect(refuseIfRemoved(rows[0] ?? '')).resolves.toBeUndefined()
+    await expect(refuseUnlessHeld(rows[0] ?? '', false)).resolves.toBeUndefined()
   })
 })

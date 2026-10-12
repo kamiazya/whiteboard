@@ -34,6 +34,8 @@ vi.mock('../../lib/browser-document-counts.js', () => ({
 
 vi.mock('../../lib/replica-store.js', () => ({
   openDocumentStore: () => ({ deleteDoc }),
+  unmarkReplica: () => {},
+  isReplicaCopy: () => false,
 }))
 
 function seedReplicas() {

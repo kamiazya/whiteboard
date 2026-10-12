@@ -20,7 +20,9 @@ import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
 import {
   browserWorkspaceIdentitySnapshot,
+  browserWorkspaceIdOrNull,
   getBrowserWorkspaceId,
+  leaveRemovedWorkspace,
   subscribeBrowserWorkspaceIdentity,
 } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
@@ -32,6 +34,7 @@ import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
 import { deleteRequestsFor, type PendingDelete } from './pending-delete.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
@@ -194,6 +197,17 @@ interface BrowserDocumentsLoadInput {
   setSnapshots: (rows: DocumentSnapshot[]) => void
   setTrashCount: (count: number) => void
   setError: (message: string | null) => void
+  /** The workspace being listed left this browser; see `useLeaveRemovedWorkspace`. */
+  onRemoved: (workspaceId: string) => void
+}
+
+/**
+ * Not a storage failure when the workspace moved off this browser in a tab
+ * whose message this one missed: the list moves too.
+ */
+function loadFailed(err: unknown, listed: string | undefined, props: BrowserDocumentsLoadInput) {
+  if (isWorkspaceRemovedError(err) && listed !== undefined) props.onRemoved(listed)
+  else props.setError('Failed to load documents from this browser.')
 }
 
 function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
@@ -208,13 +222,14 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
     // list, and the port answers that with an error rather than an empty
     // list. Ensuring it here is what makes a first visit render the empty
     // state instead of "Failed to load documents from this browser."
+    const listed = props.activeWorkspace?.workspaceId
     ensureBrowserWorkspace(props.index)
       .then(() => listBrowserDocuments(props.index, props.clock))
       .then((all) => {
         if (!cancelled) props.setSnapshots(all)
       })
-      .catch(() => {
-        if (!cancelled) props.setError('Failed to load documents from this browser.')
+      .catch((err: unknown) => {
+        if (!cancelled) loadFailed(err, listed, props)
       })
     props.filesSource
       .listTrash?.()
@@ -252,11 +267,32 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
 function useFollowOtherTabs(
   workspaceId: string | null,
   setFilesRevision: (next: (revision: number) => number) => void,
+  onRemoved: (workspaceId: string) => void,
 ): void {
   useEffect(() => {
     if (workspaceId === null) return
-    return followBrowserWorkspaceWrites(workspaceId, () => setFilesRevision((n) => n + 1))
-  }, [workspaceId, setFilesRevision])
+    return followBrowserWorkspaceWrites(workspaceId, {
+      onMoved: () => setFilesRevision((n) => n + 1),
+      onRemoved: () => onRemoved(workspaceId),
+    })
+  }, [workspaceId, setFilesRevision, onRemoved])
+}
+
+/**
+ * The workspace this list shows moved to a daemon from another tab. That tab
+ * re-points itself; this one moves to a workspace the browser still keeps
+ * (the identity change re-reads the list) and says why it did, instead of
+ * reporting the registry's refusal as storage that failed.
+ */
+function useLeaveRemovedWorkspace() {
+  const [moved, setMoved] = useState(false)
+  const onRemoved = useCallback((workspaceId: string) => {
+    setMoved(true)
+    // A registry that will not read leaves the list where it is, and its
+    // next load says so through the ordinary failure.
+    leaveRemovedWorkspace(workspaceId).catch(() => undefined)
+  }, [])
+  return { moved, onRemoved }
 }
 
 interface BrowserIndexListingInput {
@@ -290,7 +326,8 @@ function useBrowserIndexListing(props: BrowserIndexListingInput) {
   // panel re-reads whenever this identity changes, exactly as on the daemon
   // page.
   const [filesRevision, setFilesRevision] = useState(0)
-  useFollowOtherTabs(activeWorkspace?.workspaceId ?? null, setFilesRevision)
+  const leave = useLeaveRemovedWorkspace()
+  useFollowOtherTabs(activeWorkspace?.workspaceId ?? null, setFilesRevision, leave.onRemoved)
 
   useBrowserDocumentsLoad({
     index: props.index,
@@ -302,6 +339,7 @@ function useBrowserIndexListing(props: BrowserIndexListingInput) {
     setSnapshots,
     setTrashCount,
     setError,
+    onRemoved: leave.onRemoved,
   })
 
   const workspaceName = useBrowserWorkspaceName(props.index, activeWorkspace, props.revision)
@@ -318,6 +356,7 @@ function useBrowserIndexListing(props: BrowserIndexListingInput) {
     filesRevision,
     setFilesRevision,
     activeWorkspace,
+    ...leave,
   }
 }
 
@@ -416,6 +455,82 @@ function BrowserFilesPanel(props: BrowserIndexBodyProps) {
   )
 }
 
+/** Said where the list is: why it now shows another workspace than the one it did. */
+function WorkspaceMovedNotice() {
+  return (
+    <p
+      role="status"
+      data-testid="workspace-moved-notice"
+      className="mb-2 text-sm text-muted-foreground"
+    >
+      The workspace this tab was showing moved to the daemon, so this browser no longer keeps it.
+    </p>
+  )
+}
+
+interface BrowserCreateInput {
+  index: BrowserIndexPageProps['index'] & {}
+  loro: BrowserIndexPageProps['loro'] & {}
+  clock: BrowserIndexPageProps['clock'] & {}
+  pointer: BrowserIndexPageProps['pointer'] & {}
+  onOpenDocument: BrowserIndexPageProps['onOpenDocument']
+  setFilesRevision: (next: (revision: number) => number) => void
+  setError: (message: string | null) => void
+  onRemoved: (workspaceId: string) => void
+}
+
+/** This page's create: a seeded document, opened, or a refusal said in place. */
+function useBrowserCreate({
+  index,
+  loro,
+  clock,
+  pointer,
+  onOpenDocument,
+  setFilesRevision,
+  setError,
+  onRemoved,
+}: BrowserCreateInput) {
+  // The `disabled` attribute (via createDisabled) is the whole double-press
+  // mechanism: React flushes this state before a second click can dispatch,
+  // and a handler-side `if (creating) return` reads a stale closure in
+  // exactly the same-tick case it would have to catch.
+  const [creating, setCreating] = useState(false)
+  const handleCreate = useCallback(
+    async (kind: DocumentKind) => {
+      setCreating(true)
+      const target = browserWorkspaceIdOrNull()
+      try {
+        // Numbered against the INDEX, not against `snapshots`: this callback
+        // is memoized on [index, onOpenDocument], so a rendered list captured
+        // here would be whatever the first render held — `null` on the first
+        // create after a load, which numbers from nothing and lands on a path
+        // already taken. A failed read falls back to numbering from nothing,
+        // which the index's own uniqueness check then refuses rather than
+        // duplicating an address.
+        // The editor's create path, not a second one beside it: numbering,
+        // the content seed, and the rollback on a failed seed are all things
+        // a second create path would do differently or not at all.
+        const created = await createSeededDocument(index, loro, clock, undefined, kind)
+        // Repointed so a later plain load resumes in the new document — the
+        // same contract the editor's own create/switch flows keep.
+        await pointer.set(created.documentId)
+        // This page's own list must see the create even if it never
+        // unmounts (Back before the editor chunk mounts) — see the load
+        // effect's dependency note.
+        setFilesRevision((n) => n + 1)
+        onOpenDocument(created.path)
+      } catch (err) {
+        if (isWorkspaceRemovedError(err) && target !== null) onRemoved(target)
+        else setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
+      } finally {
+        setCreating(false)
+      }
+    },
+    [index, loro, clock, pointer, onOpenDocument, setFilesRevision, setError, onRemoved],
+  )
+  return { creating, handleCreate }
+}
+
 export function BrowserIndexPage({
   // Safe as a parameter default (unlike the clocks below): the shared
   // accessor memoizes, so every render sees the same identity. The concrete
@@ -441,13 +556,9 @@ export function BrowserIndexPage({
     filesRevision,
     setFilesRevision,
     activeWorkspace,
+    moved,
+    onRemoved,
   } = useBrowserIndexListing({ index, loro, clock, revision })
-  // The `disabled` attribute (via createDisabled) is the whole double-press
-  // mechanism: React flushes this state before a second click can dispatch,
-  // and a handler-side `if (creating) return` reads a stale closure in
-  // exactly the same-tick case it would have to catch.
-  const [creating, setCreating] = useState(false)
-
   // Re-read after a delete settled, with the dialog still open after a
   // partial failure: the ones that went are gone, and a list still showing
   // them behind the dialog contradicts the count above it.
@@ -504,37 +615,16 @@ export function BrowserIndexPage({
     [index, loro, clock, duplicating, setError, setFilesRevision],
   )
 
-  const handleCreate = useCallback(
-    async (kind: DocumentKind) => {
-      setCreating(true)
-      try {
-        // Numbered against the INDEX, not against `snapshots`: this callback
-        // is memoized on [index, onOpenDocument], so a rendered list captured
-        // here would be whatever the first render held — `null` on the first
-        // create after a load, which numbers from nothing and lands on a path
-        // already taken. A failed read falls back to numbering from nothing,
-        // which the index's own uniqueness check then refuses rather than
-        // duplicating an address.
-        // The editor's create path, not a second one beside it: numbering,
-        // the content seed, and the rollback on a failed seed are all things
-        // a second create path would do differently or not at all.
-        const created = await createSeededDocument(index, loro, clock, undefined, kind)
-        // Repointed so a later plain load resumes in the new document — the
-        // same contract the editor's own create/switch flows keep.
-        await pointer.set(created.documentId)
-        // This page's own list must see the create even if it never
-        // unmounts (Back before the editor chunk mounts) — see the load
-        // effect's dependency note.
-        setFilesRevision((n) => n + 1)
-        onOpenDocument(created.path)
-      } catch {
-        setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
-      } finally {
-        setCreating(false)
-      }
-    },
-    [index, loro, clock, pointer, onOpenDocument],
-  )
+  const { creating, handleCreate } = useBrowserCreate({
+    index,
+    loro,
+    clock,
+    pointer,
+    onOpenDocument,
+    setFilesRevision,
+    setError,
+    onRemoved,
+  })
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
@@ -544,6 +634,7 @@ export function BrowserIndexPage({
       <h1 className="mb-3 truncate text-lg font-semibold">
         {workspaceName ?? activeWorkspace?.segment ?? 'Documents'}
       </h1>
+      {moved && <WorkspaceMovedNotice />}
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}

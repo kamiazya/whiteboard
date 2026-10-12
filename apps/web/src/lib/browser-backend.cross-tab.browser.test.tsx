@@ -16,7 +16,7 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
@@ -68,6 +68,7 @@ const opened: BrowserBackend[] = []
 
 beforeEach(async () => {
   await clearWhiteboardDb()
+  await registerTestWorkspace()
 })
 afterEach(async () => {
   for (const backend of opened.splice(0)) backend.disconnect()

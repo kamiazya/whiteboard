@@ -13,20 +13,22 @@ import {
 } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { openDocumentStore } from './replica-store.js'
+import { isReplicaCopy, openDocumentStore } from './replica-store.js'
 import { listenToWorkspace, type WorkspaceBroadcastEnd } from './workspace-broadcast.js'
-import { refuseIfRemoved } from './workspace-tombstone.js'
+import { refuseUnlessHeld } from './workspace-tombstone.js'
 
 export class BrowserWorkspaceDocs extends DocumentStoreWorkspaceDocs {
   /**
    * Only tests pass `dbName`; see `openWhiteboardDb`'s note on why it exists.
-   * A record is never minted under an id this browser removed: another tab
-   * may still hold the whole record in memory, and its next save would
-   * otherwise write all of it back (`workspace-tombstone.ts`).
+   * A record is minted only under an id this browser holds — a registry row
+   * or a replica claim — and never under one it removed: another tab may
+   * still hold the whole record in memory, and its next save would otherwise
+   * write all of it back (`workspace-tombstone.ts`).
    */
   constructor(dbName?: string) {
     super(openDocumentStore(dbName), {
-      beforeMint: (workspaceId) => refuseIfRemoved(workspaceId, dbName),
+      beforeMint: (workspaceId) =>
+        refuseUnlessHeld(workspaceId, isReplicaCopy(workspaceId), dbName),
     })
   }
 }
