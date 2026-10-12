@@ -9,9 +9,10 @@
  * the round trip is the arms tally: every message kind is drawn.
  */
 import { afterAllFloor, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
+import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-server-core/viewport-request'
 import { describe, expect, vi } from 'vitest'
 import { parseServerTextMessage } from './sync-frame-text.js'
-import { serverTextMessageSchema, viewportRequestParamsSchema } from './sync-frames.js'
+import { serverTextMessageSchema } from './sync-frames.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const ARMS = serverTextMessageSchema.options.map((arm) => arm.shape.type.value)

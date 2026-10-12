@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/sync-frames'
+import { serverTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { describe, expect, it } from 'vitest'
 import { stripComments } from '../test-utils/strip-comments.js'
 import readerSource from './viewport-request.ts?raw'
@@ -10,8 +10,15 @@ import readerSource from './viewport-request.ts?raw'
 // than to apps/web/src: `zoom` is spelled everywhere in the editor and
 // `animate` is a Tailwind class prefix, so a tree-wide scan finds a "reader"
 // for a key nothing consults.
+// The frame the browser receives, less its envelope: `type` routes it and
+// `requestId` names it, and neither is something the viewport applies.
+const ENVELOPE_KEYS = new Set(['type', 'requestId'])
+const viewportFrame = serverTextMessageSchema.options.find(
+  (option) => option.shape.type.value === 'viewport_request',
+)
+
 describe('viewport_request wire keys', () => {
-  const keys = Object.keys(viewportRequestParamsSchema.shape)
+  const keys = Object.keys(viewportFrame?.shape ?? {}).filter((key) => !ENVELOPE_KEYS.has(key))
   const code = stripComments(readerSource)
 
   it('scans a real key set', () => {
