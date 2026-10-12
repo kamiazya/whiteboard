@@ -118,6 +118,126 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     })
   })
 
+  describe('the automatic-cap prune', () => {
+    const autoRowCount = async (workspaceId: string): Promise<number> =>
+      (
+        await handle.db
+          .selectFrom('versions')
+          .select('id')
+          .where('workspaceId', '=', workspaceId)
+          .where('auto', '=', 1)
+          .execute()
+      ).length
+
+    it("counts only this workspace's autos, never a neighbour's under the same document id", async () => {
+      await edit('ws-a', 'one')
+      await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: true }))
+      const own = await handle.db
+        .selectFrom('versions')
+        .selectAll()
+        .where('workspaceId', '=', 'ws-a')
+        .executeTakeFirstOrThrow()
+      // Enough of the neighbour's to fill the cap on their own, all newer than
+      // ws-a's first, so a cap counted across workspaces retires ws-a's.
+      await handle.db
+        .insertInto('versions')
+        .values(
+          Array.from({ length: 50 }, (_, i) => ({
+            ...own,
+            id: `foreign-${i}`,
+            workspaceId: 'ws-b',
+            createdAt: own.createdAt + 1_000 + i,
+          })),
+        )
+        .execute()
+      await edit('ws-a', 'two')
+      await at(100_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: true }))
+      expect(await autoRowCount('ws-a')).toBe(2)
+      expect(await autoRowCount('ws-b')).toBe(50)
+    })
+
+    it('holds the cap over the automatic rows a promote carries in', async () => {
+      const rows = Array.from({ length: 51 }, (_, i) => ({
+        id: `carried-${String(i).padStart(3, '0')}`,
+        documentId: 'doc-a',
+        createdAt: 1 + i,
+        auto: true,
+        frontiers: [],
+        elementCount: 0,
+        contentDigest: 'x',
+      }))
+      await store.adopt('ws-a', rows)
+      expect(await autoRowCount('ws-a')).toBe(50)
+    })
+  })
+
+  describe('pruneSandwichedAutoVersions', () => {
+    async function saveAt(workspaceId: string, text: string, tMs: number, auto: boolean) {
+      await edit(workspaceId, text)
+      return at(tMs, () => store.save(workspaceId, 'doc', new LoroDoc(), { auto }))
+    }
+    const idsOf = async (workspaceId: string): Promise<string[]> =>
+      (
+        await handle.db
+          .selectFrom('versions')
+          .select('id')
+          .where('workspaceId', '=', workspaceId)
+          .orderBy('id')
+          .execute()
+      ).map((row) => row.id)
+
+    it("does not bracket this workspace's autos with a neighbour's manual save", async () => {
+      const manual = await saveAt('ws-a', 'one', 1_000, false)
+      await saveAt('ws-a', 'two', 2_000, true)
+      const own = await handle.db
+        .selectFrom('versions')
+        .selectAll()
+        .where('id', '=', manual.id)
+        .executeTakeFirstOrThrow()
+      await handle.db
+        .insertInto('versions')
+        .values({
+          ...own,
+          id: 'foreign-manual',
+          workspaceId: 'ws-b',
+          createdAt: own.createdAt + 5_000,
+        })
+        .execute()
+      const before = await idsOf('ws-a')
+      expect(await store.pruneSandwichedAutoVersions('ws-a', 'doc')).toEqual({
+        deletedCount: 0,
+        deletedIds: [],
+      })
+      expect(await idsOf('ws-a')).toEqual(before)
+    })
+
+    it("leaves a neighbour's sandwiched autos under the same document id alone", async () => {
+      const manual = await saveAt('ws-a', 'one', 1_000, false)
+      const own = await handle.db
+        .selectFrom('versions')
+        .selectAll()
+        .where('id', '=', manual.id)
+        .executeTakeFirstOrThrow()
+      const foreign = (id: string, auto: 0 | 1, dt: number) => ({
+        ...own,
+        id,
+        auto,
+        workspaceId: 'ws-b',
+        createdAt: own.createdAt + dt,
+      })
+      await handle.db
+        .insertInto('versions')
+        .values([
+          foreign('foreign-1', 0, 1_000),
+          foreign('foreign-2', 1, 2_000),
+          foreign('foreign-3', 0, 3_000),
+        ])
+        .execute()
+      await store.pruneSandwichedAutoVersions('ws-a', 'doc')
+      expect(await idsOf('ws-b')).toEqual(['foreign-1', 'foreign-2', 'foreign-3'])
+    })
+  })
+
   describe('adopt', () => {
     it('keeps the element count the carried version was judged with', async () => {
       const kept = await store.adopt('ws-a', [

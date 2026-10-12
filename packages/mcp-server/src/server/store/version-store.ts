@@ -316,7 +316,7 @@ export class FileVersionStore implements VersionStore {
         )
         .execute()
 
-      await this.prune(documentId)
+      await this.prune(workspaceId, documentId)
 
       return savedVersion({ id, path, createdAt, elementCount, operator, opts })
     })
@@ -372,7 +372,7 @@ export class FileVersionStore implements VersionStore {
         )
         .execute()
       for (const documentId of new Set(rows.map((row) => row.documentId))) {
-        await this.prune(documentId)
+        await this.prune(workspaceId, documentId)
       }
       return held.map((row) => row.id)
     })
@@ -487,6 +487,7 @@ export class FileVersionStore implements VersionStore {
     const rows = await db
       .selectFrom('versions')
       .select(['id', 'auto', 'createdAt'])
+      .where('workspaceId', '=', workspaceId)
       .where('documentId', '=', documentId)
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
@@ -500,6 +501,7 @@ export class FileVersionStore implements VersionStore {
     if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
     await db
       .deleteFrom('versions')
+      .where('workspaceId', '=', workspaceId)
       .where('documentId', '=', documentId)
       .where('id', 'in', toDelete)
       .execute()
@@ -589,11 +591,18 @@ export class FileVersionStore implements VersionStore {
     return resolveWorkspaceDocument(storedWorkspace, path)?.documentId ?? null
   }
 
-  private async prune(documentId: string): Promise<void> {
+  /**
+   * The cap is per document WITHIN a workspace: a promote can land one
+   * browser record in two daemon workspaces, so a document id is not unique
+   * across them, and a cap counted across both would retire one workspace's
+   * history for the other's activity.
+   */
+  private async prune(workspaceId: string, documentId: string): Promise<void> {
     const db = await this.scope.db()
     const autos = await db
       .selectFrom('versions')
       .select(['id', 'restoredFrom'])
+      .where('workspaceId', '=', workspaceId)
       .where('documentId', '=', documentId)
       .where('auto', '=', 1)
       .orderBy('createdAt', 'desc')
@@ -608,6 +617,7 @@ export class FileVersionStore implements VersionStore {
         await db
           .selectFrom('versions')
           .select(['restoredFrom'])
+          .where('workspaceId', '=', workspaceId)
           .where('documentId', '=', documentId)
           .where('restoredFrom', 'is not', null)
           .execute()
@@ -617,6 +627,7 @@ export class FileVersionStore implements VersionStore {
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')
+      .where('workspaceId', '=', workspaceId)
       .where('documentId', '=', documentId)
       .where('id', 'in', toRemove)
       .execute()
