@@ -175,6 +175,18 @@ describe('sending a transfer through a window at the destination', () => {
     expect(popup.posted).toEqual([])
   })
 
+  it('refuses a keeper still on protocol 1, whose results carry a field this app no longer sends', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer(baseOptions(popup))
+    arrive(KEEPER, { type: 'transfer-ready', protocol: 1, nonce: NONCE })
+    await expect(sent).resolves.toEqual({
+      ok: false,
+      reason:
+        'That keeper speaks transfer protocol 1 and this app speaks 2. Update whichever is older and try again.',
+    })
+    expect(popup.posted).toEqual([])
+  })
+
   it('opens the window BEFORE the payload is read, so a popup blocker sees the click', async () => {
     let release: (value: {
       snapshot: Uint8Array

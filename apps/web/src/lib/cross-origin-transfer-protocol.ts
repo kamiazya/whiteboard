@@ -47,13 +47,21 @@ import { z } from 'zod'
 import { LEFT_BEHIND_MAX_CHARS, LEFT_BEHIND_MAX_ENTRIES } from './user-settings-store.js'
 
 /**
- * Bumped when a message's meaning changes, never for an added optional
- * field. Both sides state it, and a mismatch is refused with a reason a
- * person can act on rather than ignored — the two halves of this protocol
- * deploy independently (a hosted app and whatever keeper someone runs), so
- * they WILL be different versions in the field.
+ * Both sides state it, and a mismatch is refused with a reason a person can
+ * act on rather than ignored — the two halves of this protocol deploy
+ * independently (a hosted app and whatever keeper someone runs), so they
+ * WILL be different versions in the field.
+ *
+ * Bumped when a message's meaning changes, and whenever a REQUIRED field is
+ * added to or removed from any message: either way one side's older build
+ * refuses the other's message as unreadable, after the transfer may already
+ * have landed, where a bump turns that into "update whichever is older"
+ * before anything is sent. Never for an added optional field.
+ * `cross-origin-transfer-protocol.test.ts` keeps each released version's
+ * required keys and fails when the live ones match none. Version 2 dropped
+ * the result's `attested`.
  */
-export const CROSS_ORIGIN_TRANSFER_PROTOCOL = 1
+export const CROSS_ORIGIN_TRANSFER_PROTOCOL = 2
 
 /**
  * A nonce the SENDER mints per attempt. It is not a secret and does not
