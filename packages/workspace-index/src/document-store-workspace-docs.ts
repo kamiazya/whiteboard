@@ -61,8 +61,25 @@ function importStored(doc: LoroDoc, bytes: Uint8Array, workspaceId: string): voi
   }
 }
 
+export interface DocumentStoreWorkspaceDocsOptions {
+  /**
+   * Asked before a save MINTS a record — writes the first snapshot under an
+   * id with none stored — and refuses by throwing.
+   *
+   * To this class a missing record means "never created", so any holder of
+   * an id mints it again, whole, from its own copy. A keeper that can
+   * REMOVE a workspace knows the other meaning, and only it can say which
+   * ids carry it. Asked on the mint path alone: an append needs a stored
+   * snapshot, which a removed workspace no longer has.
+   */
+  readonly beforeMint?: (workspaceId: string) => Promise<void>
+}
+
 export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
-  constructor(private readonly store: DocumentStore) {}
+  constructor(
+    private readonly store: DocumentStore,
+    private readonly options: DocumentStoreWorkspaceDocsOptions = {},
+  ) {}
 
   async open(workspaceId: string): Promise<LoroDoc | null> {
     const record = await this.readRecord(refOf(workspaceId))
@@ -138,32 +155,7 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
   async save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
     const docRef = refOf(workspaceId)
     const header = await this.store.readSnapshotManifest({ docRef })
-    if (header === null) {
-      const snapshot = doc.export({ mode: 'snapshot' })
-      const { manifest: fresh, chunks } = chunkSnapshot(
-        new Uint8Array(snapshot),
-        DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
-      )
-      // The whole history as one update: what an empty peer needs, and also
-      // what this call appends if it loses the race below.
-      const update = new Uint8Array(doc.export({ mode: 'update' }))
-      const created = await this.store.saveCompactedSnapshot({
-        docRef,
-        manifest: fresh,
-        chunks,
-        frontier: new Uint8Array(doc.oplogVersion().encode()),
-        // Nothing to supersede: there is no log this snapshot folded.
-        supersededDeltaCount: 0,
-        expectedGeneration: null,
-      })
-      if (created.ok) return update
-      // Another writer minted the snapshot between the read and the write.
-      // Theirs does not contain these ops, so appending is the only move that
-      // keeps both — replacing it would be the lost update this fence exists
-      // to stop (ADR-0020).
-      await this.appendInstead(docRef, doc, update)
-      return update
-    }
+    if (header === null) return this.mint(workspaceId, doc)
 
     const stored = await this.store.readFrontier({ docRef })
     if (stored === null) return null
@@ -230,6 +222,36 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
         newFrontier: new Uint8Array(doc.oplogVersion().encode()),
       },
     })
+    return update
+  }
+
+  /** The first save under an id: the whole document as its snapshot. */
+  private async mint(workspaceId: string, doc: LoroDoc): Promise<Uint8Array> {
+    await this.options.beforeMint?.(workspaceId)
+    const docRef = refOf(workspaceId)
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const { manifest: fresh, chunks } = chunkSnapshot(
+      new Uint8Array(snapshot),
+      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+    )
+    // The whole history as one update: what an empty peer needs, and also
+    // what this call appends if it loses the race below.
+    const update = new Uint8Array(doc.export({ mode: 'update' }))
+    const created = await this.store.saveCompactedSnapshot({
+      docRef,
+      manifest: fresh,
+      chunks,
+      frontier: new Uint8Array(doc.oplogVersion().encode()),
+      // Nothing to supersede: there is no log this snapshot folded.
+      supersededDeltaCount: 0,
+      expectedGeneration: null,
+    })
+    if (created.ok) return update
+    // Another writer minted the snapshot between the read and the write.
+    // Theirs does not contain these ops, so appending is the only move that
+    // keeps both — replacing it would be the lost update this fence exists
+    // to stop (ADR-0020).
+    await this.appendInstead(docRef, doc, update)
     return update
   }
 

@@ -44,6 +44,7 @@ import { getAppLogger } from './app-logger.js'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
+import { refuseIfRemovedIn, TOMBSTONE_STORE } from './workspace-tombstone.js'
 
 /**
  * A row as stored: the port's own entry shape plus the `workspaceId` the
@@ -143,7 +144,10 @@ export class IdbDocumentIndex {
    */
   async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
     const { workspaceId, segment, displayName } = createWorkspaceInputSchema.parse(input)
-    await this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
+    await this.tx([WORKSPACES_STORE, TOMBSTONE_STORE], 'readwrite', async (tx) => {
+      // A removed workspace is not "never created": a tab still holding its
+      // id would otherwise register it again (`workspace-tombstone.ts`).
+      await refuseIfRemovedIn(tx, workspaceId)
       const store = tx.objectStore(WORKSPACES_STORE)
       // Creating one that exists is not an error — and not an overwrite. A
       // blind `put` of the input let the bare `{ workspaceId }` call clear

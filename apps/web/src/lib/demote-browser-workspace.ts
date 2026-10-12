@@ -32,9 +32,14 @@
  *   an empty registry (re-minting is an upgrade-time step), so deleting the
  *   last row would leave the browser keeper unbootable. A fresh empty
  *   workspace row is minted in the same transaction.
- * - The in-memory identity is re-pointed before returning, so a write that
- *   races the narrated reload lands in the fresh workspace instead of
- *   resurrecting the deleted record under its old id.
+ * - The row's deletion writes a tombstone in the same transaction
+ *   (`workspace-tombstone.ts`). Re-pointing this tab's identity covers this
+ *   tab alone; another tab's open page keeps the whole record in memory under
+ *   the old id, and to every writer a missing record means "never created",
+ *   so its next save or create would mint the workspace again. The
+ *   tombstone is what those writers refuse on, and every open page is told
+ *   at once (`workspace-removed`), so it locks instead of waiting for a
+ *   keystroke to find out.
  */
 import {
   readTrashEntries,
@@ -42,6 +47,7 @@ import {
   type TrashEntry,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { getAppLogger } from './app-logger.js'
 import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { deleteVersionRowsOfWorkspace } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -49,6 +55,10 @@ import { switchBrowserWorkspace } from './browser-workspace-id.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { forgetContentTimestamp } from './loro-store.js'
 import { openDocumentStore } from './replica-store.js'
+import { announceWorkspaceRemoved } from './workspace-broadcast.js'
+import { TOMBSTONE_STORE, writeTombstone } from './workspace-tombstone.js'
+
+const log = getAppLogger('demote-browser-workspace')
 
 /**
  * Does the replica this browser stores under the DAEMON workspace id hold
@@ -77,17 +87,31 @@ export async function demoteBrowserWorkspace(
   // empty, which reads as data loss.
   const residue = await residueOf(sourceWorkspaceId, dbName)
   const { nextHandle, remaining } = await dropRegistryRow(sourceWorkspaceId, dbName)
+  announceWorkspaceRemoved(sourceWorkspaceId)
   await switchBrowserWorkspace(nextHandle, dbName)
-  try {
-    await openDocumentStore(dbName).deleteDoc({
+  await bestEffort(sourceWorkspaceId, 'record', () =>
+    openDocumentStore(dbName).deleteDoc({
       docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
-    })
-  } catch {
-    // The demotion already stands: with the registry row gone the record is
-    // unreachable, so a failed byte deletion is lingering garbage, not a
-    // half-demoted workspace — and not worth failing the report over.
-  }
+    }),
+  )
   if (residue !== null) await discardResidue(sourceWorkspaceId, residue, remaining, dbName)
+}
+
+/**
+ * One deletion after the demotion already stands. A failure leaves
+ * unreachable garbage rather than a half-demoted workspace, so it does not
+ * fail the move — but nothing can name that garbage again, so it is said.
+ */
+async function bestEffort(
+  workspaceId: string,
+  step: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  try {
+    await run()
+  } catch (err) {
+    log.warn(`demote left the moved workspace's ${step} behind`, { workspaceId, step, err })
+  }
 }
 
 /**
@@ -103,9 +127,10 @@ async function dropRegistryRow(
   let remaining: readonly string[] = []
   try {
     const nextHandle = await new Promise<string>((resolve, reject) => {
-      const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
+      const tx = db.transaction([WORKSPACES_STORE, TOMBSTONE_STORE], 'readwrite')
       const workspaces = tx.objectStore(WORKSPACES_STORE)
       workspaces.delete(sourceWorkspaceId)
+      writeTombstone(tx, sourceWorkspaceId)
       const keysReq = workspaces.getAllKeys()
       let chosen: string | undefined
       keysReq.onsuccess = () => {
@@ -145,32 +170,48 @@ async function residueOf(workspaceId: string, dbName?: string): Promise<Residue 
   return { trash, documentIds: [...live, ...trash.map((entry) => entry.documentId)] }
 }
 
+/**
+ * Each kind of residue on its own boundary, because only the trash bytes
+ * depend on the neighbours: the version rows are keyed by the source alone,
+ * and the clocks by document ids no other workspace holds.
+ */
 async function discardResidue(
   sourceWorkspaceId: string,
   residue: Residue,
   remainingWorkspaceIds: readonly string[],
   dbName?: string,
 ): Promise<void> {
-  try {
-    const docs = new BrowserWorkspaceDocs(dbName)
-    const namedBlobs = new Set<string>()
-    for (const workspaceId of remainingWorkspaceIds) {
-      // A neighbour that will not open throws, and the catch below then
-      // deletes nothing: what it names is unknown.
-      const record = await docs.open(workspaceId)
-      if (record === null) continue
-      for (const entry of readTrashEntries(record)) namedBlobs.add(entry.blob.digestHex)
-    }
-    await deleteVersionRowsOfWorkspace(sourceWorkspaceId, dbName)
+  await bestEffort(sourceWorkspaceId, 'version rows', () =>
+    deleteVersionRowsOfWorkspace(sourceWorkspaceId, dbName),
+  )
+  // Only a browser-kept workspace's listing reads these clocks, and a
+  // document id is minted once, so no remaining one lists these ids.
+  await bestEffort(sourceWorkspaceId, 'listing clocks', async () => {
+    for (const id of residue.documentIds) await forgetContentTimestamp(id, dbName)
+  })
+  await bestEffort(sourceWorkspaceId, 'trash blobs', async () => {
+    const named = await trashBlobsNamedBy(remainingWorkspaceIds, dbName)
     const blobs = new IdbBlobStore(dbName)
     for (const entry of residue.trash) {
-      if (!namedBlobs.has(entry.blob.digestHex)) await blobs.delete({ ref: entry.blob })
+      if (!named.has(entry.blob.digestHex)) await blobs.delete({ ref: entry.blob })
     }
-    // Only a browser-kept workspace's listing reads these clocks, and a
-    // document id is minted once, so no remaining one lists these ids.
-    for (const id of residue.documentIds) await forgetContentTimestamp(id, dbName)
-  } catch {
-    // Same standing as the record's deletion above: the demotion stands, and
-    // what is left is unreachable garbage, not a reason to fail the move.
+  })
+}
+
+/**
+ * Every trash digest the remaining workspaces name. A neighbour that will
+ * not open throws, so no blob is deleted: what it names is unknown.
+ */
+async function trashBlobsNamedBy(
+  workspaceIds: readonly string[],
+  dbName?: string,
+): Promise<Set<string>> {
+  const docs = new BrowserWorkspaceDocs(dbName)
+  const named = new Set<string>()
+  for (const workspaceId of workspaceIds) {
+    const record = await docs.open(workspaceId)
+    if (record === null) continue
+    for (const entry of readTrashEntries(record)) named.add(entry.blob.digestHex)
   }
+  return named
 }

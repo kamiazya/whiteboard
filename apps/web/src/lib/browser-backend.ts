@@ -6,6 +6,7 @@ import type {
 import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
+  deleteWorkspaceDocument,
   resolveWorkspaceDocumentById,
   SYNC_TEXT_BREACH_CODES,
   type SyncTextBreach,
@@ -28,6 +29,7 @@ import {
   type WorkspaceBroadcastEnd,
 } from './workspace-broadcast.js'
 import { documentIdsInRecord } from './workspace-record-ids.js'
+import { isWorkspaceRemovedError } from './workspace-tombstone.js'
 
 /**
  * The document a BrowserBackend serves. `path`/`kind`/`name` are what connect
@@ -146,6 +148,15 @@ export class BrowserBackend implements DocumentBackend {
   private disconnected = false
   /** The live workspace document — set once connect() has delivered it. */
   private workspaceDoc: LoroDoc | null = null
+  /**
+   * The workspace that document is the record of, read once with it. Never
+   * the active id read again later: the active id moves on a switch or a
+   * removal, and this copy written under another id is that whole workspace
+   * minted somewhere it does not belong.
+   */
+  private workspaceId: string | null = null
+  /** The workspace left this browser: nothing more is written, and the page has been told. */
+  private removed = false
   /** One judge per record this backend has written to, so its copy outlives a push. */
   private readonly judges = new WeakMap<LoroDoc, (update: Uint8Array) => SyncTextBreach | null>()
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
@@ -166,6 +177,8 @@ export class BrowserBackend implements DocumentBackend {
     this.disconnected = false
     this.handlers = handlers
     this.workspaceDoc = null
+    this.workspaceId = null
+    this.removed = false
     this.cursor = null
     // Fire synchronously so the caller can observe onConnected immediately.
     handlers.onConnected()
@@ -179,6 +192,7 @@ export class BrowserBackend implements DocumentBackend {
     this.disconnected = true
     this.handlers = null
     this.workspaceDoc = null
+    this.workspaceId = null
     this.closeBroadcast()
   }
 
@@ -202,9 +216,10 @@ export class BrowserBackend implements DocumentBackend {
     // - The active workspace is re-pointed by the address, so reading
     //   `getBrowserWorkspaceId()` late would file these bytes under the workspace
     //   being switched TO. Losing an edit is bad; putting it in another
-    //   workspace is worse.
+    //   workspace is worse — which is also why the id is the one the record
+    //   was loaded under, never the active one.
     const workspaceDoc = this.workspaceDoc
-    const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
+    const workspaceId = this.workspaceId
     const handlers = this.handlers
     this._writeQueue = this._writeQueue.then(() =>
       this._doWrite(bytes, workspaceDoc, workspaceId, handlers),
@@ -233,7 +248,7 @@ export class BrowserBackend implements DocumentBackend {
    */
   applyRestore(past: LoroDoc, label?: string): Promise<void> {
     const workspaceDoc = this.workspaceDoc
-    const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
+    const workspaceId = this.workspaceId
     const handlers = this.handlers
     const run = async (): Promise<void> => {
       if (workspaceDoc === null || workspaceId === null || handlers === null) {
@@ -277,7 +292,7 @@ export class BrowserBackend implements DocumentBackend {
   ): Promise<void> {
     // A push before the snapshot was delivered has nothing to land on — the
     // session cannot produce one, since its doc exists only after onSnapshot.
-    if (workspaceDoc === null || workspaceId === null) return
+    if (workspaceDoc === null || workspaceId === null || this.removed) return
     try {
       // Refused before it lands: once imported, the bytes would ride the next
       // save whatever this one decided. Judged whatever the kind — a canvas's
@@ -311,9 +326,25 @@ export class BrowserBackend implements DocumentBackend {
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
       await touchContentTimestamp(this.target.documentId)
-    } catch {
-      this.handlers?.onError?.('storage-failure')
+    } catch (err) {
+      if (isWorkspaceRemovedError(err)) this.withdraw(workspaceDoc, handlers)
+      else this.handlers?.onError?.('storage-failure')
     }
+  }
+
+  /**
+   * The workspace left this browser while this page held it. The session
+   * locks on its document leaving the record it holds, so that is what it is
+   * handed: the node's removal, as a remote update. Only this copy changes —
+   * nothing is saved, and nothing is written again.
+   */
+  private withdraw(workspaceDoc: LoroDoc, handlers: DocumentBackendHandlers | null): void {
+    if (this.removed) return
+    this.removed = true
+    if (handlers === null || this.isStale(handlers)) return
+    const before = workspaceDoc.oplogVersion()
+    deleteWorkspaceDocument(workspaceDoc, { documentId: this.target.documentId })
+    handlers.onRemoteUpdate(workspaceDoc.export({ mode: 'update', from: before }))
   }
 
   /**
@@ -384,6 +415,10 @@ export class BrowserBackend implements DocumentBackend {
     handlers: DocumentBackendHandlers,
   ): void {
     if (this.isStale(handlers)) return
+    if (message.type === 'workspace-removed') {
+      this._writeQueue = this._writeQueue.then(() => this.withdraw(workspaceDoc, handlers))
+      return
+    }
     if (message.type === 'version-created') {
       if (message.documentId === this.target.documentId) handlers.onVersionCreated(message.version)
       return
@@ -520,21 +555,23 @@ export class BrowserBackend implements DocumentBackend {
     if (this.isStale(handlers)) return
 
     if (resolveWorkspaceDocumentById(workspaceDoc, this.target.documentId) === null) {
-      const settled = await this.placeMissingDocument(workspaceDoc, handlers)
+      const settled = await this.placeMissingDocument(workspaceId, workspaceDoc, handlers)
       if (!settled) return
     }
     if (this.isStale(handlers)) return
 
-    this.deliver(workspaceDoc, hear, handlers)
+    this.deliver(workspaceId, workspaceDoc, hear, handlers)
   }
 
   /** Hands the record to the session, with what the other tabs saved meanwhile. */
   private deliver(
+    workspaceId: string,
     workspaceDoc: LoroDoc,
     hear: (workspaceDoc: LoroDoc) => void,
     handlers: DocumentBackendHandlers,
   ): void {
     this.workspaceDoc = workspaceDoc
+    this.workspaceId = workspaceId
     hear(workspaceDoc)
     handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
   }
@@ -560,6 +597,7 @@ export class BrowserBackend implements DocumentBackend {
    * Returns false when delivery must stop (the unreadable and trashed cases).
    */
   private async placeMissingDocument(
+    workspaceId: string,
     workspaceDoc: LoroDoc,
     handlers: DocumentBackendHandlers,
   ): Promise<boolean> {
@@ -596,7 +634,7 @@ export class BrowserBackend implements DocumentBackend {
       if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
       return false
     }
-    await this.saveAndTellOtherTabs(getBrowserWorkspaceId(), workspaceDoc)
+    await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
     return true
   }
 }

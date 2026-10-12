@@ -182,6 +182,28 @@ it('the first save answers bytes that bring an empty peer to the saved state', a
   expect(peer.getMap('meta').get('title')).toBe('first')
 })
 
+it('a refused mint writes nothing, and the keeper is asked only when minting', async () => {
+  const store = new FakeDocumentStore()
+  const refused = new Error('removed')
+  const beforeMint = vi.fn(async (workspaceId: string) => {
+    if (workspaceId === 'ws-removed') throw refused
+  })
+  const docs = new DocumentStoreWorkspaceDocs(store, { beforeMint })
+  const doc = new LoroDoc()
+  doc.getMap('meta').set('title', 'held')
+  doc.commit()
+
+  await expect(docs.save('ws-removed', doc)).rejects.toBe(refused)
+  await expect(docs.create('ws-removed')).rejects.toBe(refused)
+  expect(await docs.open('ws-removed')).toBeNull()
+
+  await docs.save('ws-a', doc)
+  doc.getMap('meta').set('title', 'edited')
+  doc.commit()
+  await docs.save('ws-a', doc)
+  expect(beforeMint.mock.calls.filter(([id]) => id === 'ws-a')).toHaveLength(1)
+})
+
 it('an incremental save answers exactly the delta a caught-up peer needs', async () => {
   const docs = new DocumentStoreWorkspaceDocs(new FakeDocumentStore())
   const doc = new LoroDoc()

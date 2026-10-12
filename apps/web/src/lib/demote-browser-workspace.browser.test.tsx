@@ -4,19 +4,28 @@
  * is never empty and the last-workspace mint could rot unobserved (measured:
  * dropping the mint survived the flow suite).
  */
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
+  documentContainers,
   readTrashEntries,
   readWorkspaceDocuments,
   recordTrashEntry,
+  resolveWorkspaceDocumentById,
   writeDocumentKind,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
+import { LoroDoc } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { BrowserBackend } from './browser-backend.js'
 import { idbContentClock } from './browser-document-summary.js'
 import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { BrowserVersionStore, savedVersionRows } from './browser-version-store.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { BrowserWorkspaceDocs, saveAndAnnounce } from './browser-workspace-docs.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -26,6 +35,8 @@ import { demoteBrowserWorkspace, replicaCarriesAll } from './demote-browser-work
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { touchContentTimestamp } from './loro-store.js'
+import { openDocumentStore } from './replica-store.js'
+import { WorkspaceRemovedError } from './workspace-tombstone.js'
 
 claimIsolatedWhiteboardDb('demote-browser-workspace')
 
@@ -148,6 +159,148 @@ describe('demoteBrowserWorkspace, what the old record named', () => {
     await demoteBrowserWorkspace(sourceId)
 
     expect(await new IdbBlobStore().get({ ref: entry.blob })).not.toBeNull()
+  })
+})
+
+describe('demoteBrowserWorkspace, beside a neighbour that will not open', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    resetBrowserWorkspaceIdForTests()
+  })
+
+  it('still deletes the versions and clocks, and keeps only the trash bytes', async () => {
+    const { sourceId, sketch, gone, entry } = await seedTwoWorkspaces()
+    // A registered neighbour whose record is bytes Loro will not import:
+    // what its trash names is unknown, so no trash blob may go.
+    await new FoldingBrowserIndex().createWorkspace({ workspaceId: 'ws-unreadable' })
+    const garbage = chunkSnapshot(new Uint8Array([1, 2, 3, 4]), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
+    await openDocumentStore().saveSnapshot({
+      docRef: { kind: 'workspace-tree', workspaceId: 'ws-unreadable' },
+      ...garbage,
+      frontier: new Uint8Array(),
+    })
+    const logged = expectLoggedFailures()
+
+    await demoteBrowserWorkspace(sourceId)
+
+    expect(await savedVersionRows(sourceId)).toEqual([])
+    const stamps = await idbContentClock()([sketch.documentId, gone.documentId])
+    expect([...stamps.keys()]).toEqual([])
+    expect(await new IdbBlobStore().get({ ref: entry.blob })).not.toBeNull()
+    expect(logged.join('\n')).toContain('trash blobs')
+  })
+})
+
+describe('demoteBrowserWorkspace, another tab still holding the record', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    resetBrowserWorkspaceIdForTests()
+  })
+
+  it('a save from a copy held before the move does not bring the record back', async () => {
+    const { docs, sourceId } = await seedTwoWorkspaces()
+    // Another tab's backend: the whole record in memory, under the id it read.
+    const held = await docs.open(sourceId)
+    if (held === null) throw new Error('the seed has no record')
+
+    await demoteBrowserWorkspace(sourceId)
+    held.getText('typed-after-the-move').insert(0, 'typed in the other tab')
+    await expect(saveAndAnnounce(docs, sourceId, held)).rejects.toBeInstanceOf(
+      WorkspaceRemovedError,
+    )
+
+    expect(await docs.open(sourceId)).toBeNull()
+  })
+
+  it('a create under the old id does not register the workspace again', async () => {
+    const { docs, sourceId } = await seedTwoWorkspaces()
+
+    await demoteBrowserWorkspace(sourceId)
+    await expect(
+      new FoldingBrowserIndex().createWorkspace({ workspaceId: sourceId }),
+    ).rejects.toBeInstanceOf(WorkspaceRemovedError)
+
+    expect(await registryRows()).not.toContain(sourceId)
+    expect(await docs.open(sourceId)).toBeNull()
+  })
+})
+
+function pageHandlers(): DocumentBackendHandlers {
+  return {
+    onSnapshot: vi.fn(),
+    onRemoteUpdate: vi.fn(),
+    onVersionCreated: vi.fn(),
+    onRestoreStarted: vi.fn(),
+    onRestoreComplete: vi.fn(),
+    onViewportRequest: vi.fn(),
+    onConnected: vi.fn(),
+    onError: vi.fn(),
+  }
+}
+
+/** A page open on `documentId`, as a session holds it: the backend and its own copy. */
+async function openPage(documentId: string, path: string) {
+  const backend = new BrowserBackend({ documentId, path, kind: 'spatial' })
+  const h = pageHandlers()
+  backend.connect(h)
+  await vi.waitFor(() => expect(h.onSnapshot).toHaveBeenCalledTimes(1), { timeout: 10_000 })
+  const doc = new LoroDoc()
+  doc.import(vi.mocked(h.onSnapshot).mock.calls[0][0])
+  return { backend, h, doc }
+}
+
+/** Whether the page's copy still holds its document, once it has merged what it was handed. */
+function pageStillHolds(page: Awaited<ReturnType<typeof openPage>>, documentId: string): boolean {
+  for (const [bytes] of vi.mocked(page.h.onRemoteUpdate).mock.calls) page.doc.import(bytes)
+  return resolveWorkspaceDocumentById(page.doc, documentId) !== null
+}
+
+describe('demoteBrowserWorkspace, a page open on the moved workspace', () => {
+  const pages: BrowserBackend[] = []
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    resetBrowserWorkspaceIdForTests()
+  })
+  afterEach(() => {
+    for (const backend of pages.splice(0)) backend.disconnect()
+    vi.unstubAllGlobals()
+  })
+
+  it('locks as the move lands, before anything is typed', async () => {
+    const { sourceId, sketch } = await seedTwoWorkspaces()
+    const page = await openPage(sketch.documentId, 'sketch')
+    pages.push(page.backend)
+
+    await demoteBrowserWorkspace(sourceId)
+
+    await vi.waitFor(() => expect(pageStillHolds(page, sketch.documentId)).toBe(false), {
+      timeout: 10_000,
+    })
+  })
+
+  it('that missed the notice locks on its next edit instead of writing it', async () => {
+    const { docs, sourceId, sketch } = await seedTwoWorkspaces()
+    const page = await openPage(sketch.documentId, 'sketch')
+    pages.push(page.backend)
+    // No channel while the move runs: the notice never reaches the page.
+    vi.stubGlobal('BroadcastChannel', undefined)
+    await demoteBrowserWorkspace(sourceId)
+    vi.unstubAllGlobals()
+
+    const from = page.doc.version()
+    writeSpatialNode(
+      documentContainers(page.doc, sketch.documentId),
+      textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'typed after' }),
+    )
+    await page.backend.pushLocalUpdate(page.doc.export({ mode: 'update', from }))
+
+    expect(pageStillHolds(page, sketch.documentId)).toBe(false)
+    expect(page.h.onError).not.toHaveBeenCalled()
+    expect(await docs.open(sourceId)).toBeNull()
+    // Nor under the id this realm moved on to: a page writes only the record it loaded.
+    const fresh = await docs.open(getBrowserWorkspaceId())
+    const freshIds = fresh === null ? [] : readWorkspaceDocuments(fresh).map((d) => d.documentId)
+    expect(freshIds).not.toContain(sketch.documentId)
   })
 })
 
