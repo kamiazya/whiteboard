@@ -144,6 +144,18 @@ it('refuses a body that is not the contract, and bytes that are not a record', a
   expect(await new FileVersionStore().list('session1', 'sketch')).toEqual([])
 })
 
+it('answers bytes that are not a record in the code family, under a code of their own', async () => {
+  const { promote } = harness()
+  const res = await promote({ snapshot: b64u(new Uint8Array([1, 2, 3, 4])) })
+  expect(res.status).toBe(400)
+  // Not `invalid_body`: a sender reads that code, beside carried planes, as an
+  // older daemon refusing the planes, and this refusal is of the record.
+  expect(await res.json()).toEqual({
+    error: 'malformed_snapshot',
+    message: 'Malformed workspace record snapshot',
+  })
+})
+
 it('answers 404 for a workspace the daemon never registered', async () => {
   const { app } = harness()
   const res = await app.request('/api/w/unregistered/workspace-document/promote', {
@@ -253,6 +265,9 @@ it('refuses trash bytes that are not what the entry names, and merges nothing', 
     trash: [{ documentId: GONE_ID, bytes: b64u(new Uint8Array([1, 2, 3])) }],
   })
   expect(res.status).toBe(400)
+  // Its own code, not `invalid_body`: a sender reads that one, beside carried
+  // planes, as a keeper too old to know the planes, and this daemon knows them.
+  expect(((await res.json()) as { error: string }).error).toBe('unmatched_carried')
   expect(await documents()).toEqual([])
 })
 

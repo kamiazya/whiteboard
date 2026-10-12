@@ -12,8 +12,8 @@ import type { VersionEntry } from '../versions/version-entry.js'
  * the version verbs to WORK rather than to be observed: without a history,
  * `wb_version_save` reaches `deps.versions.save` on `undefined` and answers a
  * tool error, which an errand scoreboard counts as one cheap call. A row
- * carries what the store would — the live element count and the attestation —
- * so an assertion about a saved version means the same against either.
+ * carries what the store would — the live element count — so an assertion
+ * about a saved version means the same against either.
  */
 export class FakeVersionHistory implements VersionHistory {
   readonly saves: { path: string; options: Parameters<VersionHistory['save']>[3] }[] = []
@@ -38,7 +38,6 @@ export class FakeVersionHistory implements VersionHistory {
       auto: options.auto,
       ...(options.label === undefined ? {} : { label: options.label }),
       ...(options.operator === undefined ? {} : { operator: options.operator }),
-      ...(options.attestation === undefined ? {} : { attestation: options.attestation }),
     }
     this.rows.set(entry.id, { entry, snapshot: doc.export({ mode: 'snapshot' }) })
     return entry

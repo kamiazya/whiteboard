@@ -147,8 +147,8 @@ surface as shadowed. The DEMOTE (2026-09-04): once every document and
 image is VERIFIED on the daemon — read back from this browser's own
 replica, not from the response — and with every trash entry and version
 confirmed (`trashStored`/`versionsKept`), the old browser record is deleted
-(`lib/demote-browser-workspace.ts`); what remains is a cached replica under
-the daemon workspace's id, read-only when the daemon is unreachable. An
+(`lib/demote-browser-workspace.ts`) and its id tombstoned, so no stale tab mints it back; what remains is a cached replica under
+the daemon workspace's id, editable offline. An
 unverified move keeps the browser copy and says so. Copy may
 therefore say "kept by the daemon, cached here" after a verified move;
 continuing from the daemon is still a narrated reload the user takes, never

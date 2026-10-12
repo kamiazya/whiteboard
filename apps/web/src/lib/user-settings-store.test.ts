@@ -32,6 +32,13 @@ describe('fitLeftBehind', () => {
     expect(userSettingsSchema.safeParse(settings).success).toBe(true)
     expect(leftBehind).toHaveLength(100)
   })
+
+  it('drops an astral character the bound falls inside rather than keeping half of it', () => {
+    // A reason quotes a document path, which may run past the bound with an
+    // emoji straddling it.
+    const reason = `${'x'.repeat(499)}\u{1F600}tail`
+    expect(fitLeftBehind([reason])).toEqual(['x'.repeat(499)])
+  })
 })
 
 describe('createUserSettingsStore', () => {

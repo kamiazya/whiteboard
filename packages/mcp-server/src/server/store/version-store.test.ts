@@ -226,7 +226,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(listed[0]?.operator).toEqual(entry.operator)
   })
 
-  it('round-trips save({ attestation }) through list(), and a point without one reads back without one', async () => {
+  it('saves no attestation, and still reads one a stored row already carries', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
     const attestation = {
@@ -239,11 +239,22 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const attested = await store.save('sess-1', 'canvas-a', doc, {
       auto: false,
       operator: { kind: 'human', displayName: 'Yuki' },
-      attestation,
     })
-    expect(attested.attestation).toEqual(attestation)
+    expect(attested.attestation).toBeUndefined()
     const plain = await store.save('sess-1', 'canvas-a', doc, { auto: false })
-    expect(plain.attestation).toBeUndefined()
+    const stored = await handle.db
+      .selectFrom('versions')
+      .select('attestation')
+      .where('id', 'in', [attested.id, plain.id])
+      .execute()
+    expect(stored).toEqual([{ attestation: null }, { attestation: null }])
+
+    // A row that already carries a person's evidence keeps it on read.
+    await handle.db
+      .updateTable('versions')
+      .set({ attestation: JSON.stringify(attestation) })
+      .where('id', '=', attested.id)
+      .execute()
 
     const listed = await store.list('sess-1', 'canvas-a')
     expect(listed.map((entry) => entry.attestation)).toEqual([undefined, attestation])

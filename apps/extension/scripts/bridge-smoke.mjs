@@ -13,12 +13,12 @@
 //    then it reads what an agent wrote on the daemon, writes back, and sees
 //    the agent's next edit arrive live.
 // 5. A browser-kept record promotes into a daemon workspace through the
-//    bridge, unattested (the local daemon pins no passkeys), and a request
+//    bridge with no attestation (the local daemon pins no passkeys), and a request
 //    carrying an attestation is refused and lands nothing.
 // 6. The production build admits no loopback page at all.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
-// Chromium: `pnpm exec playwright install chromium`.
+// Chromium: `pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium`.
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
@@ -118,8 +118,8 @@ async function promoteThroughBridge(pageUrl) {
       const path = `/api/w/${target}/workspace-document/promote`
       const snapshot = b64u(source.data)
       // Refused first, so a refusal that merged anyway shows up in the
-      // unattested promote's own `recorded`, which would then be empty.
-      const attested = await window.bridgeRequest('POST', path, {
+      // plain promote's own `recorded`, which would then be empty.
+      const withAttestation = await window.bridgeRequest('POST', path, {
         snapshot,
         attestation: {
           kind: 'webauthn',
@@ -134,7 +134,7 @@ async function promoteThroughBridge(pageUrl) {
         source: source.status,
         created: created.status,
         target,
-        attested: { status: attested.status, body: json(attested) },
+        withAttestation: { status: withAttestation.status, body: json(withAttestation) },
         promoted: { status: promoted.status, body: json(promoted) },
       }
     })
@@ -144,14 +144,15 @@ async function promoteThroughBridge(pageUrl) {
       JSON.stringify(outcome),
     )
     check(
-      outcome.attested.status === 400 && outcome.attested.body?.error === 'invalid_body',
+      outcome.withAttestation.status === 400 &&
+        outcome.withAttestation.body?.error === 'invalid_body',
       'a promote carrying an attestation is refused, since the local daemon pins no passkey',
-      JSON.stringify(outcome.attested),
+      JSON.stringify(outcome.withAttestation),
     )
     const body = outcome.promoted.body
     check(
       outcome.promoted.status === 200 && body?.recorded.length > 0 && body.shadowed.length === 0,
-      'an unattested promote through the extension lands the whole record',
+      'a promote with no attestation through the extension lands the whole record',
       JSON.stringify(outcome.promoted),
     )
     return outcome.target

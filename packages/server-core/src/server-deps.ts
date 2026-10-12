@@ -5,12 +5,7 @@ import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboa
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
-import type {
-  Attestation,
-  OperatorInfo,
-  PromotedVersion,
-  VersionEntry,
-} from './versions/version-entry.js'
+import type { OperatorInfo, PromotedVersion, VersionEntry } from './versions/version-entry.js'
 import type { ViewportRequest } from './viewport-request.js'
 
 /**
@@ -364,8 +359,6 @@ export interface VersionHistory {
       operator?: OperatorInfo
       /** Set when this point is the merge a restore produced; see `versionEntrySchema`. */
       restoredFrom?: string
-      /** The person's evidence, when the operation asked for it; see `versionEntrySchema`. */
-      attestation?: Attestation
     },
   ): Promise<VersionEntry>
   /**

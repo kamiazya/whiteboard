@@ -27,18 +27,11 @@
  * Carrying them means the sender posting each one, which is its own
  * increment.
  */
-import {
-  promoteWorkspaceResponseSchema,
-  workspaceDocumentApiUrl,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
-import { unconfirmedPlanes } from './carried-planes.js'
-import { listDocuments } from './daemon-api-client.js'
-import { daemonContractError } from './daemon-contract-error.js'
+import { type PromoteWording, requestPromote } from './promote-request.js'
 import { imagesTheRecordReferences } from './receive-transfer.js'
 
 export type AcceptTransferResult =
@@ -83,6 +76,13 @@ export async function acceptTransferredRecord(
   }
 }
 
+const KEEPER_WORDING: PromoteWording = {
+  subject: 'This keeper',
+  object: 'the keeper',
+  refused: (status) => `This keeper refused the merge (${status}).`,
+  unexpected: 'This keeper answered the merge with an unexpected response.',
+}
+
 async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTransferResult> {
   const { fetch, workspaceId, snapshot, trash = [], versions = [] } = options
 
@@ -92,43 +92,21 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
   }
   const { promotedDocumentIds, imagesMissing } = arriving
 
-  const promoteUrl = workspaceDocumentApiUrl(workspaceId, 'promote')
-  // An empty plane is left out: a keeper that predates the planes refuses the
-  // keys, and an absent plane already means none.
-  const body: PromoteWorkspaceRequest = {
+  const promoted = await requestPromote({
+    fetch,
+    keeperBaseUrl: '',
+    workspaceId,
     snapshot: bytesToBase64Url(snapshot),
-    ...(trash.length === 0 ? {} : { trash }),
-    ...(versions.length === 0 ? {} : { versions }),
-  }
-  const res = await fetch(promoteUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    planes: { trash, versions },
+    wording: KEEPER_WORDING,
   })
-  if (!res.ok) {
-    return { ok: false, reason: await failureReason(res) }
-  }
-  const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
-  if (!promoted.success) {
-    daemonContractError(promoteUrl, promoted.error)
-    return { ok: false, reason: 'This keeper answered the merge with an unexpected response.' }
-  }
-
-  // Collisions are this keeper's own projection — what the target already
-  // held is not something the arriving bytes can say. A failed read-back
-  // degrades to "none reported", never to a failed merge: it landed.
-  const shadowedPaths = await listDocuments(fetch, '', workspaceId)
-    .then((response) =>
-      response.documents.filter((entry) => entry.shadowed === true).map((entry) => entry.path),
-    )
-    .catch(() => [])
-
+  if (!promoted.ok) return promoted
   return {
     ok: true,
     promotedDocumentIds,
-    shadowedPaths,
+    shadowedPaths: promoted.shadowedPaths,
     imagesMissing,
-    leftBehind: unconfirmedPlanes(body, promoted.data, 'the keeper'),
+    leftBehind: promoted.leftBehind,
   }
 }
 
@@ -151,8 +129,4 @@ function readArrivingRecord(
     promotedDocumentIds: readWorkspaceDocuments(record).map((entry) => entry.documentId),
     imagesMissing: imagesTheRecordReferences(record),
   }
-}
-
-async function failureReason(res: Response): Promise<string> {
-  return (await refusalReasonOf(res, `This keeper refused the merge (${res.status}).`)).reason
 }

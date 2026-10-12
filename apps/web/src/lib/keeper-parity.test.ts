@@ -87,10 +87,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "sends the person to a server-mode keeper's `/auth/reauthenticate` before it manages people; a Browser keeper has no sign-in and one person, so there is nobody to re-authenticate and nothing to mirror",
   },
-  'src/lib/accept-transferred-record.ts': {
-    reach: 'daemon-itself',
-    why: 'merges a workspace record arriving from ANOTHER origin into a workspace this keeper holds — it runs on the page a keeper serves at its own address, and a browser keeper serves no address anyone could send a transfer to, so there is no receiving side to mirror',
-  },
   'src/components/settings/PromoteWorkspaceSection.tsx': {
     reach: 'daemon-itself',
     why: 'moves a browser-kept workspace INTO the daemon and shows what the daemon keeps of the workspace in view (its replica tier line) — both are about the daemon as the destination or the keeper, and a browser-kept workspace has no counterpart for either',
@@ -192,6 +188,10 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/lib/extension-connection.ts': {
     reach: 'daemon-itself',
     why: 'asks whether the whiteboard extension can reach a daemon at all — the answer is a daemon connection, so a browser-kept workspace, which is not connected to anything, has no counterpart',
+  },
+  'src/lib/promote-request.ts': {
+    reach: 'daemon-itself',
+    why: 'the one promote request the daemon move and the cross-origin receiver both send — its destination is always a keeper holding the workspace, and the browser keeper is only ever the source, so there is nothing to mirror',
   },
   'src/lib/promote-workspace.ts': {
     reach: 'daemon-itself',

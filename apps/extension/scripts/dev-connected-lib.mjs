@@ -1,6 +1,7 @@
 // What `pnpm dev:connected` decides, apart from the processes it runs: where
 // the native host is registered, and how the browser is started so that it
 // reads that registration and nothing else.
+import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join, resolve } from 'node:path'
 import { resolveDevDataDirEnv } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
@@ -95,9 +96,43 @@ export function devServerUrl(raw) {
   return parsed.href
 }
 
-/** Where Chromium records the CDP port it chose for `--remote-debugging-port=0`. */
-export function devToolsActivePortFile(profileDir) {
+/**
+ * Where Chromium records the CDP port it chose for `--remote-debugging-port=0`.
+ * It writes this file for port 0 only: a pinned port never produces one.
+ */
+function devToolsActivePortFile(profileDir) {
   return join(profileDir, 'DevToolsActivePort')
+}
+
+/** How long one readiness probe of a pinned port may take before the poll retries. */
+const CDP_PROBE_TIMEOUT_MS = 1_000
+
+/**
+ * The CDP port once Chromium's debugging server is up, or `undefined` while
+ * it is not. Port 0 can only be learnt from `DevToolsActivePort`; a pinned
+ * port has no such file, so it is ready when its own `/json/version` answers
+ * with a debugger URL — the endpoint a CDP client attaches through.
+ *
+ * @param {{ profileDir: string, cdpPort: number }} input
+ * @returns {Promise<string | undefined>}
+ */
+export async function cdpReadyPort({ profileDir, cdpPort }) {
+  if (cdpPort === 0) {
+    const file = devToolsActivePortFile(profileDir)
+    return existsSync(file) ? readFileSync(file, 'utf8').split('\n')[0] : undefined
+  }
+  try {
+    // A server that accepts and never answers would hold this await past the
+    // caller's own deadline, which it can only check between polls.
+    const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`, {
+      signal: AbortSignal.timeout(CDP_PROBE_TIMEOUT_MS),
+    })
+    if (!response.ok) return undefined
+    const body = await response.json()
+    return typeof body?.webSocketDebuggerUrl === 'string' ? String(cdpPort) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -118,9 +153,10 @@ export function portIsFree(port, host = 'localhost') {
 /**
  * Why a named `--cdp-port` cannot be used, or `undefined` when it can. Asked
  * before anything starts because Chromium does not fail on a taken debugging
- * port: it logs the bind error, keeps running, and never writes
- * `DevToolsActivePort`, so the only symptom would be a timeout. Chromium
- * binds the debugging server on IPv4 loopback, so that is what is probed.
+ * port: it logs the bind error and keeps running, while the port's endpoint
+ * answers for whatever process does hold it — so the only symptom would be
+ * attaching to the wrong browser, or a timeout. Chromium binds the debugging
+ * server on IPv4 loopback, so that is what is probed.
  *
  * @param {number} port as parsed from the flag; `0` asks Chromium for any free port, which cannot collide
  * @returns {Promise<string | undefined>}

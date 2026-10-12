@@ -168,7 +168,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/mcp-server/src/server/routes/document/path-route.ts#DOCUMENTS_WILDCARD',
   'packages/mcp-server/src/server/routes/document/path-route.ts#matchDocumentsTail',
   'packages/mcp-server/src/server/security/credential-resolver.ts#CredentialResolverConfig',
-  'packages/mcp-server/src/server/security/daemon-identity.ts#buildSignedPayload',
   'packages/mcp-server/src/server/security/macaroon.ts#hmacSha256',
   'packages/mcp-server/src/server/security/macaroon.ts#parseMacaroon',
   'packages/mcp-server/src/server/security/macaroon.ts#serializeMacaroon',
@@ -304,8 +303,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
   'packages/loro-adapter/src/workspace-tree.ts#createWorkspaceDocument':
     'the tree raw create operation the concurrent convergence property drives, while production reaches the tree by path',
-  'packages/loro-adapter/src/workspace-tree.ts#deleteWorkspaceDocument':
-    'the tree raw delete operation the concurrent convergence property drives, while production reaches the tree by path',
   'packages/loro-adapter/src/workspace-tree.ts#moveWorkspaceDocument':
     'the tree raw move operation the concurrent convergence property drives, while production reaches the tree by path',
   'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#ALL_REGISTERED_TOOLS':
@@ -359,7 +356,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 153
+const DEBT_CEILING = 152
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 24

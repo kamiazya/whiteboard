@@ -39,7 +39,7 @@ const BARREL = join(CONTRACTS_DIR, 'index.ts')
  * string pattern has no object to refuse a key. Guarded from both sides
  * below, so an entry cannot outlive the line it excuses.
  */
-const FOREIGN_SCHEMA_REEXPORTS: readonly string[] = ['apiErrorCodeSchema']
+const FOREIGN_SCHEMA_REEXPORTS: readonly string[] = []
 
 /** Value exports the barrel takes from another package, by the name the browser sees. */
 function foreignSchemaReexports(source: string): string[] {

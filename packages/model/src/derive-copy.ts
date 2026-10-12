@@ -1,4 +1,5 @@
 import { DOCUMENT_NAME_MAX_LENGTH, DOCUMENT_PATH_MAX_LENGTH } from './ids.js'
+import { fitToLength } from './text-bound.js'
 
 // What a duplicate is called and where it goes, decided once for both keepers:
 // a copy lands BESIDE its source, so a person who keeps a folder tidy finds
@@ -19,7 +20,7 @@ export function deriveCopyName(
 ): string {
   const existing = existingNames instanceof Set ? existingNames : new Set(existingNames)
   const candidate = (suffix: string) =>
-    `${fitName(baseName, DOCUMENT_NAME_MAX_LENGTH - suffix.length)}${suffix}`
+    `${fitToLength(baseName, DOCUMENT_NAME_MAX_LENGTH - suffix.length).trimEnd()}${suffix}`
   const first = candidate(' (copy)')
   if (!existing.has(first)) return first
   let n = 2
@@ -56,18 +57,6 @@ export function deriveCopyPath(
     if (path === null || !existing.has(path)) return path
     suffix = `-copy-${n}`
   }
-}
-
-/** `name` cut to at most `max` UTF-16 units, never through a surrogate pair. */
-function fitName(name: string, max: number): string {
-  if (name.length <= max) return name
-  const cut = name.slice(0, max)
-  // A code UNIT, so charCodeAt rather than codePointAt: Node 24.21's optimised
-  // codePointAt at a slice's last index reads past the slice into the parent
-  // string and answers the whole pair, keeping a lone surrogate (measured:
-  // 42,355 wrong of 200,000 hot calls; 0 on Node 22).
-  const last = cut.charCodeAt(cut.length - 1)
-  return (last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut).trimEnd()
 }
 
 function trimTrailingHyphens(text: string): string {

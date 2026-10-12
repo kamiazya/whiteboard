@@ -10,6 +10,7 @@
  * replied" rather than as a bad URL.
  */
 import { describe, expect, it } from 'vitest'
+import type { z } from 'zod'
 import {
   CROSS_ORIGIN_TRANSFER_PROTOCOL,
   parseTransferWindowUrl,
@@ -17,6 +18,7 @@ import {
   transferResponseSchema,
   transferWindowUrl,
 } from './cross-origin-transfer-protocol.js'
+import { LEFT_BEHIND_MAX_CHARS, LEFT_BEHIND_MAX_ENTRIES } from './user-settings-store.js'
 
 const NONCE = 'n'.repeat(32)
 
@@ -163,6 +165,119 @@ describe('the transfer result', () => {
       reason: '',
     })
     expect(parsed.success).toBe(false)
+  })
+
+  describe('what it left behind, bounded since the sender shows it as-is', () => {
+    const withLeftBehind = (leftBehind: string[]) =>
+      transferResponseSchema.safeParse({
+        type: 'transfer-result',
+        nonce: NONCE,
+        ok: true,
+        workspaceId: 'ws-a',
+        promotedDocumentIds: [],
+        shadowedPaths: [],
+        leftBehind,
+      }).success
+
+    it('accepts as many sentences as the bound, and refuses one more', () => {
+      const atBound = Array.from({ length: LEFT_BEHIND_MAX_ENTRIES }, () => 'a version')
+      expect(withLeftBehind(atBound)).toBe(true)
+      expect(withLeftBehind([...atBound, 'a version'])).toBe(false)
+    })
+
+    it('accepts a sentence as long as the bound, and refuses a longer one', () => {
+      expect(withLeftBehind(['x'.repeat(LEFT_BEHIND_MAX_CHARS)])).toBe(true)
+      expect(withLeftBehind(['x'.repeat(LEFT_BEHIND_MAX_CHARS + 1)])).toBe(false)
+    })
+  })
+})
+
+/**
+ * The REQUIRED keys of every message, as each released protocol version
+ * shipped them. A reader built against one of these refuses a message
+ * missing a key it requires, and a reader built now refuses one missing a
+ * key it requires — so adding or removing a required key breaks the other
+ * side's older build, and must come with a new protocol number and a new
+ * row here. An optional key changes neither and needs neither.
+ */
+const RELEASED_REQUIRED_KEYS: Record<number, Record<string, readonly string[]>> = {
+  1: {
+    'transfer-ready': ['type', 'protocol', 'nonce'],
+    'transfer-offer': [
+      'type',
+      'protocol',
+      'nonce',
+      'snapshot',
+      'documentCount',
+      'sourceWorkspaceId',
+    ],
+    'transfer-result ok': [
+      'type',
+      'nonce',
+      'ok',
+      'workspaceId',
+      'promotedDocumentIds',
+      'shadowedPaths',
+      'attested',
+    ],
+    'transfer-result refused': ['type', 'nonce', 'ok', 'reason'],
+  },
+  2: {
+    'transfer-ready': ['type', 'protocol', 'nonce'],
+    'transfer-offer': [
+      'type',
+      'protocol',
+      'nonce',
+      'snapshot',
+      'documentCount',
+      'sourceWorkspaceId',
+    ],
+    'transfer-result ok': [
+      'type',
+      'nonce',
+      'ok',
+      'workspaceId',
+      'promotedDocumentIds',
+      'shadowedPaths',
+    ],
+    'transfer-result refused': ['type', 'nonce', 'ok', 'reason'],
+  },
+}
+
+/** Each arm of the live schemas, under the name its ledger row uses. */
+function liveRequiredKeys(): Record<string, readonly string[]> {
+  const required = (shape: Record<string, z.ZodType>) =>
+    Object.entries(shape)
+      .filter(([, schema]) => !schema.safeParse(undefined).success)
+      .map(([key]) => key)
+  const [ready, offerArm] = transferRequestSchema.options
+  const [ok, refused] = transferResponseSchema.options
+  return {
+    'transfer-ready': required(ready.shape),
+    'transfer-offer': required(offerArm.shape),
+    'transfer-result ok': required(ok.shape),
+    'transfer-result refused': required(refused.shape),
+  }
+}
+
+describe('the protocol version', () => {
+  it('has a released row whose required keys are exactly those of the live messages', () => {
+    const released = RELEASED_REQUIRED_KEYS[CROSS_ORIGIN_TRANSFER_PROTOCOL]
+    expect(released, `no released row for protocol ${CROSS_ORIGIN_TRANSFER_PROTOCOL}`).toBeDefined()
+    const live = liveRequiredKeys()
+    // The probe reaches every arm, so a lost arm cannot read as agreement.
+    expect(Object.keys(live)).toHaveLength(4)
+    for (const [message, keys] of Object.entries(live)) {
+      expect([...keys].sort(), message).toEqual([...(released?.[message] ?? [])].sort())
+    }
+  })
+
+  it('differs from every earlier release in some required key, or it would not be a new number', () => {
+    const current = JSON.stringify(RELEASED_REQUIRED_KEYS[CROSS_ORIGIN_TRANSFER_PROTOCOL])
+    for (const [version, row] of Object.entries(RELEASED_REQUIRED_KEYS)) {
+      if (Number(version) === CROSS_ORIGIN_TRANSFER_PROTOCOL) continue
+      expect(JSON.stringify(row), `protocol ${version}`).not.toBe(current)
+    }
   })
 })
 

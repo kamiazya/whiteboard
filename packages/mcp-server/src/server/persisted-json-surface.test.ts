@@ -143,7 +143,7 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
   ),
   'server/store/version-store.ts': notModelled(
     "a version row's attestation column, written and read by the same store: " +
-      'version-store.test.ts round-trips save({ attestation }) through list(), and a value the ' +
+      'version-store.test.ts seeds the column and reads it back through list() (save writes NULL), and a value the ' +
       'schema refuses reads back as no attestation by design',
   ),
 }

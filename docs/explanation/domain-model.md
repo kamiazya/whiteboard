@@ -171,8 +171,8 @@ addenda of
   saved versions, and every image any of them uses; a path both sides hold
   is surfaced as shadowed rather than renamed. Once the daemon reports
   holding all of it, the old browser record is deleted and the browser keeps a
-  cached replica of the daemon workspace instead (read-only when the daemon
-  is unreachable); continuing from the daemon is a reload the user takes.
+  cached replica of the daemon workspace instead (editable when the daemon
+  is unreachable, its edits sent on reconnect); continuing from the daemon is a reload the user takes.
   If anything could not be verified, the browser copy is kept unchanged and
   the result says so — the two copies do not sync on their own. There is no
   per-document copy: it would re-create each document under a new identity.

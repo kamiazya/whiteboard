@@ -5,8 +5,8 @@
  * This runs at the DESTINATION keeper's origin. `mcp-server` already serves
  * this app from the built dist, so a self-hosted keeper serves this page at
  * its own address without anything new being deployed — which is also what
- * makes the passkey work, since WebAuthn here uses this origin's rpId rather
- * than the sender's.
+ * lets the merge carry the session of the person signed in HERE, since a
+ * keeper's cookie is bound to its own origin rather than the sender's.
  *
  * THE GATE IS THE WHOLE SECURITY STORY, and it is ordered deliberately:
  *

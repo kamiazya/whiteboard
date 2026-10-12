@@ -24,7 +24,7 @@ import {
   readWorkspaceDocuments,
   scanFileReferences,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url, VERSION_LABEL_MAX_LENGTH } from '@kamiazya/whiteboard-model'
+import { bytesToBase64Url, fitToLength, VERSION_LABEL_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { savedVersionReads, savedVersionRows, type VersionRow } from './browser-version-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -49,16 +49,11 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
  * written before the input was bounded still parse — but the promote body is
  * strict, so one over-long label would refuse the whole move. Shortened
  * rather than left behind: a version held back keeps the browser copy, and a
- * label is not worth that. Cut by code point, so an astral character at the
- * bound is dropped whole rather than split into a lone surrogate.
+ * label is not worth that.
  */
 function wireLabel(label: string | undefined): string | undefined {
   if (label === undefined) return undefined
-  let fitted = ''
-  for (const char of label) {
-    if (fitted.length + char.length > VERSION_LABEL_MAX_LENGTH) break
-    fitted += char
-  }
+  const fitted = fitToLength(label, VERSION_LABEL_MAX_LENGTH)
   return fitted === '' ? undefined : fitted
 }
 

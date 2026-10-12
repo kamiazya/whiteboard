@@ -6,18 +6,13 @@ import {
 import { z } from 'zod'
 import { MAX_FILE_UPLOAD_BYTES } from './files.js'
 
-// The web app reads the row's evidence through this barrel and never
-// through server-core (architecture-map.md: server-core is not one of its
-// dependencies). The encoding goes with it: what the browser stores of a
-// pinned credential is validated by the same rule the daemon pinned it under.
 // The carried planes' shapes are server-core's, where the operation that
-// judges them reads them, and are published here for the sender.
+// judges them reads them, and are published here for the sender: the web app
+// never imports server-core (architecture-map.md).
 export type {
-  Attestation,
   PromotedTrashBytes,
   PromotedVersion,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
-export { base64urlSchema }
 
 /**
  * The most a promote request body may carry: the content ceiling, which a

@@ -110,8 +110,7 @@ export type MacaroonVerdict =
 /**
  * JSON-array encoding, so part boundaries are unambiguous: `["ab","c"]` and
  * `["a","bc"]` serialize differently and no length-prefixing scheme is
- * needed. `daemon-identity.ts`'s `buildSignedPayload` solves the same
- * problem the same way; this is its WebCrypto-side twin.
+ * needed.
  */
 function payload(parts: readonly string[]): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(parts))

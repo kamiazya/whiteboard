@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer as createHttpServer } from 'node:http'
 import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -7,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cdpPortRefusal,
+  cdpReadyPort,
   chromiumArgs,
   connectedHostInstall,
   devServerUrl,
@@ -116,8 +118,18 @@ describe('cdpPortRefusal', () => {
     expect(await cdpPortRefusal(0)).toBeUndefined()
   })
 
-  it.each([Number.NaN, 1.5, -1, 70_000])('refuses %s, which is no port at all', async (port) => {
+  it.each([
+    Number.NaN,
+    1.5,
+    -1,
+    65_536,
+    70_000,
+  ])('refuses %s, which is no port at all', async (port) => {
     expect(await cdpPortRefusal(port)).toMatch(/must be a port number/)
+  })
+
+  it('takes the highest port as a port, whether or not it is free', async () => {
+    expect((await cdpPortRefusal(65_535)) ?? '').not.toMatch(/must be a port number/)
   })
 
   // From a directory outside any checkout, so a check that moved below the
@@ -143,6 +155,68 @@ describe('cdpPortRefusal', () => {
       rmSync(cwd, { recursive: true, force: true })
     }
   }, 60_000)
+})
+
+describe('cdpReadyPort', () => {
+  let scratch: string | undefined
+  let held: Server | undefined
+
+  afterEach(async () => {
+    await new Promise((closed) => held?.close(closed) ?? closed(undefined))
+    held = undefined
+    if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true })
+    scratch = undefined
+  })
+
+  it('reads the port Chromium chose for 0 from DevToolsActivePort', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-ready-'))
+
+    expect(await cdpReadyPort({ profileDir: scratch, cdpPort: 0 })).toBeUndefined()
+
+    writeFileSync(join(scratch, 'DevToolsActivePort'), '43681\n/devtools/browser/x\n')
+    expect(await cdpReadyPort({ profileDir: scratch, cdpPort: 0 })).toBe('43681')
+  })
+
+  // Chromium writes DevToolsActivePort only for port 0, so a pinned port is
+  // ready when its endpoint answers, with no file in the profile at all.
+  it('answers a pinned port once its /json/version does, with no DevToolsActivePort', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-ready-'))
+    const server = createHttpServer((req, res) => {
+      if (req.url !== '/json/version') {
+        res.writeHead(404).end()
+        return
+      }
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/browser/x' }))
+    })
+    await new Promise<void>((listening) => server.listen(0, '127.0.0.1', listening))
+    held = server
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('no port')
+
+    expect(await cdpReadyPort({ profileDir: scratch, cdpPort: address.port })).toBe(
+      String(address.port),
+    )
+  })
+
+  it('has no answer for a pinned port that accepts and never replies', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-ready-'))
+    const server = createHttpServer(() => {})
+    await new Promise<void>((listening) => server.listen(0, '127.0.0.1', listening))
+    held = server
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('no port')
+
+    expect(await cdpReadyPort({ profileDir: scratch, cdpPort: address.port })).toBeUndefined()
+  }, 5_000)
+
+  it('has no answer for a pinned port nothing listens on yet', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-ready-'))
+    const { server, port } = await holdAPort()
+    await new Promise((closed) => server.close(closed))
+
+    expect(await cdpReadyPort({ profileDir: scratch, cdpPort: port })).toBeUndefined()
+  })
 })
 
 describe('devServerUrl', () => {

@@ -37,16 +37,17 @@ describe('FakeVersionHistory', () => {
     expect(entry).not.toHaveProperty('branchName')
   })
 
-  test('a saved row carries the live element count and the attestation it was given', async () => {
+  test('a saved row carries the live element count and no attestation', async () => {
     const history = new FakeVersionHistory()
 
     const entry = await history.save('ws', 'notes/plan', docWithNodes(3), {
       auto: false,
+      // @ts-expect-error the port's save options take no attestation: no operation collects one
       attestation: ATTESTATION,
     })
 
     expect(entry.elementCount).toBe(3)
-    expect(entry.attestation).toEqual(ATTESTATION)
+    expect(entry).not.toHaveProperty('attestation')
     expect(await history.list('ws', 'notes/plan')).toEqual([entry])
   })
 

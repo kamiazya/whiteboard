@@ -71,6 +71,9 @@ const workspaceBroadcastSchema = z.discriminatedUnion('type', [
     type: z.literal('document-pinned'),
     documentId: z.string().min(1),
   }),
+  // The whole workspace left this browser, so a page holding its record has
+  // nowhere to write to and locks.
+  z.object({ type: z.literal('workspace-removed') }),
 ])
 
 export type WorkspaceBroadcast = z.infer<typeof workspaceBroadcastSchema>
@@ -166,4 +169,9 @@ export function announceDocumentCreated(workspaceId: string, path: string): void
 /** A pin set or cleared, so a list in this tab or another moves the row. */
 export function announceDocumentPinned(workspaceId: string, documentId: string): void {
   announce(workspaceId, { type: 'document-pinned', documentId })
+}
+
+/** The workspace was removed from this browser, so every page holding its record locks. */
+export function announceWorkspaceRemoved(workspaceId: string): void {
+  announce(workspaceId, { type: 'workspace-removed' })
 }

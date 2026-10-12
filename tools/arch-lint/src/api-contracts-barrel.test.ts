@@ -61,11 +61,9 @@ describe('api-contracts barrel scope', () => {
       // picker sends an id the daemon gave it. Publishing the contract is
       // what keeps a URL out of the request (ADR-0012).
       './fonts.js',
-      // promotion: the promote request/response and the challenge input
-      // both sides hash (ADR-0039), exported so the browser signs exactly
-      // the bytes the daemon recomputes instead of a mirror of them.
+      // promotion: the promote answer the browser reads after a move; the
+      // request it sends is typed from the `./promotion` subpath itself.
       './promotion.js',
-      './runtime.js',
       './v1-answers.js',
     ])
   })
