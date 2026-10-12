@@ -195,7 +195,7 @@ describe('promoteWorkspace, what travels beside the record', () => {
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    expect(daemon.promotes[0]?.trash).toEqual([])
+    expect(daemon.promotes[0]?.trash).toBeUndefined()
     expect(result.leftBehind).toEqual([
       'the trashed document "gone" cannot be read in this browser',
     ])
