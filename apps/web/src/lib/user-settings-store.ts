@@ -1,4 +1,5 @@
 import { tolerantAnswer } from '@kamiazya/whiteboard-daemon-client/api-contracts/tolerant-answer'
+import { fitToLength } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-local-storage.js'
 
@@ -122,7 +123,7 @@ export const LEFT_BEHIND_MAX_CHARS = 500
 export function fitLeftBehind(leftBehind: readonly string[]): string[] {
   return leftBehind
     .slice(0, LEFT_BEHIND_MAX_ENTRIES)
-    .map((reason) => reason.slice(0, LEFT_BEHIND_MAX_CHARS))
+    .map((reason) => fitToLength(reason, LEFT_BEHIND_MAX_CHARS))
 }
 
 /**
