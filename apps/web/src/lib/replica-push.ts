@@ -20,7 +20,10 @@ import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
-import { ReplicaKeyWithheldError } from './sealed-document-store.js'
+import { getAppLogger } from './app-logger.js'
+import { type ReplicaFailure, replicaFailure } from './replica-failure.js'
+
+const log = getAppLogger('replica-push')
 
 export interface PushReplicaEditsOptions {
   fetch: typeof globalThis.fetch
@@ -36,9 +39,7 @@ export interface PushReplicaEditsOptions {
 export type PushReplicaEditsResult =
   | { kind: 'clean' }
   | { kind: 'ok'; syncedAt: string; syncedFrontier: string }
-  /** See `CacheDaemonWorkspaceResult`'s `'withheld'` — the same reconnect-not-retry distinction. */
-  | { kind: 'withheld' }
-  | { kind: 'failed'; reason: string }
+  | ReplicaFailure
 
 export async function pushReplicaEdits(
   options: PushReplicaEditsOptions,
@@ -75,7 +76,6 @@ export async function pushReplicaEdits(
       syncedFrontier: bytesToBase64(current.encode()),
     }
   } catch (err) {
-    if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }
-    return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }
+    return replicaFailure(err, 'push', { log, daemonBaseUrl, workspaceId })
   }
 }
