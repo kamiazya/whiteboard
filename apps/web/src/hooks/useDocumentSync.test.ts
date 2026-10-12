@@ -30,7 +30,15 @@ vi.mock('@kamiazya/whiteboard-canvas-viewer', async (importOriginal) => ({
   withViewerFontEmbedded: embedSpy,
 }))
 
+// The real rasteriser (null under jsdom), so one case can hand back a PNG.
+vi.mock('../lib/rasterize-svg.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/rasterize-svg.js')>()
+  return { rasterizeSvgToPng: vi.fn(actual.rasterizeSvgToPng) }
+})
+
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
+import { extractTextFromPng } from '../lib/png-embed.js'
+import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { applyCommand } from '../lib/spatial/commands.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -767,6 +775,53 @@ describe('useDocumentSync', () => {
       expect(embedSpy).toHaveBeenCalledTimes(1)
       // What it embeds into is the rendered scene, not some other string.
       expect(embedSpy.mock.calls[0]?.[0]).toContain('<svg')
+    })
+
+    it('carries the canvas source inside an exported png, under the whiteboard key', async () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useDocumentSync(backend))
+      await hydrate(backend, TEXT_CANVAS)
+      // One transparent pixel: the rasteriser's answer where a real Canvas 2D exists.
+      const pixel = Uint8Array.from(
+        atob(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        ),
+        (c) => c.charCodeAt(0),
+      )
+      vi.mocked(rasterizeSvgToPng).mockResolvedValueOnce(new Blob([pixel], { type: 'image/png' }))
+
+      let png: Blob | null = null
+      await act(async () => {
+        png = await result.current.exportScene('png', { kind: 'spatial' })
+      })
+
+      const bytes = new Uint8Array(await (png as Blob | null)!.arrayBuffer())
+      const source = extractTextFromPng(bytes, 'whiteboard')
+      expect(source).toContain('"n-a"')
+      expect(source).toContain('hello')
+    })
+
+    it('draws a markdown document from its body, not from a canvas it does not have', async () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useDocumentSync(backend))
+      const doc = new LoroDoc()
+      doc.getText('body').insert(0, 'Weekly notes')
+      doc.commit()
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+        await vi.runAllTimersAsync()
+      })
+
+      let markdown: Blob | null = null
+      let spatial: Blob | null = null
+      await act(async () => {
+        markdown = await result.current.exportScene('svg', { kind: 'markdown' })
+        spatial = await result.current.exportScene('svg', { kind: 'spatial' })
+      })
+
+      expect(markdown).toEqual(expect.objectContaining({ type: 'image/svg+xml' }))
+      expect(await (markdown as Blob | null)?.text()).toContain('Weekly')
+      expect(await (spatial as Blob | null)?.text()).not.toContain('Weekly')
     })
 
     it('derives the svg from the empty canvas (still non-null) before any snapshot has arrived', async () => {
