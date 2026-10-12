@@ -100,7 +100,7 @@ function ReplicaCacheNotice({
   const age = formatRelative(replica.syncedAt)
   return (
     <p data-testid="replica-cache-notice" className="text-muted-foreground">
-      A copy of this workspace is cached in this browser, and opens read-only when the daemon cannot
+      A copy of this workspace is cached in this browser, and stays editable when the daemon cannot
       be reached.{age === '' ? '' : ` Last synced ${age}.`}
     </p>
   )

@@ -195,8 +195,8 @@ the move finishes, and the browser copy is kept so nothing is lost.
 Once the daemon confirms it holds every document, image, trashed document
 and saved version that moved, the old browser copy is removed — its Trash
 and saved versions with it: the daemon is the workspace's one keeper, and this browser
-keeps a **cached replica** instead — it opens read-only when the daemon
-cannot be reached, so your data stays viewable offline. The replica holds
+keeps a **cached replica** instead — it stays editable when the daemon
+cannot be reached, and your edits reach the daemon when it returns. The replica holds
 the images its documents show too, up to 64 MiB per workspace; an image past
 that limit, or one the daemon could not serve when the replica last synced,
 reads *Image unavailable offline* until a later sync can fetch it. What the

@@ -550,7 +550,7 @@ export function PromoteWorkspaceSection({
                   the existing one is marked shadowed — nothing is renamed or overwritten. Once the
                   daemon is confirmed to hold all of it, the old copy here is removed; if anything
                   could not be moved, the copy stays and the report says what. This browser keeps a
-                  cached replica that opens read-only when the daemon cannot be reached.
+                  cached replica you can keep editing when the daemon cannot be reached.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-1.5">

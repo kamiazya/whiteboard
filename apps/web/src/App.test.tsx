@@ -222,7 +222,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     })
   })
 
-  it('serves the replica read-only when the daemon is unreachable and a replica exists', async () => {
+  it('serves the replica when the daemon is unreachable and a replica exists', async () => {
     // ADR-0023's offline read: the address names a daemon workspace this
     // browser holds a replica of, the daemon cannot be reached, so the
     // replica page serves it — addressed by SEGMENT, resolved to the
