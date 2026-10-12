@@ -37,7 +37,7 @@ import { BROWSER_DEFAULT_SEGMENT } from './browser-idb.js'
 /** A canonical id no fixture mints, so a save under it can only be the bug. */
 const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
 
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
@@ -112,6 +112,7 @@ function editAsSession(snapshotBytes: Uint8Array, documentId: string, nodeId: st
 describe('BrowserBackend', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
+    await registerTestWorkspace()
   })
   afterEach(async () => {
     await clearWhiteboardDb()
@@ -342,10 +343,12 @@ describe('BrowserBackend', () => {
     expect(logged.join('\n')).toContain('[browser-backend] the trash holds this document')
   })
 
-  it('disconnect() is idempotent — second call does not throw', () => {
+  it('disconnect() is idempotent — second call does not throw', async () => {
     const backend = new BrowserBackend(target(ID_A))
     const handlers = makeHandlers()
-    backend.connect(handlers)
+    // Connected first: a connect still writing when the next clear deletes
+    // the database would write the record into one with no workspace in it.
+    await connectAndWait(backend, handlers)
     backend.disconnect()
     expect(() => backend.disconnect()).not.toThrow()
   })

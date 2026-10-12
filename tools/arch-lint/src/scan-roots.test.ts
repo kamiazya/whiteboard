@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,12 +7,17 @@ import {
   EXCLUDED_DIR_SEGMENTS,
   isExcludedPath,
   REPO_ROOT,
+  REPO_SOURCE_ROOTS,
+  REPO_SOURCE_SKIPPED_DIRS,
+  readRepoSources,
+  readWorkspaceEntries,
   SCAN_ROOTS,
   scriptFiles,
   WORKTREES_PATH,
   walk,
   workspaceDirs,
 } from './scan-roots.js'
+import { trackedFiles } from './tracked-files.js'
 
 describe('scan roots', () => {
   it('reaches every app, package and tool source tree', () => {
@@ -131,5 +137,77 @@ describe('walk', () => {
       const found = walk(root, { skip: (_path, name) => name === 'skipped' || name === '.git' })
       expect(names(root, found)).toEqual(['a/deep/two.test.ts', 'a/one.ts'])
     })
+  })
+})
+
+describe('readRepoSources', () => {
+  const sources = readRepoSources()
+
+  it('names only roots that exist, and reads source under each that holds any', () => {
+    // A root that does not exist reads like coverage and reaches nothing, the
+    // way an exclusion that names a missing directory excuses nothing.
+    expect(REPO_SOURCE_ROOTS.filter((root) => !existsSync(join(REPO_ROOT, root)))).toEqual([])
+    for (const root of [
+      'apps',
+      'packages',
+      'tools',
+      'tests',
+      '.claude/scripts',
+      '.claude/workflows',
+    ]) {
+      expect(
+        sources.some((file) => file.path.startsWith(`${root}/`)),
+        root,
+      ).toBe(true)
+    }
+    expect(sources.length).toBeGreaterThan(2500)
+    expect(sources.some((file) => /\.d\.m?ts$/.test(file.path))).toBe(false)
+    expect(sources.some((file) => file.path.includes('/migrations/'))).toBe(false)
+  })
+})
+
+describe('readWorkspaceEntries', () => {
+  it('maps every package entry to the source file it lands on', () => {
+    const entries = readWorkspaceEntries()
+    expect(entries.size).toBeGreaterThan(40)
+    expect(entries.get('@kamiazya/whiteboard-ports')).toBe('packages/ports/src/index.ts')
+  })
+})
+
+// A name in the skip set is a directory the walk would otherwise enter: one
+// git tracks (`migrations`) or one it ignores (build output, a nested checkout).
+// A name that is neither skips nothing and reads exactly like a skip in force.
+describe('the directories readRepoSources skips', () => {
+  // `.git` is git's own, and a nested checkout's is a file git never lists.
+  const GIT_METADATA = '.git'
+  const PREFIXES = ['', '.claude/', ...REPO_SOURCE_ROOTS.map((dir) => `${dir}/`)]
+
+  it('each exist as a tracked directory or are ignored by git', () => {
+    const tracked = new Set(
+      trackedFiles(REPO_ROOT, ...REPO_SOURCE_ROOTS).flatMap((file) => file.split('/').slice(0, -1)),
+    )
+    const probes = [...REPO_SOURCE_SKIPPED_DIRS].flatMap((name) =>
+      PREFIXES.map((prefix) => ({ name, path: `${prefix}${name}/probe` })),
+    )
+    const ignored = new Set(
+      spawnSync('git', ['check-ignore', '--stdin'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        input: probes.map((probe) => probe.path).join('\n'),
+      })
+        .stdout.split('\n')
+        .filter((line) => line !== ''),
+    )
+    const stale = [...REPO_SOURCE_SKIPPED_DIRS].filter(
+      (name) =>
+        name !== GIT_METADATA &&
+        !tracked.has(name) &&
+        !probes.some((probe) => probe.name === name && ignored.has(probe.path)),
+    )
+    expect(
+      stale,
+      'drop the name from REPO_SOURCE_SKIPPED_DIRS: nothing by that name is tracked or ignored',
+    ).toEqual([])
+    expect(tracked.size).toBeGreaterThan(100)
   })
 })

@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { workspaceEntries } from './module-exports-resolve.js'
 
 /**
  * What a source scan needs to know about THIS checkout before it reads a
@@ -40,6 +41,68 @@ export function workspaceDirs(): string[] {
       .map((entry) => `${group}/${entry.name}`)
       .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
   )
+}
+
+/**
+ * Every exported package entry (`@kamiazya/whiteboard-x/sub`) mapped to the
+ * repo path of the source file it lands on, read from each workspace manifest.
+ */
+export function readWorkspaceEntries(): Map<string, string> {
+  return workspaceEntries(
+    workspaceDirs().map((dir) => ({
+      dir,
+      text: readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf8'),
+    })),
+  )
+}
+
+/**
+ * Every tree that may hold a file importing a workspace package: the
+ * workspaces, the smokes under `tests/`, and the dev tooling and skills under
+ * `.claude/` and `skills/`. Shared by every "has this export got an importer"
+ * guard, so they cannot disagree about which files count as one; a guard that
+ * read fewer roots would tell someone to delete a name a skipped root uses.
+ */
+export const REPO_SOURCE_ROOTS: readonly string[] = [
+  'apps',
+  'packages',
+  'tools',
+  'tests',
+  '.claude/scripts',
+  '.claude/workflows',
+  '.claude/skills',
+  'skills',
+]
+
+/**
+ * Directory names `readRepoSources` never enters: build output, caches,
+ * nested checkouts, and `migrations` — history whose imports are frozen at
+ * the point it was written, so a use there keeps nothing alive.
+ */
+export const REPO_SOURCE_SKIPPED_DIRS: ReadonlySet<string> = new Set([
+  'node_modules',
+  'dist',
+  'tmp',
+  '.git',
+  'worktrees',
+  'coverage',
+  'migrations',
+])
+
+/** A source file as the importer guards read it: repo-relative path and text. */
+export interface RepoSource {
+  readonly path: string
+  readonly text: string
+}
+
+/** Every source file under `REPO_SOURCE_ROOTS`, declaration files aside, with its text. */
+export function readRepoSources(): RepoSource[] {
+  return REPO_SOURCE_ROOTS.flatMap((root) =>
+    walk(join(REPO_ROOT, root), {
+      include: (path) => /\.(tsx?|mts|mjs|js|cjs)$/.test(path) && !/\.d\.m?ts$/.test(path),
+      skip: (_path, name) => REPO_SOURCE_SKIPPED_DIRS.has(name),
+    }),
+  ).map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
 }
 
 /** The `<sub>` directory of every package/tool matching a `<group>/*` glob that has one. */

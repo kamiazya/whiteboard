@@ -12,7 +12,7 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { BrowserBackend } from './browser-backend.js'
@@ -23,7 +23,10 @@ const DOCUMENT_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 // handler call, not on the clock.
 const WAIT_TIMEOUT = 10_000
 
-beforeEach(clearWhiteboardDb)
+beforeEach(async () => {
+  await clearWhiteboardDb()
+  await registerTestWorkspace()
+})
 afterEach(clearWhiteboardDb)
 
 function makeHandlers(): DocumentBackendHandlers {

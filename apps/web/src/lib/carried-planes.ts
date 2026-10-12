@@ -27,6 +27,7 @@ import {
 import { bytesToBase64Url, fitToLength, VERSION_LABEL_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { savedVersionReads, savedVersionRows, type VersionRow } from './browser-version-store.js'
+import { countOf, planeCounts } from './count-wording.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 
 type FileReferenceScan = Awaited<ReturnType<typeof scanFileReferences>>
@@ -41,8 +42,6 @@ export interface CarriedPlanes {
   /** The scan the planes were judged by — the images a move must also carry. */
   readonly scan: FileReferenceScan
 }
-
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
 /**
  * A stored label as the wire takes it. A row is read leniently — labels
@@ -118,7 +117,7 @@ export async function readCarriedPlanes(
   )
   if (unjudgedVersions.size > 0) {
     leftBehind.push(
-      `${plural(unjudgedVersions.size, 'saved version', 'saved versions')} could not be read`,
+      `${countOf(unjudgedVersions.size, 'saved version', 'saved versions')} could not be read`,
     )
   }
   if (scan.unjudged.some((held) => held.kind === 'unreadable-node')) {
@@ -185,12 +184,5 @@ export function unconfirmedPlanes(
   const kept = new Set(answer.versionsKept)
   const trash = (sent.trash ?? []).filter((carried) => !stored.has(carried.documentId)).length
   const versions = (sent.versions ?? []).filter((version) => !kept.has(version.id)).length
-  return [
-    ...(trash === 0
-      ? []
-      : [`${plural(trash, 'trashed document', 'trashed documents')} did not reach ${keeper}`]),
-    ...(versions === 0
-      ? []
-      : [`${plural(versions, 'saved version', 'saved versions')} did not reach ${keeper}`]),
-  ]
+  return planeCounts({ trash, versions }).map((phrase) => `${phrase} did not reach ${keeper}`)
 }

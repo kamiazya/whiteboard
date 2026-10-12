@@ -38,19 +38,9 @@
  * test reaches only through a helper that hides the import is not counted as
  * test use.
  */
-import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { workspaceEntries } from './module-exports-resolve.js'
-import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
-import {
-  findTestOnlyExports,
-  isTestFile,
-  type ScannedFile,
-  type TestOnlyClass,
-} from './test-only-exports-scan.js'
-import { trackedFiles } from './tracked-files.js'
+import { readRepoSources, readWorkspaceEntries } from './scan-roots.js'
+import { findTestOnlyExports, isTestFile, type TestOnlyClass } from './test-only-exports-scan.js'
 
 /** Dead outright: not even used inside their own file, only imported by a test. */
 const NO_USE_BESIDE_TESTS: readonly string[] = []
@@ -361,87 +351,6 @@ const DEBT_CEILING = 152
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 24
 
-const DIRS = [
-  'apps',
-  'packages',
-  'tools',
-  'tests',
-  'scripts',
-  '.claude/scripts',
-  '.claude/workflows',
-  '.claude/skills',
-  'skills',
-]
-const SKIPPED_DIRS = new Set([
-  'node_modules',
-  'dist',
-  'tmp',
-  '.git',
-  'worktrees',
-  'coverage',
-  'migrations',
-])
-
-function readRepoFiles(): ScannedFile[] {
-  return DIRS.filter((dir) => existsSync(join(REPO_ROOT, dir)))
-    .flatMap((dir) =>
-      walk(join(REPO_ROOT, dir), {
-        include: (path) => /\.(tsx?|mjs|js|cjs)$/.test(path) && !path.endsWith('.d.ts'),
-        skip: (_path, name) => SKIPPED_DIRS.has(name),
-      }),
-    )
-    .map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
-}
-
-function readWorkspaceEntries(): Map<string, string> {
-  const manifests = ['apps', 'packages'].flatMap((group) =>
-    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => `${group}/${entry.name}`)
-      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json')))
-      .map((dir) => ({ dir, text: readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf8') })),
-  )
-  return workspaceEntries(manifests)
-}
-
-// A name in the skip set is a directory this walk would otherwise enter: one
-// git tracks (`migrations`) or one it ignores (build output, a nested checkout).
-// A name that is neither skips nothing and reads exactly like a skip in force.
-describe('the directories the walk skips', () => {
-  // `.git` is git's own, and a nested checkout's is a file git never lists.
-  const GIT_METADATA = '.git'
-  const PREFIXES = ['', '.claude/', ...DIRS.map((dir) => `${dir}/`)]
-
-  it('each exist as a tracked directory or are ignored by git', () => {
-    const tracked = new Set(
-      trackedFiles(REPO_ROOT, ...DIRS).flatMap((file) => file.split('/').slice(0, -1)),
-    )
-    const probes = [...SKIPPED_DIRS].flatMap((name) =>
-      PREFIXES.map((prefix) => ({ name, path: `${prefix}${name}/probe` })),
-    )
-    const ignored = new Set(
-      spawnSync('git', ['check-ignore', '--stdin'], {
-        cwd: REPO_ROOT,
-        encoding: 'utf8',
-        input: probes.map((probe) => probe.path).join('\n'),
-      })
-        .stdout.split('\n')
-        .filter((line) => line !== ''),
-    )
-    const stale = [...SKIPPED_DIRS].filter(
-      (name) =>
-        name !== GIT_METADATA &&
-        !tracked.has(name) &&
-        !probes.some((probe) => probe.name === name && ignored.has(probe.path)),
-    )
-    expect(
-      stale,
-      'drop the name from SKIPPED_DIRS: nothing by that name is tracked or ignored',
-    ).toEqual([])
-    expect(tracked.size).toBeGreaterThan(100)
-  })
-})
-
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>
     findTestOnlyExports(Object.entries(files).map(([path, text]) => ({ path, text }))).map(
@@ -657,7 +566,7 @@ describe('what counts as an export only a test uses, on fixture files', () => {
 })
 
 describe('exports only a test uses are held from both sides', () => {
-  const files = readRepoFiles()
+  const files = readRepoSources()
   const entries = readWorkspaceEntries()
   const found = findTestOnlyExports(files, entries)
   const classOf = new Map(found.map(({ key, class: cls }) => [key, cls]))

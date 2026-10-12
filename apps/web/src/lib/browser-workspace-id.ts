@@ -234,6 +234,29 @@ export async function switchBrowserWorkspace(
 }
 
 /**
+ * Moves the active workspace off one this browser no longer keeps — the half
+ * of a move to a daemon that every OTHER tab needs, since the demoting tab
+ * re-points itself. Answers the identity it moved to, or null when the active
+ * workspace is not `removedId` (another caller already moved it) or no other
+ * workspace is left to move to.
+ *
+ * First-listed, as the demote itself chooses: the person did not ask to go
+ * anywhere, so there is no address to honour, only somewhere true to be.
+ */
+export async function leaveRemovedWorkspace(
+  removedId: string,
+  dbName?: string,
+): Promise<BrowserWorkspaceIdentity | null> {
+  const onRemoved = () => state.kind === 'resolved' && state.identity.workspaceId === removedId
+  if (!onRemoved()) return null
+  const next = (await readRegistryEntries(dbName)).find((entry) => entry.workspaceId !== removedId)
+  if (next === undefined || !onRemoved()) return null
+  inFlight = null
+  setResolutionState({ kind: 'resolved', identity: next })
+  return next
+}
+
+/**
  * The id, or null when it is unavailable.
  *
  * For a caller whose own failure path is already a null — a deep link that

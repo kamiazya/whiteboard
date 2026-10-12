@@ -32,6 +32,7 @@ import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard
 import { afterAllFloor, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { applyCommand } from '../../lib/spatial/commands.js'
+import { freehandLine } from '../../lib/spatial/freehand.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { deleteInkCommand } from '../../lib/spatial/ink-commands.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -308,6 +309,87 @@ const PLACED: Record<ContentKind, fc.Arbitrary<Placed>> = {
  */
 const placedArb = fc.oneof(...Object.values(PLACED))
 
+/** One stroke of `mark`, drawn at its own x so no two strokes overlap. */
+const markStroke = (id: string, x: number, mark = 'mark'): CanvasLine => {
+  const line = freehandLine(
+    id,
+    [
+      { x, y: 0 },
+      { x: x + 20, y: 20 },
+      { x: x + 40, y: 0 },
+    ],
+    1,
+    mark,
+  )
+  if (line === undefined) throw new Error(`stroke ${id} was read as a tap`)
+  return line
+}
+
+describe('shift over a handwritten mark', () => {
+  it('completes a partly-held mark rather than dropping the strokes already held', () => {
+    const lines = [markStroke('a', 0), markStroke('b', 100)]
+    const shift = shiftPress({ kind: 'lines', id: 'a' }, ['b'], lines, withGroupMates)
+    expect(shift).toEqual({ kind: 'paths', ids: ['b', 'a'] })
+  })
+
+  const drawn = { partlyHeld: 0, wholeHeld: 0, unheld: 0 }
+
+  fcTest.prop(
+    [
+      fc
+        .integer({ min: 2, max: 4 })
+        .chain((strokes) =>
+          fc.tuple(
+            fc.constant(strokes),
+            fc.array(fc.boolean(), { minLength: strokes, maxLength: strokes }),
+            fc.nat({ max: strokes - 1 }),
+          ),
+        ),
+      fc.subarray(['other-1', 'other-2']),
+    ],
+    withDefaults(),
+  )(
+    'the pressed mark is wholly in the answer or wholly out of it, and nothing else held moves',
+    ([strokes, heldFlags, pressed], others) => {
+      const ids = Array.from({ length: strokes }, (_, i) => `s-${i}`)
+      const lines = [
+        ...ids.map((id, i) => markStroke(id, i * 100)),
+        ...others.map((id, i) => markStroke(id, 1000 + i * 100, id)),
+      ]
+      const heldMark = ids.filter((_, i) => heldFlags[i])
+      const held = [...others, ...heldMark]
+      const shift = shiftPress(
+        { kind: 'lines', id: ids[pressed] as string },
+        held,
+        lines,
+        withGroupMates,
+      )
+      expect(shift.kind).toBe('paths')
+      if (shift.kind !== 'paths') return
+      const inAnswer = ids.filter((id) => shift.ids.includes(id))
+      // Toggle by the MARK: a press on any stroke of a mark held whole
+      // removes all of it, and on any other mark adds all of it.
+      const wholeHeld = heldMark.length === strokes
+      expect(inAnswer).toEqual(wholeHeld ? [] : ids)
+      for (const other of others) expect(shift.ids).toContain(other)
+      if (wholeHeld) drawn.wholeHeld += 1
+      else if (heldMark.length === 0) drawn.unheld += 1
+      else drawn.partlyHeld += 1
+    },
+  )
+
+  afterAllFloor(
+    ['the pressed mark is wholly in the answer or wholly out of it, and nothing else held moves'],
+    () => {
+      // A partly-held mark is the arrangement the subset statement above
+      // cannot tell grow from shrink, so the run must actually draw it.
+      expect(drawn.partlyHeld).toBeGreaterThan(0)
+      expect(drawn.wholeHeld).toBeGreaterThan(0)
+      expect(drawn.unheld).toBeGreaterThan(0)
+    },
+  )
+})
+
 describe('every element kind, through every surface that has to know about it', () => {
   fcTest.prop([placedArb], withDefaults())(
     'a press on an element of any content kind answers that element',
@@ -362,6 +444,10 @@ describe('every element kind, through every surface that has to know about it', 
     (placed, held) => {
       const pick = pickContentAt(pressProbes(placed.inputs(false)), placed.on)
       const shift = shiftPress(pick, held, placed.canvas.lines, withGroupMates)
+      // The ARM is part of the answer, not only the ids: a node toggles in
+      // the caller's node selection and everything else in the shared path
+      // selection, so a swapped arm would put a node id among the paths.
+      expect(shift.kind).toBe(placed.kind === 'nodes' ? 'nodes' : 'paths')
       switch (shift.kind) {
         case 'nodes':
           expect(shift.id).toBe(placed.id)

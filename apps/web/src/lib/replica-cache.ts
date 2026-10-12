@@ -23,7 +23,7 @@ import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
-import { forgetReplicaCopy } from './browser-workspace-removal.js'
+import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
 import { cacheReplicaImages } from './replica-images.js'
 import { markReplica, replicaKeyStatus } from './replica-store.js'
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from './sealed-document-store.js'
@@ -76,9 +76,9 @@ export type CacheDaemonWorkspaceResult =
  * it is impossible and keeping it is pointless: it is dropped and the pull
  * stands alone. Offline edits that were not yet sent go with it; they were
  * unreadable already, and the alternative was a pull that fails for good while
- * the copy goes on reading as damaged. Deleted as every replica copy is
- * (`forgetReplicaCopy`), wrapped key included — it opens a key generation
- * that no longer matches anything on this device.
+ * the copy goes on reading as damaged. Deleted as every replica copy is,
+ * wrapped key included — it opens a key generation that no longer matches
+ * anything on this device.
  */
 async function openForMerge(
   workspaceDocs: WorkspaceDocs,
@@ -93,7 +93,7 @@ async function openForMerge(
       daemonBaseUrl,
       workspaceId,
     })
-    await forgetReplicaCopy(createUserSettingsStore(), workspaceId, daemonBaseUrl)
+    await discardRotatedReplicaCopy(createUserSettingsStore(), workspaceId, daemonBaseUrl)
     return new LoroDoc()
   }
 }

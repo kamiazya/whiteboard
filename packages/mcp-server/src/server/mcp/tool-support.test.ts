@@ -1,4 +1,5 @@
-import type { McpServer } from '@modelcontextprotocol/server'
+import { Client } from '@modelcontextprotocol/client'
+import { InMemoryTransport, McpServer, type RequestId } from '@modelcontextprotocol/server'
 import { trace } from '@opentelemetry/api'
 import {
   BasicTracerProvider,
@@ -22,6 +23,7 @@ describe('registerToolWithAnnotations', () => {
       server,
       'canvas_view',
       {
+        inputSchema: {},
         outputSchema: z.object({ ok: z.boolean() }),
         _meta: { ui: { resourceUri: 'ui://whiteboard/canvas-view' } },
       },
@@ -41,7 +43,7 @@ describe('registerToolWithAnnotations', () => {
     registerToolWithAnnotations(
       server,
       'canvas_open',
-      { outputSchema: z.object({ ok: z.boolean() }) },
+      { inputSchema: {}, outputSchema: z.object({ ok: z.boolean() }) },
       async () => ({ structuredContent: { ok: true }, content: [] }),
     )
 
@@ -57,7 +59,7 @@ describe('registerToolWithAnnotations', () => {
     registerToolWithAnnotations(
       server,
       'zz_unprofiled_tool',
-      { outputSchema: z.object({ ok: z.boolean() }) },
+      { inputSchema: {}, outputSchema: z.object({ ok: z.boolean() }) },
       async () => ({ structuredContent: { ok: true }, content: [] }),
     )
 
@@ -125,28 +127,42 @@ describe('a tool call span', () => {
     trace.disable()
   })
 
+  // Driven through a real McpServer and client so the request context is the
+  // one the installed SDK actually passes, not a shape the test builds itself.
   it('carries the MCP semantic-convention method, tool and request attributes', async () => {
     const exporter = new InMemorySpanExporter()
     const provider = new BasicTracerProvider({
       spanProcessors: [new SimpleSpanProcessor(exporter)],
     })
     trace.setGlobalTracerProvider(provider)
-    const server = fakeServer()
-    registerToolWithAnnotations(server, 'canvas_open', {}, async () => ({ content: [] }))
+    const server = new McpServer({ name: 'tool-span', version: '0.0.0' })
+    registerToolWithAnnotations(server, 'canvas_open', { inputSchema: {} }, async () => ({
+      content: [],
+    }))
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
+    await server.connect(serverSide)
+    const client = new Client({ name: 'tool-span', version: '0.0.0' })
+    await client.connect(clientSide)
 
-    const traced = vi.mocked(server.registerTool).mock.calls[0]?.[2] as unknown as (
-      args: unknown,
-      extra: { requestId: number },
-    ) => Promise<unknown>
-    await traced({}, { requestId: 7 })
+    const sentIds: RequestId[] = []
+    const send = clientSide.send.bind(clientSide)
+    clientSide.send = async (message, options) => {
+      if ('method' in message && message.method === 'tools/call' && 'id' in message) {
+        sentIds.push(message.id)
+      }
+      return send(message, options)
+    }
+    await client.callTool({ name: 'canvas_open', arguments: {} })
+    await client.close()
 
     const [span] = exporter.getFinishedSpans()
     await provider.shutdown()
+    expect(sentIds).toHaveLength(1)
     expect(span?.name).toBe('mcp.tool.call canvas_open')
     expect(span?.attributes).toEqual({
       'mcp.method.name': 'tools/call',
       'mcp.tool.name': 'canvas_open',
-      'mcp.request.id': '7',
+      'mcp.request.id': String(sentIds[0]),
     })
   })
 })

@@ -10,6 +10,8 @@ export interface ReplicaSaveQueue<Doc> {
   flush(): void
   /** Saves the latest scheduled record again, now; the answer to a `failed` health. */
   retry(): void
+  /** Drops what is pending and takes nothing more: the record has nowhere left to go. */
+  stop(): void
 }
 
 export interface ReplicaSaveQueueOptions<Doc> {
@@ -19,6 +21,25 @@ export interface ReplicaSaveQueueOptions<Doc> {
 }
 
 const DEFAULT_DEBOUNCE_MS = 500
+
+/** Each save after the one before it, reporting whether it landed. */
+function sequentialSaves<Doc>(
+  save: ReplicaSaveQueueOptions<Doc>['save'],
+  onHealth: ReplicaSaveQueueOptions<Doc>['onHealth'],
+): (record: Doc) => void {
+  let chain: Promise<void> = Promise.resolve()
+  return (record) => {
+    chain = chain
+      .then(() => save(record))
+      .then(
+        () => onHealth('ok'),
+        (error: unknown) => {
+          getAppLogger('replica-save-queue').error('replica save failed', error)
+          onHealth('failed')
+        },
+      )
+  }
+}
 
 /**
  * The replica page's save queue: one trailing debounce over a sequential
@@ -40,42 +61,39 @@ export function createReplicaSaveQueue<Doc>({
   debounceMs = DEFAULT_DEBOUNCE_MS,
 }: ReplicaSaveQueueOptions<Doc>): ReplicaSaveQueue<Doc> {
   let timer: ReturnType<typeof setTimeout> | null = null
-  let chain: Promise<void> = Promise.resolve()
   let latest: Doc | null = null
+  let stopped = false
+  const saveNow = sequentialSaves(save, onHealth)
 
-  const saveNow = (record: Doc): void => {
-    chain = chain
-      .then(() => save(record))
-      .then(
-        () => onHealth('ok'),
-        (error: unknown) => {
-          getAppLogger('replica-save-queue').error('replica save failed', error)
-          onHealth('failed')
-        },
-      )
+  /** Cancels the debounced save, answering whether one was waiting. */
+  const cancelTimer = (): boolean => {
+    if (timer === null) return false
+    clearTimeout(timer)
+    timer = null
+    return true
   }
 
   return {
     schedule(record) {
+      if (stopped) return
       latest = record
-      if (timer !== null) clearTimeout(timer)
+      cancelTimer()
       timer = setTimeout(() => {
         timer = null
         saveNow(record)
       }, debounceMs)
     },
     flush() {
-      if (timer === null) return
-      clearTimeout(timer)
-      timer = null
-      if (latest !== null) saveNow(latest)
+      if (cancelTimer() && latest !== null) saveNow(latest)
     },
     retry() {
-      if (timer !== null) {
-        clearTimeout(timer)
-        timer = null
-      }
+      cancelTimer()
       if (latest !== null) saveNow(latest)
+    },
+    stop() {
+      stopped = true
+      latest = null
+      cancelTimer()
     },
   }
 }

@@ -21,10 +21,12 @@
  * second copy anywhere.
  */
 
+import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
+import { openDocumentStore } from '../../lib/replica-store.js'
 import { withReplicaEntry } from '../../lib/replicas.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -36,10 +38,15 @@ claimIsolatedWhiteboardDb('localcopiescard')
 const KEPT = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const OTHER = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
 
+/**
+ * A record already on disk, written past the app's own mint guard: a record
+ * is minted only under an id something here holds, and these are bytes the
+ * card has to cope with whatever claims them.
+ */
 async function seedRecord(workspaceId: string) {
   const doc = new LoroDoc()
   doc.getMap('meta').set('workspaceId', workspaceId)
-  await new BrowserWorkspaceDocs().save(workspaceId, doc)
+  await new DocumentStoreWorkspaceDocs(openDocumentStore()).save(workspaceId, doc)
 }
 
 function seedClaim(workspaceId: string, displayName: string) {

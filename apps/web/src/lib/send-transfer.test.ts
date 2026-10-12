@@ -358,8 +358,8 @@ describe('sending a transfer through a window at the destination', () => {
       nonce: NONCE,
     })
     await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
-    // A keeper whose page predates the planes strips them from the offer and
-    // answers without a report of them.
+    // `leftBehind` is optional on the wire, so a receiver may answer without
+    // a report of the planes; absence must not read as everything kept.
     arrive(KEEPER, {
       type: 'transfer-result',
       nonce: NONCE,
@@ -372,6 +372,77 @@ describe('sending a transfer through a window at the destination', () => {
       ok: true,
       leftBehind: [
         'the keeper did not report keeping the 1 saved version sent, so it may not have them — update it and send again',
+      ],
+    })
+  })
+
+  it('names unreported trash on its own when no version was sent', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer({
+      ...baseOptions(popup),
+      payload: Promise.resolve({
+        ...withOneVersion(),
+        trash: [{ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAW', bytes: 'AA' }],
+        versions: [],
+      }),
+    })
+    arrive(KEEPER, {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    })
+    await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: ['a'],
+      shadowedPaths: [],
+    })
+    await expect(sent).resolves.toMatchObject({
+      ok: true,
+      leftBehind: [
+        'the keeper did not report keeping the 1 trashed document sent, so it may not have them — update it and send again',
+      ],
+    })
+  })
+
+  it('names every unreported plane in one sentence, counted in the plural', async () => {
+    const popup = fakePopup()
+    const twoVersions = withOneVersion().versions.flatMap((version) => [
+      version,
+      { ...version, id: 'v-2' },
+    ])
+    const sent = sendTransfer({
+      ...baseOptions(popup),
+      payload: Promise.resolve({
+        ...withOneVersion(),
+        trash: [
+          { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAW', bytes: 'AA' },
+          { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAX', bytes: 'AA' },
+        ],
+        versions: twoVersions,
+      }),
+    })
+    arrive(KEEPER, {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    })
+    await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: ['a'],
+      shadowedPaths: [],
+    })
+    await expect(sent).resolves.toMatchObject({
+      ok: true,
+      leftBehind: [
+        'the keeper did not report keeping the 2 trashed documents and 2 saved versions sent, so it may not have them — update it and send again',
       ],
     })
   })

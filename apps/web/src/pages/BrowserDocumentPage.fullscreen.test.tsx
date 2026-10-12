@@ -10,6 +10,8 @@
 import 'fake-indexeddb/auto'
 import { act, cleanup, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -59,6 +61,9 @@ function setFullscreenElement(el: Element | null) {
 }
 
 async function renderLoaded() {
+  // The backend writes the workspace record, which is minted only under a
+  // workspace the registry holds; the in-memory double registers none.
+  await new FoldingBrowserIndex().createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)

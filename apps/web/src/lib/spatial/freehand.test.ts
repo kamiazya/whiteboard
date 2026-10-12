@@ -61,6 +61,14 @@ describe('freehandLine', () => {
     expect(freehandLine('ink-1', [], 1)).toBeUndefined()
   })
 
+  // Literal lengths rather than the constant plus one: a fixture derived from
+  // the floor moves with it, so a floor raised past a dot or a short tick of
+  // handwriting would discard real ink with this file still green.
+  it('keeps a ten-pixel tick as ink and reads a one-pixel wobble as a tap', () => {
+    expect(freehandLine('ink-1', [at(0, 0), at(10, 0)], 1)).toBeDefined()
+    expect(freehandLine('ink-1', [at(0, 0), at(1, 0)], 1)).toBeUndefined()
+  })
+
   it('measures the tap floor in screen pixels, so zoom cannot redefine a tap', () => {
     // The same travel in DOCUMENT units: comfortably a stroke at zoom 1, and
     // a third of a screen pixel — a tap — when the board is drawn at a

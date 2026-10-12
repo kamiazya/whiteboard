@@ -152,4 +152,18 @@ describe('createReplicaSaveQueue', () => {
 
     expect(save).not.toHaveBeenCalled()
   })
+
+  it('stop drops the save still waiting and takes no more', async () => {
+    const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+    const { queue } = setup(save)
+    queue.schedule('a')
+
+    queue.stop()
+    queue.schedule('b')
+    queue.flush()
+    queue.retry()
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(save).not.toHaveBeenCalled()
+  })
 })

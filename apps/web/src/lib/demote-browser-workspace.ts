@@ -94,6 +94,10 @@ export async function demoteBrowserWorkspace(
       docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
     }),
   )
+  // Keyed by the source id alone, so a record that will not open does not keep them.
+  await bestEffort(sourceWorkspaceId, 'version rows', () =>
+    deleteVersionRowsOfWorkspace(sourceWorkspaceId, dbName),
+  )
   if (residue !== null) await discardResidue(sourceWorkspaceId, residue, remaining, dbName)
 }
 
@@ -162,8 +166,15 @@ interface Residue {
 }
 
 async function residueOf(workspaceId: string, dbName?: string): Promise<Residue | null> {
-  // Unreadable means unjudgeable: leave the residue rather than guess at it.
-  const record = await new BrowserWorkspaceDocs(dbName).open(workspaceId).catch(() => null)
+  // Unreadable means unjudgeable: leave what only the record names rather
+  // than guess at it — and say so, since nothing can name it afterwards.
+  const record = await new BrowserWorkspaceDocs(dbName).open(workspaceId).catch((err: unknown) => {
+    log.warn(
+      "demote left the moved workspace's trash bytes and listing clocks: its record could not be read",
+      { workspaceId, err },
+    )
+    return null
+  })
   if (record === null) return null
   const trash = readTrashEntries(record)
   const live = readWorkspaceDocuments(record).map((entry) => entry.documentId)
@@ -171,9 +182,9 @@ async function residueOf(workspaceId: string, dbName?: string): Promise<Residue 
 }
 
 /**
- * Each kind of residue on its own boundary, because only the trash bytes
- * depend on the neighbours: the version rows are keyed by the source alone,
- * and the clocks by document ids no other workspace holds.
+ * What only the record names, each kind on its own boundary, because only the
+ * trash bytes depend on the neighbours: the clocks are keyed by document ids
+ * no other workspace holds.
  */
 async function discardResidue(
   sourceWorkspaceId: string,
@@ -181,9 +192,6 @@ async function discardResidue(
   remainingWorkspaceIds: readonly string[],
   dbName?: string,
 ): Promise<void> {
-  await bestEffort(sourceWorkspaceId, 'version rows', () =>
-    deleteVersionRowsOfWorkspace(sourceWorkspaceId, dbName),
-  )
   // Only a browser-kept workspace's listing reads these clocks, and a
   // document id is minted once, so no remaining one lists these ids.
   await bestEffort(sourceWorkspaceId, 'listing clocks', async () => {

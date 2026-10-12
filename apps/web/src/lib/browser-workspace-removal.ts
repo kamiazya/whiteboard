@@ -9,7 +9,9 @@
  *   record named — is `demote-browser-workspace.ts`.
  * - a REPLICA of a daemon workspace is a cache (`forgetReplicaCopy`). It
  *   takes no tombstone: the daemon still keeps the workspace, and pulling it
- *   again later must be allowed to store it again.
+ *   again later must be allowed to store it again. What keeps a page still
+ *   holding it from writing it back is that a record is minted only under
+ *   an id something here holds (`refuseUnlessHeld`).
  *
  * Whoever writes a removal path decides what dies with the copy, so a path
  * written in place at its call site is where something gets left behind.
@@ -17,10 +19,11 @@
 import type { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { demoteBrowserWorkspace, replicaCarriesAll } from './demote-browser-workspace.js'
 import type { PromoteWorkspaceResult } from './promote-workspace.js'
-import { openDocumentStore } from './replica-store.js'
+import { openDocumentStore, unmarkReplica } from './replica-store.js'
 import { stopReplicaReadableOffline } from './replica-unlock.js'
 import { forgetReplicaEntry } from './replicas.js'
 import type { UserSettingsStore } from './user-settings-store.js'
+import { announceWorkspaceRemoved } from './workspace-broadcast.js'
 
 type PromotedOutcome = Extract<PromoteWorkspaceResult, { kind: 'ok' }>
 
@@ -64,7 +67,7 @@ export async function demoteWhenSafe(
  * gone, and every reader of it has to cope. The wrapped key goes with the
  * claim — a key on disk for a copy that is gone opens nothing.
  */
-export async function forgetReplicaCopy(
+async function dropReplicaCopy(
   settingsStore: Pick<UserSettingsStore, 'update'>,
   workspaceId: string,
   daemonBaseUrl: string | undefined,
@@ -72,4 +75,34 @@ export async function forgetReplicaCopy(
   settingsStore.update((current) => forgetReplicaEntry(current, workspaceId))
   if (daemonBaseUrl !== undefined) stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
   await openDocumentStore().deleteDoc({ docRef: { kind: 'workspace-tree', workspaceId } })
+}
+
+/**
+ * The person's "delete this copy". With the claim and this tab's mark gone
+ * the record can no longer be minted again (`refuseUnlessHeld`), and every
+ * page holding it is told, so it locks rather than finding out on its next
+ * save.
+ */
+export async function forgetReplicaCopy(
+  settingsStore: Pick<UserSettingsStore, 'update'>,
+  workspaceId: string,
+  daemonBaseUrl: string | undefined,
+): Promise<void> {
+  unmarkReplica(workspaceId)
+  await dropReplicaCopy(settingsStore, workspaceId, daemonBaseUrl)
+  announceWorkspaceRemoved(workspaceId)
+}
+
+/**
+ * A copy sealed under a key generation the daemon replaced, dropped so the
+ * pull in flight can store a fresh one. Not a removal: the pull's mark stays,
+ * so its save is admitted and sealed, and no page is told — a page showing
+ * the unreadable copy re-opens the pulled one on its Reconnect.
+ */
+export async function discardRotatedReplicaCopy(
+  settingsStore: Pick<UserSettingsStore, 'update'>,
+  workspaceId: string,
+  daemonBaseUrl: string,
+): Promise<void> {
+  await dropReplicaCopy(settingsStore, workspaceId, daemonBaseUrl)
 }

@@ -12,6 +12,7 @@
  * The one place tag chips are BUTTONS: document rows are buttons already,
  * and a button inside a button is neither valid nor reachable by keyboard.
  */
+import { countOf } from '../../lib/count-wording.js'
 import type { TagInUse } from '../../lib/files-source.js'
 
 export interface TagStripProps {
@@ -20,15 +21,13 @@ export interface TagStripProps {
   readonly onToggle: (tag: string) => void
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-
 /** What carries the tag, for the chip's title: "2 documents, 1 board". */
 function carriedBy(row: TagInUse): string {
   const parts: string[] = []
-  if (row.documents > 0) parts.push(plural(row.documents, 'document', 'documents'))
-  if (row.boards > 0) parts.push(plural(row.boards, 'board', 'boards'))
-  if (row.nodes > 0) parts.push(plural(row.nodes, 'box', 'boxes'))
-  if (row.edges > 0) parts.push(plural(row.edges, 'edge', 'edges'))
+  if (row.documents > 0) parts.push(countOf(row.documents, 'document', 'documents'))
+  if (row.boards > 0) parts.push(countOf(row.boards, 'board', 'boards'))
+  if (row.nodes > 0) parts.push(countOf(row.nodes, 'box', 'boxes'))
+  if (row.edges > 0) parts.push(countOf(row.edges, 'edge', 'edges'))
   return parts.join(', ')
 }
 

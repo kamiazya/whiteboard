@@ -91,13 +91,19 @@ function followBrowser() {
   let listenedTo: string | undefined
   const close = vi.fn()
   const onMoved = vi.fn()
-  const stop = followBrowserWorkspaceWrites('ws-1', onMoved, (workspaceId, onMessage) => {
-    listenedTo = workspaceId
-    hear = onMessage
-    return { post: () => {}, close }
-  })
+  const onRemoved = vi.fn()
+  const stop = followBrowserWorkspaceWrites(
+    'ws-1',
+    { onMoved, onRemoved },
+    (workspaceId, onMessage) => {
+      listenedTo = workspaceId
+      hear = onMessage
+      return { post: () => {}, close }
+    },
+  )
   return {
     onMoved,
+    onRemoved,
     stop,
     close,
     listenedTo: () => listenedTo,
@@ -120,6 +126,15 @@ describe('followBrowserWorkspaceWrites', () => {
     expect(f.onMoved).not.toHaveBeenCalled()
     vi.advanceTimersByTime(200)
     expect(f.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the workspace leaving this browser at once, and reads nothing under it', () => {
+    const f = followBrowser()
+    f.hear({ type: 'document-created', path: 'a' })
+    f.hear({ type: 'workspace-removed' })
+    expect(f.onRemoved).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).not.toHaveBeenCalled()
   })
 
   it('cancels a read still waiting out a burst, and closes its end, when stopped', () => {

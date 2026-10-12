@@ -71,17 +71,26 @@ export function followWorkspaceWrites(
 /**
  * The browser keeper's twin: calls `onMoved` after another end of this
  * workspace's channel — another tab, or a write this tab's index announced —
- * says the record changed. Any message counts, because every one of them is a
+ * says the record changed. Any write counts, because every one of them is a
  * write the list may show: a saved edit moves a row's clock, an index write
- * moves a row. Answers the unsubscribe, which also cancels a pending call.
+ * moves a row.
+ *
+ * Except the workspace leaving this browser, which is `onRemoved`'s, at once:
+ * a read under the removed id meets the registry's refusal, and a list has to
+ * move somewhere else rather than re-read where it is. Answers the
+ * unsubscribe, which also cancels a pending call.
  */
 export function followBrowserWorkspaceWrites(
   workspaceId: string,
-  onMoved: () => void,
+  { onMoved, onRemoved }: { onMoved: () => void; onRemoved: () => void },
   listen: typeof listenToWorkspace = listenToWorkspace,
 ): () => void {
   const { soon, cancel } = inBursts(onMoved)
-  const end = listen(workspaceId, soon)
+  const end = listen(workspaceId, (message) => {
+    if (message.type !== 'workspace-removed') return soon()
+    cancel()
+    onRemoved()
+  })
   return () => {
     cancel()
     end.close()

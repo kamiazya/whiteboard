@@ -72,6 +72,41 @@ describe('docs never tell a reader to stop a daemon by process name', () => {
   })
 })
 
+// The SessionStart hook has usually started this checkout's dev daemon already,
+// and a second `pnpm mcp:http:dev` on the same data dir reuses it and exits 0.
+// A recipe that sets a variable on that second start therefore does nothing at
+// all, silently, unless it stops the running daemon first. A recipe naming its
+// own WHITEBOARD_DATA_DIR has no running daemon to reuse, and is left alone.
+describe('an env-var dev daemon recipe stops the running daemon first', () => {
+  const ENV_START = /^\s*(?:[A-Z][A-Z0-9_]*=\S*\s+)+pnpm mcp:http:dev\b/
+  const recipes = trackedFiles(REPO_ROOT, 'docs/contributing/*.md').flatMap((file) =>
+    [...read(file).matchAll(/^```\w*\n([\s\S]*?)^```/gm)].flatMap(([, block = '']) => {
+      const lines = block.replace(/\\\n\s*/g, '').split('\n')
+      return lines.flatMap((line, index) =>
+        ENV_START.test(line) ? [{ file, line, before: lines.slice(0, index) }] : [],
+      )
+    }),
+  )
+
+  it('finds the documented recipes', () => {
+    expect(recipes.length).toBeGreaterThanOrEqual(3)
+    expect(recipes.map((r) => r.file)).toEqual(
+      expect.arrayContaining([
+        'docs/contributing/mcp-debugging.md',
+        'docs/contributing/observability.md',
+      ]),
+    )
+  })
+
+  it('precedes each with `pnpm mcp:http:stop` in the same block', () => {
+    const unstopped = recipes
+      .filter(({ line }) => !/\bWHITEBOARD_DATA_DIR=/.test(line))
+      .filter(({ before }) => !before.some((l) => /^\s*pnpm mcp:http:stop\b/.test(l)))
+      .map(({ file, line }) => `${file}: ${line.trim()}`)
+    expect(unstopped).toEqual([])
+  })
+})
+
 // `gh <name>` where <name> is not one of gh's own commands is an EXTENSION, and
 // an extension is absent on a fresh machine: the reader gets
 // `unknown command "image" for "gh"`. A skill that tells its reader to run one

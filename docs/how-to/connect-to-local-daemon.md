@@ -204,7 +204,9 @@ replica shows depends on what is actually on this device and what the daemon
 last said: a copy that is readable in memory, a copy that only your passkey
 can open (with an **Unlock with your passkey** action that needs no
 network), or a copy that is present but locked until the daemon can be
-reached again (with a Reconnect action).
+reached again (with a Reconnect action). Another tab that was showing the
+moved workspace switches to a workspace this browser still keeps, and says
+the workspace moved to the daemon.
 
 The passkey unlock is what lets a copy survive closing the tab, and you
 switch it on per copy: see
@@ -229,7 +231,9 @@ does not come back is anything in that copy which had not reached the daemon
 yet, so the confirmation says so before you commit to it. The copy the
 session is currently showing is not offered a delete, and neither is a
 workspace this browser keeps itself: that one is the only copy of its data
-anywhere, and the way to let go of it is to move it to a daemon first.
+anywhere, and the way to let go of it is to move it to a daemon first. A copy
+open in another tab when you delete it locks there and says it was deleted,
+so nothing typed in that tab can write it back.
 
 ## Read a copy offline
 
