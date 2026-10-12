@@ -381,14 +381,9 @@ export function useClipboardActions({
 
   /** Applies a paste's insert to the canvas as it stands, selecting what it made. */
   const land = (fragment: PastedFragment, at: Point | undefined): boolean => {
-    const inserted = insertPasted(
-      canvasRef.current,
-      fragment,
-      () => createId?.() ?? crypto.randomUUID(),
-      at,
-    )
-    if (inserted === undefined) return false
-    const { running, command } = inserted
+    const { running, command } =
+      insertPasted(canvasRef.current, fragment, () => createId?.() ?? crypto.randomUUID(), at) ?? {}
+    if (running === undefined || command === undefined) return false
     onChange(running, command)
     selectCreated(command)
     return true
