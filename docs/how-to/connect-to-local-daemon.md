@@ -183,13 +183,18 @@ and the pre-existing one is marked *shadowed* — nothing is renamed or
 overwritten. Your saved versions keep their dates; the move adds one more,
 marking the move itself.
 
-A trashed document so large it does not fit in the move with everything
-else stays behind, and so does anything this browser cannot read; the
-result names each one when the move finishes, and the browser copy is kept
-so nothing is lost.
+The move is one request of at most 24 MiB, and the Trash is what gives
+way: once the workspace, its saved versions and the trashed documents taken
+so far reach that limit, each further trashed document stays behind. The
+limit is on the total, so many medium-sized trashed documents reach it as
+surely as one large one, and moving again leaves the same ones behind —
+empty the Trash of what you no longer need to let the rest go. Anything
+this browser cannot read stays behind too. The result names each one when
+the move finishes, and the browser copy is kept so nothing is lost.
 
 Once the daemon confirms it holds every document, image, trashed document
-and saved version that moved, the old browser copy is removed: the daemon is the workspace's one keeper, and this browser
+and saved version that moved, the old browser copy is removed — its Trash
+and saved versions with it: the daemon is the workspace's one keeper, and this browser
 keeps a **cached replica** instead — it opens read-only when the daemon
 cannot be reached, so your data stays viewable offline. The replica holds
 the images its documents show too, up to 64 MiB per workspace; an image past
