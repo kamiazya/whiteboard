@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history/checkpoint-scheduler'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import {
   createCanvasEditTool,
