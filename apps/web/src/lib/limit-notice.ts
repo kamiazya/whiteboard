@@ -132,11 +132,14 @@ export const KEEPER_LIMIT_REASON = {
 /**
  * A paste into another workspace or keeper that left pictures out: their
  * bytes did not come with the copy, or the target refused to store them
- * (`refusal`, the keeper's own sentence).
+ * (`refusal`, the keeper's own sentence). A paste cannot tell a picture past
+ * the copy's budget from one the copy could not read, so the first case
+ * names both rather than claiming either.
  */
 export function picturesLeftOutNotice(count: number, refusal?: string): string {
   const pictures = count === 1 ? 'A picture was' : `${COUNT.format(count)} pictures were`
   if (refusal !== undefined) return `${pictures} left out of the paste: ${refusal}`
   const limit = `${CLIPBOARD_FILES_MAX_BYTES / (1024 * 1024)} MiB`
-  return `${pictures} left out of the paste: a copy carries up to ${limit} of pictures to another workspace. Copy fewer at a time.`
+  const their = count === 1 ? 'its' : 'their'
+  return `${pictures} left out of the paste: the copy did not carry ${their} bytes. A copy carries up to ${limit} of pictures, and only ones it could read; copy fewer at a time, or once they have loaded.`
 }

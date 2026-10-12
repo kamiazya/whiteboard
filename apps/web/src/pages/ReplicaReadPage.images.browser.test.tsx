@@ -9,13 +9,21 @@ import {
   documentContainers,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
+import {
+  bytesToBase64,
+  bytesToBase64Url,
+  clipboardFragmentSchema,
+  newImageRef,
+  nodeFile,
+} from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { carriedClipboardFiles, clearClipboardFragmentForTests } from '../lib/clipboard-store.js'
+import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { cacheDaemonWorkspace } from '../lib/replica-cache.js'
 import { saveOfflinePasskey } from '../lib/replica-offline-passkey.js'
 import { REPLICA_IMAGE_UNAVAILABLE } from '../lib/replica-record.js'
@@ -25,6 +33,7 @@ import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { rootOf } from '../test-utils/spatial-editor-root.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 claimIsolatedWhiteboardDb('replica-read-page-images')
@@ -126,6 +135,7 @@ const drawnText = (): string =>
   [...document.querySelectorAll('svg text')].map((node) => node.textContent ?? '').join(' ')
 
 beforeEach(clearWhiteboardDb)
+beforeEach(clearClipboardFragmentForTests)
 afterEach(() => {
   vi.restoreAllMocks()
   connectReplicaKeeper(null)
@@ -153,5 +163,74 @@ describe('ReplicaReadPage images', () => {
     await vi.waitFor(() => expect(drawnText()).toContain(REPLICA_IMAGE_UNAVAILABLE))
     expect(drawnText()).not.toContain('asset:')
     expect(document.querySelectorAll('svg image')).toHaveLength(1)
+  })
+})
+
+function clipboardEvent(type: 'copy' | 'paste', data: DataTransfer): void {
+  fireEvent(
+    rootOf(document.body),
+    new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data }),
+  )
+}
+
+/** Selects the drawn picture by pressing on it, then copies it. */
+async function copyThePicture(): Promise<string> {
+  const picture = await vi.waitFor(() => {
+    const drawn = document.querySelector('svg image')
+    if (drawn === null) throw new Error('no picture drawn yet')
+    return drawn.getBoundingClientRect()
+  })
+  const at = { clientX: picture.x + picture.width / 2, clientY: picture.y + picture.height / 2 }
+  const root = rootOf(document.body)
+  fireEvent.pointerDown(root, { button: 0, pointerId: 1, ...at })
+  fireEvent.pointerUp(root, { pointerId: 1, ...at })
+  const data = new DataTransfer()
+  clipboardEvent('copy', data)
+  return data.getData('text/plain')
+}
+
+const DAEMON_SCOPE = createDaemonFileAdapter({
+  daemonFetch: globalThis.fetch,
+  daemonBaseUrl: DAEMON,
+  workspaceId: DAEMON_WS,
+  path: '',
+}).fileScope
+
+describe('ReplicaReadPage pictures across copy and paste', () => {
+  it("stamps a copy with the daemon's scope, so the daemon page keeps its pictures", async () => {
+    await pullThenGoOffline(boardNaming('img-cat'), ['img-cat'])
+    await unlockAndOpenBoard()
+
+    const copied = clipboardFragmentSchema.parse(JSON.parse(await copyThePicture()))
+    expect(copied.nodes.map(nodeFile)).toEqual([newImageRef('img-cat')])
+    expect(copied.source?.fileScope).toBe(DAEMON_SCOPE)
+    // The bytes come from the sealed cache, so a paste into another workspace can store them.
+    const carried = await carriedClipboardFiles(copied.source?.copyId ?? '')
+    expect(carried?.[newImageRef('img-cat')]?.dataBase64).toBe(bytesToBase64(PNG))
+  })
+
+  it('leaves out a picture from another keeper, saying why, rather than pasting it dangling', async () => {
+    await pullThenGoOffline(boardNaming(), [])
+    await unlockAndOpenBoard()
+    await vi.waitFor(() => expect(rootOf(document.body)).not.toBeNull())
+
+    const foreign = {
+      type: 'whiteboard/clipboard',
+      version: 1,
+      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 50, height: 50, file: 'asset:elsewhere' })],
+      edges: [],
+      source: { fileScope: 'browser:http://other.example', copyId: 'c' },
+      files: { 'asset:elsewhere': { mimeType: 'image/png', dataBase64: bytesToBase64(PNG) } },
+    }
+    const data = new DataTransfer()
+    data.setData('text/plain', JSON.stringify(foreign))
+    clipboardEvent('paste', data)
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-testid="clipboard-notice"]')?.textContent).toContain(
+        'A picture was left out of the paste: pictures from another workspace are stored by the daemon',
+      ),
+    )
+    expect(drawnText()).not.toContain(REPLICA_IMAGE_UNAVAILABLE)
   })
 })
