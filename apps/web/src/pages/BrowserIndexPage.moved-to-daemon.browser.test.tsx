@@ -92,6 +92,9 @@ it('on hearing the move, lists a workspace still kept here and says why', async 
   await waitFor(() => expect(titles()).toEqual(['kept']), { timeout: 15_000 })
   expect(getBrowserWorkspaceId()).toBe(NEIGHBOUR)
   expect(screen.queryByRole('alert')).toBeNull()
+  // Still there once the tab has landed: the notice explains the switch the
+  // person is now looking at, so landing must not be what clears it.
+  expect(screen.queryByTestId('workspace-moved-notice')).not.toBeNull()
 })
 
 it('drops the notice once the person switches to another workspace', async () => {
