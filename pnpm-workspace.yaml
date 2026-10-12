@@ -125,6 +125,11 @@ overrides:
   # proxy, cleared at 2.0.8. Reaches the published runtime via express <-
   # @modelcontextprotocol/sdk, and 2.0.8 is inside express's own ~2.0.7 range.
   "proxy-addr@>=1.1.0 <2.0.8": ^2.0.8
+  # GHSA-6qxp-vccf-f47h (high): the OAuth client could send credentials to an
+  # authorization server the MCP server chose, cleared at 1.31.0. The v1 SDK
+  # reaches us only as @modelcontextprotocol/ext-apps' peer (^1.29.0, which
+  # 1.31 satisfies) — the widget's App bridge, which uses no OAuth client.
+  "@modelcontextprotocol/sdk@>=1.12.0 <1.31.0": ^1.31.0
   # GHSA-c83g-rgw3-j3cx + GHSA-73wf-gq98-2v4g (high): cleared at 4.28.7
   # (dev path via babel <- stryker; the alert pair still shows in the tab).
   browserslist@<4.28.7: ^4.28.7
@@ -157,7 +162,9 @@ overrides:
   # memory allocation from a declared uncompressed size, HIGH, so unlike the
   # symlink one it reaches the `--audit-level=high` gate and fails CI's
   # `check` job on every branch until the override is raised.
-  sharp@<0.35.4: ^0.35.4
+  # GHSA-wq5f-xc86-pv6w (high, a librsvg issue in sharp's bundled libvips)
+  # is cleared at 0.35.5, so the floor moved from 0.35.4 with it.
+  sharp@<0.35.5: ^0.35.5
   adm-zip@<0.6.1: ^0.6.1
   # GHSA-gqvv-2mrq-wpjv + GHSA-g6gw-c38x-mqfc + GHSA-crvj-82cr-hjcx
   # (moderate x3), all cleared at 4.13.5. Unlike the entries above this one
