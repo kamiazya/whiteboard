@@ -246,12 +246,11 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       supersededDeltaCount: 0,
       expectedGeneration: null,
     })
-    if (created.ok) return update
-    // Another writer minted the snapshot between the read and the write.
-    // Theirs does not contain these ops, so appending is the only move that
-    // keeps both — replacing it would be the lost update this fence exists
-    // to stop (ADR-0020).
-    await this.appendInstead(docRef, doc, update)
+    // Refused: another writer minted the snapshot between the read and the
+    // write. Theirs does not contain these ops, so appending is the only move
+    // that keeps both — replacing it would be the lost update this fence
+    // exists to stop (ADR-0020).
+    if (!created.ok) await this.appendInstead(docRef, doc, update)
     return update
   }
 

@@ -39,7 +39,7 @@ describe('fitToLength', () => {
       if (value.length <= max) expect(fitted).toBe(value)
       else if (fitted.length !== max) {
         // One unit short only to keep a character whole.
-        expect(fitted.length).toBe(max - 1)
+        expect(fitted).toHaveLength(max - 1)
         expect(isHigh(value.charCodeAt(max - 1)) && isLow(value.charCodeAt(max))).toBe(true)
       }
     },
