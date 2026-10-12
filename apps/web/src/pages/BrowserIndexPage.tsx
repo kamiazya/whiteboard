@@ -1,6 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { BrowserCapacityNotice } from '../components/BrowserCapacityNotice.js'
 import { ExtensionConnectEntry } from '../components/connection/ExtensionConnectEntry.js'
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
@@ -240,10 +241,11 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
     return () => {
       cancelled = true
     }
-    // `activeWorkspace` is not read in the body — the helpers below read the
-    // accessor themselves — but it IS what this effect follows. Depending on
-    // the value rather than calling it is the difference between a list that
-    // re-reads on a switch and one that does not. Two more triggers for the
+    // `activeWorkspace` is what this effect follows: the list helpers read
+    // the accessor themselves, so depending on the value is the difference
+    // between a list that re-reads on a switch and one that does not. The
+    // body reads it only to name the workspace a refusal is about, for the
+    // removed-workspace routing in `loadFailed`. Two more triggers for the
     // same aborted-startTransition mount (a Back while a lazy chunk loads
     // returns to THIS mount, never remounting): `filesRevision` follows this
     // page's OWN writes (create below, delete dialog), and
@@ -507,13 +509,13 @@ function useBrowserCreate({
       setCreating(true)
       const target = browserWorkspaceIdOrNull()
       try {
-        // Numbered against the INDEX, not against `snapshots`: this callback
-        // is memoized on [index, onOpenDocument], so a rendered list captured
-        // here would be whatever the first render held — `null` on the first
-        // create after a load, which numbers from nothing and lands on a path
-        // already taken. A failed read falls back to numbering from nothing,
-        // which the index's own uniqueness check then refuses rather than
-        // duplicating an address.
+        // Numbered against the INDEX, not against `snapshots`: the list is
+        // not among this callback's dependencies, so a rendered list captured
+        // here would be whatever the render that memoized it held — `null` on
+        // the first create after a load, which numbers from nothing and lands
+        // on a path already taken. A failed read falls back to numbering from
+        // nothing, which the index's own uniqueness check then refuses rather
+        // than duplicating an address.
         // The editor's create path, not a second one beside it: numbering,
         // the content seed, and the rollback on a failed seed are all things
         // a second create path would do differently or not at all.
@@ -536,6 +538,31 @@ function useBrowserCreate({
     [index, loro, clock, pointer, onOpenDocument, setFilesRevision, setError, onRemoved],
   )
   return { creating, handleCreate }
+}
+
+/**
+ * The installed app's "New canvas" launcher shortcut (the manifest's
+ * `shortcuts`, `/?new=canvas`): one create through this page's own create
+ * path, which opens what it made. The parameter leaves the address first, by
+ * REPLACING the entry, so neither a reload nor a Back into it creates a
+ * second document.
+ */
+function useLauncherShortcut(onCreate: (kind: DocumentKind) => Promise<void>): void {
+  const [params, setParams] = useSearchParams()
+  const handled = useRef(false)
+  useEffect(() => {
+    if (handled.current || params.get('new') !== 'canvas') return
+    handled.current = true
+    setParams(
+      (current) => {
+        const rest = new URLSearchParams(current)
+        rest.delete('new')
+        return rest
+      },
+      { replace: true },
+    )
+    void onCreate('spatial')
+  }, [params, setParams, onCreate])
 }
 
 export function BrowserIndexPage({
@@ -632,6 +659,7 @@ export function BrowserIndexPage({
     setError,
     onRemoved,
   })
+  useLauncherShortcut(handleCreate)
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">

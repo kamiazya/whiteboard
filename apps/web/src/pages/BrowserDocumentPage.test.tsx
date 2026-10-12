@@ -24,7 +24,6 @@ import { getShellConnection, resetShellStatusForTests } from '../lib/shell-statu
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
-import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
@@ -883,31 +882,7 @@ describe('BrowserDocumentPage', () => {
   })
 })
 
-describe('?new=canvas launch shortcut', () => {
-  it('creates a fresh canvas on load and strips the param from the URL', async () => {
-    // An existing profile: auto-create is skipped, so the count isolates
-    // the shortcut's own create.
-    const store = new BrowserStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
-    window.history.replaceState(null, '', '/?new=canvas')
-    rtlRender(
-      <MemoryRouter initialEntries={['/?new=canvas']}>
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />
-      </MemoryRouter>,
-    )
-    await waitFor(async () => {
-      expect((await store.listDocuments()).length).toBe(2)
-    })
-    expect(window.location.search).not.toContain('new=canvas')
-    window.history.replaceState(null, '', '/')
-  })
-
+describe('a plain load', () => {
   it('does not create extras on a plain load', async () => {
     const store = new BrowserStoreDouble()
     renderInRouter(
@@ -921,37 +896,6 @@ describe('?new=canvas launch shortcut', () => {
     await waitFor(async () => {
       expect((await store.listDocuments()).length).toBe(1)
     })
-  })
-
-  it('a failed create rolls back the canvas and still strips the param', async () => {
-    // The shortcut create is fire-and-forget; a rejected Loro save must be
-    // caught by the page (not surface as an unhandled rejection) and the
-    // controller's rollback must remove the half-created metadata row.
-    class RejectingLoroStore extends FakeLoroStore {
-      override async save(): Promise<void> {
-        throw new Error('loro save failed')
-      }
-    }
-    const store = new BrowserStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
-    window.history.replaceState(null, '', '/?new=canvas')
-    rtlRender(
-      <MemoryRouter initialEntries={['/?new=canvas']}>
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new RejectingLoroStore()}
-        />
-      </MemoryRouter>,
-    )
-    expect(window.location.search).not.toContain('new=canvas')
-    await waitFor(async () => {
-      expect((await store.listDocuments()).length).toBe(1)
-    })
-    window.history.replaceState(null, '', '/')
-    await expectLoggedFailure('launcher shortcut create failed')
   })
 })
 

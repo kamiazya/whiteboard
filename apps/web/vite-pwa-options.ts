@@ -45,8 +45,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
       },
     ],
     // Long-press / right-click the installed icon. `?new=canvas` is handled
-    // by the browser document page (BrowserDocumentPage); in daemon mode it
-    // degrades to the gallery, one click from the same action.
+    // by the browser keeper's document list (BrowserIndexPage), which creates
+    // a canvas and opens it; in daemon mode it degrades to the daemon's list,
+    // one click from the same action.
     shortcuts: [
       {
         name: 'New canvas',
