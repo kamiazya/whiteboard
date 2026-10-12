@@ -141,5 +141,5 @@ export function picturesLeftOutNotice(count: number, refusal?: string): string {
   if (refusal !== undefined) return `${pictures} left out of the paste: ${refusal}`
   const limit = `${CLIPBOARD_FILES_MAX_BYTES / (1024 * 1024)} MiB`
   const their = count === 1 ? 'its' : 'their'
-  return `${pictures} left out of the paste: the copy did not carry ${their} bytes. A copy carries up to ${limit} of pictures, and only ones it could read; copy fewer at a time, or once they have loaded.`
+  return `${pictures} left out of the paste: the copy did not carry ${their} bytes. A copy carries up to ${limit} of pictures, and only ones it could read. Copy fewer at a time, or copy again once the pictures have loaded.`
 }

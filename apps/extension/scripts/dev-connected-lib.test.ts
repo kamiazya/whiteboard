@@ -130,6 +130,9 @@ describe('cdpPortRefusal', () => {
       // Synchronous is fine: the hold is the kernel's bind, not this loop.
       const run = spawnSync(process.execPath, [SCRIPT, '--headless', `--cdp-port=${port}`], {
         cwd,
+        // Only what the script needs to reach its first check, so a variable
+        // the runner happens to carry cannot change what it does.
+        env: { PATH: process.env.PATH ?? '', HOME: tmpdir() },
         encoding: 'utf8',
         timeout: 30_000,
       })
