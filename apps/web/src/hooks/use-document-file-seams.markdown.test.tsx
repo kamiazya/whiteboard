@@ -37,6 +37,7 @@ const canvasWith = (...files: string[]): SpatialCanvas => ({
 
 function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
   return {
+    fileScope: 'test',
     isImageRef: (file: string) => file.startsWith('asset:'),
     loadDocument: vi.fn(async () => undefined),
     loadImageUrl: vi.fn(async () => undefined),

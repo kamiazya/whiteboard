@@ -31,6 +31,7 @@ import {
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type {
   DocumentFileAdapter,
   ImageStoreResult,
@@ -76,6 +77,8 @@ export interface DocumentFileSeams {
   references: ReferenceWire
   onAddImage: (file: File) => Promise<ImageStoreResult>
   isImageFileRef: (file: string) => boolean
+  /** What a copy and paste need of this keeper to carry its pictures elsewhere. */
+  clipboardImages: ClipboardImageSeams
 }
 
 /**
@@ -215,8 +218,40 @@ export function useDocumentFileSeams({
   )
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
+  const clipboardImages = useClipboardImageSeams(adapter)
+  return { references, onAddImage, isImageFileRef, clipboardImages }
+}
 
-  return { references, onAddImage, isImageFileRef }
+/**
+ * The keeper's picture seams for copy and paste, stable while its scope is.
+ * Reads and stores through the CURRENT adapter, as the seams above do.
+ */
+function useClipboardImageSeams(adapter: DocumentFileAdapter): ClipboardImageSeams {
+  const adapterRef = useRef(adapter)
+  adapterRef.current = adapter
+  const { fileScope } = adapter
+  return useMemo(
+    () => ({
+      fileScope,
+      readImage: readImageBytes(adapterRef),
+      storeImage: (file: File) => adapterRef.current.storeImage(file),
+    }),
+    [fileScope],
+  )
+}
+
+/** A stored picture's bytes, read through the URL the adapter already answers. */
+function readImageBytes(adapterRef: { readonly current: DocumentFileAdapter }) {
+  return async (ref: string): Promise<Blob | undefined> => {
+    const url = await adapterRef.current.loadImageUrl(ref)
+    if (url === undefined) return undefined
+    try {
+      const res = await fetch(url)
+      return res.ok ? await res.blob() : undefined
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
 }
 
 /**

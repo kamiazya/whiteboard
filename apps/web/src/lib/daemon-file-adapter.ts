@@ -45,6 +45,9 @@ export function createDaemonFileAdapter({
     `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/document/${encodeURIComponent(target)}`
 
   return {
+    // The file route keeps one directory per workspace, so the workspace is
+    // the scope — on this daemon, which the base URL names.
+    fileScope: `daemon:${daemonBaseUrl}/w/${workspaceId}`,
     isImageRef,
 
     async loadDocument(ref) {

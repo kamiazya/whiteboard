@@ -38,6 +38,7 @@ const embedded = (text: string): SpatialCanvas => ({
 
 function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
   const adapter: DocumentFileAdapter = {
+    fileScope: 'test',
     isImageRef: (file) => file.startsWith('asset:'),
     loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     loadImageUrl: vi.fn(async (ref: string) => `blob:${ref}`),
@@ -198,6 +199,31 @@ describe('useDocumentFileSeams', () => {
 
     expect(adapter.storeImage).toHaveBeenCalledWith(file)
     expect(ref).toEqual({ ok: true, ref: 'asset:new' })
+  })
+
+  it("hands a copy the keeper's picture scope, bytes and store", async () => {
+    const adapter = makeAdapter()
+    const picture = new Blob(['png'], { type: 'image/png' })
+    const fetchStub = vi.fn(async () => ({ ok: true, blob: async () => picture }))
+    const revoke = vi.fn()
+    vi.stubGlobal('fetch', fetchStub)
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(revoke)
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map(), bodies: [] }),
+    )
+    const seams = result.current.clipboardImages
+
+    expect(seams.fileScope).toBe('test')
+    const bytes = await seams.readImage('asset:pic')
+    expect(bytes).toBe(picture)
+    expect(fetchStub).toHaveBeenCalledWith('blob:asset:pic')
+    // The URL was minted for this read alone, so the read releases it.
+    expect(revoke).toHaveBeenCalledWith('blob:asset:pic')
+    const file = new File(['x'], 'x.png', { type: 'image/png' })
+    await seams.storeImage(file)
+    expect(adapter.storeImage).toHaveBeenCalledWith(file)
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('exposes the adapter image-ref predicate to the editor', () => {

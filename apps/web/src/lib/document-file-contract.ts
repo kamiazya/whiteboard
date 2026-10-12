@@ -34,6 +34,13 @@ export type ImageStoreResult =
 
 /** What a backend must supply for the seams to work against it. */
 export interface DocumentFileAdapter {
+  /**
+   * Where this keeper's stored pictures live: two adapters answering the same
+   * scope hold the same bytes. The browser keeps one store per origin, the
+   * daemon one per workspace, so a copied picture pasted into another scope
+   * has to be stored again there.
+   */
+  readonly fileScope: string
   /** Distinguishes a stored image asset from a reference to another canvas. */
   isImageRef(file: string): boolean
   /**

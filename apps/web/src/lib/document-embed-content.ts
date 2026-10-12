@@ -155,6 +155,10 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
  * `/api/w/:workspaceId/document/:path/file/:fileId` endpoints.
  */
 export const BROWSER_FILE_ADAPTER: DocumentFileAdapter = {
+  // One file store per origin, shared by every browser-kept workspace in it.
+  get fileScope() {
+    return `browser:${location.origin}`
+  },
   isImageRef,
   loadDocument: loadEmbeddedDocument,
   loadImageUrl: loadImageAssetUrl,

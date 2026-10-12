@@ -5,13 +5,19 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
-import { type MutableRefObject, useState } from 'react'
+import { type MutableRefObject, useEffect, useRef, useState } from 'react'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
+import {
+  type ClipboardImageSeams,
+  needsImageTransfer,
+  type PastedFragment,
+  transferFragmentImages,
+  writeCarryingImages,
+} from '../../lib/clipboard-images.js'
 import {
   readClipboardFragment,
   recordedReconnection,
   recordReconnection,
-  writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand, ownedLinePoints } from '../../lib/spatial/commands.js'
@@ -53,6 +59,12 @@ export interface ClipboardActionsInputs {
   readonly setPendingCut: (next: PendingCut | null) => void
   readonly onChange: (next: SpatialCanvas, command: EditorCommand) => void
   readonly createId: (() => string) | undefined
+  /**
+   * The keeper's picture seams. A paste from another workspace or keeper
+   * stores the carried pictures through them; absent, references paste as
+   * they are.
+   */
+  readonly clipboardImages: ClipboardImageSeams | undefined
   /**
    * The selection seam: make exactly these nodes the selection (primary
    * first) and drop any edge selection. The hook never writes selection
@@ -118,6 +130,70 @@ function heldOffset(
 }
 
 /**
+ * The insert half of a paste, against the canvas as it stands NOW — a paste
+ * that stored pictures first lands after an await. Answers the command it
+ * applied and the canvas after it, or undefined when nothing changed.
+ *
+ * The cut surface reconnects while the document shows no trace of a previous
+ * reconnection: as long as any edge a prior paste of this cut created is
+ * still on THIS canvas, the fragment behaves as a plain copy (no second wire
+ * onto the peer). Undo removes those edges, so the next paste is a first
+ * paste again.
+ */
+function insertPasted(
+  current: SpatialCanvas,
+  fragment: PastedFragment,
+  createId: () => string,
+  at: Point | undefined,
+): { command: EditorCommand; running: SpatialCanvas } | undefined {
+  const cut =
+    fragment.cut !== undefined &&
+    !recordedReconnection(fragment.cut.id).some((id) =>
+      current.edges.some((edge) => edge.id === id),
+    )
+      ? fragment.cut
+      : undefined
+  const command = buildFragmentInsertCommand(
+    current,
+    { nodes: fragment.nodes, edges: fragment.edges, lines: fragment.lines, cut },
+    createId,
+    at,
+  )
+  if (command === undefined) return undefined
+  const running = applyCommand(current, command)
+  if (running === current) return undefined
+  if (cut !== undefined && command.kind === 'batch') {
+    // The boundary edges are the created edges with an endpoint OUTSIDE
+    // the created node set — that endpoint is the surviving peer.
+    const createdNodeIds = new Set(
+      command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
+    )
+    recordReconnection(
+      cut.id,
+      command.commands.flatMap((c) =>
+        c.kind === 'create-edge' &&
+        (!endIn(c.edge.from, createdNodeIds) || !endIn(c.edge.to, createdNodeIds))
+          ? [c.edge.id]
+          : [],
+      ),
+    )
+  }
+  return { command, running }
+}
+
+/** False once the editor unmounts, so a paste that awaited an upload writes nowhere. */
+function useMounted(): MutableRefObject<boolean> {
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  return mounted
+}
+
+/**
  * Why the last paste or duplicate made nothing, until the next one. A
  * refused verb still answers HANDLED to its caller: the notice is the
  * answer, and an unhandled Mod+D falls through to the browser's bookmark
@@ -167,12 +243,14 @@ export function useClipboardActions({
   setPendingCut,
   onChange,
   createId,
+  clipboardImages,
   selectNodes,
   selectInk,
   viewport,
   viewportCenterScreen,
 }: ClipboardActionsInputs) {
   const notice = useClipboardNotice()
+  const mounted = useMounted()
   /**
    * Everything the clipboard family acts on, whatever collection it is in.
    *
@@ -219,10 +297,9 @@ export function useClipboardActions({
     if (!hasSelection()) return null
     const fragment = extractClipboardFragment(canvasRef.current, selectedIds())
     if (fragment.nodes.length === 0 && (fragment.lines ?? []).length === 0) return null
-    writeClipboardFragment(fragment)
     // The newest clipboard intent wins: a plain copy lifts a pending cut.
     setPendingCut(null)
-    return fragment
+    return writeCarryingImages(fragment, clipboardImages)
   }
 
   /**
@@ -241,7 +318,6 @@ export function useClipboardActions({
     ) {
       return null
     }
-    writeClipboardFragment(fragment)
     // Defer the delete: hold the originals as a ghost until the paste
     // decides what the cut meant (move here, copy elsewhere, or nothing).
     // Strokes are held the same way and for the same reason — the snapshot
@@ -254,7 +330,7 @@ export function useClipboardActions({
         ...(fragment.lines ?? []).map((line) => [line.id, JSON.stringify(line)] as const),
       ]),
     })
-    return fragment
+    return writeCarryingImages(fragment, clipboardImages)
   }
 
   /** A note carrying pasted foreign text, at the viewport center. */
@@ -303,11 +379,22 @@ export function useClipboardActions({
     return pasteFragment(fragment, at)
   }
 
+  /** Applies a paste's insert to the canvas as it stands, selecting what it made. */
+  const land = (fragment: PastedFragment, at: Point | undefined): boolean => {
+    const inserted = insertPasted(
+      canvasRef.current,
+      fragment,
+      () => createId?.() ?? crypto.randomUUID(),
+      at,
+    )
+    if (inserted === undefined) return false
+    onChange(inserted.running, inserted.command)
+    selectCreated(inserted.command)
+    return true
+  }
+
   /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
-  const pasteFragment = (
-    fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'lines' | 'cut'>,
-    at?: Point,
-  ): boolean => {
+  const pasteFragment = (fragment: PastedFragment, at?: Point): boolean => {
     /**
      * A paste that answers THIS canvas's pending cut is a MOVE.
      *
@@ -320,50 +407,17 @@ export function useClipboardActions({
      * Answers `undefined` when this paste is not that, so the caller carries on
      * to the insert.
      */
-    const current = canvasRef.current
     const moved = pasteAsMove(fragment, at)
     if (moved !== undefined) return moved
     if (notice.refused(copiedFragmentRefusal(fragment, 'pasted'))) return true
-
-    // The cut surface reconnects while the document shows no trace of a
-    // previous reconnection: as long as any edge a prior paste of this cut
-    // created is still on THIS canvas, the fragment behaves as a plain
-    // copy (no second wire onto the peer). Undo removes those edges, so
-    // the next paste is a first paste again.
-    const cut =
-      fragment.cut !== undefined &&
-      !recordedReconnection(fragment.cut.id).some((id) =>
-        current.edges.some((edge) => edge.id === id),
-      )
-        ? fragment.cut
-        : undefined
-    const command = buildFragmentInsertCommand(
-      current,
-      { nodes: fragment.nodes, edges: fragment.edges, lines: fragment.lines, cut },
-      () => createId?.() ?? crypto.randomUUID(),
-      at,
-    )
-    if (command === undefined) return false
-    const running = applyCommand(current, command)
-    if (running === current) return false
-    if (cut !== undefined && command.kind === 'batch') {
-      // The boundary edges are the created edges with an endpoint OUTSIDE
-      // the created node set — that endpoint is the surviving peer.
-      const createdNodeIds = new Set(
-        command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
-      )
-      recordReconnection(
-        cut.id,
-        command.commands.flatMap((c) =>
-          c.kind === 'create-edge' &&
-          (!endIn(c.edge.from, createdNodeIds) || !endIn(c.edge.to, createdNodeIds))
-            ? [c.edge.id]
-            : [],
-        ),
-      )
-    }
-    onChange(running, command)
-    selectCreated(command)
+    if (!needsImageTransfer(fragment, clipboardImages)) return land(fragment, at)
+    // Pictures from another workspace or keeper are stored here first; the
+    // paste lands once they are, and says which did not come along.
+    void transferFragmentImages(fragment, clipboardImages).then((transferred) => {
+      if (!mounted.current) return
+      land(transferred.fragment, at)
+      notice.refused(transferred.notice)
+    })
     return true
   }
 

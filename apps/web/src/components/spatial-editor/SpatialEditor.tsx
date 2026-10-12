@@ -87,6 +87,7 @@ import {
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
+import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -336,6 +337,12 @@ export interface SpatialEditorProps {
    * navigating to an asset reference is a dead end.
    */
   readonly isImageFileRef?: (file: string) => boolean
+  /**
+   * The keeper's picture seams for copy and paste: where its pictures live,
+   * how to read one, how to store one. Absent → pictures paste by reference,
+   * which only resolves where the source's bytes already are.
+   */
+  readonly clipboardImages?: ClipboardImageSeams
 }
 
 /** Screen-space px within which a press/right-click counts as hitting an
@@ -413,6 +420,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       references,
       onAddImage,
       isImageFileRef,
+      clipboardImages,
     },
     forwardedRef,
   ) {
@@ -1057,6 +1065,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setPendingCut,
       onChange,
       createId,
+      clipboardImages,
       selectNodes,
       selectInk: setSelectedInkIds,
       viewport,

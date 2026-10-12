@@ -85,6 +85,11 @@ function renderPane(editing: { id: string; text: string } | null) {
         references: { entries: [], aliases: [], titles: [], extras: [] },
         onAddImage: () => Promise.reject(new Error('unused')),
         isImageFileRef: () => false,
+        clipboardImages: {
+          fileScope: 'test',
+          readImage: async () => undefined,
+          storeImage: () => Promise.reject(new Error('unused')),
+        },
       }}
       nodeInEditor={{
         open: () => {},
