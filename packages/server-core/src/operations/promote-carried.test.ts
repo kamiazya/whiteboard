@@ -14,7 +14,9 @@ import {
   readTrashEntries,
   recordTrashEntry,
   writeMarkdownBody,
+  writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceDocuments } from '../server-deps.js'
@@ -22,12 +24,15 @@ import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import { judgeCarried } from './promote-carried.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
 const GONE_ID = '01BRWAAAAAAAAAAAAAAAAAAAA1'
 const DAEMON_OWN_ID = '01BRWAAAAAAAAAAAAAAAAAAAA3'
+const EARLIER_TRASH_ID = '01BRWAAAAAAAAAAAAAAAAAAAA4'
+const BOARD_ID = '01BRWAAAAAAAAAAAAAAAAAAAA5'
 const operator = { kind: 'human' as const, displayName: 'Yuki' }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -119,6 +124,60 @@ describe('promoteWorkspace, carried planes', () => {
       ref: entry?.blob ?? { algorithm: 'sha-256', digestHex: '' },
     })
     expect(stored?.bytes).toEqual(new Uint8Array(record.trash[0]?.bytes ?? []))
+  })
+
+  it('answers only what the blob store reads back, not what it was handed', async () => {
+    const target = daemon()
+    const record = await browserRecord()
+    // A put that resolves and keeps nothing: a lost write.
+    target.deps.blobStore.put = async (input) => ({
+      ref: { algorithm: 'sha-256', digestHex: await sha256Hex(input.bytes) },
+    })
+    const result = await promoteWorkspace(target.deps, { workspaceId: WS, operator, ...record })
+    expect(result).toMatchObject({ kind: 'promoted', trashStored: [] })
+  })
+
+  it('does not answer a trash entry the daemon already held as carried', async () => {
+    const target = daemon()
+    const earlier = new Uint8Array([7, 7, 7])
+    const { ref } = await target.deps.blobStore.put({ bytes: earlier })
+    recordTrashEntry(target.workspaceDoc, {
+      documentId: EARLIER_TRASH_ID,
+      path: 'earlier',
+      deletedAt: 0,
+      blob: ref,
+    })
+    target.workspaceDoc.commit()
+    const record = await browserRecord()
+    const result = await promoteWorkspace(target.deps, { workspaceId: WS, operator, ...record })
+    expect(readTrashEntries(target.workspaceDoc).map((entry) => entry.documentId)).toContain(
+      EARLIER_TRASH_ID,
+    )
+    expect(result).toMatchObject({ kind: 'promoted', trashStored: [GONE_ID] })
+  })
+
+  it('counts the nodes of a carried canvas version from the state it names', async () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: BOARD_ID, kind: 'spatial' })
+    const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 1, height: 1 })
+    writeSpatialCanvas(documentContainers(doc, BOARD_ID), {
+      nodes: [box('a'), box('b')],
+      edges: [],
+    })
+    doc.commit()
+    const judged = await judgeCarried(doc, {
+      trash: [],
+      versions: [
+        {
+          id: 'board-v1',
+          documentId: BOARD_ID,
+          createdAt: 1,
+          auto: false,
+          frontiers: encodeFrontiers(doc.oplogFrontiers()),
+        },
+      ],
+    })
+    expect(judged).toMatchObject({ kind: 'admitted', versions: [{ elementCount: 2 }] })
   })
 
   it('a carried frontier still names the browser state in the merged record, beside the daemon own ops', async () => {

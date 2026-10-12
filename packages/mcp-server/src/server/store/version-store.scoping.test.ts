@@ -118,6 +118,29 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     })
   })
 
+  describe('adopt', () => {
+    it('keeps the element count the carried version was judged with', async () => {
+      const kept = await store.adopt('ws-a', [
+        {
+          id: 'carried-board',
+          documentId: 'doc-a',
+          createdAt: 1,
+          auto: false,
+          frontiers: [],
+          elementCount: 2,
+          contentDigest: 'x',
+        },
+      ])
+      expect(kept).toEqual(['carried-board'])
+      const row = await handle.db
+        .selectFrom('versions')
+        .select(['elementCount'])
+        .where('id', '=', 'carried-board')
+        .executeTakeFirstOrThrow()
+      expect(row.elementCount).toBe(2)
+    })
+  })
+
   describe('isUnchangedSinceLastVersion', () => {
     async function checkpoint(workspaceId: string, text: string, tMs: number): Promise<void> {
       await edit(workspaceId, text)
