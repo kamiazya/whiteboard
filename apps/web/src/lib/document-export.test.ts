@@ -25,4 +25,23 @@ describe('renderMarkdownForExport', () => {
     expect(math).toHaveBeenCalledWith('x^2', true)
     expect(svg).toContain('fragment-drawn')
   })
+
+  it("draws a note's diagram fences through the engine, keeping the fallback where one fails", async () => {
+    const math = vi.fn(async () => undefined)
+    const diagram = vi.fn(async (_lang: string, value: string) => {
+      if (value.includes('broken')) throw new Error('engine failed')
+      return FAKE_FRAGMENT
+    })
+    const { svg } = await renderMarkdownForExport(
+      '```mermaid\ngraph TD; A-->B\n```\n\n```mermaid\nbroken\n```\n',
+      { fragments: { math, diagram } },
+    )
+    expect(diagram).toHaveBeenCalledWith('mermaid', 'graph TD; A-->B')
+    expect(diagram).toHaveBeenCalledWith('mermaid', 'broken')
+    expect(svg.match(/fragment-drawn/g)).toHaveLength(1)
+    // The failed fence still draws, as its source.
+    expect(
+      new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement.textContent,
+    ).toContain('broken')
+  })
 })
