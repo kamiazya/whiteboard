@@ -376,6 +376,38 @@ describe('sending a transfer through a window at the destination', () => {
     })
   })
 
+  it('names unreported trash on its own when no version was sent', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer({
+      ...baseOptions(popup),
+      payload: Promise.resolve({
+        ...withOneVersion(),
+        trash: [{ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAW', bytes: 'AA' }],
+        versions: [],
+      }),
+    })
+    arrive(KEEPER, {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    })
+    await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: ['a'],
+      shadowedPaths: [],
+    })
+    await expect(sent).resolves.toMatchObject({
+      ok: true,
+      leftBehind: [
+        'the keeper did not report keeping the 1 trashed document sent, so it may not have them — update it and send again',
+      ],
+    })
+  })
+
   it('names every unreported plane in one sentence, counted in the plural', async () => {
     const popup = fakePopup()
     const twoVersions = withOneVersion().versions.flatMap((version) => [
