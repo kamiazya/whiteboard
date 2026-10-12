@@ -32,13 +32,7 @@
  * record consumer relies on.
  */
 
-import {
-  documentFileApiUrl,
-  promoteWorkspaceResponseSchema,
-  workspaceDocumentApiUrl,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
+import { documentFileApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   collectImageRefIds,
   documentContainers,
@@ -48,18 +42,11 @@ import {
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
-import { z } from 'zod'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import {
-  type CarriedPlanes,
-  fitCarriedPlanes,
-  readCarriedPlanes,
-  unconfirmedPlanes,
-} from './carried-planes.js'
-import { listDocuments } from './daemon-api-client.js'
-import { daemonContractError } from './daemon-contract-error.js'
+import { type CarriedPlanes, fitCarriedPlanes, readCarriedPlanes } from './carried-planes.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
+import { type PromoteWording, requestPromote } from './promote-request.js'
 
 export interface PromoteWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -130,18 +117,11 @@ export type PromoteWorkspaceResult =
     }
   | { kind: 'failed'; reason: string }
 
-const invalidBodySchema = z.object({ error: z.literal('invalid_body') })
-
-/**
- * The daemon's own reason, with the one cause a person can act on named when
- * the refusal is of the planes: a daemon built before them answers a body
- * carrying any with a shape refusal that says nothing about its age.
- */
-async function refusedMoveReason(res: Response, sent: PromoteWorkspaceRequest): Promise<string> {
-  const { reason, body } = await refusalReasonOf(res, `Request failed (${res.status}).`)
-  const carried = sent.trash !== undefined || sent.versions !== undefined
-  if (!carried || !invalidBodySchema.safeParse(body).success) return reason
-  return `The daemon refused the trash and saved versions sent with the workspace (${reason}). If the daemon is older than this page, update it and move again.`
+const DAEMON_WORDING: PromoteWording = {
+  subject: 'The daemon',
+  object: 'the daemon',
+  refused: (status) => `Request failed (${status}).`,
+  unexpected: 'The daemon answered the move with an unexpected response.',
 }
 
 export async function promoteWorkspace(
@@ -227,23 +207,6 @@ async function transferImages(
   return blobs
 }
 
-/**
- * An empty plane is omitted rather than sent as `[]`: a daemon whose strict
- * request schema predates the planes refuses any body naming them, so a
- * workspace with nothing beside its record still moves to one.
- */
-function promoteBody(
-  snapshot: string,
-  fitted: Pick<PromoteWorkspaceRequest, 'trash' | 'versions'>,
-): PromoteWorkspaceRequest {
-  const { trash = [], versions = [] } = fitted
-  return {
-    snapshot,
-    ...(trash.length === 0 ? {} : { trash }),
-    ...(versions.length === 0 ? {} : { versions }),
-  }
-}
-
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
@@ -270,35 +233,19 @@ async function promoteWorkspaceUnsafe(
   }
   const snapshot = bytesToBase64Url(new Uint8Array(record.export({ mode: 'snapshot' })))
   const fitted = fitCarriedPlanes(snapshot, planes)
-  const body = promoteBody(snapshot, fitted)
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
   // plus the planes beside it and the checkpoints a person's move leaves.
-  const promoteUrl = `${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`
-  const res = await fetch(promoteUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  const promoted = await requestPromote({
+    fetch,
+    keeperBaseUrl,
+    workspaceId,
+    snapshot,
+    planes: fitted,
+    wording: DAEMON_WORDING,
   })
-  if (!res.ok) {
-    return { kind: 'failed', reason: await refusedMoveReason(res, body) }
-  }
-  const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
-  if (!promoted.success) {
-    daemonContractError(promoteUrl, promoted.error)
-    return { kind: 'failed', reason: 'The daemon answered the move with an unexpected response.' }
-  }
-
-  // The daemon's own post-merge list is what reports collisions — shadowed
-  // is its projection, not something this side can compute without knowing
-  // what the target already held. A failed read-back degrades to "no
-  // collisions reported", never to a failed promotion: the merge landed.
-  const shadowedPaths = await listDocuments(fetch, keeperBaseUrl, workspaceId)
-    .then((response) =>
-      response.documents.filter((entry) => entry.shadowed === true).map((entry) => entry.path),
-    )
-    .catch(() => [])
+  if (!promoted.ok) return { kind: 'failed', reason: promoted.reason }
 
   // The record is on the daemon now, so its documents already resolve there;
   // the images travel last, and per-file — a single unreadable or refused
@@ -313,12 +260,8 @@ async function promoteWorkspaceUnsafe(
     kind: 'ok',
     sourceWorkspaceId,
     promotedDocumentIds,
-    shadowedPaths,
+    shadowedPaths: promoted.shadowedPaths,
     blobs,
-    leftBehind: [
-      ...planes.leftBehind,
-      ...fitted.leftBehind,
-      ...unconfirmedPlanes(body, promoted.data, 'the daemon'),
-    ],
+    leftBehind: [...planes.leftBehind, ...fitted.leftBehind, ...promoted.leftBehind],
   }
 }

@@ -111,6 +111,31 @@ describe('acceptTransferredRecord refusals', () => {
     await expectLoggedFailure(`/workspace-document/promote failed its contract at ${path}`)
   })
 
+  it('says to update the keeper when it refuses the shape of a body carrying planes', async () => {
+    const fetch = keeper({
+      promote: () => jsonResponse({ error: 'invalid_body', message: 'unrecognized key' }, 400),
+    })
+    const version = {
+      id: 'v-1',
+      documentId: DOCUMENT_ID,
+      createdAt: 1_000,
+      auto: false,
+      frontiers: 'AA',
+    }
+    expect(
+      await acceptTransferredRecord({
+        fetch: fetch as unknown as typeof globalThis.fetch,
+        workspaceId: 'ws-here',
+        snapshot: validSnapshot(),
+        versions: [version],
+      }),
+    ).toEqual({
+      ok: false,
+      reason:
+        'This keeper refused the trash and saved versions sent with the workspace (unrecognized key). If the keeper is older than this page, update it and move again.',
+    })
+  })
+
   it('refuses a snapshot that does not decode without asking the keeper anything', async () => {
     const fetch = keeper({ promote: promoted })
     expect(await accept(fetch, GARBAGE)).toEqual({
