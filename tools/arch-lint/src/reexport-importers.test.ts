@@ -19,13 +19,12 @@
  * test walking a barrel's every export would otherwise excuse all of them.
  * `export *` in the entry itself is not judged, since it forwards no name.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { dirname, join, normalize } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { parseSource } from './ast-helpers.js'
-import { workspaceEntries } from './module-exports-resolve.js'
-import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
+import { REPO_ROOT, type RepoSource, readRepoSources, readWorkspaceEntries } from './scan-roots.js'
 import { isTestPath } from './source-scan.js'
 
 /**
@@ -35,36 +34,6 @@ import { isTestPath } from './source-scan.js'
 const UNIMPORTED: Readonly<Record<string, string>> = {
   'packages/server-core/src/index.ts#DocumentEngineTrapError':
     'debt: every user imports it from document-io.js inside the package; drop the re-export',
-}
-
-const SOURCE_DIRS = ['apps', 'packages', 'tools', 'scripts', '.claude/scripts']
-const SKIPPED_DIRS = new Set(['node_modules', 'dist', 'tmp', '.git', 'worktrees', 'coverage'])
-
-interface SourceFile {
-  readonly path: string
-  readonly text: string
-}
-
-function readSources(): SourceFile[] {
-  return SOURCE_DIRS.filter((dir) => existsSync(join(REPO_ROOT, dir)))
-    .flatMap((dir) =>
-      walk(join(REPO_ROOT, dir), {
-        include: (path) => /\.(tsx?|mts|mjs|js|cjs)$/.test(path) && !path.endsWith('.d.ts'),
-        skip: (_path, name) => SKIPPED_DIRS.has(name),
-      }),
-    )
-    .map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
-}
-
-function readEntries(): Map<string, string> {
-  const manifests = ['apps', 'packages'].flatMap((group) =>
-    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => `${group}/${entry.name}`)
-      .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json')))
-      .map((dir) => ({ dir, text: readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf8') })),
-  )
-  return workspaceEntries(manifests)
 }
 
 /** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
@@ -128,7 +97,7 @@ function relativeTarget(from: string, spec: string): string[] {
 
 /** For each entry file, the names imported through it, or `'*'` when something takes it wholesale. */
 function importsByEntry(
-  files: readonly SourceFile[],
+  files: readonly RepoSource[],
   entries: ReadonlyMap<string, string>,
 ): Map<string, Set<string>> {
   const entryFiles = new Set(entries.values())
@@ -170,8 +139,8 @@ function importsByEntry(
 }
 
 function unimportedForwards(): string[] {
-  const entries = readEntries()
-  const files = readSources()
+  const entries = readWorkspaceEntries()
+  const files = readRepoSources()
   const imports = importsByEntry(files, entries)
   const text = new Map(files.map((file) => [file.path, file.text]))
   return [...new Set(entries.values())].sort().flatMap((entry) => {
@@ -197,12 +166,12 @@ describe('package entries forward only names someone imports through them', () =
   })
 
   it('reaches the barrels it judges, so a clean scan is not a blind one', () => {
-    const entries = readEntries()
+    const entries = readWorkspaceEntries()
     expect(entries.size).toBeGreaterThan(40)
     const barrel = 'packages/daemon-client/src/api-contracts/index.ts'
     const forwarded = forwardedNames(barrel, readFileSync(join(REPO_ROOT, barrel), 'utf8'))
     expect(forwarded).toContain('apiErrorReason')
-    const used = importsByEntry(readSources(), entries).get(barrel)
+    const used = importsByEntry(readRepoSources(), entries).get(barrel)
     expect(used?.has('apiErrorReason')).toBe(true)
     // A test walking the barrel whole must not excuse every name in it.
     expect(used?.has('*')).toBe(false)
