@@ -4,18 +4,25 @@
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearNamedDb } from '../test-utils/browser-document.js'
-import { BROWSER_DEFAULT_SEGMENT, setWhiteboardDbNameForTests } from './browser-idb.js'
+import { clearNamedDb, registerTestWorkspace } from '../test-utils/browser-document.js'
+import {
+  BROWSER_DEFAULT_SEGMENT,
+  openWhiteboardDb,
+  setWhiteboardDbNameForTests,
+  WORKSPACES_STORE,
+} from './browser-idb.js'
 import {
   browserWorkspaceHandleOrNull,
   getBrowserWorkspaceId,
   getBrowserWorkspaceIdentity,
+  leaveRemovedWorkspace,
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
   switchBrowserWorkspace,
 } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
+import { request } from './idb-tx.js'
 
 const DB_NAME = 'whiteboard-workspace-id-test'
 
@@ -25,6 +32,32 @@ const DB_NAME = 'whiteboard-workspace-id-test'
 // learn it. These two differ in the timestamp half.
 const EARLIER_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const LATER_ULID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+
+/** What a removal in another tab leaves: no registry row for the id. */
+async function removeRow(workspaceId: string): Promise<void> {
+  const db = await openWhiteboardDb(DB_NAME)
+  try {
+    await request(
+      db
+        .transaction([WORKSPACES_STORE], 'readwrite')
+        .objectStore(WORKSPACES_STORE)
+        .delete(workspaceId),
+    )
+  } finally {
+    db.close()
+  }
+}
+
+async function clearRows(): Promise<void> {
+  const db = await openWhiteboardDb(DB_NAME)
+  try {
+    await request(
+      db.transaction([WORKSPACES_STORE], 'readwrite').objectStore(WORKSPACES_STORE).clear(),
+    )
+  } finally {
+    db.close()
+  }
+}
 
 describe('browser workspace id accessor', () => {
   beforeEach(async () => {
@@ -68,6 +101,40 @@ describe('browser workspace id accessor', () => {
     expect(getBrowserWorkspaceId()).toBe(LATER_ULID)
     expect(getBrowserWorkspaceId()).not.toBe(first)
     expect(getBrowserWorkspaceIdentity().segment).toBe('second')
+  })
+
+  it('leaves a removed workspace for one this registry still keeps', async () => {
+    const index = new IdbDocumentIndex(DB_NAME)
+    await index.createWorkspace({ workspaceId: EARLIER_ULID })
+    await index.createWorkspace({ workspaceId: LATER_ULID, segment: 'kept' })
+    await switchBrowserWorkspace(EARLIER_ULID, DB_NAME)
+    await removeRow(EARLIER_ULID)
+
+    const next = await leaveRemovedWorkspace(EARLIER_ULID, DB_NAME)
+
+    expect(next?.workspaceId).toBe(LATER_ULID)
+    expect(getBrowserWorkspaceId()).toBe(LATER_ULID)
+  })
+
+  it('stays put when the removed workspace is not the one shown, or nothing else is kept', async () => {
+    const index = new IdbDocumentIndex(DB_NAME)
+    await index.createWorkspace({ workspaceId: EARLIER_ULID })
+    await switchBrowserWorkspace(EARLIER_ULID, DB_NAME)
+
+    expect(await leaveRemovedWorkspace(LATER_ULID, DB_NAME)).toBeNull()
+    expect(getBrowserWorkspaceId()).toBe(EARLIER_ULID)
+
+    // The registry also holds the default workspace the first read mints.
+    await clearRows()
+    expect(await leaveRemovedWorkspace(EARLIER_ULID, DB_NAME)).toBeNull()
+    expect(getBrowserWorkspaceId()).toBe(EARLIER_ULID)
+  })
+
+  it('registerTestWorkspace gives the resolved identity a registry row', async () => {
+    setBrowserWorkspaceIdForTests(LATER_ULID)
+    await registerTestWorkspace()
+
+    expect(await switchBrowserWorkspace(LATER_ULID, DB_NAME)).not.toBeNull()
   })
 
   it('refuses a handle this registry does not hold, leaving the identity where it was', async () => {

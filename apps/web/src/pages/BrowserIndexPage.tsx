@@ -476,10 +476,10 @@ function WorkspaceMovedNotice() {
 }
 
 interface BrowserCreateInput {
-  index: BrowserIndexPageProps['index'] & {}
-  loro: BrowserIndexPageProps['loro'] & {}
-  clock: BrowserIndexPageProps['clock'] & {}
-  pointer: BrowserIndexPageProps['pointer'] & {}
+  index: NonNullable<BrowserIndexPageProps['index']>
+  loro: NonNullable<BrowserIndexPageProps['loro']>
+  clock: NonNullable<BrowserIndexPageProps['clock']>
+  pointer: NonNullable<BrowserIndexPageProps['pointer']>
   onOpenDocument: BrowserIndexPageProps['onOpenDocument']
   setFilesRevision: (next: (revision: number) => number) => void
   setError: (message: string | null) => void
