@@ -121,8 +121,6 @@ describe('transferFragmentImages over a mixed selection', () => {
   it('keeps a link and a non-picture file beside a picture', async () => {
     const { fragment } = await transferFragmentImages(
       {
-        type: 'whiteboard/clipboard',
-        version: 1,
         nodes: [
           fileNode({ id: 'f', x: 0, y: 0, width: 1, height: 1, file: 'asset:p' }),
           linkNode({ id: 'l', x: 0, y: 0, width: 1, height: 1, url: 'https://example.com' }),
