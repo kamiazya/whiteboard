@@ -47,7 +47,7 @@
 // hold that rule.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
-// Chromium: `pnpm exec playwright install chromium`.
+// Chromium: `pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium`.
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { chromium } from 'playwright'

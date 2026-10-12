@@ -33,6 +33,14 @@ function collectMarkdownFiles(dir: string): string[] {
   })
 }
 
+// Files still carrying the bare `pnpm exec playwright install` form, owned by
+// changes outside this guard's. Shrink-only: an entry that no longer carries
+// the form fails until it is removed.
+const BARE_PLAYWRIGHT_INSTALL_LEDGER: readonly string[] = [
+  '.claude/rules/app-extension.md',
+  'apps/extension/scripts/bridge-smoke.mjs',
+]
+
 describe('docs/ contract', () => {
   it('no longer documents the retired WHITEBOARD_LEGACY_UI escape hatch', () => {
     const markdownFiles = collectMarkdownFiles(DOCS_ROOT)
@@ -156,10 +164,10 @@ describe('docs/ contract', () => {
 
   // The quick-start playwright command must work FROM REPO ROOT. The bare
   // `pnpm exec playwright install` form fails there (playwright is a
-  // devDependency of apps/web and canvas-viewer only), which a clean-clone
-  // contributor hits at step 4 — and CI never notices, because it sets
-  // WHITEBOARD_CHROME_PATH and skips playwright install entirely.
-  it('gives contributors the filtered playwright install command, never the bare root form', () => {
+  // devDependency of individual packages, not of the root), which a
+  // clean-clone contributor hits at step 4 — and CI never notices, because it
+  // sets WHITEBOARD_CHROME_PATH and skips playwright install entirely.
+  it('gives contributors the filtered playwright install command', () => {
     const filtered =
       'pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium'
     const contributing = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8')
@@ -169,10 +177,6 @@ describe('docs/ contract', () => {
       ['development.md', development],
     ] as const) {
       expect(content, `${name} must carry the filtered command`).toContain(filtered)
-      expect(
-        /^pnpm exec playwright install/m.test(content),
-        `${name} still carries the bare root-level form, which fails from repo root`,
-      ).toBe(false)
     }
     // The parenthetical names every real-browser project, derived from the
     // configs so a new browser project cannot leave it stale again.
@@ -181,6 +185,30 @@ describe('docs/ contract', () => {
         projectName,
       )
     }
+  })
+
+  // The bare form fails at the root wherever it is handed out — indented in a
+  // list, backticked in a header comment, or inside a refusal a script prints
+  // — and where a global playwright is on PATH it "succeeds" by installing
+  // that version's browser revision, not the one the package's playwright
+  // launches. So it is matched anywhere in a line, over every tracked doc,
+  // rule, script and workflow a contributor reads a command from.
+  it('never hands out the bare root-level playwright install form', () => {
+    const files = trackedFiles(REPO_ROOT, '*.md', '*.mjs', '*.js', '*.yml', '*.yaml').filter(
+      (path) => !path.includes('/adr/'),
+    )
+    expect(files.length, 'the scan reached no files').toBeGreaterThan(300)
+    const carrying = files.filter((path) =>
+      /pnpm exec playwright install/.test(readFileSync(join(REPO_ROOT, path), 'utf8')),
+    )
+    expect(
+      carrying.filter((path) => !BARE_PLAYWRIGHT_INSTALL_LEDGER.includes(path)),
+      'use `pnpm --filter <package> exec playwright install`',
+    ).toEqual([])
+    expect(
+      BARE_PLAYWRIGHT_INSTALL_LEDGER.filter((path) => !carrying.includes(path)),
+      'no longer carries the bare form — drop it from the ledger',
+    ).toEqual([])
   })
 
   // The single pre-PR gate the repo actually maintains (derived from ci.yml

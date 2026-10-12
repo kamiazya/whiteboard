@@ -194,7 +194,8 @@ through the development build of the extension, which also admits
   path in headless Chromium against a real daemon, including the built web app
   connecting, reading an agent's note, writing back, and seeing the agent's
   next edit arrive live. Branded Chrome ignores `--load-extension`, so it needs
-  `pnpm exec playwright install chromium` once.
+  `pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium`
+  once.
 - `smoke:bridge:firefox` proves the same in Firefox, over WebDriver: Playwright
   cannot load an extension into Firefox. It needs geckodriver and a Firefox that
   is not the snap (whose portal dialog wants a person), named by `GECKODRIVER`
