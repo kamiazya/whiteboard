@@ -551,7 +551,13 @@ function useLauncherShortcut(onCreate: (kind: DocumentKind) => Promise<void>): v
   const [params, setParams] = useSearchParams()
   const handled = useRef(false)
   useEffect(() => {
-    if (handled.current || params.get('new') !== 'canvas') return
+    // Re-armed once the parameter is gone, so a later visit retries a create
+    // that failed; held while it is present, so one visit creates once.
+    if (params.get('new') !== 'canvas') {
+      handled.current = false
+      return
+    }
+    if (handled.current) return
     handled.current = true
     setParams(
       (current) => {

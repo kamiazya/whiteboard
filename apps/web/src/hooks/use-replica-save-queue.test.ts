@@ -35,3 +35,13 @@ it('drops the replica mark when the copy is removed in another tab', async () =>
   expect(isReplicaCopy(OTHER_ID)).toBe(true)
   unmount()
 })
+
+it('drops a mark the tab holds with no replica page mounted for it', async () => {
+  // A tab whose page moved on to another workspace no longer listens for the
+  // first one's removal, and its mark would outlive the deleted copy.
+  markReplica(WORKSPACE_ID, DAEMON)
+
+  announceWorkspaceRemoved(WORKSPACE_ID)
+
+  await waitFor(() => expect(isReplicaCopy(WORKSPACE_ID)).toBe(false))
+})
