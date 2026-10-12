@@ -18,6 +18,7 @@ import {
   transferResponseSchema,
   transferWindowUrl,
 } from './cross-origin-transfer-protocol.js'
+import { LEFT_BEHIND_MAX_CHARS, LEFT_BEHIND_MAX_ENTRIES } from './user-settings-store.js'
 
 const NONCE = 'n'.repeat(32)
 
@@ -164,6 +165,30 @@ describe('the transfer result', () => {
       reason: '',
     })
     expect(parsed.success).toBe(false)
+  })
+
+  describe('what it left behind, bounded since the sender shows it as-is', () => {
+    const withLeftBehind = (leftBehind: string[]) =>
+      transferResponseSchema.safeParse({
+        type: 'transfer-result',
+        nonce: NONCE,
+        ok: true,
+        workspaceId: 'ws-a',
+        promotedDocumentIds: [],
+        shadowedPaths: [],
+        leftBehind,
+      }).success
+
+    it('accepts as many sentences as the bound, and refuses one more', () => {
+      const atBound = Array.from({ length: LEFT_BEHIND_MAX_ENTRIES }, () => 'a version')
+      expect(withLeftBehind(atBound)).toBe(true)
+      expect(withLeftBehind([...atBound, 'a version'])).toBe(false)
+    })
+
+    it('accepts a sentence as long as the bound, and refuses a longer one', () => {
+      expect(withLeftBehind(['x'.repeat(LEFT_BEHIND_MAX_CHARS)])).toBe(true)
+      expect(withLeftBehind(['x'.repeat(LEFT_BEHIND_MAX_CHARS + 1)])).toBe(false)
+    })
   })
 })
 
