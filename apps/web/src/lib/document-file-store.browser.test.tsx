@@ -13,6 +13,9 @@ import { DocumentFileStore, documentFileRecordSchema } from './document-file-sto
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
 claimIsolatedWhiteboardDb('document-file-store')
 
+/** Rounds of the put-vs-sweep race: unserialised, most of them lose the image. */
+const ROUNDS = 12
+
 describe('DocumentFileStore', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(clearWhiteboardDb)
@@ -60,6 +63,38 @@ describe('DocumentFileStore', () => {
   it('get returns null for an unknown fileId', async () => {
     const store = new DocumentFileStore()
     expect(await store.get('does-not-exist')).toBeNull()
+  })
+
+  it('a put racing a sweep keeps its image when a swept sibling shared its bytes', async () => {
+    // Each round stores `old` with bytes B, then sweeps `old` away while
+    // `put` maps `new` to the same B. Unserialised, the sweep sees no other
+    // mapping to B and deletes it between `put`'s blob write and its mapping
+    // write, leaving `new` naming nothing. The staggered start moves `put`'s
+    // entry across the sweep's awaits so the rounds reach that window.
+    const png = (text: string) => new Blob([new TextEncoder().encode(text)], { type: 'image/png' })
+    const lost: number[] = []
+    for (let round = 0; round < ROUNDS; round++) {
+      await clearWhiteboardDb()
+      const bytes = `png:shared-${round}`
+      await new DocumentFileStore().put(`asset:old-${round}`, {
+        mimeType: 'image/png',
+        blob: png(bytes),
+        created: 0,
+      })
+      await Promise.all([
+        new DocumentFileStore().sweep(() => false, 1),
+        (async () => {
+          for (let tick = 0; tick < round % 4; tick++) await Promise.resolve()
+          await new DocumentFileStore().put(`asset:new-${round}`, {
+            mimeType: 'image/png',
+            blob: png(bytes),
+            created: Date.now(),
+          })
+        })(),
+      ])
+      if ((await new DocumentFileStore().get(`asset:new-${round}`)) === null) lost.push(round)
+    }
+    expect(lost).toEqual([])
   })
 })
 
