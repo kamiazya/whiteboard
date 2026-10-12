@@ -33,13 +33,6 @@ function collectMarkdownFiles(dir: string): string[] {
   })
 }
 
-// Files still carrying the bare `pnpm exec playwright install` form, owned by
-// changes outside this guard's. Shrink-only: an entry that no longer carries
-// the form fails until it is removed.
-const BARE_PLAYWRIGHT_INSTALL_LEDGER: readonly string[] = [
-  'apps/extension/scripts/bridge-smoke.mjs',
-]
-
 describe('docs/ contract', () => {
   it('no longer documents the retired WHITEBOARD_LEGACY_UI escape hatch', () => {
     const markdownFiles = collectMarkdownFiles(DOCS_ROOT)
@@ -200,14 +193,7 @@ describe('docs/ contract', () => {
     const carrying = files.filter((path) =>
       /pnpm exec playwright install/.test(readFileSync(join(REPO_ROOT, path), 'utf8')),
     )
-    expect(
-      carrying.filter((path) => !BARE_PLAYWRIGHT_INSTALL_LEDGER.includes(path)),
-      'use `pnpm --filter <package> exec playwright install`',
-    ).toEqual([])
-    expect(
-      BARE_PLAYWRIGHT_INSTALL_LEDGER.filter((path) => !carrying.includes(path)),
-      'no longer carries the bare form — drop it from the ledger',
-    ).toEqual([])
+    expect(carrying, 'use `pnpm --filter <package> exec playwright install`').toEqual([])
   })
 
   // The single pre-PR gate the repo actually maintains (derived from ci.yml

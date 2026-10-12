@@ -265,6 +265,9 @@ it('refuses trash bytes that are not what the entry names, and merges nothing', 
     trash: [{ documentId: GONE_ID, bytes: b64u(new Uint8Array([1, 2, 3])) }],
   })
   expect(res.status).toBe(400)
+  // Its own code, not `invalid_body`: a sender reads that one, beside carried
+  // planes, as a keeper too old to know the planes, and this daemon knows them.
+  expect(((await res.json()) as { error: string }).error).toBe('unmatched_carried')
   expect(await documents()).toEqual([])
 })
 

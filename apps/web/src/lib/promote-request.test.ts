@@ -131,6 +131,23 @@ describe('requestPromote', () => {
     })
   })
 
+  it('passes a refusal of the carried planes themselves through as the keeper said it', async () => {
+    const fetch = keeper({
+      promote: () =>
+        jsonResponse(
+          {
+            error: 'unmatched_carried',
+            message: 'Version "v1" names a point the record does not hold.',
+          },
+          400,
+        ),
+    })
+    expect(await request(fetch, { versions: [VERSION] })).toEqual({
+      ok: false,
+      reason: 'Version "v1" names a point the record does not hold.',
+    })
+  })
+
   it('passes a shape refusal of a body carrying no planes through as the keeper said it', async () => {
     const fetch = keeper({
       promote: () => jsonResponse({ error: 'invalid_body', message: 'unrecognized key' }, 400),

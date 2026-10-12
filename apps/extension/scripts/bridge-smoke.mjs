@@ -18,7 +18,7 @@
 // 6. The production build admits no loopback page at all.
 //
 // Branded Chrome ignores --load-extension, so this needs Playwright's own
-// Chromium: `pnpm exec playwright install chromium`.
+// Chromium: `pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium`.
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
