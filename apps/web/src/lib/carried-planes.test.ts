@@ -282,6 +282,26 @@ describe('readCarriedPlanes', () => {
     expect(planes.leftBehind).toEqual([])
   })
 
+  it('names a part of the record this build cannot judge, so the browser copy stays', async () => {
+    // Pictures named only by such a node are absent from the scan's referenced
+    // set, so they are never sent and never counted missing: this line is the
+    // demote gate's only knowledge of them.
+    const { record, workspaceId } = await seedWorkspace()
+    const node = record
+      .getTree('tree')
+      .getNodes()
+      .find((each) => each.data.get('kind') === 'spatial')
+    if (node === undefined) throw new Error('no spatial node in the tree')
+    node.data.set('kind', 'future-kind')
+    record.commit()
+
+    const planes = await readCarriedPlanes(record, workspaceId)
+
+    expect(planes.leftBehind).toContain(
+      'part of the workspace could not be read by this version of the app',
+    )
+  })
+
   it('names a trash entry whose bytes are gone and carries nothing for it', async () => {
     const { record, workspaceId } = await seedWorkspace()
     const entry = readTrashEntries(record)[0]
