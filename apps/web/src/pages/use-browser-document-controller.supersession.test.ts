@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
@@ -92,8 +93,8 @@ describe('switchDocument supersession', () => {
     let docA: DocumentSnapshot | undefined
     let docB: DocumentSnapshot | undefined
     await act(async () => {
-      docA = await hook.result.current.createDocument('A')
-      docB = await hook.result.current.createDocument('B')
+      docA = await createSeededDocument(store.index, store.loro, store.clock, 'A')
+      docB = await createSeededDocument(store.index, store.loro, store.clock, 'B')
     })
     return { hook, a: docA as DocumentSnapshot, b: docB as DocumentSnapshot }
   }

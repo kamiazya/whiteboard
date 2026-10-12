@@ -56,7 +56,6 @@ export interface BrowserDocumentController {
   deleteDocument(): Promise<void>
   startFresh(): Promise<void>
   listDocuments(): Promise<DocumentSnapshot[]>
-  createDocument(name?: string, kind?: DocumentSnapshot['kind']): Promise<DocumentSnapshot>
   /** Resolves true when the switch landed; false when superseded, when the
    *  target is missing (recoverable — e.g. a stale deep link), or when the
    *  store degraded. */
@@ -514,16 +513,6 @@ export function useBrowserDocumentController(
     return listBrowserDocuments(indexRef.current, clockRef.current)
   }, [])
 
-  const createDocument = useCallback(
-    async (
-      name?: string,
-      kind: DocumentSnapshot['kind'] = 'spatial',
-    ): Promise<DocumentSnapshot> => {
-      return createSeededDocument(indexRef.current, loroRef.current, clockRef.current, name, kind)
-    },
-    [],
-  )
-
   const switchDocument = useCallback(
     async (id: string): Promise<boolean> => {
       const generation = ++switchGenerationRef.current
@@ -603,7 +592,6 @@ export function useBrowserDocumentController(
     deleteDocument,
     startFresh,
     listDocuments,
-    createDocument,
     switchDocument,
     duplicateDocument,
   }
