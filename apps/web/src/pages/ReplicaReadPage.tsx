@@ -1,11 +1,10 @@
 /**
  * ADR-0023's offline page: the daemon that keeps this workspace is
- * unreachable, and this browser holds a replica of it. Markdown bodies are
- * EDITABLE — decision 3's data plane: the edits are CRDT ops appended to
- * the replica record and shipped to the daemon as ordinary updates when it
- * returns (replica-push, run by the daemon page's resolve effect). Spatial
- * documents stay read-only for now; the convergence argument is identical,
- * only the editor mount is heavier. Control-plane actions need the keeper
+ * unreachable, and this browser holds a replica of it. Markdown bodies and
+ * canvases are EDITABLE — decision 3's data plane: the edits are CRDT ops
+ * appended to the replica record and shipped to the daemon as ordinary
+ * updates when it returns (replica-push, run by the daemon page's resolve
+ * effect). Control-plane actions need the keeper
  * (decision 3), so none are offered — not greyed out, absent — and NOTHING
  * here may touch a document index: a data-plane edit writes the record and
  * only the record. The record is opened with `open`, never `create`, so a
