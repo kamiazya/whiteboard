@@ -24,7 +24,7 @@ import {
   readWorkspaceDocuments,
   scanFileReferences,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { bytesToBase64Url, VERSION_LABEL_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { savedVersionReads, savedVersionRows, type VersionRow } from './browser-version-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -44,6 +44,24 @@ export interface CarriedPlanes {
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
+/**
+ * A stored label as the wire takes it. A row is read leniently — labels
+ * written before the input was bounded still parse — but the promote body is
+ * strict, so one over-long label would refuse the whole move. Shortened
+ * rather than left behind: a version held back keeps the browser copy, and a
+ * label is not worth that. Cut by code point, so an astral character at the
+ * bound is dropped whole rather than split into a lone surrogate.
+ */
+function wireLabel(label: string | undefined): string | undefined {
+  if (label === undefined) return undefined
+  let fitted = ''
+  for (const char of label) {
+    if (fitted.length + char.length > VERSION_LABEL_MAX_LENGTH) break
+    fitted += char
+  }
+  return fitted === '' ? undefined : fitted
+}
+
 /** The wire form of a version row: no device, which only a keeper can back with a key. */
 function promotedVersion(row: VersionRow): PromotedVersion {
   let operator: PromotedVersion['operator']
@@ -51,12 +69,13 @@ function promotedVersion(row: VersionRow): PromotedVersion {
     const { actor: _device, ...stated } = row.operator
     operator = stated
   }
+  const label = wireLabel(row.label)
   return {
     id: row.id,
     documentId: row.documentId,
     createdAt: Math.trunc(row.createdAt),
     auto: row.auto === true,
-    ...(row.label === undefined ? {} : { label: row.label }),
+    ...(label === undefined ? {} : { label }),
     ...(operator === undefined ? {} : { operator }),
     ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),
     frontiers: bytesToBase64Url(row.frontiers),

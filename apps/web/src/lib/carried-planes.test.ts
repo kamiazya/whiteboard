@@ -10,8 +10,14 @@
  * `z.instanceof(Uint8Array)` skips the row.
  */
 import 'fake-indexeddb/auto'
+import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { readTrashEntries, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { base64UrlToBytes, generateDocumentId, newImageRef } from '@kamiazya/whiteboard-model'
+import {
+  base64UrlToBytes,
+  generateDocumentId,
+  newImageRef,
+  VERSION_LABEL_MAX_LENGTH,
+} from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { blobRefKey } from '@kamiazya/whiteboard-ports'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -191,6 +197,46 @@ describe('readCarriedPlanes', () => {
         frontiers: expect.any(String),
       },
     ])
+  })
+
+  it('fits a label stored past the wire bound so the request still parses', async () => {
+    const { record, workspaceId, sketch } = await seedWorkspace()
+    // An astral character straddling the bound: cutting by code unit would
+    // leave half of it behind.
+    const stored = `${'a'.repeat(VERSION_LABEL_MAX_LENGTH - 1)}😀 and more`
+    await putVersionRow({
+      id: 'v-long',
+      workspaceId,
+      documentId: sketch.documentId,
+      label: stored,
+      createdAt: 1,
+      frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
+    })
+
+    const { versions, leftBehind } = await readCarriedPlanes(record, workspaceId)
+
+    expect(leftBehind).toEqual([])
+    expect(versions[0]?.label).toBe('a'.repeat(VERSION_LABEL_MAX_LENGTH - 1))
+    expect(
+      promoteWorkspaceRequestSchema.safeParse({ snapshot: 'AAAA', trash: [], versions }).success,
+    ).toBe(true)
+  })
+
+  it('omits an empty stored label, which the wire refuses', async () => {
+    const { record, workspaceId, sketch } = await seedWorkspace()
+    await putVersionRow({
+      id: 'v-empty',
+      workspaceId,
+      documentId: sketch.documentId,
+      label: '',
+      createdAt: 1,
+      frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
+    })
+
+    const { versions } = await readCarriedPlanes(record, workspaceId)
+
+    expect(versions).toHaveLength(1)
+    expect(versions[0]).not.toHaveProperty('label')
   })
 
   it('names a version the record cannot check out and does not send it', async () => {
