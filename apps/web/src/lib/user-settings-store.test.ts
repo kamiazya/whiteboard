@@ -2,12 +2,37 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createUserSettingsStore,
   defaultUserSettings,
+  fitLeftBehind,
   LEGACY_V1_STORAGE_KEY,
   LEGACY_V2_STORAGE_KEY,
   LEGACY_V3_STORAGE_KEY,
   LEGACY_V4_STORAGE_KEY,
   STORAGE_KEY,
+  userSettingsSchema,
 } from './user-settings-store.js'
+
+describe('fitLeftBehind', () => {
+  it('clips a list past the bound to what a strict settings write keeps', () => {
+    const leftBehind = fitLeftBehind(Array.from({ length: 101 }, () => 'x'.repeat(600)))
+    const settings = {
+      ...defaultUserSettings(),
+      migration: {
+        promotion: {
+          at: '2026-10-01T00:00:00.000Z',
+          workspaceId: 'ws-a',
+          ok: true as const,
+          promotedCount: 1,
+          shadowedPaths: [],
+          blobsMissing: [],
+          blobsFailed: [],
+          leftBehind,
+        },
+      },
+    }
+    expect(userSettingsSchema.safeParse(settings).success).toBe(true)
+    expect(leftBehind).toHaveLength(100)
+  })
+})
 
 describe('createUserSettingsStore', () => {
   beforeEach(() => {

@@ -106,6 +106,26 @@ const storageSettingsSchema = z
   .strict()
 
 /**
+ * The bound a move's `leftBehind` sentences are held to — here, because this
+ * store keeps them in localStorage under a strict schema, and the
+ * cross-origin result that carries them in reads the same bound so what
+ * arrives always fits what is kept.
+ */
+export const LEFT_BEHIND_MAX_ENTRIES = 100
+export const LEFT_BEHIND_MAX_CHARS = 500
+
+/**
+ * A `leftBehind` list fitted to that bound. Clipped rather than refused: a
+ * record past the bound fails the strict write, and the whole result —
+ * not only the list — would be lost.
+ */
+export function fitLeftBehind(leftBehind: readonly string[]): string[] {
+  return leftBehind
+    .slice(0, LEFT_BEHIND_MAX_ENTRIES)
+    .map((reason) => reason.slice(0, LEFT_BEHIND_MAX_CHARS))
+}
+
+/**
  * The last whole-workspace promotion's outcome. Persisted (not component
  * state) because the promote UI's result surface is a standing report, never
  * a toast: it must survive navigating away from Settings and a full reload.
@@ -175,7 +195,10 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
        * ran it. Bounded: the store lives in localStorage. Absent on records
        * from before the reasons were kept.
        */
-      leftBehind: z.array(z.string().max(500)).max(100).optional(),
+      leftBehind: z
+        .array(z.string().max(LEFT_BEHIND_MAX_CHARS))
+        .max(LEFT_BEHIND_MAX_ENTRIES)
+        .optional(),
     })
     .strict(),
   z

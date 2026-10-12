@@ -44,6 +44,7 @@
 import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { LEFT_BEHIND_MAX_CHARS, LEFT_BEHIND_MAX_ENTRIES } from './user-settings-store.js'
 
 /**
  * Bumped when a message's meaning changes, never for an added optional
@@ -103,9 +104,12 @@ export const transferRequestSchema = z.discriminatedUnion('type', [
 /**
  * What did not land, one sentence each — written by whichever side knows:
  * the sender for what it could not read or fit, the receiver for what its
- * keeper did not report holding. Bounded, since the sender shows it as-is.
+ * keeper did not report holding. Bounded, since the sender shows it as-is,
+ * by the bound the sender's settings keep it under.
  */
-const leftBehindSchema = z.array(z.string().min(1).max(500)).max(100)
+const leftBehindSchema = z
+  .array(z.string().min(1).max(LEFT_BEHIND_MAX_CHARS))
+  .max(LEFT_BEHIND_MAX_ENTRIES)
 
 /**
  * Discriminated on `ok`, not on `type`. Both arms are a `transfer-result` —
