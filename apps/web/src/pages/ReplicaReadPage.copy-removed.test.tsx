@@ -26,6 +26,7 @@ claimIsolatedWhiteboardDb('replicareadpage-copyremoved')
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FC0'
 const DOC_MD = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 const DAEMON = 'http://127.0.0.1:3099'
+const OTHER_WS = '01ARZ3NDEKTSV4RRFFQ69G5FC2'
 
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
@@ -92,6 +93,31 @@ describe('ReplicaReadPage when its copy is deleted elsewhere', () => {
     // The unmount flushes a waiting save, and the save runs a microtask later.
     await act(async () => unmount())
     expect(store.save).not.toHaveBeenCalled()
+  })
+
+  it('does not carry the lock to another workspace the same page goes on to show', async () => {
+    store.save.mockResolvedValue(undefined)
+    const { rerender } = render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        daemonBaseUrl={DAEMON}
+        onReconnect={() => Promise.resolve()}
+      />,
+    )
+    await screen.findByText('plan')
+    announceWorkspaceRemoved(DAEMON_WS)
+    await screen.findByTestId('replica-state-copy-removed')
+
+    rerender(
+      <ReplicaReadPage
+        workspaceId={OTHER_WS}
+        daemonBaseUrl={DAEMON}
+        onReconnect={() => Promise.resolve()}
+      />,
+    )
+
+    await screen.findByText('plan')
+    expect(screen.queryByTestId('replica-state-copy-removed')).toBeNull()
   })
 
   it('locks when a save is refused because the copy is gone', async () => {

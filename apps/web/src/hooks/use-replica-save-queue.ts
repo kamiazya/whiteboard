@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ReplicaRecord } from '../lib/replica-record.js'
 import {
@@ -19,7 +19,11 @@ import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
  */
 export function useReplicaSaveQueue(workspaceId: string) {
   const [health, setHealth] = useState<ReplicaSaveHealth>('ok')
-  const [copyRemoved, setCopyRemoved] = useState(false)
+  // Keyed by the workspace it was heard for: the page is not remounted when
+  // it goes on to show another workspace, and that one's copy is not gone.
+  const [copyRemovedFor, setCopyRemovedFor] = useState<string | null>(null)
+  const copyRemoved = copyRemovedFor === workspaceId
+  const markCopyRemoved = useCallback(() => setCopyRemovedFor(workspaceId), [workspaceId])
   const queue = useMemo(
     () =>
       createReplicaSaveQueue<ReplicaRecord>({
@@ -30,15 +34,15 @@ export function useReplicaSaveQueue(workspaceId: string) {
             () => undefined,
             (error: unknown) => {
               if (!isWorkspaceRemovedError(error)) throw error
-              setCopyRemoved(true)
+              markCopyRemoved()
             },
           ),
         onHealth: setHealth,
       }),
-    [workspaceId],
+    [workspaceId, markCopyRemoved],
   )
   useEffect(() => () => queue.flush(), [queue])
-  useCopyRemovedLock(workspaceId, queue, copyRemoved, setCopyRemoved)
+  useCopyRemovedLock(workspaceId, queue, copyRemoved, markCopyRemoved)
   return {
     scheduleSave: queue.schedule,
     retrySave: queue.retry,
@@ -57,14 +61,14 @@ function useCopyRemovedLock(
   workspaceId: string,
   queue: ReplicaSaveQueue<ReplicaRecord>,
   copyRemoved: boolean,
-  setCopyRemoved: (removed: boolean) => void,
+  markCopyRemoved: () => void,
 ): void {
   useEffect(() => {
     const end = listenToWorkspace(workspaceId, (message) => {
-      if (message.type === 'workspace-removed') setCopyRemoved(true)
+      if (message.type === 'workspace-removed') markCopyRemoved()
     })
     return () => end.close()
-  }, [workspaceId, setCopyRemoved])
+  }, [workspaceId, markCopyRemoved])
   useEffect(() => {
     if (copyRemoved) queue.stop()
   }, [copyRemoved, queue])
