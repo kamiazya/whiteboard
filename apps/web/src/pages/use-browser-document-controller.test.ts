@@ -663,21 +663,13 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
-      renderHook(() =>
-        useBrowserDocumentController(store.index, {
-          loro,
-          pointer: store.pointer,
-          clock: store.clock,
-        }),
+      const created = await createSeededDocument(
+        store.index,
+        new FakeLoroStore(),
+        store.clock,
+        'Second',
       )
-      await act(async () => {})
-
-      let created: DocumentSnapshot | undefined
-      await act(async () => {
-        created = await createSeededDocument(store.index, loro, store.clock, 'Second')
-      })
-      expect(created?.workspaceId).toBe(getBrowserWorkspaceId())
+      expect(created.workspaceId).toBe(getBrowserWorkspaceId())
     })
 
     // Two documents at one address is the failure the path exists to
