@@ -29,7 +29,7 @@ function tombstoneKey(workspaceId: string): string {
 }
 
 /** A write refused because the workspace it targets was removed from this browser. */
-export class WorkspaceRemovedError extends Error {
+class WorkspaceRemovedError extends Error {
   override readonly name = 'WorkspaceRemovedError'
   constructor(readonly workspaceId: string) {
     super(`workspace ${workspaceId} was removed from this browser`)

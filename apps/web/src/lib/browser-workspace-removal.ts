@@ -32,7 +32,7 @@ type PromotedOutcome = Extract<PromoteWorkspaceResult, { kind: 'ok' }>
  * reason: a trash entry or a saved version the daemon did not confirm
  * holding exists only in the copy a demote would delete.
  */
-export function canDemote(outcome: PromotedOutcome): boolean {
+function canDemote(outcome: PromotedOutcome): boolean {
   return (
     outcome.blobs.failed.length === 0 &&
     outcome.blobs.missing.length === 0 &&

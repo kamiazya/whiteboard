@@ -303,8 +303,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
   'packages/loro-adapter/src/workspace-tree.ts#createWorkspaceDocument':
     'the tree raw create operation the concurrent convergence property drives, while production reaches the tree by path',
-  'packages/loro-adapter/src/workspace-tree.ts#deleteWorkspaceDocument':
-    'the tree raw delete operation the concurrent convergence property drives, while production reaches the tree by path',
   'packages/loro-adapter/src/workspace-tree.ts#moveWorkspaceDocument':
     'the tree raw move operation the concurrent convergence property drives, while production reaches the tree by path',
   'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#ALL_REGISTERED_TOOLS':

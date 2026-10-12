@@ -36,7 +36,7 @@ import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { touchContentTimestamp } from './loro-store.js'
 import { openDocumentStore } from './replica-store.js'
-import { WorkspaceRemovedError } from './workspace-tombstone.js'
+import { isWorkspaceRemovedError } from './workspace-tombstone.js'
 
 claimIsolatedWhiteboardDb('demote-browser-workspace')
 
@@ -205,9 +205,7 @@ describe('demoteBrowserWorkspace, another tab still holding the record', () => {
 
     await demoteBrowserWorkspace(sourceId)
     held.getText('typed-after-the-move').insert(0, 'typed in the other tab')
-    await expect(saveAndAnnounce(docs, sourceId, held)).rejects.toBeInstanceOf(
-      WorkspaceRemovedError,
-    )
+    await expect(saveAndAnnounce(docs, sourceId, held)).rejects.toSatisfy(isWorkspaceRemovedError)
 
     expect(await docs.open(sourceId)).toBeNull()
   })
@@ -218,7 +216,7 @@ describe('demoteBrowserWorkspace, another tab still holding the record', () => {
     await demoteBrowserWorkspace(sourceId)
     await expect(
       new FoldingBrowserIndex().createWorkspace({ workspaceId: sourceId }),
-    ).rejects.toBeInstanceOf(WorkspaceRemovedError)
+    ).rejects.toSatisfy(isWorkspaceRemovedError)
 
     expect(await registryRows()).not.toContain(sourceId)
     expect(await docs.open(sourceId)).toBeNull()
