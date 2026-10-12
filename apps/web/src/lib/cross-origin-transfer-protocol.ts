@@ -14,20 +14,18 @@
  * Three properties follow from that choice rather than being added to it, and
  * each is why this is the mechanism instead of a CORS allowance:
  *
- * - **The destination's own credential is used at the destination.** A
- *   passkey is bound to an origin, so one registered against the keeper's
- *   real domain is asked for, and answered, at that domain. WebAuthn's rpId
- *   drops the port, so a credential registered against a loopback daemon is
- *   offered to whatever else later claims that host (ADR-0039); a real
- *   domain cannot be claimed that way, which is exactly what the crossing
- *   to a keeper the user does not own needs.
+ * - **The destination's own sign-in is used at the destination.** A
+ *   server-mode keeper's session is a host-only cookie bound to its origin
+ *   (ADR-0047), so the merge is authorised by whoever is signed in THERE,
+ *   exactly as any other write of theirs is, and the sending origin never
+ *   holds that session.
  * - **The person sees where their data is going.** A popup shows the
  *   destination's origin in the URL bar. An invisible cross-origin fetch
  *   shows nothing, and this transfer is the one operation where the
  *   destination is the whole question.
  * - **The confirmation happens at the destination.** The receiving side
  *   decides whether to accept, so the keeper's own rules — its membership,
- *   its capacity, its passkey — are applied by the side that owns them.
+ *   its capacity, its sign-in — are applied by the side that owns them.
  *
  * WHY A POPUP AND NOT AN IFRAME. The shipped CSP allows `frame-src https:`,
  * so this app may frame others — but it also sets `frame-ancestors 'none'`,
@@ -162,7 +160,7 @@ export const transferResponseSchema = z.discriminatedUnion('ok', [
     ok: z.literal(false),
     /**
      * A sentence the sender shows as-is. The receiver is the only side that
-     * knows why — its capacity, its membership, its passkey — so it writes
+     * knows why — its capacity, its membership, its sign-in — so it writes
      * the reason rather than sending a code the sender would have to
      * translate without knowing the vocabulary.
      */

@@ -11,9 +11,10 @@ import { Button } from '../ui/button.js'
  * 2026-09-22).
  *
  * The move itself happens in a window at the destination's own origin, which
- * asks that keeper's passkey and merges there; this section opens it, hands
- * over the record, and reports what came back. See `send-transfer.ts` for why
- * a window rather than a request, and `receive-transfer.ts` for the other end.
+ * merges there once the person signed in to that keeper presses Accept; this
+ * section opens it, hands over the record, and reports what came back. See
+ * `send-transfer.ts` for why a window rather than a request, and
+ * `receive-transfer.ts` for the other end.
  *
  * Two things are said rather than left to be discovered: images stay in this
  * browser (their bytes live outside the record, where the destination cannot
@@ -34,9 +35,9 @@ export function TransferToKeeperSection({
     <section aria-label="Send to another keeper" className="space-y-2">
       <h3 className="text-sm font-medium">Send this workspace to another keeper</h3>
       <p className="text-xs text-muted-foreground">
-        A self-hosted server or a hosted service, by its address. It opens in its own window, where
-        you confirm with that keeper’s passkey. Images stay in this browser, and this browser keeps
-        its copy.
+        A self-hosted server or a hosted service, by its address. It opens in its own window at that
+        keeper, where you sign in if asked and press Accept. Images stay in this browser, and this
+        browser keeps its copy.
       </p>
       <label className="block text-xs">
         Keeper address

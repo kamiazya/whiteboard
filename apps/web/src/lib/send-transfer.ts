@@ -5,7 +5,8 @@
  *
  * Why a window at all is `cross-origin-transfer-protocol.ts`'s header: this
  * app's `connect-src` cannot reach an arbitrary keeper, and a page AT that
- * keeper is under no such rule — it merges same-origin, with its own passkey.
+ * keeper is under no such rule — it merges same-origin, under the session of
+ * whoever is signed in there.
  *
  * TWO CHECKS DO ALL THE WORK, and both are on the browser's word rather than
  * on anything a message says about itself:
@@ -190,8 +191,8 @@ interface Talk<T> {
  * what to answer.
  *
  * ponytail: a window has no "closed" event, so this polls `popup.closed`; a
- * person may sit in the popup for as long as their passkey takes, so there is
- * deliberately no timeout — closing the window IS the cancel.
+ * person may sit in the popup for as long as signing in and deciding takes,
+ * so there is deliberately no timeout — closing the window IS the cancel.
  */
 function talkTo<T>(
   popup: PopupHandle,
