@@ -47,7 +47,7 @@ const BACKUP_DISPOSITION = {
     "never-copied: this command's own bookkeeping; a copy in a restored dir claims a backup is running there.",
 
   'daemon-identity.json':
-    'never-copied: the Ed25519 private key that signs version attestations and is the source of the daemon did:key. Decided 2026-09-19 against a real cost — a restored daemon gets a fresh identity, so pairings must be redone and old attestations no longer verify. Taken because that is recoverable and a signing key in a backup is not.',
+    'never-copied: the Ed25519 private key behind the daemon did:key, the actor its versions name. Decided 2026-09-19 against a real cost — a restored daemon gets a fresh identity, so pairings must be redone and old versions name a former actor. Taken because that is recoverable and a signing key in a backup is not.',
   'storage.json':
     'copied: the database location record. A restore needs it to find the database it just restored.',
   'whiteboard.db':
