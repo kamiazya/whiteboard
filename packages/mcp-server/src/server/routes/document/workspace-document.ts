@@ -154,7 +154,7 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
       return answerWriteRefusal(c, err)
     }
     if (result.kind === 'malformed-snapshot') {
-      return c.json({ title: 'Malformed workspace record snapshot' }, 400)
+      return c.json(errorBody('malformed_snapshot', 'Malformed workspace record snapshot'), 400)
     }
     if (result.kind === 'unmatched-carried') {
       return c.json(errorBody('invalid_body', result.reason), 400)

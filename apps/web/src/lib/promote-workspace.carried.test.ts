@@ -232,7 +232,7 @@ describe('promoteWorkspace, the planes beside the record', () => {
     await trashedCanvas(index, 'gone', 'only-in-the-trash')
     const refusing = (async () =>
       Response.json(
-        { title: 'Malformed workspace record snapshot' },
+        { error: 'malformed_snapshot', message: 'Malformed workspace record snapshot' },
         { status: 400 },
       )) as typeof globalThis.fetch
 
