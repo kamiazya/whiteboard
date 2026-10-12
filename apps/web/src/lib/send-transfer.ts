@@ -26,6 +26,7 @@
 import { isLoopbackHostname } from '@kamiazya/whiteboard-daemon-client/loopback-host'
 import { bytesToHex } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
+import { planeCounts } from './count-wording.js'
 import {
   CROSS_ORIGIN_TRANSFER_PROTOCOL,
   type TransferResponse,
@@ -141,25 +142,23 @@ interface PostedOffer {
   readonly versions: number
 }
 
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
-
 /**
  * What the reply does not say of the planes. `leftBehind` is optional on the
- * wire, and an ABSENT report is not an empty one: a keeper whose page
- * predates the planes strips them from the offer and answers without it, so
- * reading absence as "nothing left behind" would report history and trash as
- * moved when they never arrived. An absent `imagesMissing` needs no sentence:
- * no picture crosses origins at all, and the transfer says so before it
- * starts, so its absence only loses a count.
+ * wire, and an ABSENT report is not an empty one. No receiver this app ships
+ * omits it under the current protocol — every one that speaks it reports the
+ * keeper's own read-back, and a page from before the planes speaks an older
+ * protocol and is refused at the ready — but adding or dropping an optional
+ * field is not a protocol bump, so a receiver may still answer without it.
+ * Reading that absence as "nothing left behind" would report history and
+ * trash as moved when nothing says they arrived. An absent `imagesMissing`
+ * needs no sentence: no picture crosses origins at all, and the transfer says
+ * so before it starts, so its absence only loses a count.
  */
 function unreported(
   result: Extract<SendTransferResult, { ok: true }>,
   posted: PostedOffer,
 ): string[] {
-  const sent = [
-    ...(posted.trash === 0 ? [] : [plural(posted.trash, 'trashed document', 'trashed documents')]),
-    ...(posted.versions === 0 ? [] : [plural(posted.versions, 'saved version', 'saved versions')]),
-  ]
+  const sent = planeCounts(posted)
   if (result.leftBehind !== undefined || sent.length === 0) return []
   return [
     `the keeper did not report keeping the ${sent.join(' and ')} sent, so it may not have them — update it and send again`,
