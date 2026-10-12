@@ -388,8 +388,9 @@ export function useClipboardActions({
       at,
     )
     if (inserted === undefined) return false
-    onChange(inserted.running, inserted.command)
-    selectCreated(inserted.command)
+    const { running, command } = inserted
+    onChange(running, command)
+    selectCreated(command)
     return true
   }
 
