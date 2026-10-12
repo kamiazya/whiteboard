@@ -7,7 +7,12 @@ the production cost is zero unless you opt in.
 
 ## Quick start (local dev)
 
+The `SessionStart` hook has usually started a dev daemon already without the
+variable, and a second start on the same data dir reuses the running one and
+exits 0 — so the variable would never reach a process. Stop it first:
+
 ```bash
+pnpm mcp:http:stop
 # Spans go to stderr as JSON lines, safe alongside stdio JSON-RPC.
 WHITEBOARD_OTEL=1 pnpm mcp:http:dev
 ```
@@ -28,6 +33,7 @@ WHITEBOARD_OTEL=1 whiteboard server run --json   # plus the server-mode settings
 ## Forwarding to a collector
 
 ```bash
+pnpm mcp:http:stop
 WHITEBOARD_OTEL=1 \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
   pnpm mcp:http:dev
@@ -67,9 +73,15 @@ Inbound HTTP requests honour the W3C `traceparent` header, so a caller
 that already has a span (e.g. another MCP server) can stitch its trace
 into the daemon's trace without extra wiring.
 
-Outbound calls from the MCP daemon-client (`client.request(...)` inside
-each tool) inject `traceparent` automatically, so an `mcp.tool.call` span
-parents the HTTP request span on the daemon side.
+Tools run in the process that receives the call — the daemon and the stdio
+entry alike — so a tool call makes no outbound request to propagate into.
+On the daemon, an `mcp.tool.call` span is a CHILD of the `POST /mcp` HTTP
+span in the same trace, and carries the JSON-RPC id as `mcp.request.id`. On
+the stdio entry there is no HTTP span, so each tool span is a trace root.
+
+A `traceparent` carried in a request's `_meta` rather than as an HTTP header
+is not read: only the header is. The dev stdio proxy speaks JSON-RPC on its
+stdin, which has no headers, so a trace does not cross it.
 
 ## Browser side
 
