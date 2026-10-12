@@ -743,10 +743,8 @@ passes its FILTER and gets the traversal. Two of its choices are measured, not
 tidy: `skip` is judged before the entry is stat'ed, so it reaches FILES (a
 nested worktree's `.git` is a file), and `isExcludedPath` matches the path
 RELATIVE to the repo — this checkout may itself live under
-`.claude/worktrees/`, where an absolute match excludes every file in it. `readRepoSources`
-(the importer guards' walk) skips `migrations` and `.claude/worktrees` by the
-same repo-relative path, never by name — a look-alike directory is somebody's
-code — and still reads the vendored `budoux`, which ships.
+`.claude/worktrees/`, where an absolute match excludes every file in it.
+`readRepoSources` skips both by path, not name.
 
 `size-ledger-assertions.ts` registers the five assertions every shrink-only
 size ledger makes (unlisted, grown, shrunk, missing, headroom). The titles and
