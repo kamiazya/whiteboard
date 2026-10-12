@@ -16,11 +16,18 @@
 //   connection failure retries within a budget instead of surfacing.
 //
 // This is sound because the daemon's /mcp endpoint is stateless per
-// request (fresh server + transport, no Mcp-Session-Id, JSON responses):
-// one line in = one POST = one line out, with no protocol session to lose
-// across daemon restarts. Server-initiated notifications (tools
-// listChanged) don't traverse this proxy — a dev-only tradeoff; reload the
-// client session to pick up a changed tool list.
+// request (fresh server + transport, no Mcp-Session-Id): one line in = one
+// POST, with no protocol session to lose across daemon restarts. Both
+// protocol eras traverse it. A 2026-07-28 request names its revision in
+// `params._meta`, and the endpoint refuses one whose standard headers
+// (MCP-Protocol-Version, Mcp-Method, Mcp-Name) do not mirror the body, so
+// those are derived from each line exactly as the SDK's HTTP client derives
+// them. A reply that arrives as an SSE stream — a modern call whose `_meta`
+// opts into log records — is relayed message by message, in order, so its
+// `notifications/message` records reach the client ahead of the result.
+// What does not traverse is anything the server sends OUTSIDE a request's
+// reply (tools listChanged): there is no standing stream to carry it — a
+// dev-only tradeoff; reload the client session to pick up a changed tool list.
 //
 // Requests go to the socket the daemon's record names (ADR-0050 decision 2),
 // never to a port this derives: while there is no record — the daemon is
@@ -96,12 +103,63 @@ const MCP_HEADERS = {
   Authorization: `Bearer ${TOKEN}`,
 }
 
+const PROTOCOL_VERSION_META_KEY = 'io.modelcontextprotocol/protocolVersion'
+
+// Which body field `Mcp-Name` mirrors, per method — the SDK's
+// MCP_NAME_HEADER_SOURCE, which its public surface does not export.
+const MCP_NAME_SOURCE = {
+  'tools/call': 'name',
+  'prompts/get': 'name',
+  'resources/read': 'uri',
+  'tasks/get': 'taskId',
+  'tasks/update': 'taskId',
+  'tasks/cancel': 'taskId',
+}
+
+// A header value that is not plain printable ASCII travels as the spec's
+// `=?base64?…?=` sentinel, which is what the server decodes before comparing.
+function encodeHeaderValue(value) {
+  const plain =
+    value.length > 0 &&
+    value === value.trim() &&
+    !(value.startsWith('=?base64?') && value.endsWith('?=')) &&
+    /^[\t\x20-\x7e]*$/.test(value)
+  return plain ? value : `=?base64?${Buffer.from(value, 'utf8').toString('base64')}?=`
+}
+
+/**
+ * The standard request headers a modern-era line needs, derived from the line
+ * itself. A request with no protocol-version claim in its `_meta` is a 2025
+ * exchange and gets none, so no modern header can reach a legacy request.
+ */
+function eraHeadersFor(line) {
+  let message
+  try {
+    message = JSON.parse(line)
+  } catch {
+    return {}
+  }
+  if (message === null || typeof message !== 'object' || Array.isArray(message)) return {}
+  if (typeof message.method !== 'string' || !('id' in message)) return {}
+  const params = message.params
+  const version = params?._meta?.[PROTOCOL_VERSION_META_KEY]
+  if (typeof version !== 'string') return {}
+  const headers = { 'MCP-Protocol-Version': version, 'Mcp-Method': message.method }
+  const field = Object.hasOwn(MCP_NAME_SOURCE, message.method)
+    ? MCP_NAME_SOURCE[message.method]
+    : undefined
+  const name = field === undefined ? undefined : params?.[field]
+  if (typeof name === 'string') headers['Mcp-Name'] = encodeHeaderValue(name)
+  return headers
+}
+
 // The record is read per request, not once: a watch restart rewrites it, and
 // a daemon that is down has none.
 function post(line) {
   const record = readDaemonRecord(DATA_DIR)
   if (record === null) return Promise.reject(new Error('the dev daemon has no record yet'))
-  return requestDaemon(record, { method: 'POST', path: '/mcp', headers: MCP_HEADERS, body: line })
+  const headers = { ...MCP_HEADERS, ...eraHeadersFor(line) }
+  return requestDaemon(record, { method: 'POST', path: '/mcp', headers, body: line })
 }
 
 async function forwardOnce(line) {
@@ -118,16 +176,17 @@ async function forwardOnce(line) {
     throw error
   }
   if (contentType.includes('text/event-stream')) {
-    // enableJsonResponse keeps POSTs JSON in practice; parse SSE defensively
-    // so an unexpected stream reply still yields the final message.
-    const dataLines = text
+    // Every message the stream carried, in order: the records a call emitted
+    // come before its result, and dropping them loses the only route they
+    // have to a client on stdio.
+    const messages = text
       .split('\n')
       .filter((l) => l.startsWith('data:'))
       .map((l) => l.slice(5).trim())
       .filter((l) => l !== '')
-    return dataLines.at(-1) ?? null
+    return messages.length === 0 ? null : messages
   }
-  return text
+  return [text]
 }
 
 function isJson(text) {
@@ -179,8 +238,8 @@ rl.on('line', (line) => {
   const task = (async () => {
     await ready
     try {
-      const response = await forwardWithRetry(line)
-      if (response !== null) process.stdout.write(`${response}\n`)
+      const messages = await forwardWithRetry(line)
+      if (messages !== null) process.stdout.write(messages.map((m) => `${m}\n`).join(''))
     } catch (error) {
       log(`request failed after retries: ${String(error)}`)
       const errorResponse = errorResponseFor(line, error)
