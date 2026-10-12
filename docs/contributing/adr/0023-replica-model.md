@@ -124,7 +124,11 @@ is what they come back to.
 > does not confirm, or that this browser could not read, keeps the browser
 > copy and is named in the report. What the move guarantees is that the
 > daemon holds everything that moved — not that this browser still serves
-> any of it.
+> any of it. A replica caches the images its documents name beside its
+> record, sealed under the record's key and bounded per replica
+> (`replica-images.ts`); the browser's own image plane is not shared with it,
+> so after a verified move the browser's copies are ordinary unreferenced
+> files its sweep reclaims.
 
 ### 3. Replica edits are data-plane only
 

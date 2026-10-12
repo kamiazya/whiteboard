@@ -56,10 +56,14 @@ implementations live in the composition roots.
 - **Which uploaded files a workspace still names** (`file-references.ts`):
   `scanFileReferences` walks live documents by id (shadowed ones too), trash
   entries' evacuated bytes, and the saved versions a keeper supplies through
-  `FileReferenceReads`, and reports what it could not read as `unjudged` so
+  `FileReferenceReads` — each read through `collectImageRefIds`, which counts
+  what an OPEN proposed change would draw (a decided one protects nothing) —
+  and reports what it could not read as `unjudged` so
   a deleting caller fails closed. The daemon's `file-gc.ts` and the browser's
   `browser-file-sweep.ts` both judge by it;
-  `test-utils/file-collection-conformance` is the scenario both run.
+  `test-utils/file-collection-conformance` is the scenario both run; a
+  verdict one keeper is known to reach differently is a `knownDivergences`
+  entry with its reason, never an omitted step (today there are none).
 - **A duplicate is one record change** (`workspace-duplicate.ts`), written
   through the projection rather than `copyNodeData`, so the source's id,
   segment, name, timestamps and plane keys stay behind.
@@ -111,7 +115,11 @@ implementations live in the composition roots.
   would wipe it. The one place `setContainer` is right is `copyNodeData`,
   whose target is a node `createNode()` just minted — replacing on an empty
   node replaces nothing, and it is what copies a container by KIND without a
-  hardcoded list of keys. A document's own content containers stay REGULAR children
+  hardcoded list of keys. `content-sync`'s `openCopiedMap` is the second: a
+  copy opens a plain child where a mergeable one's name (parent id + key)
+  could pass `CONTAINER_NAME_MAX_CHARS` — only data stored before the sync
+  judge refused such a key reaches it, and `content-sync.long-key.test.ts`
+  pins both branches, two keepers writing one new thread still converging. A document's own content containers stay REGULAR children
   deliberately — pre-attached at creation, so no replica opens one first, and
   mergeable would cost 18.6% of the delta log to close a hazard that is
   already closed (`mergeable-containers.test.ts` carries the numbers).

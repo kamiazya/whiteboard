@@ -297,6 +297,19 @@ properties on one PR passed over the defect they exist to catch because
 each generator had a schema it had never met, and one walk in model — the
 package every generator can reach — is the permanent answer.
 
+### A replica's images are its own, sealed
+
+A replica's images are sealed blobs in `blobs` under the record's key
+(`replica-images.ts`), indexed by a localStorage pointer
+(`replica-image-store.ts`), never `documentFiles` rows — which is why the
+browser file sweep and the replica cache cannot delete each other's bytes;
+`openDocumentStore().deleteDoc` of a workspace record drops them. A `blob:`
+URL can be drawn (`img-src … blob:`) but not fetched (`connect-src` lacks
+`blob:`), so export reads page-local pictures through an image decode, and
+its browser test enforces the shipped `connect-src` from
+`public/_headers?raw` — the test page has no policy and would pass a fetch
+the app refuses.
+
 ### The settings store reads tolerantly and writes strictly
 
 `user-settings-store` READS through `tolerantAnswer(userSettingsSchema)` and
