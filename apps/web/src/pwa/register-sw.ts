@@ -4,6 +4,12 @@ import { bindApplyUpdate, bindCheckForUpdates } from './sw-status-store.js'
 
 const log = getAppLogger('register-sw')
 
+// What an unrequested reload asks before it goes (the deadline's recovery and
+// the hidden-tab auto-apply). Loaded with the modules that ask it rather than
+// here: this module is in the entry chunk, and the shell's connection state is
+// not.
+const loadIdleSignal = () => import('../lib/nothing-held-in-tab.js')
+
 type ImportRegisterModule = () => Promise<{
   registerSW: (options?: RegisterSWOptions) => (reloadPage?: boolean) => Promise<void>
 }>
@@ -31,8 +37,10 @@ export interface SetupSwRegistrationOptions {
 // the thing that is stuck. Applying never rejects, so a caller with nowhere to
 // report a failure can pass the result straight on.
 function offerUpdate(updateServiceWorker: () => Promise<void>): () => void {
-  const applier = import('./apply-update.js')
-    .then(({ createUpdateApplier }) => createUpdateApplier({ apply: updateServiceWorker }))
+  const applier = Promise.all([import('./apply-update.js'), loadIdleSignal()])
+    .then(([{ createUpdateApplier }, { nothingHeldInTab }]) =>
+      createUpdateApplier({ apply: updateServiceWorker, isIdle: nothingHeldInTab }),
+    )
     .catch((err: unknown) => {
       log.error('failed to load the update recovery module', err)
       return updateServiceWorker
@@ -78,9 +86,9 @@ function createOnNeedRefresh(applyWaiting: () => Promise<void>): () => void {
     // hidden costs nothing and needs no decision from them — and the prompt
     // strategy's reason for existing (never swap under someone mid-draw) does
     // not apply to a tab nobody is looking at.
-    void import('./sw-idle-apply.js')
-      .then(({ startSwIdleAutoApply }) => {
-        startSwIdleAutoApply({ apply })
+    void Promise.all([import('./sw-idle-apply.js'), loadIdleSignal()])
+      .then(([{ startSwIdleAutoApply }, { nothingHeldInTab }]) => {
+        startSwIdleAutoApply({ apply, isIdle: nothingHeldInTab })
       })
       .catch((err: unknown) => {
         log.error('failed to load the idle auto-apply module', err)

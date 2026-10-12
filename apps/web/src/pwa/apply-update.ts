@@ -17,6 +17,13 @@ export interface UpdateApplierOptions {
   readonly apply: () => Promise<void>
   /** What to do when the swap never lands. Defaults to a reload that bypasses every worker. */
   readonly recover?: () => void | Promise<void>
+  /**
+   * False while the tab holds work a reload would drop. The deadline then
+   * leaves the update waiting rather than recovering: a reload the page's
+   * leave prompt held never lands either, and recovering would raise that
+   * prompt again unasked. Defaults to always idle.
+   */
+  readonly isIdle?: () => boolean
   readonly deadlineMs?: number
 }
 
@@ -36,6 +43,7 @@ export interface UpdateApplierOptions {
 export function createUpdateApplier({
   apply,
   recover = () => reloadFresh(),
+  isIdle = () => true,
   deadlineMs = SWAP_DEADLINE_MS,
 }: UpdateApplierOptions): () => Promise<void> {
   let deadline: ReturnType<typeof setTimeout> | undefined
@@ -43,6 +51,10 @@ export function createUpdateApplier({
   return async () => {
     deadline ??= setTimeout(() => {
       deadline = undefined
+      if (!isIdle()) {
+        log.info('the waiting service worker did not take over; holding it while work is unsaved')
+        return
+      }
       log.warn('the waiting service worker did not take over; reloading without it')
       void recover()
     }, deadlineMs)

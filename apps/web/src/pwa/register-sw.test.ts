@@ -420,6 +420,48 @@ describe('setupSwRegistration', () => {
       resetSwStatusForTests()
     }
   })
+
+  // A reload the leave prompt held is indistinguishable here from a lost swap;
+  // reloading again unasked would raise a second prompt over unsaved work.
+  it('leaves an accepted update waiting while a daemon write has not landed', async () => {
+    vi.resetModules()
+    const reloadFresh = vi.fn().mockResolvedValue(undefined)
+    vi.doMock('./reload-fresh.js', () => ({ reloadFresh }))
+    vi.doMock('./mount-update-toast.js', () => ({ mountUpdateToast: vi.fn() }))
+    vi.doMock('./sw-idle-apply.js', () => ({ startSwIdleAutoApply: vi.fn() }))
+    const { setupSwRegistration: setup } = await import('./register-sw.js')
+    const { applyUpdate, resetSwStatusForTests } = await import('./sw-status-store.js')
+    const { SWAP_DEADLINE_MS } = await import('./apply-update.js')
+    const shell = await import('../lib/shell-status-store.js')
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const updateServiceWorker = vi.fn().mockResolvedValue(undefined)
+    const registerSW = vi.fn().mockReturnValue(updateServiceWorker)
+
+    vi.useFakeTimers()
+    try {
+      setup({
+        isProd: true,
+        hasServiceWorker: true,
+        isDaemonServed: false,
+        importRegister: vi.fn().mockResolvedValue({ registerSW }),
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      registerSW.mock.calls[0][0].onNeedRefresh()
+
+      await applyUpdate()
+      shell.setShellConnection({ state: { keeper: 'daemon', session: 'write-failed' } })
+      await vi.advanceTimersByTimeAsync(SWAP_DEADLINE_MS)
+      expect(updateServiceWorker).toHaveBeenCalledWith(true)
+      expect(reloadFresh).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      vi.doUnmock('./reload-fresh.js')
+      vi.doUnmock('./mount-update-toast.js')
+      vi.doUnmock('./sw-idle-apply.js')
+      shell.resetShellStatusForTests()
+      resetSwStatusForTests()
+    }
+  })
 })
 
 // The toast and the hidden-tab auto-apply are the two places an accepted update
@@ -465,8 +507,37 @@ describe('register-sw: what an offered update is wired to', () => {
     await vi.waitFor(() => expect(mountUpdateToast).toHaveBeenCalled())
     await vi.waitFor(() => expect(startSwIdleAutoApply).toHaveBeenCalled())
     const { getSwStatus } = await import('./sw-status-store.js')
-    return { mountUpdateToast, startSwIdleAutoApply, updateServiceWorker, getSwStatus, registerSW }
+    const shell = await import('../lib/shell-status-store.js')
+    return {
+      mountUpdateToast,
+      startSwIdleAutoApply,
+      updateServiceWorker,
+      getSwStatus,
+      registerSW,
+      shell,
+    }
   }
+
+  // A tab whose keeper is not keeping holds the only copy of what was typed;
+  // reloading it unasked drops that copy or, at best, raises a leave prompt
+  // nobody asked for.
+  it('holds the hidden-tab auto-apply while a daemon write has not landed', async () => {
+    const { startSwIdleAutoApply, shell } = await offered()
+    const { isIdle } = startSwIdleAutoApply.mock.calls[0][0]
+    try {
+      expect(isIdle()).toBe(true)
+      shell.setShellConnection({ state: { keeper: 'daemon', session: 'write-failed' } })
+      expect(isIdle()).toBe(false)
+      shell.setShellConnection({ state: { keeper: 'daemon', session: 'reconnecting' } })
+      expect(isIdle()).toBe(true)
+      shell.setShellConnection({ state: { keeper: 'browser', storage: 'failed' } })
+      expect(isIdle()).toBe(false)
+      shell.setShellConnection({ state: { keeper: 'daemon', session: 'synced' } })
+      expect(isIdle()).toBe(true)
+    } finally {
+      shell.resetShellStatusForTests()
+    }
+  })
 
   it('hands the toast an action that asks the waiting worker to take over', async () => {
     const { mountUpdateToast, updateServiceWorker } = await offered()
