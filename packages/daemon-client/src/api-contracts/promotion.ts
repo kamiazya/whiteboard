@@ -1,9 +1,7 @@
-import { versionLabelSchema, WORKSPACE_ID_PATTERN } from '@kamiazya/whiteboard-model'
 import {
-  type Attestation,
-  attestationSchema,
   base64urlSchema,
-  requestOperatorSchema,
+  promotedTrashBytesRequestSchema,
+  promotedVersionRequestSchema,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { z } from 'zod'
 import { MAX_FILE_UPLOAD_BYTES } from './files.js'
@@ -12,52 +10,14 @@ import { MAX_FILE_UPLOAD_BYTES } from './files.js'
 // through server-core (architecture-map.md: server-core is not one of its
 // dependencies). The encoding goes with it: what the browser stores of a
 // pinned credential is validated by the same rule the daemon pinned it under.
-export type { Attestation }
+// The carried planes' shapes are server-core's, where the operation that
+// judges them reads them, and are published here for the sender.
+export type {
+  Attestation,
+  PromotedTrashBytes,
+  PromotedVersion,
+} from '@kamiazya/whiteboard-server-core/versions/version-entry'
 export { base64urlSchema }
-
-/**
- * The evacuated bytes one of the record's trash entries names. The record
- * carries only the entry and its digest; the bytes live in the browser's blob
- * store, and without them the daemon lists the entry but cannot restore it.
- * The daemon stores them only when they hash to the digest the entry names.
- */
-const promotedTrashBytesRequestSchema = z
-  .object({
-    documentId: z.string().min(1),
-    bytes: base64urlSchema,
-  })
-  .strict()
-export type PromotedTrashBytes = z.infer<typeof promotedTrashBytesRequestSchema>
-
-/** A version id the daemon can key a row by — the character class its validator admits. */
-const promotedVersionIdSchema = z.string().max(64).regex(WORKSPACE_ID_PATTERN)
-
-/**
- * One saved version of a promoted document, as the browser keeper recorded
- * it. A version is a frontier of the workspace record, and the merge keeps
- * every op's peer and counter, so the frontier names the same point in the
- * daemon's record; the daemon checks it out of the incoming record before it
- * merges and derives the element count and content digest from that state
- * itself rather than trusting a figure.
- *
- * The operator is the request form — no `actor`: the device a row names is
- * one the keeper can back with a key, which a carried row cannot.
- */
-const promotedVersionRequestSchema = z
-  .object({
-    id: promotedVersionIdSchema,
-    documentId: z.string().min(1),
-    /** When the browser saved it, epoch milliseconds — kept, so the history reads in order. */
-    createdAt: z.number().int().nonnegative(),
-    auto: z.boolean(),
-    label: versionLabelSchema.optional(),
-    operator: requestOperatorSchema.optional(),
-    restoredFrom: promotedVersionIdSchema.optional(),
-    /** `encodeFrontiers` of the record at the version, base64url. */
-    frontiers: base64urlSchema,
-  })
-  .strict()
-export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 
 /**
  * The most a promote request body may carry: the content ceiling, which a
@@ -68,10 +28,9 @@ export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 export const PROMOTE_REQUEST_LIMIT_BYTES = (MAX_FILE_UPLOAD_BYTES * 3) / 2
 
 // POST /api/w/:workspaceId/workspace-document/promote — the browser keeper's
-// whole record moved into a daemon workspace (ADR-0023), with the person's
-// evidence beside it (ADR-0039). JSON rather than the update route's raw
-// bytes because the attestation travels WITH the snapshot it vouches for,
-// and the daemon verifies before it merges. Deliberately free of node:*.
+// whole record moved into a daemon workspace (ADR-0023). JSON rather than
+// the update route's raw bytes because the carried planes travel WITH the
+// snapshot they belong to. Deliberately free of node:*.
 //
 // The planes the record only POINTS at travel beside it — each trash entry's
 // evacuated bytes and the saved version rows — so one request, inside the one
@@ -81,8 +40,6 @@ export const promoteWorkspaceRequestSchema = z
   .object({
     /** The record as `doc.export({ mode: 'snapshot' })`, base64url. */
     snapshot: base64urlSchema,
-    /** Present when the browser could ask a passkey; absent is honest, not a failure. */
-    attestation: attestationSchema.optional(),
     trash: z.array(promotedTrashBytesRequestSchema).optional(),
     versions: z.array(promotedVersionRequestSchema).optional(),
   })
@@ -91,8 +48,6 @@ export type PromoteWorkspaceRequest = z.infer<typeof promoteWorkspaceRequestSche
 
 export const promoteWorkspaceResponseSchema = z.object({
   ok: z.literal(true),
-  /** True iff the rows carry a verified attestation. */
-  attested: z.boolean(),
   recorded: z.array(z.string()),
   shadowed: z.array(z.string()),
   /**
@@ -102,7 +57,11 @@ export const promoteWorkspaceResponseSchema = z.object({
    * one for a keeper that does not say.
    */
   trashStored: z.array(z.string()).default([]),
-  /** The carried version ids the daemon's history holds for this workspace, read back likewise. */
+  /**
+   * The carried version ids the daemon's history took in for this workspace,
+   * read back likewise. An automatic one its own cap then retires still
+   * counts: it arrived, and went the way one of the daemon's own would.
+   */
   versionsKept: z.array(z.string()).default([]),
 })
 export type PromoteWorkspaceResponse = z.infer<typeof promoteWorkspaceResponseSchema>

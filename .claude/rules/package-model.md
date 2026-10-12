@@ -20,7 +20,7 @@ paths:
 
 ## The base64 codec
 
-`src/encoding/base64.ts` is the repo's only base64 / base64url codec: encoders, and decoders that answer `null` for text that is not base64 rather than throwing. It lives here because `model` is the one package every runtime-sharing layer already depends on, and it runs on `btoa`/`atob` (globals on Node, in browsers and in workers) — no `Buffer`. Never hand-roll another; a caller that must throw names its own error at the call site.
+`src/encoding/base64.ts` is the repo's only base64 / base64url codec: encoders, and decoders that answer `null` for text that is not base64 rather than throwing. It lives here because `model` is the one package every runtime-sharing layer already depends on, and it runs on `btoa`/`atob` (globals on Node, in browsers and in workers) — no `Buffer`. Never hand-roll another; a caller that must throw names its own error at the call site. `tools/arch-lint`'s `base64-codec-one-place.test.ts` fails a `btoa(`/`atob(` call in any other production source.
 
 ## Two small runtime helpers every layer needs
 

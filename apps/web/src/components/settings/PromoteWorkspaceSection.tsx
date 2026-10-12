@@ -35,7 +35,11 @@ import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.j
 import type { ConnectedDaemon } from '../../lib/daemon-fetch.js'
 import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
-import type { PromotionResultRecord, UserSettings } from '../../lib/user-settings-store.js'
+import {
+  fitLeftBehind,
+  type PromotionResultRecord,
+  type UserSettings,
+} from '../../lib/user-settings-store.js'
 import { type WorkspaceIdentity, workspaceLabel } from '../../lib/workspace-handle.js'
 
 const log = getAppLogger('promote-workspace-section')
@@ -221,14 +225,10 @@ function browserCopyNotes(result: PromotionResultRecord & { ok: true }): string[
   return notes
 }
 
-/**
- * What was left behind, inside the bounds the settings schema holds a record
- * to — a record past them would fail the strict write and lose the whole
- * result, so a long list is clipped rather than refused.
- */
+/** What was left behind, as the settings record keeps it; an empty list is not stored. */
 function storedLeftBehind(leftBehind: readonly string[]): { leftBehind?: string[] } {
   if (leftBehind.length === 0) return {}
-  return { leftBehind: leftBehind.slice(0, 100).map((reason) => reason.slice(0, 500)) }
+  return { leftBehind: fitLeftBehind(leftBehind) }
 }
 
 /** The failed uploads as the record keeps them: the files, and each distinct reason once. */

@@ -3,6 +3,7 @@
 // a picture node, a frame background, an inline image — at the target's copy.
 import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import {
+  bytesToBase64,
   CLIPBOARD_FILES_MAX_BYTES,
   clipboardFragmentSchema,
   frameBackground,
@@ -129,5 +130,43 @@ describe('transferFragmentImages', () => {
       },
     )
     expect(notice).toBe('A picture was left out of the paste: The daemon is full.')
+  })
+
+  it('leaves out a picture whose carried bytes are not base64, storing nothing', async () => {
+    const storeImage = vi.fn(async () => ({ ok: true as const, ref: 'asset:new' }))
+    const { fragment, notice } = await transferFragmentImages(
+      {
+        nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'asset:p' })],
+        edges: [],
+        files: { 'asset:p': { mimeType: 'image/png', dataBase64: 'not base64!' } },
+      },
+      { fileScope: 'b', readImage: async () => undefined, storeImage },
+    )
+    expect(storeImage).not.toHaveBeenCalled()
+    expect(fragment.nodes).toEqual([])
+    expect(notice).toContain('A picture was left out of the paste')
+  })
+
+  it('stores exactly the bytes the copy carried', async () => {
+    const stored: File[] = []
+    const bytes = Uint8Array.from({ length: 300 }, (_, i) => (i * 37) % 256)
+    await transferFragmentImages(
+      {
+        nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'asset:p' })],
+        edges: [],
+        files: { 'asset:p': { mimeType: 'image/png', dataBase64: bytesToBase64(bytes) } },
+      },
+      {
+        fileScope: 'b',
+        readImage: async () => undefined,
+        storeImage: async (file) => {
+          stored.push(file)
+          return { ok: true, ref: 'asset:new' }
+        },
+      },
+    )
+    expect(stored.map((file) => [file.name, file.type, file.size])).toEqual([
+      ['p', 'image/png', 300],
+    ])
   })
 })

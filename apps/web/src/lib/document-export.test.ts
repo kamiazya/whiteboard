@@ -1,5 +1,9 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { renderMarkdownForExport } from './document-export.js'
+
+const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 const FAKE_FRAGMENT = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="10"><path data-probe="fragment-drawn" d="M0 0h40"/></svg>',
@@ -43,5 +47,51 @@ describe('renderMarkdownForExport', () => {
     expect(
       new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement.textContent,
     ).toContain('broken')
+  })
+
+  it('draws an embedded note through the references it is handed', async () => {
+    const { svg } = await renderMarkdownForExport(`before\n\n![[${NOTE_ID}]]\n\nafter`, {
+      references: referenceSeams(new Map([[NOTE_ID, { name: 'Target', body: 'embedded body' }]])),
+    })
+    expect(svg).toContain('embedded body')
+  })
+
+  it('wraps at the width the daemon draws a note at', async () => {
+    const long = Array.from({ length: 200 }, () => 'word').join(' ')
+    const { bounds } = await renderMarkdownForExport(long)
+    expect(bounds.w).toBeGreaterThan(1)
+    expect(bounds.w).toBeLessThanOrEqual(720)
+  })
+
+  it('colours an embedded board by the tag library, in the light theme', async () => {
+    const { svg } = await renderMarkdownForExport(`![[${NOTE_ID}]]\n`, {
+      tagLibrary: { health: { exclusive: true, values: { failing: { color: '1' } } } },
+      references: referenceSeams(
+        new Map([
+          [
+            NOTE_ID,
+            {
+              name: 'The Board',
+              canvas: {
+                nodes: [
+                  textNode({
+                    id: 'db',
+                    x: 0,
+                    y: 0,
+                    width: 300,
+                    height: 120,
+                    text: 'db',
+                    tags: ['health:failing'],
+                  }),
+                ],
+                edges: [],
+              },
+            },
+          ],
+        ]),
+      ),
+    })
+    // Preset 1's LIGHT fill: the declared colour, in the theme a saved file is pinned to.
+    expect(svg).toContain('#fee2e2')
   })
 })

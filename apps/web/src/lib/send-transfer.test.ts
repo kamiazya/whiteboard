@@ -96,7 +96,6 @@ describe('sending a transfer through a window at the destination', () => {
       workspaceId: 'ws-there',
       promotedDocumentIds: ['a', 'b'],
       shadowedPaths: [],
-      attested: true,
       imagesMissing: ['img-1'],
     })
     await expect(sent).resolves.toMatchObject({
@@ -122,7 +121,6 @@ describe('sending a transfer through a window at the destination', () => {
       workspaceId: 'forged',
       promotedDocumentIds: [],
       shadowedPaths: [],
-      attested: false,
     })
     popup.closed = true
     // The forged result did not resolve it; the closed window did.
@@ -269,10 +267,7 @@ describe('sending a transfer through a window at the destination', () => {
 
   it.each([
     ['a result whose ok is not a boolean', { ok: 'maybe' }],
-    [
-      'a success that names no workspace',
-      { ok: true, promotedDocumentIds: [], shadowedPaths: [], attested: true },
-    ],
+    ['a success that names no workspace', { ok: true, promotedDocumentIds: [], shadowedPaths: [] }],
     ['a refusal with no reason', { ok: false }],
   ])('settles as a refusal rather than hanging on %s', async (_label, fields) => {
     const popup = fakePopup()
@@ -312,7 +307,6 @@ describe('sending a transfer through a window at the destination', () => {
       workspaceId: 'ws-there',
       promotedDocumentIds: ['a'],
       shadowedPaths: [],
-      attested: false,
       leftBehind: ['1 saved version did not reach the keeper'],
     })
     await expect(sent).resolves.toMatchObject({

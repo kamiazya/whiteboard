@@ -12,11 +12,22 @@
  * response that was just imported, which proves only that the network
  * worked. What this module owns is the deletion's shape:
  *
- * - Only the workspace-keyed rows die: the record (the `workspace-tree`
- *   docRef) and the registry row. The browser's image bytes, trash bytes and
- *   version rows are left where they are, but nothing a replica opens reads
- *   them — its pages ask the daemon — so what the move guarantees is that
- *   the daemon holds them, not that this browser still serves them.
+ * - The record (the `workspace-tree` docRef) and the registry row die, and so
+ *   does everything only that record made reachable: each trash entry's
+ *   evacuated bytes, the saved version rows keyed by the workspace, and the
+ *   listing clock of every document it held. Nothing a replica opens reads
+ *   any of them — its pages ask the daemon — and once the record is gone no
+ *   purge, sweep or Settings surface can name them again, so whatever this
+ *   step leaves stays for the life of the origin. Images need nothing here:
+ *   the file sweep drops them once no remaining record names them.
+ * - A trash blob survives while another browser-kept workspace's trash still
+ *   names it — the blob store is content-addressed and global, and that rule
+ *   is the one `purgeTrashEntry` applies within a workspace. The store's other
+ *   owners cannot share a trash digest: pictures are image encodings, and a
+ *   replica's envelopes are sealed under a fresh IV.
+ * - The residue goes AFTER the record, best-effort: by then the demotion
+ *   stands, and a failure leaves unreachable garbage rather than a
+ *   half-demoted workspace.
  * - The registry is never left empty: `resolveBrowserWorkspaceId` throws on
  *   an empty registry (re-minting is an upgrade-time step), so deleting the
  *   last row would leave the browser keeper unbootable. A fresh empty
@@ -25,11 +36,18 @@
  *   races the narrated reload lands in the fresh workspace instead of
  *   resurrecting the deleted record under its old id.
  */
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readTrashEntries,
+  readWorkspaceDocuments,
+  type TrashEntry,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
-import type { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { deleteVersionRowsOfWorkspace } from './browser-version-store.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { switchBrowserWorkspace } from './browser-workspace-id.js'
+import { IdbBlobStore } from './idb-blob-store.js'
+import { forgetContentTimestamp } from './loro-store.js'
 import { openDocumentStore } from './replica-store.js'
 
 /**
@@ -57,17 +75,41 @@ export async function demoteBrowserWorkspace(
   // registry row: unreachable, harmless garbage. The other order leaves a
   // registry row whose record is gone — a workspace that lists but opens
   // empty, which reads as data loss.
-  const db = await openWhiteboardDb(dbName)
-  let nextHandle: string
+  const residue = await residueOf(sourceWorkspaceId, dbName)
+  const { nextHandle, remaining } = await dropRegistryRow(sourceWorkspaceId, dbName)
+  await switchBrowserWorkspace(nextHandle, dbName)
   try {
-    nextHandle = await new Promise<string>((resolve, reject) => {
+    await openDocumentStore(dbName).deleteDoc({
+      docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
+    })
+  } catch {
+    // The demotion already stands: with the registry row gone the record is
+    // unreachable, so a failed byte deletion is lingering garbage, not a
+    // half-demoted workspace — and not worth failing the report over.
+  }
+  if (residue !== null) await discardResidue(sourceWorkspaceId, residue, remaining, dbName)
+}
+
+/**
+ * Deletes the source's registry row, minting a fresh workspace row when it
+ * was the last, and answers the handle to re-point at plus the rows that
+ * remain — the browser-kept workspaces whose trash may still name a blob.
+ */
+async function dropRegistryRow(
+  sourceWorkspaceId: string,
+  dbName?: string,
+): Promise<{ nextHandle: string; remaining: readonly string[] }> {
+  const db = await openWhiteboardDb(dbName)
+  let remaining: readonly string[] = []
+  try {
+    const nextHandle = await new Promise<string>((resolve, reject) => {
       const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
       const workspaces = tx.objectStore(WORKSPACES_STORE)
       workspaces.delete(sourceWorkspaceId)
       const keysReq = workspaces.getAllKeys()
       let chosen: string | undefined
       keysReq.onsuccess = () => {
-        const remaining = keysReq.result.map(String)
+        remaining = keysReq.result.map(String)
         chosen = remaining[0]
         if (chosen === undefined) {
           const fresh = generateDocumentId()
@@ -82,17 +124,53 @@ export async function demoteBrowserWorkspace(
       tx.onerror = () => reject(tx.error ?? new Error('workspace registry update failed'))
       tx.onabort = () => reject(tx.error ?? new Error('workspace registry update aborted'))
     })
+    return { nextHandle, remaining }
   } finally {
     db.close()
   }
-  await switchBrowserWorkspace(nextHandle, dbName)
+}
+
+/** What only the source record names, read before the record goes. */
+interface Residue {
+  readonly trash: readonly TrashEntry[]
+  readonly documentIds: readonly string[]
+}
+
+async function residueOf(workspaceId: string, dbName?: string): Promise<Residue | null> {
+  // Unreadable means unjudgeable: leave the residue rather than guess at it.
+  const record = await new BrowserWorkspaceDocs(dbName).open(workspaceId).catch(() => null)
+  if (record === null) return null
+  const trash = readTrashEntries(record)
+  const live = readWorkspaceDocuments(record).map((entry) => entry.documentId)
+  return { trash, documentIds: [...live, ...trash.map((entry) => entry.documentId)] }
+}
+
+async function discardResidue(
+  sourceWorkspaceId: string,
+  residue: Residue,
+  remainingWorkspaceIds: readonly string[],
+  dbName?: string,
+): Promise<void> {
   try {
-    await openDocumentStore(dbName).deleteDoc({
-      docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
-    })
+    const docs = new BrowserWorkspaceDocs(dbName)
+    const namedBlobs = new Set<string>()
+    for (const workspaceId of remainingWorkspaceIds) {
+      // A neighbour that will not open throws, and the catch below then
+      // deletes nothing: what it names is unknown.
+      const record = await docs.open(workspaceId)
+      if (record === null) continue
+      for (const entry of readTrashEntries(record)) namedBlobs.add(entry.blob.digestHex)
+    }
+    await deleteVersionRowsOfWorkspace(sourceWorkspaceId, dbName)
+    const blobs = new IdbBlobStore(dbName)
+    for (const entry of residue.trash) {
+      if (!namedBlobs.has(entry.blob.digestHex)) await blobs.delete({ ref: entry.blob })
+    }
+    // Only a browser-kept workspace's listing reads these clocks, and a
+    // document id is minted once, so no remaining one lists these ids.
+    for (const id of residue.documentIds) await forgetContentTimestamp(id, dbName)
   } catch {
-    // The demotion already stands: with the registry row gone the record is
-    // unreachable, so a failed byte deletion is lingering garbage, not a
-    // half-demoted workspace — and not worth failing the report over.
+    // Same standing as the record's deletion above: the demotion stands, and
+    // what is left is unreachable garbage, not a reason to fail the move.
   }
 }

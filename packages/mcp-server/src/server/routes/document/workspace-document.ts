@@ -99,7 +99,7 @@ const PROMOTE_BODY: ReadJsonBodyOptions = {
   refuseShape: () =>
     errorBody(
       'invalid_body',
-      'snapshot must be base64url, attestation, if present, a WebAuthn assertion, and trash and versions the carried planes',
+      'snapshot must be base64url, and trash and versions the carried planes',
     ),
 }
 
@@ -124,11 +124,10 @@ function decodeCarried(body: PromoteWorkspaceRequest) {
 // promote is a person's explicit act.
 //
 // No keeper here holds a passkey pin (ADR-0050 decision 3 retired the local
-// daemon's, and server mode never had any), so an attestation can name no
-// credential this keeper knows. It is refused before the merge rather than
-// dropped: a refused promote changes nothing, and a caller that sent
-// evidence is told it was not checked instead of reading `attested: false`
-// as a verdict.
+// daemon's, and server mode never had any), so the contract has no place for
+// an attestation: a body carrying one is refused by the strict schema, before
+// the merge, rather than dropped — a caller that sent evidence learns it was
+// not checked.
 //
 // POST /api/w/:workspaceId/workspace-document/promote
 function promoteHandler(options: WorkspaceDocumentRouterOptions) {
@@ -138,9 +137,6 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
     const { workspaceId, deps } = admitted
     const body = await readJsonBody(c, promoteWorkspaceRequestSchema, PROMOTE_BODY)
     if ('refusal' in body) return body.refusal
-    if (body.data.attestation !== undefined) {
-      return c.json({ error: 'attestation_rejected', message: 'unknownCredential' }, 403)
-    }
     const snapshot = new Uint8Array(Buffer.from(body.data.snapshot, 'base64url'))
     const carried = decodeCarried(body.data)
 
@@ -165,7 +161,6 @@ function promoteHandler(options: WorkspaceDocumentRouterOptions) {
     }
     const response: PromoteWorkspaceResponse = {
       ok: true,
-      attested: false,
       recorded: [...result.recorded],
       shadowed: [...result.shadowed],
       trashStored: [...result.trashStored],

@@ -74,10 +74,7 @@ function isLaunched(command: string): boolean {
  * right that they do. Guarded from both sides: an entry naming a script that
  * no longer exists, or one that has since been launched, fails too.
  */
-const UNWRAPPED_ON_PURPOSE: Record<string, string> = {
-  daemon:
-    'the PACKAGED daemon (`dist/`), which is what an installed copy runs — its data dir is the install’s, not a checkout’s',
-}
+const UNWRAPPED_ON_PURPOSE: Record<string, string> = {}
 
 describe('dev scripts that boot a store', () => {
   const starting = Object.entries(scripts).filter(([, command]) => bootsAStore(command))
@@ -86,7 +83,7 @@ describe('dev scripts that boot a store', () => {
   // passing over an empty set — which reads exactly like a clean tree.
   it('reaches the scripts that start it at all', () => {
     expect(starting.map(([name]) => name)).toEqual(
-      expect.arrayContaining(['daemon', 'mcp:http:dev', 'mcp:http', 'mcp', 'mcp:inspect:stdio']),
+      expect.arrayContaining(['mcp:http:dev', 'mcp:http', 'mcp', 'mcp:inspect:stdio']),
     )
   })
 

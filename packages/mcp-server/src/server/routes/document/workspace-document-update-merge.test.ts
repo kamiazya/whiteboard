@@ -1,15 +1,15 @@
 /**
- * Promotion, slice 1: a browser-kept workspace record transfers INTO a daemon
- * workspace through the EXISTING workspace-document/update route, with the
- * documents' identity intact — same documentId, kind, name and body on the
- * other side, path collisions surfacing as shadowed pairs rather than
- * renames, and a post-transfer edit arriving as an ordinary incremental
- * delta (the replica plane).
+ * A whole foreign workspace record merged through workspace-document/update:
+ * the documents keep their identity — same documentId, kind, name and body on
+ * the other side — path collisions surface as shadowed pairs rather than
+ * renames, a re-run is idempotent, and a later edit arrives as an ordinary
+ * incremental delta (the replica plane).
  *
- * No production route is added: the route's `doc.import(bytes)` IS the
- * identity- and history-preserving CRDT merge. This file is the acceptance
- * bar later slices build on; if a route or bridge change breaks any leg of
- * it, promotion silently degrades into the per-document copy it replaces.
+ * The update route's `doc.import(bytes)` is the identity- and
+ * history-preserving CRDT merge the promote route also runs
+ * (`promoteWorkspace` calls the same `applyWorkspaceDocumentUpdate`), so
+ * these cases pin the merge itself; what promotion adds beside it — the
+ * carried planes and the explicit checkpoints — is workspace-promote.test.ts.
  */
 
 import { mkdtemp, rm } from 'node:fs/promises'

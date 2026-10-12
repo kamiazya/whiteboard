@@ -337,6 +337,28 @@ export async function deleteVersionRowsOfDocument(
 }
 
 /**
+ * Removes every saved version of one workspace — what retiring a whole
+ * browser-kept workspace owes its history once nothing can open the record
+ * the frontiers point into.
+ */
+export async function deleteVersionRowsOfWorkspace(
+  workspaceId: string,
+  dbName?: string,
+): Promise<void> {
+  await inTransaction(dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
+    const store = tx.objectStore(VERSIONS_STORE)
+    // Every `[workspaceId, documentId]`: an array key sorts after any string,
+    // so `[workspaceId, []]` bounds them from above.
+    const ids = await request(
+      store
+        .index(VERSIONS_BY_DOCUMENT_INDEX)
+        .getAllKeys(IDBKeyRange.bound([workspaceId], [workspaceId, []])),
+    )
+    for (const id of ids) await request(store.delete(id))
+  })
+}
+
+/**
  * Every saved version of one workspace, whole — what a move carries to the
  * keeper the workspace goes to, and what the file sweep checks out. A row that fails the schema is skipped
  * exactly as the History panel skips it: a version nobody can list is one

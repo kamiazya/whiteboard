@@ -1,13 +1,19 @@
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  cdpPortRefusal,
   chromiumArgs,
   connectedHostInstall,
   devServerUrl,
   installHost,
 } from './dev-connected-lib.mjs'
+
+const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'dev-connected.mjs')
 
 const NATIVE_HOST_MANIFEST = 'io.github.kamiazya.whiteboard.json'
 
@@ -73,6 +79,70 @@ describe('chromiumArgs', () => {
     expect(args).toContain('--no-sandbox')
     expect(args).toContain('--remote-debugging-port=9333')
   })
+})
+
+/** A listener on an OS-chosen loopback port, standing in for another session's Chromium. */
+async function holdAPort(): Promise<{ server: Server; port: number }> {
+  const server = createServer()
+  await new Promise<void>((listening) => server.listen(0, '127.0.0.1', listening))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('no port')
+  return { server, port: address.port }
+}
+
+describe('cdpPortRefusal', () => {
+  let held: Server | undefined
+
+  afterEach(async () => {
+    await new Promise((closed) => held?.close(closed) ?? closed(undefined))
+    held = undefined
+  })
+
+  it('names a held --cdp-port, which Chromium would fail to bind without exiting', async () => {
+    const { server, port } = await holdAPort()
+    held = server
+
+    const refusal = await cdpPortRefusal(port)
+
+    expect(refusal).toContain(`port ${port} is in use`)
+    expect(refusal).toContain('--cdp-port')
+  })
+
+  it('has nothing to say about a free port, or about 0 (any free one)', async () => {
+    const { server, port } = await holdAPort()
+    await new Promise((closed) => server.close(closed))
+
+    expect(await cdpPortRefusal(port)).toBeUndefined()
+    expect(await cdpPortRefusal(0)).toBeUndefined()
+  })
+
+  it.each([Number.NaN, 1.5, -1, 70_000])('refuses %s, which is no port at all', async (port) => {
+    expect(await cdpPortRefusal(port)).toMatch(/must be a port number/)
+  })
+
+  // From a directory outside any checkout, so a check that moved below the
+  // daemon/build steps fails on the missing repo instead of starting either.
+  it('makes the script exit non-zero, naming the port, before anything is started', async () => {
+    const { server, port } = await holdAPort()
+    held = server
+    const cwd = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-'))
+    try {
+      // Synchronous is fine: the hold is the kernel's bind, not this loop.
+      const run = spawnSync(process.execPath, [SCRIPT, '--headless', `--cdp-port=${port}`], {
+        cwd,
+        // Only what the script needs to reach its first check, so a variable
+        // the runner happens to carry cannot change what it does.
+        env: { PATH: process.env.PATH ?? '', HOME: tmpdir() },
+        encoding: 'utf8',
+        timeout: 30_000,
+      })
+
+      expect(run.status).toBe(1)
+      expect(run.stderr).toContain(`port ${port} is in use`)
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  }, 60_000)
 })
 
 describe('devServerUrl', () => {

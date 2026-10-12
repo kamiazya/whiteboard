@@ -1,6 +1,7 @@
 // What `pnpm dev:connected` decides, apart from the processes it runs: where
 // the native host is registered, and how the browser is started so that it
 // reads that registration and nothing else.
+import { createServer } from 'node:net'
 import { join, resolve } from 'node:path'
 import { resolveDevDataDirEnv } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
 import { whiteboard } from './smoke-kit.mjs'
@@ -97,4 +98,37 @@ export function devServerUrl(raw) {
 /** Where Chromium records the CDP port it chose for `--remote-debugging-port=0`. */
 export function devToolsActivePortFile(profileDir) {
   return join(profileDir, 'DevToolsActivePort')
+}
+
+/**
+ * Whether `port` can be listened on at `host`.
+ *
+ * @param {number} port
+ * @param {string} [host]
+ * @returns {Promise<boolean>}
+ */
+export function portIsFree(port, host = 'localhost') {
+  return new Promise((answer) => {
+    const probe = createServer()
+    probe.once('error', () => answer(false))
+    probe.listen(port, host, () => probe.close(() => answer(true)))
+  })
+}
+
+/**
+ * Why a named `--cdp-port` cannot be used, or `undefined` when it can. Asked
+ * before anything starts because Chromium does not fail on a taken debugging
+ * port: it logs the bind error, keeps running, and never writes
+ * `DevToolsActivePort`, so the only symptom would be a timeout. Chromium
+ * binds the debugging server on IPv4 loopback, so that is what is probed.
+ *
+ * @param {number} port as parsed from the flag; `0` asks Chromium for any free port, which cannot collide
+ * @returns {Promise<string | undefined>}
+ */
+export async function cdpPortRefusal(port) {
+  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+    return `--cdp-port must be a port number, not ${JSON.stringify(String(port))}`
+  }
+  if (port === 0 || (await portIsFree(port, '127.0.0.1'))) return undefined
+  return `port ${port} is in use — pick another --cdp-port (and point the Playwright MCP's --cdp-endpoint at it), or omit it for any free one`
 }

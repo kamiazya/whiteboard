@@ -72,7 +72,7 @@ const WEBSOCKET_WORDING: Readonly<Record<string, string>> = {
  * search test indexes.
  */
 const BROWSER_LOCAL_IN_PACKAGES: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/routes/document/promote-workspace.test.ts':
+  'packages/mcp-server/src/server/routes/document/workspace-document-update-merge.test.ts':
     'pins that the retired keeper id gets no special pass; naming it is the assertion',
   'packages/server-core/src/search/search-corpus.ts':
     'sample document text the search tests index; the word is its content',

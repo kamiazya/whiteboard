@@ -15,6 +15,8 @@
  * says how many.
  */
 import {
+  base64ToBytes,
+  bytesToBase64,
   CLIPBOARD_FILES_MAX_BYTES,
   CLIPBOARD_FILES_MAX_COUNT,
   type ClipboardFragment,
@@ -59,25 +61,11 @@ function fragmentImageRefs(fragment: Pick<ClipboardFragment, 'nodes'>): readonly
   return storedImageRefs({ canvas: { nodes: fragment.nodes, edges: [] } })
 }
 
-/** Chunked so a picture of megabytes never spreads into one call's arguments. */
-async function toBase64(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer())
-  let binary = ''
-  for (let at = 0; at < bytes.length; at += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000))
-  }
-  return btoa(binary)
-}
-
-/** The carried bytes as a file the target's image seam takes, or undefined when unreadable. */
+/** The carried bytes as a file the target's image seam takes, or undefined when they are not base64. */
 function fromBase64(ref: string, asset: CarriedFiles[string]): File | undefined {
-  try {
-    const binary = atob(asset.dataBase64)
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
-    return new File([bytes], ref.slice(ref.indexOf(':') + 1), { type: asset.mimeType })
-  } catch {
-    return undefined
-  }
+  const bytes = base64ToBytes(asset.dataBase64)
+  if (bytes === null) return undefined
+  return new File([bytes], ref.slice(ref.indexOf(':') + 1), { type: asset.mimeType })
 }
 
 /**
@@ -94,7 +82,10 @@ async function readCarriedFiles(
   for (const ref of refs.slice(0, CLIPBOARD_FILES_MAX_COUNT)) {
     const blob = await readImage(ref).catch(() => undefined)
     if (blob === undefined || blob.type === '' || blob.size > budget) continue
-    files[ref] = { mimeType: blob.type, dataBase64: await toBase64(blob) }
+    files[ref] = {
+      mimeType: blob.type,
+      dataBase64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())),
+    }
     budget -= blob.size
   }
   return files

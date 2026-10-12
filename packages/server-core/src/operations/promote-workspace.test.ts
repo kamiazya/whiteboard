@@ -36,13 +36,6 @@ const SKETCH_ID = '01BRWAAAAAAAAAAAAAAAAAAAA1'
 const CONTESTED_ID = '01BRWAAAAAAAAAAAAAAAAAAAA2'
 const DAEMON_OWN_ID = '01BRWAAAAAAAAAAAAAAAAAAAA3'
 
-const attestation = {
-  kind: 'webauthn' as const,
-  credentialId: 'Y3JlZA',
-  authenticatorData: 'YXV0aA',
-  clientDataJSON: 'Y2xpZW50',
-  signature: 'c2ln',
-}
 const operator = { kind: 'human' as const, displayName: 'Yuki' }
 
 /**
@@ -120,7 +113,7 @@ afterEach(() => {
 })
 
 describe('promoteWorkspace', () => {
-  it('merges the record and writes one explicit human checkpoint per promoted document, carrying the attestation', async () => {
+  it('merges the record and writes one explicit human checkpoint per promoted document', async () => {
     const fake = fakes()
     const result = await promoteWorkspace(
       {
@@ -129,7 +122,7 @@ describe('promoteWorkspace', () => {
         versions: fake.versions,
         blobStore: fake.blobs,
       },
-      { workspaceId: WS, snapshot: browserRecord(), operator, attestation },
+      { workspaceId: WS, snapshot: browserRecord(), operator },
     )
     expect(result.kind).toBe('promoted')
     if (result.kind !== 'promoted') return
@@ -139,14 +132,14 @@ describe('promoteWorkspace', () => {
     // The merge landed: the record's body is readable in the workspace doc.
     expect(readMarkdownBody(documentContainers(fake.workspaceDoc, ROADMAP_ID))).toBe('# roadmap v1')
 
-    // One row per promoted document, explicit, human, with the evidence.
+    // One row per promoted document, explicit, human.
     expect(fake.versions.saves.map((save) => save.path).sort()).toEqual(['notes/roadmap', 'sketch'])
     for (const save of fake.versions.saves) {
-      expect(save.options).toEqual({ auto: false, operator, attestation })
+      expect(save.options).toEqual({ auto: false, operator })
     }
   })
 
-  it("writes the rows without an attestation when none was asked for, and none for the target's own documents", async () => {
+  it("writes no row for the target's own documents", async () => {
     const fake = fakes()
     const result = await promoteWorkspace(
       {

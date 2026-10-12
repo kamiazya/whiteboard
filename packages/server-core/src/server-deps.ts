@@ -5,7 +5,12 @@ import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboa
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
-import type { Attestation, OperatorInfo, VersionEntry } from './versions/version-entry.js'
+import type {
+  Attestation,
+  OperatorInfo,
+  PromotedVersion,
+  VersionEntry,
+} from './versions/version-entry.js'
 import type { ViewportRequest } from './viewport-request.js'
 
 /**
@@ -384,7 +389,9 @@ export interface VersionHistory {
    * path, because a row names a document and a carried document may sit at a
    * path the target contests. A row whose id is already held is left as it
    * is, so a re-run adds nothing. Answers the carried ids this workspace's
-   * history holds afterwards, read back rather than assumed.
+   * history took in, read back rather than assumed — before the automatic
+   * cap runs, so an automatic row the cap retires in the same call is
+   * answered as arrived: it went the way one of this keeper's own would.
    */
   adopt(workspaceId: string, rows: readonly AdoptedVersion[]): Promise<readonly string[]>
 }
@@ -394,19 +401,13 @@ export interface VersionHistory {
  * caller has already checked the frontier out of the merged record and
  * derived `elementCount` and `contentDigest` from that state.
  */
-export interface AdoptedVersion {
-  readonly id: string
-  readonly documentId: string
-  /** Epoch milliseconds, as the other keeper recorded it. */
-  readonly createdAt: number
-  readonly auto: boolean
-  readonly label?: string
-  readonly operator?: OperatorInfo
-  readonly restoredFrom?: string
-  readonly frontiers: Frontiers
-  readonly elementCount: number
-  readonly contentDigest: string
-}
+export type AdoptedVersion = Readonly<
+  Omit<PromotedVersion, 'frontiers'> & {
+    readonly frontiers: Frontiers
+    readonly elementCount: number
+    readonly contentDigest: string
+  }
+>
 
 // Carries the workspaceId because the tree is the address book: resolving a
 // bare documentId back to its workspace would mean scanning every workspace

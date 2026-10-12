@@ -144,16 +144,13 @@ async function promoteThroughBridge(pageUrl) {
       JSON.stringify(outcome),
     )
     check(
-      outcome.attested.status === 403 && outcome.attested.body?.error === 'attestation_rejected',
+      outcome.attested.status === 400 && outcome.attested.body?.error === 'invalid_body',
       'a promote carrying an attestation is refused, since the local daemon pins no passkey',
       JSON.stringify(outcome.attested),
     )
     const body = outcome.promoted.body
     check(
-      outcome.promoted.status === 200 &&
-        body?.attested === false &&
-        body.recorded.length > 0 &&
-        body.shadowed.length === 0,
+      outcome.promoted.status === 200 && body?.recorded.length > 0 && body.shadowed.length === 0,
       'an unattested promote through the extension lands the whole record',
       JSON.stringify(outcome.promoted),
     )

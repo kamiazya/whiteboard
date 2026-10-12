@@ -29,13 +29,13 @@ function validSnapshot(): Uint8Array {
 
 const GARBAGE = Uint8Array.from([0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x02, 0x03])
 
-const promoted = () => jsonResponse({ ok: true, attested: false, recorded: [], shadowed: [] })
+const promoted = () => jsonResponse({ ok: true, recorded: [], shadowed: [] })
 
 function keeper(handlers: {
   promote: () => Response | Promise<Response>
   list?: () => Response | Promise<Response>
 }) {
-  return vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+  return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
     const url = String(input)
     if (url.endsWith('/workspace-document/promote')) return handlers.promote()
     if (url.endsWith('/documents') && handlers.list) return handlers.list()
@@ -92,8 +92,8 @@ describe('acceptTransferredRecord refusals', () => {
   it.each([
     {
       name: 'an ok answer that fails the promote schema',
-      promote: () => jsonResponse({ ok: true, attested: 'yes' }),
-      path: 'attested',
+      promote: () => jsonResponse({ ok: true, recorded: 'yes' }),
+      path: 'recorded',
     },
     {
       name: 'an ok answer that is not JSON',
@@ -122,6 +122,13 @@ describe('acceptTransferredRecord refusals', () => {
 })
 
 describe('acceptTransferredRecord on a landed merge', () => {
+  it('leaves an empty plane out of the merge it asks for, so an older keeper reads it', async () => {
+    const fetch = keeper({ promote: promoted, list: () => jsonResponse({ documents: [] }) })
+    await accept(fetch)
+    const init = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+    expect(Object.keys(JSON.parse(String(init?.body)))).toEqual(['snapshot'])
+  })
+
   it('reports the arriving record ids and the paths the keeper lists as shadowed', async () => {
     const fetch = keeper({
       promote: promoted,
@@ -143,7 +150,6 @@ describe('acceptTransferredRecord on a landed merge', () => {
       ok: true,
       promotedDocumentIds: [DOCUMENT_ID],
       shadowedPaths: ['notes/roadmap'],
-      attested: false,
     })
   })
 

@@ -20,6 +20,7 @@ import {
   markdownBodyNotice,
   nodeTextEditNotice,
   pastedTextNotice,
+  picturesLeftOutNotice,
   tagCountNotice,
 } from './limit-notice.js'
 
@@ -123,5 +124,22 @@ describe('limit notices', () => {
       ...Object.values(KEEPER_LIMIT_REASON),
     ]
     for (const said of all) expect(said).not.toMatch(/\bcards?\b/i)
+  })
+})
+
+describe('picturesLeftOutNotice', () => {
+  // A paste cannot tell a picture past the copy's budget from one whose bytes
+  // could not be read, so it names neither as THE cause.
+  it('says the bytes did not come along, without blaming the budget alone', () => {
+    const said = picturesLeftOutNotice(2)
+    expect(said).toMatch(/^2 pictures were left out of the paste: /)
+    expect(said).toContain('did not carry their bytes')
+    expect(said).not.toMatch(/: a copy carries up to/)
+  })
+
+  it("says the keeper's own reason when it refused", () => {
+    expect(picturesLeftOutNotice(1, 'The daemon is full.')).toBe(
+      'A picture was left out of the paste: The daemon is full.',
+    )
   })
 })

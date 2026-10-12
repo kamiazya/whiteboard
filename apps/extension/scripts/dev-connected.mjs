@@ -15,17 +15,18 @@
 // The dev daemon is the checkout's shared one: it is ensured, never stopped.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { resolveRepoRootFromGit } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
 import {
+  cdpPortRefusal,
   chromiumArgs,
   devServerUrl,
   devToolsActivePortFile,
   installHost,
+  portIsFree,
 } from './dev-connected-lib.mjs'
 import { EXTENSION_DIR } from './smoke-kit.mjs'
 
@@ -70,6 +71,10 @@ try {
   console.error(`[dev-connected] ${err.message}`)
   process.exit(2)
 }
+// Before the daemon and the build, which take seconds and would only end in
+// a timeout behind a port another session's Chromium already holds.
+const cdpRefusal = await cdpPortRefusal(Number(options['cdp-port']))
+if (cdpRefusal !== undefined) fail(cdpRefusal)
 if (process.platform === 'win32') {
   fail(
     'Windows registers a native host only through a per-user registry key, which a throwaway profile cannot scope — run `whiteboard native-host install --json` yourself instead (development.md).',
@@ -139,15 +144,6 @@ try {
   await cleanUp(1)
 }
 
-/** Whether `port` can be listened on, as vite would listen on it. */
-function portIsFree(port) {
-  return new Promise((answer) => {
-    const probe = createServer()
-    probe.once('error', () => answer(false))
-    probe.listen(port, 'localhost', () => probe.close(() => answer(true)))
-  })
-}
-
 async function answers(url) {
   try {
     return (await fetch(url)).ok
@@ -156,7 +152,7 @@ async function answers(url) {
   }
 }
 
-async function waitFor(what, isReady, timeoutMs) {
+async function waitFor(what, isReady, timeoutMs, seeLog = '') {
   const startedAt = Date.now()
   while (Date.now() - startedAt < timeoutMs) {
     const value = await isReady()
@@ -165,7 +161,7 @@ async function waitFor(what, isReady, timeoutMs) {
     if (cleaningUp) return new Promise(() => {})
     await new Promise((later) => setTimeout(later, 200))
   }
-  console.error(`[dev-connected] ${what} did not come up within ${timeoutMs}ms`)
+  console.error(`[dev-connected] ${what} did not come up within ${timeoutMs}ms${seeLog}`)
   return cleanUp(1)
 }
 
@@ -235,6 +231,7 @@ const cdpPort = await waitFor(
     return existsSync(file) ? readFileSync(file, 'utf8').split('\n')[0] : undefined
   },
   30_000,
+  ` — see ${logPath}`,
 )
 
 ready = true

@@ -329,6 +329,12 @@ export class FileVersionStore implements VersionStore {
    * the other workspace's, and the answer — read back for THIS workspace —
    * leaves the id out, which is how the caller learns the history did not
    * arrive whole.
+   *
+   * The answer is read back BEFORE the automatic cap prunes: a carried
+   * automatic row the cap then retires did reach this keeper, and went the
+   * way one of its own would. Read after, a re-run once this keeper had taken
+   * a checkpoint of its own reported that row as never arriving — and the
+   * caller, keeping its copy for it, re-sent it on every retry to the same end.
    */
   async adopt(workspaceId: string, rows: readonly AdoptedVersion[]): Promise<string[]> {
     validateWorkspaceId(workspaceId)
@@ -355,9 +361,6 @@ export class FileVersionStore implements VersionStore {
         )
         .onConflict((conflict) => conflict.column('id').doNothing())
         .execute()
-      for (const documentId of new Set(rows.map((row) => row.documentId))) {
-        await this.prune(documentId)
-      }
       const held = await db
         .selectFrom('versions')
         .select(['id'])
@@ -368,6 +371,9 @@ export class FileVersionStore implements VersionStore {
           rows.map((row) => row.id),
         )
         .execute()
+      for (const documentId of new Set(rows.map((row) => row.documentId))) {
+        await this.prune(documentId)
+      }
       return held.map((row) => row.id)
     })
   }

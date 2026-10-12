@@ -51,7 +51,6 @@ function daemonStub(options: { confirms: boolean }) {
       promotes.push(body)
       return Response.json({
         ok: true,
-        attested: false,
         recorded: [],
         shadowed: [],
         trashStored: options.confirms ? (body.trash ?? []).map((each) => each.documentId) : [],
@@ -181,6 +180,66 @@ describe('promoteWorkspace, the planes beside the record', () => {
         ],
       }),
     )
+  })
+
+  it('sends no plane keys for a workspace with no trash and no versions', async () => {
+    const { index, workspaceId } = await newWorkspace()
+    await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
+    const daemon = daemonStub({ confirms: true })
+
+    expect((await promote(daemon.fetch)).kind).toBe('ok')
+
+    // A daemon whose strict request schema predates the planes refuses any
+    // body that names them, empty or not.
+    expect(Object.keys(daemon.promotes[0] ?? {})).toEqual(['snapshot'])
+  })
+
+  it('says to update the daemon when it cannot read the planes sent beside the record', async () => {
+    const { index } = await newWorkspace()
+    await trashedCanvas(index, 'gone', 'only-in-the-trash')
+    const olderDaemon = (async () =>
+      Response.json(
+        { error: 'invalid_body', message: 'snapshot must be base64url' },
+        { status: 400 },
+      )) as typeof globalThis.fetch
+
+    const result = await promote(olderDaemon)
+
+    expect(result).toEqual({
+      kind: 'failed',
+      reason:
+        'The daemon refused the trash and saved versions sent with the workspace (snapshot must be base64url). If the daemon is older than this page, update it and move again.',
+    })
+  })
+
+  it('passes a shape refusal of a body carrying no planes through as the daemon said it', async () => {
+    const { index, workspaceId } = await newWorkspace()
+    await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
+    const refusing = (async () =>
+      Response.json(
+        { error: 'invalid_body', message: 'snapshot must be base64url' },
+        { status: 400 },
+      )) as typeof globalThis.fetch
+
+    expect(await promote(refusing)).toEqual({
+      kind: 'failed',
+      reason: 'snapshot must be base64url',
+    })
+  })
+
+  it('passes a refusal of the record itself through, planes carried or not', async () => {
+    const { index } = await newWorkspace()
+    await trashedCanvas(index, 'gone', 'only-in-the-trash')
+    const refusing = (async () =>
+      Response.json(
+        { title: 'Malformed workspace record snapshot' },
+        { status: 400 },
+      )) as typeof globalThis.fetch
+
+    expect(await promote(refusing)).toEqual({
+      kind: 'failed',
+      reason: 'Malformed workspace record snapshot',
+    })
   })
 
   it('fails before anything is sent when the planes cannot be read', async () => {

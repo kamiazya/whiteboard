@@ -72,6 +72,35 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       return (await store.save('ws-b', 'doc', new LoroDoc(), { auto: false })).id
     }
 
+    it('is not answered as adopted into this workspace', async () => {
+      // The caller learns a carried version did not arrive only by its id
+      // being absent here; the row the insert skipped is the other workspace's.
+      const id = await foreignVersionId()
+      const kept = await store.adopt('ws-a', [
+        {
+          id,
+          documentId: 'doc-a',
+          createdAt: 1,
+          auto: false,
+          frontiers: [],
+          elementCount: 0,
+          contentDigest: 'x',
+        },
+      ])
+      expect(kept).toEqual([])
+    })
+
+    it('is not listed by document id', async () => {
+      const id = await foreignVersionId()
+      const row = await handle.db
+        .selectFrom('versions')
+        .select(['documentId'])
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow()
+      expect(await store.listIdsByDocument('ws-b', row.documentId)).toContain(id)
+      expect(await store.listIdsByDocument('ws-a', row.documentId)).toEqual([])
+    })
+
     it('is not loaded', async () => {
       const id = await foreignVersionId()
       await expect(store.load('ws-a', id)).resolves.toBeNull()
@@ -86,6 +115,29 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       const id = await foreignVersionId()
       await expect(store.loadWorkspaceAt('ws-b', id)).resolves.not.toBeNull()
       await expect(store.load('ws-b', id)).resolves.not.toBeNull()
+    })
+  })
+
+  describe('adopt', () => {
+    it('keeps the element count the carried version was judged with', async () => {
+      const kept = await store.adopt('ws-a', [
+        {
+          id: 'carried-board',
+          documentId: 'doc-a',
+          createdAt: 1,
+          auto: false,
+          frontiers: [],
+          elementCount: 2,
+          contentDigest: 'x',
+        },
+      ])
+      expect(kept).toEqual(['carried-board'])
+      const row = await handle.db
+        .selectFrom('versions')
+        .select(['elementCount'])
+        .where('id', '=', 'carried-board')
+        .executeTakeFirstOrThrow()
+      expect(row.elementCount).toBe(2)
     })
   })
 

@@ -72,6 +72,8 @@ interface DaemonOptions {
   missing?: readonly string[]
   /** File ids whose read fails at the network. */
   unreachable?: readonly string[]
+  /** File ids served padded to this many bytes, past their readable prefix. */
+  paddedTo?: Readonly<Record<string, number>>
 }
 
 /** The daemon as its key, snapshot and file routes; `served` records each file read. */
@@ -94,7 +96,11 @@ function daemon(record: LoroDoc, options: DaemonOptions = {}): typeof globalThis
       if (options.unreachable?.includes(fileId)) throw new TypeError('Failed to fetch')
       if (options.missing?.includes(fileId)) return new Response('gone', { status: 404 })
       options.served?.push(fileId)
-      return new Response(pictureOf(fileId) as BodyInit, {
+      const size = options.paddedTo?.[fileId]
+      const picture = pictureOf(fileId)
+      const body = size === undefined ? picture : new Uint8Array(size)
+      body.set(picture)
+      return new Response(body as BodyInit, {
         status: 200,
         headers: { 'Content-Type': 'image/png' },
       })
@@ -254,6 +260,16 @@ describe('replica images over fake-indexeddb', () => {
     expect([...loaded.keys()]).toEqual(['img-cat'])
   })
 
+  it('caches a picture far past a few kilobytes under the default budget', async () => {
+    // The default is sized for several full-size uploads; a budget off by a
+    // factor of 1024 would cache no real photo and fail nothing else.
+    const cached = await cacheFor(boardNaming('img-cat'), {
+      daemon: { paddedTo: { 'img-cat': 256 * 1024 } },
+    })
+
+    expect(cached).toBe(1)
+  })
+
   it('drops a held picture that a smaller budget no longer fits', async () => {
     const record = boardNaming('img-cat')
     await cacheFor(record)
@@ -341,6 +357,22 @@ describe('replica images over fake-indexeddb', () => {
     const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], blobs)
 
     expect(loaded.size).toBe(1)
+  })
+
+  it('an envelope moved under another picture id does not open', async () => {
+    await cacheFor(boardNaming('img-cat', 'img-dog'))
+    const [catRef, dogRef] = readReplicaImagePointer(DAEMON_WS)?.blobs ?? []
+    if (catRef === undefined || dogRef === undefined) throw new Error('two pictures not cached')
+    const real = new IdbBlobStore()
+    // Each read answers the OTHER picture's envelope: the same key and the
+    // same record, so only the picture id in the sealing context refuses it.
+    const blobs = blobStoreWith({
+      get: (input) => real.get({ ref: input.ref.digestHex === catRef.digestHex ? dogRef : catRef }),
+    })
+
+    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], blobs)
+
+    expect(loaded.size).toBe(0)
   })
 
   it('a picture whose blob is gone is absent from what loads', async () => {

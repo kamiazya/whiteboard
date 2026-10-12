@@ -97,7 +97,6 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
       target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       return Response.json({
         ok: true,
-        attested: body.attestation !== undefined,
         recorded: readWorkspaceDocuments(target).map((entry) => entry.documentId),
         shadowed: [],
       })

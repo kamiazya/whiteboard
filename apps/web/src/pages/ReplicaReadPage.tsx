@@ -1,11 +1,10 @@
 /**
  * ADR-0023's offline page: the daemon that keeps this workspace is
- * unreachable, and this browser holds a replica of it. Markdown bodies are
- * EDITABLE — decision 3's data plane: the edits are CRDT ops appended to
- * the replica record and shipped to the daemon as ordinary updates when it
- * returns (replica-push, run by the daemon page's resolve effect). Spatial
- * documents stay read-only for now; the convergence argument is identical,
- * only the editor mount is heavier. Control-plane actions need the keeper
+ * unreachable, and this browser holds a replica of it. Markdown bodies and
+ * canvases are EDITABLE — decision 3's data plane: the edits are CRDT ops
+ * appended to the replica record and shipped to the daemon as ordinary
+ * updates when it returns (replica-push, run by the daemon page's resolve
+ * effect). Control-plane actions need the keeper
  * (decision 3), so none are offered — not greyed out, absent — and NOTHING
  * here may touch a document index: a data-plane edit writes the record and
  * only the record. The record is opened with `open`, never `create`, so a
@@ -42,8 +41,10 @@ import { Button } from '../components/ui/button.js'
 import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
+import { replicaClipboardImages } from '../lib/replica-clipboard-images.js'
 import { loadReplicaImages } from '../lib/replica-images.js'
 import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
 import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
@@ -317,8 +318,9 @@ function useReplicaLinkTables(state: LoadState) {
   return { resolveAlias, resolveTitle }
 }
 
-/** The link table, reference seams and tag library the editors draw this replica with. */
+/** The link table, reference seams, tag library and picture seams the editors use on this replica. */
 function useReplicaSeams(
+  daemonBaseUrl: string,
   workspaceId: string,
   state: LoadState,
   selected: WorkspaceDocumentEntry | undefined,
@@ -355,7 +357,11 @@ function useReplicaSeams(
     () => (state.kind === 'ready' ? replicaTagLibrary(state.record, state.entries) : undefined),
     [state],
   )
-  return { seams, references, tagLibrary }
+  const clipboardImages = useMemo(
+    () => replicaClipboardImages(daemonBaseUrl, workspaceId),
+    [daemonBaseUrl, workspaceId],
+  )
+  return { seams, references, tagLibrary, clipboardImages }
 }
 
 /**
@@ -434,6 +440,7 @@ interface ReplicaReaderProps {
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
   tagLibrary: TagLibrary | undefined
+  clipboardImages: ClipboardImageSeams
   saveFailed: boolean
   onRetrySave: () => void
 }
@@ -501,6 +508,7 @@ function ReplicaReader({
   seams,
   references,
   tagLibrary,
+  clipboardImages,
   saveFailed,
   onRetrySave,
 }: ReplicaReaderProps) {
@@ -553,6 +561,7 @@ function ReplicaReader({
               className="h-full"
               references={references}
               tagLibrary={tagLibrary}
+              clipboardImages={clipboardImages}
             />
           )}
         </div>
@@ -667,7 +676,7 @@ export function ReplicaReadPage({
   // entries — so a `[[...]]` written here resolves by the rules the rest of
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
-  const drawnWith = useReplicaSeams(workspaceId, state, selected)
+  const drawnWith = useReplicaSeams(daemonBaseUrl, workspaceId, state, selected)
   const { content, draft, spatialDraft, onDraftChange, onSpatialChange } = useReplicaEditing({
     state,
     selected,

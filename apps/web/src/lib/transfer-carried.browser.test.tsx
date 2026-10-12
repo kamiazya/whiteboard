@@ -115,7 +115,6 @@ function keeper() {
       promotes.push(body)
       return jsonResponse({
         ok: true,
-        attested: false,
         recorded: [],
         shadowed: [],
         trashStored: (body.trash ?? []).map((each) => each.documentId),
@@ -180,7 +179,7 @@ describe('a cross-origin transfer, what travels beside the record', () => {
     const silent = (async (input: RequestInfo | URL) =>
       String(input).endsWith('/documents')
         ? jsonResponse({ documents: [] })
-        : jsonResponse({ ok: true, attested: false, recorded: [], shadowed: [] })) as typeof fetch
+        : jsonResponse({ ok: true, recorded: [], shadowed: [] })) as typeof fetch
     expect(
       await acceptTransferredRecord({ fetch: silent, workspaceId: 'ws-there', ...offer }),
     ).toMatchObject({

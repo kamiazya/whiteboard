@@ -1,4 +1,8 @@
-import { okfActorSchema } from '@kamiazya/whiteboard-model'
+import {
+  okfActorSchema,
+  versionLabelSchema,
+  WORKSPACE_ID_PATTERN,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -76,6 +80,57 @@ export const base64urlSchema = z
   .min(1)
   .regex(/^[A-Za-z0-9_-]+$/, 'unpadded base64url')
   .refine(isCanonicalBase64url, 'canonical unpadded base64url')
+
+// The planes a promotion carries beside the record (ADR-0023), as the wire
+// states them. Declared here, beside the operator they carry, because the
+// daemon-client contract that publishes them and the server-core operation
+// that judges them must read one shape: the operation's types are these with
+// the base64url decoded, so a field added to the wire is a field the
+// operation and the version store are made to handle.
+
+/**
+ * The evacuated bytes one of the record's trash entries names. The record
+ * carries only the entry and its digest; the bytes live in the browser's blob
+ * store, and without them the daemon lists the entry but cannot restore it.
+ * The daemon stores them only when they hash to the digest the entry names.
+ */
+export const promotedTrashBytesRequestSchema = z
+  .object({
+    documentId: z.string().min(1),
+    bytes: base64urlSchema,
+  })
+  .strict()
+export type PromotedTrashBytes = z.infer<typeof promotedTrashBytesRequestSchema>
+
+/** A version id the daemon can key a row by — the character class its validator admits. */
+const promotedVersionIdSchema = z.string().max(64).regex(WORKSPACE_ID_PATTERN)
+
+/**
+ * One saved version of a promoted document, as the browser keeper recorded
+ * it. A version is a frontier of the workspace record, and the merge keeps
+ * every op's peer and counter, so the frontier names the same point in the
+ * daemon's record; the daemon checks it out of the incoming record before it
+ * merges and derives the element count and content digest from that state
+ * itself rather than trusting a figure.
+ *
+ * The operator is the request form — no `actor`: the device a row names is
+ * one the keeper can back with a key, which a carried row cannot.
+ */
+export const promotedVersionRequestSchema = z
+  .object({
+    id: promotedVersionIdSchema,
+    documentId: z.string().min(1),
+    /** When the browser saved it, epoch milliseconds — kept, so the history reads in order. */
+    createdAt: z.number().int().nonnegative(),
+    auto: z.boolean(),
+    label: versionLabelSchema.optional(),
+    operator: requestOperatorSchema.optional(),
+    restoredFrom: promotedVersionIdSchema.optional(),
+    /** `encodeFrontiers` of the record at the version, base64url. */
+    frontiers: base64urlSchema,
+  })
+  .strict()
+export type PromotedVersion = z.infer<typeof promotedVersionRequestSchema>
 
 /**
  * The evidence a person was present when a row was written (ADR-0039).

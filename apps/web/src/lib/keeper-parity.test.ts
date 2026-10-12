@@ -201,6 +201,10 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "pulls a daemon workspace's record into this browser as a cached copy — only a daemon-kept workspace has a replica, since a browser-kept one is already held here and is the authority itself",
   },
+  'src/lib/replica-clipboard-images.ts': {
+    reach: 'daemon-itself',
+    why: "gives the offline copy of a daemon workspace the daemon's file scope for copy and paste — a browser-kept workspace's editor takes its picture seams from its own keeper, with no daemon behind it",
+  },
   'src/lib/replica-images.ts': {
     reach: 'daemon-itself',
     why: "reads the pictures a daemon workspace's documents name into this browser's cached copy of it — a browser-kept workspace's pictures are already in this browser",

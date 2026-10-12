@@ -248,6 +248,10 @@ server's arguments are fixed when the client starts. So the browser is set up by
    pnpm dev:connected --headless --cdp-port=9222
    ```
 
+   If something already listens on that port (another checkout following this
+   recipe, say), it stops at once and names the port. Pick another one and use
+   it in step 2 as well.
+
 2. **Your step:** register the Playwright MCP server against that port, for
    this checkout only. The agent does not do this, because it changes your
    client's configuration:

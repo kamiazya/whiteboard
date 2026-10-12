@@ -2,7 +2,7 @@
  * The promotion library function over REAL IndexedDB: the browser keeper's
  * workspace record leaves through the same bytes the daemon route merges.
  * The daemon side of those bytes is pinned in mcp-server's
- * promote-workspace.test.ts; what this file adds is the browser half — the
+ * workspace-promote.test.ts; what this file adds is the browser half — the
  * record actually read from IndexedDB, and the posted snapshot verified by
  * importing it into a target record rather than by trusting the POST
  * happened.
@@ -71,7 +71,6 @@ function daemonStub(
       const recorded = readWorkspaceDocuments(target).map((entry) => entry.documentId)
       return Response.json({
         ok: true,
-        attested: body.attestation !== undefined,
         recorded,
         shadowed: [],
       })

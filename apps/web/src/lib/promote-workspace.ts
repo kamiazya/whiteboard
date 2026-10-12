@@ -1,34 +1,28 @@
 /**
- * Promotion: the browser keeper's whole workspace record transferred to
- * ANOTHER KEEPER's workspace, identity and history intact.
+ * Promotion (ADR-0023): the browser keeper's whole workspace record moved
+ * into a workspace of the daemon on this machine, identity and history
+ * intact. Settings > Connections' "This workspace" section
+ * (`PromoteWorkspaceSection`) is the caller, and it loads this module lazily:
+ * it reaches loro-crdt, which stays out of the entry closure
+ * (entry-graph-loro-free.test.ts guards it).
  *
- * The destination is `keeperBaseUrl` and has always been a plain parameter.
- * It is not called `daemonBaseUrl`: a daemon is only one kind of keeper, and
- * a name saying so would make the transfer read as daemon-shaped when nothing
- * about it is. ADR-0023 makes the destination the workspace's new KEEPER, so
- * that is the word. A browser
- * transfers directly to a SaaS or a self-hosted server with no daemon hop
- * (user decision, 2026-09-22); the receiving route is not gated on
- * `authMode`, so server mode already answers it.
+ * The destination is a parameter, `keeperBaseUrl`, named for the keeper axis
+ * rather than for the daemon: nothing in the transfer is daemon-shaped, and
+ * the daemon is the one keeper the section offers today. The sentences a
+ * person reads name the daemon, because that is who they moved to.
  *
- * A plain function, not a component — the UI that offers it arrives in its
- * own increment, and keeping loro-crdt behind the lazy chunks is that
- * increment's job too (entry-graph-loro-free.test.ts guards the entry
- * closure; nothing on the entry path may import this file statically).
+ * The core move is a CRDT merge of the record's snapshot through the
+ * daemon's promote route, which imports these bytes the way its sync surface
+ * would and writes one explicit human checkpoint per promoted document.
+ * Beside the record travel the planes it only points at — each trash entry's
+ * evacuated bytes and the saved version rows (`carried-planes.ts`) — and
+ * every image any of them names, uploaded afterwards one file at a time.
  *
- * The core move is a CRDT merge of the record's snapshot: the daemon's
- * promote route imports exactly these bytes the way its sync surface would
- * (mcp-server's workspace-promote.test.ts pins identity, shadowed
- * collisions, idempotent retry and the unregistered-target 404), and writes
- * one explicit human checkpoint per promoted document. Beside the record
- * travel the planes it only points at — each trash entry's evacuated bytes
- * and the saved version rows — and every image any of them names.
- *
- * No passkey assertion travels with it. The only destination is the daemon
- * on this machine, which has one person — the owner who alone can reach its
- * socket (ADR-0050 decision 3) — so there is nobody for an assertion to tell
- * apart. A transfer to a keeper the person does NOT own goes through
- * `accept-transferred-record.ts`, at that keeper's own origin.
+ * No passkey assertion travels with it: the daemon on this machine has one
+ * person — the owner who alone can reach its socket (ADR-0050 decision 3) —
+ * so there is nobody for an assertion to tell apart. A transfer to a keeper
+ * the person does NOT own goes through `accept-transferred-record.ts`, at
+ * that keeper's own origin.
  *
  * The caller owns the fold: a legacy row-plane document that has not been
  * absorbed into the tree yet is not in the record this reads, so the promote
@@ -54,6 +48,7 @@ import {
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import {
   type CarriedPlanes,
@@ -135,8 +130,18 @@ export type PromoteWorkspaceResult =
     }
   | { kind: 'failed'; reason: string }
 
-async function failureReason(res: Response): Promise<string> {
-  return (await refusalReasonOf(res, `Request failed (${res.status}).`)).reason
+const invalidBodySchema = z.object({ error: z.literal('invalid_body') })
+
+/**
+ * The daemon's own reason, with the one cause a person can act on named when
+ * the refusal is of the planes: a daemon built before them answers a body
+ * carrying any with a shape refusal that says nothing about its age.
+ */
+async function refusedMoveReason(res: Response, sent: PromoteWorkspaceRequest): Promise<string> {
+  const { reason, body } = await refusalReasonOf(res, `Request failed (${res.status}).`)
+  const carried = sent.trash !== undefined || sent.versions !== undefined
+  if (!carried || !invalidBodySchema.safeParse(body).success) return reason
+  return `The daemon refused the trash and saved versions sent with the workspace (${reason}). If the daemon is older than this page, update it and move again.`
 }
 
 export async function promoteWorkspace(
@@ -222,6 +227,23 @@ async function transferImages(
   return blobs
 }
 
+/**
+ * An empty plane is omitted rather than sent as `[]`: a daemon whose strict
+ * request schema predates the planes refuses any body naming them, so a
+ * workspace with nothing beside its record still moves to one.
+ */
+function promoteBody(
+  snapshot: string,
+  fitted: Pick<PromoteWorkspaceRequest, 'trash' | 'versions'>,
+): PromoteWorkspaceRequest {
+  const { trash = [], versions = [] } = fitted
+  return {
+    snapshot,
+    ...(trash.length === 0 ? {} : { trash }),
+    ...(versions.length === 0 ? {} : { versions }),
+  }
+}
+
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
@@ -248,7 +270,7 @@ async function promoteWorkspaceUnsafe(
   }
   const snapshot = bytesToBase64Url(new Uint8Array(record.export({ mode: 'snapshot' })))
   const fitted = fitCarriedPlanes(snapshot, planes)
-  const body: PromoteWorkspaceRequest = { snapshot, trash: fitted.trash, versions: fitted.versions }
+  const body = promoteBody(snapshot, fitted)
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
@@ -260,7 +282,7 @@ async function promoteWorkspaceUnsafe(
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    return { kind: 'failed', reason: await failureReason(res) }
+    return { kind: 'failed', reason: await refusedMoveReason(res, body) }
   }
   const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
   if (!promoted.success) {

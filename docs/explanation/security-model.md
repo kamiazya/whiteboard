@@ -80,10 +80,11 @@ Moving a browser-kept workspace to a local daemon
 ([ADR-0023](../contributing/adr/0023-replica-model.md)) is a request through
 the extension, carrying the daemon's credential like any other. The daemon
 has one person, so there is nobody else for the move to be confirmed as, and
-it is recorded without a passkey attestation. A move that does carry one is
-refused (`attestation_rejected`), because no local daemon pins a passkey to
-verify it against; [ADR-0039](../contributing/adr/0039-passkey-attestation.md)'s
-attestation is not used by the local daemon.
+it is recorded without a passkey attestation. The move's request has no
+field for one, and a request that carries one anyway is refused as an invalid
+body, because no local daemon pins a passkey to verify it against;
+[ADR-0039](../contributing/adr/0039-passkey-attestation.md)'s attestation is
+not used by the local daemon.
 
 ## Replica key (offline read plane)
 

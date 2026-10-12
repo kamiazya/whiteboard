@@ -128,7 +128,6 @@ describe('the bounds of the transfer messages', () => {
       workspaceId: 'ws-there',
       promotedDocumentIds: [],
       shadowedPaths: [],
-      attested: false,
     }
     expect(transferResponseSchema.safeParse(success).success).toBe(true)
     expect(transferResponseSchema.safeParse({ ...success, workspaceId: '' }).success).toBe(false)
@@ -144,7 +143,6 @@ describe('the transfer result', () => {
       workspaceId: 'ws-a',
       promotedDocumentIds: ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
       shadowedPaths: ['contested'],
-      attested: true,
     })
     expect(ok.success).toBe(true)
 

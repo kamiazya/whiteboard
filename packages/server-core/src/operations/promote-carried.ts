@@ -18,25 +18,17 @@ import {
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
-import type { OperatorInfo } from '../versions/version-entry.js'
+import type { PromotedTrashBytes, PromotedVersion } from '../versions/version-entry.js'
 
 /** One trash entry's evacuated bytes, decoded. */
-export interface CarriedTrashBytes {
-  readonly documentId: string
-  readonly bytes: Uint8Array
-}
+export type CarriedTrashBytes = Readonly<
+  Omit<PromotedTrashBytes, 'bytes'> & { readonly bytes: Uint8Array }
+>
 
-/** One saved version as the other keeper recorded it, its frontier still encoded. */
-export interface CarriedVersion {
-  readonly id: string
-  readonly documentId: string
-  readonly createdAt: number
-  readonly auto: boolean
-  readonly label?: string
-  readonly operator?: OperatorInfo
-  readonly restoredFrom?: string
-  readonly frontiers: Uint8Array
-}
+/** One saved version as the other keeper recorded it, its frontier decoded from base64url only. */
+export type CarriedVersion = Readonly<
+  Omit<PromotedVersion, 'frontiers'> & { readonly frontiers: Uint8Array }
+>
 
 export type CarriedJudgement =
   | { readonly kind: 'refused'; readonly reason: string }

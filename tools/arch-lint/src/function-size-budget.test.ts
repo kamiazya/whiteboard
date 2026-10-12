@@ -394,8 +394,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 54,
   // The read surface: the banner, the tree and the editor. JSX, and the
   // three are what a replica IS to a reader. +3: the replica's tag library,
-  // handed to both editors.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 75,
+  // handed to both editors. +2: the picture seams a copy and paste carry.
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReader': 77,
   // Presentation only — the logic is `useTransferHandshake`. Six stages, each
   // a short branch, and the offer and the report already live in their own
   // components; the page is the switch between them.

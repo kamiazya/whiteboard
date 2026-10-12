@@ -42,7 +42,6 @@ function keeper(target: LoroDoc) {
       target.import(base64UrlToBytes(body.snapshot) as Uint8Array)
       return Response.json({
         ok: true,
-        attested: false,
         recorded: readWorkspaceDocuments(target).map((entry) => entry.documentId),
         shadowed: [],
       })
