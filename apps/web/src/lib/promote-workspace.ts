@@ -227,6 +227,23 @@ async function transferImages(
   return blobs
 }
 
+/**
+ * An empty plane is omitted rather than sent as `[]`: a daemon whose strict
+ * request schema predates the planes refuses any body naming them, so a
+ * workspace with nothing beside its record still moves to one.
+ */
+function promoteBody(
+  snapshot: string,
+  fitted: Pick<PromoteWorkspaceRequest, 'trash' | 'versions'>,
+): PromoteWorkspaceRequest {
+  const { trash = [], versions = [] } = fitted
+  return {
+    snapshot,
+    ...(trash.length === 0 ? {} : { trash }),
+    ...(versions.length === 0 ? {} : { versions }),
+  }
+}
+
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
@@ -253,14 +270,7 @@ async function promoteWorkspaceUnsafe(
   }
   const snapshot = bytesToBase64Url(new Uint8Array(record.export({ mode: 'snapshot' })))
   const fitted = fitCarriedPlanes(snapshot, planes)
-  // An empty plane is omitted rather than sent as `[]`: a daemon whose strict
-  // request schema predates the planes refuses any body naming them, so a
-  // workspace with nothing beside its record still moves to one.
-  const body: PromoteWorkspaceRequest = {
-    snapshot,
-    ...(fitted.trash.length === 0 ? {} : { trash: fitted.trash }),
-    ...(fitted.versions.length === 0 ? {} : { versions: fitted.versions }),
-  }
+  const body = promoteBody(snapshot, fitted)
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,

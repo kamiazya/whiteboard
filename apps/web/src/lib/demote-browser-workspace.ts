@@ -76,11 +76,33 @@ export async function demoteBrowserWorkspace(
   // registry row whose record is gone — a workspace that lists but opens
   // empty, which reads as data loss.
   const residue = await residueOf(sourceWorkspaceId, dbName)
+  const { nextHandle, remaining } = await dropRegistryRow(sourceWorkspaceId, dbName)
+  await switchBrowserWorkspace(nextHandle, dbName)
+  try {
+    await openDocumentStore(dbName).deleteDoc({
+      docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
+    })
+  } catch {
+    // The demotion already stands: with the registry row gone the record is
+    // unreachable, so a failed byte deletion is lingering garbage, not a
+    // half-demoted workspace — and not worth failing the report over.
+  }
+  if (residue !== null) await discardResidue(sourceWorkspaceId, residue, remaining, dbName)
+}
+
+/**
+ * Deletes the source's registry row, minting a fresh workspace row when it
+ * was the last, and answers the handle to re-point at plus the rows that
+ * remain — the browser-kept workspaces whose trash may still name a blob.
+ */
+async function dropRegistryRow(
+  sourceWorkspaceId: string,
+  dbName?: string,
+): Promise<{ nextHandle: string; remaining: readonly string[] }> {
   const db = await openWhiteboardDb(dbName)
-  let nextHandle: string
   let remaining: readonly string[] = []
   try {
-    nextHandle = await new Promise<string>((resolve, reject) => {
+    const nextHandle = await new Promise<string>((resolve, reject) => {
       const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
       const workspaces = tx.objectStore(WORKSPACES_STORE)
       workspaces.delete(sourceWorkspaceId)
@@ -102,20 +124,10 @@ export async function demoteBrowserWorkspace(
       tx.onerror = () => reject(tx.error ?? new Error('workspace registry update failed'))
       tx.onabort = () => reject(tx.error ?? new Error('workspace registry update aborted'))
     })
+    return { nextHandle, remaining }
   } finally {
     db.close()
   }
-  await switchBrowserWorkspace(nextHandle, dbName)
-  try {
-    await openDocumentStore(dbName).deleteDoc({
-      docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
-    })
-  } catch {
-    // The demotion already stands: with the registry row gone the record is
-    // unreachable, so a failed byte deletion is lingering garbage, not a
-    // half-demoted workspace — and not worth failing the report over.
-  }
-  if (residue !== null) await discardResidue(sourceWorkspaceId, residue, remaining, dbName)
 }
 
 /** What only the source record names, read before the record goes. */
