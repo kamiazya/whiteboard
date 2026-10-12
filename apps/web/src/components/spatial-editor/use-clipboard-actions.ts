@@ -5,7 +5,7 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
-import { type MutableRefObject, useEffect, useRef, useState } from 'react'
+import { type MutableRefObject, type RefObject, useEffect, useRef, useState } from 'react'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
   type ClipboardImageSeams,
@@ -182,7 +182,7 @@ function insertPasted(
 }
 
 /** False once the editor unmounts, so a paste that awaited an upload writes nowhere. */
-function useMounted(): MutableRefObject<boolean> {
+function useMounted(): RefObject<boolean> {
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true

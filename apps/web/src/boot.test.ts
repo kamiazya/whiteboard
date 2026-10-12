@@ -280,6 +280,6 @@ describe('startBootSequence — the page-load file sweep', () => {
   ] as const)('with runtime config %j, schedules the sweep: %s', async ([config, scheduled]) => {
     ;(window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__ = config
     await boot()
-    expect(vi.mocked(scheduleFileSweep).mock.calls.length).toBe(scheduled ? 1 : 0)
+    expect(vi.mocked(scheduleFileSweep).mock.calls).toHaveLength(scheduled ? 1 : 0)
   })
 })

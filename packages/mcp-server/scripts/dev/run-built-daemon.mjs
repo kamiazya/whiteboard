@@ -36,7 +36,7 @@ if (existsSync(registry)) {
   const names = [...readFileSync(registry, 'utf8').matchAll(/'(\d{4}-[a-z0-9-]+)':/g)].map(
     (m) => m[1],
   )
-  const newest = names.sort().at(-1)
+  const newest = names.toSorted().at(-1)
   if (newest && !builtFilesShip(join(packageRoot, 'dist'), newest)) {
     process.stderr.write(
       `[mcp:http] dist/ is older than this checkout's source: it does not ship migration ${newest}. Run \`pnpm build\` first (or use \`pnpm mcp:http:dev\` for watch-mode source).\n`,

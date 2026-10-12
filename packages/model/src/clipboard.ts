@@ -22,7 +22,9 @@ const CLIPBOARD_FILES_MAX_BASE64 = 4 * Math.ceil(CLIPBOARD_FILES_MAX_BYTES / 3)
 
 /** The bytes a base64 string decodes to, padded or not, without decoding it. */
 function base64ByteLength(data: string): number {
-  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0
+  let padding = 0
+  if (data.endsWith('==')) padding = 2
+  else if (data.endsWith('=')) padding = 1
   return Math.floor((data.length * 3) / 4) - padding
 }
 

@@ -69,10 +69,8 @@ function replicaRow(entry: ReplicaMatch): CopyRow {
  */
 function browserKeptCopy(documentCount: number | undefined): string {
   if (documentCount === 0) return 'Kept in this browser, and empty.'
-  const holds =
-    documentCount === undefined
-      ? ''
-      : `, holding ${documentCount} ${documentCount === 1 ? 'document' : 'documents'}`
+  const noun = documentCount === 1 ? 'document' : 'documents'
+  const holds = documentCount === undefined ? '' : `, holding ${documentCount} ${noun}`
   return `Kept in this browser${holds} — the only copy of it anywhere, so it cannot be removed here.`
 }
 

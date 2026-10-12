@@ -153,7 +153,7 @@ export function needsImageTransfer(
 function rewriteInline(text: string, minted: ReadonlyMap<string, string>): string {
   let out = text
   for (const [from, to] of minted) {
-    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
     out = out.replace(new RegExp(`${escaped}(?![A-Za-z0-9_-])`, 'g'), to)
   }
   return out
