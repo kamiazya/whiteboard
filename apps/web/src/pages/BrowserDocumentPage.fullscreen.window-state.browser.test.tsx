@@ -20,6 +20,7 @@ import {
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { registerTestWorkspace } from '../test-utils/browser-document.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
@@ -65,6 +66,9 @@ const snap: DocumentSnapshot = {
 }
 
 async function renderLoaded() {
+  // The backend writes the workspace record, which is minted only under a
+  // workspace the registry holds; the in-memory double registers none.
+  await registerTestWorkspace()
   const store = new BrowserStoreDouble()
   await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)
