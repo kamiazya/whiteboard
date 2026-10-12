@@ -20,6 +20,7 @@
 import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
+import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
@@ -151,6 +152,17 @@ export async function cacheDaemonWorkspace(
     }
   } catch (err) {
     if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }
+    // The copy already on this device is what failed, and the daemon was
+    // reached: saying otherwise sends a person to check a connection that
+    // works. Worded like the Browser keeper's own unreadable-workspace notice.
+    if (isStoredDocumentUnreadableError(err)) {
+      log.warn('stored replica could not be read; pull not stored', { daemonBaseUrl, workspaceId })
+      return {
+        kind: 'failed',
+        reason:
+          "This browser's copy of this workspace could not be read, so the pull was not stored.",
+      }
+    }
     // A thrown fetch (daemon offline mid-pull) surfaces as a structured
     // failure the caller can report; the pull is safe to re-run.
     return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }

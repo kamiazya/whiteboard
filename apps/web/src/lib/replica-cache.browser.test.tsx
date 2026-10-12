@@ -14,9 +14,11 @@ import {
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { base64ToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, VersionVector } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -260,6 +262,26 @@ describe('cacheDaemonWorkspace', () => {
     })
     expect(result.kind).toBe('failed')
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
+  })
+
+  it('an unreadable stored copy is reported as that, not as an unreachable daemon', async () => {
+    const logged = expectLoggedFailures()
+    const fetch = snapshotStub(daemonRecord({ path: 'notes/plan', documentId: DOC_A }))
+    connectReplicaKeeper({ baseUrl: BASE, fetch })
+    const docs = new BrowserWorkspaceDocs()
+    docs.open = async () => {
+      throw new StoredDocumentUnreadableError('malformed', 'a delta does not decode')
+    }
+    const result = await cacheDaemonWorkspace({
+      fetch,
+      daemonBaseUrl: BASE,
+      workspaceId: DAEMON_WS,
+      workspaceDocs: docs,
+    })
+    if (result.kind !== 'failed') throw new Error(`expected a failed pull, got ${result.kind}`)
+    expect(result.reason).toMatch(/copy of this workspace could not be read/)
+    expect(result.reason).not.toMatch(/network|reach/i)
+    expect(logged.some((line) => line.includes('stored replica could not be read'))).toBe(true)
   })
 
   it('a first pull with no registry entry lands sealed and reads back once registered', async () => {

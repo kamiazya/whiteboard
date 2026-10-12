@@ -17,10 +17,8 @@ import {
   referenceSeamsFromWire,
   referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
-import {
-  createBrowserMeasureText,
-  ensureViewerFontLoaded,
-} from '@kamiazya/whiteboard-canvas-viewer'
+import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'

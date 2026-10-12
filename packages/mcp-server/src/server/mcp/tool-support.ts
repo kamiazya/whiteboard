@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { getTracer, MCP_ATTR } from '../observability/tracing.js'
+import { runWithRequestLog } from './logging.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { TOOL_PROFILES, UNPROFILED_TOOL_PROFILE } from './tool-profiles.js'
 
@@ -51,8 +52,11 @@ type InferToolArgs<I> = I extends z.ZodTypeAny
 
 // Thin wrapper around McpServer.registerTool that injects annotations.
 // inputSchema accepts either a raw shape or a whole schema so handler
-// argument inference keeps working for both; outputSchema stays unknown
-// because the SDK accepts multiple overload shapes.
+// argument inference keeps working for both; outputSchema binds the
+// handler's return through ToolHandlerReturn<O>.
+//
+// The handler runs inside its request's log scope (logging.ts), so a record
+// it emits is forwarded to this caller and to no other.
 //
 // It also converts handler throws into MCP `{ isError: true, content: [...] }`
 // responses. The MCP spec recommends tool errors use isError responses rather
@@ -123,7 +127,7 @@ export function registerToolWithAnnotations<
       },
       async (span) => {
         try {
-          return await handler(args, extra)
+          return await runWithRequestLog(extra?.mcpReq?.log, () => handler(args, extra))
         } catch (err) {
           span.recordException(err instanceof Error ? err : new Error(String(err)))
           span.setStatus({

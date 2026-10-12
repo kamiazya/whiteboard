@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { DocRef, DocumentStore, SaveCompactedSnapshotInput, SnapshotChunk } from '../index.js'
-import { isStoredDocumentUnreadableError } from '../index.js'
+import {
+  chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+  isStoredDocumentUnreadableError,
+} from '../index.js'
 
 /**
  * The arrays a caller passes in stay theirs, and the ones they get back are
@@ -35,6 +39,74 @@ async function expectBuffersAreIndependent(store: DocumentStore, docRef: DocRef)
   const read = await store.readFrontier({ docRef })
   if (read) read.frontier[0] = 42
   expect([...((await store.readFrontier({ docRef }))?.frontier ?? [])]).toEqual([8])
+}
+
+const GUARDED: DocRef = { kind: 'workspace-tree', workspaceId: '01JD0GUARDEDAPPEND00000001' }
+const guardedBytes = (value: number): Uint8Array<ArrayBuffer> => new Uint8Array([value])
+const guardedSnapshot = (value: number) => ({
+  ...chunkSnapshot(guardedBytes(value), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES),
+  frontier: guardedBytes(value),
+})
+const appendGuarded = (store: DocumentStore, value: number, requireSnapshot?: boolean) =>
+  store.appendDeltas({
+    docRef: GUARDED,
+    deltaBatch: { updates: [guardedBytes(value)], newFrontier: guardedBytes(value) },
+    ...(requireSnapshot === undefined ? {} : { requireSnapshot }),
+  })
+const guardedLog = async (store: DocumentStore) =>
+  (await store.loadDeltas({ docRef: GUARDED, afterSeq: null })).updates.map((u) => [...u])
+
+/**
+ * The two writes that must not bring back a record a delete removed: an
+ * append that requires a snapshot, and a create over a log with nothing
+ * behind it. Separate from the suite below only for length; every
+ * implementation runs both through it.
+ */
+function describeRecordGuards(
+  withStore: (body: (store: DocumentStore) => Promise<void>) => Promise<void>,
+): void {
+  it('refuses a conditional append to a document with no snapshot, writing nothing', async () => {
+    await withStore(async (store) => {
+      expect(await appendGuarded(store, 1, true)).toEqual({ ok: false, reason: 'no-snapshot' })
+      expect(await guardedLog(store)).toEqual([])
+      expect(await store.readFrontier({ docRef: GUARDED })).toBeNull()
+
+      // A log with no snapshot behind it is still no snapshot.
+      await appendGuarded(store, 2)
+      expect(await appendGuarded(store, 3, true)).toEqual({ ok: false, reason: 'no-snapshot' })
+      expect(await guardedLog(store)).toEqual([[2]])
+    })
+  })
+
+  it('refuses a conditional append once the document is deleted', async () => {
+    await withStore(async (store) => {
+      await store.saveSnapshot({ docRef: GUARDED, ...guardedSnapshot(1) })
+      expect(await appendGuarded(store, 2, true)).toEqual({ ok: true, frontier: guardedBytes(2) })
+      await store.deleteDoc({ docRef: GUARDED })
+
+      expect(await appendGuarded(store, 3, true)).toEqual({ ok: false, reason: 'no-snapshot' })
+      expect(await store.readSnapshotManifest({ docRef: GUARDED })).toBeNull()
+      expect(await store.readFrontier({ docRef: GUARDED })).toBeNull()
+      expect(await guardedLog(store)).toEqual([])
+    })
+  })
+
+  it('drops a log with no snapshot behind it when a create lands over it', async () => {
+    await withStore(async (store) => {
+      await appendGuarded(store, 9)
+      const created = await store.saveCompactedSnapshot({
+        docRef: GUARDED,
+        ...guardedSnapshot(1),
+        supersededDeltaCount: 0,
+        expectedGeneration: null,
+      })
+      expect(created.ok).toBe(true)
+      expect(await guardedLog(store)).toEqual([])
+
+      expect(await appendGuarded(store, 2, true)).toEqual({ ok: true, frontier: guardedBytes(2) })
+      expect(await guardedLog(store)).toEqual([[2]])
+    })
+  })
 }
 
 /**
@@ -103,8 +175,6 @@ export function describeDocumentStoreConformance(
     workspaceId: 'conformance-ws',
     documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
   }
-  // Same id STRING as a workspace would use, different kind. The key a store
-  // derives has to keep these apart.
   // The SAME identifier string as DOC, so a store that keys on the id alone
   // and drops `kind` fails the case below. With two different strings it
   // passes without ever exercising what it claims to.
@@ -158,6 +228,7 @@ export function describeDocumentStoreConformance(
   }
 
   describe('DocumentStore conformance', () => {
+    describeRecordGuards(withStore)
     it('answers null before anything has been saved', async () => {
       await withStore(async (store) => {
         expect(await store.loadSnapshot({ docRef: DOC })).toBeNull()
@@ -341,7 +412,7 @@ export function describeDocumentStoreConformance(
           docRef: DOC,
           deltaBatch: { updates: [bytes(1)], newFrontier: bytes(1) },
         })
-        expect([...first.frontier]).toEqual([1])
+        expect(first).toEqual({ ok: true, frontier: bytes(1) })
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2), bytes(3)], newFrontier: bytes(3) },

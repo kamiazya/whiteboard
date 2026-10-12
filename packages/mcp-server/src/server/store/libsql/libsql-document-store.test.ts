@@ -59,13 +59,13 @@ describe('LibsqlDocumentStore', () => {
       docRef,
       deltaBatch: { updates: [updateA], newFrontier: new Uint8Array([1]) },
     })
-    expect(first).toEqual({ frontier: new Uint8Array([1]) })
+    expect(first).toEqual({ ok: true, frontier: new Uint8Array([1]) })
 
     const second = await store.appendDeltas({
       docRef,
       deltaBatch: { updates: [updateB], newFrontier: new Uint8Array([2]) },
     })
-    expect(second).toEqual({ frontier: new Uint8Array([2]) })
+    expect(second).toEqual({ ok: true, frontier: new Uint8Array([2]) })
 
     expect(await store.readFrontier({ docRef })).toEqual({ frontier: new Uint8Array([2]) })
 

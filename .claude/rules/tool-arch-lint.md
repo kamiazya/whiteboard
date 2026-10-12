@@ -744,6 +744,7 @@ tidy: `skip` is judged before the entry is stat'ed, so it reaches FILES (a
 nested worktree's `.git` is a file), and `isExcludedPath` matches the path
 RELATIVE to the repo — this checkout may itself live under
 `.claude/worktrees/`, where an absolute match excludes every file in it.
+`readRepoSources` skips both by path, not name.
 
 `size-ledger-assertions.ts` registers the five assertions every shrink-only
 size ledger makes (unlisted, grown, shrunk, missing, headroom). The titles and

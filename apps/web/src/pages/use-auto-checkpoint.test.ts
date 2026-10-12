@@ -1,5 +1,5 @@
 import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history/checkpoint-scheduler'
 import { renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

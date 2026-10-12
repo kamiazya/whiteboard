@@ -57,6 +57,37 @@ async function upsertFrontier(trx: Trx, docKey: string, frontier: Frontier): Pro
 }
 
 /**
+ * Drops the oldest `count` entries of a document's log, or all of them.
+ * Oldest by seq, so an append that landed after the caller read the log —
+ * and so is not in its snapshot — keeps its row.
+ */
+async function dropSupersededDeltas(
+  trx: Trx,
+  docKey: string,
+  count: number | 'all',
+): Promise<void> {
+  if (count === 'all') {
+    await trx.deleteFrom('documentDeltas').where('docKey', '=', docKey).execute()
+    return
+  }
+  if (count === 0) return
+  await trx
+    .deleteFrom('documentDeltas')
+    .where('docKey', '=', docKey)
+    .where(
+      'seq',
+      'in',
+      trx
+        .selectFrom('documentDeltas')
+        .select('seq')
+        .where('docKey', '=', docKey)
+        .orderBy('seq', 'asc')
+        .limit(count),
+    )
+    .execute()
+}
+
+/**
  * libSQL-backed `DocumentStore`. Snapshot replace (saveSnapshot) and delta
  * append (appendDeltas) each run inside a single Kysely transaction so a
  * mid-write failure never leaves a header without chunks, a stale chunk
@@ -269,22 +300,9 @@ export class LibsqlDocumentStore implements DocumentStore {
       // Everything appended after the caller folded is not in the snapshot,
       // so clearing the whole log would lose it. The transaction makes this
       // and the write above one operation; the count makes it the right one.
-      if (input.supersededDeltaCount > 0) {
-        await trx
-          .deleteFrom('documentDeltas')
-          .where('docKey', '=', docKey)
-          .where(
-            'seq',
-            'in',
-            trx
-              .selectFrom('documentDeltas')
-              .select('seq')
-              .where('docKey', '=', docKey)
-              .orderBy('seq', 'asc')
-              .limit(input.supersededDeltaCount),
-          )
-          .execute()
-      }
+      // A create has no prefix to keep: a log with no snapshot behind it is
+      // not part of the document.
+      await dropSupersededDeltas(trx, docKey, current === null ? 'all' : input.supersededDeltaCount)
       await upsertFrontier(trx, docKey, input.frontier)
       log.debug({ docKey, chunkCount: input.manifest.chunkCount }, 'saved compacted snapshot')
       return { ok: true as const, generation }
@@ -326,12 +344,26 @@ export class LibsqlDocumentStore implements DocumentStore {
     log.debug({ docKey }, 'deleted doc')
   }
 
-  async appendDeltas({ docRef, deltaBatch }: AppendDeltasInput): Promise<AppendDeltasResult> {
+  async appendDeltas({
+    docRef,
+    deltaBatch,
+    requireSnapshot,
+  }: AppendDeltasInput): Promise<AppendDeltasResult> {
     const docKey = docRefKey(docRef)
     const newFrontier = cloneBytes(deltaBatch.newFrontier)
     const frontierBlob = toBlob(newFrontier)
 
-    await inTenantTransaction(this.db, async (trx) => {
+    const appended = await inTenantTransaction(this.db, async (trx) => {
+      // Inside the write transaction, so a delete cannot land between this
+      // answer and the insert below — SQLite serialises write transactions.
+      if (requireSnapshot === true) {
+        const header = await trx
+          .selectFrom('documentSnapshots')
+          .select('docKey')
+          .where('docKey', '=', docKey)
+          .executeTakeFirst()
+        if (header === undefined) return false
+      }
       const maxRow = await trx
         .selectFrom('documentDeltas')
         .select((eb) => eb.fn.max('seq').as('maxSeq'))
@@ -352,10 +384,12 @@ export class LibsqlDocumentStore implements DocumentStore {
       await trx.insertInto('documentDeltas').values(rows).execute()
 
       await upsertFrontier(trx, docKey, newFrontier)
+      return true
     })
+    if (!appended) return { ok: false, reason: 'no-snapshot' }
 
     log.debug({ docKey, count: deltaBatch.updates.length }, 'appended deltas')
-    return { frontier: cloneBytes(newFrontier) }
+    return { ok: true, frontier: cloneBytes(newFrontier) }
   }
 
   /**

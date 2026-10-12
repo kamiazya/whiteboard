@@ -651,11 +651,12 @@ describe('run-coverage.mjs (CLI)', () => {
     expect(deriveCoverageProjectNames(fixtureRoot)).toEqual(['alpha-node', 'mcp-node', 'web-jsdom'])
   })
 
-  it('leaves out the browser projects and the one that needs a build', async () => {
+  it('leaves out the browser projects and the one whose code runs in a child process', async () => {
     const { deriveCoverageProjectNames } = await importRunCoverage()
     await writeFixtureRepo(fixtureRoot, [
       { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
-      // Needs `pnpm build`; the coverage job deliberately does not run one.
+      // Its tests spawn the stdio server as a child process, whose coverage v8
+      // does not collect; it runs from source and needs no build.
       { configPath: 'packages/mcp-server/vitest.smoke.config.ts', name: 'mcp-smoke' },
       // Held out by nothing: arch-lint IS measured, under the widened
       // per-test budget the run passes (see run-coverage.mjs).

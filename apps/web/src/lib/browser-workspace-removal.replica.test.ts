@@ -11,10 +11,10 @@ import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-se
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
-import { openWhiteboardDb, WORKSPACES_STORE, whiteboardDbName } from './browser-idb.js'
+import { whiteboardDbName } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { forgetReplicaCopy } from './browser-workspace-removal.js'
 import { connectReplicaKeeper, markReplica } from './replica-store.js'
@@ -79,20 +79,6 @@ async function storedText(): Promise<string> {
     db.close()
   }
   return parts.join('\n')
-}
-
-async function seedRegistryRow(workspaceId: string): Promise<void> {
-  const db = await openWhiteboardDb()
-  try {
-    const tx = db.transaction([WORKSPACES_STORE], 'readwrite')
-    tx.objectStore(WORKSPACES_STORE).put({ workspaceId }, workspaceId)
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-    })
-  } finally {
-    db.close()
-  }
 }
 
 /** A replica claimed in Settings and stored sealed, as a pull leaves it. */
@@ -173,7 +159,7 @@ describe('which ids may mint a workspace record', () => {
 
   it('admits a workspace this browser keeps', async () => {
     const workspaceId = freshWorkspaceId()
-    await seedRegistryRow(workspaceId)
+    await registerTestWorkspace({ workspaceId })
     await new BrowserWorkspaceDocs().create(workspaceId)
     expect(await new BrowserWorkspaceDocs().open(workspaceId)).not.toBeNull()
   })

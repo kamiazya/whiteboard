@@ -1,4 +1,4 @@
-import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
+import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, it } from 'vitest'
 import { captureDocAsset, waitForSnapshotContent } from './_helpers.js'

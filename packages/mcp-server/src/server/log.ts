@@ -14,8 +14,8 @@
 //
 // Tap surface for MCP integration / tests:
 //   • `addLogDestination({ stream, level })` adds a fanout subscriber and
-//     returns a dispose handle. wireMcpLogging uses it to forward records
-//     to `server.sendLoggingMessage`. Tests use `captureLogsForTests` for
+//     returns a dispose handle. wireMcpLogging uses it to forward a record
+//     to the MCP request that emitted it. Tests use `captureLogsForTests` for
 //     a typed records buffer.
 
 import { Writable } from 'node:stream'
@@ -344,7 +344,7 @@ export const lineToLogRecord = (line: string): LogRecord | null => {
 
 // Test-only introspection: number of currently-registered destinations,
 // including the default stderr one. Used by tests that guard against
-// destination leaks (e.g. per-request MCP servers wiring + restoring).
+// destination leaks (e.g. a per-request MCP server adding one each).
 export function _destinationCountForTests(): number {
   return destinations.size
 }

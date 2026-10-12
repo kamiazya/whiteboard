@@ -37,6 +37,7 @@ type AppendDeltasOp = {
   docRefIndex: number
   updates: Uint8Array<ArrayBuffer>[]
   newFrontier: Uint8Array<ArrayBuffer>
+  requireSnapshot: boolean
 }
 
 type DeleteDocOp = {
@@ -70,6 +71,7 @@ async function applyOp(store: DocumentStore, op: Op): Promise<void> {
     await store.appendDeltas({
       docRef,
       deltaBatch: { updates: op.updates, newFrontier: op.newFrontier },
+      requireSnapshot: op.requireSnapshot,
     })
   } else {
     await store.deleteDoc({ docRef })
@@ -106,6 +108,7 @@ const opArbitrary: fc.Arbitrary<Op> = fc.oneof(
     docRefIndex: fc.integer({ min: 0, max: DOC_REFS.length - 1 }),
     updates: fc.array(fc.uint8Array({ maxLength: 5 }), { minLength: 1, maxLength: 3 }),
     newFrontier: fc.uint8Array({ maxLength: 5 }),
+    requireSnapshot: fc.boolean(),
   }),
   // Deleting is generated alongside the writes rather than only after them:
   // what a partial delete leaves behind (an orphan frontier, a delta run with

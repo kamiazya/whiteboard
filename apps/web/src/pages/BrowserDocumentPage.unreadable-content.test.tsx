@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -46,7 +46,10 @@ async function seedDocumentWithContent(
 }
 
 describe('a document this build cannot read', () => {
-  beforeEach(clearWhiteboardDb)
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    await registerTestWorkspace()
+  })
   afterEach(cleanup)
 
   it('says the storage version is unsupported rather than showing an empty canvas', async () => {

@@ -62,6 +62,7 @@ import {
   stopDaemon,
   whiteboard,
 } from './smoke-kit.mjs'
+import { prfAuthenticatorOptions } from './virtual-passkey.mjs'
 
 const BRIDGE_DAEMON_BASE_URL = 'https://daemon.whiteboard.invalid'
 /**
@@ -212,24 +213,13 @@ async function replicaBlobs(workspaceId) {
 }
 
 /**
- * A platform-style authenticator with PRF and user verification, answering
- * every prompt on its own — what a person's passkey provider does after they
- * confirm. Scoped to this page's target, so it survives a reload of the page.
+ * The shared virtual passkey, scoped to this page's target, so it survives a
+ * reload of the page.
  */
 async function addPrfAuthenticator(context, page) {
   const cdp = await context.newCDPSession(page)
   await cdp.send('WebAuthn.enable')
-  await cdp.send('WebAuthn.addVirtualAuthenticator', {
-    options: {
-      protocol: 'ctap2',
-      transport: 'internal',
-      hasResidentKey: true,
-      hasUserVerification: true,
-      isUserVerified: true,
-      hasPrf: true,
-      automaticPresenceSimulation: true,
-    },
-  })
+  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: prfAuthenticatorOptions() })
 }
 
 /** Waits for a test id to reach `state`; answers whether it did. */

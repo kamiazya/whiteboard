@@ -226,7 +226,7 @@ export function useWorkspaceAddressSync(inputs: WorkspaceAddressInputs): void {
       // kept address — the ping-pong this produced never gets a first move.
       if (daemonKeptRef.current) return
       const path = workspacePath(browserHandle)
-      if (location.pathname !== path) navigate(path, { replace: true })
+      if (location.pathname !== path) navigate(path + location.search, { replace: true })
     }
     // An address naming a workspace this browser DOES hold is a switch, not a
     // mistake — the switcher moves the address and this is what makes the

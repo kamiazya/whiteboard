@@ -1,4 +1,4 @@
-import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history'
+import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history/checkpoint-scheduler'
 import {
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,

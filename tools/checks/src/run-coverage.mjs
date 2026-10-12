@@ -13,8 +13,10 @@
 // are held out:
 //   - browser projects, which need Playwright and a real Chrome, and whose v8
 //     coverage would be charged to a page rather than to the module graph;
-//   - mcp-smoke, which spawns the built stdio server and so needs a `pnpm
-//     build` this job deliberately does not do.
+//   - mcp-smoke, whose tests spawn the stdio server as a child process (from
+//     source, through tsx; nothing is built and nothing reads dist/). v8
+//     coverage does not follow a spawned child, so the project would add its
+//     run time and measure almost none of the code it exercises.
 //
 // --testTimeout is widened for the run, and that is not slack: v8 instruments
 // every module, so a test whose cost is the tree it walks or the cases a

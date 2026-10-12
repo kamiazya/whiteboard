@@ -32,8 +32,9 @@ const { uninstallAutoCheckpointForTests } = await import('../../store/auto-check
 const { FileVersionStore } = await import('../../store/version-store.js')
 const { compactWorkspace } = await import('../../store/document-store.js')
 const { disposeAutoCompact } = await import('../../store/auto-compact.js')
-const { createWorkspaceEditTool, createCanvasEditTool } = await import(
-  '@kamiazya/whiteboard-server-core'
+const { createCanvasEditTool } = await import('@kamiazya/whiteboard-server-core')
+const { createWorkspaceEditTool } = await import(
+  '@kamiazya/whiteboard-server-core/test-utils/tools'
 )
 
 describe('an agent-only workspace', () => {

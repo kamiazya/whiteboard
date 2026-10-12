@@ -24,6 +24,8 @@ export const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
  * alone is a name other directories may legitimately carry.
  */
 export const WORKTREES_PATH = '.claude/worktrees'
+const WORKTREES_SEGMENT = `/${WORKTREES_PATH}/`
+const MIGRATIONS_SEGMENT = '/packages/mcp-server/src/server/store/db/migrations/'
 
 /** The three top-level groups `pnpm-workspace.yaml` globs: `packages/*`, `apps/*`, `tools/*`. */
 const WORKSPACE_GROUPS = ['packages', 'apps', 'tools'] as const
@@ -75,18 +77,21 @@ export const REPO_SOURCE_ROOTS: readonly string[] = [
 ]
 
 /**
- * Directory names `readRepoSources` never enters: build output, caches,
- * nested checkouts, and `migrations` — history whose imports are frozen at
- * the point it was written, so a use there keeps nothing alive.
+ * Directory NAMES `readRepoSources` never enters, each one a name that is never
+ * this repo's source wherever it appears: `node_modules` is installed
+ * dependencies, `dist` and `coverage` are build and report output, `tmp` is
+ * scratch (a crashed Stryker run leaves a sandbox copy of the source under a
+ * package's `tmp`), and `.git` is git's own — a directory in the main checkout,
+ * a file in a nested one. History and nested checkouts are skipped by PATH
+ * instead (`REPO_SOURCE_EXCLUDED_SEGMENTS`), because `migrations` and
+ * `worktrees` are names somebody's code may carry.
  */
 export const REPO_SOURCE_SKIPPED_DIRS: ReadonlySet<string> = new Set([
   'node_modules',
   'dist',
   'tmp',
   '.git',
-  'worktrees',
   'coverage',
-  'migrations',
 ])
 
 /** A source file as the importer guards read it: repo-relative path and text. */
@@ -96,13 +101,15 @@ export interface RepoSource {
 }
 
 /** Every source file under `REPO_SOURCE_ROOTS`, declaration files aside, with its text. */
-export function readRepoSources(): RepoSource[] {
+export function readRepoSources(repoRoot: string = REPO_ROOT): RepoSource[] {
   return REPO_SOURCE_ROOTS.flatMap((root) =>
-    walk(join(REPO_ROOT, root), {
+    walk(join(repoRoot, root), {
       include: (path) => /\.(tsx?|mts|mjs|js|cjs)$/.test(path) && !/\.d\.m?ts$/.test(path),
-      skip: (_path, name) => REPO_SOURCE_SKIPPED_DIRS.has(name),
+      skip: (path, name) =>
+        REPO_SOURCE_SKIPPED_DIRS.has(name) ||
+        isExcludedPath(`${path}/`, repoRoot, REPO_SOURCE_EXCLUDED_SEGMENTS),
     }),
-  ).map((path) => ({ path: relativeToRepo(path), text: readFileSync(path, 'utf8') }))
+  ).map((path) => ({ path: relativeToRepo(path, repoRoot), text: readFileSync(path, 'utf8') }))
 }
 
 /** The `<sub>` directory of every package/tool matching a `<group>/*` glob that has one. */
@@ -174,10 +181,18 @@ export function scriptFiles(): string[] {
  * that exists, so an entry cannot outlive the directory it excuses.
  */
 export const EXCLUDED_DIR_SEGMENTS: readonly string[] = [
-  '/packages/mcp-server/src/server/store/db/migrations/',
+  MIGRATIONS_SEGMENT,
   '/packages/canvas-render/src/vendor/budoux/',
-  `/${WORKTREES_PATH}/`,
+  WORKTREES_SEGMENT,
 ]
+
+/**
+ * The excluded directories the importer guards skip too: a migration's
+ * imports are frozen at the point it was written, so a use there keeps
+ * nothing alive, and a worktree is another branch's code. The vendored
+ * directory is still read — it ships, so a name it imports is in use.
+ */
+const REPO_SOURCE_EXCLUDED_SEGMENTS: readonly string[] = [MIGRATIONS_SEGMENT, WORKTREES_SEGMENT]
 
 /**
  * The repo-relative path in the form the size ledgers are keyed with.
@@ -196,9 +211,13 @@ export function relativeToRepo(absolutePath: string, root: string = REPO_ROOT): 
  * to the repo, never the absolute one: this checkout may itself live under
  * `.claude/worktrees/`, and an absolute match would then exclude everything.
  */
-export function isExcludedPath(absolutePath: string, root: string = REPO_ROOT): boolean {
+export function isExcludedPath(
+  absolutePath: string,
+  root: string = REPO_ROOT,
+  segments: readonly string[] = EXCLUDED_DIR_SEGMENTS,
+): boolean {
   const relative = `/${relativeToRepo(absolutePath, root)}`
-  return EXCLUDED_DIR_SEGMENTS.some((segment) => relative.startsWith(segment))
+  return segments.some((segment) => relative.startsWith(segment))
 }
 
 export interface WalkOptions {

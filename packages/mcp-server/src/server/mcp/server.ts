@@ -11,29 +11,6 @@ import {
   WHITEBOARD_INSTRUCTIONS,
 } from './standalone-help.js'
 
-/**
- * Bridges our logger to MCP `notifications/message` and accepts
- * `logging/setLevel` from clients. Records still hit stderr in the base
- * sink, so HTTP-only callers and stdio operators retain their view.
- *
- * The destination is disposed through the underlying server's `onclose`. The
- * HTTP `/mcp` handler builds a fresh McpServer per request and closes it
- * (transitively, via `transport.close()`) in a finally block; without this
- * restore() the global log destination set would grow once per request and
- * every record would fan out to the closed transports of every prior request.
- */
-function bridgeLogging(server: McpServer): void {
-  const loggingHandle = wireMcpLogging(server)
-  const previousOnClose = server.server.onclose?.bind(server.server)
-  server.server.onclose = () => {
-    try {
-      loggingHandle.restore()
-    } finally {
-      previousOnClose?.()
-    }
-  }
-}
-
 function registerDrawPrompt(server: McpServer): void {
   server.registerPrompt(
     WHITEBOARD_DRAW_PROMPT,
@@ -86,7 +63,7 @@ export async function createMcpServer(deps: ServerDeps) {
     // standalone-help.ts for what that cost.
     { instructions: WHITEBOARD_INSTRUCTIONS },
   )
-  bridgeLogging(server)
+  wireMcpLogging(server)
   registerDrawPrompt(server)
   registerMcpAppsExtension(server)
   registerDocumentTools(server, deps)

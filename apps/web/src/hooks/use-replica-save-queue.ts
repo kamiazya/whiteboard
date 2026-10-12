@@ -56,6 +56,10 @@ export function useReplicaSaveQueue(workspaceId: string) {
  * in this tab or another). The page's record is the whole workspace, so a
  * save from it would write everything back; the queue stops on the news
  * rather than on the refusal its next save would meet.
+ *
+ * The same news drops this tab's replica mark, through the listener the
+ * mark itself owns (`markReplica`), so a tab whose page has moved on loses
+ * its mark too.
  */
 function useCopyRemovedLock(
   workspaceId: string,

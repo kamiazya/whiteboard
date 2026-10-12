@@ -69,8 +69,9 @@ export interface DocumentStoreWorkspaceDocsOptions {
    * To this class a missing record means "never created", so any holder of
    * an id mints it again, whole, from its own copy. A keeper that can
    * REMOVE a workspace knows the other meaning, and only it can say which
-   * ids carry it. Asked on the mint path alone: an append needs a stored
-   * snapshot, which a removed workspace no longer has.
+   * ids carry it. Asked on the mint path alone: every append requires a
+   * stored snapshot inside the store's own write, so an append that lost
+   * the record to a delete is refused there and comes here as a mint.
    */
   readonly beforeMint?: (workspaceId: string) => Promise<void>
 }
@@ -212,17 +213,36 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       // snapshot we did NOT write. Appending them is what makes losing the
       // race cost a delay rather than an edit — the whole reason the refusal
       // is an outcome and not an error.
-      await this.appendInstead(docRef, doc, update)
-      return update
+      return this.append(workspaceId, doc, update)
     }
-    await this.store.appendDeltas({
-      docRef,
+    return this.append(workspaceId, doc, update)
+  }
+
+  /**
+   * Extend the record, on the condition that it is still there.
+   *
+   * `save` found a snapshot, but in an earlier transaction than this one, and
+   * a delete can land in between. Unconditional, the append would bring the
+   * record back as a log with nothing behind it — written past `beforeMint`,
+   * opened as nothing, listed nowhere. Refused, the record is absent, which
+   * is the mint path's question: the keeper says whether this id may be
+   * created again, and a yes writes the whole document rather than a delta
+   * against a base that is gone.
+   *
+   * Also the one move after a refused fold or mint — the ops go in the log
+   * instead of the snapshot — under the same condition, since the snapshot
+   * that refused can itself be deleted before this write.
+   */
+  private async append(workspaceId: string, doc: LoroDoc, update: Uint8Array): Promise<Uint8Array> {
+    const appended = await this.store.appendDeltas({
+      docRef: refOf(workspaceId),
       deltaBatch: {
-        updates: [update],
+        updates: [new Uint8Array(update)],
         newFrontier: new Uint8Array(doc.oplogVersion().encode()),
       },
+      requireSnapshot: true,
     })
-    return update
+    return appended.ok ? update : this.mint(workspaceId, doc)
   }
 
   /** The first save under an id: the whole document as its snapshot. */
@@ -250,26 +270,8 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     // write. Theirs does not contain these ops, so appending is the only move
     // that keeps both — replacing it would be the lost update this fence
     // exists to stop (ADR-0020).
-    if (!created.ok) await this.appendInstead(docRef, doc, update)
+    if (!created.ok) return this.append(workspaceId, doc, update)
     return update
-  }
-
-  /**
-   * The one move available after a refused fold: put the ops in the log
-   * instead of the snapshot.
-   *
-   * Not merged with the plain append path above because the reason differs
-   * and the reason is the whole point — this one runs having just decided not
-   * to overwrite another writer's snapshot.
-   */
-  private async appendInstead(docRef: DocRef, doc: LoroDoc, update: Uint8Array): Promise<void> {
-    await this.store.appendDeltas({
-      docRef,
-      deltaBatch: {
-        updates: [new Uint8Array(update)],
-        newFrontier: new Uint8Array(doc.oplogVersion().encode()),
-      },
-    })
   }
 
   async readCursor(workspaceId: string): Promise<WorkspaceDocCursor> {

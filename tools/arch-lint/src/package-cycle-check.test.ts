@@ -1,9 +1,9 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { KNOWN_PACKAGE_CYCLES } from './architecture-map.js'
 import { findPackageCycles } from './package-cycle-check.js'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 
 function manifest(
   name: string,
@@ -52,21 +52,11 @@ describe('findPackageCycles', () => {
 })
 
 describe('the real workspace', () => {
-  // Enumerated from the same globs pnpm-workspace.yaml declares
+  // `workspaceDirs()` enumerates the globs pnpm-workspace.yaml declares
   // (packages/*, apps/*, tools/*), so a new package joins this scan the
   // moment it exists — no list to keep in step.
-  const manifests = ['packages', 'apps', 'tools'].flatMap((group) =>
-    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .flatMap((entry) => {
-        try {
-          return [
-            JSON.parse(readFileSync(join(REPO_ROOT, group, entry.name, 'package.json'), 'utf-8')),
-          ]
-        } catch {
-          return []
-        }
-      }),
+  const manifests = workspaceDirs().map((dir) =>
+    JSON.parse(readFileSync(join(REPO_ROOT, dir, 'package.json'), 'utf-8')),
   )
 
   it('enumerates a plausible manifest count', () => {

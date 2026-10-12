@@ -68,10 +68,7 @@ const viewportRequestMessageSchema = z.object({
   ...viewportRequestParamsSchema.shape,
 })
 
-export {
-  type ViewportRequestParams,
-  viewportRequestParamsSchema,
-} from '@kamiazya/whiteboard-server-core/viewport-request'
+export type { ViewportRequestParams } from '@kamiazya/whiteboard-server-core/viewport-request'
 
 export const serverTextMessageSchema = z.discriminatedUnion('type', [
   versionCreatedMessageSchema,

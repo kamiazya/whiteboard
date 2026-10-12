@@ -22,6 +22,11 @@ export default defineConfig({
         __dirname,
         '../../packages/canvas-viewer/src/scene.ts',
       ),
+      // The family name, without the loader or the barrel.
+      '@kamiazya/whiteboard-canvas-viewer/font': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/font.ts',
+      ),
       // The layout worker imports these two rather than the barrel, which
       // re-exports React components whose graphs touch `document`.
       '@kamiazya/whiteboard-canvas-viewer/font-loading': resolve(

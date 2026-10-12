@@ -26,7 +26,12 @@
  *   freeing quota is a normal recovery a reload should not be required for.
  */
 import { messageOf, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
-import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
+import {
+  resolveWorkspaceHandle,
+  storedWorkspaceEntrySchema,
+  type WorkspaceEntry,
+} from '@kamiazya/whiteboard-ports'
+import { getAppLogger } from './app-logger.js'
 import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { createSubscribers } from './subscribers.js'
 
@@ -44,10 +49,9 @@ type ResolutionState =
  * one-argument test seam mints none. A caller addressing such a workspace
  * falls back to the id, which is what that layer is for.
  */
-export interface BrowserWorkspaceIdentity {
-  readonly workspaceId: string
-  readonly segment?: string
-}
+export type BrowserWorkspaceIdentity = Readonly<Pick<WorkspaceEntry, 'workspaceId' | 'segment'>>
+
+const log = getAppLogger('browser-workspace-id')
 
 let state: ResolutionState = { kind: 'unresolved' }
 
@@ -128,6 +132,13 @@ export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
  * read, because a row keyed `'local'` says `'local'` in its value too —
  * validating the value would pass the check for precisely the reason it
  * should fail.
+ *
+ * Each row is hydrated through the port's READ schema, the one the index's
+ * own listing uses, so the two readers of a stored row agree on which
+ * workspace a handle names: a segment the model refuses reads as absent here
+ * too, rather than resolving to a workspace the index says it does not name.
+ * A row whose id the schema refuses is skipped and said aloud, for the reason
+ * a listing that cannot name a row cannot address it either.
  */
 async function readRegistryEntries(
   dbName: string | undefined,
@@ -141,18 +152,25 @@ async function readRegistryEntries(
       const rowsReq = store.getAll()
       tx.onerror = () => reject(tx.error)
       tx.oncomplete = () => {
-        const rows = rowsReq.result as { segment?: unknown }[]
-        resolve(
-          keysReq.result.map(String).map((workspaceId, i) => {
-            const segment = rows[i]?.segment
-            return { workspaceId, ...(typeof segment === 'string' ? { segment } : {}) }
-          }),
-        )
+        const rows: unknown[] = rowsReq.result
+        resolve(keysReq.result.map(String).flatMap((key, i) => identityOf(key, rows[i])))
       }
     })
   } finally {
     db.close()
   }
+}
+
+/** One registry row as an identity under its KEY, or nothing when it will not read. */
+function identityOf(key: string, row: unknown): BrowserWorkspaceIdentity[] {
+  const value = typeof row === 'object' && row !== null ? row : {}
+  const read = storedWorkspaceEntrySchema.safeParse({ ...value, workspaceId: key })
+  if (!read.success) {
+    log.warn('skipped a workspace registry row that does not read', { workspaceId: key })
+    return []
+  }
+  const { workspaceId, segment } = read.data
+  return [{ workspaceId, ...(segment === undefined ? {} : { segment }) }]
 }
 
 async function readWorkspaceIdentity(

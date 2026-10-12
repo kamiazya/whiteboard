@@ -45,7 +45,7 @@ describe('setLogLevel', () => {
     cap.restore()
   })
 
-  it('moves the threshold at runtime so MCP logging/setLevel can change it', () => {
+  it('moves the process threshold at runtime', () => {
     setLogLevel('debug')
     expect(getLogLevel()).toBe('debug')
     setLogLevel('error')

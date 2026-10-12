@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join, resolve } from 'node:path'
+import { parseArgs } from 'node:util'
 import { resolveDevDataDirEnv } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
 import { whiteboard } from './smoke-kit.mjs'
 
@@ -167,4 +168,30 @@ export async function cdpPortRefusal(port) {
   }
   if (port === 0 || (await portIsFree(port, '127.0.0.1'))) return undefined
   return `port ${port} is in use — pick another --cdp-port (and point the Playwright MCP's --cdp-endpoint at it), or omit it for any free one`
+}
+
+/**
+ * `pnpm dev:connected`'s flags. A virtual passkey is on by default under
+ * `--headless`, where nothing can answer a real WebAuthn prompt, and off with
+ * a window, where a person's own platform authenticator can; either flag
+ * spelling overrides that.
+ *
+ * @param {string[]} argv
+ */
+export function parseDevConnectedArgs(argv) {
+  const { values } = parseArgs({
+    args: argv,
+    strict: true,
+    allowNegative: true,
+    options: {
+      headless: { type: 'boolean', default: false },
+      'virtual-passkey': { type: 'boolean' },
+      port: { type: 'string', default: '5173' },
+      url: { type: 'string' },
+      'cdp-port': { type: 'string', default: '0' },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+  })
+  const { 'virtual-passkey': named, ...rest } = values
+  return { ...rest, virtualPasskey: named ?? rest.headless }
 }

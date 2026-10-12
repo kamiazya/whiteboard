@@ -32,9 +32,17 @@
       "types": "./src/test-utils/fake-version-history.ts",
       "import": "./src/test-utils/fake-version-history.ts"
     },
+    "./test-utils/tools": {
+      "types": "./src/test-utils/tools.ts",
+      "import": "./src/test-utils/tools.ts"
+    },
     "./test-utils/embedder-contract": {
       "types": "./src/test-utils/embedder-contract.ts",
       "import": "./src/test-utils/embedder-contract.ts"
+    },
+    "./log": {
+      "types": "./src/log.ts",
+      "import": "./src/log.ts"
     },
     "./log-levels": {
       "types": "./src/log-levels.ts",

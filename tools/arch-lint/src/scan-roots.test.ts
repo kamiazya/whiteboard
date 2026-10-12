@@ -166,6 +166,40 @@ describe('readRepoSources', () => {
   })
 })
 
+describe('readRepoSources over a fixture checkout', () => {
+  it('reads a directory that only shares an excluded name, and skips the excluded path', () => {
+    // An importer guard that skipped every `migrations` or `worktrees` by name
+    // would ignore a caller living there, and report the name it uses as dead.
+    // The vendored directory ships, so what it imports is in use and it is read.
+    const root = mkdtempSync(join(tmpdir(), 'scan-roots-sources-'))
+    try {
+      for (const dir of REPO_SOURCE_ROOTS) mkdirSync(join(root, dir), { recursive: true })
+      const files = [
+        'apps/x/src/migrations/kept.ts',
+        'packages/x/src/worktrees/kept.ts',
+        'packages/mcp-server/src/server/store/db/migrations/0001.ts',
+        'packages/canvas-render/src/vendor/budoux/ja.ts',
+        'packages/x/node_modules/dep/index.js',
+      ]
+      for (const file of files) {
+        mkdirSync(join(root, file, '..'), { recursive: true })
+        writeFileSync(join(root, file), '')
+      }
+      expect(
+        readRepoSources(root)
+          .map((file) => file.path)
+          .sort(),
+      ).toEqual([
+        'apps/x/src/migrations/kept.ts',
+        'packages/canvas-render/src/vendor/budoux/ja.ts',
+        'packages/x/src/worktrees/kept.ts',
+      ])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('readWorkspaceEntries', () => {
   it('maps every package entry to the source file it lands on', () => {
     const entries = readWorkspaceEntries()

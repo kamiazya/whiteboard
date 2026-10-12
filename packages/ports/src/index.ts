@@ -17,7 +17,6 @@ export * from './snapshot-helpers.js'
 export * from './snapshot-reassembly-error.js'
 export {
   isStoredDocumentUnreadableError,
-  type StoredDocumentUnreadableCode,
   StoredDocumentUnreadableError,
 } from './stored-document-unreadable-error.js'
 export * from './tokens.js'

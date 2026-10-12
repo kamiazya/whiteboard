@@ -35,6 +35,7 @@ import { sealedUnderSupersededKey } from './replicas.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
 import { SealedDocumentStore } from './sealed-document-store.js'
 import { createUserSettingsStore } from './user-settings-store.js'
+import { listenToWorkspace, type WorkspaceBroadcastEnd } from './workspace-broadcast.js'
 
 interface ConnectedKeeper {
   baseUrl: string
@@ -47,6 +48,12 @@ let connected: ConnectedKeeper | null = null
 
 /** Workspaces marked as a replica of some daemon before the registry entry lands (see `markReplica`). */
 const pending = new Map<string, string>()
+/**
+ * One removal listener per mark, owned by the mark rather than by a page: a
+ * tab whose page has moved on still holds the mark, and the copy deleted in
+ * another tab has to take it away here too.
+ */
+const removalWatches = new Map<string, WorkspaceBroadcastEnd>()
 
 /** The daemon a workspace's replica belongs to, from the in-memory mark or the persisted registry. */
 function replicaDaemonBaseUrl(workspaceId: string): string | undefined {
@@ -188,6 +195,13 @@ export function connectReplicaKeeper(
 /** Marks a workspace as a replica of `daemonBaseUrl` BEFORE its first pull is saved, so the pull is sealed even though the registry entry does not exist yet. */
 export function markReplica(workspaceId: string, daemonBaseUrl: string): void {
   pending.set(workspaceId, daemonBaseUrl)
+  if (removalWatches.has(workspaceId)) return
+  removalWatches.set(
+    workspaceId,
+    listenToWorkspace(workspaceId, (message) => {
+      if (message.type === 'workspace-removed') unmarkReplica(workspaceId)
+    }),
+  )
 }
 
 /**
@@ -196,6 +210,8 @@ export function markReplica(workspaceId: string, daemonBaseUrl: string): void {
  */
 export function unmarkReplica(workspaceId: string): void {
   pending.delete(workspaceId)
+  removalWatches.get(workspaceId)?.close()
+  removalWatches.delete(workspaceId)
 }
 
 /** Whether this tab holds `workspaceId` as a daemon workspace's replica — a mark or a claim. */

@@ -1,57 +1,75 @@
-import type { McpServer } from '@modelcontextprotocol/server'
+import { AsyncLocalStorage } from 'node:async_hooks'
+import type { LoggingLevel, McpServer } from '@modelcontextprotocol/server'
 
 // Bridge our internal logger to the MCP `notifications/message` channel
 // described in https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging.
 //
-// Wiring contract:
-//   1. Declare the `logging: {}` capability so the SDK accepts
-//      `logging/setLevel` and `notifications/message`.
-//   2. Add a fanout destination on the project logger that forwards every
-//      record to `server.sendLoggingMessage(...)`. The default stderr
-//      destination stays in place so HTTP-only callers and stdio operators
-//      still see records even with no MCP peer.
-// The SDK applies its own per-session level filter on top of the project
-// logger's threshold, so `logging/setLevel` from a client only changes
-// what reaches that client.
+// A record is forwarded only to the request that PRODUCED it. The tool wrapper
+// (tool-support.ts) runs each handler inside `runWithRequestLog`, carrying that
+// call's `ctx.mcpReq.log`; the one destination below forwards a record only
+// when it was emitted inside such a scope, and only to that scope's sink.
+// A record emitted anywhere else — a background worker, another user's route,
+// a sync stream — reaches stderr and no MCP client. A process-wide fan-out to
+// every connected server would hand one caller's records (workspace ids,
+// sign-in failures) to whoever else had a request open.
+//
+// What reaches a client therefore follows the SDK's own per-request rules:
+//   - stdio: one server per connection, so the request's notification goes
+//     out on the one pipe and a 2025-era `logging/setLevel` holds for the
+//     connection. Records outside a tool call are stderr-only here too.
+//   - HTTP `/mcp`, modern era (2026-07-28): delivered on the call's own
+//     response stream when the request opts in with `_meta`
+//     `io.modelcontextprotocol/logLevel` (the threshold); `logging/setLevel`
+//     does not exist in that era.
+//   - HTTP `/mcp`, 2025 era: the endpoint answers in JSON mode, which has no
+//     stream to carry a request's notifications, so nothing is delivered;
+//     `logging/setLevel` is accepted and binds a per-request server that is
+//     discarded with the request.
+// The project logger's own threshold (`WHITEBOARD_LOG_LEVEL`) applies first:
+// a record below it is never produced, whatever a client asks for.
 import { addLogDestination, lineToLogRecord } from '../log.js'
 
-export interface WireMcpLoggingHandle {
-  // Detach the MCP destination. Tests use this between cases.
-  restore(): void
-}
+type RequestLog = (level: LoggingLevel, data: unknown, logger?: string) => Promise<void>
 
-export function wireMcpLogging(server: McpServer): WireMcpLoggingHandle {
-  // Capability registration is idempotent in the SDK, so re-running this in
-  // tests across the same server instance is safe.
-  server.server.registerCapabilities({ logging: {} })
+const requestLog = new AsyncLocalStorage<RequestLog>()
 
-  const dispose = addLogDestination({
+// pino writes each line to the fan-out synchronously from the log call, so
+// the store read here is the emitting call's own scope.
+let destinationInstalled = false
+function installForwardingDestination(): void {
+  if (destinationInstalled) return
+  destinationInstalled = true
+  addLogDestination({
     stream: {
       write(line: string) {
+        const log = requestLog.getStore()
+        if (log === undefined) return
         const record = lineToLogRecord(line)
         if (!record) return
-        // Match the spec shape: level + optional logger + free-form data.
         // Keep msg inside `data` so structured consumers see the message
         // string alongside its fields.
-        const params = {
-          level: record.level,
-          logger: record.scope,
-          data:
-            record.data !== undefined ? { msg: record.msg, ...record.data } : { msg: record.msg },
-        }
-        void server.sendLoggingMessage(params).catch(() => {
-          // sendLoggingMessage rejects when the transport has no peer or
-          // when the connection drops mid-flight. Logging itself must
-          // never throw — stderr already captured the record from the
-          // default destination.
+        const data =
+          record.data !== undefined ? { msg: record.msg, ...record.data } : { msg: record.msg }
+        void log(record.level, data, record.scope).catch(() => {
+          // A dropped connection rejects the send. Logging itself must never
+          // throw — stderr already holds the record.
         })
       },
     },
   })
+}
 
-  return {
-    restore() {
-      dispose()
-    },
-  }
+/** Runs `fn` with records it emits forwarded to `log` — one request's sink. */
+export function runWithRequestLog<T>(log: RequestLog | undefined, fn: () => T): T {
+  return log === undefined ? fn() : requestLog.run(log, fn)
+}
+
+/**
+ * Declares the `logging: {}` capability (so the SDK accepts
+ * `logging/setLevel` from a 2025-era client and filters `ctx.mcpReq.log` by
+ * it) and ensures the request-scoped forwarding destination exists.
+ */
+export function wireMcpLogging(server: McpServer): void {
+  server.server.registerCapabilities({ logging: {} })
+  installForwardingDestination()
 }

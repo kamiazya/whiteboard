@@ -269,6 +269,35 @@ Without these steps, the workflows stop and report a skip. They do not spend
 agents on a browser the session does not have. Remove the registration with
 `claude mcp remove --scope local playwright` when you are done.
 
+#### Passkeys in the dogfooding browser
+
+The offline read of a daemon workspace asks for a passkey: "Make readable
+offline" in Settings > Connections creates one, and unlocking the copy while
+the daemon is away asks for it again. Nobody can answer that prompt in a
+headless browser, so `dev:connected --headless` gives every tab a virtual
+passkey — one that confirms on its own, as a person's passkey provider does
+after they confirm. `--virtual-passkey` turns it on with a window too, and
+`--no-virtual-passkey` turns it off.
+
+The virtual passkey has limits that a real one does not have, and each can
+look like a product bug:
+
+- **It lasts only for this `dev:connected` run.** A copy made readable
+  offline during an earlier run cannot be unlocked. Turn it off and opt in
+  again.
+- **It is replaced when a CDP client attached to that tab disconnects.**
+  Chromium removes a tab's virtual passkey whenever any CDP session on that
+  tab detaches, including a session that never used WebAuthn.
+  `dev:connected` notices within a second, puts a new one in place and
+  prints `passkey: a CDP client detached from a tab…`. After that, new
+  opt-ins work, but a copy opted in before it cannot be unlocked. A script
+  that connects and disconnects for each step therefore loses the passkey
+  between steps. A Playwright MCP server that stays connected for the
+  session keeps it.
+- **Only the frontmost tab answers.** With two tabs open, an opt-in in the
+  background tab fails with "No passkey was confirmed, so nothing changed."
+  Bring that tab to the front first (Playwright's `page.bringToFront()`).
+
 ## Cloudflare Pages header parity in local dev
 
 `apps/web/public/_headers` (security headers, CSP) is only served by

@@ -9,7 +9,6 @@ import { useStencilRegistry } from '../hooks/use-stencil-library.js'
 import { useTagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
-import { getAppLogger } from '../lib/app-logger.js'
 import { documentPath as documentRoutePath, indexPath, workspacePath } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/browser-document-summary.js'
@@ -58,8 +57,6 @@ import { useBrowserRouteSync } from './use-browser-route-sync.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
 import { versionsSlot } from './versions-slot.js'
-
-const log = getAppLogger('browser-document-page')
 
 export interface BrowserDocumentPageProps {
   /** Defaults to the shared production index; injected by tests. */
@@ -110,7 +107,6 @@ function useBrowserDocument(
     renameDocument,
     followRecordedName,
     listDocuments,
-    createDocument,
     switchDocument,
     duplicateDocument,
   } = useBrowserDocumentController(store, { loro, initialPath, pointer, clock })
@@ -351,28 +347,6 @@ function useBrowserDocument(
   useEffect(() => {
     void ensurePersistentStorage()
   }, [])
-
-  // Launcher shortcut (manifest `shortcuts`): /?new=canvas creates a fresh
-  // canvas once, then strips the param so a reload doesn't create another.
-  const shortcutHandledRef = useRef(false)
-  useEffect(() => {
-    if (shortcutHandledRef.current) return
-    shortcutHandledRef.current = true
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('new') !== 'canvas') return
-    params.delete('new')
-    const rest = params.toString()
-    window.history.replaceState(
-      window.history.state,
-      '',
-      window.location.pathname + (rest ? `?${rest}` : ''),
-    )
-    // Fire-and-forget: the failure path already rolls back inside
-    // createDocument, so the shortcut degrades to a plain load.
-    createDocument().catch((err) => {
-      log.error('launcher shortcut create failed', err)
-    })
-  }, [createDocument])
 
   // One account of the document's writes over its two writers — the
   // controller (renames) and the sync session (content, either kind) — worst

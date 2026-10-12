@@ -360,10 +360,16 @@ export class IdbDocumentStore implements DocumentStore {
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {
     const key = docRefKey(input.docRef)
     const frontier = copy(input.deltaBatch.newFrontier)
+    let refused = false
     // The snapshot store is deliberately OUT of scope. Nothing here reads or
     // writes a chunk, and naming the store would both lock it and re-open the
-    // cost this split exists to remove.
+    // cost this split exists to remove. The record carries the manifest, so
+    // the snapshot condition is answered in this same transaction.
     await this.#read('readwrite', key, [SYNC_DOCUMENTS_STORE], async (record, tx) => {
+      if (input.requireSnapshot === true && record.snapshot === null) {
+        refused = true
+        return
+      }
       const next: SyncRecord = {
         ...record,
         deltas: [...record.deltas, ...input.deltaBatch.updates.map(copy)],
@@ -372,7 +378,8 @@ export class IdbDocumentStore implements DocumentStore {
       }
       await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
     })
-    return { frontier: copy(frontier) }
+    if (refused) return { ok: false, reason: 'no-snapshot' }
+    return { ok: true, frontier: copy(frontier) }
   }
 
   /**
@@ -439,8 +446,10 @@ export class IdbDocumentStore implements DocumentStore {
           frontier: copy(input.frontier),
           // The half `saveSnapshot` does not do — but only the SUPERSEDED
           // prefix. Anything appended after the caller folded is not in the
-          // snapshot, so clearing the whole log would lose it.
-          deltas: record.deltas.slice(input.supersededDeltaCount),
+          // snapshot, so clearing the whole log would lose it. A create has
+          // no prefix to keep: a log with no snapshot behind it is not part
+          // of the document.
+          deltas: current === null ? [] : record.deltas.slice(input.supersededDeltaCount),
           // NOT reset: a fold shortens the array without moving the seqs
           // already handed out.
           nextSeq: record.nextSeq,

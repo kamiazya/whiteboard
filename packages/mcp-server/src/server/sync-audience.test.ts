@@ -13,9 +13,9 @@ import { versionEntrySchema } from '@kamiazya/whiteboard-daemon-client/api-contr
 import {
   agentActivityMessageSchema,
   serverTextMessageSchema,
-  viewportRequestParamsSchema,
 } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { afterAllFloor, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
+import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-server-core/viewport-request'
 import { describe, expect, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 

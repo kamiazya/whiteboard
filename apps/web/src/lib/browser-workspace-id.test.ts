@@ -5,6 +5,7 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb, registerTestWorkspace } from '../test-utils/browser-document.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   BROWSER_DEFAULT_SEGMENT,
   openWhiteboardDb,
@@ -135,6 +136,48 @@ describe('browser workspace id accessor', () => {
     await registerTestWorkspace()
 
     expect(await switchBrowserWorkspace(LATER_ULID, DB_NAME)).not.toBeNull()
+  })
+
+  it('a stored segment the read schema drops names nothing, here as in the index', async () => {
+    // A row written before the identity bounds (or by a writer that skipped
+    // them) can carry a segment the model refuses — here one shaped like
+    // ANOTHER workspace's canonical id. The index reads that layer as absent;
+    // a resolver that honoured it would open B for an address naming A.
+    const index = new IdbDocumentIndex(DB_NAME)
+    await index.createWorkspace({ workspaceId: EARLIER_ULID, segment: 'alpha' })
+    await registerTestWorkspace({ workspaceId: LATER_ULID, segment: EARLIER_ULID })
+
+    expect((await index.resolveWorkspace(EARLIER_ULID))?.workspaceId).toBe(EARLIER_ULID)
+    expect((await switchBrowserWorkspace(EARLIER_ULID, DB_NAME))?.workspaceId).toBe(EARLIER_ULID)
+    expect(getBrowserWorkspaceIdentity()).toEqual({ workspaceId: EARLIER_ULID, segment: 'alpha' })
+    expect(await switchBrowserWorkspace(LATER_ULID, DB_NAME)).toEqual({ workspaceId: LATER_ULID })
+
+    resetBrowserWorkspaceIdForTests()
+    expect(await resolveBrowserWorkspaceId(DB_NAME, EARLIER_ULID)).toBe(EARLIER_ULID)
+  })
+
+  it('a refused lowercase id-shaped segment is not a handle either', async () => {
+    const index = new IdbDocumentIndex(DB_NAME)
+    await registerTestWorkspace({ workspaceId: LATER_ULID, segment: EARLIER_ULID.toLowerCase() })
+
+    expect(await index.resolveWorkspace(EARLIER_ULID.toLowerCase())).toBeNull()
+    expect(await switchBrowserWorkspace(EARLIER_ULID.toLowerCase(), DB_NAME)).toBeNull()
+  })
+
+  it('skips, and says so, a registry row whose id does not read', async () => {
+    // Keyed to sort FIRST, so an address-less resolve that kept it would
+    // land on it rather than on the workspace that does read.
+    await registerTestWorkspace({ workspaceId: '00 not an id', segment: 'broken' })
+    await registerTestWorkspace({ workspaceId: LATER_ULID, segment: 'kept' })
+
+    expect(await resolveBrowserWorkspaceId(DB_NAME)).toBe(LATER_ULID)
+    expect(await switchBrowserWorkspace('broken', DB_NAME)).toBeNull()
+    expect(await switchBrowserWorkspace('00 not an id', DB_NAME)).toBeNull()
+    expect(await switchBrowserWorkspace('kept', DB_NAME)).toEqual({
+      workspaceId: LATER_ULID,
+      segment: 'kept',
+    })
+    await expectLoggedFailure('skipped a workspace registry row that does not read')
   })
 
   it('refuses a handle this registry does not hold, leaving the identity where it was', async () => {

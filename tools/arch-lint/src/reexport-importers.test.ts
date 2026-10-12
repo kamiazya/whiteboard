@@ -50,44 +50,6 @@ const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
     "decision: the icon-name catalogue is part of the plugin's data surface; catalog.test.ts holds it to LUCIDE_ICONS",
   'packages/server-core/src/index.ts#apiErrorBodySchema':
     'decision: the strict refusal-body contract a daemon emits, published from the package root; the route fuzz holds every refusal to it',
-  'packages/canvas-viewer/src/index.ts#VIEWER_FONT_FAMILY':
-    'debt: browser tests only; shipped code takes it from font.ts',
-  'packages/canvas-viewer/src/index.ts#ensureViewerFontLoaded':
-    'debt: tests and doc snapshots only; boot.ts takes it from the ./font-loading subpath',
-  'packages/daemon-client/src/sync-frames.ts#viewportRequestParamsSchema':
-    'debt: contract tests only; server-core owns it in viewport-request.ts',
-  'packages/history/src/index.ts#CHECKPOINT_QUIET_MS':
-    'debt: keeper tests advance timers by it; the scheduler reads it in place',
-  'packages/ports/src/index.ts#StoredDocumentUnreadableCode':
-    'debt: only the in-memory test double names the code type',
-  'packages/search/src/index.ts#tokenize':
-    'debt: search-quality tests only; full-text.ts uses it in place',
-  'packages/search/src/index.ts#tokenizeForIndex':
-    'debt: search-quality tests only; full-text.ts uses it in place',
-  'packages/server-core/src/index.ts#getLogger':
-    'debt: tests only; every shipped caller imports log.js inside the package',
-  'packages/server-core/src/index.ts#canvasEditInputSchema':
-    'debt: tests only; the tool registers it from tools/canvas-edit.ts',
-  'packages/server-core/src/index.ts#canvasSnapshotSchema':
-    'debt: tests only; shipped callers import tools/canvas-snapshot.ts',
-  'packages/server-core/src/index.ts#canvasViewInputSchema':
-    'debt: the widget contract test only; the tool registers it in place',
-  'packages/server-core/src/index.ts#canvasViewOutputSchema':
-    'debt: the widget contract test only; the tool registers it in place',
-  'packages/server-core/src/index.ts#createCanvasViewTool':
-    'debt: tests only; createServer builds it from tools/canvas-view.ts',
-  'packages/server-core/src/index.ts#createFacetListTool':
-    'debt: tests only; createServer builds it from tools/facet-list.ts',
-  'packages/server-core/src/index.ts#createVersionListTool':
-    'debt: the daemon version-tool test only; createServer builds it in place',
-  'packages/server-core/src/index.ts#createVersionRestoreTool':
-    'debt: the daemon version-tool test only; createServer builds it in place',
-  'packages/server-core/src/index.ts#createVersionSaveTool':
-    'debt: the daemon version-tool test only; createServer builds it in place',
-  'packages/server-core/src/index.ts#createWorkspaceEditTool':
-    'debt: tests only; createServer builds it from tools/workspace-edit.ts',
-  'packages/server-core/src/index.ts#versionRestoreOutputSchema':
-    'debt: the smoke tool-list parity test only; the tool registers it in place',
 }
 
 /** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
@@ -243,7 +205,7 @@ describe('package entries forward only names someone imports through them', () =
   })
 
   it('holds the test-only ledger at its size, so it only shrinks', () => {
-    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(21)
+    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(2)
     for (const reason of Object.values(TEST_ONLY_FORWARDS)) {
       expect(reason).toMatch(/^(?:decision|debt): \S/)
     }

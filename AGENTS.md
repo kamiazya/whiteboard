@@ -166,8 +166,8 @@ Why this exists:
 - `WHITEBOARD_LOG_LEVEL` (default `warning`) gates emission. `MCP_HTTP_DEBUG=1`
   lowers it to `info` automatically so HTTP-tracing logs survive without
   toggling two env vars.
-- Clients can call MCP `logging/setLevel` to adjust their per-session view; the
-  SDK handles the request once the `logging: {}` capability is registered.
+- A client gets only records its own tool call emitted: over stdio, or over
+  HTTP `/mcp` for modern-era calls opting in via `_meta` (mcp-debugging.md).
 
 Tests use `captureLogsForTests(level)` to buffer parsed records and assert
 against them rather than spying on `console`; `restore()` in `afterEach`.
