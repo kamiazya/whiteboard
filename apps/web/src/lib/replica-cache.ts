@@ -23,10 +23,9 @@ import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { forgetReplicaCopy } from './browser-workspace-removal.js'
 import { cacheReplicaImages } from './replica-images.js'
-import { markReplica, openDocumentStore, replicaKeyStatus } from './replica-store.js'
-import { stopReplicaReadableOffline } from './replica-unlock.js'
-import { forgetReplicaEntry } from './replicas.js'
+import { markReplica, replicaKeyStatus } from './replica-store.js'
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from './sealed-document-store.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
@@ -77,9 +76,9 @@ export type CacheDaemonWorkspaceResult =
  * it is impossible and keeping it is pointless: it is dropped and the pull
  * stands alone. Offline edits that were not yet sent go with it; they were
  * unreadable already, and the alternative was a pull that fails for good while
- * the copy goes on reading as damaged. Claim first, bytes second, as every
- * delete of a copy does, and the wrapped key goes too — it opens a key
- * generation that no longer matches anything on this device.
+ * the copy goes on reading as damaged. Deleted as every replica copy is
+ * (`forgetReplicaCopy`), wrapped key included — it opens a key generation
+ * that no longer matches anything on this device.
  */
 async function openForMerge(
   workspaceDocs: WorkspaceDocs,
@@ -94,9 +93,7 @@ async function openForMerge(
       daemonBaseUrl,
       workspaceId,
     })
-    createUserSettingsStore().update((current) => forgetReplicaEntry(current, workspaceId))
-    stopReplicaReadableOffline(daemonBaseUrl, workspaceId)
-    await openDocumentStore().deleteDoc({ docRef: { kind: 'workspace-tree', workspaceId } })
+    await forgetReplicaCopy(createUserSettingsStore(), workspaceId, daemonBaseUrl)
     return new LoroDoc()
   }
 }

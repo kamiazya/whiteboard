@@ -19,7 +19,7 @@
  * Only a REPLICA offers a delete. A browser-kept workspace is the only copy
  * of its data anywhere, so deleting it here would be data loss dressed as
  * tidying; the one case where that is safe (after a verified promote to a
- * daemon) already has its own path in `demote-browser-workspace.ts`. The row
+ * daemon) already has its own path in `browser-workspace-removal.ts`. The row
  * still appears, because a list of "every copy" that silently omits half of
  * them is worse than no list.
  */
@@ -27,8 +27,7 @@ import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } 
 import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
 import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
-import { stopReplicaReadableOffline } from '../../lib/replica-unlock.js'
-import { forgetReplicaEntry, listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
+import { listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { DaemonAddress } from '../connection/DaemonAddress.js'
 import { Button } from '../ui/button.js'
@@ -234,20 +233,8 @@ export function LocalCopiesCard({
     async (row: CopyRow) => {
       setDeleting(true)
       try {
-        // The CLAIM first, the bytes second — `demote-browser-workspace.ts`
-        // takes the same order for the same reason: a failure between the two
-        // leaves bytes nothing points at, which the next pull overwrites,
-        // where the reverse leaves a claim pointing at a record that is gone
-        // and every reader of it has to cope with the absence.
-        settingsStore.update((current) => forgetReplicaEntry(current, row.workspaceId))
-        // A wrapped key for a copy that is gone is a key on disk for nothing.
-        if (row.daemonBaseUrl !== undefined) {
-          stopReplicaReadableOffline(row.daemonBaseUrl, row.workspaceId)
-        }
-        const { openDocumentStore } = await import('../../lib/replica-store.js')
-        await openDocumentStore().deleteDoc({
-          docRef: { kind: 'workspace-tree', workspaceId: row.workspaceId },
-        })
+        const { forgetReplicaCopy } = await import('../../lib/browser-workspace-removal.js')
+        await forgetReplicaCopy(settingsStore, row.workspaceId, row.daemonBaseUrl)
         setPending(null)
         await load()
       } finally {

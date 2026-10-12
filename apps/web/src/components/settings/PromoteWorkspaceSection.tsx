@@ -106,22 +106,6 @@ function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
 }
 
 /**
- * Whether the move left anything only the browser copy holds — the demote
- * gate, deliberately strict. `missing` gates alongside `failed` because the
- * file store folds read errors into "missing", so those references may be
- * retryable and the source record is the retry vehicle. `leftBehind` gates
- * for the same reason: a trash entry or a saved version the daemon did not
- * confirm holding exists only in the copy the demote would delete.
- */
-function leftAnythingBehind(outcome: Extract<PromoteWorkspaceResult, { kind: 'ok' }>): boolean {
-  return (
-    outcome.blobs.failed.length > 0 ||
-    outcome.blobs.missing.length > 0 ||
-    outcome.leftBehind.length > 0
-  )
-}
-
-/**
  * The demote pull (ADR-0023 decision 2): cache the daemon's merged record
  * back into this browser's planes, and delete the source record only once
  * that cache is proven to carry everything.
@@ -129,9 +113,9 @@ function leftAnythingBehind(outcome: Extract<PromoteWorkspaceResult, { kind: 'ok
  * Best-effort throughout — the move itself already landed, so a failed pull
  * costs only the cache line on the report, never the promotion.
  *
- * The demote gate is `leftAnythingBehind`, below.
- * And the read-back has its OWN try/catch rather than the caller's:
- * `replicaCarriesAll` reads through the sealed store and can throw
+ * The demote gate is `demoteWhenSafe`'s (`browser-workspace-removal.ts`).
+ * It runs in its OWN try/catch rather than the caller's: its replica
+ * read-back goes through the sealed store and can throw
  * `ReplicaKeyWithheldError` if the session key lapses between the cache
  * write and this read — letting that escape would report an
  * already-successful move as a failed one. The decision is simply deferred
@@ -183,21 +167,10 @@ async function cacheAndMaybeDemote({
     }),
   )
 
-  if (leftAnythingBehind(outcome))
-    return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: false }
-
   try {
-    const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
-      '../../lib/demote-browser-workspace.js'
-    )
-    const carried = await replicaCarriesAll(
-      new BrowserWorkspaceDocs(),
-      workspaceId,
-      outcome.promotedDocumentIds,
-    )
-    if (!carried) return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: false }
-    await demoteBrowserWorkspace(outcome.sourceWorkspaceId)
-    return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: true }
+    const { demoteWhenSafe } = await import('../../lib/browser-workspace-removal.js')
+    const removed = await demoteWhenSafe(new BrowserWorkspaceDocs(), workspaceId, outcome)
+    return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: removed }
   } catch (err) {
     // The move stands either way; a withheld session key or a failed
     // deletion only means the old copy lingers, which the report says
