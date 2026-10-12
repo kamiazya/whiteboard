@@ -90,9 +90,10 @@ const STORED_SHAPE_COVERAGE: Record<string, StoredShapeCoverage> = {
       'seeded old-version databases',
   ),
   'browser-workspace-id.ts': notModelled(
-    'it validates the workspace id on a row the index already round-trips, and refuses a record ' +
-      'not keyed by a canonical id rather than reading a shape of its own. ' +
-      'browser-workspace-id.test.ts covers the choice and that refusal',
+    'it reads a registry row the index already round-trips through the same port read schema ' +
+      'the index uses, and refuses a record not keyed by a canonical id, rather than reading a ' +
+      'shape of its own. browser-workspace-id.test.ts covers the choice, that the two readers ' +
+      'agree, and that refusal',
   ),
 }
 
