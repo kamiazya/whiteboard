@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { DocRef, DocumentStore, SaveCompactedSnapshotInput, SnapshotChunk } from '../index.js'
-import { isStoredDocumentUnreadableError } from '../index.js'
+import {
+  chunkSnapshot,
+  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+  isStoredDocumentUnreadableError,
+} from '../index.js'
 
 /**
  * The arrays a caller passes in stay theirs, and the ones they get back are
@@ -40,8 +44,7 @@ async function expectBuffersAreIndependent(store: DocumentStore, docRef: DocRef)
 const GUARDED: DocRef = { kind: 'workspace-tree', workspaceId: '01JD0GUARDEDAPPEND00000001' }
 const guardedBytes = (value: number): Uint8Array<ArrayBuffer> => new Uint8Array([value])
 const guardedSnapshot = (value: number) => ({
-  manifest: { chunkCount: 1, totalBytes: 1, maxChunkBytes: 4 },
-  chunks: [{ index: 0, of: 1, bytes: guardedBytes(value) }],
+  ...chunkSnapshot(guardedBytes(value), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES),
   frontier: guardedBytes(value),
 })
 const appendGuarded = (store: DocumentStore, value: number, requireSnapshot?: boolean) =>
