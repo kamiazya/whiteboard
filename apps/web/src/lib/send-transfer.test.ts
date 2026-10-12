@@ -44,6 +44,22 @@ const baseOptions = (popup: PopupHandle | null) => ({
   closedPollMs: 10,
 })
 
+const withOneVersion = () => ({
+  snapshot: Uint8Array.from([1]),
+  documentCount: 1,
+  sourceWorkspaceId: 'ws-here',
+  trash: [],
+  versions: [
+    {
+      id: 'v-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      createdAt: 1_000,
+      auto: false,
+      frontiers: 'AA',
+    },
+  ],
+})
+
 afterEach(() => {
   vi.useRealTimers()
 })
@@ -316,6 +332,57 @@ describe('sending a transfer through a window at the destination', () => {
         '1 saved version did not reach the keeper',
       ],
     })
+  })
+
+  it('names the carried planes as unconfirmed when the keeper reports nothing of them', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer({
+      ...baseOptions(popup),
+      payload: Promise.resolve(withOneVersion()),
+    })
+    arrive(KEEPER, {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    })
+    await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
+    // A keeper whose page predates the planes strips them from the offer and
+    // answers without a report of them.
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: ['a'],
+      shadowedPaths: [],
+    })
+    await expect(sent).resolves.toMatchObject({
+      ok: true,
+      leftBehind: [
+        'the keeper did not report keeping the 1 saved version sent, so it may not have them — update it and send again',
+      ],
+    })
+  })
+
+  it('adds nothing to a report that states what the keeper kept', async () => {
+    const popup = fakePopup()
+    const sent = sendTransfer({ ...baseOptions(popup), payload: Promise.resolve(withOneVersion()) })
+    arrive(KEEPER, {
+      type: 'transfer-ready',
+      protocol: CROSS_ORIGIN_TRANSFER_PROTOCOL,
+      nonce: NONCE,
+    })
+    await vi.waitFor(() => expect(popup.posted).toHaveLength(1))
+    arrive(KEEPER, {
+      type: 'transfer-result',
+      nonce: NONCE,
+      ok: true,
+      workspaceId: 'ws-there',
+      promotedDocumentIds: ['a'],
+      shadowedPaths: [],
+      leftBehind: [],
+    })
+    await expect(sent).resolves.toMatchObject({ ok: true, leftBehind: [] })
   })
 
   it('stops polling the window once a result settles the attempt', async () => {

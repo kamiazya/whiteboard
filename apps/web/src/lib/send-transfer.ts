@@ -104,11 +104,11 @@ export function sendTransfer(options: SendTransferOptions): Promise<SendTransfer
   }
 
   let offered = false
-  let leftHere: readonly string[] = []
+  let posted: PostedOffer = { leftHere: [], trash: 0, versions: 0 }
   return talkTo<SendTransferResult>(popup, options.closedPollMs ?? 500, {
     onMessage: (event, talk) => {
       const read = readHandshakeMessage(event, destination, nonce)
-      if (read.kind === 'result') talk.settle(withLeftHere(read.result, leftHere))
+      if (read.kind === 'result') talk.settle(withLeftHere(read.result, posted))
       else if (read.kind === 'ready' && !offered) {
         offered = true
         offerRecord(talk, read.protocol, {
@@ -116,8 +116,8 @@ export function sendTransfer(options: SendTransferOptions): Promise<SendTransfer
           destination,
           nonce,
           payload: options.payload,
-          onPosted: (left) => {
-            leftHere = left
+          onPosted: (offer) => {
+            posted = offer
           },
         })
       }
@@ -132,10 +132,49 @@ export function sendTransfer(options: SendTransferOptions): Promise<SendTransfer
   })
 }
 
+/** What this side knows of an offer once it is posted, for reading the reply. */
+interface PostedOffer {
+  /** What never left this browser. */
+  readonly leftHere: readonly string[]
+  readonly trash: number
+  readonly versions: number
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+/**
+ * What the reply does not say of the planes. `leftBehind` is optional on the
+ * wire, and an ABSENT report is not an empty one: a keeper whose page
+ * predates the planes strips them from the offer and answers without it, so
+ * reading absence as "nothing left behind" would report history and trash as
+ * moved when they never arrived. An absent `imagesMissing` needs no sentence:
+ * no picture crosses origins at all, and the transfer says so before it
+ * starts, so its absence only loses a count.
+ */
+function unreported(
+  result: Extract<SendTransferResult, { ok: true }>,
+  posted: PostedOffer,
+): string[] {
+  const sent = [
+    ...(posted.trash === 0 ? [] : [plural(posted.trash, 'trashed document', 'trashed documents')]),
+    ...(posted.versions === 0 ? [] : [plural(posted.versions, 'saved version', 'saved versions')]),
+  ]
+  if (result.leftBehind !== undefined || sent.length === 0) return []
+  return [
+    `the keeper did not report keeping the ${sent.join(' and ')} sent, so it may not have them — update it and send again`,
+  ]
+}
+
 /** The keeper's report, with what never left this browser named first. */
-function withLeftHere(result: SendTransferResult, leftHere: readonly string[]): SendTransferResult {
-  if (!result.ok || leftHere.length === 0) return result
-  return { ...result, leftBehind: [...leftHere, ...(result.leftBehind ?? [])] }
+function withLeftHere(result: SendTransferResult, posted: PostedOffer): SendTransferResult {
+  if (!result.ok) return result
+  const leftBehind = [
+    ...posted.leftHere,
+    ...(result.leftBehind ?? []),
+    ...unreported(result, posted),
+  ]
+  if (leftBehind.length === 0) return result
+  return { ...result, leftBehind }
 }
 
 interface Talk<T> {
@@ -192,7 +231,7 @@ function offerRecord(
     destination: string
     nonce: string
     payload: Promise<TransferPayload>
-    onPosted: (leftBehind: readonly string[]) => void
+    onPosted: (offer: PostedOffer) => void
   },
 ): void {
   if (protocol !== CROSS_ORIGIN_TRANSFER_PROTOCOL) {
@@ -205,7 +244,11 @@ function offerRecord(
       if (talk.settled) return
       // What could not be carried is this side's to report, not the offer's.
       const { leftBehind = [], ...carried } = payload
-      to.onPosted(leftBehind)
+      to.onPosted({
+        leftHere: leftBehind,
+        trash: carried.trash?.length ?? 0,
+        versions: carried.versions?.length ?? 0,
+      })
       to.popup.postMessage(
         {
           type: 'transfer-offer',
