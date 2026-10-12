@@ -157,7 +157,11 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     const store = new SealedDocumentStore(new IdbDocumentStore(DB_NAME), fixedKeyProvider(key, 0))
     const update = randomBytes(80)
     const newFrontier = randomBytes(3)
-    await store.appendDeltas({ docRef, deltaBatch: { updates: [update], newFrontier } })
+    await store.appendDeltas({
+      docRef,
+      deltaBatch: { updates: [update], newFrontier },
+      requireSnapshot: false,
+    })
 
     const loaded = await store.loadDeltas({ docRef, afterSeq: null })
     expect(loaded.updates.map((u) => [...u])).toEqual([[...update]])
@@ -171,6 +175,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     await store.appendDeltas({
       docRef,
       deltaBatch: { updates: [randomBytes(10)], newFrontier: randomBytes(2) },
+      requireSnapshot: false,
     })
     const bytes = randomBytes(512)
     const { manifest, chunks } = chunkSnapshot(bytes, 256)
@@ -229,6 +234,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
           updates: deltas as Uint8Array<ArrayBuffer>[],
           newFrontier: new Uint8Array([2]),
         },
+        requireSnapshot: true,
       })
       const loadedDeltas = await store.loadDeltas({ docRef: ref, afterSeq: null })
       expect(loadedDeltas.updates.map((u) => [...u])).toEqual(deltas.map((d) => [...d]))
@@ -250,6 +256,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     await store.appendDeltas({
       docRef,
       deltaBatch: { updates: [deltaPlaintext], newFrontier: randomBytes(4) },
+      requireSnapshot: true,
     })
 
     const db = await openRaw()
@@ -283,6 +290,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     await new SealedDocumentStore(inner, fixedKeyProvider(key, 0)).appendDeltas({
       docRef,
       deltaBatch: { updates: [randomBytes(20)], newFrontier: randomBytes(4) },
+      requireSnapshot: true,
     })
 
     const { provider: locked, calls } = countingProvider(withheldProvider())
@@ -357,6 +365,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     await store.appendDeltas({
       docRef,
       deltaBatch: { updates: [randomBytes(20)], newFrontier: randomBytes(4) },
+      requireSnapshot: true,
     })
 
     const key0 = [docRefKey(docRef), 0]
@@ -420,6 +429,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
     await store.appendDeltas({
       docRef,
       deltaBatch: { updates: [randomBytes(20)], newFrontier: randomBytes(4) },
+      requireSnapshot: true,
     })
 
     // An unknown version byte, same length as the real record: decodeEnvelope
@@ -526,6 +536,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
       await sealed.appendDeltas({
         docRef: plaintextRef,
         deltaBatch: { updates: [delta], newFrontier: deltaFrontier },
+        requireSnapshot: true,
       })
 
       const BARE_DB = `${DB_NAME}-bare`
@@ -535,6 +546,7 @@ describe('SealedDocumentStore over a real IndexedDB', () => {
       await bare.appendDeltas({
         docRef: plaintextRef,
         deltaBatch: { updates: [delta], newFrontier: deltaFrontier },
+        requireSnapshot: true,
       })
 
       const sealedDb = await openRaw()

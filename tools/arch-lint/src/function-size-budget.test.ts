@@ -611,7 +611,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/ports/src/test-utils/document-index-conformance.ts#describeRenameWorkspace': 96,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeResolveWorkspace': 57,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeSetDocumentName': 60,
-  'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 639,
+  // +15: `appendDeltas` takes a required `requireSnapshot`, so each append
+  // case names whether it may create a log-only record — one line per call.
+  'packages/ports/src/test-utils/document-store-conformance.ts#describeDocumentStoreConformance': 654,
   // +4: the two v1 POST routes refuse a body that names the URL's own
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.

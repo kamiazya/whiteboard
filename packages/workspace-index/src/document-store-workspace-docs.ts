@@ -232,6 +232,15 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
    * Also the one move after a refused fold or mint — the ops go in the log
    * instead of the snapshot — under the same condition, since the snapshot
    * that refused can itself be deleted before this write.
+   *
+   * `append` and `mint` fall to each other with no counter, and still end:
+   * the append refuses only when no snapshot exists at its write, and the
+   * mint refuses only when one does, so every further round needs another
+   * writer's create AND another's delete to land in between. Every re-mint
+   * also passes `beforeMint` first, where a keeper that removed the id
+   * throws, so a delete that means it ends the cycle there. What is left
+   * lasts only as long as real concurrent churn on this one id does, and a
+   * bound would turn that churn into a lost edit instead.
    */
   private async append(workspaceId: string, doc: LoroDoc, update: Uint8Array): Promise<Uint8Array> {
     const appended = await this.store.appendDeltas({

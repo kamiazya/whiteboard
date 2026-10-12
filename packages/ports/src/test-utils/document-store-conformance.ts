@@ -47,11 +47,11 @@ const guardedSnapshot = (value: number) => ({
   ...chunkSnapshot(guardedBytes(value), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES),
   frontier: guardedBytes(value),
 })
-const appendGuarded = (store: DocumentStore, value: number, requireSnapshot?: boolean) =>
+const appendGuarded = (store: DocumentStore, value: number, requireSnapshot: boolean) =>
   store.appendDeltas({
     docRef: GUARDED,
     deltaBatch: { updates: [guardedBytes(value)], newFrontier: guardedBytes(value) },
-    ...(requireSnapshot === undefined ? {} : { requireSnapshot }),
+    requireSnapshot,
   })
 const guardedLog = async (store: DocumentStore) =>
   (await store.loadDeltas({ docRef: GUARDED, afterSeq: null })).updates.map((u) => [...u])
@@ -72,7 +72,7 @@ function describeRecordGuards(
       expect(await store.readFrontier({ docRef: GUARDED })).toBeNull()
 
       // A log with no snapshot behind it is still no snapshot.
-      await appendGuarded(store, 2)
+      await appendGuarded(store, 2, false)
       expect(await appendGuarded(store, 3, true)).toEqual({ ok: false, reason: 'no-snapshot' })
       expect(await guardedLog(store)).toEqual([[2]])
     })
@@ -93,7 +93,7 @@ function describeRecordGuards(
 
   it('drops a log with no snapshot behind it when a create lands over it', async () => {
     await withStore(async (store) => {
-      await appendGuarded(store, 9)
+      await appendGuarded(store, 9, false)
       const created = await store.saveCompactedSnapshot({
         docRef: GUARDED,
         ...guardedSnapshot(1),
@@ -258,6 +258,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(1)], newFrontier: bytes(7) },
+          requireSnapshot: false,
         })
         expect(await store.readSnapshotManifest({ docRef: DOC })).toBeNull()
         expect(await store.loadSnapshot({ docRef: DOC })).toBeNull()
@@ -293,6 +294,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(8)], newFrontier: bytes(2) },
+          requireSnapshot: true,
         })
         const compacted = chunked([bytes(9, 9, 9)])
         await foldAccepted(store, {
@@ -400,6 +402,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2, 2) },
+          requireSnapshot: true,
         })
         expect([...((await store.loadSnapshot({ docRef: DOC }))?.frontier ?? [])]).toEqual([2, 2])
         expect([...((await store.readFrontier({ docRef: DOC }))?.frontier ?? [])]).toEqual([2, 2])
@@ -411,11 +414,13 @@ export function describeDocumentStoreConformance(
         const first = await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(1)], newFrontier: bytes(1) },
+          requireSnapshot: false,
         })
         expect(first).toEqual({ ok: true, frontier: bytes(1) })
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2), bytes(3)], newFrontier: bytes(3) },
+          requireSnapshot: false,
         })
         const loaded = await store.loadDeltas({ docRef: DOC, afterSeq: null })
         expect(loaded.updates.map((update) => [...update])).toEqual([[1], [2], [3]])
@@ -438,6 +443,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(1), bytes(2)], newFrontier: bytes(2) },
+          requireSnapshot: false,
         })
         const all = await store.loadDeltas({ docRef: DOC, afterSeq: null })
         expect(all.updates.map((update) => [...update])).toEqual([[1], [2]])
@@ -446,6 +452,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(3)], newFrontier: bytes(3) },
+          requireSnapshot: false,
         })
         const tail = await store.loadDeltas({ docRef: DOC, afterSeq: all.lastSeq })
         expect(tail.updates.map((update) => [...update])).toEqual([[3]])
@@ -481,6 +488,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+          requireSnapshot: false,
         })
         const before = await store.loadDeltas({ docRef: DOC, afterSeq: null })
         expect(before.generation).not.toBeNull()
@@ -501,6 +509,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(1)], newFrontier: bytes(1) },
+          requireSnapshot: true,
         })
         expect((await store.loadDeltas({ docRef: DOC, afterSeq: null })).generation).toBeNull()
       })
@@ -512,6 +521,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(9)], newFrontier: bytes(9) },
+          requireSnapshot: true,
         })
         expect(await store.loadSnapshot({ docRef: OTHER })).toBeNull()
         expect((await store.loadDeltas({ docRef: OTHER, afterSeq: null })).updates).toEqual([])
@@ -532,6 +542,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+          requireSnapshot: true,
         })
         await store.saveSnapshot({ docRef: OTHER, ...chunked([bytes(5)]), frontier: bytes(5) })
 
@@ -556,6 +567,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2), bytes(3)], newFrontier: bytes(3) },
+          requireSnapshot: true,
         })
 
         await foldAccepted(store, {
@@ -579,6 +591,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: OTHER,
           deltaBatch: { updates: [bytes(9)], newFrontier: bytes(9) },
+          requireSnapshot: false,
         })
         await foldAccepted(store, {
           docRef: DOC,
@@ -605,6 +618,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+          requireSnapshot: true,
         })
 
         const compacting = foldAccepted(store, {
@@ -617,6 +631,7 @@ export function describeDocumentStoreConformance(
         const appending = store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(3)], newFrontier: bytes(3) },
+          requireSnapshot: true,
         })
         await Promise.all([compacting, appending])
 
@@ -644,6 +659,7 @@ export function describeDocumentStoreConformance(
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+          requireSnapshot: true,
         })
         const read = await store.readSnapshotManifest({ docRef: DOC })
         if (read === null) throw new Error('expected a stored snapshot')

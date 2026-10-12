@@ -43,13 +43,9 @@ export async function seedSyncDocument(
     await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array() })
     const deltas = content.deltas ?? []
     if (deltas.length > 0) {
-      await store.appendDeltas({
-        docRef,
-        deltaBatch: {
-          updates: deltas.map((delta) => new Uint8Array(delta)),
-          newFrontier: new Uint8Array(),
-        },
-      })
+      const updates = deltas.map((delta) => new Uint8Array(delta))
+      const deltaBatch = { updates, newFrontier: new Uint8Array() }
+      await store.appendDeltas({ docRef, deltaBatch, requireSnapshot: true })
     }
     return
   }
