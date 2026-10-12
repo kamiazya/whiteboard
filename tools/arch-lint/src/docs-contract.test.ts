@@ -37,7 +37,6 @@ function collectMarkdownFiles(dir: string): string[] {
 // changes outside this guard's. Shrink-only: an entry that no longer carries
 // the form fails until it is removed.
 const BARE_PLAYWRIGHT_INSTALL_LEDGER: readonly string[] = [
-  '.claude/rules/app-extension.md',
   'apps/extension/scripts/bridge-smoke.mjs',
 ]
 

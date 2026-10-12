@@ -60,7 +60,7 @@ addendum decision 5), and a store signs what it publishes.
   from a browser-kept document, reading an agent's note, writing back, and
   seeing the agent's next edit arrive live over SSE. Branded Chrome ignores
   `--load-extension`, so it needs Playwright's own Chromium
-  (`pnpm exec playwright install chromium`).
+  (`pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium`).
 - `smoke:native-host` is the host with no browser in front of it: a real
   daemon, the host `native-host install` writes, started as a browser starts
   it, and one request in the native messaging framing. It is what CI runs on
