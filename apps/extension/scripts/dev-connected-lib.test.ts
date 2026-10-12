@@ -15,7 +15,11 @@ import {
   installHost,
   parseDevConnectedArgs,
 } from './dev-connected-lib.mjs'
-import { armVirtualPasskeys, prfAuthenticatorOptions } from './virtual-passkey.mjs'
+import {
+  armVirtualPasskeys,
+  connectBrowserSession,
+  prfAuthenticatorOptions,
+} from './virtual-passkey.mjs'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'dev-connected.mjs')
 
@@ -456,6 +460,31 @@ describe('armVirtualPasskeys', () => {
     }
   })
 
+  it('stops polling every watched page when stopped', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = fakeBrowserSession()
+      const passkeys = await armVirtualPasskeys(fake.session, {
+        pollMs: 5,
+        onAdded: () => {},
+        onReset: () => {},
+        onError: () => {},
+      })
+      const polls = () => fake.sent.filter((m) => m.method === 'WebAuthn.getCredentials')
+      for (const sessionId of ['s1', 's2', 's3']) fake.attach(sessionId, 'page')
+      await vi.advanceTimersByTimeAsync(20)
+      expect(new Set(polls().map((m) => m.sessionId))).toEqual(new Set(['s1', 's2', 's3']))
+
+      passkeys.stop()
+      const atStop = polls().length
+      await vi.advanceTimersByTimeAsync(50)
+
+      expect(polls()).toHaveLength(atStop)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('lets a target that is not a page run on without an authenticator', async () => {
     const fake = fakeBrowserSession()
     await arm(fake.session, { onAdded: () => {}, onReset: () => {}, onError: () => {} })
@@ -466,5 +495,47 @@ describe('armVirtualPasskeys', () => {
         'Runtime.runIfWaitingForDebugger',
       ]),
     )
+  })
+})
+
+/** Stands in for Node's WebSocket: opens at once and records each frame sent. */
+class FakeSocket extends EventTarget {
+  static last: FakeSocket | undefined
+  readonly frames: Array<Record<string, unknown>> = []
+  constructor(readonly url: string) {
+    super()
+    FakeSocket.last = this
+    queueMicrotask(() => this.dispatchEvent(new Event('open')))
+  }
+  send(data: string) {
+    this.frames.push(JSON.parse(data))
+  }
+  close() {}
+}
+
+describe('connectBrowserSession', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('frames a command with empty params when none are given, and no session id unless one is', async () => {
+    vi.stubGlobal('WebSocket', FakeSocket)
+    const session = await connectBrowserSession('ws://127.0.0.1:1/devtools/browser/x')
+    const socket = FakeSocket.last as FakeSocket
+
+    void session.send('Target.getTargets')
+    void session.send('WebAuthn.enable', undefined, 's1')
+    void session.send('WebAuthn.getCredentials', { authenticatorId: 'a' }, 's2')
+
+    expect(socket.frames).toEqual([
+      { id: 1, method: 'Target.getTargets', params: {} },
+      { id: 2, method: 'WebAuthn.enable', params: {}, sessionId: 's1' },
+      {
+        id: 3,
+        method: 'WebAuthn.getCredentials',
+        params: { authenticatorId: 'a' },
+        sessionId: 's2',
+      },
+    ])
   })
 })
