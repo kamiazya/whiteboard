@@ -144,3 +144,8 @@ ports (frozen migrations skipped).
   instead of taking it as a parameter.
 - Treating an out-of-order chunk set as a `reassembleSnapshot` failure —
   it is a success case.
+- Passing `requireSnapshot: false` to `appendDeltas` from anything but a fixture. An append
+  to an absent record with `false` CREATES a log with no snapshot behind it, so a writer
+  that lost its record to a delete brings it back as an orphan no reader opens. A writer
+  extending a record it believes exists passes `true` and treats
+  `{ ok: false, reason: 'no-snapshot' }` as "go back to the mint path".
