@@ -26,7 +26,16 @@ Legacy versions accepted by the SDK's `initialize` negotiation:
 - `2024-11-05`
 - `2024-10-07`
 
-Note: the deprecated core Logging capability (`logging/setLevel` + `notifications/message`) still works for legacy-era sessions; on modern-era requests the SDK only emits log notifications when the client opts in via the `io.modelcontextprotocol/logLevel` `_meta` key. Structured logs always reach stderr regardless.
+Note on the deprecated core Logging capability (`logging/setLevel` + `notifications/message`): a record is forwarded only to the request that emitted it — the tool call's own `ctx.mcpReq.log` — so a client never receives records from another request or from work that belongs to no request (background workers, routes, sync streams). What reaches a client follows from that:
+
+| transport | era | what a client receives |
+|---|---|---|
+| stdio | 2025 | records from its own tool calls; `logging/setLevel` holds for the connection |
+| stdio | 2026-07-28 | records from a tool call whose `_meta` sets `io.modelcontextprotocol/logLevel` (the threshold) |
+| HTTP `/mcp` | 2025 | nothing: the endpoint answers in JSON mode, which has no stream for a request's notifications. `logging/setLevel` is accepted and has no effect |
+| HTTP `/mcp` | 2026-07-28 | records from a tool call whose `_meta` sets `io.modelcontextprotocol/logLevel`, on that call's response stream |
+
+`WHITEBOARD_LOG_LEVEL` applies first: a record below it is never produced. Structured logs always reach stderr regardless, and stderr is where to look for anything outside a tool call. `logging-forwarding.test.ts` pins each row.
 
 When upgrading the `@modelcontextprotocol/*` packages, re-check this matrix, the era tests (`app.test.ts` modern-pinned client, `serve-stdio-eras.test.ts`), and the related initialize tests before shipping.
 

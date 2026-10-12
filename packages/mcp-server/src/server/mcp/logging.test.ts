@@ -6,20 +6,22 @@ import {
   captureLogsForTests,
   getLogger,
 } from '../log.js'
-import { wireMcpLogging } from './logging.js'
+import { runWithRequestLog, wireMcpLogging } from './logging.js'
 
 function makeServer() {
   return new McpServer({ name: 'test', version: '0.0.0' })
+}
+
+function sink() {
+  return vi.fn((_level: string, _data: unknown, _logger?: string) => Promise.resolve())
 }
 
 describe('wireMcpLogging', () => {
   let cap: CapturedLogsHandle
 
   beforeEach(() => {
-    // Capture mode opens an extra fanout subscriber on the project logger
-    // so we can also assert "the previous destination still receives the
-    // record" — the same role the explicit baseSink played before.
     cap = captureLogsForTests('debug')
+    wireMcpLogging(makeServer())
   })
 
   afterEach(() => {
@@ -33,85 +35,78 @@ describe('wireMcpLogging', () => {
     expect(spy).toHaveBeenCalledWith({ logging: {} })
   })
 
-  it('forwards every emitted record to server.sendLoggingMessage with the spec shape', () => {
-    const server = makeServer()
-    const sendSpy = vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
-    wireMcpLogging(server)
-
-    getLogger('document-store').warning({ workspaceId: 'ws_1' }, 'skipped corrupt row')
-
-    expect(sendSpy).toHaveBeenCalledTimes(1)
-    expect(sendSpy).toHaveBeenCalledWith({
-      level: 'warning',
-      logger: 'document-store',
-      data: { msg: 'skipped corrupt row', workspaceId: 'ws_1' },
+  it("forwards a record emitted inside a request's scope to that request's sink", () => {
+    const log = sink()
+    runWithRequestLog(log, () => {
+      getLogger('document-store').warning({ workspaceId: 'ws_1' }, 'skipped corrupt row')
     })
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith(
+      'warning',
+      { msg: 'skipped corrupt row', workspaceId: 'ws_1' },
+      'document-store',
+    )
   })
 
-  it('still records to the existing destinations (capture / stderr) so logging keeps working', () => {
-    const server = makeServer()
-    vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
-    wireMcpLogging(server)
+  it('forwards a record emitted outside every request scope to no sink', async () => {
+    const log = sink()
+    let release: () => void = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // A request is in flight (its scope is live, awaiting) while unrelated
+    // code logs from outside it.
+    const inFlight = runWithRequestLog(log, () => held)
+    getLogger('sync-sse').warning({ workspaceId: 'ws_other' }, 'refused')
+    release()
+    await inFlight
+    expect(log).not.toHaveBeenCalled()
+    expect(cap.records.map((r) => r.msg)).toContain('refused')
+  })
 
-    getLogger('app').error('boom')
+  it('keeps two interleaved requests apart across awaits', async () => {
+    const a = sink()
+    const b = sink()
+    let releaseB: () => void = () => {}
+    const bReady = new Promise<void>((resolve) => {
+      releaseB = resolve
+    })
+    const callA = runWithRequestLog(a, async () => {
+      await bReady
+      getLogger('t').warning('from a')
+    })
+    const callB = runWithRequestLog(b, async () => {
+      getLogger('t').warning('from b')
+      releaseB()
+      await callA
+      getLogger('t').warning('from b again')
+    })
+    await Promise.all([callA, callB])
+    expect(a.mock.calls.map((c) => (c[1] as { msg: string }).msg)).toEqual(['from a'])
+    expect(b.mock.calls.map((c) => (c[1] as { msg: string }).msg)).toEqual([
+      'from b',
+      'from b again',
+    ])
+  })
 
+  it('still records to the other destinations so logging keeps working', () => {
+    runWithRequestLog(sink(), () => getLogger('app').error('boom'))
     expect(cap.records).toHaveLength(1)
     expect(cap.records[0]).toMatchObject({ level: 'error', scope: 'app', msg: 'boom' })
   })
 
-  it('swallows sendLoggingMessage rejections so logging never crashes the daemon', async () => {
-    const server = makeServer()
-    vi.spyOn(server, 'sendLoggingMessage').mockRejectedValue(new Error('no peer'))
-    wireMcpLogging(server)
-
-    expect(() => getLogger('any').notice('peer-less')).not.toThrow()
-    // Wait one microtask so the unhandled promise resolution surfaces if it
-    // would have leaked — vitest fails the test on unhandled rejections.
+  it('swallows a rejecting sink so logging never crashes the daemon', async () => {
+    const log = vi.fn(() => Promise.reject(new Error('no peer')))
+    expect(() => runWithRequestLog(log, () => getLogger('any').notice('peer-less'))).not.toThrow()
+    // One microtask so an unhandled rejection would surface; vitest fails the
+    // test on one.
     await Promise.resolve()
-    expect(cap.records).toHaveLength(1)
+    expect(log).toHaveBeenCalledTimes(1)
   })
 
-  it('restore() detaches the MCP destination so subsequent records skip sendLoggingMessage', () => {
-    const server = makeServer()
-    const sendSpy = vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
-    const handle = wireMcpLogging(server)
-    handle.restore()
-
-    getLogger('after').info('post-restore')
-
-    expect(cap.records).toHaveLength(1)
-    expect(sendSpy).not.toHaveBeenCalled()
-  })
-
-  it('does not leak destinations when the caller forgets to call restore() but the server closes', async () => {
-    // The HTTP /mcp handler in app.ts closes the underlying transport in
-    // its finally block. wireMcpLogging discards the handle inside
-    // createMcpServer, so the destination has to come back
-    // automatically when the server closes — otherwise every per-request
-    // server permanently grows the destination set.
+  it('adds no destination per server, so per-request servers cannot grow the set', () => {
     const baseline = _destinationCountForTests()
-
-    for (let i = 0; i < 20; i++) {
-      const server = makeServer()
-      vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(undefined)
-      // Match the createMcpServer wiring: chain restore() onto
-      // the server's onclose so the caller does not have to remember.
-      const handle = wireMcpLogging(server)
-      const previousOnClose = server.server.onclose?.bind(server.server)
-      server.server.onclose = () => {
-        try {
-          handle.restore()
-        } finally {
-          previousOnClose?.()
-        }
-      }
-      // Mirror what the MCP SDK does internally when the connected
-      // transport closes: invoke server.server.onclose. McpServer.close()
-      // alone is a no-op when no transport was attached, so calling the
-      // hook directly is the most faithful simulation here.
-      server.server.onclose?.()
-    }
-
+    for (let i = 0; i < 20; i++) wireMcpLogging(makeServer())
     expect(_destinationCountForTests()).toBe(baseline)
   })
 })
