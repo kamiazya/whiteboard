@@ -14,7 +14,7 @@
 //
 // The dev daemon is the checkout's shared one: it is ensured, never stopped.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, openSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -22,9 +22,9 @@ import { chromium } from 'playwright'
 import { resolveRepoRootFromGit } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
 import {
   cdpPortRefusal,
+  cdpReadyPort,
   chromiumArgs,
   devServerUrl,
-  devToolsActivePortFile,
   installHost,
   portIsFree,
 } from './dev-connected-lib.mjs'
@@ -113,7 +113,7 @@ if (built.status !== 0) fail('the extension did not build')
 const chromePath = process.env.WHITEBOARD_DEV_CONNECTED_CHROME || chromium.executablePath()
 if (!existsSync(chromePath)) {
   fail(
-    `no Chromium at ${chromePath} — run \`pnpm exec playwright install chromium\` once, or set WHITEBOARD_DEV_CONNECTED_CHROME=<path>`,
+    `no Chromium at ${chromePath} — run \`pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium\` once, or set WHITEBOARD_DEV_CONNECTED_CHROME=<path>`,
   )
 }
 
@@ -226,10 +226,7 @@ browser.once('exit', (code, signal) => {
 
 const cdpPort = await waitFor(
   'Chromium',
-  () => {
-    const file = devToolsActivePortFile(profileDir)
-    return existsSync(file) ? readFileSync(file, 'utf8').split('\n')[0] : undefined
-  },
+  () => cdpReadyPort({ profileDir, cdpPort: Number(options['cdp-port']) }),
   30_000,
   ` — see ${logPath}`,
 )
