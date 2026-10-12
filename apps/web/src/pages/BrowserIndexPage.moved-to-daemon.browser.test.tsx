@@ -21,6 +21,7 @@ import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
+  switchBrowserWorkspace,
 } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
@@ -34,6 +35,7 @@ import { BrowserIndexPage } from './BrowserIndexPage.js'
 claimIsolatedWhiteboardDb('browserindexpage-movedtodaemon')
 
 const NEIGHBOUR = '01ARZ3NDEKTSV4RRFFQ69G5FD0'
+const THIRD = '01ARZ3NDEKTSV4RRFFQ69G5FD1'
 
 beforeEach(async () => {
   await clearWhiteboardDb()
@@ -90,6 +92,24 @@ it('on hearing the move, lists a workspace still kept here and says why', async 
   await waitFor(() => expect(titles()).toEqual(['kept']), { timeout: 15_000 })
   expect(getBrowserWorkspaceId()).toBe(NEIGHBOUR)
   expect(screen.queryByRole('alert')).toBeNull()
+})
+
+it('drops the notice once the person switches to another workspace', async () => {
+  const movedId = await seedTwoWorkspaces()
+  const index = new FoldingBrowserIndex()
+  await index.createWorkspace({ workspaceId: THIRD })
+  await index.createDocument({ workspaceId: THIRD, path: 'elsewhere', kind: 'markdown' })
+  renderList()
+  await waitFor(() => expect(titles()).toEqual(['untitled']), { timeout: 15_000 })
+  await removeElsewhere(movedId)
+  announceWorkspaceRemoved(movedId)
+  await screen.findByTestId('workspace-moved-notice', {}, { timeout: 15_000 })
+  await waitFor(() => expect(titles()).toEqual(['kept']), { timeout: 15_000 })
+
+  await switchBrowserWorkspace(THIRD)
+
+  await waitFor(() => expect(titles()).toEqual(['elsewhere']), { timeout: 15_000 })
+  expect(screen.queryByTestId('workspace-moved-notice')).toBeNull()
 })
 
 it('meeting the refusal on a load, moves off it instead of reporting a failure', async () => {

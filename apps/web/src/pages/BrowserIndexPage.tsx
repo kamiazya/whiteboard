@@ -284,15 +284,22 @@ function useFollowOtherTabs(
  * (the identity change re-reads the list) and says why it did, instead of
  * reporting the registry's refusal as storage that failed.
  */
-function useLeaveRemovedWorkspace() {
-  const [moved, setMoved] = useState(false)
+function useLeaveRemovedWorkspace(activeId: string | null) {
+  // The notice belongs to the workspace this tab landed on: it stays while
+  // that one is shown and goes once the person switches anywhere else.
+  const [left, setLeft] = useState<{ removed: string; landedOn: string | null } | null>(null)
   const onRemoved = useCallback((workspaceId: string) => {
-    setMoved(true)
+    setLeft({ removed: workspaceId, landedOn: null })
     // A registry that will not read leaves the list where it is, and its
     // next load says so through the ordinary failure.
     leaveRemovedWorkspace(workspaceId).catch(() => undefined)
   }, [])
-  return { moved, onRemoved }
+  useEffect(() => {
+    if (left === null || activeId === null || activeId === left.removed) return
+    if (left.landedOn === null) setLeft({ ...left, landedOn: activeId })
+    else if (left.landedOn !== activeId) setLeft(null)
+  }, [left, activeId])
+  return { moved: left !== null, onRemoved }
 }
 
 interface BrowserIndexListingInput {
@@ -326,7 +333,7 @@ function useBrowserIndexListing(props: BrowserIndexListingInput) {
   // panel re-reads whenever this identity changes, exactly as on the daemon
   // page.
   const [filesRevision, setFilesRevision] = useState(0)
-  const leave = useLeaveRemovedWorkspace()
+  const leave = useLeaveRemovedWorkspace(activeWorkspace?.workspaceId ?? null)
   useFollowOtherTabs(activeWorkspace?.workspaceId ?? null, setFilesRevision, leave.onRemoved)
 
   useBrowserDocumentsLoad({
