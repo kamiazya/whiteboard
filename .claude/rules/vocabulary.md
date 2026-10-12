@@ -145,7 +145,8 @@ browser's whole workspace record into a daemon workspace as a CRDT merge —
 identity, history and referenced images survive, and path collisions
 surface as shadowed. The DEMOTE (2026-09-04): once every document and
 image is VERIFIED on the daemon — read back from this browser's own
-replica, not from the response — the old browser record is deleted
+replica, not from the response — and with every trash entry and version
+confirmed (`trashStored`/`versionsKept`), the old browser record is deleted
 (`lib/demote-browser-workspace.ts`); what remains is a cached replica under
 the daemon workspace's id, read-only when the daemon is unreachable. An
 unverified move keeps the browser copy and says so. Copy may

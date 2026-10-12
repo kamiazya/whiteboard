@@ -46,7 +46,12 @@ test('--help, an unknown option, a missing kind and an unlisted kind print usage
   }
 })
 
-test('dogfood-triage is a recordable kind', () => {
-  assert.equal(record('dogfood-triage').status, 0)
-  rmSync(logPath)
+// A kind is recordable only while audit-nudge reads it: a row nothing reads says a cadence is
+// being watched when nobody is watching it. dogfood-triage has no cadence check — its runs need a
+// browser MCP the session may not have, so a nudge would be one nobody could act on.
+test('dogfood-triage is refused: nothing reads that kind', () => {
+  const result = record('dogfood-triage')
+  assert.equal(result.status, 2, result.stderr)
+  assert.match(result.stderr, /unknown kind dogfood-triage/)
+  assert.equal(existsSync(logPath), false)
 })

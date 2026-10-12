@@ -9,7 +9,7 @@
 import { readFacets, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { readTagLibrary, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { carriesATag, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-server-core'
+import { drawsATag, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-server-core'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { documentExists, getDoc } from '../store/document-store.js'
@@ -48,15 +48,16 @@ async function readCanvas(
  * decision 5): what the document at `tags` declares, or nothing. Probes
  * existence FIRST — `getDoc` answers a missing path with an empty document,
  * which would read as a library declaring nothing rather than as no library.
- * Asked only for a tagged board, so an untagged one costs neither the probe
- * nor the read.
+ * Asked only when `drawsATag` says so, so an untagged board costs neither the
+ * probe nor the read. This export draws the board alone and resolves no
+ * reference, so the board is the whole of what it draws.
  */
 async function libraryFor(
   workspaceId: string,
   canvas: SpatialCanvas,
   scope: StoreScope,
 ): Promise<TagLibrary | undefined> {
-  if (!carriesATag(canvas)) return undefined
+  if (!drawsATag([canvas])) return undefined
   if (!(await documentExists(workspaceId, TAG_LIBRARY_PATH, scope))) return undefined
   return readTagLibrary(readFacets(await getDoc(workspaceId, TAG_LIBRARY_PATH, scope)))
 }

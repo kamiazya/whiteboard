@@ -3,6 +3,7 @@ import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
+  DEFAULT_FILE_GRACE_MS,
   type FileReferenceReads,
   scanFileReferences,
   type UnjudgedFileHolder,
@@ -22,15 +23,11 @@ import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Garbage-collect files in a workspace's files directory that no document
-// uses. Used means referenced by a live document or a trashed one (a restore
-// brings it back under the same id) and, when a versionStore is supplied, by
-// any saved past version state.
-//
-// Live-only mode (no versionStore) is cheap and works well for workspaces
-// that do not depend on saved-version restore for image fidelity. Pass a
-// VersionStore to walk every saved version's reconstructed state too;
-// that protects images that only the past states reference, at the cost
-// of one Loro fork+checkout per version per document.
+// uses. Used means referenced by a live document, a trashed one (a restore
+// brings it back under the same id) or a saved version of either. The
+// version store is required: a pass without it would delete what a version
+// restore brings back, and walking it costs one Loro fork+checkout per
+// version.
 //
 // A scan that cannot read something it must judge (a version, a trash entry,
 // a workspace node this build does not understand) refuses to purge rather
@@ -54,19 +51,10 @@ function workspaceFilesDir(scope: StoreScope, workspaceId: string): string {
   )
 }
 
-// Internal-only description of a document/version that GC could not safely
-// inspect. Not a persisted or wire type, so no Zod schema — kept as a
-// discriminated union purely to make the fail-closed reason legible in logs
-// and error messages.
-type SkippedScanTarget =
-  | { kind: 'version'; path: string; versionId: string; cause: unknown }
-  | { kind: 'unreadable-node'; treeId: string }
-  | { kind: 'trash'; documentId: string; cause: unknown }
-
 export class IncompleteFileGcScanError extends Error {
   constructor(
     public readonly workspaceId: string,
-    public readonly skipped: ReadonlyArray<SkippedScanTarget>,
+    public readonly skipped: ReadonlyArray<UnjudgedFileHolder>,
   ) {
     super(
       `file-gc: refusing to purge ${workspaceId} because ${skipped.length} target(s) could not be inspected`,
@@ -125,7 +113,7 @@ export function incompleteFileGcScanErrorBody(
 async function collectReferencedFileIds(
   workspaceId: string,
   scope: StoreScope,
-  versionStore?: GcVersionReader,
+  versionStore: GcVersionReader,
 ): Promise<Set<string>> {
   const record = await openWorkspaceDocIfStored(workspaceId, scope)
   if (record === null) return new Set()
@@ -139,30 +127,26 @@ async function collectReferencedFileIds(
       }
       return stored?.bytes ?? null
     },
-    ...(versionStore === undefined ? {} : { versions: versionReads(workspaceId, versionStore) }),
+    versions: versionReads(workspaceId, versionStore),
   })
-  const skipped = scan.unjudged.map((target) => skippedTarget(workspaceId, target))
-  if (skipped.length > 0) {
-    throw new IncompleteFileGcScanError(workspaceId, skipped)
+  if (scan.unjudged.length > 0) {
+    for (const target of scan.unjudged) logUnjudged(workspaceId, target)
+    throw new IncompleteFileGcScanError(workspaceId, scan.unjudged)
   }
   return scan.referenced
 }
 
 /**
- * The version store as the scan reads it.
- *
- * ponytail: this store addresses a history by PATH, so a trashed document's
- * versions — and a shadowed one's, whose path names another document — are
- * not reached here. The browser keeper's rows are keyed by document id and do
- * reach them; listing by `documentId` is the upgrade that closes the gap.
+ * The version store as the scan reads it. Listed by document id, not path:
+ * a trashed document has no path and a shadowed one's names another
+ * document, yet a restore brings either back with its versions.
  */
 function versionReads(
   workspaceId: string,
   versionStore: GcVersionReader,
 ): NonNullable<FileReferenceReads['versions']> {
   return {
-    list: async (holder) =>
-      holder.trashed ? [] : (await versionStore.list(workspaceId, holder.path)).map((v) => v.id),
+    list: (holder) => versionStore.listIdsByDocument(workspaceId, holder.documentId),
     load: (_holder, versionId) => versionStore.load(workspaceId, versionId),
   }
 }
@@ -172,21 +156,21 @@ function versionReads(
  * judge refuses the whole purge, and the log is where an operator learns
  * which target held it back.
  */
-function skippedTarget(workspaceId: string, target: UnjudgedFileHolder): SkippedScanTarget {
+function logUnjudged(workspaceId: string, target: UnjudgedFileHolder): void {
   switch (target.kind) {
     case 'unreadable-node':
       log.warning({ workspaceId, treeId: target.treeId }, 'unreadable workspace node')
-      return target
+      return
     case 'trash':
       log.warning(
         { workspaceId, documentId: target.documentId, err: target.cause },
         'skipped trash entry',
       )
-      return target
+      return
     case 'version': {
-      const { path, versionId, cause } = target
-      log.warning({ workspaceId, path, versionId, err: cause }, 'skipped version')
-      return { kind: 'version', path, versionId, cause }
+      const { documentId, path, versionId, cause } = target
+      log.warning({ workspaceId, documentId, path, versionId, err: cause }, 'skipped version')
+      return
     }
   }
 }
@@ -196,10 +180,10 @@ function skippedTarget(workspaceId: string, target: UnjudgedFileHolder): Skipped
  * caller (and a test double) supplies what the scan uses, and a new method on
  * `VersionStore` does not reach a fake that cannot know it.
  */
-type GcVersionReader = Pick<VersionStore, 'list' | 'load'>
+export type GcVersionReader = Pick<VersionStore, 'listIdsByDocument' | 'load'>
 
 export interface PurgeFilesOptions {
-  versionStore?: GcVersionReader
+  versionStore: GcVersionReader
   // Don't unlink files whose mtime is younger than this many ms. Closes
   // the upload-but-not-yet-saveDocument race: routes/files.ts writes the
   // blob first, the user (or agent) calls saveDocument later to add the
@@ -213,8 +197,6 @@ export interface PurgeFilesOptions {
    */
   scope?: StoreScope
 }
-
-const DEFAULT_GRACE_MS = 60 * 60 * 1000
 
 /**
  * Delete the uploads nothing points at any more, and report what went.
@@ -290,12 +272,12 @@ function resolveGraceMs(options: PurgeFilesOptions): number {
   // the fallback below.
   const parsed = parseFileGcGraceMs(process.env)
   if (parsed.ok && parsed.value !== null) return parsed.value
-  return DEFAULT_GRACE_MS
+  return DEFAULT_FILE_GRACE_MS
 }
 
 export async function purgeDanglingFiles(
   workspaceId: string,
-  options: PurgeFilesOptions = {},
+  options: PurgeFilesOptions,
 ): Promise<PurgeFilesResult> {
   validateWorkspaceId(workspaceId)
   const scope = options.scope ?? globalStoreScope

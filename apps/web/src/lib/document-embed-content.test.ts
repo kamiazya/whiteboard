@@ -17,7 +17,11 @@ import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { loadBrowserReference, resetEmbedIndexForTests } from './document-embed-content.js'
+import {
+  BROWSER_FILE_ADAPTER,
+  loadBrowserReference,
+  resetEmbedIndexForTests,
+} from './document-embed-content.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 
@@ -170,5 +174,41 @@ describe('loadBrowserReference', () => {
 
     const source = await loadBrowserReference(entry.documentId)
     expect(source).toEqual({ documentId: entry.documentId, name: 'The Plan', canvas })
+  })
+})
+
+describe('BROWSER_FILE_ADAPTER, stored images', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+  })
+
+  it('hands back the bytes of an image it stored, under the reference it answered', async () => {
+    const stored = await BROWSER_FILE_ADAPTER.storeImage(
+      new File([new Uint8Array([137, 80, 78, 71])], 'dot.png', { type: 'image/png' }),
+    )
+    if (!stored.ok) throw new Error(stored.reason)
+
+    const blob = await BROWSER_FILE_ADAPTER.loadImageBlob(stored.ref)
+
+    expect(blob === undefined ? undefined : [...new Uint8Array(await blob.arrayBuffer())]).toEqual([
+      137, 80, 78, 71,
+    ])
+  })
+
+  it('answers an image it never stored with no bytes and no URL', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+    try {
+      await expect(
+        BROWSER_FILE_ADAPTER.loadImageBlob('asset:never-stored'),
+      ).resolves.toBeUndefined()
+      await expect(BROWSER_FILE_ADAPTER.loadImageUrl('asset:never-stored')).resolves.toBeUndefined()
+      expect(createObjectURL).not.toHaveBeenCalled()
+    } finally {
+      createObjectURL.mockRestore()
+    }
+  })
+
+  it('scopes its files to this origin, the one store every browser workspace shares', () => {
+    expect(BROWSER_FILE_ADAPTER.fileScope).toBe(`browser:${location.origin}`)
   })
 })

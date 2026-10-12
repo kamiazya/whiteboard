@@ -707,7 +707,8 @@ export async function listDocuments(
     // Absent rather than null when unset: a document nobody renamed has no
     // name of its own to report.
     ...(entry.name === undefined ? {} : { name: entry.name }),
-    // Every tree write stamps updatedAt and the fold carries the row
+    // A create and a content write stamp updatedAt; a rename or a move
+    // does not, since neither edits the document. The fold carries the row
     // value; a record written before that stamp existed simply has none,
     // and the epoch is the honest "unknown" for our own pre-release data.
     updatedAt: new Date(entry.updatedAt ?? entry.createdAt ?? 0).toISOString(),

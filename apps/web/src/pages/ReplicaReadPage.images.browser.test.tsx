@@ -1,0 +1,157 @@
+/**
+ * The offline page draws the pictures its replica cached: pulled while the
+ * daemon was there, then read on a cold start with nothing connected and
+ * nothing held in memory — the state a closed tab and a stopped daemon leave.
+ */
+import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { cleanup, render, screen } from '@testing-library/react'
+import { LoroDoc } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
+import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { cacheDaemonWorkspace } from '../lib/replica-cache.js'
+import { saveOfflinePasskey } from '../lib/replica-offline-passkey.js'
+import { REPLICA_IMAGE_UNAVAILABLE } from '../lib/replica-record.js'
+import { REPLICA_STATE_COPY } from '../lib/replica-state-copy.js'
+import { connectReplicaKeeper } from '../lib/replica-store.js'
+import { rememberReplicaKey } from '../lib/replica-unlock.js'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { jsonResponse } from '../test-utils/json-response.js'
+import { ReplicaReadPage } from './ReplicaReadPage.js'
+
+claimIsolatedWhiteboardDb('replica-read-page-images')
+
+const DAEMON = 'http://127.0.0.1:3099'
+const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FD0'
+const BOARD = '01ARZ3NDEKTSV4RRFFQ69G5FD1'
+const SEALED_KEYS = 'whiteboard:replica-sealed-keys'
+const OFFLINE_PASSKEYS = 'whiteboard:replica-offline-passkeys'
+const IMAGES_KEY = 'whiteboard:replica-images'
+const PRF = new Uint8Array(32).fill(11)
+const RAW_ID = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])
+
+const KEY_RESPONSE = {
+  workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
+  workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
+  tier: 'offline',
+} as const
+
+/** A 1x1 PNG: real image bytes, so the page has something an <image> can show. */
+const PNG = Uint8Array.from(
+  atob(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  ),
+  (c) => c.charCodeAt(0),
+)
+
+function boardNaming(...fileIds: string[]): LoroDoc {
+  const doc = new LoroDoc()
+  createWorkspaceDocumentAtPath(doc, { path: 'photo', documentId: BOARD, kind: 'spatial' })
+  writeSpatialCanvas(documentContainers(doc, BOARD), {
+    nodes: fileIds.map((id, i) =>
+      fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 220, y: 0, width: 200, height: 200 }),
+    ),
+    edges: [],
+  })
+  doc.commit()
+  return doc
+}
+
+/** The daemon while it was there: key, snapshot, and the file route for `serves` alone. */
+function daemon(record: LoroDoc, serves: readonly string[]): typeof globalThis.fetch {
+  return (async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    if (url.endsWith('/replica-key')) return jsonResponse(KEY_RESPONSE)
+    if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
+      return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
+    }
+    const file = /\/document\/photo\/file\/([\w-]+)$/.exec(url)?.[1]
+    if (file !== undefined && serves.includes(file)) {
+      return new Response(PNG as BodyInit, { headers: { 'Content-Type': 'image/png' } })
+    }
+    return new Response('not found', { status: 404 })
+  }) as typeof globalThis.fetch
+}
+
+/** Pulls the replica, then leaves what closing the tab with the daemon stopped leaves. */
+async function pullThenGoOffline(record: LoroDoc, serves: readonly string[]): Promise<void> {
+  const fetch = daemon(record, serves)
+  connectReplicaKeeper({ baseUrl: DAEMON, fetch })
+  const pulled = await cacheDaemonWorkspace({
+    fetch,
+    daemonBaseUrl: DAEMON,
+    workspaceId: DAEMON_WS,
+    workspaceDocs: new BrowserWorkspaceDocs(),
+  })
+  if (pulled.kind !== 'ok') throw new Error(`pull failed: ${pulled.kind}`)
+  await rememberReplicaKey({
+    daemonBaseUrl: DAEMON,
+    workspaceId: DAEMON_WS,
+    response: KEY_RESPONSE,
+    prfOutput: PRF,
+  })
+  saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: bytesToBase64Url(RAW_ID), prfSalt: 'AAAA' })
+  connectReplicaKeeper(null)
+  forgetAllForTests()
+}
+
+/** Opens the copy with the passkey, offline, and selects the board. */
+async function unlockAndOpenBoard(): Promise<void> {
+  vi.spyOn(navigator.credentials, 'get').mockResolvedValue({
+    rawId: RAW_ID.buffer,
+    response: {
+      authenticatorData: new Uint8Array(37).fill(1).buffer,
+      clientDataJSON: new TextEncoder().encode('{"type":"webauthn.get"}').buffer,
+      signature: new Uint8Array([7, 7, 7]).buffer,
+    },
+    getClientExtensionResults: () => ({ prf: { results: { first: PRF.buffer } } }),
+  } as unknown as Credential)
+  render(<ReplicaReadPage workspaceId={DAEMON_WS} daemonBaseUrl={DAEMON} onReconnect={vi.fn()} />)
+  await userEvent.click(
+    await screen.findByRole('button', { name: REPLICA_STATE_COPY.unlockable.action }),
+  )
+  await screen.findByTestId('replica-state-readable')
+  await userEvent.click(await screen.findByText('photo'))
+}
+
+const drawnText = (): string =>
+  [...document.querySelectorAll('svg text')].map((node) => node.textContent ?? '').join(' ')
+
+beforeEach(clearWhiteboardDb)
+afterEach(() => {
+  vi.restoreAllMocks()
+  connectReplicaKeeper(null)
+  forgetAllForTests()
+  for (const key of [SEALED_KEYS, OFFLINE_PASSKEYS, IMAGES_KEY]) localStorage.removeItem(key)
+  cleanup()
+})
+
+describe('ReplicaReadPage images', () => {
+  it('draws a cached picture offline, from the bytes this device holds', async () => {
+    await pullThenGoOffline(boardNaming('img-cat'), ['img-cat'])
+    await unlockAndOpenBoard()
+
+    await vi.waitFor(() => {
+      const href = document.querySelector('svg image')?.getAttribute('href') ?? ''
+      expect(href).toMatch(/^blob:/)
+    })
+    expect(drawnText()).not.toContain('asset:')
+  })
+
+  it('labels a picture it holds no bytes for as unavailable, never by its raw id', async () => {
+    await pullThenGoOffline(boardNaming('img-cat', 'img-gone'), ['img-cat'])
+    await unlockAndOpenBoard()
+
+    await vi.waitFor(() => expect(drawnText()).toContain(REPLICA_IMAGE_UNAVAILABLE))
+    expect(drawnText()).not.toContain('asset:')
+    expect(document.querySelectorAll('svg image')).toHaveLength(1)
+  })
+})

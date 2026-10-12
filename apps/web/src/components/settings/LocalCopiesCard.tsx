@@ -23,7 +23,7 @@
  * still appears, because a list of "every copy" that silently omits half of
  * them is worse than no list.
  */
-import { useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
 import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
@@ -44,6 +44,8 @@ interface CopyRow {
   /** What to call it: the display name a keeper recorded, else its handle. */
   label: string
   keeper: 'browser' | 'daemon'
+  /** For a browser-kept row: how many documents it holds, once counted. */
+  documentCount?: number
   /** Present for a replica: which daemon keeps the original. */
   daemonBaseUrl?: string
   syncedAt?: string
@@ -59,13 +61,26 @@ function replicaRow(entry: ReplicaMatch): CopyRow {
   }
 }
 
+/**
+ * What a browser-kept row says, by what it holds. An empty workspace is the
+ * only copy of nothing, so it says it is empty rather than warning about a
+ * loss that cannot happen — the case a demote leaves when it moved the last
+ * browser workspace and a fresh one took its name beside the daemon's.
+ */
+function browserKeptCopy(documentCount: number | undefined): string {
+  if (documentCount === 0) return 'Kept in this browser, and empty.'
+  const noun = documentCount === 1 ? 'document' : 'documents'
+  const holds = documentCount === undefined ? '' : `, holding ${documentCount} ${noun}`
+  return `Kept in this browser${holds} — the only copy of it anywhere, so it cannot be removed here.`
+}
+
 function CopyRowDescription({ row }: { row: CopyRow }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-sm">{row.label}</span>
       <span className="text-muted-foreground text-xs">
         {row.keeper === 'browser' ? (
-          'Kept in this browser — the only copy of it anywhere, so it cannot be removed here.'
+          browserKeptCopy(row.documentCount)
         ) : (
           <>
             Cached from <DaemonAddress baseUrl={row.daemonBaseUrl ?? ''} />
@@ -122,10 +137,31 @@ function CopyRowItem({
   )
 }
 
+function withDocumentCount(row: CopyRow, counts: ReadonlyMap<string, number>): CopyRow {
+  const documentCount = row.keeper === 'browser' ? counts.get(row.workspaceId) : undefined
+  return documentCount === undefined ? row : { ...row, documentCount }
+}
+
+/**
+ * How many documents each browser-kept workspace holds, or `undefined` when
+ * they cannot be counted. A count reads every workspace's tree, which loads
+ * loro-crdt's WASM, so it is imported only when there is a row to count.
+ */
+async function readBrowserDocumentCounts(): Promise<ReadonlyMap<string, number> | undefined> {
+  try {
+    const { browserDocumentCounts } = await import('../../lib/browser-document-counts.js')
+    return await browserDocumentCounts()
+  } catch (error) {
+    log.info('the browser workspaces could not be counted', error)
+    return undefined
+  }
+}
+
 /** Every copy this device keeps, read from the two sources that list them; `load` re-reads. */
 function useCopyRows(settingsStore: UserSettingsStore) {
   const [rows, setRows] = useState<CopyRow[] | null>(null)
   const [keptReadable, setKeptReadable] = useState(true)
+  const [counts, setCounts] = useState<ReadonlyMap<string, number>>(new Map())
 
   const load = useCallback(async () => {
     // The claims come from the settings blob in localStorage and need no
@@ -155,13 +191,22 @@ function useCopyRows(settingsStore: UserSettingsStore) {
     }
     setRows([...kept, ...replicas])
     setKeptReadable(keptReadable)
+    if (kept.length === 0) return
+    // After the rows are drawn, and held apart from them: a count landing
+    // after a later re-read must not put back a row that re-read dropped.
+    const counted = await readBrowserDocumentCounts()
+    if (counted !== undefined) setCounts(counted)
   }, [settingsStore])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  return { rows, keptReadable, load }
+  const counted = useMemo(
+    () => (rows === null ? null : rows.map((row) => withDocumentCount(row, counts))),
+    [rows, counts],
+  )
+  return { rows: counted, keptReadable, load }
 }
 
 export function LocalCopiesCard({

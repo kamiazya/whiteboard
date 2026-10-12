@@ -96,6 +96,7 @@ export type SyncTextBreach =
     }
   | {
       readonly shape: 'container-name'
+      /** The name's length, or the key's for a child a peer's op id names, which a copy names by it. */
       readonly chars: number
       /** The container whose name is past the bound. */
       readonly container: ContainerID
@@ -285,8 +286,9 @@ const BOUNDED_VALUES: readonly BoundedValue[] = [
 
 /**
  * No update this short can breach any bound above, nor name a container past
- * `CONTAINER_NAME_MAX_CHARS` (`sync-text-limits.container-names.test.ts` pins
- * that encoding).
+ * `CONTAINER_NAME_MAX_CHARS` or nest one under a key past it: the bytes carry
+ * the name or key whole (`sync-text-limits.container-names.test.ts` pins that
+ * encoding).
  */
 const SMALLEST_VALUE_BOUND = Math.min(
   CONTAINER_NAME_MAX_CHARS,

@@ -8,7 +8,7 @@ import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-se
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
@@ -19,6 +19,7 @@ import {
   openDocumentStore,
   replicaKeyStatus,
 } from './replica-store.js'
+import { withReplicaEntry } from './replicas.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from './user-settings-store.js'
 
@@ -191,6 +192,28 @@ describe('replica-store', () => {
 
     // Explicit forget is idempotent and safe to call again.
     forgetDaemonKeys(DAEMON)
+  })
+
+  it('a disconnect withholds the key of a replica the registry records, not only a marked one', async () => {
+    // After its first pull a replica is known through the persisted registry
+    // rather than this tab's in-memory mark — the state every real one is in.
+    const workspaceId = freshWorkspaceId()
+    const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
+    onTestFinished(() => createUserSettingsStore().reset())
+    createUserSettingsStore().update((current) =>
+      withReplicaEntry(current, workspaceId, {
+        daemonBaseUrl: DAEMON,
+        syncedAt: new Date().toISOString(),
+      }),
+    )
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    const store = openDocumentStore(DB_NAME)
+    const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
+    await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) })
+    expect(await store.loadSnapshot({ docRef })).not.toBeNull()
+
+    connectReplicaKeeper(null)
+    await expect(store.loadSnapshot({ docRef })).rejects.toBeInstanceOf(ReplicaKeyWithheldError)
   })
 
   it('Settings disconnect drops the connection at once: a load before App re-renders mints nothing', async () => {

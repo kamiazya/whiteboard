@@ -574,10 +574,11 @@ function entryOf(found: {
   updatedAt?: number
   contentDigest: string
 }): DocumentEntry {
-  // Every tree write stamps updatedAt (falling back to createdAt for a
-  // record written before timestamps landed in the node meta); absent for
-  // one that predates both — the port leaves the field optional for exactly
-  // that record.
+  // A create and a content write stamp updatedAt; a rename or a move does
+  // not, since neither edits the document. Falls back to createdAt for a
+  // record written before timestamps landed in the node meta; absent for one
+  // that predates both — the port leaves the field optional for exactly that
+  // record.
   const stamp = found.updatedAt ?? found.createdAt
   return {
     documentId: found.documentId,

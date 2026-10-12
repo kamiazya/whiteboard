@@ -4,6 +4,7 @@
 // module, so a bound refused in two places is refused in one voice, and
 // `limit-notice-surface.test.ts` fails on these words written anywhere else.
 import {
+  CLIPBOARD_FILES_MAX_BYTES,
   COMMENT_MESSAGE_MAX_CHARS,
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
@@ -127,3 +128,15 @@ export const KEEPER_LIMIT_REASON = {
   tags_too_large:
     'It would give a node, an edge or the board more tags, or a longer tag, than one may carry.',
 } as const satisfies Partial<Record<SyncWriteRefusalCode, string>>
+
+/**
+ * A paste into another workspace or keeper that left pictures out: their
+ * bytes did not come with the copy, or the target refused to store them
+ * (`refusal`, the keeper's own sentence).
+ */
+export function picturesLeftOutNotice(count: number, refusal?: string): string {
+  const pictures = count === 1 ? 'A picture was' : `${COUNT.format(count)} pictures were`
+  if (refusal !== undefined) return `${pictures} left out of the paste: ${refusal}`
+  const limit = `${CLIPBOARD_FILES_MAX_BYTES / (1024 * 1024)} MiB`
+  return `${pictures} left out of the paste: a copy carries up to ${limit} of pictures to another workspace. Copy fewer at a time.`
+}

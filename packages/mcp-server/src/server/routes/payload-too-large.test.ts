@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resolveTestServerDeps,
   testDocumentRouterOptions,
+  testFilesRouterOptions,
   testStoreScope,
   withTempDataDir,
 } from './_test-helpers.js'
@@ -54,7 +55,7 @@ const CASES: readonly {
     route: 'file upload',
     method: 'PUT',
     path: '/api/w/s1/document/canvas-a/file/img1',
-    build: () => createFilesRouter({ scope: testStoreScope(tmp.dir) }),
+    build: () => createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir))),
     limit: 16 * MIB,
     noun: 'Upload',
   },

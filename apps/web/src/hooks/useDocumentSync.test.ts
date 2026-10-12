@@ -736,7 +736,7 @@ describe('useDocumentSync', () => {
 
       let blob: Blob | null | undefined
       await act(async () => {
-        blob = await result.current.exportScene('svg')
+        blob = await result.current.exportScene('svg', { kind: 'spatial' })
       })
 
       expect(blob).not.toBeNull()
@@ -755,14 +755,14 @@ describe('useDocumentSync', () => {
       embedSpy.mockClear()
 
       await act(async () => {
-        await result.current.exportScene('svg')
+        await result.current.exportScene('svg', { kind: 'spatial' })
       })
       // A saved .svg names the family without carrying it: embedding would add
       // ~466 KB for a face any viewer with Roboto already has.
       expect(embedSpy).not.toHaveBeenCalled()
 
       await act(async () => {
-        await result.current.exportScene('png')
+        await result.current.exportScene('png', { kind: 'spatial' })
       })
       expect(embedSpy).toHaveBeenCalledTimes(1)
       // What it embeds into is the rendered scene, not some other string.
@@ -773,7 +773,7 @@ describe('useDocumentSync', () => {
       const backend = makeFakeBackend()
       const { result } = renderHook(() => useDocumentSync(backend))
 
-      const blob = await result.current.exportScene('svg')
+      const blob = await result.current.exportScene('svg', { kind: 'spatial' })
 
       expect(blob).not.toBeNull()
       expect(blob?.type).toBe('image/svg+xml')

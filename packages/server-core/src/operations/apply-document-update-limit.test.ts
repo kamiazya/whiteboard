@@ -76,7 +76,13 @@ function workspaceDeps(store: StoredDoc) {
       throw new Error('a refused promote reached the per-document checkpoint pass')
     },
   }
-  return { liveDocuments, workspaceDocuments, versions: new FakeVersionHistory() }
+  // A refused promote stores nothing, so no blob store is reached.
+  return {
+    liveDocuments,
+    workspaceDocuments,
+    versions: new FakeVersionHistory(),
+    blobStore: {} as never,
+  }
 }
 
 function liveDeps(store: StoredDoc) {

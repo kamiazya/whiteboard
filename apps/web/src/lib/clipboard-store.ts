@@ -6,17 +6,34 @@
  * integration (slice 5) layers on top of this store, and an in-memory
  * slot needs no permissions and cannot race an unmount.
  *
- * File-node references travel by reference, not inline bytes: in
- * browser mode the asset store is origin-global, so a same-tab
- * cross-canvas paste resolves them as-is. Inline `files` assets are the
- * OS-clipboard slice's concern.
+ * Stored pictures travel by reference in the slot, and their bytes beside
+ * it: where those bytes live is per keeper (the daemon keeps them per
+ * workspace), so a paste elsewhere needs them. They are read after the copy,
+ * so the slot holds them as a promise beside the fragment.
  */
 import type { ClipboardFragment } from '@kamiazya/whiteboard-model'
 
-let current: ClipboardFragment | null = null
+type CarriedFiles = NonNullable<ClipboardFragment['files']>
 
-export function writeClipboardFragment(fragment: ClipboardFragment): void {
+let current: ClipboardFragment | null = null
+let carried: { readonly copyId: string; readonly files: Promise<CarriedFiles> } | null = null
+
+export function writeClipboardFragment(
+  fragment: ClipboardFragment,
+  files?: Promise<CarriedFiles>,
+): void {
   current = fragment
+  const copyId = fragment.source?.copyId
+  carried = copyId === undefined || files === undefined ? null : { copyId, files }
+}
+
+/**
+ * The picture bytes this tab read for the copy `copyId`, or undefined once a
+ * later copy replaced it. Keyed by the copy rather than by the fragment
+ * object, because a paste that arrives as clipboard TEXT parses a new one.
+ */
+export function carriedClipboardFiles(copyId: string): Promise<CarriedFiles> | undefined {
+  return carried?.copyId === copyId ? carried.files : undefined
 }
 
 export function readClipboardFragment(): ClipboardFragment | null {
@@ -50,5 +67,6 @@ export function recordReconnection(cutId: string, edgeIds: readonly string[]): v
 /** Test isolation only — production never clears the slot. */
 export function clearClipboardFragmentForTests(): void {
   current = null
+  carried = null
   reconnections.clear()
 }

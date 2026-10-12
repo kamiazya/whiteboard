@@ -10,9 +10,12 @@ import { Hono } from 'hono'
 import { isMissingFileError } from '../../shared/errno.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
-import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
+import {
+  type GcVersionReader,
+  incompleteFileGcScanErrorBody,
+  purgeDanglingFiles,
+} from '../store/file-gc.js'
 import type { StoreScope } from '../store/store-scope.js'
-import type { VersionStore } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { validateFileId, validationErrorBody } from '../validators.js'
 import { parseWorkspaceHandle } from '../workspace-handle.js'
@@ -69,10 +72,8 @@ export interface FilesRouterOptions {
    * purge reads its references from.
    */
   scope: StoreScope
-  // Provide a versionStore for version-aware purge. Without one, the
-  // purge endpoint walks only the live state of each canvas and leaves
-  // files referenced exclusively by saved versions untouched.
-  versionStore?: VersionStore
+  /** The saved versions the purge keeps every image of. */
+  versionStore: GcVersionReader
 }
 
 /**
@@ -181,12 +182,10 @@ export function createFilesRouter(options: FilesRouterOptions) {
   })
 
   // POST /api/workspaces/:workspaceId/files/purge-dangling
-  // Delete files under <workspaceId>/files/ whose stem is not referenced
-  // by any image element in the workspace's live documents OR any branch
-  // tip (main and every other branch), and — when a versionStore is
-  // supplied — any saved version either. Safe and idempotent; a file is
-  // only ever removed once nothing across that full reference set points
-  // at it, so branch/version restore never regresses to a broken image.
+  // Delete the files nothing a user can still reach names — live documents
+  // by id, trash bytes, saved versions of a document a path reaches (not a
+  // trashed or shadowed one's yet: file-gc.ts's `versionReads`), and what an
+  // open proposal in any of them would draw. Idempotent.
   app.post('/api/workspaces/:workspaceId/files/purge-dangling', async (c) => {
     const address = await parseWorkspaceHandle(c, c.req.param('workspaceId'))
     if ('refusal' in address) return address.refusal
@@ -195,9 +194,10 @@ export function createFilesRouter(options: FilesRouterOptions) {
       const result = await purgeDanglingFiles(workspaceId, { versionStore, scope })
       return c.json(result)
     } catch (err) {
-      // 503: fail-closed refusal (some branch/version could not be scanned),
-      // distinct from the 500 corrupt-stored-data path — the caller should
-      // retry rather than treat this as a broken store.
+      // 503: a unit the scan must judge (version, trash bytes, node) could
+      // not be read — corrupt or not, nothing was deleted, and a retry helps
+      // only if the failure was transient; the log names the unit. 500: the
+      // workspace record will not decode, so there is no reference set.
       const incompleteScanBody = incompleteFileGcScanErrorBody(err)
       if (incompleteScanBody) return c.json(incompleteScanBody, 503)
       const body = corruptStoredDataBody(err)

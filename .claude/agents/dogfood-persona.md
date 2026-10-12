@@ -10,7 +10,7 @@ You dogfood the running whiteboard product as a real user — NOT as a tester. S
 
 ## How
 
-1. Use the Playwright MCP browser tools (navigate, snapshot, click, type, etc.) against the given app URL. Load them via ToolSearch if not already available.
+1. Use the Playwright MCP browser tools (navigate, snapshot, click, type, etc.) against the given app URL. Load them via ToolSearch if not already available. **If no browser tool loads, stop at once and report a skip** (`goalAchieved: skip`, or `ready: false` for a preflight), with a reason beginning "no browser tool". Never substitute curl, a scripted browser or reading the source, because the run is about what a user sees. The server exists only when the session's user registered it before starting the session (docs/contributing/development.md, "Give an agent session a browser").
 2. Pursue the persona's goal end-to-end through whatever parts of the product you need. If a specific touched flow is given (review mode), focus there and read the diff first to know what changed.
 3. Be efficient: a handful of meaningful steps toward the goal, not exhaustive crawling. If you hit a hard block, record it and stop.
 4. Do NOT trigger native dialogs (alert/confirm/prompt) — they freeze the browser session.

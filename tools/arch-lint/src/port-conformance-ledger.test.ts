@@ -117,6 +117,12 @@ const CONFORMANCE_LEDGER: readonly LedgerEntry[] = [
     source: 'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts',
     test: 'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.test.ts',
   },
+  {
+    cls: 'FakeBlobStore',
+    port: 'BlobStore',
+    source: 'packages/server-core/src/test-utils/fake-blob-store.ts',
+    test: 'packages/server-core/src/test-utils/fake-blob-store.test.ts',
+  },
 ]
 
 /** An implementer that is not a keeper's store, so has no contract to conform to. */

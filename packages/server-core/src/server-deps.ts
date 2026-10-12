@@ -2,7 +2,7 @@ import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
+import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
 import type { Attestation, OperatorInfo, VersionEntry } from './versions/version-entry.js'
@@ -378,6 +378,34 @@ export interface VersionHistory {
   loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
   /** Saved versions of the document at `path`, newest first. */
   list(workspaceId: string, path: string): Promise<readonly VersionEntry[]>
+  /**
+   * Take in versions ANOTHER keeper saved of documents now merged into this
+   * workspace's record — a promotion's history. Keyed by document id, not by
+   * path, because a row names a document and a carried document may sit at a
+   * path the target contests. A row whose id is already held is left as it
+   * is, so a re-run adds nothing. Answers the carried ids this workspace's
+   * history holds afterwards, read back rather than assumed.
+   */
+  adopt(workspaceId: string, rows: readonly AdoptedVersion[]): Promise<readonly string[]>
+}
+
+/**
+ * A version another keeper saved, as `VersionHistory.adopt` writes it. The
+ * caller has already checked the frontier out of the merged record and
+ * derived `elementCount` and `contentDigest` from that state.
+ */
+export interface AdoptedVersion {
+  readonly id: string
+  readonly documentId: string
+  /** Epoch milliseconds, as the other keeper recorded it. */
+  readonly createdAt: number
+  readonly auto: boolean
+  readonly label?: string
+  readonly operator?: OperatorInfo
+  readonly restoredFrom?: string
+  readonly frontiers: Frontiers
+  readonly elementCount: number
+  readonly contentDigest: string
 }
 
 // Carries the workspaceId because the tree is the address book: resolving a

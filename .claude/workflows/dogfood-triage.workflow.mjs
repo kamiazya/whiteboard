@@ -3,8 +3,9 @@ export const meta = {
   description:
     'Persona-driven exploratory dogfooding of the whole running product via real browser, then triage friction into dedup-aware, classified, verified findings filed as whiteboard documents',
   whenToUse:
-    'Periodically or pre-release, to find real user friction (not diff-scoped). Requires the web app + MCP daemon already running: `pnpm dev` for a browser-kept app, or `pnpm dev:connected --headless` for one connected to the dev daemon — pass its printed app URL as appUrl and start the Playwright MCP with `--cdp-endpoint=<its printed CDP endpoint>`, since that browser is the only one with the extension loaded. Pass args:{personaCount?, appUrl?, existingIssues?, theme?}.',
+    'Periodically or pre-release, to find real user friction (not diff-scoped). Requires the web app + MCP daemon already running: `pnpm dev` for a browser-kept app, or `pnpm dev:connected --headless --cdp-port=9222` for one connected to the dev daemon (pass its printed app URL as appUrl) — AND a session whose user registered the Playwright MCP before starting it, since nothing in the repo registers one and an MCP server\'s args are fixed at session start (recipe: docs/contributing/development.md). Without browser tools the Preflight phase returns `skipped` and spends nothing more. Pass args:{personaCount?, appUrl?, existingIssues?, theme?}.',
   phases: [
+    { title: 'Preflight', detail: 'one agent checks the browser tools load and the app answers; stops the run as a skip otherwise' },
     { title: 'Personas', detail: 'invent diverse user personas + their jobs-to-be-done' },
     { title: 'Dogfood', detail: 'each persona drives the real browser end-to-end (sequential — browser is a shared singleton)' },
     { title: 'Triage', detail: 'dedup vs existing issues, classify, adversarially verify bug claims' },
@@ -59,7 +60,7 @@ const FRICTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    goalAchieved: { enum: ['yes', 'partial', 'no'] },
+    goalAchieved: { enum: ['yes', 'partial', 'no', 'skip'] },
     summary: { type: 'string', description: 'narrative of what the persona did and where it broke down' },
     friction: {
       type: 'array',
@@ -90,9 +91,37 @@ const TRIAGE_SCHEMA = {
     severity: { enum: ['HIGH', 'MEDIUM', 'LOW'] },
     disposition: { enum: ['fix-now', 'backlog', 'wont-fix'] },
     rationale: { type: 'string' },
-    issueSlug: { type: 'string', description: 'kebab-case slug for the whiteboard document if kept' },
+    issueName: { type: 'string', description: 'kebab-case name for the whiteboard document if kept' },
   },
   required: ['isDuplicate', 'verifiedReal', 'severity', 'disposition', 'rationale'],
+}
+
+const PREFLIGHT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ready: { type: 'boolean' },
+    reason: { type: 'string', description: 'why not, when ready is false' },
+  },
+  required: ['ready', 'reason'],
+}
+
+// Every agent that drives the app is told the same thing: the browser tools exist only when the
+// session's user registered the Playwright MCP, and any substitute measures something other
+// than what a user sees.
+const NO_BROWSER =
+  'Load the Playwright MCP browser tools first (ToolSearch "playwright browser_navigate"). If no browser tool loads, stop and report it with a reason beginning "no browser tool" — never substitute curl, a scripted browser or reading the source: the run is about what a user sees.'
+
+// --- Phase 0: preflight — one agent, so a session without a browser spends nothing more ---
+phase('Preflight')
+const preflight = await agent(
+  `Preflight for a dogfooding run — do NOT dogfood. ${NO_BROWSER} If the tools load, navigate to ${APP_URL} and take one snapshot. Answer ready=true only if both worked; otherwise ready=false with the reason.`,
+  { label: 'preflight', phase: 'Preflight', agentType: 'dogfood-persona', schema: PREFLIGHT_SCHEMA },
+)
+if (!preflight || !preflight.ready) {
+  const reason = (preflight && preflight.reason) || 'the preflight agent returned no answer'
+  log(`Skipped: ${reason}`)
+  return { appUrl: APP_URL, skipped: reason }
 }
 
 // --- Phase 1: personas ---
@@ -106,17 +135,24 @@ log(`Generated ${personas.length} personas`)
 
 // --- Phase 2: dogfood (SEQUENTIAL — the browser MCP is a shared singleton, parallel drivers collide) ---
 const runs = []
+let skipped
 for (let i = 0; i < personas.length; i++) {
   const p = personas[i]
   log(`Dogfooding persona ${i + 1}/${personas.length}: ${p.name}`)
   const run = await agent(
     `You are this user, not a tester:\n- Name: ${p.name}\n- Context: ${p.context}\n- Goal: ${p.goal}\n- Success looks like: ${p.successLooksLike}\n\n` +
+      `${NO_BROWSER} (Report that as goalAchieved=skip.)\n\n` +
       `Drive the REAL running app at ${APP_URL} using the Playwright MCP browser tools (navigate, snapshot, click, type, etc.). Pursue YOUR goal end-to-end as this persona would, touching whatever parts of the product you need. ` +
       `Stay in character: when something is confusing, missing, slow, or broken, note it as the user would feel it. Capture concrete friction with repro steps and where it happened. ` +
       `Be efficient: a handful of meaningful steps toward the goal, not exhaustive crawling. If you hit a hard block, record it and stop. Report whether you achieved the goal and the friction you hit.`,
     { label: `dogfood:${p.name}`, phase: 'Dogfood', agentType: 'dogfood-persona', schema: FRICTION_SCHEMA },
   )
   if (run) runs.push({ persona: p, ...run })
+  // The browser went away mid-run: every later persona would only report the same.
+  if (run && run.goalAchieved === 'skip') {
+    skipped = run.summary || 'a persona reported a skip'
+    break
+  }
 }
 
 // flatten friction with persona attribution
@@ -134,7 +170,7 @@ const triaged = (
         `Triage this dogfooding friction item for the whiteboard product.\n` +
           `Item: [${f.kind} / ${f.severity}] ${f.title}\nWhere: ${f.where || 'n/a'}\nDetail: ${f.detail}\nReported by persona: ${f.persona}\n\n` +
           `Existing tracked issues (dedup against these):\n- ${existingList}\n\n` +
-          `Steps: (1) decide if it duplicates an existing issue. (2) If kind=bug, adversarially verify it is genuinely reproducible from the code/app — default verifiedReal=false if you cannot substantiate it; you may inspect the repo. For non-bug UX gaps, judge whether it is a real gap worth tracking. (3) Assign a final severity and a disposition (fix-now / backlog / wont-fix) with a one-line rationale, and a kebab-case issueSlug if kept.`,
+          `Steps: (1) decide if it duplicates an existing issue. (2) If kind=bug, adversarially verify it is genuinely reproducible from the code/app — default verifiedReal=false if you cannot substantiate it; you may inspect the repo. For non-bug UX gaps, judge whether it is a real gap worth tracking. (3) Assign a final severity and a disposition (fix-now / backlog / wont-fix) with a one-line rationale, and a kebab-case issueName if kept.`,
         { label: `triage:${(f.title || '').slice(0, 30)}`, phase: 'Triage', schema: TRIAGE_SCHEMA },
       ).then((t) => ({ ...f, triage: t })),
     ),
@@ -146,6 +182,7 @@ const fixNow = keep.filter((f) => f.triage.disposition === 'fix-now')
 
 return {
   appUrl: APP_URL,
+  ...(skipped ? { skipped } : {}),
   personas: personas.map((p) => ({ name: p.name, goal: p.goal })),
   runs: runs.map((r) => ({ persona: r.persona.name, goalAchieved: r.goalAchieved, summary: r.summary })),
   summary: {
@@ -165,7 +202,7 @@ return {
       where: f.where,
       detail: f.detail,
       rationale: f.triage.rationale,
-      issueSlug: f.triage.issueSlug,
+      issueName: f.triage.issueName,
     }))
     .sort((a, b) => (a.disposition === 'fix-now' ? -1 : 1)),
 }

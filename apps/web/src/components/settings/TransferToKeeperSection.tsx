@@ -91,6 +91,8 @@ function reportFor(result: SendTransferResult): string {
     const n = result.shadowedPaths.length
     parts.push(`${n} path${n === 1 ? '' : 's'} already existed there and both versions were kept.`)
   }
+  const leftBehind = result.leftBehind ?? []
+  if (leftBehind.length > 0) parts.push(`Not carried: ${leftBehind.join('; ')}.`)
   parts.push('This browser still has its copy.')
   return parts.join(' ')
 }

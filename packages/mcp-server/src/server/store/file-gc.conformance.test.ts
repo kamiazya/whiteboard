@@ -7,7 +7,11 @@
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { FILE_COLLECTION_CONFORMANCE } from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
+import { writeProposal } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  conformanceVerdictFor,
+  FILE_COLLECTION_CONFORMANCE,
+} from '@kamiazya/whiteboard-loro-adapter/test-utils/file-collection-conformance'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -47,13 +51,14 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
+function imageNodes(fileIds: readonly string[]) {
+  return fileIds.map((id, i) =>
+    fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 20, y: 0, width: 10, height: 10 }),
+  )
+}
+
 function drawing(fileIds: readonly string[]) {
-  return makeSpatialDoc({
-    nodes: fileIds.map((id, i) =>
-      fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 20, y: 0, width: 10, height: 10 }),
-    ),
-    edges: [],
-  })
+  return makeSpatialDoc({ nodes: imageNodes(fileIds), edges: [] })
 }
 
 /** Written and aged past the default grace window, as `upload` declares. */
@@ -80,6 +85,20 @@ it('reaches the verdict every keeper reaches on the shared scenario', async () =
       case 'draw':
         await saveDocument(WORKSPACE, step.path, drawing(step.draws), { overwrite: true })
         break
+      case 'propose': {
+        const doc = await loadDocument(WORKSPACE, step.path)
+        writeProposal(doc, {
+          id: `p-${step.draws.join('-')}`,
+          changes: imageNodes(step.draws).map((node) => ({
+            id: `c-${node.id}`,
+            status: step.status,
+            op: 'node.add' as const,
+            node,
+          })),
+        })
+        await saveDocument(WORKSPACE, step.path, doc, { overwrite: true })
+        break
+      }
       case 'save-version':
         await versions.save(WORKSPACE, step.path, await loadDocument(WORKSPACE, step.path), {
           auto: false,
@@ -100,9 +119,8 @@ it('reaches the verdict every keeper reaches on the shared scenario', async () =
 
   const result = await purgeDanglingFiles(WORKSPACE, { versionStore: versions })
 
-  expect(result.purgedCount).toBe(FILE_COLLECTION_CONFORMANCE.collected.length)
+  const { kept, collected } = conformanceVerdictFor('daemon')
+  expect(result.purgedCount).toBe(collected.length)
   const remaining = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WORKSPACE))
-  expect(remaining.sort()).toEqual(
-    FILE_COLLECTION_CONFORMANCE.kept.map((fileId) => `${fileId}.png`).sort(),
-  )
+  expect(remaining.sort()).toEqual(kept.map((fileId) => `${fileId}.png`).sort())
 })

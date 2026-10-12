@@ -100,6 +100,51 @@ describe('createDaemonFileAdapter', () => {
     await expect(adapter.loadImageUrl('asset:gone')).resolves.toBeUndefined()
   })
 
+  it('hands back the image bytes themselves, read from the same file route', async () => {
+    const daemonFetch = vi.fn(async () => new Response(new Blob(['12345'])))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    const blob = await adapter.loadImageBlob('asset:file-abc')
+
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/${path}/file/file-abc`)
+    expect(await blob?.text()).toBe('12345')
+    // The bytes, not a URL minted for them: a caller that wants bytes owns no URL to revoke.
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('answers an unreachable daemon with no image, logged, for both image reads', async () => {
+    const daemonFetch = vi.fn(async () => {
+      throw new Error('network down')
+    })
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    await expect(adapter.loadImageBlob('asset:file-abc')).resolves.toBeUndefined()
+    await expect(adapter.loadImageUrl('asset:file-abc')).resolves.toBeUndefined()
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    await expectLoggedFailure('image load failed')
+  })
+
+  it('scopes its files to this workspace on this daemon', () => {
+    const adapterFor = (daemonBaseUrl: string, workspaceId: string) =>
+      createDaemonFileAdapter({ daemonFetch: vi.fn(), daemonBaseUrl, workspaceId, path })
+
+    expect(adapterFor(BASE, WS).fileScope).toBe(`daemon:${BASE}/w/${WS}`)
+    expect(adapterFor(BASE, 'ws-2').fileScope).not.toBe(adapterFor(BASE, WS).fileScope)
+    expect(adapterFor('http://127.0.0.1:4000', WS).fileScope).not.toBe(
+      adapterFor(BASE, WS).fileScope,
+    )
+  })
+
   it('uploads an image and returns the reference the node should carry', async () => {
     const daemonFetch = vi.fn(async () => new Response(null, { status: 204 }))
     const adapter = createDaemonFileAdapter({

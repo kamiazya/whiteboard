@@ -38,9 +38,11 @@ const embedded = (text: string): SpatialCanvas => ({
 
 function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
   const adapter: DocumentFileAdapter = {
+    fileScope: 'test',
     isImageRef: (file) => file.startsWith('asset:'),
     loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     loadImageUrl: vi.fn(async (ref: string) => `blob:${ref}`),
+    loadImageBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
     storeImage: vi.fn(async () => ({ ok: true as const, ref: 'asset:new' })),
     ...overrides,
   }
@@ -198,6 +200,31 @@ describe('useDocumentFileSeams', () => {
 
     expect(adapter.storeImage).toHaveBeenCalledWith(file)
     expect(ref).toEqual({ ok: true, ref: 'asset:new' })
+  })
+
+  it("hands a copy the keeper's picture scope, bytes and store", async () => {
+    const picture = new Blob(['png'], { type: 'image/png' })
+    const adapter = makeAdapter({ loadImageBlob: vi.fn(async () => picture) })
+    // The shipped policy refuses a fetch of a blob: URL (connect-src has no
+    // blob:), so the bytes must come from the keeper, not from a minted URL.
+    const fetchStub = vi.fn(async (url: string) => {
+      if (url.startsWith('blob:')) throw new TypeError('Failed to fetch')
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchStub)
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map(), bodies: [] }),
+    )
+    const seams = result.current.clipboardImages
+
+    expect(seams.fileScope).toBe('test')
+    expect(await seams.readImage('asset:pic')).toBe(picture)
+    expect(adapter.loadImageBlob).toHaveBeenCalledWith('asset:pic')
+    expect(fetchStub).not.toHaveBeenCalled()
+    const file = new File(['x'], 'x.png', { type: 'image/png' })
+    await seams.storeImage(file)
+    expect(adapter.storeImage).toHaveBeenCalledWith(file)
+    vi.unstubAllGlobals()
   })
 
   it('exposes the adapter image-ref predicate to the editor', () => {

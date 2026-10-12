@@ -169,6 +169,13 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
        * those runs kept the copy, so absent reads as false.
        */
       localCopyRemoved: z.boolean().optional(),
+      /**
+       * What the move could not carry, one sentence each — why the browser
+       * copy was kept, for every later visit and not only the session that
+       * ran it. Bounded: the store lives in localStorage. Absent on records
+       * from before the reasons were kept.
+       */
+      leftBehind: z.array(z.string().max(500)).max(100).optional(),
     })
     .strict(),
   z

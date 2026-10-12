@@ -119,7 +119,7 @@ export function renderMarkdownPreview(
     tagLibrary,
   }: RenderMarkdownPreviewOptions,
 ): RenderedMarkdownPreview {
-  const scene = layoutScene(value, {
+  const scene = layoutMarkdownScene(value, {
     measure,
     maxWidth,
     references,
@@ -138,14 +138,14 @@ export function renderMarkdownPreview(
  *
  * The rail draws rectangles, so the SVG string is pure waste on that path —
  * and it is paid per keystroke, in a worker, for a document that may be long.
- * Sharing `layoutScene` keeps the shape identical to what the preview would
+ * Sharing `layoutMarkdownScene` keeps the shape identical to what the preview would
  * paint; only the serialization is skipped.
  */
 export function layoutMarkdownOutline(
   value: string,
   options: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Pick<RenderedMarkdownPreview, 'anchors' | 'blocks'> {
-  const scene = layoutScene(value, options)
+  const scene = layoutMarkdownScene(value, options)
   return { anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
 }
 
@@ -184,7 +184,12 @@ function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[
   return anchors
 }
 
-function layoutScene(
+/**
+ * The note's scene itself, for a surface that draws it whole rather than
+ * as the pane's padded, keyed projection — the saved export. Shared so the
+ * picture a person saves is laid out by exactly what the preview paints.
+ */
+export function layoutMarkdownScene(
   value: string,
   {
     measure,
@@ -217,7 +222,7 @@ function layoutScene(
         fontAvailable: hasLoadedFace,
         // A page, not an object. This pane runs to a readable measure, where the
         // node scale — cut so a heading cannot eat a third of a 280px box —
-        // reads timid. Set on `layoutScene` rather than at the preview's own
+        // reads timid. Set on `layoutMarkdownScene` rather than at the preview's own
         // call so the minimap rail, which maps THESE blocks, is laid out from
         // the same metrics; two scales here would have the rail marking a
         // document the reader is not looking at.

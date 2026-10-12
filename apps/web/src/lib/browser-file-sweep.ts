@@ -24,17 +24,13 @@
  * ponytail: a per-document record that stays unreadable keeps every sweep
  * standing down; clearing it (Start fresh, or deleting it) lets them run.
  */
-import {
-  type FileReferenceReads,
-  projectWorkspaceDocument,
-  scanFileReferences,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { DEFAULT_FILE_GRACE_MS, scanFileReferences } from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
-import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { SYNC_DOCUMENTS_STORE } from './browser-idb.js'
-import { savedVersionFrontiers } from './browser-version-store.js'
+import { savedVersionReads, savedVersionRows } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -42,9 +38,6 @@ import { inTransaction, request } from './idb-tx.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
 const log = getAppLogger('browser-file-sweep')
-
-/** The daemon's default, for the same upload -> save window. */
-const DEFAULT_GRACE_MS = 60 * 60 * 1000
 
 export type BrowserFileSweepResult =
   | { kind: 'swept'; deleted: readonly string[] }
@@ -94,33 +87,6 @@ function yieldToPage(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-/**
- * The version rows as the scan reads them: each one's frontier checked out of
- * ONE fork of the record, rather than a fork per version — a fork copies the
- * whole workspace, and a checkout moves the one it has.
- */
-function versionReads(
-  record: LoroDoc,
-  rows: Awaited<ReturnType<typeof savedVersionFrontiers>>,
-): NonNullable<FileReferenceReads['versions']> {
-  let past: LoroDoc | null = null
-  return {
-    list: (holder) =>
-      Promise.resolve(
-        rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
-      ),
-    // Through `then`, so a checkout that throws rejects the way an async read would.
-    load: (holder, versionId) =>
-      Promise.resolve().then(() => {
-        const row = rows.find((candidate) => candidate.id === versionId)
-        if (row === undefined) return null
-        past ??= record.fork()
-        past.checkout(decodeFrontiers(row.frontiers))
-        return projectWorkspaceDocument(past, holder.documentId)
-      }),
-  }
-}
-
 /** What every workspace this browser keeps names, or why it cannot say. */
 async function scanBrowserWorkspaces(
   workspaceIds: readonly string[],
@@ -141,10 +107,10 @@ async function scanBrowserWorkspaces(
     if (record === undefined) return { kind: 'stood-down', reason: 'unreadable-record' }
     if (record === null) continue
     signatures.set(workspaceId, signatureOf(record))
-    const rows = await savedVersionFrontiers(workspaceId, dbName)
+    const rows = await savedVersionRows(workspaceId, dbName)
     const scan = await scanFileReferences(record, {
       trashBytes: async (entry) => (await blobs.get({ ref: entry.blob }))?.bytes ?? null,
-      versions: versionReads(record, rows),
+      versions: savedVersionReads(record, rows),
       between: yieldToPage,
     })
     if (scan.unjudged.length > 0) {
@@ -188,7 +154,7 @@ export async function sweepUnreferencedFiles(
   if (!(await recordsUnmoved(keys, scan.signatures, dbName))) {
     return { kind: 'stood-down', reason: 'record-moved' }
   }
-  const createdBefore = (options.now ?? Date.now)() - (options.graceMs ?? DEFAULT_GRACE_MS)
+  const createdBefore = (options.now ?? Date.now)() - (options.graceMs ?? DEFAULT_FILE_GRACE_MS)
   // A document names an image by its reference (`asset:<id>`), which is also
   // the key the editor stores it under; the scan answers the bare id.
   const keep = (fileId: string) =>

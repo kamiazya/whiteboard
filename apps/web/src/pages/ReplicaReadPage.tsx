@@ -33,7 +33,7 @@
 import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { imageRefId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
@@ -44,6 +44,7 @@ import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTr
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
+import { loadReplicaImages } from '../lib/replica-images.js'
 import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
 import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
 import {
@@ -51,6 +52,7 @@ import {
   type ReplicaRecord,
   readReplicaContent,
   replicaEntries,
+  replicaReferenceGraph,
   replicaReferenceWire,
   replicaTagLibrary,
   writeReplicaMarkdown,
@@ -259,8 +261,45 @@ function useReplicaRecord({
   }, [workspaceId, daemonBaseUrl, attempt, withheld])
 }
 
-/** The link table, reference seams and tag library the editors draw this replica with. */
-function useReplicaSeams(state: LoadState, selected: WorkspaceDocumentEntry | undefined) {
+/**
+ * Object URLs for the cached images among `refs`, keyed by the reference as
+ * written; undefined until the cache has answered for this exact set, so the
+ * wire never calls a picture unavailable before it has been looked for.
+ */
+function useReplicaImageUrls(
+  workspaceId: string,
+  refs: readonly string[] | undefined,
+): ReadonlyMap<string, string> | undefined {
+  const [loaded, setLoaded] = useState<{
+    refs: readonly string[]
+    urls: ReadonlyMap<string, string>
+  }>()
+  useEffect(() => {
+    if (refs === undefined) return
+    let cancelled = false
+    const made: string[] = []
+    void loadReplicaImages(workspaceId, refs.map(imageRefId)).then((blobs) => {
+      if (cancelled) return
+      const urls = new Map<string, string>()
+      for (const ref of refs) {
+        const blob = blobs.get(imageRefId(ref))
+        if (blob === undefined) continue
+        const url = URL.createObjectURL(blob)
+        made.push(url)
+        urls.set(ref, url)
+      }
+      setLoaded({ refs, urls })
+    })
+    return () => {
+      cancelled = true
+      for (const url of made) URL.revokeObjectURL(url)
+    }
+  }, [workspaceId, refs])
+  return loaded !== undefined && loaded.refs === refs ? loaded.urls : undefined
+}
+
+/** The replica's own link tables — the two both keeper pages build, over this record's entries. */
+function useReplicaLinkTables(state: LoadState) {
   const linkable = useMemo(
     (): readonly LinkableDocument[] =>
       state.kind === 'ready'
@@ -275,19 +314,35 @@ function useReplicaSeams(state: LoadState, selected: WorkspaceDocumentEntry | un
   )
   const resolveAlias = useMemo(() => createUniqueNameResolver(linkEntries(linkable)), [linkable])
   const resolveTitle = useMemo(() => linkTitles(linkable), [linkable])
+  return { resolveAlias, resolveTitle }
+}
 
-  const references = useMemo(
+/** The link table, reference seams and tag library the editors draw this replica with. */
+function useReplicaSeams(
+  workspaceId: string,
+  state: LoadState,
+  selected: WorkspaceDocumentEntry | undefined,
+) {
+  const { resolveAlias, resolveTitle } = useReplicaLinkTables(state)
+  const graph = useMemo(
     () =>
       state.kind !== 'ready' || selected === undefined
         ? undefined
-        : replicaReferenceWire({
+        : replicaReferenceGraph({
             record: state.record,
             entries: state.entries,
             selected,
             resolveAlias,
-            resolveTitle,
           }),
-    [state, selected, resolveAlias, resolveTitle],
+    [state, selected, resolveAlias],
+  )
+  const images = useReplicaImageUrls(workspaceId, graph?.images)
+  const references = useMemo(
+    () =>
+      graph === undefined
+        ? undefined
+        : replicaReferenceWire({ references: graph, resolveAlias, resolveTitle, images }),
+    [graph, resolveAlias, resolveTitle, images],
   )
 
   const seams = useMemo(
@@ -612,7 +667,7 @@ export function ReplicaReadPage({
   // entries — so a `[[...]]` written here resolves by the rules the rest of
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
-  const drawnWith = useReplicaSeams(state, selected)
+  const drawnWith = useReplicaSeams(workspaceId, state, selected)
   const { content, draft, spatialDraft, onDraftChange, onSpatialChange } = useReplicaEditing({
     state,
     selected,

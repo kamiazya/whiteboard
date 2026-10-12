@@ -12,7 +12,11 @@ import { chunkSnapshot, docRefKey } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
-import { SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE } from './browser-idb.js'
+import {
+  openWhiteboardDb,
+  SYNC_DOCUMENTS_STORE,
+  SYNC_SNAPSHOT_CHUNKS_STORE,
+} from './browser-idb.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 
 // Its OWN database, not the app's — browser tests share an origin, so deleting
@@ -158,4 +162,37 @@ describe('IdbDocumentStore layout', () => {
       chunks.map((chunk) => [...chunk.bytes]),
     )
   })
+
+  // A v2 record is lifted on read and its first append is permanent, so the
+  // seq the lift invents for the next delta has to follow the log it holds.
+  for (const held of [0, 1, 2]) {
+    it(`a v2 record holding ${held} deltas takes an append and reads every delta back`, async () => {
+      const deltas = Array.from({ length: held }, (_, i) => new Uint8Array([i + 1]))
+      const db = await openWhiteboardDb(DB_NAME)
+      try {
+        await put(
+          db,
+          SYNC_DOCUMENTS_STORE,
+          { v: 2, snapshot: null, frontier: null, deltas },
+          docRefKey(docRef),
+        )
+      } finally {
+        db.close()
+      }
+      const store = new IdbDocumentStore(DB_NAME)
+
+      await store.appendDeltas({
+        docRef,
+        deltaBatch: { updates: [new Uint8Array([9])], newFrontier: new Uint8Array() },
+      })
+
+      const loaded = await store.loadDeltas({ docRef, afterSeq: null })
+      expect(loaded.updates.map((update) => [...update])).toEqual([
+        ...deltas.map((delta) => [...delta]),
+        [9],
+      ])
+      // The log held seqs 1..n, so the append is n+1 and a tail resumes after it.
+      expect(loaded.lastSeq).toBe(held + 1)
+    })
+  }
 })

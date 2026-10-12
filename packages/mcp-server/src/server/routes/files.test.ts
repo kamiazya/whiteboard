@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeScope } from '../store/store-scope.js'
 import { workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { testStoreScope } from './_test-helpers.js'
+import { testFilesRouterOptions, testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -61,7 +61,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('saves image binary data and returns 204', async () => {
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]) // PNG magic bytes
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -83,7 +83,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('stores an upload under the data layout it is handed, not the process data dir', async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-files-layout-'))
     try {
-      const app = createFilesRouter({ scope: storeScope(elsewhere, 'other-tenant') })
+      const app = createFilesRouter(testFilesRouterOptions(storeScope(elsewhere, 'other-tenant')))
       const res = await app.request('/api/w/session1/document/canvas-a/file/file-009', {
         method: 'PUT',
         headers: { 'Content-Type': 'image/png' },
@@ -117,7 +117,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     ['an encoded NUL', 'file%00id'],
     ['an id past the length limit', 'x'.repeat(129)],
   ])('refuses an upload under %s and stores no image', async (_name, fileId) => {
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request(`/api/w/session1/document/canvas-a/file/${fileId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -131,7 +131,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('refuses an empty upload with 400 rather than storing a zero-byte file', async () => {
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-002', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -144,7 +144,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     withWorkspaceWriteLockMock.mockClear()
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -174,7 +174,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     })
 
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const responsePromise = app.request('/api/w/session1/document/canvas-a/file/file-001', {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -221,7 +221,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       imageData,
     )
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('image/png')
@@ -235,7 +235,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   // touch, but a top-level navigation to the URL would run it in the app's
   // origin — which in server mode carries the session.
   it('serves an uploaded SVG sandboxed with no script allowed and as an attachment', async () => {
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
     const put = await app.request('/api/w/session1/document/canvas-a/file/file-svg', {
       method: 'PUT',
@@ -268,7 +268,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       join(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
       new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     )
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.headers.get('Content-Security-Policy')).toBeNull()
     expect(res.headers.get('Content-Disposition')).toBeNull()
@@ -277,7 +277,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   // A JSON 404, like every other refusal on this surface: the browser
   // client reads the body, and a plain-text one is a refusal it cannot read.
   it('returns a JSON 404 for a missing fileId', async () => {
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/nonexistent')
     expect(res.status).toBe(404)
     expect(res.headers.get('Content-Type')).toContain('json')
@@ -290,7 +290,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       force: true,
     })
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(404)
@@ -305,7 +305,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     const { writeFile } = await import('node:fs/promises')
     await writeFile(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'not-a-directory')
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(500)
@@ -320,7 +320,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       recursive: true,
     })
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(500)
@@ -343,7 +343,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       new Uint8Array([0x02]),
     )
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
     expect(res.status).toBe(200)
 
@@ -353,7 +353,7 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('returns 400 for invalid workspaceId / fileId', async () => {
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
 
     const badSession = await app.request('/api/w/bad.sid/document/canvas-a/file/file-001')
     expect(badSession.status).toBe(400)
@@ -376,11 +376,17 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
   it('returns a structured 503 when the GC scan is incomplete instead of an unstructured 500', async () => {
     purgeDanglingFilesMock.mockRejectedValue(
       new IncompleteFileGcScanError('session1', [
-        { kind: 'version', path: 'canvas-a', versionId: 'v1', cause: new Error('boom') },
+        {
+          kind: 'version',
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          path: 'canvas-a',
+          versionId: 'v1',
+          cause: new Error('boom'),
+        },
       ]),
     )
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
       method: 'POST',
     })
@@ -392,14 +398,17 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
     })
   })
 
-  it('returns a structured 500 corrupt_stored_data when a branch tip is unrecoverably corrupt, not a retryable 503', async () => {
-    // A corrupt persisted tipFrontiers can never be fixed by retrying, so
-    // it must not be folded into the retryable incomplete-scan (503) path.
+  it('returns a structured 500 corrupt_stored_data when the workspace record will not open', async () => {
+    // The shape `workspace-doc-cache`'s open failure throws; the real store
+    // drives it in files.purge-dangling.test.ts.
     purgeDanglingFilesMock.mockRejectedValue(
-      corruptStoredData('session1/canvas-a branch "feature"', 'tipFrontiers could not be decoded'),
+      corruptStoredData(
+        'workspace-tree:session1',
+        'workspace record could not be opened (unreadable snapshot)',
+      ),
     )
 
-    const app = createFilesRouter({ scope: testStoreScope(tempDir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
     const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
       method: 'POST',
     })
@@ -407,7 +416,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
       error: 'corrupt_stored_data',
-      message: expect.stringContaining('tipFrontiers could not be decoded'),
+      message: expect.stringContaining('workspace record could not be opened'),
     })
   })
 })

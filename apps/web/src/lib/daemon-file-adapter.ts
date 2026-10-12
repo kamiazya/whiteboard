@@ -34,6 +34,9 @@ export interface DaemonFileAdapterOptions {
   readonly resolveRefPath?: (ref: string) => string | undefined
 }
 
+const objectUrlOf = (blob: Blob | undefined) =>
+  blob === undefined ? undefined : URL.createObjectURL(blob)
+
 export function createDaemonFileAdapter({
   daemonFetch,
   daemonBaseUrl,
@@ -44,7 +47,23 @@ export function createDaemonFileAdapter({
   const documentPath = (target: string) =>
     `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/document/${encodeURIComponent(target)}`
 
+  async function loadImageBlob(ref: string): Promise<Blob | undefined> {
+    try {
+      // This canvas's own path, not the reference: the file route scopes
+      // reads by the canvas that owns the workspace's file directory.
+      const res = await daemonFetch(`${documentPath(path)}/file/${imageRefId(ref)}`)
+      if (!res.ok) return undefined
+      return await res.blob()
+    } catch (err) {
+      log.warn('image load failed', { ref, err })
+      return undefined
+    }
+  }
+
   return {
+    // The file route keeps one directory per workspace, so the workspace is
+    // the scope — on this daemon, which the base URL names.
+    fileScope: `daemon:${daemonBaseUrl}/w/${workspaceId}`,
     isImageRef,
 
     async loadDocument(ref) {
@@ -61,18 +80,9 @@ export function createDaemonFileAdapter({
       }
     },
 
-    async loadImageUrl(ref) {
-      try {
-        // This canvas's own path, not the reference: the file route scopes
-        // reads by the canvas that owns the workspace's file directory.
-        const res = await daemonFetch(`${documentPath(path)}/file/${imageRefId(ref)}`)
-        if (!res.ok) return undefined
-        return URL.createObjectURL(await res.blob())
-      } catch (err) {
-        log.warn('image load failed', { ref, err })
-        return undefined
-      }
-    },
+    loadImageBlob,
+
+    loadImageUrl: async (ref) => objectUrlOf(await loadImageBlob(ref)),
 
     async storeImage(file) {
       const id = crypto.randomUUID()

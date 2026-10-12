@@ -1,3 +1,4 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ReactNode, Ref } from 'react'
 import VersionTimeline, { type VersionPreviewSession } from '../../components/VersionTimeline.js'
 import { InspectorPanel } from '../document-editor/InspectorPanel.js'
@@ -6,6 +7,7 @@ interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>
   workspaceId: string
   path: string
+  documentKind?: DocumentKind
   onRestored?: () => void
   refreshSignal?: number
   onPreview?: (session: VersionPreviewSession | null) => void
@@ -26,6 +28,7 @@ export function VersionPanel({
   panelRef,
   workspaceId,
   path,
+  documentKind,
   onRestored,
   refreshSignal,
   onPreview,
@@ -41,6 +44,7 @@ export function VersionPanel({
       <VersionTimeline
         workspaceId={workspaceId}
         path={path}
+        {...(documentKind === undefined ? {} : { documentKind })}
         onRestored={onRestored}
         refreshSignal={refreshSignal}
         onPreview={onPreview}

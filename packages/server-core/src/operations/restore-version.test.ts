@@ -195,6 +195,9 @@ class FakeVersions implements VersionHistory {
         ...(value.label === undefined ? {} : { label: value.label }),
       }))
   }
+  async adopt(): Promise<readonly string[]> {
+    throw new Error("a restore never adopts another keeper's versions")
+  }
 }
 
 function versionsWith(

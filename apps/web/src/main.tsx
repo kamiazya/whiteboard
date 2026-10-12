@@ -1,7 +1,6 @@
-import { servedByServerKeeper, startBootSequence } from './boot.js'
+import { startBootSequence } from './boot.js'
 import { applyThemeClass, readPersistedTheme, resolveTheme } from './hooks/useThemeMode.js'
 import './index.css'
-import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 import { initInstallPromptCapture } from './lib/install-prompt-store.js'
 import { installMobileAppShellGuards } from './lib/mobile-app-shell.js'
 import { purgeLegacyReconnectCredentials } from './lib/purge-legacy-reconnect-credentials.js'
@@ -28,12 +27,8 @@ installMobileAppShellGuards()
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('Root element #root not found')
 
-// The full chain — font load, workspace-id resolve, splash dismissal, render
-// — lives in boot.ts, so the resolver-rejection path is testable through the
-// real sequence. See its module comment for why a rejection there must not
-// block this call.
+// The full chain — the page-load file sweep, font load, workspace-id
+// resolve, splash dismissal, render — lives in boot.ts, so it is testable
+// through the real sequence. See its module comment for why a resolver
+// rejection there must not block this call.
 void startBootSequence({ rootEl })
-
-// A keeper that serves this shell keeps the files itself; only the browser
-// keeper's own uploads are this page's to reclaim.
-if (!servedByServerKeeper()) scheduleFileSweep()

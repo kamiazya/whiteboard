@@ -7,6 +7,7 @@ import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
 import {
   contentDigestOfDocument,
   countSpatialNodes,
+  type FileReferenceReads,
   projectWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit, generateDocumentId } from '@kamiazya/whiteboard-model'
@@ -63,7 +64,7 @@ const versionRowSchema = z
     contentDigest: z.string().min(1),
   })
   .strict()
-type VersionRow = z.infer<typeof versionRowSchema>
+export type VersionRow = z.infer<typeof versionRowSchema>
 
 export interface BrowserVersionStoreDeps {
   /** The workspace record — where a frontier points and what a restore checks out. */
@@ -336,22 +337,49 @@ export async function deleteVersionRowsOfDocument(
 }
 
 /**
- * Every saved version of one workspace, as the document it belongs to and the
- * frontier it points at — what the file sweep checks out to learn which images
- * a past state draws. A row that fails the schema is skipped exactly as the
- * History panel skips it: a version nobody can list is one nobody can restore.
+ * Every saved version of one workspace, whole — what a move carries to the
+ * keeper the workspace goes to, and what the file sweep checks out. A row that fails the schema is skipped
+ * exactly as the History panel skips it: a version nobody can list is one
+ * nobody can restore.
  */
-export async function savedVersionFrontiers(
+export async function savedVersionRows(
   workspaceId: string,
   dbName?: string,
-): Promise<ReadonlyArray<Pick<VersionRow, 'id' | 'documentId' | 'frontiers'>>> {
+): Promise<readonly VersionRow[]> {
   const raw = await inTransaction(dbName, [VERSIONS_STORE], 'readonly', (tx) =>
     request(tx.objectStore(VERSIONS_STORE).getAll()),
   )
   return (raw as unknown[]).flatMap((value) => {
     const parsed = versionRowSchema.safeParse(value)
-    if (!parsed.success || parsed.data.workspaceId !== workspaceId) return []
-    const { id, documentId, frontiers } = parsed.data
-    return [{ id, documentId, frontiers }]
+    return parsed.success && parsed.data.workspaceId === workspaceId ? [parsed.data] : []
   })
+}
+
+/**
+ * The saved versions as `scanFileReferences` reads them — what the file sweep
+ * and a promotion check out to learn which images a past state draws. Each
+ * frontier is checked out of ONE fork of the record rather than a fork per
+ * version: a fork copies the whole workspace, and a checkout moves the one it
+ * has.
+ */
+export function savedVersionReads(
+  record: LoroDoc,
+  rows: ReadonlyArray<Pick<VersionRow, 'id' | 'documentId' | 'frontiers'>>,
+): NonNullable<FileReferenceReads['versions']> {
+  let past: LoroDoc | null = null
+  return {
+    list: (holder) =>
+      Promise.resolve(
+        rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
+      ),
+    // Through `then`, so a checkout that throws rejects the way an async read would.
+    load: (holder, versionId) =>
+      Promise.resolve().then(() => {
+        const row = rows.find((candidate) => candidate.id === versionId)
+        if (row === undefined) return null
+        past ??= record.fork()
+        past.checkout(decodeFrontiers(row.frontiers))
+        return projectWorkspaceDocument(past, holder.documentId)
+      }),
+  }
 }

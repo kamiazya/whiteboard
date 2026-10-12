@@ -4,11 +4,13 @@
  *
  * A file is needed while anything a user can still reach names it: a live
  * document, a trashed one (a restore brings it back under the same id), or a
- * saved version of either. Each keeper stores those three differently — the
- * daemon in SQLite rows and a blob directory, the browser in IndexedDB — so
- * the I/O arrives as `FileReferenceReads` and the judgement stays here. Two
- * hand-written copies of this walk are how one keeper learns a new place an
- * image can sit and the other deletes it.
+ * saved version of either. Each is read through `collectImageRefIds`, so a
+ * picture an undecided proposal in it would draw counts as named. Each
+ * keeper stores those three differently — the daemon in SQLite rows and a
+ * blob directory, the browser in IndexedDB — so the I/O arrives as
+ * `FileReferenceReads` and the judgement stays here. Two hand-written copies
+ * of this walk are how one keeper learns a new place an image can sit and
+ * the other deletes it.
  *
  * Fail closed: what cannot be read is reported in `unjudged` rather than
  * read as "names nothing", and a caller that deletes must refuse to while
@@ -27,6 +29,15 @@ import {
   readWorkspaceDocuments,
   unreadableWorkspaceNodes,
 } from './workspace-tree.js'
+
+/**
+ * How old an upload nothing names must be before a collection deletes it, by
+ * default. An image is stored first and the node naming it arrives with the
+ * next save, so a fresh upload is unnamed by construction; this window is
+ * what keeps it. One value for both keepers, so they cannot drift apart —
+ * the daemon lets an operator override it (`WHITEBOARD_FILE_GC_GRACE_MS`).
+ */
+export const DEFAULT_FILE_GRACE_MS = 60 * 60 * 1000
 
 /** A document whose saved versions are asked for. */
 export interface FileReferenceHolder {

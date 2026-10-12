@@ -121,7 +121,7 @@ it('reclaims a file that only a past state of the document references', async ()
     overwrite: true,
   })
 
-  const { purgedCount } = await purgeDanglingFiles(WS)
+  const { purgedCount } = await purgeDanglingFiles(WS, { versionStore: new FileVersionStore() })
   expect(purgedCount).toBe(1)
   await expect(readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS))).resolves.toEqual([])
 })

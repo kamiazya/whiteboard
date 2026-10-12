@@ -224,8 +224,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/pointer-release.ts#commitRelease': 81,
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
-  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 228,
-  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions.pasteFragment': 65,
+  'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
   'apps/web/src/components/spatial-editor/use-comment-state.ts#useCommentState': 124,
   'apps/web/src/components/spatial-editor/use-drag-layers.ts#useDragLayers': 357,
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 125,
@@ -555,7 +554,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/routes/document/maintenance.ts#createMaintenanceRouter': 54,
   'packages/mcp-server/src/server/routes/document/metadata.ts#createDocumentMetadataRouter': 76,
   'packages/mcp-server/src/server/routes/document/versions.ts#createVersionsRouter': 99,
-  'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 105,
+  'packages/mcp-server/src/server/routes/document/workspace-document.ts#createWorkspaceDocumentRouter': 59,
   // The workspace list filters rows the caller is not admitted to (ADR-0041).
   // +3: the rename route is an adapter over `wbDocumentMove` now, and the
   // address translation it owes — path to id, absent to 404 — is three lines

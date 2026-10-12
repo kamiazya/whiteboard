@@ -47,6 +47,7 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import {
+  type AdoptedVersion,
   type Attestation,
   attestationSchema,
   type VersionHistory,
@@ -59,6 +60,11 @@ export type { OperatorInfo, VersionEntry }
 export interface VersionStore extends VersionHistory {
   // `list` answers a mutable array, which narrows the seam's readonly one.
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
+  // The ids of every saved version of one document, addressed by its id
+  // rather than a path: a trashed document has no path, and a shadowed one's
+  // path resolves to another document, yet both keep their versions — what
+  // file collection must still walk.
+  listIdsByDocument(workspaceId: string, documentId: string): Promise<string[]>
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
@@ -316,6 +322,56 @@ export class FileVersionStore implements VersionStore {
     })
   }
 
+  /**
+   * The rows go in under the ids the other keeper gave them, so a re-run of
+   * the same move inserts nothing, and a `restoredFrom` still names its row.
+   * An id another workspace already holds is not taken over: that row stays
+   * the other workspace's, and the answer — read back for THIS workspace —
+   * leaves the id out, which is how the caller learns the history did not
+   * arrive whole.
+   */
+  async adopt(workspaceId: string, rows: readonly AdoptedVersion[]): Promise<string[]> {
+    validateWorkspaceId(workspaceId)
+    for (const row of rows) validateVersionId(row.id)
+    if (rows.length === 0) return []
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await this.scope.db()
+      await db
+        .insertInto('versions')
+        .values(
+          rows.map((row) =>
+            versionRow({
+              id: row.id,
+              documentId: row.documentId,
+              workspaceId,
+              opts: row,
+              operator: row.operator,
+              elementCount: row.elementCount,
+              frontiers: frontiersToBase64(row.frontiers),
+              contentDigest: row.contentDigest,
+              createdAt: row.createdAt,
+            }),
+          ),
+        )
+        .onConflict((conflict) => conflict.column('id').doNothing())
+        .execute()
+      for (const documentId of new Set(rows.map((row) => row.documentId))) {
+        await this.prune(documentId)
+      }
+      const held = await db
+        .selectFrom('versions')
+        .select(['id'])
+        .where('workspaceId', '=', workspaceId)
+        .where(
+          'id',
+          'in',
+          rows.map((row) => row.id),
+        )
+        .execute()
+      return held.map((row) => row.id)
+    })
+  }
+
   async load(workspaceId: string, id: string): Promise<LoroDoc | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
@@ -398,6 +454,21 @@ export class FileVersionStore implements VersionStore {
       .execute()
     return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }
+
+  async listIdsByDocument(workspaceId: string, documentId: string): Promise<string[]> {
+    validateWorkspaceId(workspaceId)
+    const db = await this.scope.db()
+    const rows = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+      .orderBy('createdAt', 'desc')
+      .orderBy(sql`rowid`, 'desc')
+      .execute()
+    return rows.map((row) => row.id)
+  }
+
   async pruneSandwichedAutoVersions(
     workspaceId: string,
     path: string,

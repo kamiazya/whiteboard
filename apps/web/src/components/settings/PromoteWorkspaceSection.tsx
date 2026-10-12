@@ -1,7 +1,8 @@
 /**
  * Settings > Connections' "This workspace" section: move the workspace this
- * browser keeps to a daemon, whole — documents, their edit history, and the
- * images they reference — with identity preserved (links keep resolving).
+ * browser keeps to a daemon, whole — its documents, the Trash, every saved
+ * version, and every image any of them uses — with identity preserved (links
+ * keep resolving).
  *
  * Discoverable-but-disabled until a daemon is connected, per DESIGN.md's
  * "Status reports; Settings manages": the chip popover only nudges here.
@@ -101,6 +102,22 @@ function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
 }
 
 /**
+ * Whether the move left anything only the browser copy holds — the demote
+ * gate, deliberately strict. `missing` gates alongside `failed` because the
+ * file store folds read errors into "missing", so those references may be
+ * retryable and the source record is the retry vehicle. `leftBehind` gates
+ * for the same reason: a trash entry or a saved version the daemon did not
+ * confirm holding exists only in the copy the demote would delete.
+ */
+function leftAnythingBehind(outcome: Extract<PromoteWorkspaceResult, { kind: 'ok' }>): boolean {
+  return (
+    outcome.blobs.failed.length > 0 ||
+    outcome.blobs.missing.length > 0 ||
+    outcome.leftBehind.length > 0
+  )
+}
+
+/**
  * The demote pull (ADR-0023 decision 2): cache the daemon's merged record
  * back into this browser's planes, and delete the source record only once
  * that cache is proven to carry everything.
@@ -108,9 +125,7 @@ function carryNotes(result: PromotionResultRecord & { ok: true }): string[] {
  * Best-effort throughout — the move itself already landed, so a failed pull
  * costs only the cache line on the report, never the promotion.
  *
- * The demote gate is deliberately strict. `missing` gates alongside `failed`
- * because the file store folds read errors into "missing", so those
- * references may be retryable and the source record is the retry vehicle.
+ * The demote gate is `leftAnythingBehind`, below.
  * And the read-back has its OWN try/catch rather than the caller's:
  * `replicaCarriesAll` reads through the sealed store and can throw
  * `ReplicaKeyWithheldError` if the session key lapses between the cache
@@ -164,9 +179,8 @@ async function cacheAndMaybeDemote({
     }),
   )
 
-  if (outcome.blobs.failed.length > 0 || outcome.blobs.missing.length > 0) {
+  if (leftAnythingBehind(outcome))
     return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: false }
-  }
 
   try {
     const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
@@ -207,6 +221,16 @@ function browserCopyNotes(result: PromotionResultRecord & { ok: true }): string[
   return notes
 }
 
+/**
+ * What was left behind, inside the bounds the settings schema holds a record
+ * to — a record past them would fail the strict write and lose the whole
+ * result, so a long list is clipped rather than refused.
+ */
+function storedLeftBehind(leftBehind: readonly string[]): { leftBehind?: string[] } {
+  if (leftBehind.length === 0) return {}
+  return { leftBehind: leftBehind.slice(0, 100).map((reason) => reason.slice(0, 500)) }
+}
+
 /** The failed uploads as the record keeps them: the files, and each distinct reason once. */
 function failedBlobFields(failed: ReadonlyArray<{ fileId: string; reason: string }>) {
   return {
@@ -215,16 +239,82 @@ function failedBlobFields(failed: ReadonlyArray<{ fileId: string; reason: string
   }
 }
 
-function describeResult(result: PromotionResultRecord): string {
+/**
+ * `name` is the daemon workspace's label when this section has read one —
+ * names are chrome, ids are the address. The record's `leftBehind` is what
+ * the move could not carry, which is why the browser copy stayed.
+ */
+function describeResult(result: PromotionResultRecord, name: string): string {
   if (!result.ok) {
-    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason}`
+    return `Move to daemon workspace "${name}" failed: ${result.reason}`
   }
   const parts = [
-    `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
+    `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${name}"`,
     ...carryNotes(result),
+    ...(result.leftBehind === undefined || result.leftBehind.length === 0
+      ? []
+      : [`Not moved yet: ${result.leftBehind.join('; ')}`]),
     ...browserCopyNotes(result),
   ]
   return `${parts.join('. ')}.`
+}
+
+/**
+ * The stored result, while connected to the daemon it happened against: a
+ * result recorded under daemon A (and its reload offer) must not read as
+ * actionable while connected to daemon B.
+ */
+function resultFor(
+  result: PromotionResultRecord | undefined,
+  daemon: ConnectedDaemon | undefined,
+): PromotionResultRecord | undefined {
+  return result !== undefined && result.daemonBaseUrl === daemon?.baseUrl ? result : undefined
+}
+
+/**
+ * The display name of the workspace a stored result names. The result keeps
+ * only the id, so a later visit reads the name back from the daemon; until
+ * that answers — or when it cannot — the id stands in.
+ */
+function useResultWorkspaceName(
+  daemon: ConnectedDaemon | undefined,
+  baseFetch: typeof globalThis.fetch | undefined,
+  workspaceId: string | undefined,
+): [string, (target: WorkspaceIdentity | undefined) => void] {
+  const [known, setKnown] = useState<WorkspaceIdentity>()
+  useEffect(() => {
+    if (!daemon || workspaceId === undefined || known?.workspaceId === workspaceId) return
+    let cancelled = false
+    listWorkspaces(daemonFetch(daemon, baseFetch), daemon.baseUrl)
+      .then((response) => {
+        const row = response.workspaces.find((ws) => ws.workspaceId === workspaceId)
+        if (!cancelled && row !== undefined) setKnown(row)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [daemon?.baseUrl, baseFetch, workspaceId, known?.workspaceId])
+  const name =
+    known !== undefined && known.workspaceId === workspaceId ? workspaceLabel(known) : workspaceId
+  return [name ?? '', setKnown]
+}
+
+/** What the move does, stated as what it carries and when the browser copy goes. */
+function SectionLede({ connected }: { connected: boolean }) {
+  return connected ? (
+    <p className="text-xs text-muted-foreground">
+      Move this browser's workspace to the daemon: its documents and their history, the Trash, saved
+      versions, and every image they use. Documents keep their identity, so links between them keep
+      working. Once the daemon is confirmed to hold all of it, the copy in this browser is removed
+      and a cached copy stays for reading offline.
+    </p>
+  ) : (
+    <p className="text-xs text-muted-foreground">
+      Connect a daemon to move the workspace this browser keeps onto it — documents, the Trash,
+      saved versions and images.
+    </p>
+  )
 }
 
 export function PromoteWorkspaceSection({
@@ -268,6 +358,12 @@ export function PromoteWorkspaceSection({
   }, [daemon?.baseUrl, baseFetch, workspaceId])
   const [lastResult, setLastResult] = useState<PromotionResultRecord | undefined>(
     () => settingsStore.load().migration.promotion,
+  )
+  const shownResult = resultFor(lastResult, daemon)
+  const [resultName, setResultTarget] = useResultWorkspaceName(
+    daemon,
+    baseFetch,
+    shownResult?.workspaceId,
   )
 
   // Re-read on daemon change so a reconnect shows the result recorded under it.
@@ -370,6 +466,7 @@ export function PromoteWorkspaceSection({
                 shadowedPaths: outcome.shadowedPaths,
                 blobsMissing: outcome.blobs.missing,
                 ...failedBlobFields(outcome.blobs.failed),
+                ...storedLeftBehind(outcome.leftBehind),
               }
             : {
                 at: new Date().toISOString(),
@@ -394,27 +491,17 @@ export function PromoteWorkspaceSection({
         ...current,
         migration: { ...current.migration, promotion: record },
       }))
+      setResultTarget(target)
       setLastResult(record)
       setFlow({ step: 'idle' })
     },
-    [daemon, baseFetch, settingsStore],
+    [daemon, baseFetch, settingsStore, setResultTarget],
   )
 
   return (
     <section aria-label="This workspace" className="flex flex-col gap-1.5">
       <p className="text-sm font-medium">This workspace</p>
-      {daemon ? (
-        <p className="text-xs text-muted-foreground">
-          Move everything this browser keeps — documents, their edit history, and referenced images
-          — to the daemon. Documents keep their identity, so links between them keep working. Your
-          documents also stay in this browser.
-        </p>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Connect a daemon to move the documents this browser keeps onto it, with their edit history
-          and images.
-        </p>
-      )}
+      <SectionLede connected={daemon !== undefined} />
       {tier !== undefined && (
         <p data-testid="replica-tier-line" className="text-xs text-muted-foreground">
           {REPLICA_TIER_COPY[tier]}
@@ -443,25 +530,23 @@ export function PromoteWorkspaceSection({
           {flow.reason}
         </p>
       )}
-      {lastResult !== undefined &&
-        lastResult.daemonBaseUrl === daemon?.baseUrl &&
-        flow.step !== 'running' && (
-          <div data-testid="promote-last-result" className="rounded-md border px-3 py-2 text-xs">
-            <p>{describeResult(lastResult)}</p>
-            {lastResult.ok && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                data-testid="promote-reload"
-                onClick={() => (reload ?? (() => window.location.assign('/')))()}
-              >
-                Reload and continue from the daemon
-              </Button>
-            )}
-          </div>
-        )}
+      {shownResult !== undefined && flow.step !== 'running' && (
+        <div data-testid="promote-last-result" className="rounded-md border px-3 py-2 text-xs">
+          <p>{describeResult(shownResult, resultName)}</p>
+          {shownResult.ok && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              data-testid="promote-reload"
+              onClick={() => (reload ?? (() => window.location.assign('/')))()}
+            >
+              Reload and continue from the daemon
+            </Button>
+          )}
+        </div>
+      )}
 
       <Dialog
         open={flow.step === 'confirm' || flow.step === 'running'}
@@ -487,10 +572,11 @@ export function PromoteWorkspaceSection({
                 <DialogTitle>Move this workspace to the daemon</DialogTitle>
                 <DialogDescription>
                   All {flow.documentCount} document{flow.documentCount === 1 ? '' : 's'} move to the
-                  daemon workspace you choose, with their full edit history and referenced images.
-                  If a path already exists there, both versions are kept and the existing one is
-                  marked shadowed — nothing is renamed or overwritten. Once every document and image
-                  is confirmed on the daemon, the old copy here is removed; this browser keeps a
+                  daemon workspace you choose, with their history, the Trash, saved versions and
+                  every image they use. If a path already exists there, both versions are kept and
+                  the existing one is marked shadowed — nothing is renamed or overwritten. Once the
+                  daemon is confirmed to hold all of it, the old copy here is removed; if anything
+                  could not be moved, the copy stays and the report says what. This browser keeps a
                   cached replica that opens read-only when the daemon cannot be reached.
                 </DialogDescription>
               </DialogHeader>

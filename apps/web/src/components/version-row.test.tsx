@@ -118,6 +118,25 @@ describe('a version row is written from the content side', () => {
     expect(all).not.toMatch(/Human/)
   })
 
+  // A note has no nodes, so its every row would read "0 els" — a number that
+  // says nothing about a note and looks like it says the note is empty.
+  it('counts elements for a board and says no count for a note', async () => {
+    const backend = backendOf(async () => ROWS)
+    const view = render(
+      <VersionsBackendContext.Provider value={backend}>
+        <VersionTimeline workspaceId="ws" path="doc" documentKind="markdown" />
+      </VersionsBackendContext.Provider>,
+    )
+    const noteRows = await screen.findAllByTestId('version-row')
+    expect(noteRows).toHaveLength(3)
+    for (const row of noteRows) expect(row.textContent).not.toMatch(/\bels\b/)
+    view.unmount()
+
+    renderTimeline(backendOf(async () => ROWS))
+    const boardRows = await screen.findAllByTestId('version-row')
+    expect(boardRows[0]?.textContent).toContain('24 els')
+  })
+
   it('drops the manual badge, whose fact the label already carries', async () => {
     renderTimeline(backendOf(async () => ROWS))
     await screen.findAllByTestId('version-row')

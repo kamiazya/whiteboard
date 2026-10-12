@@ -6,7 +6,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { testStoreScope, withTempDataDir } from './_test-helpers.js'
+import { testFilesRouterOptions, testStoreScope, withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-files-content-type-')
 
@@ -25,7 +25,7 @@ const route = (fileId: string) => `/api/w/ws-ct/document/board/file/${fileId}`
 
 describe('the file route when the type is not stated', () => {
   it('stores an upload with no Content-Type as a PNG', async () => {
-    const app = createFilesRouter({ scope: testStoreScope(tmp.dir) })
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir)))
 
     const stored = await app.request(route('untyped1'), {
       method: 'PUT',
@@ -44,7 +44,7 @@ describe('the file route when the type is not stated', () => {
     await mkdir(dir, { recursive: true })
     await writeFile(join(dir, 'foreign1.bin'), new Uint8Array([1, 2, 3]))
 
-    const read = await createFilesRouter({ scope }).request(route('foreign1'))
+    const read = await createFilesRouter(testFilesRouterOptions(scope)).request(route('foreign1'))
     expect(read.status).toBe(200)
     expect(read.headers.get('Content-Type')).toBe('application/octet-stream')
   })

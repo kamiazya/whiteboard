@@ -13,7 +13,7 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import {
-  carriesATag,
+  drawsATag,
   refuseAgainstLibrary,
   TAG_LIBRARY_PATH,
   TagLibraryError,
@@ -117,15 +117,16 @@ const edge = (id: string, tags?: string[]) => ({
   ...(tags === undefined ? {} : { tags }),
 })
 
-describe('carriesATag decides whether a render loads the tag library at all', () => {
+describe('drawsATag decides whether a render loads the tag library at all', () => {
   test('is false for an untagged board, including empty tag lists', () => {
     const board: SpatialCanvas = {
       tags: [],
       nodes: [plain('a'), { ...plain('b'), tags: [] }],
       edges: [edge('e', [])],
     }
-    expect(carriesATag(board)).toBe(false)
-    expect(carriesATag({ nodes: [], edges: [] })).toBe(false)
+    expect(drawsATag([board])).toBe(false)
+    expect(drawsATag([{ nodes: [], edges: [] }])).toBe(false)
+    expect(drawsATag([])).toBe(false)
   })
 
   test.each<[string, SpatialCanvas]>([
@@ -141,6 +142,21 @@ describe('carriesATag decides whether a render loads the tag library at all', ()
       { nodes: [plain('a'), plain('b')], edges: [edge('e1', ['k:v']), edge('e2'), edge('e3')] },
     ],
   ])('is true when only %s carries a tag', (_name, board) => {
-    expect(carriesATag(board)).toBe(true)
+    expect(drawsATag([board])).toBe(true)
+  })
+
+  // An untagged host still draws a tagged board inside a file node or an
+  // embed, so what the reference graph loaded counts as drawn.
+  test('is true when only a canvas the reference graph loaded carries a tag', () => {
+    const host: SpatialCanvas = { nodes: [plain('a')], edges: [] }
+    const taggedBoard: SpatialCanvas = { nodes: [tagged('b')], edges: [] }
+    const graph = new Map([
+      ['missing', null],
+      ['note', { body: '# untagged note' }],
+      ['board', { canvas: taggedBoard }],
+    ])
+    expect(drawsATag([host], graph)).toBe(true)
+    expect(drawsATag([], graph)).toBe(true)
+    expect(drawsATag([host], new Map([['board', { canvas: host }]]))).toBe(false)
   })
 })

@@ -18,9 +18,11 @@
  *
  * The core move is a CRDT merge of the record's snapshot: the daemon's
  * promote route imports exactly these bytes the way its sync surface would
- * (mcp-server's promote-workspace.test.ts pins identity, shadowed
+ * (mcp-server's workspace-promote.test.ts pins identity, shadowed
  * collisions, idempotent retry and the unregistered-target 404), and writes
- * one explicit human checkpoint per promoted document.
+ * one explicit human checkpoint per promoted document. Beside the record
+ * travel the planes it only points at — each trash entry's evacuated bytes
+ * and the saved version rows — and every image any of them names.
  *
  * No passkey assertion travels with it. The only destination is the daemon
  * on this machine, which has one person — the owner who alone can reach its
@@ -41,15 +43,24 @@ import {
   promoteWorkspaceResponseSchema,
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import {
   collectImageRefIds,
   documentContainers,
+  readTrashEntries,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import type { LoroDoc } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import {
+  type CarriedPlanes,
+  fitCarriedPlanes,
+  readCarriedPlanes,
+  unconfirmedPlanes,
+} from './carried-planes.js'
 import { listDocuments } from './daemon-api-client.js'
 import { daemonContractError } from './daemon-contract-error.js'
 import { DocumentFileStore } from './document-file-store.js'
@@ -113,6 +124,14 @@ export type PromoteWorkspaceResult =
         missing: string[]
         failed: Array<{ fileId: string; reason: string }>
       }
+      /**
+       * What this browser keeps that the keeper did not verifiably take —
+       * trash an entry's bytes could not come with, saved versions, a part
+       * of the record no reader could judge — one sentence per cause. The
+       * browser copy is the only one of these, so it must stay while any is
+       * listed.
+       */
+      leftBehind: string[]
     }
   | { kind: 'failed'; reason: string }
 
@@ -135,22 +154,27 @@ export async function promoteWorkspace(
 }
 
 /**
- * The image references the record's documents carry, each mapped to its
- * owning document's path (the address the daemon's file route wants). The
- * walk itself is collectImageRefIds — shared with the daemon-side GC's
- * live-state pass, so the two sides cannot drift on what counts as a live
- * reference: image nodes, frame backgrounds, and inline images in a text node
- * or a markdown document's body.
+ * Every image the workspace still needs — its live documents, its trash and
+ * its saved versions, by `scanFileReferences`, the definition both keepers'
+ * file collections judge by — each mapped to a document path for the
+ * daemon's file route. Files there are kept per workspace and the path in the
+ * address is only checked for its grammar, so an image no live document
+ * names goes under the path of whatever named it first.
  */
-function collectImageRefs(
-  record: Parameters<typeof readWorkspaceDocuments>[0],
+function imageAddresses(
+  record: LoroDoc,
   entries: ReturnType<typeof readWorkspaceDocuments>,
+  scan: CarriedPlanes['scan'],
 ): Map<string, string> {
   const refs = new Map<string, string>()
   for (const entry of entries) {
     for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
       if (!refs.has(fileId)) refs.set(fileId, entry.path)
     }
+  }
+  const fallback = entries[0]?.path ?? readTrashEntries(record)[0]?.path
+  for (const fileId of scan.referenced) {
+    if (!refs.has(fileId) && fallback !== undefined) refs.set(fileId, fallback)
   }
   return refs
 }
@@ -216,17 +240,24 @@ async function promoteWorkspaceUnsafe(
   // acceptance tests hold the route to that.
   const entries = readWorkspaceDocuments(record)
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
-
-  const snapshot = new Uint8Array(record.export({ mode: 'snapshot' }))
+  // Its own failure, not the network one the outer catch reports: nothing
+  // has left the browser yet, and a retry would not be cured by a connection.
+  const planes = await readCarriedPlanes(record, sourceWorkspaceId).catch(() => null)
+  if (planes === null) {
+    return { kind: 'failed', reason: 'This browser could not read its workspace to move it.' }
+  }
+  const snapshot = bytesToBase64Url(new Uint8Array(record.export({ mode: 'snapshot' })))
+  const fitted = fitCarriedPlanes(snapshot, planes)
+  const body: PromoteWorkspaceRequest = { snapshot, trash: fitted.trash, versions: fitted.versions }
 
   onProgress?.('record')
   // The promote route rather than the sync surface's update: the same merge,
-  // plus the explicit checkpoints a person's move leaves behind.
+  // plus the planes beside it and the checkpoints a person's move leaves.
   const promoteUrl = `${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`
   const res = await fetch(promoteUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ snapshot: bytesToBase64Url(snapshot) }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     return { kind: 'failed', reason: await failureReason(res) }
@@ -253,7 +284,7 @@ async function promoteWorkspaceUnsafe(
   // happened.
   onProgress?.('blobs')
   const blobs = await transferImages(fetch, keeperBaseUrl, workspaceId, fileStore, [
-    ...collectImageRefs(record, entries),
+    ...imageAddresses(record, entries, planes.scan),
   ])
 
   return {
@@ -262,5 +293,10 @@ async function promoteWorkspaceUnsafe(
     promotedDocumentIds,
     shadowedPaths,
     blobs,
+    leftBehind: [
+      ...planes.leftBehind,
+      ...fitted.leftBehind,
+      ...unconfirmedPlanes(body, promoted.data, 'the daemon'),
+    ],
   }
 }

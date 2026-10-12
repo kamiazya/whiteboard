@@ -34,6 +34,13 @@ export type ImageStoreResult =
 
 /** What a backend must supply for the seams to work against it. */
 export interface DocumentFileAdapter {
+  /**
+   * Where this keeper's stored pictures live: two adapters answering the same
+   * scope hold the same bytes. The browser keeps one store per origin, the
+   * daemon one per workspace, so a copied picture pasted into another scope
+   * has to be stored again there.
+   */
+  readonly fileScope: string
   /** Distinguishes a stored image asset from a reference to another canvas. */
   isImageRef(file: string): boolean
   /**
@@ -44,6 +51,11 @@ export interface DocumentFileAdapter {
   loadDocument(ref: string): Promise<LoadedFileDocument | undefined>
   /** Resolves an image reference to a displayable URL, or undefined. */
   loadImageUrl(ref: string): Promise<string | undefined>
+  /**
+   * A stored image's bytes, or undefined. A copy reads these rather than
+   * fetching the URL above: the app's policy refuses `connect-src blob:`.
+   */
+  loadImageBlob(ref: string): Promise<Blob | undefined>
   /** Stores a picked/dropped/pasted image, answering its new reference or why not. */
   storeImage(file: File): Promise<ImageStoreResult>
 }

@@ -14,6 +14,7 @@
  * arrives as a container rather than a flattened value (a thread written back
  * as a value is lost across a restart).
  */
+import { CONTAINER_NAME_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { type LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { openMergeableMap } from './mergeable-containers.js'
 import { spliceText } from './minimal-change.js'
@@ -64,6 +65,21 @@ function recreateSequence(target: LoroMap, key: string, kind: string, wanted: un
 }
 
 /**
+ * The child map a copy opens at `key`: mergeable, so two peers creating one
+ * thread at once converge — unless its name could pass
+ * `CONTAINER_NAME_MAX_CHARS`. A mergeable child is a root named by its
+ * parent's id, rewritten and never longer, plus its key, and a root name long
+ * enough leaves a record no keeper can open. Only data stored before the sync
+ * judge refused such a key reaches the plain branch; every key a writer mints
+ * is an id far inside the bound.
+ */
+function openCopiedMap(target: LoroMap, key: string): LoroMap {
+  return target.id.length + key.length > CONTAINER_NAME_MAX_CHARS
+    ? target.setContainer(key, new LoroMap())
+    : openMergeableMap(target, key)
+}
+
+/**
  * Sync a nested MAP, replacing a value that sits where a container is wanted.
  * That value is what the flattening sync described on `syncMapEntries` wrote,
  * and replacing it is what makes the flattened thread read again.
@@ -72,7 +88,7 @@ function syncNestedMap(target: LoroMap, key: string, wanted: LoroMap): boolean {
   const existing = target.get(key) as unknown
   if (existing instanceof LoroMap) return syncMapEntries(existing, wanted)
   if (existing !== undefined) target.delete(key)
-  syncMapEntries(openMergeableMap(target, key), wanted)
+  syncMapEntries(openCopiedMap(target, key), wanted)
   return true
 }
 

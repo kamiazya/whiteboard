@@ -25,10 +25,12 @@ import {
   replicaKeyProviderFor,
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import type { DocumentStore } from '@kamiazya/whiteboard-ports'
-import { workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
+import type { DeleteDocInput, DocumentStore } from '@kamiazya/whiteboard-ports'
+import { docRefKey, workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
 import { createDaemonFetch } from './daemon-fetch.js'
+import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentStore } from './idb-document-store.js'
+import { dropReplicaImages } from './replica-image-store.js'
 import { sealedUnderSupersededKey } from './replicas.js'
 import type { ReplicaKeyProvider } from './sealed-document-store.js'
 import { SealedDocumentStore } from './sealed-document-store.js'
@@ -118,12 +120,43 @@ export function replicaKeyStatus(
 }
 
 /**
+ * The key a workspace's record is sealed under, as the routing above decides
+ * it — or null when that record is not sealed, or cannot be opened now.
+ * Content kept BESIDE a replica's record (its cached images) is sealed under
+ * this same answer, so it is never readable where the record is not, and is
+ * never kept at all for a record held in plaintext.
+ */
+export async function replicaRecordKey(
+  workspaceId: string,
+): Promise<{ key: CryptoKey; epoch: number } | null> {
+  const answer = await routingProvider.keyFor(docRefKey({ kind: 'workspace-tree', workspaceId }))
+  return typeof answer === 'object' ? answer : null
+}
+
+/**
+ * A workspace record's deletion takes the replica images filed under the
+ * same id with it, whichever caller deletes the copy: the images are
+ * unreadable without the record, and nothing else would ever reclaim them.
+ */
+class ReplicaDocumentStore extends SealedDocumentStore {
+  constructor(private readonly dbName: string | undefined) {
+    super(new IdbDocumentStore(dbName), routingProvider)
+  }
+
+  override async deleteDoc(input: DeleteDocInput): Promise<void> {
+    await super.deleteDoc(input)
+    if (input.docRef.kind !== 'workspace-tree') return
+    await dropReplicaImages(input.docRef.workspaceId, new IdbBlobStore(this.dbName))
+  }
+}
+
+/**
  * The one `DocumentStore` construction site. `dbName` mirrors
  * `IdbDocumentStore`'s own optional parameter — production never passes it;
  * a test claims a private database the way every other browser test does.
  */
 export function openDocumentStore(dbName?: string): DocumentStore {
-  return new SealedDocumentStore(new IdbDocumentStore(dbName), routingProvider)
+  return new ReplicaDocumentStore(dbName)
 }
 
 /**

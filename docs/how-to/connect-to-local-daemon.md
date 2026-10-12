@@ -173,21 +173,33 @@ one step from **Settings → Connections → This workspace**:
    **Reload and continue from the daemon** to switch to working from the
    daemon, or keep working in the browser.
 
-The move carries your documents, their full edit history, and the images
-they reference. Documents keep their identity, so links between them keep
-working on the daemon. If a path already exists in the chosen daemon
-workspace, both versions are kept and the pre-existing one is marked
-*shadowed* — nothing is renamed or overwritten.
+The move carries your documents and their edit history, the **Trash**
+(so a trashed document can still be restored on the daemon), every **saved
+version** with its label, and every image any of these use — including an
+image only a trashed document or an older version shows. Documents keep
+their identity, so links between them keep working on the daemon. If a
+path already exists in the chosen daemon workspace, both versions are kept
+and the pre-existing one is marked *shadowed* — nothing is renamed or
+overwritten. Your saved versions keep their dates; the move adds one more,
+marking the move itself.
 
-Once every document and image is confirmed on the daemon, the old browser
-copy is removed: the daemon is the workspace's one keeper, and this browser
+A trashed document so large it does not fit in the move with everything
+else stays behind, and so does anything this browser cannot read; the
+result names each one when the move finishes, and the browser copy is kept
+so nothing is lost.
+
+Once the daemon confirms it holds every document, image, trashed document
+and saved version that moved, the old browser copy is removed: the daemon is the workspace's one keeper, and this browser
 keeps a **cached replica** instead — it opens read-only when the daemon
-cannot be reached, so your data stays viewable offline. What it shows
-depends on what is actually on this device and what the daemon last said:
-a copy that is readable in memory, a copy that only your passkey can open
-(with an **Unlock with your passkey** action that needs no network), or a
-copy that is present but locked until the daemon can be reached again (with
-a Reconnect action).
+cannot be reached, so your data stays viewable offline. The replica holds
+the images its documents show too, up to 64 MiB per workspace; an image past
+that limit, or one the daemon could not serve when the replica last synced,
+reads *Image unavailable offline* until a later sync can fetch it. What the
+replica shows depends on what is actually on this device and what the daemon
+last said: a copy that is readable in memory, a copy that only your passkey
+can open (with an **Unlock with your passkey** action that needs no
+network), or a copy that is present but locked until the daemon can be
+reached again (with a Reconnect action).
 
 The passkey unlock is what lets a copy survive closing the tab, and you
 switch it on per copy: see
@@ -216,10 +228,10 @@ anywhere, and the way to let go of it is to move it to a daemon first.
 
 ## Read a copy offline
 
-A cached replica is encrypted on this device, and its key is held only while
-the tab is open. To open a copy after the tab has closed and the daemon is
-unreachable, use **Make readable offline** on its row in **Settings >
-Connections > Copies on this device**.
+A cached replica, the images it holds included, is encrypted on this device,
+and its key is held only while the tab is open. To open a copy after the tab
+has closed and the daemon is unreachable, use **Make readable offline** on
+its row in **Settings > Connections > Copies on this device**.
 
 The action creates a passkey in this browser only. It is not registered with
 the daemon, and the app never asks for one on its own. The copy's key is

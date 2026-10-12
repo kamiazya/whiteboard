@@ -29,6 +29,7 @@ import { TouchFormattingBar } from './components/markdown-editor/TouchFormatting
 import { getAppLogger } from './lib/app-logger.js'
 import { parseWorkspaceRoute } from './lib/app-routes.js'
 import { resolveBrowserWorkspaceId } from './lib/browser-workspace-id.js'
+import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 
 const log = getAppLogger('boot')
 
@@ -55,7 +56,7 @@ const ServerModeApp = lazy(() =>
 
 /** A server-mode keeper marks the shell it serves (ADR-0047). A plain read,
  *  not the runtime-config schema, for the same entry-chunk reason. */
-export function servedByServerKeeper(): boolean {
+function servedByServerKeeper(): boolean {
   const raw = (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__
   return (
     typeof raw === 'object' && raw !== null && (raw as { keeper?: unknown }).keeper === 'server'
@@ -126,6 +127,10 @@ export async function startBootSequence({
   dismissSplash = () => dismissBootSplash(),
   render = renderApp,
 }: BootSequenceOptions): Promise<void> {
+  // A keeper that serves this shell keeps the files itself; only the browser
+  // keeper's own uploads are this page's to reclaim. Armed before the awaits
+  // below, so its delay counts from page load rather than from first paint.
+  if (!servedByServerKeeper()) scheduleFileSweep()
   // Bounded await: every on-screen text measurement (SpatialEditor,
   // MarkdownEditor's preview pane, useDocumentSync) must use the same vendored
   // Roboto face the Node export pipeline measures, or wrapped-line counts and

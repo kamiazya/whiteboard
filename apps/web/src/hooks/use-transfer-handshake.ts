@@ -106,7 +106,7 @@ export function useTransferHandshake({
     const outcome = await acceptTransferredRecord({
       fetch: fetchFn,
       workspaceId: targetId,
-      snapshot: offer.snapshot,
+      ...offer,
     })
     if (!outcome.ok) {
       setStage({ kind: 'refused', reason: outcome.reason })
@@ -120,14 +120,9 @@ export function useTransferHandshake({
       shadowed: outcome.shadowedPaths,
     })
     if (opener) {
-      postTransferResult(opener, session, {
-        ok: true,
-        workspaceId: targetId,
-        promotedDocumentIds: outcome.promotedDocumentIds,
-        shadowedPaths: outcome.shadowedPaths,
-        attested: outcome.attested,
-        imagesMissing: outcome.imagesMissing,
-      })
+      // The keeper's own read-back, whole: ids, collisions, attestation,
+      // missing images and the carried planes it did not report holding.
+      postTransferResult(opener, session, { ...outcome, workspaceId: targetId })
     }
   }, [session, fetchFn, targetId, opener])
 

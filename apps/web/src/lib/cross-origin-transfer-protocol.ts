@@ -41,6 +41,7 @@
  * the realm-independent test, and a `z.instanceof(Uint8Array)` here would
  * refuse every real message while passing every test that builds one in-realm.
  */
+import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
@@ -88,8 +89,23 @@ export const transferRequestSchema = z.discriminatedUnion('type', [
     snapshot: uint8ArrayAnyRealmSchema,
     documentCount: z.number().int().nonnegative(),
     sourceWorkspaceId: z.string().min(1),
+    /**
+     * The planes the record only points at — each trash entry's evacuated
+     * bytes and the saved version rows — in exactly the form the receiver
+     * posts on to its keeper's promote, so the two cannot disagree. Optional:
+     * an older sender carries none, and its trash then lists unrestorable.
+     */
+    trash: promoteWorkspaceRequestSchema.shape.trash,
+    versions: promoteWorkspaceRequestSchema.shape.versions,
   }),
 ])
+
+/**
+ * What did not land, one sentence each — written by whichever side knows:
+ * the sender for what it could not read or fit, the receiver for what its
+ * keeper did not report holding. Bounded, since the sender shows it as-is.
+ */
+const leftBehindSchema = z.array(z.string().min(1).max(500)).max(100)
 
 /**
  * Discriminated on `ok`, not on `type`. Both arms are a `transfer-result` —
@@ -124,6 +140,11 @@ export const transferResponseSchema = z.discriminatedUnion('ok', [
      * this version of the sender.
      */
     imagesMissing: z.array(z.string()).optional(),
+    /**
+     * What the receiving keeper did not report holding of the trash and
+     * versions the offer carried. Optional for the reason `imagesMissing` is.
+     */
+    leftBehind: leftBehindSchema.optional(),
   }),
   z.object({
     type: z.literal('transfer-result'),
