@@ -18,9 +18,9 @@ import type {
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
-  StoredDocumentUnreadableCode,
 } from '../index.js'
 import { docRefKey, StoredDocumentUnreadableError } from '../index.js'
+import type { StoredDocumentUnreadableCode } from '../stored-document-unreadable-error.js'
 
 /**
  * Defensive copy of a byte buffer into a fresh `ArrayBuffer`-backed

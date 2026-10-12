@@ -54,8 +54,6 @@ const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
     'debt: browser tests only; shipped code takes it from font.ts',
   'packages/history/src/index.ts#CHECKPOINT_QUIET_MS':
     'debt: keeper tests advance timers by it; the scheduler reads it in place',
-  'packages/ports/src/index.ts#StoredDocumentUnreadableCode':
-    'debt: only the in-memory test double names the code type',
   'packages/search/src/index.ts#tokenize':
     'debt: search-quality tests only; full-text.ts uses it in place',
   'packages/search/src/index.ts#tokenizeForIndex':
@@ -239,7 +237,7 @@ describe('package entries forward only names someone imports through them', () =
   })
 
   it('holds the test-only ledger at its size, so it only shrinks', () => {
-    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(19)
+    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(18)
     for (const reason of Object.values(TEST_ONLY_FORWARDS)) {
       expect(reason).toMatch(/^(?:decision|debt): \S/)
     }
