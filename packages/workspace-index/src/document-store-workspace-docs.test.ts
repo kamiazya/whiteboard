@@ -127,13 +127,20 @@ class FakeDocumentStore implements DocumentStore {
     return { ok: true, generation }
   }
 
-  async appendDeltas({ docRef, deltaBatch }: AppendDeltasInput): Promise<AppendDeltasResult> {
+  async appendDeltas({
+    docRef,
+    deltaBatch,
+    requireSnapshot,
+  }: AppendDeltasInput): Promise<AppendDeltasResult> {
     const stored = this.docs.get(docRefKey(docRef))
-    if (stored === undefined) throw new Error('append without a snapshot')
+    if (stored === undefined || stored.manifest === null) {
+      if (requireSnapshot === true) return { ok: false, reason: 'no-snapshot' }
+      throw new Error('append without a snapshot')
+    }
     stored.deltas.push(...deltaBatch.updates)
     stored.nextSeq += deltaBatch.updates.length
     stored.frontier = deltaBatch.newFrontier
-    return { frontier: stored.frontier }
+    return { ok: true, frontier: stored.frontier }
   }
 
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {

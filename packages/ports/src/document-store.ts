@@ -110,11 +110,34 @@ const saveCompactedSnapshotResultSchema = z.discriminatedUnion('ok', [
 export type SaveCompactedSnapshotResult = z.infer<typeof saveCompactedSnapshotResultSchema>
 
 export const appendDeltasInputSchema = z
-  .object({ docRef: docRefSchema, deltaBatch: deltaBatchSchema })
+  .object({
+    docRef: docRefSchema,
+    deltaBatch: deltaBatchSchema,
+    /**
+     * Refuse, writing nothing, when the document has no snapshot.
+     *
+     * Without it an append to an absent document CREATES one — a log with
+     * nothing behind it — so a writer that read the record, lost it to a
+     * delete, and then appended would bring the deleted record back as a
+     * fragment no reader opens. Checked inside the store's own write, because
+     * a caller's earlier read of the snapshot is exactly what the delete
+     * slipped past.
+     */
+    requireSnapshot: z.boolean().optional(),
+  })
   .strict()
 export type AppendDeltasInput = z.infer<typeof appendDeltasInputSchema>
 
-export const appendDeltasResultSchema = z.object({ frontier: frontierSchema }).strict()
+/**
+ * A refusal is an OUTCOME, for the reason `saveCompactedSnapshot`'s is: the
+ * record going away under a writer is expected under concurrency, and what
+ * the writer does next (create it again, or learn that it may not) is its
+ * own decision rather than a catch.
+ */
+export const appendDeltasResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), frontier: frontierSchema }).strict(),
+  z.object({ ok: z.literal(false), reason: z.literal('no-snapshot') }).strict(),
+])
 export type AppendDeltasResult = z.infer<typeof appendDeltasResultSchema>
 
 /**
@@ -237,6 +260,12 @@ export interface DocumentStore {
    *
    * Without this a log has no way to stop growing while the document lives:
    * `deleteDoc` is the only other thing that clears one.
+   *
+   * A CREATE (`expectedGeneration: null`) drops the whole log, whatever
+   * count it names. A log with no snapshot behind it is not part of any
+   * document — only an unconditional append can leave one, and it is what a
+   * write racing a delete leaves — so a fresh snapshot adopting it would carry
+   * those bytes into a document that never contained them.
    */
   saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<SaveCompactedSnapshotResult>
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>

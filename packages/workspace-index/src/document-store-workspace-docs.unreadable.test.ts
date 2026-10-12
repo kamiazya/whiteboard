@@ -70,7 +70,7 @@ function storeHolding(bytes: Uint8Array<ArrayBuffer>): DocumentStore {
       return { ok: true, generation: 1 }
     },
     async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
-      return { frontier: new Uint8Array() }
+      return { ok: true, frontier: new Uint8Array() }
     },
     async deleteDoc(_input: DeleteDocInput): Promise<void> {},
   } as unknown as DocumentStore

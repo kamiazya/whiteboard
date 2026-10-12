@@ -70,14 +70,22 @@ describe('DocumentStore method DTOs', () => {
   })
 
   it('appendDeltas: accepts a docRef + deltaBatch input; result requires a frontier', () => {
+    const deltaBatch = { updates: [new Uint8Array([1])], newFrontier: frontier }
+    expect(appendDeltasInputSchema.safeParse({ docRef, deltaBatch }).success).toBe(true)
     expect(
-      appendDeltasInputSchema.safeParse({
-        docRef,
-        deltaBatch: { updates: [new Uint8Array([1])], newFrontier: frontier },
-      }).success,
+      appendDeltasInputSchema.safeParse({ docRef, deltaBatch, requireSnapshot: true }).success,
     ).toBe(true)
-    expect(appendDeltasResultSchema.safeParse({ frontier }).success).toBe(true)
-    expect(appendDeltasResultSchema.safeParse({}).success).toBe(false)
+    expect(appendDeltasResultSchema.safeParse({ ok: true, frontier }).success).toBe(true)
+    expect(appendDeltasResultSchema.safeParse({ ok: true }).success).toBe(false)
+  })
+
+  it('appendDeltas: a refusal names why and carries no frontier', () => {
+    expect(appendDeltasResultSchema.safeParse({ ok: false, reason: 'no-snapshot' }).success).toBe(
+      true,
+    )
+    expect(
+      appendDeltasResultSchema.safeParse({ ok: false, reason: 'no-snapshot', frontier }).success,
+    ).toBe(false)
   })
 
   it('loadDeltas: takes a seq cursor, and the result carries the cursor and the generation', () => {

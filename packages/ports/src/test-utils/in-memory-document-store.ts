@@ -169,8 +169,9 @@ export class InMemoryDocumentStore implements DocumentStore {
       snapshot: { manifest: input.manifest, chunks: input.chunks.map(cloneChunk) },
       frontier: cloneBytes(input.frontier),
       // Exactly the superseded prefix. Anything appended after the caller
-      // folded is not in the snapshot and stays.
-      deltas: existing.deltas.slice(input.supersededDeltaCount),
+      // folded is not in the snapshot and stays. A create has no prefix to
+      // keep: a log with no snapshot behind it is not part of the document.
+      deltas: current === null ? [] : existing.deltas.slice(input.supersededDeltaCount),
       // NOT reset. A fold shortens the array without moving the seqs already
       // handed out, which is what keeps a tail's cursor meaningful across it.
       nextSeq: existing.nextSeq,
@@ -182,6 +183,9 @@ export class InMemoryDocumentStore implements DocumentStore {
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {
     const key = docRefKey(input.docRef)
     const existing = this.getRecord(key)
+    if (input.requireSnapshot === true && existing.snapshot === null) {
+      return { ok: false, reason: 'no-snapshot' }
+    }
     const frontier = cloneBytes(input.deltaBatch.newFrontier)
     this.docs.set(key, {
       ...existing,
@@ -189,7 +193,7 @@ export class InMemoryDocumentStore implements DocumentStore {
       nextSeq: existing.nextSeq + input.deltaBatch.updates.length,
       frontier,
     })
-    return { frontier: cloneBytes(frontier) }
+    return { ok: true, frontier: cloneBytes(frontier) }
   }
 
   /**
