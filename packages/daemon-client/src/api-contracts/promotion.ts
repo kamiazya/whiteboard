@@ -1,8 +1,5 @@
 import {
-  type Attestation,
   base64urlSchema,
-  type PromotedTrashBytes,
-  type PromotedVersion,
   promotedTrashBytesRequestSchema,
   promotedVersionRequestSchema,
 } from '@kamiazya/whiteboard-server-core/versions/version-entry'
@@ -15,7 +12,11 @@ import { MAX_FILE_UPLOAD_BYTES } from './files.js'
 // pinned credential is validated by the same rule the daemon pinned it under.
 // The carried planes' shapes are server-core's, where the operation that
 // judges them reads them, and are published here for the sender.
-export type { Attestation, PromotedTrashBytes, PromotedVersion }
+export type {
+  Attestation,
+  PromotedTrashBytes,
+  PromotedVersion,
+} from '@kamiazya/whiteboard-server-core/versions/version-entry'
 export { base64urlSchema }
 
 /**
