@@ -9,7 +9,9 @@
  * that lands on a source file, lists what that file forwards (`export { x }
  * from`, and `export { x }` of an imported binding), and fails on a forwarded
  * name no file imports through the entry, by its package specifier or by a
- * relative path to the same file.
+ * relative path to the same file. Through a runtime entry only a SHIPPED
+ * importer counts; a test-support entry (a `test-utils`/`testing` subpath)
+ * exists for tests, so a test's import counts there.
  *
  * A namespace import counts the members read off it (`ns.x`). Otherwise it
  * errs toward false negatives: a shipped file reaching an entry wholesale — a
@@ -25,7 +27,7 @@ import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, type RepoSource, readRepoSources, readWorkspaceEntries } from './scan-roots.js'
-import { isTestPath } from './source-scan.js'
+import { isShippedPath, isTestPath } from './source-scan.js'
 
 /**
  * Forwarded names with no importer, as `<entry path>#<name>`, each with why.
@@ -34,6 +36,58 @@ import { isTestPath } from './source-scan.js'
 const UNIMPORTED: Readonly<Record<string, string>> = {
   'packages/server-core/src/index.ts#DocumentEngineTrapError':
     'debt: every user imports it from document-io.js inside the package; drop the re-export',
+}
+
+/**
+ * Forwards from a RUNTIME entry that only tests import through it, as
+ * `<entry path>#<name>`, each with why: `decision:` is kept on purpose,
+ * `debt:` is a barrel line to drop once its tests import the origin.
+ * Shrink-only, its size pinned by equality, so a retired contract's test
+ * cannot add its forward here unnoticed.
+ */
+const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
+  'packages/plugin-visual/src/index.ts#BUILT_IN_ICON_NAMES':
+    "decision: the icon-name catalogue is part of the plugin's data surface; catalog.test.ts holds it to LUCIDE_ICONS",
+  'packages/server-core/src/index.ts#apiErrorBodySchema':
+    'decision: the strict refusal-body contract a daemon emits, published from the package root; the route fuzz holds every refusal to it',
+  'packages/canvas-viewer/src/index.ts#VIEWER_FONT_FAMILY':
+    'debt: browser tests only; shipped code takes it from font.ts',
+  'packages/canvas-viewer/src/index.ts#ensureViewerFontLoaded':
+    'debt: tests and doc snapshots only; boot.ts takes it from the ./font-loading subpath',
+  'packages/daemon-client/src/sync-frames.ts#viewportRequestParamsSchema':
+    'debt: contract tests only; server-core owns it in viewport-request.ts',
+  'packages/history/src/index.ts#CHECKPOINT_QUIET_MS':
+    'debt: keeper tests advance timers by it; the scheduler reads it in place',
+  'packages/ports/src/index.ts#StoredDocumentUnreadableCode':
+    'debt: only the in-memory test double names the code type',
+  'packages/search/src/index.ts#tokenize':
+    'debt: search-quality tests only; full-text.ts uses it in place',
+  'packages/search/src/index.ts#tokenizeForIndex':
+    'debt: search-quality tests only; full-text.ts uses it in place',
+  'packages/server-core/src/index.ts#getLogger':
+    'debt: tests only; every shipped caller imports log.js inside the package',
+  'packages/server-core/src/index.ts#canvasEditInputSchema':
+    'debt: tests only; the tool registers it from tools/canvas-edit.ts',
+  'packages/server-core/src/index.ts#canvasSnapshotSchema':
+    'debt: tests only; shipped callers import tools/canvas-snapshot.ts',
+  'packages/server-core/src/index.ts#canvasViewInputSchema':
+    'debt: the widget contract test only; the tool registers it in place',
+  'packages/server-core/src/index.ts#canvasViewOutputSchema':
+    'debt: the widget contract test only; the tool registers it in place',
+  'packages/server-core/src/index.ts#createCanvasViewTool':
+    'debt: tests only; createServer builds it from tools/canvas-view.ts',
+  'packages/server-core/src/index.ts#createFacetListTool':
+    'debt: tests only; createServer builds it from tools/facet-list.ts',
+  'packages/server-core/src/index.ts#createVersionListTool':
+    'debt: the daemon version-tool test only; createServer builds it in place',
+  'packages/server-core/src/index.ts#createVersionRestoreTool':
+    'debt: the daemon version-tool test only; createServer builds it in place',
+  'packages/server-core/src/index.ts#createVersionSaveTool':
+    'debt: the daemon version-tool test only; createServer builds it in place',
+  'packages/server-core/src/index.ts#createWorkspaceEditTool':
+    'debt: tests only; createServer builds it from tools/workspace-edit.ts',
+  'packages/server-core/src/index.ts#versionRestoreOutputSchema':
+    'debt: the smoke tool-list parity test only; the tool registers it in place',
 }
 
 /** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
@@ -95,10 +149,20 @@ function relativeTarget(from: string, spec: string): string[] {
   return [base, `${stem}.ts`, `${stem}.tsx`, `${base}/index.ts`]
 }
 
-/** For each entry file, the names imported through it, or `'*'` when something takes it wholesale. */
+/**
+ * For each entry file, the names imported through it, or `'*'` when something
+ * takes it wholesale.
+ *
+ * A test's named import credits a runtime entry only when `countTests` is set:
+ * the commonest survivor of a retired contract is the contract's own test, so
+ * it cannot be what keeps the barrel line alive. An entry that is itself
+ * test-support (a `test-utils`/`testing` subpath) exists for tests, and a
+ * test's import always counts there.
+ */
 function importsByEntry(
   files: readonly RepoSource[],
   entries: ReadonlyMap<string, string>,
+  countTests: boolean,
 ): Map<string, Set<string>> {
   const entryFiles = new Set(entries.values())
   const byEntry = new Map<string, Set<string>>()
@@ -113,6 +177,7 @@ function importsByEntry(
     const reach = (spec: string | undefined, names: readonly string[]) => {
       const entry = spec === undefined ? undefined : land(path, spec)
       if (entry === undefined || entry === path) return
+      if (!countTests && isTestPath(path) && isShippedPath(entry)) return
       for (const name of names) add(entry, name)
     }
     for (const [, names, spec] of text.matchAll(NAMED)) reach(spec, bindingNames(names ?? ''))
@@ -138,10 +203,10 @@ function importsByEntry(
   return byEntry
 }
 
-function unimportedForwards(): string[] {
+function unimportedForwards(countTests: boolean): string[] {
   const entries = readWorkspaceEntries()
   const files = readRepoSources()
-  const imports = importsByEntry(files, entries)
+  const imports = importsByEntry(files, entries, countTests)
   const text = new Map(files.map((file) => [file.path, file.text]))
   return [...new Set(entries.values())].sort().flatMap((entry) => {
     const used = imports.get(entry)
@@ -155,14 +220,33 @@ function unimportedForwards(): string[] {
 }
 
 describe('package entries forward only names someone imports through them', () => {
-  it('finds no forwarded name without an importer', () => {
-    const offenders = unimportedForwards().filter((key) => !(key in UNIMPORTED))
+  it('finds no forwarded name without a shipped importer', () => {
+    const offenders = unimportedForwards(false).filter(
+      (key) => !(key in UNIMPORTED) && !(key in TEST_ONLY_FORWARDS),
+    )
     expect(offenders).toEqual([])
   })
 
-  it('keeps no ledgered entry that has gained an importer or gone', () => {
-    const current = new Set(unimportedForwards())
+  it('keeps no unimported entry that has gained an importer or gone', () => {
+    const current = new Set(unimportedForwards(true))
     expect(Object.keys(UNIMPORTED).filter((key) => !current.has(key))).toEqual([])
+  })
+
+  it('keeps no test-only entry that has gained a shipped importer, lost its tests, or gone', () => {
+    const shippedLess = new Set(unimportedForwards(false))
+    const importerLess = new Set(unimportedForwards(true))
+    expect(
+      Object.keys(TEST_ONLY_FORWARDS).filter(
+        (key) => !shippedLess.has(key) || importerLess.has(key),
+      ),
+    ).toEqual([])
+  })
+
+  it('holds the test-only ledger at its size, so it only shrinks', () => {
+    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(21)
+    for (const reason of Object.values(TEST_ONLY_FORWARDS)) {
+      expect(reason).toMatch(/^(?:decision|debt): \S/)
+    }
   })
 
   it('reaches the barrels it judges, so a clean scan is not a blind one', () => {
@@ -171,7 +255,7 @@ describe('package entries forward only names someone imports through them', () =
     const barrel = 'packages/daemon-client/src/api-contracts/index.ts'
     const forwarded = forwardedNames(barrel, readFileSync(join(REPO_ROOT, barrel), 'utf8'))
     expect(forwarded).toContain('apiErrorReason')
-    const used = importsByEntry(readRepoSources(), entries).get(barrel)
+    const used = importsByEntry(readRepoSources(), entries, false).get(barrel)
     expect(used?.has('apiErrorReason')).toBe(true)
     // A test walking the barrel whole must not excuse every name in it.
     expect(used?.has('*')).toBe(false)
@@ -199,17 +283,37 @@ describe('package entries forward only names someone imports through them', () =
         { path: 'p/t.ts', text: "export { e } from './index.js'" },
       ],
       entries,
+      true,
     ).get('p/index.ts')
     expect([...(found ?? [])].sort()).toEqual(['a', 'b', 'e'])
     expect(
-      importsByEntry([{ path: 'r.ts', text: dynamicImport }], entries).get('p/index.ts'),
+      importsByEntry([{ path: 'r.ts', text: dynamicImport }], entries, true).get('p/index.ts'),
     ).toEqual(new Set(['*']))
     const namespaced = (path: string) =>
       importsByEntry(
         [{ path, text: "import * as ns from '@s/p'\nns.f()\nObject.keys(ns)" }],
         entries,
+        true,
       ).get('p/index.ts')
     expect(namespaced('s.ts')).toEqual(new Set(['f', '*']))
     expect(namespaced('s.test.ts')).toEqual(new Set(['f']))
+  })
+
+  it('credits a runtime entry only to shipped importers, a test-support entry to tests too', () => {
+    const entries = new Map([
+      ['@s/p', 'p/src/index.ts'],
+      ['@s/p/test-utils', 'p/src/test-utils/index.ts'],
+    ])
+    const files = [
+      { path: 'q.test.ts', text: "import { a } from '@s/p'\nimport { t } from '@s/p/test-utils'" },
+      { path: 'q/fixtures/seed.ts', text: "import { b } from '@s/p'" },
+      { path: 'q.ts', text: "import { c } from '@s/p'" },
+    ]
+    const shipped = importsByEntry(files, entries, false)
+    expect(shipped.get('p/src/index.ts')).toEqual(new Set(['c']))
+    expect(shipped.get('p/src/test-utils/index.ts')).toEqual(new Set(['t']))
+    expect(importsByEntry(files, entries, true).get('p/src/index.ts')).toEqual(
+      new Set(['a', 'b', 'c']),
+    )
   })
 })
