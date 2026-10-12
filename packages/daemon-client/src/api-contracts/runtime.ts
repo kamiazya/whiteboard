@@ -6,10 +6,11 @@ import { didKeyToEd25519PublicKey } from './did-key.js'
 // alone can misidentify an unrelated process as "our" daemon; instanceId is
 // unique per start and never reused, closing that identity-confusion window
 // for the CLI's stop/status/doctor checks that read this endpoint.
-// The daemon's durable signing identity (see server/security/daemon-identity.ts).
+// The daemon's durable identity (see server/security/daemon-identity.ts).
 // publicKey is the raw Ed25519 public key, base64url. Advertising it is safe:
-// trust comes from whoever verifies a signature against a key they already
-// hold, never from the advertisement itself.
+// nothing the daemon serves is signed with it today, and when something is,
+// trust comes from a verifier checking against a key it already holds, never
+// from the advertisement itself.
 // `did` is the same key under the name the rest of the world uses for one
 // (ADR-0035 decision 1) — derived from publicKey, never a second credential,
 // and never what a pin is taken on. Optional for the same wire-compat reason

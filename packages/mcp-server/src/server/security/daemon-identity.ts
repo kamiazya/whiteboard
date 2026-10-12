@@ -1,24 +1,21 @@
 /**
- * The daemon's durable identity keypair. Its public key is published by the
- * ping route as a `did:key`, which names the daemon as the actor on the
- * versions it saves; the private key signs those versions' attestations
- * (ADR-0039) and stays in this data dir, readable by the owning OS user only.
+ * The daemon's durable identity keypair, which is the daemon's DID: its public
+ * key is published by the ping route as a `did:key`, and that `did:key` names
+ * the daemon as the actor on the versions it saves (ADR-0035 decisions 1-2).
+ * Nothing signs with the private key today. It is kept, in this data dir and
+ * readable by the owning OS user only, because it is the key ADR-0035 decision
+ * 3's checkpoint signatures would sign with; a version's attestation is a
+ * WebAuthn assertion (ADR-0039) and never involved this key.
  *
  * Threat boundary: a full-privilege local attacker can read the private key
  * and is out of scope — the daemon already trusts the OS user boundary.
  *
  * A corrupt or unreadable file regenerates a fresh keypair (rotation
- * semantics): the `did:key` changes, and attestations signed under the old
- * key no longer verify against the current one. Losing the file costs those
- * attestations' provenance, never a dead daemon.
+ * semantics): the `did:key` changes, so versions saved under the old one name
+ * an actor the daemon no longer answers to. Losing the file costs that
+ * continuity, never a dead daemon.
  */
-import {
-  createPrivateKey,
-  createPublicKey,
-  sign as cryptoSign,
-  generateKeyPairSync,
-  type KeyObject,
-} from 'node:crypto'
+import { createPrivateKey, createPublicKey, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { join } from 'node:path'
 import { ed25519PublicKeyToDidKey } from '@kamiazya/whiteboard-daemon-client/api-contracts/did-key'
 import { z } from 'zod'
@@ -57,15 +54,6 @@ export interface DaemonIdentity {
   readonly publicKey: string
   /** The same key as a `did:key`; a portable NAME for it, not a credential. */
   readonly did: string
-  /** Signs a domain-separated message; returns the signature base64url. */
-  readonly sign: (parts: readonly string[]) => string
-}
-
-// JSON-array encoding gives unambiguous part boundaries: ["ab","c"] and
-// ["a","bc"] serialize differently, so no length-prefixing scheme is needed.
-// The first part is always a domain-separation tag ("wb-verify-v1", ...).
-export function buildSignedPayload(parts: readonly string[]): Buffer {
-  return Buffer.from(JSON.stringify(parts), 'utf8')
 }
 
 interface LoadedKeys {
@@ -137,7 +125,5 @@ export function createDaemonIdentity({ dataDir }: { dataDir: string }): DaemonId
     alg: 'Ed25519',
     publicKey: publicKeyB64u,
     did,
-    sign: (parts) =>
-      cryptoSign(null, buildSignedPayload(parts), keys.privateKey).toString('base64url'),
   }
 }

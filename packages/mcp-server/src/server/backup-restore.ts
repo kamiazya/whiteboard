@@ -214,16 +214,17 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
  *   verifies against the LIVE daemon. It costs only reissuance to lose,
  *   which `macaroon-root-key.ts` already calls the expected price of
  *   regeneration, so the exclusion is cheap and the leak is not.
- * - The daemon's Ed25519 private key signs version attestations (ADR-0039)
- *   and is the source of its `did:key`. Excluding it is the one exclusion
- *   here with a real cost: a restored daemon generates a fresh identity, so
- *   its did:key changes and attestations signed by the old identity no
- *   longer verify against the current one. That cost is accepted because it
- *   is RECOVERABLE — old attestations are read as history — while a
- *   signing key sitting in a backup is a forgery capability that outlives
- *   the machine it came from, and that is not. Encrypting the backup under
- *   a passphrase is the answer that keeps both, and it is a feature rather
- *   than a list entry.
+ * - The daemon's Ed25519 private key is the source of its `did:key`, the
+ *   actor its saved versions name, and the key ADR-0035's checkpoint
+ *   signatures would sign with. Excluding it is the one exclusion here with
+ *   a real cost: a restored daemon generates a fresh identity, so its
+ *   did:key changes, every pin on the old key must be retaken, and versions
+ *   saved before the restore name an actor the daemon no longer answers to.
+ *   That cost is accepted because it is RECOVERABLE — old rows are read as
+ *   history — while a private key sitting in a backup is an impersonation
+ *   capability that outlives the machine it came from, and that is not.
+ *   Encrypting the backup under a passphrase is the answer that keeps both,
+ *   and it is a feature rather than a list entry.
  * - The in-progress marker is this command's own bookkeeping, and a copy of
  *   it in a restored data directory claims a backup is running there.
  *

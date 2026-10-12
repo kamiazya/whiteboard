@@ -1,4 +1,3 @@
-import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../shared/test-utils/can-deny-file-read.js'
 import { CHMOD_IS_OBSERVABLE } from '../../shared/test-utils/chmod-is-observable.js'
 import { captureLogsForTests } from '../log.js'
-import { buildSignedPayload, createDaemonIdentity } from './daemon-identity.js'
+import { createDaemonIdentity } from './daemon-identity.js'
 
 let dir: string
 
@@ -17,14 +16,6 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
-
-function verifySignature(publicKeyB64u: string, parts: readonly string[], signatureB64u: string) {
-  const key = createPublicKey({
-    key: { kty: 'OKP', crv: 'Ed25519', x: publicKeyB64u },
-    format: 'jwk',
-  })
-  return cryptoVerify(null, buildSignedPayload(parts), key, Buffer.from(signatureB64u, 'base64url'))
-}
 
 describe('createDaemonIdentity', () => {
   it('generates a persisted Ed25519 identity on first start', () => {
@@ -60,21 +51,6 @@ describe('createDaemonIdentity', () => {
     const first = createDaemonIdentity({ dataDir: dir })
     const second = createDaemonIdentity({ dataDir: dir })
     expect(second.publicKey).toBe(first.publicKey)
-  })
-
-  it('signatures verify against the advertised public key', () => {
-    const identity = createDaemonIdentity({ dataDir: dir })
-    const parts = ['wb-verify-v1', 'nonce-abc', 'https://example.com'] as const
-    const signature = identity.sign(parts)
-    expect(verifySignature(identity.publicKey, parts, signature)).toBe(true)
-    // A different message must not verify.
-    expect(verifySignature(identity.publicKey, ['wb-verify-v1', 'other', ''], signature)).toBe(
-      false,
-    )
-  })
-
-  it('part boundaries are unambiguous (["ab","c"] never collides with ["a","bc"])', () => {
-    expect(buildSignedPayload(['ab', 'c'])).not.toEqual(buildSignedPayload(['a', 'bc']))
   })
 
   it('a corrupt identity file regenerates (rotation semantics) with a warning', () => {
@@ -134,7 +110,7 @@ describe('createDaemonIdentity', () => {
     const capture = captureLogsForTests('debug')
     try {
       const identity = createDaemonIdentity({ dataDir: dir })
-      expect(Object.keys(identity).sort()).toEqual(['alg', 'did', 'publicKey', 'sign'])
+      expect(Object.keys(identity).sort()).toEqual(['alg', 'did', 'publicKey'])
       const raw = readFileSync(join(dir, 'daemon-identity.json'), 'utf8')
       const privateD = JSON.parse(raw).privateJwk.d
       expect(typeof privateD).toBe('string')
