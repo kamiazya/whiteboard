@@ -2,11 +2,14 @@
 /**
  * The navigation machine's behaviour, stated at the model level.
  *
- * These are a PORT's specification, not a discovery: every case here is
- * behaviour `SpatialEditor.tsx` already ships and its browser tests already
- * pin. Writing them at this layer is what makes the port checkable at all —
- * a reducer whose only evidence is "the browser suite still passes" would
- * tell you it broke without telling you where.
+ * Every case here is behaviour `SpatialEditor.tsx` ships, but this file is
+ * NOT a restatement of the browser suite: several arms are pinned here and
+ * nowhere else — the double-press window and slop at their exact bounds, the
+ * hand tool's sole claim on the double press, a gather that grows past one
+ * member, a finger a pinch leaves behind, and a release that is not the
+ * panning pointer's. The browser tests drive these arms without asserting
+ * them, so loosening any one leaves every browser file green.
+ * `navigation.property.test.ts` holds the multi-finger arms against a model.
  *
  * The two most recent defects are restated here as model-level cases (a
  * double press bounded in space, a stranded touch dropped on the next
@@ -18,7 +21,6 @@ import { describe, expect, it } from 'vitest'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_SLOP_PX,
-  DOUBLE_PRESS_WINDOW_MS,
   NAVIGATION_MEMORY_KEYS,
   type NavigationEvent,
   type NavigationState,
@@ -134,14 +136,38 @@ describe('the hand double press', () => {
     expect(state.mode.kind).toBe('panning')
   })
 
+  // The window and the slop are written as literals, not as the exported
+  // constants: a case built from the constant moves with it, so retuning the
+  // window to four seconds would leave every case here green.
   it('pans when the second press is late, however close in space', () => {
-    const { effects, state } = run([
-      first,
-      up(1),
-      down(1, { x: 100, y: 100 }, { timeStamp: DOUBLE_PRESS_WINDOW_MS + 1 }),
-    ])
+    const { effects, state } = run([first, up(1), down(1, { x: 100, y: 100 }, { timeStamp: 401 })])
     expect(effects.filter((effect) => effect.kind === 'zoom-at')).toEqual([])
     expect(state.mode.kind).toBe('panning')
+  })
+
+  it('presses a full second apart are two presses, not a double press', () => {
+    const { effects } = run([first, up(1), down(1, { x: 100, y: 100 }, { timeStamp: 1000 })])
+    expect(effects.filter((effect) => effect.kind === 'zoom-at')).toEqual([])
+  })
+
+  it('zooms on a second press landing exactly at the window and exactly at the slop', () => {
+    const atWindow = run([first, up(1), down(1, { x: 100, y: 100 }, { timeStamp: 400 })])
+    expect(atWindow.effects.filter((effect) => effect.kind === 'zoom-at')).toHaveLength(1)
+    const atSlop = run([first, up(1), down(1, { x: 140, y: 100 }, { timeStamp: 100 })])
+    expect(atSlop.effects.filter((effect) => effect.kind === 'zoom-at')).toHaveLength(1)
+  })
+
+  it('belongs to the hand tool alone: a Space or middle-button double press only pans', () => {
+    const mouse = (button: number, context: PressContext, timeStamp: number) =>
+      down(1, { x: 100, y: 100 }, { button, context, timeStamp, pointerType: 'mouse' })
+    const mouseUp: NavigationEvent = { type: 'pointerup', pointerId: 1, pointerType: 'mouse' }
+    const space = { ...plainContext, spaceDown: true }
+    const spaceDrag = run([mouse(0, space, 0), mouseUp, mouse(0, space, 100)])
+    expect(spaceDrag.effects.filter((effect) => effect.kind === 'zoom-at')).toEqual([])
+    expect(spaceDrag.state.mode.kind).toBe('panning')
+    const middle = run([mouse(1, handContext, 0), mouseUp, mouse(1, handContext, 100)])
+    expect(middle.effects.filter((effect) => effect.kind === 'zoom-at')).toEqual([])
+    expect(middle.state.mode.kind).toBe('panning')
   })
 })
 
@@ -186,6 +212,54 @@ describe('two fingers', () => {
     ])
     expect(effects.filter((effect) => effect.kind === 'pan')).toEqual([])
     expect(state.mode).toEqual({ kind: 'pinching' })
+  })
+
+  it('a finger left behind by a pinch is still navigation’s, not the caller’s', () => {
+    const { fallThrough } = run([
+      down(1, { x: 100, y: 100 }, { context: plainContext }),
+      down(2, { x: 200, y: 100 }, { context: plainContext, isPrimary: false }),
+      move(2, { x: 260, y: 100 }),
+      up(1),
+      move(2, { x: 300, y: 100 }),
+    ])
+    expect(fallThrough).toBe(false)
+  })
+
+  it('a mouse release during a pinch is the caller’s: the mouse was never part of it', () => {
+    const { state, fallThrough } = run([
+      down(1, { x: 100, y: 100 }),
+      down(2, { x: 200, y: 100 }, { isPrimary: false }),
+      down(9, { x: 50, y: 50 }, { context: plainContext, pointerType: 'mouse', isPrimary: true }),
+      { type: 'pointerup', pointerId: 9, pointerType: 'mouse' },
+    ])
+    expect(fallThrough).toBe(true)
+    expect(state.mode).toEqual({ kind: 'pinching' })
+  })
+})
+
+describe('a release that is not the panning pointer’s', () => {
+  // A press on an overlay control never reaches the machine, but its release
+  // does, because the control captures the pointer on the root.
+  it('a finger lifting off an overlay leaves a middle-button pan running', () => {
+    const { state, effects } = run([
+      down(1, { x: 100, y: 100 }, { context: plainContext, button: 1, pointerType: 'mouse' }),
+      { type: 'external-press', pointerId: 2 },
+      up(2),
+      { type: 'pointermove', pointerId: 1, pointerType: 'mouse', point: { x: 130, y: 100 } },
+    ])
+    expect(state.mode).toMatchObject({ kind: 'panning', pointerId: 1 })
+    expect(effects).toContainEqual({ kind: 'pan', deltaScreen: { x: 30, y: 0 } })
+  })
+
+  it('a mouse lifting off an overlay leaves a one-finger hand pan running', () => {
+    const { state, effects } = run([
+      down(1, { x: 100, y: 100 }),
+      { type: 'external-press', pointerId: 9 },
+      { type: 'pointerup', pointerId: 9, pointerType: 'mouse' },
+      move(1, { x: 130, y: 100 }),
+    ])
+    expect(state.mode).toMatchObject({ kind: 'panning', pointerId: 1 })
+    expect(effects).toContainEqual({ kind: 'pan', deltaScreen: { x: 30, y: 0 } })
   })
 })
 
@@ -232,6 +306,78 @@ describe('gathering', () => {
     ])
     expect(effects.filter((effect) => effect.kind === 'gather')).toEqual([])
     expect(state.mode).toEqual({ kind: 'pinching' })
+  })
+
+  /** Anchor on n1, first member on n2 — the gather every case below extends. */
+  const begun = [
+    down(1, { x: 100, y: 100 }, { context: { ...gatherContext, hitId: 'n1' } }),
+    down(2, { x: 200, y: 200 }, { context: gatherContext, isPrimary: false }),
+  ]
+
+  it('a further finger on empty space is another tap, never a pinch', () => {
+    const { state, fallThrough } = run([
+      ...begun,
+      down(
+        3,
+        { x: 300, y: 300 },
+        { context: { ...gatherContext, hitId: undefined }, isPrimary: false },
+      ),
+    ])
+    expect(state.mode.kind).toBe('gathering')
+    expect(fallThrough).toBe(true)
+  })
+
+  it('a later gathered finger keeps every earlier one a member, so each release is consumed', () => {
+    const third = down(
+      3,
+      { x: 300, y: 300 },
+      { context: { ...gatherContext, hitId: 'n3' }, isPrimary: false },
+    )
+    const gathered = run([...begun, third])
+    expect(gathered.state.mode).toMatchObject({
+      kind: 'gathering',
+      anchorId: 1,
+      memberIds: new Set([2, 3]),
+    })
+    const lifted = run([up(2)], gathered.state)
+    expect(lifted.fallThrough).toBe(false)
+    expect(lifted.state.mode).toMatchObject({ kind: 'gathering', memberIds: new Set([3]) })
+  })
+
+  it('only the finger that began the gather abandons the manipulation', () => {
+    const gathered = run(begun)
+    const next = reduceNavigation(
+      gathered.state,
+      down(3, { x: 300, y: 300 }, { context: { ...gatherContext, hitId: 'n3' }, isPrimary: false }),
+    )
+    expect(next.effects).toEqual([
+      { kind: 'clear-marquee' },
+      { kind: 'clear-press-memory' },
+      { kind: 'clear-long-press' },
+      { kind: 'gather', anchorPrimaryId: 'n1', hitId: 'n3' },
+    ])
+  })
+
+  it('neither the anchor nor a member drags while the gather holds', () => {
+    const gathered = run(begun)
+    for (const pointerId of [1, 2]) {
+      const result = reduceNavigation(gathered.state, move(pointerId, { x: 400, y: 400 }))
+      expect(result).toEqual({ state: gathered.state, effects: [], fallThrough: false })
+    }
+  })
+
+  it('a finger that joined without gathering anything releases to the caller', () => {
+    const { state, fallThrough } = run([
+      ...begun,
+      down(
+        3,
+        { x: 300, y: 300 },
+        { context: { ...gatherContext, hitId: undefined }, isPrimary: false },
+      ),
+      up(3),
+    ])
+    expect(fallThrough).toBe(true)
+    expect(state.mode).toMatchObject({ kind: 'gathering', memberIds: new Set([2]) })
   })
 })
 
