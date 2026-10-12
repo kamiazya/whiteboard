@@ -203,7 +203,9 @@ function versionRow({
     contentDigest,
     createdAt,
     restoredFrom: opts.restoredFrom ?? null,
-    attestation: opts.attestation === undefined ? null : JSON.stringify(opts.attestation),
+    // Nothing saves a version with a person's evidence; the column is kept
+    // for the rows that already carry one, which `rowToEntry` still reads.
+    attestation: null,
   }
 }
 
@@ -237,7 +239,6 @@ function savedVersion({
     ...(opts.label !== undefined ? { label: opts.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
-    ...(opts.attestation !== undefined ? { attestation: opts.attestation } : {}),
   }
 }
 
@@ -259,7 +260,6 @@ export class FileVersionStore implements VersionStore {
       operator?: OperatorInfo
       /** The version this point was produced by restoring; see `versionEntrySchema`. */
       restoredFrom?: string
-      attestation?: Attestation
     },
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
