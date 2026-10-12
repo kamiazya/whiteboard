@@ -2,12 +2,12 @@ import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import {
   createVersionListTool,
   createVersionRestoreTool,
   createVersionSaveTool,
-  type ServerDeps,
-} from '@kamiazya/whiteboard-server-core'
+} from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'

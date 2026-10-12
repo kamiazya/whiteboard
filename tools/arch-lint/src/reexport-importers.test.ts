@@ -50,24 +50,6 @@ const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
     "decision: the icon-name catalogue is part of the plugin's data surface; catalog.test.ts holds it to LUCIDE_ICONS",
   'packages/server-core/src/index.ts#apiErrorBodySchema':
     'decision: the strict refusal-body contract a daemon emits, published from the package root; the route fuzz holds every refusal to it',
-  'packages/server-core/src/index.ts#getLogger':
-    'debt: tests only; server-core-logs.test.ts takes it from ./log, mcp/document-tools.test.ts still from the root',
-  'packages/server-core/src/index.ts#canvasEditInputSchema':
-    'debt: tests only; the tool registers it from tools/canvas-edit.ts',
-  'packages/server-core/src/index.ts#canvasViewInputSchema':
-    'debt: the widget contract test only; the tool registers it in place',
-  'packages/server-core/src/index.ts#canvasViewOutputSchema':
-    'debt: the widget contract test only; the tool registers it in place',
-  'packages/server-core/src/index.ts#createCanvasViewTool':
-    'debt: tests only; createServer builds it from tools/canvas-view.ts',
-  'packages/server-core/src/index.ts#createVersionListTool':
-    'debt: the daemon version-tool test only; createServer builds it in place',
-  'packages/server-core/src/index.ts#createVersionRestoreTool':
-    'debt: the daemon version-tool test only; createServer builds it in place',
-  'packages/server-core/src/index.ts#createVersionSaveTool':
-    'debt: the daemon version-tool test only; createServer builds it in place',
-  'packages/server-core/src/index.ts#versionRestoreOutputSchema':
-    'debt: the smoke tool-list parity test only; the tool registers it in place',
 }
 
 /** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
@@ -223,7 +205,7 @@ describe('package entries forward only names someone imports through them', () =
   })
 
   it('holds the test-only ledger at its size, so it only shrinks', () => {
-    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(11)
+    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(2)
     for (const reason of Object.values(TEST_ONLY_FORWARDS)) {
       expect(reason).toMatch(/^(?:decision|debt): \S/)
     }

@@ -16,7 +16,7 @@
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { versionRestoreOutputSchema } from '@kamiazya/whiteboard-server-core'
+import { versionRestoreOutputSchema } from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { describe, expect, it } from 'vitest'
 import {
   ALL_REGISTERED_TOOLS,

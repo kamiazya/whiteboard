@@ -1,7 +1,5 @@
-import {
-  getLogger as getServerCoreLogger,
-  setLogSink as setServerCoreLogSink,
-} from '@kamiazya/whiteboard-server-core'
+import { setLogSink as setServerCoreLogSink } from '@kamiazya/whiteboard-server-core'
+import { getLogger as getServerCoreLogger } from '@kamiazya/whiteboard-server-core/log'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../../di/container.js'

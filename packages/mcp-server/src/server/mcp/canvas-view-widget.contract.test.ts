@@ -24,12 +24,14 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import {
-  canvasViewOutputSchema,
   createCanvasRenderSvgTool,
-  createCanvasViewTool,
   type ServerDeps,
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-server-core'
+import {
+  canvasViewOutputSchema,
+  createCanvasViewTool,
+} from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'

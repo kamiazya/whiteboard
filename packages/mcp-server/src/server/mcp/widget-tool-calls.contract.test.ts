@@ -6,7 +6,10 @@ import {
   canvasViewCall,
   commentAddCall,
 } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
-import { canvasEditInputSchema, canvasViewInputSchema } from '@kamiazya/whiteboard-server-core'
+import {
+  canvasEditInputSchema,
+  canvasViewInputSchema,
+} from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { describe, expect, it } from 'vitest'
 
 const target = {
