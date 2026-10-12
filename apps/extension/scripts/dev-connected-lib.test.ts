@@ -118,8 +118,18 @@ describe('cdpPortRefusal', () => {
     expect(await cdpPortRefusal(0)).toBeUndefined()
   })
 
-  it.each([Number.NaN, 1.5, -1, 70_000])('refuses %s, which is no port at all', async (port) => {
+  it.each([
+    Number.NaN,
+    1.5,
+    -1,
+    65_536,
+    70_000,
+  ])('refuses %s, which is no port at all', async (port) => {
     expect(await cdpPortRefusal(port)).toMatch(/must be a port number/)
+  })
+
+  it('takes the highest port as a port, whether or not it is free', async () => {
+    expect((await cdpPortRefusal(65_535)) ?? '').not.toMatch(/must be a port number/)
   })
 
   // From a directory outside any checkout, so a check that moved below the
