@@ -13,8 +13,8 @@ scan says.
 ## Tests
 
 - **A passing `mcp-node` run prints no log records.** `vitest.log-setup.ts`
-  mutes the default stderr destination (captures and the MCP bridge still get
-  every record); a test asserting on the stderr line itself captures through
+  mutes the default stderr destination (captures still get every record; the
+  MCP bridge forwards only records a tool call emitted, to that call's client); a test asserting on the stderr line itself captures through
   `captureStdio` (which opts in while it captures) or opts back in with
   `setStderrLogDestination(true)`; `capture-stdio.test.ts` fails a file that
   spies on `process.stderr` without doing either.
