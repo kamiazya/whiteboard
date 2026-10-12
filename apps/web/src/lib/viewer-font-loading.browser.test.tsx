@@ -6,11 +6,8 @@
 // must never be used as this guard.
 
 import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
-import {
-  createBrowserMeasureText,
-  ensureViewerFontLoaded,
-  VIEWER_FONT_FAMILY,
-} from '@kamiazya/whiteboard-canvas-viewer'
+import { createBrowserMeasureText, VIEWER_FONT_FAMILY } from '@kamiazya/whiteboard-canvas-viewer'
+import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { describe, expect, it } from 'vitest'
 
 const SAMPLE_TEXT = 'The quick brown fox jumps'
