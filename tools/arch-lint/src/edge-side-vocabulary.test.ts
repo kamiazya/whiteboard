@@ -10,10 +10,10 @@
  * with comments and strings stripped except for single-word strings, so a
  * sentence naming the sides is not mistaken for a declaration.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { REPO_ROOT } from './scan-roots.js'
+import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 const THE_DECLARATION = 'packages/model/src/spatial.ts'
@@ -25,19 +25,10 @@ const SIDE_LITERAL = `'(?:${SIDES.join('|')})'`
 const FOUR_SIDES = new RegExp(`(?:${SIDE_LITERAL}\\s*[|,]\\s*){3}${SIDE_LITERAL}`, 'g')
 
 function sourceRoots(): string[] {
-  return ['packages', 'apps'].flatMap((group) =>
-    readdirSync(join(REPO_ROOT, group), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(REPO_ROOT, group, entry.name, 'src'))
-      .filter((dir) => {
-        try {
-          readdirSync(dir)
-          return true
-        } catch {
-          return false
-        }
-      }),
-  )
+  return workspaceDirs()
+    .filter((dir) => dir.startsWith('packages/') || dir.startsWith('apps/'))
+    .map((dir) => join(REPO_ROOT, dir, 'src'))
+    .filter((dir) => existsSync(dir))
 }
 
 function declarations(): { readonly files: number; readonly found: readonly string[] } {
