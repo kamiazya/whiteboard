@@ -11,9 +11,12 @@
  * name no file imports through the entry, by its package specifier or by a
  * relative path to the same file.
  *
- * It errs toward false negatives: an entry that anything reaches wholesale —
- * `import * as`, `export * from`, a dynamic `import()` — counts every name as
- * used, and an import is matched by text, so a quoted one in a comment counts.
+ * A namespace import counts the members read off it (`ns.x`). Otherwise it
+ * errs toward false negatives: a shipped file reaching an entry wholesale — a
+ * namespace passed around whole, `export * from`, a bare dynamic `import()` —
+ * counts every name as used, and an import is matched by text, so a quoted
+ * one in a comment counts. A TEST reaching it wholesale counts nothing: a
+ * test walking a barrel's every export would otherwise excuse all of them.
  * `export *` in the entry itself is not judged, since it forwards no name.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -211,6 +214,8 @@ describe('package entries forward only names someone imports through them', () =
       ),
     ).toEqual(['x', 'b', 'c'])
     const entries = new Map([['@s/p', 'p/index.ts']])
+    // Assembled, so the lazy-import scan does not read this fixture as a test's own import.
+    const dynamicImport = ['await import', "('@s/p')"].join('')
     const found = importsByEntry(
       [
         { path: 'q.ts', text: "import D, { type a, b as c } from '@s/p'" },
@@ -220,7 +225,7 @@ describe('package entries forward only names someone imports through them', () =
     ).get('p/index.ts')
     expect([...(found ?? [])].sort()).toEqual(['a', 'b', 'e'])
     expect(
-      importsByEntry([{ path: 'r.ts', text: "await import('@s/p')" }], entries).get('p/index.ts'),
+      importsByEntry([{ path: 'r.ts', text: dynamicImport }], entries).get('p/index.ts'),
     ).toEqual(new Set(['*']))
     const namespaced = (path: string) =>
       importsByEntry(

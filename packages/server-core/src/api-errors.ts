@@ -38,7 +38,7 @@ import { z } from 'zod'
  * answers `undefined`, so the only description of what went wrong is in the
  * one field no client reads as prose.
  */
-export const apiErrorCodeSchema = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/)
+const apiErrorCodeSchema = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/)
 
 // NOT strict, and the asymmetry is the RFC's: 9457 defines `type`,
 // `status`, `detail` and `instance` beside `title`, and explicitly allows
