@@ -67,16 +67,18 @@ function readEntries(): Map<string, string> {
   return workspaceEntries(manifests)
 }
 
-/** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import. */
+/** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
 function forwardedNames(path: string, text: string): string[] {
   const source = parseSource(path, text, false)
   const imported = new Set<string>()
   for (const statement of source.statements) {
-    const bindings = ts.isImportDeclaration(statement)
-      ? statement.importClause?.namedBindings
-      : undefined
+    const clause = ts.isImportDeclaration(statement) ? statement.importClause : undefined
+    if (clause?.name !== undefined) imported.add(clause.name.text)
+    const bindings = clause?.namedBindings
     if (bindings !== undefined && ts.isNamedImports(bindings)) {
       for (const element of bindings.elements) imported.add(element.name.text)
+    } else if (bindings !== undefined) {
+      imported.add(bindings.name.text)
     }
   }
   return source.statements.flatMap((statement) => {
@@ -213,6 +215,12 @@ describe('package entries forward only names someone imports through them', () =
         "import { x, y } from './x.js'\nconst z = 1\nexport { x, z }\nexport { a as b, type c } from './a.js'",
       ),
     ).toEqual(['x', 'b', 'c'])
+    expect(
+      forwardedNames(
+        'a.ts',
+        "import D from './d.js'\nimport * as ns from './n.js'\nexport { D, ns as space }",
+      ),
+    ).toEqual(['D', 'space'])
     const entries = new Map([['@s/p', 'p/index.ts']])
     // Assembled, so the lazy-import scan does not read this fixture as a test's own import.
     const dynamicImport = ['await import', "('@s/p')"].join('')
