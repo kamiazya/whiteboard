@@ -26,7 +26,7 @@
 // its variables, and a new verifier naming them differently would slip past —
 // which is the same "guard that cannot see its subject" failure that let both
 // instances through.
-import { canvasSnapshotSchema } from '@kamiazya/whiteboard-server-core'
+import { canvasSnapshotSchema } from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { describe, expect, it } from 'vitest'
 import {
   byText,

@@ -1,10 +1,8 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  getLogger as getServerCoreLogger,
-  setLogSink as setServerCoreLogSink,
-} from '@kamiazya/whiteboard-server-core'
+import { setLogSink as setServerCoreLogSink } from '@kamiazya/whiteboard-server-core'
+import { getLogger as getServerCoreLogger } from '@kamiazya/whiteboard-server-core/log'
 import { LOG_LEVELS } from '@kamiazya/whiteboard-server-core/log-levels'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createContainer, resolveServerDeps } from '../di/container.js'

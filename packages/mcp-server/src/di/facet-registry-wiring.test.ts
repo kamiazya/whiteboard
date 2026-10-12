@@ -5,7 +5,7 @@
 // registry, supplied rather than left to each tool's own fallback.
 
 import { bundledFacetRegistry, bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
-import { createFacetListTool } from '@kamiazya/whiteboard-server-core'
+import { createFacetListTool } from '@kamiazya/whiteboard-server-core/test-utils/tools'
 import { describe, expect, it } from 'vitest'
 import { withTempDataDir } from '../server/routes/_test-helpers.js'
 import { getDb } from '../server/store/db/index.js'

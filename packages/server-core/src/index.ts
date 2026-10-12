@@ -45,10 +45,6 @@ export type {
 } from './server-deps.js'
 export { canvasEditInputSchema, createCanvasEditTool } from './tools/canvas-edit.js'
 export { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
-// The snapshot's own shape, exported for the same reason every other tool's
-// schemas here are: a reader outside this package needs the one declaration
-// of what a board read answers, rather than a second description of it.
-export { canvasSnapshotSchema } from './tools/canvas-snapshot.js'
 export {
   canvasViewInputSchema,
   canvasViewOutputSchema,
@@ -66,7 +62,6 @@ export {
 } from './tools/document-move.js'
 export { createDocumentSearchTool } from './tools/document-search.js'
 export { createDocumentSetOperation } from './tools/document-set.js'
-export { createFacetListTool } from './tools/facet-list.js'
 export { drawsATag, TAG_LIBRARY_PATH } from './tools/tag-library.js'
 export { createVersionListTool } from './tools/version-list.js'
 export {
@@ -74,7 +69,6 @@ export {
   versionRestoreOutputSchema,
 } from './tools/version-restore.js'
 export { createVersionSaveTool } from './tools/version-save.js'
-export { createWorkspaceEditTool } from './tools/workspace-edit.js'
 export type {
   Attestation,
   OperatorInfo,
