@@ -359,7 +359,7 @@ const COMMAND_COVERAGE = {
   'set-edge-end':
     'not modelled: the end-drag arm. This model generates NODE interactions and never produces the `pointerdown-end` that arms one, so the gesture is unreachable from here rather than absent. Its canvas meaning is commands.test.ts, its reducer arms gesture-ends.test.ts, and the whole way from a pointer to the moved end is edge-reattach.browser.test.tsx',
   'set-line-end':
-    'not modelled: the same drag reaching the other collection — a stroke end that may also land in empty space. Unreachable here for `set-edge-end`\u2019s reason, and covered by the same three files',
+    'not modelled: the same drag reaching the other collection — a stroke end that may also land in empty space. Unreachable here for `set-edge-end`\u2019s reason. Its canvas meaning is commands.test.ts; its release arms — an attached end freed, a free end moved along either axis alone, and a release on the end\u2019s own spot writing nothing — are gesture-ends.test.ts; and a stroke end freed from a real pointer is edge-reattach.browser.test.tsx',
   'set-edge-color': 'not modelled: edge inspector, single-field write',
   'set-edge-routing': 'not modelled: a canvas-wide preference, not per-element state',
   'set-line-jumps': 'not modelled: a canvas-wide preference, not per-element state',

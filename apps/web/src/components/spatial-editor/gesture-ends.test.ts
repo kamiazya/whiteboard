@@ -11,6 +11,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { otherEndNodeOf } from './gesture-ends.js'
 import { createIdleState, reduceGesture } from './gestures.js'
 
 const canvas: SpatialCanvas = {
@@ -130,5 +131,51 @@ describe('releasing an end drag', () => {
     // command, so the refusal never reaches history as an empty edit.
     expect(release('e1', 'to', { x: 50, y: 25 }, 'a')).toEqual(IDLE)
     expect(release('l1', 'to', { x: 50, y: 25 }, 'a')).toEqual(IDLE)
+  })
+})
+
+describe('a free stroke end released in empty space', () => {
+  it('writes nothing when it lands exactly where the end already is', () => {
+    // Rounded to the same whole units the end is stored on, so a release
+    // that does not move it cannot reach history as an empty edit.
+    expect(release('l1', 'to', { x: 300.2, y: 299.8 })).toEqual(IDLE)
+  })
+
+  it('moves along one axis alone', () => {
+    expect(release('l1', 'to', { x: 360, y: 300 })).toMatchObject({
+      commands: [
+        {
+          kind: 'set-line-end',
+          id: 'l1',
+          endpoint: 'to',
+          target: { kind: 'point', point: { x: 360, y: 300 } },
+        },
+      ],
+    })
+    expect(release('l1', 'to', { x: 300, y: 360 })).toMatchObject({
+      commands: [
+        {
+          kind: 'set-line-end',
+          id: 'l1',
+          endpoint: 'to',
+          target: { kind: 'point', point: { x: 300, y: 360 } },
+        },
+      ],
+    })
+  })
+})
+
+describe('the box the other end is on', () => {
+  // What the overlay marks rather than offers, since landing there is a
+  // self-loop the write refuses.
+  it('names the OTHER end’s box, for either end of a relation and of a stroke', () => {
+    expect(otherEndNodeOf(canvas, 'e1', 'to')).toBe('a')
+    expect(otherEndNodeOf(canvas, 'e1', 'from')).toBe('b')
+    expect(otherEndNodeOf(canvas, 'l1', 'to')).toBe('a')
+  })
+
+  it('is nothing when the other end is a free point, or the element is gone', () => {
+    expect(otherEndNodeOf(canvas, 'l1', 'from')).toBeUndefined()
+    expect(otherEndNodeOf(canvas, 'gone', 'to')).toBeUndefined()
   })
 })
