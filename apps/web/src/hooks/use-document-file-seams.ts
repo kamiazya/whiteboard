@@ -240,18 +240,12 @@ function useClipboardImageSeams(adapter: DocumentFileAdapter): ClipboardImageSea
   )
 }
 
-/** A stored picture's bytes, read through the URL the adapter already answers. */
+/**
+ * A stored picture's bytes, from the keeper itself. Never a fetch of the
+ * displayable URL: the shipped policy refuses `connect-src blob:`.
+ */
 function readImageBytes(adapterRef: { readonly current: DocumentFileAdapter }) {
-  return async (ref: string): Promise<Blob | undefined> => {
-    const url = await adapterRef.current.loadImageUrl(ref)
-    if (url === undefined) return undefined
-    try {
-      const res = await fetch(url)
-      return res.ok ? await res.blob() : undefined
-    } finally {
-      URL.revokeObjectURL(url)
-    }
-  }
+  return (ref: string): Promise<Blob | undefined> => adapterRef.current.loadImageBlob(ref)
 }
 
 /**

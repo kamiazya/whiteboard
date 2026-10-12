@@ -196,11 +196,10 @@ export function inspectorPanelsFor(deps: {
         />
       ) : undefined,
     comments: () => (
-      /* The annotation layer's document-level surface (ADR-0026
-         decision 5) sits BESIDE the editor rather than inside it,
-         because one panel serves both document kinds and a markdown
-         document has no canvas chrome to host one. Its opener lives in
-         the document actions row, in flow.
+      /* The annotation layer's document-level surface (ADR-0026 decision 5)
+         sits BESIDE the editor rather than inside it, because one panel
+         serves both document kinds and a markdown document has no canvas
+         chrome to host one. Its opener lives in the document actions row.
 
          Not writable while a past state is on screen: the editor is
          replaced by VersionPreview but this rail is not, and its

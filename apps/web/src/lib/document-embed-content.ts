@@ -142,10 +142,13 @@ async function storeImageAsset(file: File): Promise<ImageStoreResult> {
 }
 
 /** Loads a stored image asset as an object URL, or undefined when missing. */
+async function loadImageAssetBlob(ref: string): Promise<Blob | undefined> {
+  return (await new DocumentFileStore().get(ref)) ?? undefined
+}
+
 async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
-  const blob = await new DocumentFileStore().get(ref)
-  if (blob === null) return undefined
-  return URL.createObjectURL(blob)
+  const blob = await loadImageAssetBlob(ref)
+  return blob === undefined ? undefined : URL.createObjectURL(blob)
 }
 
 /**
@@ -162,5 +165,6 @@ export const BROWSER_FILE_ADAPTER: DocumentFileAdapter = {
   isImageRef,
   loadDocument: loadEmbeddedDocument,
   loadImageUrl: loadImageAssetUrl,
+  loadImageBlob: loadImageAssetBlob,
   storeImage: storeImageAsset,
 }

@@ -42,6 +42,7 @@ function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
     isImageRef: (file) => file.startsWith('asset:'),
     loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     loadImageUrl: vi.fn(async (ref: string) => `blob:${ref}`),
+    loadImageBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
     storeImage: vi.fn(async () => ({ ok: true as const, ref: 'asset:new' })),
     ...overrides,
   }
@@ -202,28 +203,28 @@ describe('useDocumentFileSeams', () => {
   })
 
   it("hands a copy the keeper's picture scope, bytes and store", async () => {
-    const adapter = makeAdapter()
     const picture = new Blob(['png'], { type: 'image/png' })
-    const fetchStub = vi.fn(async () => ({ ok: true, blob: async () => picture }))
-    const revoke = vi.fn()
+    const adapter = makeAdapter({ loadImageBlob: vi.fn(async () => picture) })
+    // The shipped policy refuses a fetch of a blob: URL (connect-src has no
+    // blob:), so the bytes must come from the keeper, not from a minted URL.
+    const fetchStub = vi.fn(async (url: string) => {
+      if (url.startsWith('blob:')) throw new TypeError('Failed to fetch')
+      throw new Error(`unexpected fetch ${url}`)
+    })
     vi.stubGlobal('fetch', fetchStub)
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(revoke)
     const { result } = renderHook(() =>
       useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map(), bodies: [] }),
     )
     const seams = result.current.clipboardImages
 
     expect(seams.fileScope).toBe('test')
-    const bytes = await seams.readImage('asset:pic')
-    expect(bytes).toBe(picture)
-    expect(fetchStub).toHaveBeenCalledWith('blob:asset:pic')
-    // The URL was minted for this read alone, so the read releases it.
-    expect(revoke).toHaveBeenCalledWith('blob:asset:pic')
+    expect(await seams.readImage('asset:pic')).toBe(picture)
+    expect(adapter.loadImageBlob).toHaveBeenCalledWith('asset:pic')
+    expect(fetchStub).not.toHaveBeenCalled()
     const file = new File(['x'], 'x.png', { type: 'image/png' })
     await seams.storeImage(file)
     expect(adapter.storeImage).toHaveBeenCalledWith(file)
     vi.unstubAllGlobals()
-    vi.restoreAllMocks()
   })
 
   it('exposes the adapter image-ref predicate to the editor', () => {

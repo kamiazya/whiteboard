@@ -96,6 +96,7 @@ describe('a link typed into the node editor overlay', () => {
       isImageRef: () => false,
       loadDocument,
       loadImageUrl: async () => undefined,
+      loadImageBlob: async () => undefined,
       fileScope: 'test',
       storeImage: async () => ({ ok: false, reason: 'unused' }),
     }

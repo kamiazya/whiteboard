@@ -41,6 +41,7 @@ function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
     isImageRef: (file: string) => file.startsWith('asset:'),
     loadDocument: vi.fn(async () => undefined),
     loadImageUrl: vi.fn(async () => undefined),
+    loadImageBlob: vi.fn(async () => undefined),
     storeImage: vi.fn(async () => ({ ok: false as const, reason: 'unused' })),
     ...overrides,
   } satisfies DocumentFileAdapter
