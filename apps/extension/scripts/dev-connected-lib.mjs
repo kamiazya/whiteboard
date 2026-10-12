@@ -104,6 +104,9 @@ function devToolsActivePortFile(profileDir) {
   return join(profileDir, 'DevToolsActivePort')
 }
 
+/** How long one readiness probe of a pinned port may take before the poll retries. */
+const CDP_PROBE_TIMEOUT_MS = 1_000
+
 /**
  * The CDP port once Chromium's debugging server is up, or `undefined` while
  * it is not. Port 0 can only be learnt from `DevToolsActivePort`; a pinned
@@ -119,7 +122,11 @@ export async function cdpReadyPort({ profileDir, cdpPort }) {
     return existsSync(file) ? readFileSync(file, 'utf8').split('\n')[0] : undefined
   }
   try {
-    const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`)
+    // A server that accepts and never answers would hold this await past the
+    // caller's own deadline, which it can only check between polls.
+    const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`, {
+      signal: AbortSignal.timeout(CDP_PROBE_TIMEOUT_MS),
+    })
     if (!response.ok) return undefined
     const body = await response.json()
     return typeof body?.webSocketDebuggerUrl === 'string' ? String(cdpPort) : undefined

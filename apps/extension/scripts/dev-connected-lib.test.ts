@@ -199,6 +199,17 @@ describe('cdpReadyPort', () => {
     )
   })
 
+  it('has no answer for a pinned port that accepts and never replies', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-ready-'))
+    const server = createHttpServer(() => {})
+    await new Promise<void>((listening) => server.listen(0, '127.0.0.1', listening))
+    held = server
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('no port')
+
+    expect(await cdpReadyPort({ profileDir: scratch, cdpPort: address.port })).toBeUndefined()
+  }, 5_000)
+
   it('has no answer for a pinned port nothing listens on yet', async () => {
     scratch = mkdtempSync(join(tmpdir(), 'dev-connected-cdp-ready-'))
     const { server, port } = await holdAPort()
