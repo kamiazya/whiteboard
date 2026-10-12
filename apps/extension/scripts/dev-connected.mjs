@@ -17,7 +17,6 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, openSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { resolveRepoRootFromGit } from '../../../packages/mcp-server/scripts/dev/with-dev-data-dir-lib.mjs'
 import {
@@ -26,12 +25,16 @@ import {
   chromiumArgs,
   devServerUrl,
   installHost,
+  parseDevConnectedArgs,
   portIsFree,
 } from './dev-connected-lib.mjs'
 import { EXTENSION_DIR } from './smoke-kit.mjs'
+import { armVirtualPasskeys, connectBrowserSession } from './virtual-passkey.mjs'
 
-const USAGE = `usage: pnpm dev:connected [--headless] [--port=<n>] [--url=<dev server url>] [--cdp-port=<n>]
+const USAGE = `usage: pnpm dev:connected [--headless] [--[no-]virtual-passkey] [--port=<n>] [--url=<dev server url>] [--cdp-port=<n>]
   --headless   no window; attach over CDP (the printed endpoint) instead
+  --virtual-passkey  answer WebAuthn prompts in every tab with a passkey that lives
+               only as long as this run (default: on with --headless, off without)
   --port       the vite port to try first (default 5173; the next free one is taken)
   --url        use a dev server that is already running instead of starting one
   --cdp-port   the remote debugging port (default: any free one, printed)
@@ -45,17 +48,7 @@ const fail = (line) => {
 
 let options
 try {
-  options = parseArgs({
-    args: process.argv.slice(2),
-    strict: true,
-    options: {
-      headless: { type: 'boolean', default: false },
-      port: { type: 'string', default: '5173' },
-      url: { type: 'string' },
-      'cdp-port': { type: 'string', default: '0' },
-      help: { type: 'boolean', short: 'h', default: false },
-    },
-  }).values
+  options = parseDevConnectedArgs(process.argv.slice(2))
 } catch (err) {
   console.error(`${err.message}\n${USAGE}`)
   process.exit(2)
@@ -121,11 +114,13 @@ if (!existsSync(chromePath)) {
 const profileDir = mkdtempSync(join(tmpdir(), 'whiteboard-dev-connected-'))
 let vite
 let browser
+let passkeys
 let cleaningUp = false
 
 async function cleanUp(code) {
   if (cleaningUp) return
   cleaningUp = true
+  passkeys?.close()
   vite?.kill('SIGTERM')
   if (browser !== undefined && browser.exitCode === null && browser.signalCode === null) {
     browser.kill('SIGTERM')
@@ -231,10 +226,35 @@ const cdpPort = await waitFor(
   ` — see ${logPath}`,
 )
 
+// One connection for the whole run: a virtual authenticator dies with the
+// CDP session that added it, and the credentials it minted with it.
+if (options.virtualPasskey) {
+  try {
+    const endpoint = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).then((r) => r.json())
+    passkeys = await connectBrowserSession(endpoint.webSocketDebuggerUrl)
+    await armVirtualPasskeys(passkeys, {
+      onAdded: ({ url }) => say(`passkey:  virtual authenticator added to ${url || 'a new tab'}`),
+      onReset: () =>
+        say(
+          'passkey:  a CDP client detached from a tab, which takes its passkey with it — a fresh one is in place, and a copy made readable offline before this cannot be unlocked',
+        ),
+      onError: (err) => console.error(`[dev-connected] virtual passkey not added: ${err.message}`),
+    })
+  } catch (err) {
+    console.error(`[dev-connected] no virtual passkey this run: ${err.message}`)
+    passkeys = undefined
+  }
+}
+
 ready = true
 say(`app:      ${appUrl}`)
 say(`CDP:      http://127.0.0.1:${cdpPort}  (Playwright: chromium.connectOverCDP(<this>))`)
 say(`data dir: ${plan.dataDir}`)
 say(`profile:  ${profileDir} (removed on exit; Chromium's log: ${logPath})`)
+if (passkeys !== undefined) {
+  say(
+    'passkey:  every tab gets a virtual passkey that lives only for this run, and only until a CDP client attached to that tab disconnects — so keep one Playwright connection open rather than one per step. A copy made readable offline under an earlier passkey cannot be unlocked.',
+  )
+}
 say('In the app, "Connect through the extension" (Settings > Connections) reaches the daemon.')
 say(options.headless ? 'Ctrl-C to stop.' : 'Close the window or Ctrl-C to stop.')

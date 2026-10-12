@@ -13,7 +13,9 @@ import {
   connectedHostInstall,
   devServerUrl,
   installHost,
+  parseDevConnectedArgs,
 } from './dev-connected-lib.mjs'
+import { armVirtualPasskeys, prfAuthenticatorOptions } from './virtual-passkey.mjs'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'dev-connected.mjs')
 
@@ -272,4 +274,197 @@ describe('installHost, through the real CLI', () => {
       expect(readdirSync(join(home, dir))).toEqual([])
     }
   }, 60_000)
+})
+
+describe('prfAuthenticatorOptions', () => {
+  it('is a platform passkey with PRF that confirms every prompt on its own', () => {
+    expect(prfAuthenticatorOptions()).toEqual({
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      hasPrf: true,
+      automaticPresenceSimulation: true,
+    })
+  })
+})
+
+describe('parseDevConnectedArgs', () => {
+  it('gives a headless run a virtual passkey, since nothing there can answer a real one', () => {
+    expect(parseDevConnectedArgs(['--headless']).virtualPasskey).toBe(true)
+    expect(parseDevConnectedArgs([]).virtualPasskey).toBe(false)
+  })
+
+  it('lets --virtual-passkey and --no-virtual-passkey override the default', () => {
+    expect(parseDevConnectedArgs(['--virtual-passkey']).virtualPasskey).toBe(true)
+    expect(parseDevConnectedArgs(['--headless', '--no-virtual-passkey']).virtualPasskey).toBe(false)
+  })
+
+  it('keeps the defaults of the other flags', () => {
+    expect(parseDevConnectedArgs([])).toMatchObject({
+      headless: false,
+      port: '5173',
+      'cdp-port': '0',
+      help: false,
+    })
+  })
+
+  it('refuses a flag it does not know', () => {
+    expect(() => parseDevConnectedArgs(['--passkey'])).toThrow()
+  })
+})
+
+type Sent = { method: string; params?: unknown; sessionId?: string }
+
+/** A browser-level CDP connection that records what is sent and lets a test fire events. */
+function fakeBrowserSession() {
+  const sent: Sent[] = []
+  const lost = new Set<string>()
+  const handlers = new Map<string, (params: never) => void>()
+  let next = 0
+  return {
+    sent,
+    session: {
+      send: async (method: string, params?: unknown, sessionId?: string) => {
+        sent.push({ method, params, sessionId })
+        if (
+          method === 'WebAuthn.getCredentials' &&
+          sessionId !== undefined &&
+          lost.has(sessionId)
+        ) {
+          throw new Error(
+            'The Virtual Authenticator Environment has not been enabled for this session',
+          )
+        }
+        if (method === 'WebAuthn.enable' && sessionId !== undefined) lost.delete(sessionId)
+        if (method === 'WebAuthn.getCredentials') return { credentials: [] }
+        if (method !== 'WebAuthn.addVirtualAuthenticator') return {}
+        next += 1
+        return { authenticatorId: `auth-${next}` }
+      },
+      on: (event: string, handler: (params: never) => void) => handlers.set(event, handler),
+    },
+    attach: (sessionId: string, type: string) =>
+      (handlers.get('Target.attachedToTarget') as (p: unknown) => void)({
+        sessionId,
+        targetInfo: { type, targetId: `t-${sessionId}`, url: 'http://localhost:5173/' },
+        waitingForDebugger: true,
+      }),
+    lose: (sessionId: string) => lost.add(sessionId),
+    detach: (sessionId: string) =>
+      (handlers.get('Target.detachedFromTarget') as (p: unknown) => void)({ sessionId }),
+  }
+}
+
+describe('armVirtualPasskeys', () => {
+  const armed: Array<{ stop: () => void }> = []
+  afterEach(() => {
+    for (const passkeys of armed.splice(0)) passkeys.stop()
+  })
+  const arm = async (...args: Parameters<typeof armVirtualPasskeys>) => {
+    const passkeys = await armVirtualPasskeys(...args)
+    armed.push(passkeys)
+    return passkeys
+  }
+
+  it('auto-attaches to pages, so a tab opened later by anyone is covered too', async () => {
+    const fake = fakeBrowserSession()
+
+    await arm(fake.session, { onAdded: () => {}, onReset: () => {}, onError: () => {} })
+
+    const autoAttach = fake.sent.find((m) => m.method === 'Target.setAutoAttach')
+    expect(autoAttach?.sessionId).toBeUndefined()
+    expect(autoAttach?.params).toMatchObject({
+      autoAttach: true,
+      waitForDebuggerOnStart: true,
+      flatten: true,
+    })
+  })
+
+  it('adds an authenticator to each page as it attaches, on that page, before it runs on', async () => {
+    const fake = fakeBrowserSession()
+    const added: string[] = []
+    await arm(fake.session, {
+      onAdded: (page) => added.push(page.sessionId),
+      onReset: () => {},
+      onError: () => {},
+    })
+
+    fake.attach('s1', 'page')
+    fake.attach('s2', 'page')
+    await vi.waitFor(() => expect(added).toEqual(['s1', 's2']))
+
+    for (const sessionId of ['s1', 's2']) {
+      const onPage = fake.sent.filter((m) => m.sessionId === sessionId).map((m) => m.method)
+      expect(onPage).toEqual([
+        'WebAuthn.enable',
+        'WebAuthn.addVirtualAuthenticator',
+        'Runtime.runIfWaitingForDebugger',
+      ])
+    }
+    expect(fake.sent.find((m) => m.method === 'WebAuthn.addVirtualAuthenticator')?.params).toEqual({
+      options: prfAuthenticatorOptions(),
+    })
+  })
+
+  it('adds a fresh authenticator when a client detaching from the page took the last one', async () => {
+    const fake = fakeBrowserSession()
+    const reset: string[] = []
+    await arm(fake.session, {
+      pollMs: 5,
+      onAdded: () => {},
+      onReset: (page) => reset.push(page.sessionId),
+      onError: () => {},
+    })
+    fake.attach('s1', 'page')
+    await vi.waitFor(() =>
+      expect(fake.sent.some((m) => m.method === 'WebAuthn.getCredentials')).toBe(true),
+    )
+
+    fake.lose('s1')
+
+    await vi.waitFor(() => expect(reset).toEqual(['s1']))
+    const added = fake.sent.filter(
+      (m) => m.method === 'WebAuthn.addVirtualAuthenticator' && m.sessionId === 's1',
+    )
+    expect(added).toHaveLength(2)
+  })
+
+  it('stops watching a page once it is gone', async () => {
+    vi.useFakeTimers()
+    try {
+      const fake = fakeBrowserSession()
+      await arm(fake.session, {
+        pollMs: 5,
+        onAdded: () => {},
+        onReset: () => {},
+        onError: () => {},
+      })
+      const polls = () => fake.sent.filter((m) => m.method === 'WebAuthn.getCredentials').length
+      fake.attach('s1', 'page')
+      await vi.advanceTimersByTimeAsync(20)
+      expect(polls()).toBeGreaterThan(0)
+
+      fake.detach('s1')
+      const atDetach = polls()
+      await vi.advanceTimersByTimeAsync(50)
+
+      expect(polls()).toBe(atDetach)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('lets a target that is not a page run on without an authenticator', async () => {
+    const fake = fakeBrowserSession()
+    await arm(fake.session, { onAdded: () => {}, onReset: () => {}, onError: () => {} })
+
+    fake.attach('w1', 'service_worker')
+    await vi.waitFor(() =>
+      expect(fake.sent.filter((m) => m.sessionId === 'w1').map((m) => m.method)).toEqual([
+        'Runtime.runIfWaitingForDebugger',
+      ]),
+    )
+  })
 })
