@@ -55,6 +55,38 @@ describe('a promotion record written before the counts were required', () => {
   })
 })
 
+describe('a promotion record that says what it left behind', () => {
+  const record = {
+    at: '2026-10-01T00:00:00.000Z',
+    workspaceId: 'ws-a',
+    ok: true as const,
+    promotedCount: 1,
+    shadowedPaths: [],
+    blobsMissing: [],
+    blobsFailed: [],
+  }
+
+  it('keeps the reasons across a save and a fresh load', () => {
+    const leftBehind = ['1 saved version did not reach the daemon']
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      migration: { promotion: { ...record, leftBehind } },
+    }))
+    expect(createUserSettingsStore().load().migration.promotion).toEqual({
+      ...record,
+      leftBehind,
+    })
+  })
+
+  it('still loads a record stored before the reasons were kept', () => {
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      migration: { promotion: record },
+    }))
+    expect(createUserSettingsStore().load().migration.promotion).toEqual(record)
+  })
+})
+
 describe('an older payload beside a newer one that does not parse', () => {
   it('loads defaults rather than reaching past the invalid key to an older one', () => {
     localStorage.setItem(

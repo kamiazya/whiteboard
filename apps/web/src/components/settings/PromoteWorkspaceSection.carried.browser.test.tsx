@@ -163,4 +163,21 @@ describe('PromoteWorkspaceSection, the trash and saved versions', () => {
     if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
     expect(promotion.localCopyRemoved).toBe(false)
   })
+
+  it('still says why the browser copy was kept on a later visit, from the stored result', async () => {
+    await seedVersionAndTrash()
+    await moveTo(daemonStub(new LoroDoc(), false).fetch)
+    cleanup()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), false).fetch}
+        reload={vi.fn()}
+      />,
+    )
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/1 trashed document did not reach the daemon/)
+    expect(result.textContent).toMatch(/1 saved version did not reach the daemon/)
+  })
 })

@@ -221,6 +221,16 @@ function browserCopyNotes(result: PromotionResultRecord & { ok: true }): string[
   return notes
 }
 
+/**
+ * What was left behind, inside the bounds the settings schema holds a record
+ * to — a record past them would fail the strict write and lose the whole
+ * result, so a long list is clipped rather than refused.
+ */
+function storedLeftBehind(leftBehind: readonly string[]): { leftBehind?: string[] } {
+  if (leftBehind.length === 0) return {}
+  return { leftBehind: leftBehind.slice(0, 100).map((reason) => reason.slice(0, 500)) }
+}
+
 /** The failed uploads as the record keeps them: the files, and each distinct reason once. */
 function failedBlobFields(failed: ReadonlyArray<{ fileId: string; reason: string }>) {
   return {
@@ -231,21 +241,19 @@ function failedBlobFields(failed: ReadonlyArray<{ fileId: string; reason: string
 
 /**
  * `name` is the daemon workspace's label when this section has read one —
- * names are chrome, ids are the address — and `leftBehind` is what the run
- * this session could not carry, which is why the browser copy stayed.
+ * names are chrome, ids are the address. The record's `leftBehind` is what
+ * the move could not carry, which is why the browser copy stayed.
  */
-function describeResult(
-  result: PromotionResultRecord,
-  name: string,
-  leftBehind: readonly string[],
-): string {
+function describeResult(result: PromotionResultRecord, name: string): string {
   if (!result.ok) {
     return `Move to daemon workspace "${name}" failed: ${result.reason}`
   }
   const parts = [
     `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${name}"`,
     ...carryNotes(result),
-    ...(leftBehind.length === 0 ? [] : [`Not moved yet: ${leftBehind.join('; ')}`]),
+    ...(result.leftBehind === undefined || result.leftBehind.length === 0
+      ? []
+      : [`Not moved yet: ${result.leftBehind.join('; ')}`]),
     ...browserCopyNotes(result),
   ]
   return `${parts.join('. ')}.`
@@ -351,7 +359,6 @@ export function PromoteWorkspaceSection({
   const [lastResult, setLastResult] = useState<PromotionResultRecord | undefined>(
     () => settingsStore.load().migration.promotion,
   )
-  const [leftBehind, setLeftBehind] = useState<readonly string[]>([])
   const shownResult = resultFor(lastResult, daemon)
   const [resultName, setResultTarget] = useResultWorkspaceName(
     daemon,
@@ -419,7 +426,6 @@ export function PromoteWorkspaceSection({
       if (!daemon) return
       setFlow({ step: 'running', phase: 'record' })
       let record: PromotionResultRecord
-      let leftNow: readonly string[] = []
       try {
         const fetchImpl = daemonFetch(daemon, baseFetch)
         const [{ promoteWorkspace }, { BrowserWorkspaceDocs }] = await Promise.all([
@@ -445,7 +451,6 @@ export function PromoteWorkspaceSection({
               })
             : { replicaSyncedAt: undefined, localCopyRemoved: false }
         const { replicaSyncedAt, localCopyRemoved } = after
-        if (outcome.kind === 'ok') leftNow = outcome.leftBehind
 
         record =
           outcome.kind === 'ok'
@@ -461,6 +466,7 @@ export function PromoteWorkspaceSection({
                 shadowedPaths: outcome.shadowedPaths,
                 blobsMissing: outcome.blobs.missing,
                 ...failedBlobFields(outcome.blobs.failed),
+                ...storedLeftBehind(outcome.leftBehind),
               }
             : {
                 at: new Date().toISOString(),
@@ -486,7 +492,6 @@ export function PromoteWorkspaceSection({
         migration: { ...current.migration, promotion: record },
       }))
       setResultTarget(target)
-      setLeftBehind(leftNow)
       setLastResult(record)
       setFlow({ step: 'idle' })
     },
@@ -527,7 +532,7 @@ export function PromoteWorkspaceSection({
       )}
       {shownResult !== undefined && flow.step !== 'running' && (
         <div data-testid="promote-last-result" className="rounded-md border px-3 py-2 text-xs">
-          <p>{describeResult(shownResult, resultName, leftBehind)}</p>
+          <p>{describeResult(shownResult, resultName)}</p>
           {shownResult.ok && (
             <Button
               type="button"
