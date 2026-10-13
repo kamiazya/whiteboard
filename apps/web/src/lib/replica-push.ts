@@ -21,7 +21,7 @@ import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
-import { type ReplicaFailure, replicaFailure } from './replica-failure.js'
+import { describeFailure, PUSH_FAILURE_COPY, type ReplicaFailure } from './replica-failure.js'
 
 const log = getAppLogger('replica-push')
 
@@ -76,6 +76,6 @@ export async function pushReplicaEdits(
       syncedFrontier: bytesToBase64(current.encode()),
     }
   } catch (err) {
-    return replicaFailure(err, 'push', { log, daemonBaseUrl, workspaceId })
+    return describeFailure(err, PUSH_FAILURE_COPY, { log, fields: { daemonBaseUrl, workspaceId } })
   }
 }

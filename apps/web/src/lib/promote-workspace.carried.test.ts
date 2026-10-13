@@ -14,11 +14,14 @@ import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client
 import { readTrashEntries, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
+import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
@@ -254,5 +257,91 @@ describe('promoteWorkspace, the planes beside the record', () => {
       reason: 'This browser could not read its workspace to move it.',
     })
     expect(daemon.promotes).toEqual([])
+    await expectLoggedFailure('carried planes could not be read')
+  })
+})
+
+const NETWORK_SENTENCE = 'Could not reach the destination (network error).'
+
+function openThrowing(err: unknown): WorkspaceDocs {
+  const docs = new BrowserWorkspaceDocs()
+  vi.spyOn(docs, 'open').mockRejectedValue(err)
+  return docs
+}
+
+const promoteFrom = (fetch: typeof globalThis.fetch, workspaceDocs: WorkspaceDocs) =>
+  promoteWorkspace({ fetch, keeperBaseUrl: BASE, workspaceId: 'ws-a', workspaceDocs })
+
+describe('promoteWorkspace failure reasons', () => {
+  beforeEach(clearWhiteboardDb)
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('a fetch that throws is reported as an unreachable destination', async () => {
+    const { index, workspaceId } = await newWorkspace()
+    await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
+    const offline = (async () => {
+      throw new TypeError('Failed to fetch')
+    }) as typeof globalThis.fetch
+
+    expect(await promote(offline)).toEqual({ kind: 'failed', reason: NETWORK_SENTENCE })
+  })
+
+  it('an unreadable browser record is reported as unreadable and logged', async () => {
+    const daemon = daemonStub({ confirms: true })
+
+    const result = await promoteFrom(
+      daemon.fetch,
+      openThrowing(new StoredDocumentUnreadableError('malformed', 'a delta does not decode')),
+    )
+
+    expect(result).toEqual({
+      kind: 'failed',
+      reason: "This browser's copy of this workspace could not be read, so it was not moved.",
+    })
+    expect(daemon.promotes).toEqual([])
+    await expectLoggedFailure('stored workspace could not be read; promote abandoned')
+  })
+
+  it('a record this device cannot open is reported as a device failure and logged', async () => {
+    const daemon = daemonStub({ confirms: true })
+
+    const result = await promoteFrom(
+      daemon.fetch,
+      openThrowing(new DOMException('the quota has been exceeded', 'QuotaExceededError')),
+    )
+
+    expect(result).toEqual({
+      kind: 'failed',
+      reason: 'This workspace could not be prepared on this device to move it.',
+    })
+    expect(daemon.promotes).toEqual([])
+    await expectLoggedFailure('workspace promote failed on this device')
+  })
+
+  it('an image this device cannot read fails that image alone and is logged', async () => {
+    const { index, workspaceId } = await newWorkspace()
+    const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
+    await storePicture('unreadable-here')
+    expect(
+      await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('unreadable-here')),
+    ).toBe(true)
+    vi.spyOn(DocumentFileStore.prototype, 'get').mockRejectedValue(
+      new DOMException('the quota has been exceeded', 'QuotaExceededError'),
+    )
+    const daemon = daemonStub({ confirms: true })
+
+    const result = await promote(daemon.fetch)
+
+    if (result.kind !== 'ok')
+      throw new Error(`expected the merged move to report, got ${result.kind}`)
+    expect(result.blobs).toEqual({
+      transferred: [],
+      missing: [],
+      failed: [{ fileId: 'unreadable-here', reason: 'This browser could not read that image.' }],
+    })
+    expect(daemon.putFiles).toEqual([])
+    await expectLoggedFailure('image could not be read for the move')
   })
 })

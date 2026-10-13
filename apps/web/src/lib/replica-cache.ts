@@ -24,7 +24,7 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
-import { type ReplicaFailure, replicaFailure } from './replica-failure.js'
+import { describeFailure, PULL_FAILURE_COPY, type ReplicaFailure } from './replica-failure.js'
 import { cacheReplicaImages } from './replica-images.js'
 import { markReplica, replicaKeyStatus } from './replica-store.js'
 import { ReplicaKeyRotatedError } from './sealed-document-store.js'
@@ -144,6 +144,6 @@ export async function cacheDaemonWorkspace(
       syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),
     }
   } catch (err) {
-    return replicaFailure(err, 'pull', { log, daemonBaseUrl, workspaceId })
+    return describeFailure(err, PULL_FAILURE_COPY, { log, fields: { daemonBaseUrl, workspaceId } })
   }
 }

@@ -51,17 +51,21 @@ const accept = (fetch: ReturnType<typeof keeper>, snapshot = validSnapshot()) =>
   })
 
 describe('acceptTransferredRecord refusals', () => {
-  it.each([
-    {
-      name: 'a fetch that throws',
-      fetch: () =>
-        keeper({
-          promote: () => {
-            throw new TypeError('Failed to fetch')
-          },
-        }),
+  it('a fetch that throws is answered as a sentence and logged by name', async () => {
+    const throwing = keeper({
+      promote: () => {
+        throw new TypeError('Failed to fetch')
+      },
+    })
+
+    expect(await accept(throwing)).toEqual({
+      ok: false,
       reason: 'The workspace could not be merged here (unexpected failure).',
-    },
+    })
+    await expectLoggedFailure('arriving workspace could not be merged')
+  })
+
+  it.each([
     {
       name: 'a refusal carrying its own message',
       fetch: () =>

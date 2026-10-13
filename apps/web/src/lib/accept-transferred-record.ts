@@ -31,8 +31,12 @@ import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
+import { getAppLogger } from './app-logger.js'
 import { type PromoteWording, requestPromote } from './promote-request.js'
 import { imagesTheRecordReferences } from './receive-transfer.js'
+import { errorName } from './replica-failure.js'
+
+const log = getAppLogger('accept-transferred-record')
 
 export type AcceptTransferResult =
   | {
@@ -69,9 +73,14 @@ export async function acceptTransferredRecord(
 ): Promise<AcceptTransferResult> {
   try {
     return await acceptUnsafe(options)
-  } catch {
+  } catch (err) {
     // A thrown fetch or an unreadable snapshot must surface as a sentence
     // the page can show and the sender can be told, never a rejected promise.
+    // The sentence names no cause, so the log record is where one survives.
+    log.warn('arriving workspace could not be merged', {
+      workspaceId: options.workspaceId,
+      name: errorName(err),
+    })
     return { ok: false, reason: 'The workspace could not be merged here (unexpected failure).' }
   }
 }

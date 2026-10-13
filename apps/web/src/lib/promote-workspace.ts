@@ -42,11 +42,15 @@ import {
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
+import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { type CarriedPlanes, fitCarriedPlanes, readCarriedPlanes } from './carried-planes.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
 import { type PromoteWording, requestPromote } from './promote-request.js'
+import { describeFailure, errorName, type FailureCopy } from './replica-failure.js'
+
+const log = getAppLogger('promote-workspace')
 
 export interface PromoteWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -124,17 +128,32 @@ const DAEMON_WORDING: PromoteWording = {
   unexpected: 'The daemon answered the move with an unexpected response.',
 }
 
+const PROMOTE_FAILURE_COPY: FailureCopy = {
+  network: 'Could not reach the destination (network error).',
+  unreadable: "This browser's copy of this workspace could not be read, so it was not moved.",
+  device: 'This workspace could not be prepared on this device to move it.',
+  unreadableLog: 'stored workspace could not be read; promote abandoned',
+  deviceLog: 'workspace promote failed on this device',
+}
+
 export async function promoteWorkspace(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
   try {
     return await promoteWorkspaceUnsafe(options)
-  } catch {
-    // A thrown fetch (the keeper unreachable, connection dropped
-    // mid-transfer) must surface as a structured failure the confirmation UI
-    // can show, never a rejected promise. The transfer itself is safe to
+  } catch (err) {
+    // Anything thrown must surface as a structured failure the confirmation
+    // UI can show, never a rejected promise. The transfer itself is safe to
     // re-run: the same snapshot re-POSTed is an idempotent merge.
-    return { kind: 'failed', reason: 'Could not reach the destination (network error).' }
+    const failure = describeFailure(err, PROMOTE_FAILURE_COPY, {
+      log,
+      fields: { keeperBaseUrl: options.keeperBaseUrl, workspaceId: options.workspaceId },
+    })
+    // A withheld replica key is a sealed replica's failure; the browser
+    // keeper's own record is read without one, so it reads as unreadable.
+    return failure.kind === 'withheld'
+      ? { kind: 'failed', reason: PROMOTE_FAILURE_COPY.unreadable }
+      : failure
   }
 }
 
@@ -166,6 +185,28 @@ function imageAddresses(
 
 type PromotedBlobs = Extract<PromoteWorkspaceResult, { kind: 'ok' }>['blobs']
 
+/**
+ * One image's bytes, `null` when the store has none, `undefined` when this
+ * device refused the read. The record has already merged by the time images
+ * are read, so a refused read fails that image alone, the way a refused
+ * upload does.
+ */
+async function readImage(
+  fileStore: DocumentFileStore,
+  workspaceId: string,
+  fileId: string,
+): Promise<Blob | null | undefined> {
+  // The store is keyed by the reference the document carries — what the
+  // editor's upload writes — while the scan and the daemon's file route
+  // speak the bare id. Read under the bare id, every real picture is
+  // `missing`, and a missing picture holds the browser copy back from
+  // demotion for good.
+  return fileStore.get(newImageRef(fileId)).catch((err: unknown) => {
+    log.warn('image could not be read for the move', { workspaceId, fileId, name: errorName(err) })
+    return undefined
+  })
+}
+
 /** Sends each referenced image through the daemon's file route, one outcome per file. */
 async function transferImages(
   fetch: typeof globalThis.fetch,
@@ -176,12 +217,11 @@ async function transferImages(
 ): Promise<PromotedBlobs> {
   const blobs: PromotedBlobs = { transferred: [], missing: [], failed: [] }
   for (const [fileId, path] of refs) {
-    // The store is keyed by the reference the document carries — what the
-    // editor's upload writes — while the scan and the daemon's file route
-    // speak the bare id. Read under the bare id, every real picture is
-    // `missing`, and a missing picture holds the browser copy back from
-    // demotion for good.
-    const blob = await fileStore.get(newImageRef(fileId))
+    const blob = await readImage(fileStore, workspaceId, fileId)
+    if (blob === undefined) {
+      blobs.failed.push({ fileId, reason: 'This browser could not read that image.' })
+      continue
+    }
     if (blob === null) {
       blobs.missing.push(fileId)
       continue
@@ -227,7 +267,10 @@ async function promoteWorkspaceUnsafe(
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
   // Its own failure, not the network one the outer catch reports: nothing
   // has left the browser yet, and a retry would not be cured by a connection.
-  const planes = await readCarriedPlanes(record, sourceWorkspaceId).catch(() => null)
+  const planes = await readCarriedPlanes(record, sourceWorkspaceId).catch((err: unknown) => {
+    log.warn('carried planes could not be read', { sourceWorkspaceId, name: errorName(err) })
+    return null
+  })
   if (planes === null) {
     return { kind: 'failed', reason: 'This browser could not read its workspace to move it.' }
   }
