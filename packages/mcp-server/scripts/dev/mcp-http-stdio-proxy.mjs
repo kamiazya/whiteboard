@@ -23,8 +23,10 @@
 // (MCP-Protocol-Version, Mcp-Method, Mcp-Name) do not mirror the body, so
 // those are derived from each line exactly as the SDK's HTTP client derives
 // them. A reply that arrives as an SSE stream — a modern call whose `_meta`
-// opts into log records — is relayed message by message, in order, so its
-// `notifications/message` records reach the client ahead of the result.
+// opts into log records, or a long-lived listen — is relayed message by
+// message as each arrives, in order, so its `notifications/message` records
+// reach the client ahead of the result and a stream that never ends still
+// delivers.
 // What does not traverse is anything the server sends OUTSIDE a request's
 // reply (tools listChanged): there is no standing stream to carry it — a
 // dev-only tradeoff; reload the client session to pick up a changed tool list.
@@ -155,15 +157,49 @@ function eraHeadersFor(line) {
 
 // The record is read per request, not once: a watch restart rewrites it, and
 // a daemon that is down has none.
-function post(line) {
+function post(line, onChunk) {
   const record = readDaemonRecord(DATA_DIR)
   if (record === null) return Promise.reject(new Error('the dev daemon has no record yet'))
   const headers = { ...MCP_HEADERS, ...eraHeadersFor(line) }
-  return requestDaemon(record, { method: 'POST', path: '/mcp', headers, body: line })
+  return requestDaemon(record, { method: 'POST', path: '/mcp', headers, body: line, onChunk })
+}
+
+/**
+ * Writes each `data:` message of a 2xx event stream to stdout the moment its
+ * line is complete. A stream may never end (a long-lived listen), so waiting
+ * for the end would hold every message it carries; and the records a call
+ * emits come before its result, in order.
+ */
+function streamRelay() {
+  let buffer = ''
+  let wrote = false
+  const onChunk = (chunk, { status, contentType }) => {
+    if (status < 200 || status >= 300 || !contentType.includes('text/event-stream')) return
+    buffer += chunk
+    for (let at = buffer.indexOf('\n'); at !== -1; at = buffer.indexOf('\n')) {
+      const line = buffer.slice(0, at)
+      buffer = buffer.slice(at + 1)
+      if (!line.startsWith('data:')) continue
+      const message = line.slice(5).trim()
+      if (message === '') continue
+      process.stdout.write(`${message}\n`)
+      wrote = true
+    }
+  }
+  return { onChunk, wrote: () => wrote }
 }
 
 async function forwardOnce(line) {
-  const { status, contentType, text } = await post(line)
+  const relay = streamRelay()
+  let answer
+  try {
+    answer = await post(line, relay.onChunk)
+  } catch (error) {
+    // Part of the stream already reached the client: a retry would repeat it.
+    if (relay.wrote()) error.nonRetryable = true
+    throw error
+  }
+  const { status, contentType, text } = answer
   // 202/empty: a notification was accepted — nothing to write back.
   if (status === 202 || text.trim() === '') return null
   if ((status < 200 || status >= 300) && !isJson(text)) {
@@ -175,17 +211,8 @@ async function forwardOnce(line) {
     error.nonRetryable = status < 500
     throw error
   }
-  if (contentType.includes('text/event-stream')) {
-    // Every message the stream carried, in order: the records a call emitted
-    // come before its result, and dropping them loses the only route they
-    // have to a client on stdio.
-    const messages = text
-      .split('\n')
-      .filter((l) => l.startsWith('data:'))
-      .map((l) => l.slice(5).trim())
-      .filter((l) => l !== '')
-    return messages.length === 0 ? null : messages
-  }
+  // A 2xx event stream was written as it arrived (`streamRelay`).
+  if (contentType.includes('text/event-stream')) return null
   return [text]
 }
 

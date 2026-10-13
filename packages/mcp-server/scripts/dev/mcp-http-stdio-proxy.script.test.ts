@@ -180,6 +180,37 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     expect(parsed.error.message).toContain('HTTP 404')
   })
 
+  it('writes a streamed message as it arrives, before the stream ends', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    // A stream that sends one message and then stays open, the shape of a
+    // long-lived listen: nothing ends it, so a proxy that waits for the end
+    // never writes anything.
+    const open: Array<{ end: () => void }> = []
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write(
+        `event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'early' } })}\n\n`,
+      )
+      open.push(res)
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(
+      () =>
+        new Promise((r) => {
+          for (const res of open) res.end()
+          server.close(() => r(undefined))
+        }),
+    )
+
+    const proc = spawnProxy(dataDir)
+    proc.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'subscriptions/listen' })}\n`,
+    )
+    const first = JSON.parse(await nextStdoutLine(proc))
+    expect(first.method).toBe('notifications/message')
+    expect(first.params.data).toBe('early')
+  })
+
   it('exits cleanly when stdin closes', async () => {
     const { dataDir, socketPath } = dataDirWithRecord()
     await startResponder(socketPath)

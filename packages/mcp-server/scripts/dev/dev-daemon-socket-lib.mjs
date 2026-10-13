@@ -58,16 +58,28 @@ export function isPidAlive(pid) {
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
  * @param {{ socketPath: string }} record
- * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: string, timeoutMs?: number }} req
+ * `onChunk` sees each body chunk as it arrives, with the status and content
+ * type already known — what a caller relaying a stream that may never end
+ * needs, since the promise settles only at the end.
+ *
+ * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: string, timeoutMs?: number, onChunk?: (chunk: string, head: { status: number, contentType: string }) => void }} req
  * @returns {Promise<{ status: number, contentType: string, text: string }>}
  */
-export function requestDaemon(record, { method = 'GET', path, headers = {}, body, timeoutMs }) {
+export function requestDaemon(
+  record,
+  { method = 'GET', path, headers = {}, body, timeoutMs, onChunk },
+) {
   return new Promise((resolveRequest, rejectRequest) => {
     const req = request({ socketPath: record.socketPath, path, method, headers }, (res) => {
       let text = ''
+      const head = {
+        status: res.statusCode ?? 0,
+        contentType: String(res.headers['content-type'] ?? '').toLowerCase(),
+      }
       res.setEncoding('utf8')
       res.on('data', (chunk) => {
         text += chunk
+        onChunk?.(chunk, head)
       })
       res.on('end', () =>
         resolveRequest({
