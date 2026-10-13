@@ -18,6 +18,7 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import {
+  type RenderCanvasCoreOptions,
   type RenderedCanvas,
   renderCanvasForExportWith,
   renderCanvasToSvgWith,
@@ -43,6 +44,9 @@ export interface RenderCanvasOptions {
   readonly commentObstacles?: readonly BoundingBox[]
   /** See RenderCanvasCoreOptions: draw resolved comments (muted) too. */
   readonly showResolved?: boolean
+  /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
+  readonly renderMath?: RenderCanvasCoreOptions['renderMath']
+  readonly renderDiagram?: RenderCanvasCoreOptions['renderDiagram']
 }
 
 /**
@@ -79,6 +83,9 @@ export interface CanvasExportOptions {
   readonly threads?: readonly CommentThread[]
   /** The workspace's colour by intent (ADR-0040 decision 5), part of the picture. */
   readonly tagLibrary?: TagLibrary
+  /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
+  readonly renderMath?: RenderCanvasCoreOptions['renderMath']
+  readonly renderDiagram?: RenderCanvasCoreOptions['renderDiagram']
 }
 
 /**
@@ -87,11 +94,13 @@ export interface CanvasExportOptions {
  * Pinned to the light theme: a saved artifact's bytes must never depend on a
  * display preference. Every file node is drawn in full, by intrinsic size:
  * the editor's on-screen gate depends on a zoom a saved file does not have,
- * and this is the policy the daemon's export takes.
+ * and this is the policy the daemon's export takes. Synchronous like every
+ * layout: the caller that can wait for math and diagrams runs it through
+ * `layoutWithFragments` (`lib/fragment-requests.ts`) and hands the seams in.
  */
 export function renderCanvasForExport(
   canvas: SpatialCanvas,
-  { measure, references, threads, tagLibrary }: CanvasExportOptions,
+  { measure, references, threads, tagLibrary, renderMath, renderDiagram }: CanvasExportOptions,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
   return renderCanvasForExportWith(canvas, {
     measure,
@@ -99,5 +108,7 @@ export function renderCanvasForExport(
     ...(references === undefined ? {} : { references, expandFileNode: () => true }),
     ...(threads === undefined ? {} : { threads }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
+    renderMath,
+    renderDiagram,
   })
 }

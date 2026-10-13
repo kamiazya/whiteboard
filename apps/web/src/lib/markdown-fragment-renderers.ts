@@ -102,7 +102,7 @@ function exAttrToPx(svg: string, attr: 'width' | 'height'): number | undefined {
 }
 
 /** Typesets one display-math block; inline math is drawn as source by the layout. */
-export async function renderMathFragment(value: string): Promise<RenderedSvgFragment | undefined> {
+async function renderMathFragment(value: string): Promise<RenderedSvgFragment | undefined> {
   mathjaxSingleton ??= loadMathJax()
   const convert = await mathjaxSingleton
   if (convert === undefined) return undefined
@@ -168,7 +168,7 @@ function svgDimension(svg: string, attr: 'width' | 'height'): number | undefined
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-export async function renderDiagramFragment(
+async function renderDiagramFragment(
   lang: string,
   value: string,
 ): Promise<RenderedSvgFragment | undefined> {

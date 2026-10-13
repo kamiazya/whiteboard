@@ -494,7 +494,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
     // drag-static backdrop, resize preview).
-    const { fileSeamOptions, missingFileRefs, expandedFileIds } = useFileSeamScene({
+    const { fileSeamOptions, wire: seamWire } = useFileSeamScene({
       canvas,
       zoom: viewport.zoom,
       references: seams,
@@ -559,7 +559,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         fontsGeneration,
       },
       fileSeamOptions,
-      { fileRefLabels: fileRefOptions, missingFileRefs, references: canvasWire, expandedFileIds },
+      { ...seamWire, fileRefLabels: fileRefOptions, references: canvasWire },
     )
     const {
       keyed,

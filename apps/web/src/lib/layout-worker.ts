@@ -39,6 +39,7 @@ import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import { outlineFromSpatial } from './document-outline.js'
 import { unhandledKind } from './exhaustive.js'
 import { resolveRectColor } from './favicon.js'
+import { type FragmentAsk, recordingFragmentSeams } from './fragment-requests.js'
 import { createContentCacheStore } from './layout-content-caches.js'
 import {
   FONT_DEGRADED,
@@ -269,26 +270,40 @@ async function handleMarkdownRail(request: MarkdownRailRequest): Promise<void> {
   }
 }
 
+/**
+ * The fragment seams for one layout: answered from what the asking thread
+ * rendered, every other source collected to report back. The content
+ * cache's key names the rendered set, because a body memoised while its
+ * fragment was missing would otherwise keep drawing the fallback.
+ */
+function fragmentSeamsFor(entries: LayoutRequest['fragments']) {
+  const rendered = new Map(entries)
+  const asked = new Map<string, FragmentAsk>()
+  const seams = recordingFragmentSeams(
+    (key) => rendered.get(key),
+    (ask, key) => asked.set(key, ask),
+  )
+  return { seams, asked, keys: [...rendered.keys()] }
+}
+
 async function handleLayout(request: LayoutRequest): Promise<void> {
   try {
     if (!(await measurable(request.id))) return
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
     const missingRefs = new Set(request.missingFileRefs ?? [])
-    // A corrupt snapshot throws here and lands in the catch below as a
-    // `failed` reply, which is what the row's kind icon is for. It must not
-    // take the worker down: every request queued behind it belongs to a
-    // different document.
+    // A corrupt snapshot lands in the catch below as a `failed` reply (the row's kind icon),
+    // never taking the worker down: every request queued behind it is another document's.
     const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
     const startedAt = performance.now()
     // The same bundle the main thread builds, from the same bytes.
     const references =
       request.references === undefined ? undefined : referenceSeamsFromWire(request.references)
     const expanded = new Set(request.expandedFileIds ?? [])
-    // What this realm could not measure. Reported back rather than acted on
-    // here: only the asking thread can fetch a face and register it in every
-    // realm at once, and a list surface's thread never decodes the canvas,
-    // so this is where the family a board's theme names first becomes known.
+    // What this realm could not measure, and which fragments it was not handed. Reported back,
+    // not acted on: only the asking thread can fetch a face (registering it in every realm at
+    // once) or load an engine, and a list surface's thread never decodes the canvas.
     const fontsMissing = new Set<string>()
+    const fragments = fragmentSeamsFor(request.fragments)
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
@@ -305,13 +320,14 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
         // The look the request asks for is part of what its bodies ARE: a
         // theme changes their ink even where it changes no metric.
         ...(request.style === undefined ? {} : { style: request.style }),
-        wireKey: JSON.stringify(request.references ?? null),
+        wireKey: JSON.stringify([request.references ?? null, fragments.keys]),
       }),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,
       threads: request.threads,
       proposals: request.proposals,
       tagLibrary: request.tagLibrary,
+      ...fragments.seams,
       onDegrade: (event) => {
         if (event.kind === 'font-missing') fontsMissing.add(event.family)
       },
@@ -324,6 +340,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       scene,
       anchors,
       ...(fontsMissing.size === 0 ? {} : { fontsMissing: [...fontsMissing] }),
+      ...(fragments.asked.size === 0 ? {} : { fragmentsAsked: [...fragments.asked.values()] }),
     }
     self.postMessage(response)
     // The whole reply, `scene` and `anchors` included: they are not optional

@@ -8,7 +8,9 @@
  * markdown-fragment-renderers.browser.test.tsx instead.
  */
 import { describe, expect, it } from 'vitest'
-import { renderDiagramFragment, renderMathFragment } from './markdown-fragment-renderers.js'
+import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
+
+const { math: renderMathFragment, diagram: renderDiagramFragment } = FRAGMENT_ENGINES
 
 describe('renderMathFragment (real MathJax)', () => {
   it('renders TeX to a sized SVG fragment', async () => {
