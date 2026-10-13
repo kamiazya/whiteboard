@@ -56,6 +56,11 @@ describe('the route through an edge’s stored bends', () => {
     expect(path?.[0]).toEqual({ x: 50, y: 0 })
   })
 
+  it('faces a bend below or beside the box through that border', () => {
+    expect(route([{ x: 50, y: 300 }])?.[0]).toEqual({ x: 50, y: 50 })
+    expect(route([{ x: 300, y: 20 }])?.[0]).toEqual({ x: 100, y: 20 })
+  })
+
   it('declines an edge with no bends, so a route is computed instead', () => {
     expect(route(undefined)).toBeUndefined()
     expect(route([])).toBeUndefined()
@@ -66,6 +71,15 @@ describe('the route through an edge’s stored bends', () => {
     // throws on a non-finite number — which this package promises never to do.
     expect(route([{ x: Number.NaN, y: 0 }])).toBeUndefined()
     expect(route([{ x: 0, y: Number.POSITIVE_INFINITY }])).toBeUndefined()
+  })
+
+  it('declines a list with ANY non-finite point, finite neighbours or not', () => {
+    expect(
+      route([
+        { x: 200, y: 20 },
+        { x: Number.NaN, y: 0 },
+      ]),
+    ).toBeUndefined()
   })
 })
 
