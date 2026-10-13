@@ -3,7 +3,7 @@
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { clipboardFragmentSchema, endIn, endNode, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
@@ -185,6 +185,32 @@ describe('remintClipboardFragment', () => {
     }
     const { edges } = remintClipboardFragment(foreign, seq(), new Set())
     expect(edges).toEqual([])
+  })
+
+  it('drops a line hung on a box the fragment lacks, while a point end still travels', () => {
+    // Foreign input can name a box that never came along. Either end
+    // missing is enough to drop the line: a line pasted with an end that
+    // names nothing is not a valid `CanvasLine`.
+    const foreign = {
+      ...extractClipboardFragment(canvas, new Set(['a'])),
+      lines: [
+        { id: 'toGhost', from: { kind: 'node', node: 'a' }, to: { kind: 'node', node: 'ghost' } },
+        {
+          id: 'fromGhost',
+          from: { kind: 'node', node: 'ghost' },
+          to: { kind: 'point', point: { x: 5, y: 5 } },
+        },
+        {
+          id: 'kept',
+          from: { kind: 'node', node: 'a' },
+          to: { kind: 'point', point: { x: 7, y: 9 } },
+        },
+      ] satisfies CanvasLine[],
+    }
+    const { lines, idMap } = remintClipboardFragment(foreign, seq(), new Set())
+    expect(lines).toHaveLength(1)
+    expect(lines[0]?.from).toEqual({ kind: 'node', node: idMap.get('a') })
+    expect(lines[0]?.to).toEqual({ kind: 'point', point: { x: 7, y: 9 } })
   })
 
   fcTest.prop(
