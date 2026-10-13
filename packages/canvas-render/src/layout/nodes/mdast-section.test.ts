@@ -50,6 +50,14 @@ describe('selectMarkdownSection', () => {
     expect(texts(selectMarkdownSection(root, 'launch'))).toEqual(['Launch', 'launch body'])
   })
 
+  it('prefers an exact heading over an earlier case-insensitive one', () => {
+    const both: MdastRoot = {
+      type: 'root',
+      children: [h(2, 'intro'), p('lower body'), h(2, 'Intro'), p('upper body')],
+    }
+    expect(texts(selectMarkdownSection(both, 'Intro'))).toEqual(['Intro', 'upper body'])
+  })
+
   it('an unknown or empty fragment selects nothing', () => {
     expect(selectMarkdownSection(root, 'Nowhere')).toBeUndefined()
     expect(selectMarkdownSection(root, ' ')).toBeUndefined()
