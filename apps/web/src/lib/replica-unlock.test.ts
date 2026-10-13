@@ -318,6 +318,28 @@ describe('makeReplicaReadableOffline asking the daemon for the key', () => {
     expect(credentials.create).not.toHaveBeenCalled()
   })
 
+  // `no-offline` is the keeper's POLICY; a person the daemon no longer
+  // admits is a different sentence, whatever word it ends up with.
+  it.each([
+    [401, 'requires_person_session'],
+    [403, 'not_a_member'],
+  ] as const)('does not read a %i %s refusal as no-offline', async (status, code) => {
+    const credentials = noPasskeyMadeHere()
+    const fetch = vi.fn(async () => Response.json({ error: code, message: 'refused' }, { status }))
+
+    const made = await makeReplicaReadableOffline({
+      daemonBaseUrl: DAEMON,
+      workspaceId: WORKSPACE,
+      label: 'Notes',
+      fetch,
+      credentials,
+    })
+
+    expect(made.ok).toBe(false)
+    expect(made).not.toEqual({ ok: false, reason: 'no-offline' })
+    expect(credentials.create).not.toHaveBeenCalled()
+  })
+
   it('answers unreachable for a body that is not the key response', async () => {
     const credentials = noPasskeyMadeHere()
     const fetch = vi.fn(async () => Response.json({ tier: 'offline' }))
