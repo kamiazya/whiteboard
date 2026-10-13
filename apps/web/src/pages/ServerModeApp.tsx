@@ -53,10 +53,12 @@ async function readAuth<T>(
   route: string,
   schema: z.ZodType<T>,
   what: string,
+  absent?: T,
 ): Promise<T | 'unavailable'> {
   try {
     const res = await fetchFn(route)
     if (res.ok) return await readDaemonJson(route, res, schema)
+    if (res.status === 404 && absent !== undefined) return absent
     log.warn(`could not read ${what}`, { route, status: res.status })
   } catch (err) {
     // Drift was already reported by the reader that built it.
@@ -108,6 +110,9 @@ function useProviders(fetchFn: Fetch) {
         authProvidersUrl(),
         signInProvidersResponseSchema,
         'the sign-in providers',
+        // A server with no provider configured mounts no sign-in routes, so
+        // this route is unknown to it: that is "none", not "unreachable".
+        { providers: [] },
       ).then((body): Providers | 'unavailable' => (body === 'unavailable' ? body : body.providers)),
     [fetchFn],
   )
