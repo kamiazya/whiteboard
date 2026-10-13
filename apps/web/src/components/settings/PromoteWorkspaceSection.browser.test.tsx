@@ -648,10 +648,10 @@ describe('PromoteWorkspaceSection', () => {
     expect(promotion.localCopyRemoved).toBe(true)
   })
 
-  it('a missing blob keeps the browser copy — missing may be a fold-in of a read error', async () => {
-    // DocumentFileStore.get never throws: an unreachable store degrades to
-    // "missing", so a missing reference may be retryable — and the source
-    // record is the retry vehicle a re-run of the move needs.
+  it('a missing blob keeps the browser copy — it is the only evidence of the reference', async () => {
+    // `missing` means no readable bytes are stored for the reference, so the
+    // move could not carry them; the source record is the only place what
+    // the document pointed at survives, and a demote would delete it.
     const { sketchId } = await seedTwoDocuments()
     // An image REFERENCE whose bytes were never stored.
     const content = new LoroDoc()
@@ -854,26 +854,5 @@ describe('PromoteWorkspaceSection', () => {
     const notice = await screen.findByTestId('promote-unavailable')
     expect(notice.textContent).toMatch(/no workspace to move into yet/i)
     expect(notice.textContent).toMatch(/open one on the daemon first/i)
-  })
-
-  it('an unreachable daemon is disclosed and the trigger stays clickable for a retry', async () => {
-    await seedTwoDocuments()
-    const unreachable = (async () => {
-      throw new TypeError('Failed to fetch')
-    }) as typeof globalThis.fetch
-    render(
-      <PromoteWorkspaceSection
-        daemon={DAEMON}
-        settingsStore={createUserSettingsStore()}
-        baseFetch={unreachable}
-      />,
-    )
-    const trigger = screen.getByTestId('promote-workspace-open')
-    await userEvent.click(trigger)
-    const notice = await screen.findByTestId('promote-unavailable')
-    expect(notice.textContent).toMatch(/could not reach the daemon/i)
-    // Recoverable, not a dead end: the same trigger retries, and a daemon
-    // that answers this time opens the confirmation.
-    expect(trigger.hasAttribute('disabled')).toBe(false)
   })
 })

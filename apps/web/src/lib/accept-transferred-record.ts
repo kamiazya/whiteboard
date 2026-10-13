@@ -32,9 +32,9 @@ import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { describeTransferFailure, type FailureCopy } from './keeper-transfer-failure.js'
 import { type PromoteWording, requestPromote } from './promote-request.js'
 import { imagesTheRecordReferences } from './receive-transfer.js'
-import { errorName } from './replica-failure.js'
 
 const log = getAppLogger('accept-transferred-record')
 
@@ -74,15 +74,26 @@ export async function acceptTransferredRecord(
   try {
     return await acceptUnsafe(options)
   } catch (err) {
-    // A thrown fetch or an unreadable snapshot must surface as a sentence
-    // the page can show and the sender can be told, never a rejected promise.
-    // The sentence names no cause, so the log record is where one survives.
-    log.warn('arriving workspace could not be merged', {
-      workspaceId: options.workspaceId,
-      name: errorName(err),
+    // A thrown fetch or a failure on this side must surface as a sentence the
+    // page can show and the sender can be told, never a rejected promise.
+    const failure = describeTransferFailure(err, ACCEPT_FAILURE_COPY, {
+      log,
+      fields: { workspaceId: options.workspaceId },
     })
-    return { ok: false, reason: 'The workspace could not be merged here (unexpected failure).' }
+    // No replica key is involved in a merge this keeper is handed the bytes for.
+    return {
+      ok: false,
+      reason: failure.kind === 'withheld' ? ACCEPT_FAILURE_COPY.device : failure.reason,
+    }
   }
+}
+
+const ACCEPT_FAILURE_COPY: FailureCopy = {
+  network: 'Could not reach this keeper (network error), so the workspace was not merged.',
+  unreadable: 'The arriving workspace could not be read here, so it was not merged.',
+  device: 'The workspace could not be merged here (unexpected failure).',
+  unreadableLog: 'arriving workspace could not be read; merge abandoned',
+  deviceLog: 'arriving workspace could not be merged',
 }
 
 const KEEPER_WORDING: PromoteWording = {

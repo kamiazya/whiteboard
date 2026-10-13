@@ -20,6 +20,8 @@
 import { bytesToBase64, messageOf } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { listWorkspaces } from './daemon-api-client.js'
+import { errorName, type TransferFailure } from './keeper-transfer-failure.js'
+import type { PushReplicaEditsResult } from './replica-push.js'
 import { findReplicaForHandle, pulledReplicaFields, withReplicaEntry } from './replicas.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
@@ -70,16 +72,12 @@ function reportRefreshFailure(deps: ReplicaRefreshDeps, err: unknown): void {
   log.warn('replica refresh failed', {
     daemonBaseUrl: deps.daemonBaseUrl,
     workspaceId: deps.workspaceId,
-    name: err instanceof Error ? err.name : typeof err,
+    name: errorName(err),
     message: messageOf(err, String(err)),
   })
 }
 
-function reportNoPull(
-  daemonBaseUrl: string,
-  workspaceId: string,
-  result: { kind: string; reason?: unknown },
-): void {
+function reportNoPull(daemonBaseUrl: string, workspaceId: string, result: TransferFailure): void {
   log.warn('replica refresh did not pull', {
     daemonBaseUrl,
     workspaceId,
@@ -184,7 +182,7 @@ async function pullReplica(deps: ReplicaRefreshDeps, key: string): Promise<void>
 function reportNoPush(
   daemonBaseUrl: string,
   workspaceId: string,
-  result: { kind: string; reason?: unknown },
+  result: Exclude<PushReplicaEditsResult, { kind: 'ok' }>,
 ): void {
   log.warn('replica push did not push', {
     daemonBaseUrl,
@@ -251,7 +249,7 @@ export function scheduleReplicaPush(deps: ReplicaPushDeps): () => void {
         log.warn('replica push failed', {
           daemonBaseUrl: deps.daemonBaseUrl,
           workspaceId: deps.workspaceId,
-          name: err instanceof Error ? err.name : typeof err,
+          name: errorName(err),
         })
       } finally {
         pushing.delete(key)

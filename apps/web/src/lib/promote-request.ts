@@ -20,7 +20,7 @@ import { z } from 'zod'
 import { unconfirmedPlanes } from './carried-planes.js'
 import { listDocuments } from './daemon-api-client.js'
 import { daemonContractError } from './daemon-contract-error.js'
-import { reach } from './replica-failure.js'
+import { reach } from './keeper-transfer-failure.js'
 
 /** How a caller's sentences name its keeper and its operation. */
 export interface PromoteWording {
@@ -109,7 +109,11 @@ export async function requestPromote(
     }),
   )
   if (!res.ok) return { ok: false, reason: await refusedReason(res, body, wording) }
-  const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
+  // The body read is reached like the fetch: a connection dropped after the
+  // status line is the network's, while a body that arrived and is not JSON
+  // is the keeper's contract.
+  const text = await reach(res.text())
+  const promoted = promoteWorkspaceResponseSchema.safeParse(parseJsonOrNull(text))
   if (!promoted.success) {
     daemonContractError(promoteUrl, promoted.error)
     return { ok: false, reason: wording.unexpected }
@@ -129,5 +133,13 @@ export async function requestPromote(
     ok: true,
     shadowedPaths,
     leftBehind: unconfirmedPlanes(body, promoted.data, wording.object),
+  }
+}
+
+function parseJsonOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
   }
 }

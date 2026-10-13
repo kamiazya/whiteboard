@@ -25,11 +25,12 @@ import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
 import {
-  describeFailure,
+  describeTransferFailure,
+  errorName,
   PULL_FAILURE_COPY,
-  type ReplicaFailure,
   reach,
-} from './replica-failure.js'
+  type TransferFailure,
+} from './keeper-transfer-failure.js'
 import { cacheReplicaImages } from './replica-images.js'
 import { markReplica, replicaKeyStatus } from './replica-store.js'
 import { ReplicaKeyRotatedError } from './sealed-document-store.js'
@@ -65,7 +66,7 @@ export type CacheDaemonWorkspaceResult =
        */
       keyId?: string
     }
-  | ReplicaFailure
+  | TransferFailure
 
 /**
  * The stored copy to merge the pull into — or a fresh one when the stored
@@ -113,7 +114,7 @@ async function cacheImagesBesideRecord(
     log.warn('replica images were not cached', {
       daemonBaseUrl,
       workspaceId,
-      name: err instanceof Error ? err.name : typeof err,
+      name: errorName(err),
     })
   }
 }
@@ -151,6 +152,9 @@ export async function cacheDaemonWorkspace(
       syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),
     }
   } catch (err) {
-    return describeFailure(err, PULL_FAILURE_COPY, { log, fields: { daemonBaseUrl, workspaceId } })
+    return describeTransferFailure(err, PULL_FAILURE_COPY, {
+      log,
+      fields: { daemonBaseUrl, workspaceId },
+    })
   }
 }

@@ -51,7 +51,7 @@ const accept = (fetch: ReturnType<typeof keeper>, snapshot = validSnapshot()) =>
   })
 
 describe('acceptTransferredRecord refusals', () => {
-  it('a fetch that throws is answered as a sentence and logged by name', async () => {
+  it('a fetch that throws reads as the keeper unreached, not as an unexpected failure', async () => {
     const throwing = keeper({
       promote: () => {
         throw new TypeError('Failed to fetch')
@@ -59,6 +59,18 @@ describe('acceptTransferredRecord refusals', () => {
     })
 
     expect(await accept(throwing)).toEqual({
+      ok: false,
+      reason: 'Could not reach this keeper (network error), so the workspace was not merged.',
+    })
+  })
+
+  it('a failure on this side is answered as a sentence and logged by name', async () => {
+    // A real fetch never throws synchronously, so this one is not the network.
+    const broken = vi.fn((): Promise<Response> => {
+      throw new RangeError('not the network')
+    })
+
+    expect(await accept(broken as unknown as ReturnType<typeof keeper>)).toEqual({
       ok: false,
       reason: 'The workspace could not be merged here (unexpected failure).',
     })

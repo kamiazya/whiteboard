@@ -47,8 +47,8 @@ import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { type CarriedPlanes, fitCarriedPlanes, readCarriedPlanes } from './carried-planes.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
+import { describeTransferFailure, errorName, type FailureCopy } from './keeper-transfer-failure.js'
 import { type PromoteWording, requestPromote } from './promote-request.js'
-import { describeFailure, errorName, type FailureCopy } from './replica-failure.js'
 
 const log = getAppLogger('promote-workspace')
 
@@ -100,8 +100,8 @@ export type PromoteWorkspaceResult =
        * must not fail — or silently hollow out — the whole promotion:
        * `missing` are references whose bytes are already gone in the browser
        * (the promoted document was equally broken before), `failed` are
-       * uploads the daemon refused or the network dropped, each with the
-       * reason — a type or size the daemon will never store stays failed on
+       * images this browser could not read, or uploads the daemon refused or
+       * the network dropped, each with the reason — a type or size the daemon will never store stays failed on
        * every re-run, while a dropped connection is cured by one (the whole
        * promotion is an idempotent merge).
        */
@@ -145,7 +145,7 @@ export async function promoteWorkspace(
     // Anything thrown must surface as a structured failure the confirmation
     // UI can show, never a rejected promise. The transfer itself is safe to
     // re-run: the same snapshot re-POSTed is an idempotent merge.
-    const failure = describeFailure(err, PROMOTE_FAILURE_COPY, {
+    const failure = describeTransferFailure(err, PROMOTE_FAILURE_COPY, {
       log,
       fields: { keeperBaseUrl: options.keeperBaseUrl, workspaceId: options.workspaceId },
     })
@@ -221,6 +221,9 @@ async function transferImages(
   refs: ReadonlyArray<readonly [fileId: string, path: string]>,
 ): Promise<PromotedBlobs> {
   const blobs: PromotedBlobs = { transferred: [], missing: [], failed: [] }
+  // One image at a time, on purpose: each is read whole into memory before
+  // its PUT, so a workspace of large pictures uploaded at once would hold
+  // them all, and would race every upload against the daemon's file route.
   for (const [fileId, path] of refs) {
     const blob = await readImage(fileStore, workspaceId, fileId)
     if (blob === undefined) {
