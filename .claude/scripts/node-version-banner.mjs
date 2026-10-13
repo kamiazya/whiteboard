@@ -34,7 +34,7 @@ export function wrongNodeBanner({ pinned, versions = process.versions }) {
     bar,
     `WRONG NODE MAJOR: running Node ${versions.node} (ICU/Unicode ${versions.unicode}); .node-version pins ${pinned}, which is what CI installs.`,
     'Failures on the wrong major name neither Node nor the pin. Known symptoms, none a regression:',
-    '  - 9 web-jsdom tests fail with `TypeError: object.stream is not a function` (undici reads Blob.stream()).',
+    '  - a jsdom Blob passed to `new Response` throws `TypeError: object.stream is not a function` (undici reads Blob.stream() on 22).',
     '  - packages/search snippet.test.ts "honours a Prepend" fails on the Unicode table (ICU/Unicode version).',
     `Switch to Node ${pinned} (nvm/fnm/asdf) and re-run before believing any red.`,
     "The guard for this is packages/mcp-server's local-node-version.test.ts (mcp-node project only); this banner covers every project and never fails the run.",
