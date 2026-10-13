@@ -305,6 +305,16 @@ describe('the references axis', () => {
     )
   })
 
+  // A picture's reference names no version: what it draws is its bytes, and
+  // a card where an image was is another picture again.
+  it('keys a stored picture by the image it was drawn with', async () => {
+    const pic = { target: 'asset:pic', image: 'data:image/png;base64,AAAA' }
+    const drawn = await referencesKey([pic])
+    expect(drawn).not.toBe(await referencesKey([{ ...pic, image: 'data:image/png;base64,AAAB' }]))
+    expect(drawn).not.toBe(await referencesKey([{ ...pic, image: '' }]))
+    expect(drawn).not.toBe('')
+  })
+
   it('keys the same references the same, whatever order they were walked in', async () => {
     const other = { target: 'b', documentId: 'b1', version: 'v9', label: 'b' }
     expect(await referencesKey([other, note])).toBe(await referencesKey([note, other]))

@@ -40,7 +40,6 @@ import {
   releaseIsolatedDataDir,
 } from '../../src/shared/test-utils/isolated-data-dir.js'
 import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
-import { testSocketPath } from '../../src/shared/test-utils/socket-fetch.js'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
 
 const PROXY_SCRIPT_PATH = resolve(import.meta.dirname, 'mcp-http-stdio-proxy.mjs')
@@ -428,9 +427,10 @@ describe('mcp-http-stdio-proxy against the real daemon', () => {
     previousLevel = getLogLevel()
     // The records a call emits pass the daemon's own threshold first.
     setLogLevel('debug')
-    const socketPath = testSocketPath()
-    running = await startHttpServer({ socketPath, token: TOKEN })
     recordDir = mkdtempSync(join(tmpdir(), 'wb-proxy-real-'))
+    // In the record dir rather than `testSocketPath()`'s, which is per test.
+    const socketPath = join(recordDir, 'd.sock')
+    running = await startHttpServer({ socketPath, token: TOKEN })
     writeFileSync(join(recordDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
     // The widget is a build output a test run need not have; a fixture stands in.
     const widgetPath = join(recordDir, 'canvas-viewer.html')

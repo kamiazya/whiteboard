@@ -128,7 +128,14 @@ export {
   type ReferenceSeamsOptions,
   referenceSeams,
 } from './references/seams.js'
-export { imageTargets, referenceTargets } from './references/targets.js'
+export {
+  imageTargets,
+  type ReferenceSeeds,
+  referenceTargets,
+  type WalkReferencesOptions,
+  walkReferences,
+  walkReferencesSync,
+} from './references/targets.js'
 export {
   type ReferenceExtra,
   type ReferenceWire,

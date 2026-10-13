@@ -400,7 +400,7 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     expect(
       runs('pnpm --filter @kamiazya/whiteboard-web exec vitest run -c vitest.browser.config.ts'),
     ).toBe(true)
-    expect(runs('pnpm --filter @kamiazya/whiteboard-canvas-render test')).toBe(false)
+    expect(runs('pnpm --filter @kamiazya/whiteboard-codec test')).toBe(false)
     expect(runs('pnpm exec vitest run --config apps/web/vitest.config.ts')).toBe(false)
   })
 

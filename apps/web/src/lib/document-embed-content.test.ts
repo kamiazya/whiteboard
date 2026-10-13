@@ -177,6 +177,42 @@ describe('loadBrowserReference', () => {
   })
 })
 
+describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    resetEmbedIndexForTests()
+  })
+
+  it('re-throws a store read that FAILED, so the canvas seam asks again', async () => {
+    // The canvas's embeds read through this door, not `loadBrowserReference`,
+    // and the contract is the same: `undefined` is cached as terminal.
+    const entry = await seedLegacyRow({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'boards/unreadable',
+      kind: 'spatial',
+      name: 'Unreadable',
+    })
+    await new LoroStore().save(entry.documentId, new Loro().export({ mode: 'snapshot' }))
+    const failing = vi
+      .spyOn(LoroStore.prototype, 'load')
+      .mockRejectedValue(new Error('the store could not be read'))
+    try {
+      await expect(BROWSER_FILE_ADAPTER.loadDocument(entry.documentId)).rejects.toThrow(
+        'the store could not be read',
+      )
+      await expectLoggedFailure('embedded document load failed')
+    } finally {
+      failing.mockRestore()
+    }
+  })
+
+  it('answers undefined for a document the store does not hold', async () => {
+    await expect(
+      BROWSER_FILE_ADAPTER.loadDocument('01ARZ3NDEKTSV4RRFFQ69G5FBZ'),
+    ).resolves.toBeUndefined()
+  })
+})
+
 describe('BROWSER_FILE_ADAPTER, stored images', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()

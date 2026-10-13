@@ -309,7 +309,7 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
 
   // The layer is the same plane on every format (ADR-0026 decision 6), so no
   // op is refused for the document's KIND as such; what varies is the anchor,
-  // and `anchorRefusal` holds each arm to the surface it points at.
+  // and `storedAnchor` holds each arm to the surface it points at.
   const indexed = await deps.documentIndex.resolveDocumentById({
     workspaceId: input.workspaceId,
     documentId: input.documentId,

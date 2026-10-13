@@ -199,3 +199,40 @@ it('draws the note a body embeds inside the thumbnail', async () => {
   expect(drawn?.svg).toContain('Quoted paragraph')
   expect(dangling?.svg).not.toContain('Quoted paragraph')
 }, 60_000)
+
+// A mood board previews as the pictures it holds, not as a grid of "Image"
+// cards: the picture's own bytes ride into the stored thumbnail as data.
+it('draws a picture a board holds inside the thumbnail', async () => {
+  const pictured: SpatialCanvas = {
+    nodes: [fileNode({ id: 'p', x: 0, y: 0, width: 200, height: 120, file: 'asset:pic' })],
+    edges: [],
+  }
+  // A 1x1 PNG.
+  const png = Uint8Array.from(
+    atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    ),
+    (char) => char.charCodeAt(0),
+  )
+  const board: WorkspaceDocumentEntry = {
+    documentId: 'mood',
+    path: 'boards/mood',
+    kind: 'spatial',
+    contentDigest: '0000000000000005',
+  }
+  const draw = (loadImage: WorkspaceFilesSource['loadImage']) =>
+    createRowRenderLoader({
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => [board],
+      source: { ...sourceOf(snapshotBytes(pictured)), ...(loadImage ? { loadImage } : {}) },
+    })(board)
+
+  const drawn = await draw(async () => new Blob([png], { type: 'image/png' }))
+  // The control: a keeper that holds no such picture leaves the card.
+  const missing = await draw(async () => undefined)
+
+  const svg = new DOMParser().parseFromString(drawn?.svg ?? '', 'image/svg+xml')
+  expect(svg.querySelector('image')?.getAttribute('href')).toMatch(/^data:image\/png;base64,/)
+  expect(missing?.svg).not.toContain('<image')
+}, 60_000)

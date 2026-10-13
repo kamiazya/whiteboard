@@ -13,11 +13,14 @@
  * shared worker pool at background priority — a thumbnail is never what
  * someone is waiting on.
  *
- * Neither is decoded here. A spatial document's snapshot travels to the
- * worker as bytes, so this thread's share of a thumbnail is the read and
- * nothing else: decoding cost 1.20ms at 12 nodes, 2.60ms at 40 and 4.60ms at
- * 120, and handing the bytes over costs nothing measurable. What that buys
- * is not a faster picture but a thread that is free while one is drawn.
+ * Neither is decoded here for its first picture. A spatial document's
+ * snapshot travels to the worker as bytes, so this thread's share of a
+ * thumbnail is the read and nothing else: decoding cost 1.20ms at 12 nodes,
+ * 2.60ms at 40 and 4.60ms at 120, and handing the bytes over costs nothing
+ * measurable. What that buys is not a faster picture but a thread that is
+ * free while one is drawn. The exception is a board whose picture names
+ * another document: `row-references.ts` decodes it, and every board it
+ * embeds, on this thread to build the wire — once per board and version.
  *
  * Total by contract. Every failure answers `null` and the row keeps its kind
  * icon: a list that cannot draw a miniature is a plainer list, a list that
@@ -29,12 +32,13 @@
  * starting a second render.
  *
  * What a document embeds is part of that picture — a board's file nodes, a
- * note's `![[…]]` — so a picture drawn without them is only a first answer.
- * The render that draws it says whether its subject named another document
+ * note's `![[…]]`, the stored pictures either holds — so a picture drawn
+ * without them is only a first answer. The render that draws it says
+ * whether its subject named another document or a picture
  * (`referencesOmitted`), which this thread cannot know of a board it never
- * decodes; only then are those documents read and the picture drawn again,
- * keyed by what they were (`row-references.ts`). A document that names
- * nothing is drawn once and keyed as it always was.
+ * decodes; only then are those read and the picture drawn again, keyed by
+ * what they were (`row-references.ts`). A document that names nothing is
+ * drawn once and keyed as it always was.
  */
 
 import type { BoundingBox, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
@@ -45,7 +49,7 @@ import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
-import { namesADocument } from '../../lib/names-a-document.js'
+import { namesAReference } from '../../lib/names-a-reference.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, type RenderKey, renderKeyOf, tagLibraryKey } from '../../lib/render-key.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -266,7 +270,7 @@ async function produce(
     )
     // The body is in hand here, so this thread answers for a note what the
     // worker answers for a board.
-    return drawn === null || references !== undefined || !namesADocument({ bodies: [body] })
+    return drawn === null || references !== undefined || !namesAReference({ bodies: [body] })
       ? drawn
       : { ...drawn, referencesOmitted: true }
   }

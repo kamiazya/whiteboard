@@ -15,11 +15,19 @@
  */
 
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
+import { z } from 'zod'
 
-/** One source a layout asked a fragment seam for. Plain data: it crosses to and from the worker. */
-export type FragmentAsk =
-  | { readonly kind: 'math'; readonly value: string }
-  | { readonly kind: 'diagram'; readonly lang: string; readonly value: string }
+/**
+ * One source a layout asked a fragment seam for. Plain data: it crosses to and
+ * from the worker, and the render store persists it as JSON — so the stored
+ * reply parses it with this schema, and a kind added here reaches both.
+ */
+export const fragmentAskSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('math'), value: z.string() }),
+  z.object({ kind: z.literal('diagram'), lang: z.string(), value: z.string() }),
+])
+
+export type FragmentAsk = Readonly<z.infer<typeof fragmentAskSchema>>
 
 /** A rendered fragment by its key, as it crosses to the layout worker. */
 export type FragmentEntry = readonly [key: string, fragment: RenderedSvgFragment]

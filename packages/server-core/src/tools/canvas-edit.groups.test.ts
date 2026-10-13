@@ -244,6 +244,97 @@ describe('wb_canvas_edit — node.add within a group', () => {
     expect(canvas.nodes.map((node) => node.id)).toEqual(['g'])
   })
 
+  test("a node given a position exactly on the group's top-left is inside it, not refused", async () => {
+    // A child at its group's corner is the most natural placement there is;
+    // containment is inclusive of the edge.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [{ ...GROUP, x: 100, y: 100 }], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: {
+            id: 'corner',
+            type: 'text',
+            text: 'corner',
+            x: 100,
+            y: 100,
+            width: 100,
+            height: 60,
+          },
+          within: 'g',
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'corner')).toMatchObject({ x: 100, y: 100 })
+    expect(canvas.nodes.find((node) => node.id === 'g')).toMatchObject({ x: 100, y: 100 })
+  })
+
+  test('a group positioned earlier in the batch refuses a member before its top-left rather than regrowing', async () => {
+    // Only a group the CURSOR placed has a box derived from its members; one
+    // the caller positioned has a top-left somebody chose, so growing it up
+    // and left over its neighbours would override that choice.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: { id: 'g2', type: 'group', label: 'G', x: 100, y: 100, width: 300, height: 300 },
+          },
+          {
+            op: 'node.add',
+            node: { id: 'm', type: 'text', text: 'm', x: 50, y: 50, width: 40, height: 40 },
+            within: 'g2',
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 1,
+      message: expect.stringMatching(/left edge 50 is before the group's 100/),
+    })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes).toEqual([])
+  })
+
+  test('a node given an x but no y is placed inside the group, not at half a position', async () => {
+    // Partial geometry is treated as none: guessing the missing half would put
+    // the node somewhere the caller did not ask for either.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [{ ...GROUP, x: 100, y: 100 }], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'half', type: 'text', text: 'half', x: 5 }, within: 'g' },
+      ],
+    })
+
+    // Geometry is reported for what the server placed, never for a position
+    // the caller chose — so its presence is the evidence of placement.
+    const placed = result.geometry.find((entry) => entry.id === 'half')
+    expect(placed).toBeDefined()
+    expect(placed?.x).toBeGreaterThanOrEqual(100)
+    expect(placed?.y).toBeGreaterThanOrEqual(100)
+  })
+
   test('refuses to grow into a neighbour, and names it', async () => {
     // Growth that swallows a node just past the old edge makes that node a
     // member the next region.set deletes by omission. So a group never

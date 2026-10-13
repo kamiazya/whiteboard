@@ -2,9 +2,10 @@
  * The daemon binding of the editor's file seams (see use-document-file-seams.ts
  * for the backend-agnostic half).
  *
- * Every method is total: a missing file resolves to `undefined` so the editor
- * keeps the card, and a rejected upload or an unreachable daemon answers a
- * refusal with its reason. A broken reference must never take the page down,
+ * A missing file resolves to `undefined` so the editor keeps the card, and a
+ * rejected upload or an unreachable daemon answers a refusal with its reason.
+ * `loadDocument` alone REJECTS a failed read, per its contract, so the seam
+ * that caches it can tell a transient failure from an absence. A broken reference must never take the page down,
  * and it must never be reported as success either — an upload that failed
  * carries no reference to bytes the daemon never stored.
  */
@@ -16,7 +17,7 @@ import {
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
-import type { DocumentFileAdapter } from './document-file-contract.js'
+import type { DocumentFileAdapter, LoadedFileDocument } from './document-file-contract.js'
 import { uploadRefusalReason } from './image-upload-policy.js'
 import { readLoadedFileDocument } from './read-loaded-file-document.js'
 
@@ -40,6 +41,29 @@ export interface DaemonFileAdapterOptions {
 
 const objectUrlOf = (blob: Blob | undefined) =>
   blob === undefined ? undefined : URL.createObjectURL(blob)
+
+/**
+ * One referenced document off the daemon's snapshot route. Only a 404 is
+ * "absent": the contract caches that answer as terminal, so a busy database,
+ * a server error or a dropped request rejects and is asked again.
+ */
+async function loadSnapshotDocument(
+  daemonFetch: typeof fetch,
+  url: string,
+  ref: string,
+): Promise<LoadedFileDocument | undefined> {
+  try {
+    const res = await daemonFetch(url)
+    if (res.status === 404) return undefined
+    if (!res.ok) throw new Error(`snapshot read answered ${res.status}`)
+    const doc = new Loro()
+    doc.import(new Uint8Array(await res.arrayBuffer()))
+    return readLoadedFileDocument(doc)
+  } catch (err) {
+    log.warn('referenced document load failed', { ref, err })
+    throw err
+  }
+}
 
 export function createDaemonFileAdapter({
   daemonFetch,
@@ -70,19 +94,12 @@ export function createDaemonFileAdapter({
     fileScope: `daemon:${daemonBaseUrl}/w/${workspaceId}`,
     isImageRef,
 
-    async loadDocument(ref) {
-      try {
-        const snapshot = documentApiUrl(workspaceId, resolveRefPath?.(ref) ?? ref, 'snapshot')
-        const res = await daemonFetch(`${daemonBaseUrl}${snapshot}`)
-        if (!res.ok) return undefined
-        const doc = new Loro()
-        doc.import(new Uint8Array(await res.arrayBuffer()))
-        return readLoadedFileDocument(doc)
-      } catch (err) {
-        log.warn('referenced document load failed', { ref, err })
-        return undefined
-      }
-    },
+    loadDocument: (ref) =>
+      loadSnapshotDocument(
+        daemonFetch,
+        `${daemonBaseUrl}${documentApiUrl(workspaceId, resolveRefPath?.(ref) ?? ref, 'snapshot')}`,
+        ref,
+      ),
 
     loadImageBlob,
 

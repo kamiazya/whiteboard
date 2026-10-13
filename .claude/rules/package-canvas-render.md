@@ -776,9 +776,9 @@ the table alone.
     applied identically to a file node and to a `![[embed]]`. A surface adds
     what only it knows through `options.extra` (an image asset's URL, a
     facet card) and hands the builder its own alias table and names, which
-    answer ahead of any load. `referenceTargets` is the matching single
-    definition of what to load; `overlayReferences` layers plain-data chrome
-    (labels, dangling marks) for the layout worker and the main thread
+    answer ahead of any load. `referenceTargets` is what to load (no
+    pictures), `walkReferences` its loop; `overlayReferences`
+    layers chrome (labels, dangling marks) for the layout worker and the main thread
     alike. Both layouts accept the bundle as `references` and apply it under
     the individual seams (`withReferenceSeams`), which stay for a test
     probing one alone. `ReferenceWire` is the bundle as DATA — the graph

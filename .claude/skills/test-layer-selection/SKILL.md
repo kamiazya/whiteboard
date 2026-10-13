@@ -30,6 +30,10 @@ Notes:
   named and failed CI on the sibling project holding that editor's own test. **`pnpm --filter
   <pkg> test` is the command that means "this package"** — the same lesson `dev-flow.md` records
   for `--project web-jsdom` against `pnpm --filter @kamiazya/whiteboard-web test`, one level down.
+  `tools/arch-lint`'s `package-test-script.test.ts` holds every package's `test` script to every
+  config the root `vitest.config.ts` registers for it, browser halves included. Its ledger names
+  the exception: `apps/web`, whose script is CI's `test-jsdom` job and leaves its browser
+  projects to `pnpm test:browser`.
 - **A budget or size guard is a property of the MERGE, not of your branch.** `dev-rules-budget`
   reads the always-on rule files, and CI reads them from the PR's merge ref: an edit that fits
   locally fails there when `main` grew the same file meanwhile. Measured at 119 chars of someone

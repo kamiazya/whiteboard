@@ -125,6 +125,7 @@ function tryCompose(
       registry: createFacetRegistry([...deployment, defineWorkspaceStencilPlugin(stencils)]),
     }
   } catch (error) {
+    // Not model's describeThrown: this package depends on zod alone.
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }
 }

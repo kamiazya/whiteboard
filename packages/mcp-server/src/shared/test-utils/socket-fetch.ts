@@ -1,15 +1,20 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { onTestFinished } from 'vitest'
 
 /**
  * A fresh owner-only socket path for one test: its own temp directory, so a
  * parallel run never shares a path, and short enough for the 104/108-byte
- * limit a Unix socket path has.
+ * limit a Unix socket path has. The directory is removed when the calling
+ * test finishes, so this must be called from inside a test; a daemon a whole
+ * suite shares puts its socket in a directory its `afterAll` removes.
  */
 export function testSocketPath(): string {
-  return join(mkdtempSync(join(tmpdir(), 'wb-sock-')), 'd.sock')
+  const dir = mkdtempSync(join(tmpdir(), 'wb-sock-'))
+  onTestFinished(() => rmSync(dir, { recursive: true, force: true }))
+  return join(dir, 'd.sock')
 }
 
 /**

@@ -85,6 +85,8 @@ function lint(file, plugin) {
     return ''
   } catch (err) {
     return `${err.stdout ?? ''}${err.stderr ?? ''}`
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 }
 

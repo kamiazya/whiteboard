@@ -313,7 +313,11 @@ describe('createDaemonFileAdapter', () => {
     })
   })
 
-  it('resolves an unreachable referenced canvas to undefined', async () => {
+  // `undefined` is the terminal "no such document" the seams cache for the
+  // life of the page; a rejection is what they ask again for. So only an
+  // absence the daemon ASSERTS may answer `undefined` — a busy database, a
+  // server error or a dropped request each answer the next time.
+  it('rejects a referenced canvas it could not reach, so the seam asks again', async () => {
     const daemonFetch = vi.fn(async () => {
       throw new Error('network down')
     })
@@ -324,8 +328,33 @@ describe('createDaemonFileAdapter', () => {
       path: path,
     })
 
-    await expect(adapter.loadDocument('sibling')).resolves.toBeUndefined()
+    await expect(adapter.loadDocument('sibling')).rejects.toThrow('network down')
     await expectLoggedFailure('referenced document load failed')
+  })
+
+  it.each([503, 500])('rejects a referenced canvas the daemon answered %i for', async (status) => {
+    const daemonFetch = vi.fn(async () => new Response(null, { status }))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    await expect(adapter.loadDocument('sibling')).rejects.toThrow(String(status))
+    await expectLoggedFailure('referenced document load failed')
+  })
+
+  it('answers undefined for a referenced canvas the daemon says does not exist', async () => {
+    const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    await expect(adapter.loadDocument('gone')).resolves.toBeUndefined()
   })
 
   it('percent-encodes a path on its way into the path', async () => {

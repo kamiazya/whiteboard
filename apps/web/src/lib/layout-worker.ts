@@ -36,6 +36,7 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
+import { decodeSpatialSnapshot } from './decode-spatial-snapshot.js'
 import { outlineFromSpatial } from './document-outline.js'
 import { unhandledKind } from './exhaustive.js'
 import { resolveRectColor } from './favicon.js'
@@ -55,7 +56,7 @@ import {
   type WorkerFailure,
 } from './layout-worker-protocol.js'
 import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
-import { namesADocument } from './names-a-document.js'
+import { namesAReference } from './names-a-reference.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
@@ -65,36 +66,6 @@ const measure = createBrowserMeasureText()
 // One store for this worker's whole life; its axes and why they are the
 // ones that matter are `layout-content-caches.ts`.
 const contentCacheFor = createContentCacheStore()
-
-/**
- * Decodes a stored snapshot into a canvas, INSIDE the worker.
- *
- * The import is lazy and memoized for the same reason `sse-shared-worker.ts`
- * defers its own: loro-crdt initialises WASM, and paying that at worker
- * startup would charge every markdown render and every editor layout for
- * something only this path needs. The first spatial thumbnail pays it once
- * per worker, off the main thread, at background priority.
- */
-let loroBundle:
-  | Promise<{
-      readonly LoroDoc: typeof import('loro-crdt').LoroDoc
-      readonly readSpatialCanvas: typeof import('@kamiazya/whiteboard-loro-adapter').readSpatialCanvas
-    }>
-  | undefined
-
-async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
-  loroBundle ??= Promise.all([
-    import('loro-crdt'),
-    import('@kamiazya/whiteboard-loro-adapter'),
-  ]).then(([loro, adapter]) => ({
-    LoroDoc: loro.LoroDoc,
-    readSpatialCanvas: adapter.readSpatialCanvas,
-  }))
-  const { LoroDoc, readSpatialCanvas } = await loroBundle
-  const doc = new LoroDoc()
-  doc.import(bytes)
-  return readSpatialCanvas(doc)
-}
 
 // Registration is idempotent and memoized inside the loader, but the FIRST
 // request must wait for it: measuring before the face lands produces
@@ -203,7 +174,7 @@ async function handleOutline(request: OutlineRequest): Promise<void> {
     // `failed` reply — the row keeps its kind icon and the tab its static
     // one. It must not take the worker down: every request queued behind it
     // belongs to a different document.
-    const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+    const canvas = request.canvas ?? (await decodeSpatialSnapshot(request.snapshot))
     const startedAt = performance.now()
     // Read here rather than on the asking thread: this is the one place
     // the canvas is already decoded, and decoding it again to read one
@@ -304,7 +275,7 @@ function omittedReferences(
   request: LayoutRequest,
   canvas: SpatialCanvas,
 ): { readonly referencesOmitted?: true } {
-  return request.references === undefined && namesADocument({ canvases: [canvas] })
+  return request.references === undefined && namesAReference({ canvases: [canvas] })
     ? { referencesOmitted: true }
     : {}
 }
@@ -316,7 +287,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
     const missingRefs = new Set(request.missingFileRefs ?? [])
     // A corrupt snapshot lands in the catch below as a `failed` reply (the row's kind icon),
     // never taking the worker down: every request queued behind it is another document's.
-    const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+    const canvas = request.canvas ?? (await decodeSpatialSnapshot(request.snapshot))
     const startedAt = performance.now()
     // The same bundle the main thread builds, from the same bytes.
     const references =

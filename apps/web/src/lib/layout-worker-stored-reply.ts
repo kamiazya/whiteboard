@@ -35,6 +35,7 @@
  */
 import type { EdgeAnchorPair } from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
+import { fragmentAskSchema } from './fragment-requests.js'
 
 const boundsSchema = z
   .object({
@@ -79,14 +80,7 @@ const storedReplySchema = z.discriminatedUnion('type', [
       anchors: z.array(z.tuple([z.string(), z.unknown()])),
       fontsMissing: z.array(z.string()).optional(),
       /** The math and diagram sources the layout asked for and was not given. */
-      fragmentsAsked: z
-        .array(
-          z.discriminatedUnion('kind', [
-            z.object({ kind: z.literal('math'), value: z.string() }),
-            z.object({ kind: z.literal('diagram'), lang: z.string(), value: z.string() }),
-          ]),
-        )
-        .optional(),
+      fragmentsAsked: z.array(fragmentAskSchema).optional(),
       /** The document names another one that this render was drawn without. */
       referencesOmitted: z.literal(true).optional(),
     })

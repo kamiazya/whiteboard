@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, describeThrown } from '@kamiazya/whiteboard-model'
 
 /**
  * Thrown when a write is in a format the document is not in.
@@ -49,7 +49,7 @@ export class DocumentSerializeError extends Error {
     cause: unknown,
   ) {
     super(
-      `Document ${documentId} cannot be read as ${format}: ${cause instanceof Error ? cause.message : String(cause)}. ` +
+      `Document ${documentId} cannot be read as ${format}: ${describeThrown(cause)}. ` +
         "Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it.",
       { cause },
     )

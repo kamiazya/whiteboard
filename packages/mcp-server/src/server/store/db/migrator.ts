@@ -1,3 +1,4 @@
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import { sql } from 'kysely'
 import { type MigrationProvider, Migrator } from 'kysely/migration'
 import { isErrnoCode } from '../../../shared/errno.js'
@@ -70,7 +71,7 @@ export async function runMigrations(db: Database, where = 'this deployment'): Pr
   const { error, results } = await migrator.migrateToLatest()
   if (error) {
     const failed = results?.find((r) => r.status === 'Error')?.migrationName
-    const detail = error instanceof Error ? error.message : String(error)
+    const detail = describeThrown(error)
 
     // An incompatible migration history (DB created by a build that ships a
     // migration this build lacks) is unrecoverable by re-running. Re-frame the

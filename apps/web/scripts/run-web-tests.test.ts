@@ -17,7 +17,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 // @ts-expect-error -- a plain .mjs script, imported for the one pure function
 // its behaviour hangs on; there are no types to generate for a CI wrapper.
 import { RUNS, reportsNoTestFiles, runAll, vitestArgv } from './run-web-tests.mjs'
@@ -115,5 +115,33 @@ describe('a file filter that only one half can match', () => {
     expect(reportsNoTestFiles('\n No test files found, exiting with code 0\n')).toBe(true)
     expect(reportsNoTestFiles('No test files found, exiting with code 1')).toBe(true)
     expect(reportsNoTestFiles(' Test Files  1 passed (1)')).toBe(false)
+  })
+})
+
+describe('a vitest that never started', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function stderrOf(error: unknown): Promise<string> {
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const run = async () => ({ status: null, empty: false, error })
+    return runAll([], run).then((code: number) => {
+      expect(code).toBe(1)
+      return write.mock.calls.map(([chunk]) => String(chunk)).join('')
+    })
+  }
+
+  it('prints the spawn error with its stack', async () => {
+    const error = new Error('spawn vitest ENOENT')
+    const out = await stderrOf(error)
+    expect(out).toContain('spawn vitest ENOENT')
+    expect(out).toContain(String(error.stack).split('\n')[1]?.trim())
+  })
+
+  it('prints what a non-Error failure carried rather than [object Object]', async () => {
+    const out = await stderrOf({ code: 'ENOENT' })
+    expect(out).toContain('"code":"ENOENT"')
+    expect(out).not.toContain('[object Object]')
   })
 })

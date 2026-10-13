@@ -25,6 +25,7 @@ import {
   rotateReplicaKeyResponseSchema,
   setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType } from 'zod'
@@ -197,7 +198,7 @@ async function askDaemon<T>(
       ...(req.body === undefined ? {} : { body: req.body }),
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = describeThrown(err)
     return { refusal: refused(workspaceId, 'unreachable', message) }
   }
   if (answer.status < 200 || answer.status >= 300) {

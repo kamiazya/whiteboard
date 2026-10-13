@@ -11,18 +11,27 @@
  * automatic creation can carry someone past them, and a person who stops
  * satisfying them is refused at their next sign-in.
  */
+import type { SignInRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import type { ProviderAdmission } from './sign-in-config.js'
 
 /** Claims the authenticator has already verified (signature, issuer, audience). */
 export type VerifiedClaims = Readonly<Record<string, unknown>>
 
-export type AdmissionRefusal =
+/**
+ * A subset of the refusals the sign-in contract declares. The web app's
+ * sign-in screen explains only the codes that contract lists, so naming one it
+ * does not is a type error here rather than a generic failure in a browser.
+ */
+export type RefusalOf<T extends SignInRefusal> = T
+
+export type AdmissionRefusal = RefusalOf<
   | 'email_unverified'
   | 'email_domain_not_allowed'
   | 'hosted_domain_not_allowed'
   | 'claim_not_satisfied'
   | 'not_invited'
   | 'rule_refused'
+>
 
 export type AdmissionDecision =
   | { readonly admitted: true }

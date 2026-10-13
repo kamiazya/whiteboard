@@ -91,6 +91,15 @@ export interface WorkspaceFilesSource {
    */
   loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array>
   /**
+   * The bytes of a stored picture `entry`'s content names (`asset:…`), for
+   * the miniatures that draw it inline. `undefined` when the keeper holds no
+   * such picture, which draws as its card; a REJECTION when it could not be
+   * read, so a row keeps the picture it had rather than one keyed as though
+   * the image were gone. OPTIONAL like `readTagLibrary`: without it every
+   * picture draws as its card.
+   */
+  loadImage?(entry: WorkspaceDocumentEntry, ref: string): Promise<Blob | undefined>
+  /**
    * What a delete evacuated, restorable. OPTIONAL like `setPinned`: the
    * capability belongs to a keeper whose index keeps a trash, and the panel
    * omits the section rather than offering a restore that cannot happen.

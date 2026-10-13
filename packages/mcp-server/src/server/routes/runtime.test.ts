@@ -9,7 +9,7 @@ import {
   daemonPingResponseSchema,
   type RuntimeStatusResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type CredentialResolverConfig,
   createCredentialResolver,
@@ -47,7 +47,7 @@ const { createDaemonIdentity } = await import('../security/daemon-identity.js')
 // the mocked config seam for it).
 const identityDir = mkdtempSync(join(tmpdir(), 'wb-runtime-identity-'))
 const testIdentity = createDaemonIdentity({ dataDir: identityDir })
-process.once('exit', () => rmSync(identityDir, { recursive: true, force: true }))
+afterAll(() => rmSync(identityDir, { recursive: true, force: true }))
 
 // The status the keeper reports, typed as the contract the web app parses so a
 // field the contract gains or drops fails here rather than asserting the fake.

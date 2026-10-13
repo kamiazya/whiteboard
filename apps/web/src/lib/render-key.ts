@@ -220,13 +220,16 @@ async function digestKey(lines: readonly string[]): Promise<string> {
 /**
  * One reference a picture drew, as the key needs it: the target as written,
  * the document it resolved to (absent when it names nothing), that
- * document's content identity, and the label it was drawn under.
+ * document's content identity, and the label it was drawn under — or, for a
+ * stored picture, the `image` it was drawn with: its `data:` URL, which is
+ * its content, or '' when it was drawn as its card.
  */
 export interface ReferenceKeyRow {
   readonly target: string
   readonly documentId?: string
   readonly version?: string
   readonly label?: string
+  readonly image?: string
 }
 
 /**
@@ -235,15 +238,24 @@ export interface ReferenceKeyRow {
  * and otherwise a digest of every row.
  *
  * The label is in it because an embed is drawn under its document's name,
- * and a rename moves no content digest. A dangling target is a row too: it
+ * and a rename moves no content digest. A picture's href is in it because a
+ * picture's bytes are what is drawn, and the reference names no version. A dangling target is a row too: it
  * is drawn as missing, and the day it resolves is a different picture.
  */
 export async function referencesKey(rows: readonly ReferenceKeyRow[]): Promise<string | null> {
   const lines: string[] = []
   for (const row of rows) {
     if (row.documentId !== undefined && row.version === undefined) return null
+    // `image` only when present, so a row naming a document keys as it did
+    // before pictures had a row of their own.
     lines.push(
-      JSON.stringify([row.target, row.documentId ?? null, row.version ?? null, row.label ?? null]),
+      JSON.stringify([
+        row.target,
+        row.documentId ?? null,
+        row.version ?? null,
+        row.label ?? null,
+        ...(row.image === undefined ? [] : [row.image]),
+      ]),
     )
   }
   return await digestKey(lines)

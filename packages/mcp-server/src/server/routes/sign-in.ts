@@ -203,7 +203,7 @@ async function reauthenticate(c: Context, routing: Routing) {
   return begin(c, routing, provider, true)
 }
 
-// A callback is a browser navigation, so a refusal goes back to the web app's
+// Sign-in and its callback are browser navigations, so a refusal goes back to the web app's
 // sign-in screen, which explains the reason rather than showing raw JSON.
 function refusedTo(c: Context, reason: SignInRefusal): Response {
   return c.redirect(`/sign-in?error=${reason}`, 302)
@@ -267,7 +267,7 @@ export function createSignInRoutes(deps: SignInRoutesDeps): Hono {
     (step: (c: Context, routing: Routing, provider: SignInRouteProvider) => Promise<Response>) =>
     async (c: Context): Promise<Response> => {
       const provider = providerById.get(c.req.param('providerId') ?? '')
-      if (provider === undefined) return c.json({ error: 'unknown_provider' }, 404)
+      if (provider === undefined) return refusedTo(c, 'unknown_provider')
       return step(c, routing, provider)
     }
   const listed: SignInProvidersResponse = {

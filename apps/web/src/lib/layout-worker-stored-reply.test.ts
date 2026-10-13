@@ -56,6 +56,23 @@ describe('a laid-out reply through the store', () => {
 
     expect(decoded).toMatchObject({ fontsMissing: ['Kiwi Maru'] })
   })
+
+  // A stored entry the schema refuses is a miss, so a schema stricter than the
+  // writer would silently re-render exactly the rows that typeset or embed.
+  it('keeps the fragments it asked for and that it was drawn without references', () => {
+    const fragmentsAsked = [
+      { kind: 'math', value: 'e^{i\\pi}' },
+      { kind: 'diagram', lang: 'mermaid', value: 'graph TD; a-->b' },
+    ] as const
+
+    const decoded = decodeStoredReply(
+      throughTheStore(encodeStoredReply({ ...reply, fragmentsAsked, referencesOmitted: true })),
+    )
+
+    expect(decoded).not.toBeNull()
+    expect(decoded?.fragmentsAsked).toEqual(fragmentsAsked)
+    expect(decoded?.referencesOmitted).toBe(true)
+  })
 })
 
 describe('an entry this build cannot use', () => {

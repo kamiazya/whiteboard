@@ -46,6 +46,7 @@ import {
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
+import { DocumentFileStore } from './document-file-store.js'
 import {
   type LoadedMarkdown,
   type WorkspaceFilesSource,
@@ -249,6 +250,7 @@ export function createBrowserFilesSource(
     index?: DocumentIndex
     loro?: LoroStoreLike
     clock?: ContentClock
+    files?: Pick<DocumentFileStore, 'read'>
   } = {},
 ): WorkspaceFilesSource {
   // The default matches what production injects (App.tsx): the tree index
@@ -257,6 +259,7 @@ export function createBrowserFilesSource(
   const index = deps.index ?? new FoldingBrowserIndex()
   const loro = deps.loro ?? new LoroStore()
   const clock = deps.clock ?? idbContentClock()
+  const files = deps.files ?? new DocumentFileStore()
 
   /**
    * The searchable corpus, built on FIRST search rather than at list time
@@ -482,6 +485,13 @@ export function createBrowserFilesSource(
 
     async loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {
       return (await loadCurrentDoc(entry)).export({ mode: 'snapshot' })
+    },
+
+    // One file store per origin, so the row says nothing about where to look.
+    async loadImage(_entry: WorkspaceDocumentEntry, ref: string): Promise<Blob | undefined> {
+      const read = await files.read(ref)
+      if (read.kind === 'unreadable') throw read.error
+      return read.kind === 'blob' ? read.blob : undefined
     },
 
     ...pinMembers(index),

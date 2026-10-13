@@ -1,11 +1,11 @@
 import {
-  type LoadedReference,
   type ReferenceGraph,
   type ReferenceSeams,
+  type ReferenceSeeds,
   referenceSeams,
-  referenceTargets,
+  walkReferences,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas, WorkspaceId } from '@kamiazya/whiteboard-model'
+import type { WorkspaceId } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadReferencedDocument } from './resolve-file-references.js'
@@ -23,9 +23,9 @@ export interface LoadedReferenceGraph {
  * Loads everything a render's seeds point at — a markdown body's links and
  * embeds, a canvas's file nodes — transitively through the markdown it
  * finds, so the layout's SYNCHRONOUS seams become map lookups. The daemon's
- * twin of apps/web's prefetching hooks: both ask `referenceTargets` what to
- * load and hand `referenceSeams` what they loaded, and neither decides on
- * its own what a reference is or draws as.
+ * twin of apps/web's prefetching hooks: all of them walk with
+ * `walkReferences` and hand `referenceSeams` what they loaded, and none
+ * decides on its own what a reference is or draws as.
  *
  * Total: a target that fails to load is logged and recorded as nothing
  * there, so the reader keeps the literal text the author wrote and the
@@ -34,28 +34,21 @@ export interface LoadedReferenceGraph {
 export async function loadReferenceGraph(
   deps: ServerDeps,
   workspaceId: WorkspaceId,
-  seeds: { readonly bodies?: readonly string[]; readonly canvases?: readonly SpatialCanvas[] },
+  seeds: ReferenceSeeds,
 ): Promise<LoadedReferenceGraph> {
-  const graph = new Map<string, LoadedReference | null>()
-  for (;;) {
-    const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
-      (target) => !graph.has(target),
-    )
-    if (wanted.length === 0) break
-    await Promise.all(
-      wanted.map(async (target) => {
-        try {
-          graph.set(target, await loadReferencedDocument(deps, workspaceId, target))
-        } catch (err) {
-          log.warning('reference did not load; rendering it unresolved', {
-            workspaceId,
-            target,
-            err,
-          })
-          graph.set(target, null)
-        }
-      }),
-    )
-  }
+  const graph = await walkReferences(
+    seeds,
+    (target) => loadReferencedDocument(deps, workspaceId, target),
+    {
+      onFailure: (target, err) => {
+        log.warning('reference did not load; rendering it unresolved', {
+          workspaceId,
+          target,
+          err,
+        })
+        return null
+      },
+    },
+  )
   return { graph, seams: referenceSeams(graph) }
 }

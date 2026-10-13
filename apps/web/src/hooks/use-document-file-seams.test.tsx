@@ -8,10 +8,11 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
  */
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
+import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
 import { toFacetCard, useDocumentFileSeams } from './use-document-file-seams.js'
+import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
 /** The bundle a surface builds from the wire the hook hands the editor. */
 const seamsOf = (result: { current: { references: ReferenceWire } }) =>
@@ -110,6 +111,70 @@ describe('useDocumentFileSeams', () => {
     // Moved stamp: the referenced canvas was edited elsewhere.
     rerender({ stampOf: new Map([['other', 'v2']]) })
     await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(2))
+  })
+
+  it('draws the revision a moved stamp loaded, and the earlier one until it lands', async () => {
+    let release: () => void = () => {}
+    const loadDocument = vi
+      .fn<DocumentFileAdapter['loadDocument']>()
+      .mockResolvedValueOnce({ canvas: embedded('first') })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve({ canvas: embedded('second') })
+          }),
+      )
+    const adapter = makeAdapter({ loadDocument })
+    const canvas = canvasWith('other')
+    const { result, rerender } = renderHook(
+      ({ stampOf }: { stampOf: ReadonlyMap<string, string> }) =>
+        useDocumentFileSeams({ canvas, adapter, stampOf, bodies: [] }),
+      { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
+    )
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('first')),
+    )
+
+    rerender({ stampOf: new Map([['other', 'v2']]) })
+    await waitFor(() => expect(loadDocument).toHaveBeenCalledTimes(2))
+    expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('first'))
+
+    release()
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('second')),
+    )
+  })
+
+  it('keeps the newer revision when a load under an earlier stamp lands after it', async () => {
+    let releaseFirst: () => void = () => {}
+    const first = new Promise<LoadedFileDocument>((resolve) => {
+      releaseFirst = () => resolve({ canvas: embedded('first') })
+    })
+    const loadDocument = vi
+      .fn<DocumentFileAdapter['loadDocument']>()
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce({ canvas: embedded('second') })
+    const adapter = makeAdapter({ loadDocument })
+    const canvas = canvasWith('other')
+    const { result, rerender } = renderHook(
+      ({ stampOf }: { stampOf: ReadonlyMap<string, string> }) =>
+        useDocumentFileSeams({ canvas, adapter, stampOf, bodies: [] }),
+      { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
+    )
+    await waitFor(() => expect(loadDocument).toHaveBeenCalledTimes(1))
+
+    rerender({ stampOf: new Map([['other', 'v2']]) })
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('second')),
+    )
+
+    // The hook's completion is registered on `first` before this await is,
+    // so it has written the late answer by the time `act` returns.
+    await act(async () => {
+      releaseFirst()
+      await first
+    })
+    expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('second'))
   })
 
   it("loads the picture a TEXT node writes inline, not only a file node's", async () => {
@@ -467,6 +532,44 @@ describe('useDocumentFileSeams facets', () => {
     await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(1))
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again after a read that failed, and draws the embed once it answers', async () => {
+    // A rejection is the adapter saying "could not read", not "nothing
+    // here": one busy store while the board opens must not leave the embed
+    // unresolved until someone edits its target. The stamp never moves.
+    const loadDocument = vi
+      .fn<DocumentFileAdapter['loadDocument']>()
+      .mockRejectedValueOnce(new Error('database_busy'))
+      .mockImplementation(async (ref) => ({ canvas: embedded(ref) }))
+    const adapter = makeAdapter({ loadDocument })
+    const canvas = canvasWith('other')
+    const stampOf = new Map([['other', 'v1']])
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({ canvas, adapter, stampOf, bodies: [] }),
+    )
+
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('other')),
+    )
+    expect(loadDocument).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops asking after a bounded number of failed reads', async () => {
+    const loadDocument = vi.fn<DocumentFileAdapter['loadDocument']>(async () => {
+      throw new Error('database_busy')
+    })
+    const adapter = makeAdapter({ loadDocument })
+    const canvas = canvasWith('other')
+    renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map(), bodies: [] }))
+
+    await waitFor(() => expect(loadDocument).toHaveBeenCalledTimes(TRANSIENT_LOAD_ATTEMPTS))
+    // Settle the last rejection inside `act`: the hook's handler runs first,
+    // and the pass it schedules is what would ask a fourth time.
+    await act(async () => {
+      await loadDocument.mock.results.at(-1)?.value.catch(() => {})
+    })
+    expect(loadDocument).toHaveBeenCalledTimes(TRANSIENT_LOAD_ATTEMPTS)
   })
 })
 

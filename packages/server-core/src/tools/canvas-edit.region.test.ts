@@ -412,6 +412,30 @@ describe('wb_canvas_edit — region.set', () => {
     expect(canvas.edges.map((edge) => edge.id)).toEqual(['smuggled'])
   })
 
+  test('naming the group as one of its own members is refused before anything changes', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [GROUP, textNode({ id: 'a', x: 50, y: 50, width: 50, height: 50, text: 'a' })],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'region.set', within: 'g', nodes: ['a', 'g'] }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/"g" is the group itself, not one of its members/),
+    })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.map((node) => node.id).sort()).toEqual(['a', 'g'])
+  })
+
   test('a group added without a position is placed around the members it is set to, which stay put', async () => {
     // The lane's wrap-a-chain task: boxes drawn in a row, then a group
     // with no geometry, then region.set. The group used to land at the

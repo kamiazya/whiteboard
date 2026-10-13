@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
-import { EdgeNotFoundError, NodeNotFoundError } from './errors.js'
+import { DocumentSerializeError, EdgeNotFoundError, NodeNotFoundError } from './errors.js'
 
 describe('server-core tool errors', () => {
   test('SnapshotNotFoundError carries the documentId and a descriptive message', () => {
@@ -25,5 +25,13 @@ describe('server-core tool errors', () => {
   test('a missing node or edge is said to be missing from a document, not a canvas', () => {
     expect(new NodeNotFoundError('doc-1', 'n').message).toBe('node not found: n in document doc-1')
     expect(new EdgeNotFoundError('doc-1', 'e').message).toBe('edge not found: e in document doc-1')
+  })
+
+  // A model reads this message, and serializers do throw plain `{ code }`
+  // objects, whose `String()` is `[object Object]`.
+  test('a serialize failure caused by a plain object says what the object carried', () => {
+    const err = new DocumentSerializeError('doc-1', 'okf', { code: 'X' })
+    expect(err.message).toContain('"code"')
+    expect(err.message).not.toContain('[object Object]')
   })
 })

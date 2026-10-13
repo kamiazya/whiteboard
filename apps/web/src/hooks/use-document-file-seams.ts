@@ -10,9 +10,9 @@
  * subtle enough that a second hand-written copy is the wrong answer.
  *
  * `resolveReference` is SYNCHRONOUS by the editor's contract, so it is a
- * cache lookup over content this hook pre-fetches. Totality mirrors the
- * layout seam: any load failure resolves to `undefined` and the editor keeps
- * the card — a broken reference never takes down a page.
+ * cache lookup over content this hook pre-fetches through
+ * `usePrefetchedEntries`. A broken reference keeps the card and never takes
+ * down a page; a read that failed is asked again a bounded number of times.
  */
 
 import {
@@ -30,7 +30,7 @@ import {
   type SpatialCanvas,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type {
   DocumentFileAdapter,
@@ -38,6 +38,7 @@ import type {
   LoadedFileDocument,
 } from '../lib/document-file-contract.js'
 import { useImageUrls } from './use-image-urls.js'
+import { TRANSIENT_LOAD_ATTEMPTS, usePrefetchedEntries } from './use-prefetched-cache.js'
 
 export interface UseDocumentFileSeamsOptions {
   readonly canvas: SpatialCanvas
@@ -104,6 +105,35 @@ function loadedReferenceFor(
   }
 }
 
+/**
+ * A prefetch key is the reference AND the stamp it was asked under, so a moved
+ * stamp is a key never fetched and the shared hook loads it like any other.
+ * NUL cannot occur in a reference or a stamp, so splitting on it is exact.
+ */
+const STAMP_SEPARATOR = '\u0000'
+const keyOf = (ref: string, stamp: string) => `${ref}${STAMP_SEPARATOR}${stamp}`
+const refOf = (key: string) => key.slice(0, key.indexOf(STAMP_SEPARATOR))
+
+/**
+ * What has loaded, by reference: the answer under the CURRENT stamp where
+ * there is one, else the latest answer under an earlier stamp — so an edit
+ * made elsewhere keeps the embed drawn while its new revision loads, and a
+ * slow load under an old stamp cannot land over a newer one.
+ */
+function byReference<V>(
+  cache: ReadonlyMap<string, V>,
+  stampOf: ReadonlyMap<string, string>,
+): Map<string, V> {
+  const out = new Map<string, V>()
+  // Insertion order is completion order, so the last write is the latest answer.
+  for (const [key, value] of cache) out.set(refOf(key), value)
+  for (const [key, value] of cache) {
+    const ref = refOf(key)
+    if (key === keyOf(ref, stampOf.get(ref) ?? '')) out.set(ref, value)
+  }
+  return out
+}
+
 export function useDocumentFileSeams({
   canvas,
   adapter,
@@ -112,27 +142,45 @@ export function useDocumentFileSeams({
   stampOf,
   bodies,
 }: UseDocumentFileSeamsOptions): DocumentFileSeams {
-  // `null` = the adapter answered "there is nothing here". It has to OCCUPY
-  // the slot rather than leave it absent: absent means "not fetched yet", so
-  // dropping the result made the next staleness pass ask again — while the
-  // drop itself published a new map instance and scheduled that pass. The
-  // image loop below already guards this exact shape by returning the SAME
-  // instance when nothing was added.
-  const [embedContent, setEmbedContent] = useState<ReadonlyMap<string, LoadedFileDocument | null>>(
-    new Map(),
-  )
-  const embedStampsRef = useRef<Map<string, string>>(new Map())
   // Kept in a ref so a caller that rebuilds its adapter object every render
   // cannot restart the fetch effects; the adapter is a backend binding, not
   // reactive state.
   const adapterRef = useRef(adapter)
   adapterRef.current = adapter
 
+  // Everything the canvas points at — its file nodes AND what its text nodes
+  // embed or link, transitively through what has loaded — plus what a body
+  // drafted beside it names, minus image assets, which are not documents.
+  // A rejection is the adapter's "could not read" (see `DocumentFileAdapter`),
+  // so it is asked again; `undefined` is "nothing here", terminal until the
+  // stamp moves.
+  //
+  // ponytail: every stamp a target has had stays cached for the page's life;
+  // evict superseded keys in `usePrefetchedEntries` if a long session's
+  // memory says it matters.
+  const cache = usePrefetchedEntries<LoadedFileDocument>(
+    useCallback(
+      (loaded) => {
+        const graph = new Map<string, LoadedReference | null>()
+        for (const [ref, document] of byReference(loaded, stampOf)) {
+          graph.set(ref, loadedReferenceFor(ref, document, resolveAlias))
+        }
+        return referenceTargets({ canvases: [canvas], bodies, loaded: graph }).map((ref) => ({
+          key: keyOf(ref, stampOf.get(ref) ?? ''),
+          load: () => adapterRef.current.loadDocument(ref),
+          attempts: TRANSIENT_LOAD_ATTEMPTS,
+        }))
+      },
+      [bodies, canvas, resolveAlias, stampOf],
+    ),
+  )
+  // `null` is the terminal "nothing here" slot, kept so the seams answer
+  // without the layout retrying. A document with facets but no canvas is
+  // still a hit — it is what renders the facet card.
+  const embedContent = useMemo(() => byReference(cache, stampOf), [cache, stampOf])
+
   // The shared record per reference: what this keeper loaded, minus the
-  // facets, which are a surface extra below. `null` keeps the terminal
-  // "nothing here" slot so the seams answer without the layout retrying.
-  // The id the page's table resolved a written path to rides on the record,
-  // so a body's `![[path]]` finds it by id.
+  // facets, which are a surface extra below.
   const graph = useMemo(() => {
     const entries = new Map<string, LoadedReference | null>()
     for (const [ref, document] of embedContent) {
@@ -140,46 +188,6 @@ export function useDocumentFileSeams({
     }
     return entries
   }, [embedContent, resolveAlias])
-
-  useEffect(() => {
-    // Everything the canvas points at — its file nodes AND what its text
-    // nodes embed or link, transitively through what has loaded — plus what
-    // a body drafted beside it names, minus image assets, which are not
-    // documents.
-    const refs = referenceTargets({ canvases: [canvas], bodies, loaded: graph }).filter(
-      (ref) => !adapterRef.current.isImageRef(ref),
-    )
-    if (refs.length === 0) return
-    // Normalised on BOTH sides: the write below stores `?? ''`, so comparing
-    // against a raw `undefined` left a reference with no stamp entry (a
-    // dangling one, or a document absent from the page's list) permanently
-    // stale, reloading it on every render.
-    const stale = refs.filter(
-      (ref) =>
-        !embedContent.has(ref) || embedStampsRef.current.get(ref) !== (stampOf.get(ref) ?? ''),
-    )
-    if (stale.length === 0) return
-    let cancelled = false
-    void Promise.all(
-      stale.map(async (ref) => [ref, await adapterRef.current.loadDocument(ref)] as const),
-    ).then((loaded) => {
-      if (cancelled) return
-      setEmbedContent((prev) => {
-        const next = new Map(prev)
-        for (const [ref, document] of loaded) {
-          // A document with facets but no canvas is still a cache HIT — it is
-          // what renders the facet card. So is one that resolved to nothing;
-          // the stamp is what brings it back if the target later appears.
-          next.set(ref, document ?? null)
-          embedStampsRef.current.set(ref, stampOf.get(ref) ?? '')
-        }
-        return next
-      })
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [bodies, canvas, embedContent, graph, stampOf])
 
   // Every picture this render draws, from the one definition
   // (`storedImageRefs`): a canvas's image file nodes, frame backgrounds, and
