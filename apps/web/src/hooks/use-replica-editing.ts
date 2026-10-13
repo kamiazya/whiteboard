@@ -46,7 +46,7 @@ export function useReplicaEditing({
 
   const onSpatialChange = useCallback(
     (next: SpatialCanvas) => {
-      if (record === undefined || selected === undefined || selected.kind !== 'spatial') return
+      if (record === undefined || selected?.kind !== 'spatial') return
       setSpatialDraft(next)
       const prev = spatialPrev.current
       if (prev !== null) writeReplicaSpatial(record, selected.documentId, prev, next)
