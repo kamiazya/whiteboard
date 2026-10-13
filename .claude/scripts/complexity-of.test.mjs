@@ -218,6 +218,15 @@ test(
   }),
 )
 
+test(
+  'a flag where --base wants its ref refuses with exit 2 rather than reading it as the ref',
+  probed(() => {
+    const result = run('--base', '--chaged')
+    assert.equal(result.status, 2, result.stdout)
+    assert.match(result.stderr, /--base needs a <ref>, not --chaged/)
+  }),
+)
+
 test("--changed's scope is this repo's biome.json: scripts in, tests and workflow scripts out", () => {
   const linted = complexityScopeFrom(readFileSync(join(here, '..', '..', 'biome.json'), 'utf-8'))
   const scored = [

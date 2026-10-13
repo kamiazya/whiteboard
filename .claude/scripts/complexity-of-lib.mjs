@@ -23,6 +23,8 @@ export function argsFrom(argv) {
   const baseAt = argv.indexOf('--base')
   const base = baseAt === -1 ? null : argv[baseAt + 1]
   if (base === undefined) throw new UsageError('--base needs a <ref>')
+  // No ref starts with `-` (git refuses one), so a flag here is a missing ref.
+  if (base?.startsWith('-')) throw new UsageError(`--base needs a <ref>, not ${base}`)
   const files = argv.filter((a, i) => !a.startsWith('--') && (baseAt === -1 || i !== baseAt + 1))
   return { base, changed: argv.includes('--changed'), files }
 }
