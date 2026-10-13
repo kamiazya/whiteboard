@@ -255,6 +255,31 @@ describe('makeReplicaReadableOffline', () => {
   it('refuses a workspace whose keeper keeps no copy offline', async () => {
     const credentials = authenticator()
 
+    // What the daemon answers a no-offline workspace: a typed 403, before
+    // any key is built.
+    const made = await makeReplicaReadableOffline({
+      daemonBaseUrl: DAEMON,
+      workspaceId: WORKSPACE,
+      label: 'Notes',
+      fetch: vi.fn(async () =>
+        jsonResponse(
+          {
+            error: 'replica_not_allowed',
+            message: 'this workspace does not allow an offline replica',
+          },
+          403,
+        ),
+      ),
+      credentials,
+    })
+
+    expect(made).toEqual({ ok: false, reason: 'no-offline' })
+    expect(credentials.create).not.toHaveBeenCalled()
+  })
+
+  it('wraps no key handed over under a no-offline tier, a shape the daemon never sends', async () => {
+    const credentials = authenticator()
+
     const made = await makeReplicaReadableOffline({
       daemonBaseUrl: DAEMON,
       workspaceId: WORKSPACE,
