@@ -56,7 +56,12 @@ function rgb(hex: string): string {
 describe('SpatialEditor theme', () => {
   it('draws the theme the canvas names', () => {
     const { container } = render(
-      <SpatialEditor canvas={themed('visual.neon')} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        theme="light"
+        canvas={themed('visual.neon')}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
     expect(content(container)).toContain('wb-glow')
   })
@@ -65,7 +70,12 @@ describe('SpatialEditor theme', () => {
   // editor that hardcodes the look it happens to be asked for.
   it('reads the theme from the canvas rather than drawing one look for every board', () => {
     const { container } = render(
-      <SpatialEditor canvas={themed('visual.sketch')} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        theme="light"
+        canvas={themed('visual.sketch')}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
     expect(content(container)).toContain('stroke-linecap="round"')
     expect(content(container)).not.toContain('wb-glow')
@@ -77,11 +87,18 @@ describe('SpatialEditor theme', () => {
     // Non-vacuous: neon's label fill is not the bundled one, so a chrome
     // reading the bundled palette is visible here.
     expect(palette.labelFill).not.toBe(SPATIAL_LIGHT_PALETTE.labelFill)
-    const board = render(<SpatialEditor canvas={neon} onChange={vi.fn()} measure={fakeMeasure} />)
+    const board = render(
+      <SpatialEditor theme="light" canvas={neon} onChange={vi.fn()} measure={fakeMeasure} />,
+    )
     expect(inheritedFill(board.container)).toBe(rgb(palette.labelFill))
     cleanup()
     const plain = render(
-      <SpatialEditor canvas={{ nodes: [], edges: [] }} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        theme="light"
+        canvas={{ nodes: [], edges: [] }}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
     expect(inheritedFill(plain.container)).toBe(rgb(SPATIAL_LIGHT_PALETTE.labelFill))
   })

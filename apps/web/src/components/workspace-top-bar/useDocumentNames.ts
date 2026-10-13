@@ -1,19 +1,16 @@
 import {
-  documentNameApiUrl,
-  type setNameRequestSchema,
+  apiErrorReason,
   type WorkspaceNames,
-  workspaceNamesApiUrl,
-  workspaceNamesSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { useCallback, useEffect, useState } from 'react'
-import type { z } from 'zod'
-import { parseDaemonResponse } from '../../lib/daemon-contract-error.js'
+import {
+  DaemonApiError,
+  getWorkspaceNames,
+  setDocumentDisplayName,
+} from '../../lib/daemon-api-client.js'
 
-/** Both the read and the rename answer with the workspace's names; a skew in either is reported with its route. */
-async function readNames(route: string, res: Response): Promise<WorkspaceNames> {
-  return parseDaemonResponse(route, workspaceNamesSchema, await res.json())
-}
+/** `daemonFetch` already resolves a route against the daemon it was built for. */
+const SAME_BASE = ''
 
 const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
 
@@ -69,8 +66,8 @@ export function useDocumentNames({
     let active = true
     ;(async () => {
       try {
-        const res = await daemonFetch(workspaceNamesApiUrl(workspaceId))
-        if (res.ok && active) setNames(await readNames(workspaceNamesApiUrl(workspaceId), res))
+        const read = await getWorkspaceNames(daemonFetch, SAME_BASE, workspaceId)
+        if (active) setNames(read)
       } catch {
         /* best-effort */
       }
@@ -89,18 +86,14 @@ export function useDocumentNames({
   const renameDocument = useCallback(
     async (targetPath: string, name: string): Promise<string | null> => {
       try {
-        const res = await daemonFetch(documentNameApiUrl(workspaceId, targetPath), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name } satisfies z.infer<typeof setNameRequestSchema>),
-        })
-        if (res.ok) {
-          setNames(await readNames(documentNameApiUrl(workspaceId, targetPath), res))
-          return null
-        }
-        return (await refusalReasonOf(res, RENAME_REFUSED)).reason
-      } catch {
-        return RENAME_REFUSED
+        setNames(
+          await setDocumentDisplayName(daemonFetch, SAME_BASE, workspaceId, targetPath, name),
+        )
+        return null
+      } catch (err) {
+        // The daemon's own reason when its refusal carried one; anything else —
+        // unreached, a reasonless refusal, a drifted answer — in this hook's words.
+        return (err instanceof DaemonApiError && apiErrorReason(err.body)) || RENAME_REFUSED
       }
     },
     [workspaceId, daemonFetch],

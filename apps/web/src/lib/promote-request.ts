@@ -19,8 +19,8 @@ import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contract
 import { z } from 'zod'
 import { unconfirmedPlanes } from './carried-planes.js'
 import { listDocuments } from './daemon-api-client.js'
-import { daemonContractError } from './daemon-contract-error.js'
-import { reach } from './keeper-transfer-failure.js'
+import { DaemonContractError, readDaemonJson } from './daemon-contract-error.js'
+import { reach } from './fetch-failure.js'
 
 /** How a caller's sentences name its keeper and its operation. */
 export interface PromoteWording {
@@ -109,14 +109,14 @@ export async function requestPromote(
     }),
   )
   if (!res.ok) return { ok: false, reason: await refusedReason(res, body, wording) }
-  // The body read is reached like the fetch: a connection dropped after the
-  // status line is the network's, while a body that arrived and is not JSON
-  // is the keeper's contract.
-  const text = await reach(res.text())
-  const promoted = promoteWorkspaceResponseSchema.safeParse(parseJsonOrNull(text))
-  if (!promoted.success) {
-    daemonContractError(promoteUrl, promoted.error)
-    return { ok: false, reason: wording.unexpected }
+  // A body cut after the status line propagates as the network's failure; one
+  // that arrived and broke the promote contract is the keeper's, already logged.
+  let promoted: z.infer<typeof promoteWorkspaceResponseSchema>
+  try {
+    promoted = await readDaemonJson(promoteUrl, res, promoteWorkspaceResponseSchema)
+  } catch (err) {
+    if (err instanceof DaemonContractError) return { ok: false, reason: wording.unexpected }
+    throw err
   }
 
   // The keeper's own post-merge list is what reports collisions — shadowed is
@@ -132,14 +132,6 @@ export async function requestPromote(
   return {
     ok: true,
     shadowedPaths,
-    leftBehind: unconfirmedPlanes(body, promoted.data, wording.object),
-  }
-}
-
-function parseJsonOrNull(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
+    leftBehind: unconfirmedPlanes(body, promoted, wording.object),
   }
 }

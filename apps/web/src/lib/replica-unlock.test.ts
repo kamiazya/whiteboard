@@ -15,6 +15,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   dropOfflinePasskey,
   type OfflinePasskeyCredentials,
@@ -277,7 +278,12 @@ describe('makeReplicaReadableOffline asking the daemon for the key', () => {
   })
 
   it('POSTs to the workspace replica-key route, naming the workspace in the path', async () => {
-    const fetch = vi.fn(async () => Response.json({ ...RESPONSE, tier: 'no-offline' }))
+    const fetch = vi.fn(async () =>
+      Response.json(
+        { error: 'replica_not_allowed', message: 'no offline replica' },
+        { status: 403 },
+      ),
+    )
 
     await makeReplicaReadableOffline({
       daemonBaseUrl: DAEMON,
@@ -326,5 +332,22 @@ describe('makeReplicaReadableOffline asking the daemon for the key', () => {
 
     expect(made).toEqual({ ok: false, reason: 'unreachable' })
     expect(credentials.create).not.toHaveBeenCalled()
+    await expectLoggedFailure('/api/workspaces/ws-1/replica-key failed its contract at')
+  })
+
+  it('answers unreachable, and logs the drift, for a 200 whose body is not JSON', async () => {
+    const credentials = noPasskeyMadeHere()
+    const fetch = vi.fn(async () => new Response('<html>proxy</html>', { status: 200 }))
+
+    const made = await makeReplicaReadableOffline({
+      daemonBaseUrl: DAEMON,
+      workspaceId: WORKSPACE,
+      label: 'Notes',
+      fetch,
+      credentials,
+    })
+
+    expect(made).toEqual({ ok: false, reason: 'unreachable' })
+    await expectLoggedFailure('/api/workspaces/ws-1/replica-key failed its contract at (root)')
   })
 })

@@ -140,6 +140,13 @@ describe('listWorkspaces', () => {
     })
   })
 
+  it('rejects as an unreached daemon when the fetch itself rejects', async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toMatchObject({
+      name: 'FetchFailedError',
+    })
+  })
+
   it('reads an accepted listing that is not JSON as contract drift, not as the network', async () => {
     const fetchFn = vi.fn().mockResolvedValue(new Response('<html>', { status: 200 }))
     const failure = await listWorkspaces(fetchFn, DAEMON_BASE_URL).catch((err: unknown) => err)

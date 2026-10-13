@@ -19,7 +19,8 @@ export interface PreviewPaneProps {
   maxWidth: number
   measure: MeasureText
   background?: string
-  theme?: ResolvedTheme
+  /** Required: a light fill on a dark page is unreadable, and only the type can see it dropped. */
+  theme: ResolvedTheme
   /** Every reference seam at once; see render-preview.ts. */
   references?: ReferenceSeams
   /** Renders math blocks; see render-preview.ts. */
@@ -68,7 +69,7 @@ export function PreviewPane({
   maxWidth,
   measure,
   background,
-  theme = 'light',
+  theme,
   references,
   renderMath,
   renderDiagram,

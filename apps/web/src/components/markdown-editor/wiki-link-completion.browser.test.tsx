@@ -71,7 +71,13 @@ describe('wiki link completion (real browser)', () => {
       value = next
     }
     const { getByTestId } = render(
-      <MarkdownEditor initialViewMode="write" value="" onChange={onChange} linkTargets={TARGETS} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="write"
+        value=""
+        onChange={onChange}
+        linkTargets={TARGETS}
+      />,
     )
     await focusEditable(() =>
       getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
@@ -107,6 +113,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -141,6 +148,7 @@ describe('wiki link completion (real browser)', () => {
       const [value, setValue] = useState('')
       return (
         <MarkdownEditor
+          theme="light"
           initialViewMode="split"
           previewDebounceMs={30}
           value={value}
@@ -183,6 +191,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -218,6 +227,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -276,6 +286,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -328,6 +339,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -370,6 +382,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -409,6 +422,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -459,6 +473,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -511,6 +526,7 @@ describe('wiki link completion (real browser)', () => {
     let value = ''
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value=""
         onChange={(next) => {
@@ -561,7 +577,13 @@ describe('wiki link completion (real browser)', () => {
 
   it('plain prose never opens the popup', async () => {
     const { getByTestId } = render(
-      <MarkdownEditor initialViewMode="write" value="" onChange={() => {}} linkTargets={TARGETS} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="write"
+        value=""
+        onChange={() => {}}
+        linkTargets={TARGETS}
+      />,
     )
     await focusEditable(() =>
       getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),

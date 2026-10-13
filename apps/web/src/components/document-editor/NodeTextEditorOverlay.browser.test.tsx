@@ -32,6 +32,7 @@ function renderOverlay(
   const onClose = overrides.onClose ?? vi.fn()
   const view = render(
     <NodeTextEditorOverlay
+      theme="light"
       initialViewMode="write"
       title="Weekly review"
       initialText={BODY}
@@ -157,6 +158,7 @@ describe('the node text overlay (real browser)', () => {
     const onCommit = vi.fn()
     const { container, getByRole } = render(
       <NodeTextEditorOverlay
+        theme="light"
         initialViewMode="write"
         title="Weekly review"
         initialText={`See [[${TARGET_NAME}]]`}

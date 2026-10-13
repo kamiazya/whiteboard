@@ -279,7 +279,7 @@ function markdownPaneProps({
   decidePassage: (proposalId: string, changeId: string, decision: 'adopted' | 'dismissed') => void
 }): ComponentProps<typeof DocumentEditorSurface>['markdown'] {
   const { markdown } = model
-  if (markdown.hydrating) return { body: null, setBody: markdown.setBody }
+  if (markdown.hydrating) return { body: null, setBody: markdown.setBody, theme: resolvedTheme }
   return {
     body: markdown.body,
     setBody: markdown.setBody,

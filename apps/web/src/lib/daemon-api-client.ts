@@ -65,12 +65,12 @@ import {
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
-import { daemonContractError } from './daemon-contract-error.js'
+import { readDaemonJson } from './daemon-contract-error.js'
 // Re-exported so existing callers keep one import site; the implementation
 // lives in its own module so a SharedWorker can use it without this file's
 // schema graph.
 import { createDaemonFetch } from './daemon-fetch.js'
-import { reach } from './keeper-transfer-failure.js'
+import { reach } from './fetch-failure.js'
 
 export { createDaemonFetch }
 
@@ -102,24 +102,14 @@ async function fetchAndParse<T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetchFn(url, init)
+  // Reached like the body read below, so a caller classifying failures tells an
+  // unreachable daemon from this device's own faults without wrapping the fetch.
+  const res = await reach(fetchFn(url, init))
   if (!res.ok) {
     const { message, body } = await parseProblemDetails(res)
     throw new DaemonApiError(message, res.status, body)
   }
-  // A body cut mid-stream is the network's failure; one that arrived and is
-  // not JSON is the daemon's, so it reaches the schema and reads as drift.
-  const parsed = schema.safeParse(parseJsonOrUndefined(await reach(res.text())))
-  if (!parsed.success) throw daemonContractError(url, parsed.error)
-  return parsed.data
-}
-
-function parseJsonOrUndefined(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
+  return readDaemonJson(url, res, schema)
 }
 
 export function listWorkspaces(
@@ -270,7 +260,7 @@ export function deleteDocument(
 
 // GET /api/w/:workspaceId/document/:path/snapshot returns raw Loro bytes
 // (application/octet-stream), not JSON — kept separate from fetchAndParse,
-// which always calls res.json().
+// which reads its body as JSON.
 export async function getDocumentSnapshot(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,

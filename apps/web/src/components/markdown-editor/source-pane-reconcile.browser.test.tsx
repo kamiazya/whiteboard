@@ -37,7 +37,7 @@ describe('SourcePane external value reconciliation (real browser)', () => {
   it('keeps a mid-document caret when an external change lands after it', async () => {
     const onChange = vi.fn()
     const { rerender } = render(
-      <MarkdownEditor initialViewMode="write" value="abcdef" onChange={onChange} />,
+      <MarkdownEditor theme="light" initialViewMode="write" value="abcdef" onChange={onChange} />,
     )
 
     await focusEditable(editableOf)
@@ -45,7 +45,9 @@ describe('SourcePane external value reconciliation (real browser)', () => {
 
     // Appended beyond the caret — nothing the caret sits on has moved, so it
     // must still be between "abc" and "def".
-    rerender(<MarkdownEditor initialViewMode="write" value="abcdefgh" onChange={onChange} />)
+    rerender(
+      <MarkdownEditor theme="light" initialViewMode="write" value="abcdefgh" onChange={onChange} />,
+    )
     await expect.poll(() => editableOf().textContent).toBe('abcdefgh')
 
     await userEvent.keyboard('X')
@@ -55,7 +57,7 @@ describe('SourcePane external value reconciliation (real browser)', () => {
   it('shifts the caret by an external insertion that lands before it', async () => {
     const onChange = vi.fn()
     const { rerender } = render(
-      <MarkdownEditor initialViewMode="write" value="abc" onChange={onChange} />,
+      <MarkdownEditor theme="light" initialViewMode="write" value="abc" onChange={onChange} />,
     )
 
     await focusEditable(editableOf)
@@ -63,7 +65,9 @@ describe('SourcePane external value reconciliation (real browser)', () => {
 
     // Prepended: the caret must follow the text it was anchored after, so it
     // ends up at the end of "ZZabc" rather than staying on offset 3.
-    rerender(<MarkdownEditor initialViewMode="write" value="ZZabc" onChange={onChange} />)
+    rerender(
+      <MarkdownEditor theme="light" initialViewMode="write" value="ZZabc" onChange={onChange} />,
+    )
     await expect.poll(() => editableOf().textContent).toBe('ZZabc')
 
     await userEvent.keyboard('X')
@@ -73,7 +77,12 @@ describe('SourcePane external value reconciliation (real browser)', () => {
   it('preserves an active selection across an external change elsewhere', async () => {
     const onChange = vi.fn()
     const { rerender } = render(
-      <MarkdownEditor initialViewMode="write" value={'keep me\ntail'} onChange={onChange} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="write"
+        value={'keep me\ntail'}
+        onChange={onChange}
+      />,
     )
 
     // Ctrl+Home rather than a click on the first line: the click had to reach
@@ -86,7 +95,12 @@ describe('SourcePane external value reconciliation (real browser)', () => {
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
 
     rerender(
-      <MarkdownEditor initialViewMode="write" value={'keep me\ntail edited'} onChange={onChange} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="write"
+        value={'keep me\ntail edited'}
+        onChange={onChange}
+      />,
     )
     await expect.poll(() => editableOf().textContent).toContain('tail edited')
 

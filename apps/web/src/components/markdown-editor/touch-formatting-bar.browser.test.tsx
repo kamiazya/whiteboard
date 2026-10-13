@@ -216,7 +216,13 @@ it('follows the document editor too, and leaves when that editor unmounts', asyn
   const { unmount } = render(
     <>
       <div style={{ height: 300 }}>
-        <MarkdownEditor value="# Title" onChange={vi.fn()} autoFocus initialViewMode="write" />
+        <MarkdownEditor
+          theme="light"
+          value="# Title"
+          onChange={vi.fn()}
+          autoFocus
+          initialViewMode="write"
+        />
       </div>
       <TouchFormattingBar />
     </>,

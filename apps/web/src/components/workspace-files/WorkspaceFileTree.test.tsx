@@ -94,7 +94,7 @@ describe('WorkspaceFileTree', () => {
   it('collapsing a branch hides its descendants', () => {
     render(<WorkspaceFileTree documents={documents} onOpen={vi.fn()} />)
 
-    fireEvent.click(screen.getByTestId('tree-toggle-notes'))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse notes' }))
     expect(screen.getByRole('treeitem', { name: /notes/ }).getAttribute('aria-expanded')).toBe(
       'false',
     )

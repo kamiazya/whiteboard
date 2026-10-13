@@ -29,6 +29,7 @@ describe('the rail in write mode', () => {
     const { container, rerender } = render(
       <div style={{ width: '900px', height: '400px' }}>
         <MarkdownEditor
+          theme="light"
           initialViewMode="write"
           value={LONG}
           onChange={() => undefined}
@@ -48,6 +49,7 @@ describe('the rail in write mode', () => {
     rerender(
       <div style={{ width: '900px', height: '400px' }}>
         <MarkdownEditor
+          theme="light"
           initialViewMode="write"
           value={LONGER}
           onChange={() => undefined}
@@ -66,6 +68,7 @@ describe('the rail in write mode', () => {
     const { container } = render(
       <div style={{ width: '900px', height: '300px' }}>
         <MarkdownEditor
+          theme="light"
           initialViewMode="write"
           value={LONG}
           onChange={() => undefined}

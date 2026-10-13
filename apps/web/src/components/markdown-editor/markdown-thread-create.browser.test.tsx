@@ -34,6 +34,7 @@ describe('opening a thread from the body', () => {
     const onComposeThread = vi.fn()
     const { container, getByRole } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}
@@ -61,6 +62,7 @@ describe('opening a thread from the body', () => {
     const onComposeThread = vi.fn()
     const { container, getByRole } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}
@@ -90,7 +92,7 @@ describe('opening a thread from the body', () => {
 
   it('offers no row at all when the host takes no threads', async () => {
     const { container, getByRole, queryByRole } = render(
-      <MarkdownEditor initialViewMode="write" value={BODY} onChange={vi.fn()} />,
+      <MarkdownEditor theme="light" initialViewMode="write" value={BODY} onChange={vi.fn()} />,
     )
     await selectFromStart(container, 9, 6)
 

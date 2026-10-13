@@ -1,20 +1,16 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../../test-utils/json-response.js'
 import { expectLoggedFailure } from '../../test-utils/logged-failures.js'
 import { useDocumentNames } from './useDocumentNames'
-
-function jsonResponse(body: unknown, ok = true): Response {
-  return {
-    ok,
-    json: async () => body,
-  } as Response
-}
 
 describe('useDocumentNames', () => {
   it('parses a well-formed /names response into effectiveNames', async () => {
     const daemonFetch = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ documents: { foo: 'Foo Canvas' }, pinned: ['foo'] }))
+      .mockImplementation(async () =>
+        jsonResponse({ documents: { foo: 'Foo Canvas' }, pinned: ['foo'] }),
+      )
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
@@ -29,7 +25,9 @@ describe('useDocumentNames', () => {
   })
 
   it('falls back to empty names when the /names response fails schema validation', async () => {
-    const daemonFetch = vi.fn().mockResolvedValue(jsonResponse({ documents: 'not-an-object' }))
+    const daemonFetch = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse({ documents: 'not-an-object' }))
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
@@ -98,7 +96,7 @@ describe('useDocumentNames', () => {
       .mockResolvedValueOnce(
         jsonResponse(
           { error: 'invalid_body', message: 'a display name is at most 200 characters' },
-          false,
+          400,
         ),
       )
     const { result } = renderHook(() =>
@@ -145,7 +143,9 @@ describe('useDocumentNames', () => {
   ])('reads the record for the open document: %s', async (_, recordedName, expected) => {
     const daemonFetch = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ documents: { foo: 'From names', bar: 'Bar' }, pinned: [] }))
+      .mockImplementation(async () =>
+        jsonResponse({ documents: { foo: 'From names', bar: 'Bar' }, pinned: [] }),
+      )
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',

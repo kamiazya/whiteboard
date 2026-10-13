@@ -37,7 +37,9 @@ describe('the editor catalog (real browser)', () => {
     // (see MarkdownVerbBar). What must stay true through all of that is that
     // ⋯ is not the same list twice: the bar has ONE heading slot that
     // cycles, and the catalog is where a level is chosen outright.
-    const { queryByRole } = render(<MarkdownEditor value="make this bold" onChange={() => {}} />)
+    const { queryByRole } = render(
+      <MarkdownEditor theme="light" value="make this bold" onChange={() => {}} />,
+    )
     expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
     // What the strip is FOR is still there: how this document is shown.
     expect(queryByRole('button', { name: 'Write' })).not.toBeNull()
@@ -46,7 +48,7 @@ describe('the editor catalog (real browser)', () => {
   it('bolds the word under the caret — no selection made first', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="make this bold" onChange={onChange} />,
+      <MarkdownEditor theme="light" value="make this bold" onChange={onChange} />,
     )
     await caretInto(container, 6) // inside "this"
 
@@ -59,7 +61,7 @@ describe('the editor catalog (real browser)', () => {
   it('sets the heading level of the caret line, and pins the current level', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="## weekly review" onChange={onChange} />,
+      <MarkdownEditor theme="light" value="## weekly review" onChange={onChange} />,
     )
     await caretInto(container, 5)
 
@@ -73,7 +75,7 @@ describe('the editor catalog (real browser)', () => {
   it("wraps the caret's word as a document link", async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="see weekly review" onChange={onChange} />,
+      <MarkdownEditor theme="light" value="see weekly review" onChange={onChange} />,
     )
     await caretInto(container, 6) // inside "weekly"
 
@@ -88,7 +90,7 @@ describe('the editor catalog (real browser)', () => {
   it('toggles the task checkbox of the caret line', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="- [ ] ship it" onChange={onChange} />,
+      <MarkdownEditor theme="light" value="- [ ] ship it" onChange={onChange} />,
     )
     await caretInto(container, 8)
 
@@ -106,7 +108,7 @@ describe('the editor catalog (real browser)', () => {
   it('opens as a bottom sheet in a narrow container', async () => {
     const { container, getByRole } = render(
       <div style={{ width: 390, height: 640 }}>
-        <MarkdownEditor value="make this bold" onChange={() => {}} />
+        <MarkdownEditor theme="light" value="make this bold" onChange={() => {}} />
       </div>,
     )
     await caretInto(container, 6)
@@ -123,7 +125,7 @@ describe('the editor catalog (real browser)', () => {
 
   it('right-click opens the catalog when there IS a selection', async () => {
     const { container, queryByTestId } = render(
-      <MarkdownEditor value="make this bold" onChange={() => {}} />,
+      <MarkdownEditor theme="light" value="make this bold" onChange={() => {}} />,
     )
     await caretInto(container, 5)
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
@@ -138,7 +140,7 @@ describe('the editor catalog (real browser)', () => {
   // than ours when there is nothing selected — so we must NOT preventDefault.
   it('right-click with no selection leaves the browser menu alone', async () => {
     const { container, queryByTestId } = render(
-      <MarkdownEditor value="make this bold" onChange={() => {}} />,
+      <MarkdownEditor theme="light" value="make this bold" onChange={() => {}} />,
     )
     await caretInto(container, 5)
 

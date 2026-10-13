@@ -82,13 +82,17 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   })),
   documentFileApiUrl: [
     { label: 'file', method: 'GET', url: documentUrls.documentFileApiUrl(...doc, 'img1') },
+    { label: 'upload', method: 'PUT', url: documentUrls.documentFileApiUrl(...doc, 'img1') },
   ],
   workspaceDocumentApiUrl: WORKSPACE_DOCUMENT_API_ACTIONS.map((action) => ({
     label: action,
     method: WORKSPACE_DOCUMENT_ACTION_METHODS[action],
     url: documentUrls.workspaceDocumentApiUrl(WS, action),
   })),
-  workspacesApiUrl: [{ label: 'list', method: 'GET', url: daemonUrls.workspacesApiUrl() }],
+  workspacesApiUrl: [
+    { label: 'list', method: 'GET', url: daemonUrls.workspacesApiUrl() },
+    { label: 'create', method: 'POST', url: daemonUrls.workspacesApiUrl() },
+  ],
   workspaceApiUrl: [{ label: 'rename', method: 'PATCH', url: daemonUrls.workspaceApiUrl(WS) }],
   workspaceNamesApiUrl: [
     { label: 'names', method: 'GET', url: daemonUrls.workspaceNamesApiUrl(WS) },
@@ -136,6 +140,16 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   storageReportApiUrl: [{ label: 'report', method: 'GET', url: daemonUrls.storageReportApiUrl() }],
   runtimePingApiUrl: [{ label: 'ping', method: 'GET', url: daemonUrls.runtimePingApiUrl() }],
   replicaKeyApiUrl: [{ label: 'issue', method: 'POST', url: daemonUrls.replicaKeyApiUrl(WS) }],
+  replicaKeyRotateApiUrl: [
+    { label: 'rotate', method: 'POST', url: daemonUrls.replicaKeyRotateApiUrl(WS) },
+  ],
+  replicaTierApiUrl: [{ label: 'set', method: 'PUT', url: daemonUrls.replicaTierApiUrl(WS) }],
+  runtimeStatusApiUrl: [{ label: 'status', method: 'GET', url: daemonUrls.runtimeStatusApiUrl() }],
+  syncStreamApiUrl: [{ label: 'open', method: 'GET', url: daemonUrls.syncStreamApiUrl() }],
+  syncSubscribeApiUrl: [
+    { label: 'subscribe', method: 'POST', url: daemonUrls.syncSubscribeApiUrl() },
+  ],
+  syncMessageApiUrl: [{ label: 'message', method: 'POST', url: daemonUrls.syncMessageApiUrl() }],
   documentsV1ApiUrl: [{ label: 'create', method: 'POST', url: daemonUrls.documentsV1ApiUrl(WS) }],
   documentBacklinksApiUrl: [
     { label: 'backlinks', method: 'GET', url: daemonUrls.documentBacklinksApiUrl(WS, 'doc1') },
@@ -209,16 +223,26 @@ const BUILDERS = Object.entries({ ...documentUrls, ...daemonUrls })
  * `answerNotFound`'s JSON naming the request. A route that refuses something
  * it understood answers JSON too, so the content type alone cannot tell the
  * two apart under `/api` — the check has to read what was said.
+ *
+ * Server mode answers an `/api` path outside every declared route scope with
+ * `500 auth.route-undeclared` before the router runs, so a renamed route ROOT
+ * is never a 404 there; that refusal means "no route" as surely as one.
  */
 async function unmatched(res: Response): Promise<boolean> {
-  if (res.status !== 404) return false
-  if ((res.headers.get('content-type') ?? '').startsWith('text/plain')) return true
+  if (res.status !== 404 && res.status !== 500) return false
+  if (res.status === 404 && (res.headers.get('content-type') ?? '').startsWith('text/plain')) {
+    return true
+  }
   const body: unknown = await res
     .clone()
     .json()
     .catch(() => null)
-  const message =
-    typeof body === 'object' && body !== null && 'message' in body ? body.message : undefined
+  const field = (key: string) =>
+    typeof body === 'object' && body !== null && key in body
+      ? (body as Record<string, unknown>)[key]
+      : undefined
+  if (res.status === 500) return field('error') === 'auth.route-undeclared'
+  const message = field('message')
   return typeof message === 'string' && message.startsWith('No route answers ')
 }
 
@@ -285,11 +309,11 @@ describe('daemon client URLs reach a route', () => {
 
   // The control: without it, a predicate that never says "unmatched" passes
   // every sample below, renamed route or not.
-  it('tells a mounted route from a path no route serves', async () => {
-    const res = await (await localDaemonApp()).request(
-      '/api/runtime/no-such-route',
-      requestInit('GET', `Bearer ${TOKEN}`),
-    )
+  it.each([
+    '/api/runtime/no-such-route',
+    '/api/no-such-root',
+  ])('tells a mounted route from %s, which no route serves', async (path) => {
+    const res = await (await localDaemonApp()).request(path, requestInit('GET', `Bearer ${TOKEN}`))
     expect(await unmatched(res), `-> ${res.status}`).toBe(true)
   })
 
@@ -298,7 +322,10 @@ describe('daemon client URLs reach a route', () => {
     url,
   }) => {
     const res = await (await localDaemonApp()).request(url, requestInit(method, `Bearer ${TOKEN}`))
-    expect(await unmatched(res), `${method} ${url} -> ${res.status}`).toBe(false)
+    // The sync stream's body never ends on its own; the headers are the
+    // answer, and cancelling the body closes the stream it opened.
+    const isUnmatched = await unmatched(res).finally(() => res.body?.cancel())
+    expect(isUnmatched, `${method} ${url} -> ${res.status}`).toBe(false)
   })
 })
 
@@ -338,9 +365,12 @@ describe('daemon client people URLs reach a server-mode route', () => {
   // The controls: a request has to get past server mode's auth and the
   // membership gate to the router, or every sample below would be refused
   // before matching, and a refusal is JSON whether or not a route exists.
+  // The top-level one is what a renamed route ROOT looks like: no declared
+  // scope covers it, so server mode refuses it before the router runs.
   it.each([
     '/api/people/u1/no-such-route',
     `/api/workspaces/${WS}/no-such-route`,
+    '/api/no-such-root',
   ])('tells a mounted route from %s, which no route serves', async (path) => {
     const res = await app.request(`${PUBLIC_URL}${path}`, requestInit('POST', 'Bearer alice'))
     expect(await unmatched(res), `-> ${res.status}`).toBe(true)

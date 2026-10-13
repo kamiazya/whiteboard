@@ -107,6 +107,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
     await waitFor(() => {
       expect(vi.mocked(apiFetch)).toHaveBeenCalledWith(
         expect.stringContaining('/api/workspaces/ws_1/names'),
+        undefined,
       )
     })
   })
@@ -127,6 +128,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalledWith(
         expect.stringContaining('/api/workspaces/ws_1/names'),
+        undefined,
       )
     })
     expect(apiFetch).not.toHaveBeenCalled()

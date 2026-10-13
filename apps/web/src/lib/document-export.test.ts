@@ -26,7 +26,7 @@ describe('renderMarkdownForExport', () => {
     const { svg } = await renderMarkdownForExport('$$\nx^2\n$$\n', {
       fragments: { math, diagram },
     })
-    expect(math).toHaveBeenCalledWith('x^2', true)
+    expect(math).toHaveBeenCalledWith('x^2')
     expect(svg).toContain('fragment-drawn')
   })
 

@@ -7,17 +7,13 @@ import {
   purgeResultSchema,
   type StorageCategory,
   type StorageReportPayload,
-  storageReportApiUrl,
-  storageReportPayloadSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { messageOf } from '@kamiazya/whiteboard-model'
 import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
-import { parseDaemonResponse } from '../lib/daemon-contract-error.js'
 import { formatBytes } from '../lib/format-bytes.js'
-import { sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
+import { readStorageReport, sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
 import {
   type CategoryDescriptor,
   type RowAction,
@@ -88,25 +84,6 @@ function humanizeAge(seconds: number): string {
 function autoOptimisedLine(lastAutoCompactedAt: number | null | undefined, now: number): string {
   if (!lastAutoCompactedAt) return 'Never auto-optimised'
   return `Auto-optimised ${humanizeAge(Math.max(0, Math.floor((now - lastAutoCompactedAt) / 1000)))}`
-}
-
-/** The storage report, or the reason it could not be read. */
-async function readStorageReport(
-  fetchApi: typeof globalThis.fetch,
-): Promise<{ report: StorageReportPayload } | { error: string }> {
-  try {
-    const res = await fetchApi(storageReportApiUrl())
-    if (!res.ok) return { error: `HTTP ${res.status}` }
-    return {
-      report: parseDaemonResponse(
-        storageReportApiUrl(),
-        storageReportPayloadSchema,
-        await res.json(),
-      ),
-    }
-  } catch (err) {
-    return { error: messageOf(err, String(err)) }
-  }
 }
 
 /** Wait out whatever is left of a floor, and nothing when it has passed. */

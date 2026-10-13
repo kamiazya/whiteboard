@@ -6,7 +6,8 @@
  * tool sometimes does not respond" on a phone, noticed only after the press
  * that died. A recorder the user has to arm first records nothing, so this
  * one always runs; what makes that acceptable is what it holds: event kinds,
- * coordinates, element test-ids and mode names. Never document content.
+ * coordinates, element tags, test-ids and roles, and mode names — never an
+ * accessible name, which interpolates titles and URLs. Never document content.
  *
  * Because `reduceNavigation` is pure and its events are plain data, a
  * serialized trace REPLAYS: fold the reducer over the recorded events and
@@ -31,7 +32,12 @@ import {
 export interface TargetDescriptor {
   readonly tag: string
   readonly testId?: string
-  readonly label?: string
+  /**
+   * The element's explicit ARIA role. Never its accessible name: names
+   * interpolate content (`Load ${url}`, `Editing ${title}`), and this
+   * recorder promises to hold none.
+   */
+  readonly role?: string
   /** The `data-editor-overlay` ancestor that would swallow a press, if any. */
   readonly overlay?: string
 }
@@ -210,13 +216,13 @@ export function describeTarget(target: EventTarget | null): TargetDescriptor {
     overlay === null
       ? undefined
       : (overlay.getAttribute('data-testid') ??
-        overlay.getAttribute('aria-label') ??
+        overlay.getAttribute('role') ??
         overlay.tagName.toLowerCase())
   const carrier = target.closest('[data-testid]')
   return {
     tag: target.tagName.toLowerCase(),
     testId: carrier?.getAttribute('data-testid') ?? undefined,
-    label: target.getAttribute('aria-label') ?? undefined,
+    role: target.getAttribute('role') ?? undefined,
     overlay: overlayName,
   }
 }

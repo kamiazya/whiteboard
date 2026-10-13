@@ -51,6 +51,7 @@ describe('a file node referencing a markdown document', () => {
   it('renders the referenced body at the default document-node size', async () => {
     const { container } = render(
       <SpatialEditor
+        theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
         references={referenceWire(new Map(), { extras: new Map([['notes', { markdown: BODY }]]) })}
@@ -65,6 +66,7 @@ describe('a file node referencing a markdown document', () => {
   it('outranks the facet card, which says what the document is and not what it says', async () => {
     const { container } = render(
       <SpatialEditor
+        theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
         references={referenceWire(new Map(), {
@@ -80,6 +82,7 @@ describe('a file node referencing a markdown document', () => {
   it('keeps the facet card when the reference resolves to no body', async () => {
     const { container } = render(
       <SpatialEditor
+        theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
         references={referenceWire(new Map(), { extras: new Map([['notes', { facets: CARD }]]) })}
@@ -95,6 +98,7 @@ describe('a file node referencing a markdown document', () => {
     )
     const { container } = render(
       <SpatialEditor
+        theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
         references={referenceWire(new Map(), { extras: new Map([['notes', { markdown: long }]]) })}

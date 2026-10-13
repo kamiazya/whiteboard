@@ -685,7 +685,7 @@ function layoutPhrasing(
         case 'imageReference':
           emit(child.alt ?? child.identifier, {}, currentStyle)
           break
-        case 'inlineMath':
+        case 'inlineMath': // drawn as TeX source, never typeset: `renderMath` serves display math only
           emit(child.value, {}, currentStyle, false, false)
           break
         case 'wikiLink':
@@ -717,7 +717,7 @@ function layoutMathBlock(
   try {
     // A throwing renderer degrades this one node to the placeholder
     // (total-layout rule), exactly like renderDiagram above.
-    rendered = renderMath(node.value, true) ?? defaultRenderMath(node.value)
+    rendered = renderMath(node.value) ?? defaultRenderMath(node.value)
   } catch {
     rendered = defaultRenderMath(node.value)
   }

@@ -4,6 +4,7 @@
 // call site — means a future field change to the schema only needs to be
 // kept in sync in one place.
 
+import { runtimePingApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import type { DaemonPingResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
@@ -30,7 +31,7 @@ export async function fetchDaemonPing(
 ): Promise<DaemonPingResponse | null> {
   const connectHost = resolveConnectHost(host)
   try {
-    const res = await fetch(`http://${connectHost}:${port}/api/runtime/ping`, {
+    const res = await fetch(`http://${connectHost}:${port}${runtimePingApiUrl()}`, {
       signal: AbortSignal.timeout(timeoutMs),
     })
     if (!res.ok) return null

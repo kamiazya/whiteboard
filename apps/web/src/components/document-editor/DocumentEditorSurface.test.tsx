@@ -30,7 +30,7 @@ describe('DocumentEditorSurface', () => {
         kind="markdown"
         documentKey="doc-1"
         spatial={() => <div data-testid="spatial-slot" />}
-        markdown={{ body: '# From the surface', setBody: () => {} }}
+        markdown={{ body: '# From the surface', setBody: () => {}, theme: 'light' }}
       />,
     )
     expect(screen.getByTestId('markdown-source-wrap')).toBeTruthy()
@@ -43,7 +43,7 @@ describe('DocumentEditorSurface', () => {
         kind="markdown"
         documentKey="doc-1"
         spatial={() => <div data-testid="spatial-slot" />}
-        markdown={{ body: null, setBody: () => {} }}
+        markdown={{ body: null, setBody: () => {}, theme: 'light' }}
       />,
     )
     expect(container.textContent).toBe('')

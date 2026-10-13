@@ -20,7 +20,9 @@ import { PreviewPane } from './PreviewPane.js'
 afterEach(cleanup)
 
 function drawn(value: string): string {
-  const { container } = render(<PreviewPane value={value} maxWidth={520} measure={fakeMeasure} />)
+  const { container } = render(
+    <PreviewPane theme="light" value={value} maxWidth={520} measure={fakeMeasure} />,
+  )
   expect(container.querySelector('svg')).not.toBeNull()
   return container.textContent ?? ''
 }

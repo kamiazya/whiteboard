@@ -33,7 +33,6 @@ import {
 import { getAppLogger } from '../../lib/app-logger.js'
 import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
 import type { ConnectedDaemon } from '../../lib/daemon-fetch.js'
-import { reach } from '../../lib/keeper-transfer-failure.js'
 import { openFailureReason } from '../../lib/open-move-failure.js'
 import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
@@ -359,7 +358,7 @@ export function PromoteWorkspaceSection({
         import('../../lib/promote-workspace.js'),
         import('../../lib/browser-workspace-docs.js'),
         import('../../lib/fold-workspace.js'),
-        listWorkspaces((input, init) => reach(fetchImpl(input, init)), daemon.baseUrl),
+        listWorkspaces(fetchImpl, daemon.baseUrl),
       ])
       // Settings can be a session's first surface (deep-link/reload), so the
       // startup fold may not have run yet — and this count reads the

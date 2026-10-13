@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { escapeXmlAttr, escapeXmlText } from './xml-escape.js'
 
+// XML 1.0 §2.2 `Char` admits exactly these three of the 32 C0 controls,
+// written out as code points so the oracle shares nothing with the regex
+// under test.
+const XML_CHAR_C0 = new Set([0x09, 0x0a, 0x0d])
+const C0_CONTROLS = Array.from({ length: 0x20 }, (_, codePoint) => ({
+  codePoint,
+  hex: codePoint.toString(16).toUpperCase().padStart(4, '0'),
+}))
+
+describe.each([
+  ['escapeXmlText', escapeXmlText],
+  ['escapeXmlAttr', escapeXmlAttr],
+])('%s over every C0 control', (_name, escapeXml) => {
+  it.each(C0_CONTROLS)('keeps U+$hex exactly when XML 1.0 Char admits it', ({ codePoint }) => {
+    const ch = String.fromCodePoint(codePoint)
+    expect(escapeXml(`a${ch}b`)).toBe(XML_CHAR_C0.has(codePoint) ? `a${ch}b` : 'ab')
+  })
+})
+
 describe('escapeXmlText', () => {
   it('escapes & < > in text content', () => {
     expect(escapeXmlText('a & b < c > d')).toBe('a &amp; b &lt; c &gt; d')

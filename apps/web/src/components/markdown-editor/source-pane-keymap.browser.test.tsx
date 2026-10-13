@@ -20,7 +20,9 @@ afterEach(cleanup)
 
 function mountEditor() {
   const onChange = vi.fn()
-  const utils = render(<MarkdownEditor initialViewMode="write" value="" onChange={onChange} />)
+  const utils = render(
+    <MarkdownEditor theme="light" initialViewMode="write" value="" onChange={onChange} />,
+  )
   const editable = () =>
     utils.getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
   return { onChange, editable }
@@ -83,6 +85,7 @@ describe('SourcePane keymap (real browser)', () => {
     // update cycles made this test time out under full-suite load.
     render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={'word '.repeat(80).trim()}
         onChange={vi.fn()}

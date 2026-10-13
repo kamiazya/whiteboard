@@ -42,7 +42,7 @@ describe('the wire the canvas lays out against', () => {
     const renders = vi.mocked(sceneRender.renderCanvasToSvg)
     const base = wireWith([[NOTE, { body: 'THE NOTE' }]])
     const { container, rerender } = render(
-      <SpatialEditor canvas={canvas} onChange={() => {}} references={base} />,
+      <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={base} />,
     )
     await waitFor(() => expect(svgText(container)).toContain('THE NOTE'))
     const before = renders.mock.calls.length
@@ -52,12 +52,14 @@ describe('the wire the canvas lays out against', () => {
       [NOTE, { body: 'THE NOTE' }],
       ['01BX5ZZKBKACTAV9WEVGEMMVRZ', { body: 'DRAFTED BESIDE THE CANVAS' }],
     ])
-    rerender(<SpatialEditor canvas={canvas} onChange={() => {}} references={grown} />)
+    rerender(<SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={grown} />)
     expect(renders.mock.calls.length).toBe(before)
 
     // The note the canvas embeds was edited elsewhere: that is a re-layout.
     const edited = wireWith([[NOTE, { body: 'THE NOTE, REVISED' }]])
-    rerender(<SpatialEditor canvas={canvas} onChange={() => {}} references={edited} />)
+    rerender(
+      <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={edited} />,
+    )
     await waitFor(() => expect(svgText(container)).toContain('THE NOTE, REVISED'))
     expect(renders.mock.calls.length).toBeGreaterThan(before)
   })

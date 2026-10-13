@@ -1,4 +1,5 @@
 import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
+import type { z } from 'zod'
 import { replicaKeyApiUrl } from './api-contracts/daemon-urls.js'
 import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
@@ -23,6 +24,71 @@ import { deriveDocumentKey } from './read-plane.js'
 
 export interface ReplicaSource {
   fetch: typeof fetch
+  /** Where a 200 that fails its contract is reported; `requestReplicaKey`'s default when absent. */
+  reportDrift?: ReportReplicaKeyDrift
+}
+
+/** Reports a key answer that arrived and failed its contract, naming the route it came from. */
+export type ReportReplicaKeyDrift = (route: string, error: z.ZodError) => void
+
+// daemon-client cannot reach a composition root's logger; a root that has
+// one passes it in, and every other caller still leaves a record.
+const warnDrift: ReportReplicaKeyDrift = (route, error) => {
+  console.warn(`[whiteboard] response from ${route} failed its contract`, error.issues)
+}
+
+/**
+ * The one reading of `POST .../replica-key`, for every caller that asks it.
+ *
+ * Each arm is a different thing to tell a person, which is why they stay
+ * apart: `refused` is the daemon's decision (a no-offline workspace is its
+ * typed 403, never a 200), `unreachable` is silence — a rejected fetch, a
+ * body cut off mid-read, or a failure that names no refusal — and `drifted`
+ * is an answer that arrived and could not be read, reported once here.
+ */
+export type ReplicaKeyRequestResult =
+  | { kind: 'key'; response: ReplicaKeyResponse }
+  | { kind: 'refused'; code: MembershipRefusalCode }
+  | { kind: 'unreachable' }
+  | { kind: 'drifted' }
+
+export async function requestReplicaKey(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  reportDrift: ReportReplicaKeyDrift = warnDrift,
+): Promise<ReplicaKeyRequestResult> {
+  const route = replicaKeyApiUrl(workspaceId)
+  let response: Response
+  let text: string
+  try {
+    response = await fetchImpl(`${daemonBaseUrl}${route}`, { method: 'POST' })
+    text = await response.text()
+  } catch {
+    return { kind: 'unreachable' }
+  }
+  const body = jsonOrUndefined(text)
+
+  if (!response.ok) {
+    const refusal = membershipRefusalSchema.safeParse(body)
+    return refusal.success ? { kind: 'refused', code: refusal.data.error } : { kind: 'unreachable' }
+  }
+  const parsed = replicaKeyResponseSchema.safeParse(body)
+  if (!parsed.success) {
+    reportDrift(route, parsed.error)
+    return { kind: 'drifted' }
+  }
+  return { kind: 'key', response: parsed.data }
+}
+
+// An arrived body that is not JSON is drift, not silence: answered as
+// `undefined` so the contract's own parse fails and reports it.
+function jsonOrUndefined(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 export type SessionKeyResult =
@@ -143,30 +209,21 @@ async function fetchSessionKey(
   workspaceId: string,
   source: ReplicaSource,
 ): Promise<SessionKeyResult> {
-  let response: Response
-  let body: unknown
-  try {
-    response = await source.fetch(`${daemonBaseUrl}${replicaKeyApiUrl(workspaceId)}`, {
-      method: 'POST',
-    })
-    body = await response.json()
-  } catch {
-    return { kind: 'withheld', reason: 'unreachable' }
-  }
-
-  if (response.ok) {
-    const parsed = replicaKeyResponseSchema.safeParse(body)
-    if (!parsed.success) {
+  const answer = await requestReplicaKey(
+    source.fetch,
+    daemonBaseUrl,
+    workspaceId,
+    source.reportDrift,
+  )
+  switch (answer.kind) {
+    case 'key':
+      return heldFrom(answer.response)
+    case 'refused':
+      return { kind: 'withheld', reason: answer.code }
+    case 'unreachable':
+    case 'drifted':
       return { kind: 'withheld', reason: 'unreachable' }
-    }
-    return heldFrom(parsed.data)
   }
-
-  const refusal = membershipRefusalSchema.safeParse(body)
-  if (!refusal.success) {
-    return { kind: 'withheld', reason: 'unreachable' }
-  }
-  return { kind: 'withheld', reason: refusal.data.error }
 }
 
 /**

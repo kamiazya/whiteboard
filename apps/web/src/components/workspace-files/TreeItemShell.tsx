@@ -2,12 +2,10 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 
 function ExpandToggle({
-  path,
   name,
   expanded,
   onToggle,
 }: {
-  path: string
   name: string
   expanded: boolean
   onToggle: () => void
@@ -15,7 +13,6 @@ function ExpandToggle({
   return (
     <button
       type="button"
-      data-testid={`tree-toggle-${path.replaceAll('/', '-')}`}
       aria-label={expanded ? `Collapse ${name}` : `Expand ${name}`}
       onClick={onToggle}
       className="text-muted-foreground hover:text-foreground rounded p-0.5"
@@ -29,12 +26,11 @@ function ExpandToggle({
  * One row of a workspace tree and the expandable group beneath it: the ARIA
  * `treeitem`, its collapse toggle, and the indented `group` of children. The
  * file tree and the folder tree differ only in what sits in the row, so the
- * part that has to agree between them — roles, toggle label, test id — is one
- * component.
+ * part that has to agree between them — roles, toggle label — is one
+ * component. The toggle carries no test id: a folder has no identity but its
+ * path, and a path is content the editor's gesture trace would record.
  */
 interface TreeItemShellProps {
-  /** The prefix that identifies the item; keys the toggle's test id. */
-  path: string
   /** Names the item in the toggle's accessible label. */
   name: string
   /** The treeitem's own accessible name. */
@@ -46,14 +42,7 @@ interface TreeItemShellProps {
   children: ReactNode
 }
 
-export function TreeItemShell({
-  path,
-  name,
-  label,
-  hasChildren,
-  row,
-  children,
-}: TreeItemShellProps) {
+export function TreeItemShell({ name, label, hasChildren, row, children }: TreeItemShellProps) {
   const [expanded, setExpanded] = useState(true)
 
   return (
@@ -70,7 +59,6 @@ export function TreeItemShell({
       <div className="flex items-center gap-1">
         {hasChildren ? (
           <ExpandToggle
-            path={path}
             name={name}
             expanded={expanded}
             onToggle={() => setExpanded((prev) => !prev)}

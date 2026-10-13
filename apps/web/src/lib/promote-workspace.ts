@@ -98,12 +98,13 @@ export type PromoteWorkspaceResult =
        * store), so each referenced image travels separately through the
        * daemon's file route. Per-file outcomes, because one unreadable image
        * must not fail — or silently hollow out — the whole promotion:
-       * `missing` are references whose bytes are already gone in the browser
-       * (the promoted document was equally broken before), `failed` are
-       * images this browser could not read, or uploads the daemon refused or
-       * the network dropped, each with the reason — a type or size the daemon will never store stays failed on
-       * every re-run, while a dropped connection is cured by one (the whole
-       * promotion is an idempotent merge).
+       * `missing` are references this browser holds no readable bytes for —
+       * already gone, or a record too corrupt to read (the promoted document
+       * was equally broken before); `failed` are images this browser could
+       * not read, or uploads the daemon refused or the network dropped, each
+       * with the reason. A type or size the daemon will never store stays
+       * failed on every re-run, while a dropped connection is cured by one
+       * (the whole promotion is an idempotent merge).
        */
       blobs: {
         transferred: string[]

@@ -10,6 +10,9 @@
  * Positioned divs rather than an `<svg>`, for the reason the minimap gives:
  * the editor's scene is the one SVG in this container and tests reach for
  * it by tag.
+ *
+ * Every row shares one test id: a value is facet content, and the gesture
+ * trace records the nearest test id of a press.
  */
 import { legendValueLabel, type SceneLegend } from '@kamiazya/whiteboard-canvas-render'
 import { ChevronDown } from 'lucide-react'
@@ -47,7 +50,7 @@ export function LegendOverlay({ legend }: { readonly legend: SceneLegend }) {
                 <span
                   key={entry.value}
                   className="flex items-center gap-1.5"
-                  data-testid={`legend-${key.of}-${legendValueLabel(entry.value)}`}
+                  data-testid="legend-entry"
                 >
                   {key.of === 'edges' ? (
                     <span

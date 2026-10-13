@@ -24,6 +24,7 @@ function thread(id: string, exact: string): CommentThread {
 it('marks each conversation beside its block in Read mode, lower passages lower', async () => {
   render(
     <MarkdownEditor
+      theme="light"
       value={BODY}
       onChange={vi.fn()}
       initialViewMode="read"
@@ -41,6 +42,7 @@ it('a press on a preview marker opens that conversation', async () => {
   const onSelectThread = vi.fn()
   render(
     <MarkdownEditor
+      theme="light"
       value={BODY}
       onChange={vi.fn()}
       initialViewMode="read"
@@ -68,6 +70,7 @@ it('says how many messages a conversation holds, the way its gutter marker does'
   }
   render(
     <MarkdownEditor
+      theme="light"
       value={BODY}
       onChange={vi.fn()}
       initialViewMode="read"
@@ -90,6 +93,7 @@ it('says how many messages a conversation holds, the way its gutter marker does'
 it('an orphaned conversation gets no preview marker', async () => {
   render(
     <MarkdownEditor
+      theme="light"
       value={BODY}
       onChange={vi.fn()}
       initialViewMode="read"

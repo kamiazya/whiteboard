@@ -46,6 +46,7 @@ describe('a proposed passage in the body', () => {
     const onDecidePassage = vi.fn()
     const { container, getByRole, getByTestId, queryByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}
@@ -86,6 +87,7 @@ describe('a proposed passage in the body', () => {
   it('names who proposed the passage on its card', async () => {
     const { container, getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}
@@ -107,6 +109,7 @@ describe('a proposed passage in the body', () => {
   it('says so when the words changed after the proposal was written', async () => {
     const { container, getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}
@@ -130,6 +133,7 @@ describe('a proposed passage in the body', () => {
   it('opens the card from the keyboard, because the gutter target is a real button', async () => {
     const { container, getByTestId, queryByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}
@@ -160,6 +164,7 @@ describe('a proposed passage in the body', () => {
     const onDecidePassage = vi.fn()
     const { container, getByRole, getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={nearLimit}
         onChange={vi.fn()}
@@ -200,6 +205,7 @@ describe('a proposed passage in the body', () => {
     ]
     const { container } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={BODY}
         onChange={vi.fn()}

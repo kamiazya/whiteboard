@@ -9,11 +9,15 @@
  * server's route for one leaves every client and server test green, because
  * the client's own tests assert the client's own literal.
  *
- * It reads shipped client code — `apps/web/src`, `apps/extension/src` and
- * `packages/daemon-client/src` — with comments removed, and fails on a string
- * or template literal that writes an `/api/` or `/auth/` path: one that opens
+ * It reads shipped client code — `apps/web/src`, `apps/extension/src`,
+ * `packages/daemon-client/src`, and the CLI that talks to a running daemon
+ * (`packages/mcp-server/src/cli`) — with comments removed, and fails on a string
+ * or template literal that writes an `/api` or `/auth` path: one that opens
  * on the quote, or follows an interpolation (`${base}/api/…`), which is how a
- * path prefixed with a daemon base URL is spelled.
+ * path prefixed with a daemon base URL is spelled. The leading slash is
+ * optional and the rest of the path is too, so the prefix held in a constant
+ * (`'/api'`), a relative URL (`new URL('api/…', base)`) and a segment joined
+ * into one (`['', 'api', …].join('/')`) are each read as the route they spell.
  *
  * The ledger is guarded from both sides like every allowlist here: an entry
  * whose literal is gone fails as stale.
@@ -25,7 +29,12 @@ import { REPO_ROOT } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 import { stripComments } from './strip-comments.js'
 
-const CLIENT_ROOTS = ['apps/web/src', 'apps/extension/src', 'packages/daemon-client/src']
+const CLIENT_ROOTS = [
+  'apps/web/src',
+  'apps/extension/src',
+  'packages/daemon-client/src',
+  'packages/mcp-server/src/cli',
+]
 
 /** Where a route is named, and so where a route literal belongs. */
 const HOMES: readonly string[] = [
@@ -42,21 +51,6 @@ interface Exemption {
 
 const LEDGER: readonly Exemption[] = [
   {
-    file: 'packages/daemon-client/src/sse-stream-hub.ts',
-    literal: '/api/sync/message',
-    why: "the sync protocol's endpoints, which the hub alone requests; mcp-server's web-api-paths-mounted test holds the quoted two to a mounted route",
-  },
-  {
-    file: 'packages/daemon-client/src/sse-stream-hub.ts',
-    literal: '/api/sync/subscribe',
-    why: 'the sync protocol, as above',
-  },
-  {
-    file: 'packages/daemon-client/src/sse-stream-hub.ts',
-    literal: '/api/sync/stream',
-    why: 'the sync protocol, as above; written after the base URL, so web-api-paths-mounted does not read it',
-  },
-  {
     file: 'packages/daemon-client/src/api-client.ts',
     literal: '/api/',
     why: 'a same-origin prefix check (`startsWith`), never a request',
@@ -68,8 +62,12 @@ const LEDGER: readonly Exemption[] = [
   },
 ]
 
-/** A route literal: opening on a quote or backtick, or right after a `${…}`. */
-const ROUTE_LITERAL = /(?<=['"`}])\/(?:api|auth)\/[^'"`$\s]*/g
+/**
+ * A route literal: opening on a quote or backtick, or right after a `${…}`,
+ * with or without its leading slash, and either continuing as a path or ending
+ * where the literal (or its text before an interpolation) ends.
+ */
+const ROUTE_LITERAL = /(?<=['"`}])\/?(?:api|auth)(?:\/[^'"`$\s]*|(?=['"`$]))/g
 
 function routeLiterals(source: string): string[] {
   return [...stripComments(source).matchAll(ROUTE_LITERAL)].map(([hit]) => hit)
@@ -123,10 +121,23 @@ describe('a client names a daemon route only through the URL builders', () => {
     expect(routeLiterals('const u = "/auth/session"')).toEqual(['/auth/session'])
   })
 
+  it('reads a prefix constant, a relative URL and a joined segment', () => {
+    expect(routeLiterals(`const API = '/api'; fetch(\`\${base}\${API}/runtime/ping\`)`)).toEqual([
+      '/api',
+    ])
+    expect(routeLiterals("new URL('api/runtime/ping', base)")).toEqual(['api/runtime/ping'])
+    expect(routeLiterals("['', 'api', 'workspaces'].join('/')")).toEqual(['api'])
+    expect(routeLiterals(`fetch(\`\${base}/auth\${path}\`)`)).toEqual(['/auth'])
+  })
+
   it('does not read a comment, a regex or a foreign URL as a route literal', () => {
     expect(routeLiterals("// fetch('/api/runtime/ping')\nconst x = 1")).toEqual([])
     expect(routeLiterals('/** `/api/v1` is served by server-core */\nconst x = 1')).toEqual([])
     expect(routeLiterals('const re = /\\/api\\//')).toEqual([])
     expect(routeLiterals("const u = 'https://example.com/api/x'")).toEqual([])
+    // A word that only begins like one is not a route segment.
+    expect(routeLiterals("const k = 'apiKey'; const a = '/authority'; const s = 'apis/x'")).toEqual(
+      [],
+    )
   })
 })

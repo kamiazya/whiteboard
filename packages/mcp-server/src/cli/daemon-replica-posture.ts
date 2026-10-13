@@ -14,6 +14,11 @@
  * socket and the token, exactly as the native host reaches it.
  */
 import { request as httpRequest } from 'node:http'
+import {
+  replicaKeyRotateApiUrl,
+  replicaTierApiUrl,
+  workspacesApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   type ReplicaTier,
@@ -157,7 +162,7 @@ async function canonicalWorkspaceId(
     const answer = await (options.request ?? requestDaemon)({
       record,
       method: 'GET',
-      path: '/api/workspaces',
+      path: workspacesApiUrl(),
     })
     const listing = listWorkspacesResponseSchema.safeParse(answer.body)
     if (answer.status !== 200 || !listing.success) return options.workspaceId
@@ -214,7 +219,7 @@ export async function runDaemonRotateReplicaKey(
     options,
     {
       method: 'POST',
-      pathFor: (id) => `/api/workspaces/${encodeURIComponent(id)}/replica-key/rotate`,
+      pathFor: replicaKeyRotateApiUrl,
     },
     rotateReplicaKeyResponseSchema,
   )
@@ -239,7 +244,7 @@ export async function runDaemonSetReplicaTier(
     options,
     {
       method: 'PUT',
-      pathFor: (id) => `/api/workspaces/${encodeURIComponent(id)}/replica-tier`,
+      pathFor: replicaTierApiUrl,
       body: { tier: options.tier },
     },
     setReplicaTierResponseSchema,

@@ -253,7 +253,7 @@ describe('both editing hosts install it', () => {
   const popupText = () => document.querySelector('.cm-tooltip-autocomplete')?.textContent ?? ''
 
   it('reopens in the document editor', async () => {
-    render(<MarkdownEditor value={'ship it :rocket: today'} onChange={vi.fn()} />)
+    render(<MarkdownEditor theme="light" value={'ship it :rocket: today'} onChange={vi.fn()} />)
     const content = document.querySelector('.cm-content') as HTMLElement
     await userEvent.click(content)
     await userEvent.keyboard('{Home}{ArrowRight>16/}')

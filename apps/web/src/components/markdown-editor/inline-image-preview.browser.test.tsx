@@ -29,7 +29,15 @@ function Note({
     load: async () => undefined,
     ...(loadImage === undefined ? {} : { loadImage }),
   })
-  return <PreviewPane value={value} maxWidth={520} measure={fakeMeasure} references={references} />
+  return (
+    <PreviewPane
+      theme="light"
+      value={value}
+      maxWidth={520}
+      measure={fakeMeasure}
+      references={references}
+    />
+  )
 }
 
 const hrefs = (container: HTMLElement): (string | null)[] =>

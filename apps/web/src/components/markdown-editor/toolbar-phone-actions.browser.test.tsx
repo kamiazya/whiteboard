@@ -61,7 +61,7 @@ async function focusSource(container: HTMLElement) {
 
 it('gives the caret-holding phone editor a Comment button in place of the verbs the docked bar repeats', async () => {
   const { container } = render(
-    <MarkdownEditor value={BODY} onChange={vi.fn()} onComposeThread={vi.fn()} />,
+    <MarkdownEditor theme="light" value={BODY} onChange={vi.fn()} onComposeThread={vi.fn()} />,
   )
   // Before the caret arrives there is no docked bar, so this one still owns
   // the formatting.
@@ -81,7 +81,7 @@ it('gives the caret-holding phone editor a Comment button in place of the verbs 
 it('keeps the verbs on a fine pointer, where no docked bar exists to repeat them', async () => {
   coarse = false
   const { container } = render(
-    <MarkdownEditor value={BODY} onChange={vi.fn()} onComposeThread={vi.fn()} />,
+    <MarkdownEditor theme="light" value={BODY} onChange={vi.fn()} onComposeThread={vi.fn()} />,
   )
   await focusSource(container)
   const shown = labels(container)
@@ -90,7 +90,7 @@ it('keeps the verbs on a fine pointer, where no docked bar exists to repeat them
 })
 
 it('offers no Comment button to a host with no annotation layer to open one in', async () => {
-  const { container } = render(<MarkdownEditor value={BODY} onChange={vi.fn()} />)
+  const { container } = render(<MarkdownEditor theme="light" value={BODY} onChange={vi.fn()} />)
   await focusSource(container)
   await vi.waitFor(() => expect(labels(container)).not.toContain('Bold'))
   expect(labels(container)).not.toContain('Comment')
@@ -100,6 +100,7 @@ it('opens a conversation about the paragraph the caret is in, with nothing selec
   const onComposeThread = vi.fn()
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={`Intro line.\n\n${BODY}`}
       onChange={vi.fn()}
       onComposeThread={onComposeThread}
@@ -125,6 +126,7 @@ it('takes the paragraph above when the caret sits on the blank line under it', a
   const onComposeThread = vi.fn()
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={`Intro line.\n\n${BODY}`}
       onChange={vi.fn()}
       onComposeThread={onComposeThread}
@@ -147,7 +149,7 @@ it('takes the paragraph above when the caret sits on the blank line under it', a
 it('is inert on a body with no prose at all, the one case with nothing to be about', async () => {
   const onComposeThread = vi.fn()
   const { container } = render(
-    <MarkdownEditor value="" onChange={vi.fn()} onComposeThread={onComposeThread} />,
+    <MarkdownEditor theme="light" value="" onChange={vi.fn()} onComposeThread={onComposeThread} />,
   )
   await focusSource(container)
   const button = await vi.waitFor(() => {
@@ -181,6 +183,7 @@ it("opens the conversation the caret's paragraph already has, instead of startin
   const onComposeThread = vi.fn()
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={`Intro line.\n\n${BODY}`}
       onChange={vi.fn()}
       threads={[EXISTING]}
@@ -206,6 +209,7 @@ it('still composes from a paragraph no conversation is about', async () => {
   const onComposeThread = vi.fn()
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={`Intro line.\n\n${BODY}`}
       onChange={vi.fn()}
       threads={[EXISTING]}
@@ -243,6 +247,7 @@ it("follows a thread's LIVE passage when the quote now appears twice, as the gut
   }
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={repeated}
       onChange={vi.fn()}
       threads={[ambiguous]}
@@ -270,6 +275,7 @@ it('still opens a conversation for a host that can select one but cannot start o
   const onSelectThread = vi.fn()
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={`Intro line.\n\n${BODY}`}
       onChange={vi.fn()}
       threads={[EXISTING]}

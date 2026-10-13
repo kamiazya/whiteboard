@@ -23,7 +23,7 @@ afterEach(() => {
 describe('PreviewPane', () => {
   it('renders an SVG whose content is produced by canvas-render, not an HTML markdown renderer', () => {
     const { container } = render(
-      <PreviewPane value="# Hello" maxWidth={480} measure={fakeMeasure} />,
+      <PreviewPane theme="light" value="# Hello" maxWidth={480} measure={fakeMeasure} />,
     )
     const svg = container.querySelector('svg')
     expect(svg).not.toBeNull()
@@ -33,7 +33,7 @@ describe('PreviewPane', () => {
 
   it('renders an empty document without throwing', () => {
     expect(() =>
-      render(<PreviewPane value="" maxWidth={480} measure={fakeMeasure} />),
+      render(<PreviewPane theme="light" value="" maxWidth={480} measure={fakeMeasure} />),
     ).not.toThrow()
   })
 
@@ -43,9 +43,23 @@ describe('PreviewPane', () => {
     const before = { health: { values: { ok: { color: '4' } } } } as never
     const after = { health: { values: { ok: { color: '1' } } } } as never
     const { rerender } = render(
-      <PreviewPane value="# Hi" maxWidth={480} measure={fakeMeasure} tagLibrary={before} />,
+      <PreviewPane
+        theme="light"
+        value="# Hi"
+        maxWidth={480}
+        measure={fakeMeasure}
+        tagLibrary={before}
+      />,
     )
-    rerender(<PreviewPane value="# Hi" maxWidth={480} measure={fakeMeasure} tagLibrary={after} />)
+    rerender(
+      <PreviewPane
+        theme="light"
+        value="# Hi"
+        maxWidth={480}
+        measure={fakeMeasure}
+        tagLibrary={after}
+      />,
+    )
     expect(rendered.tagLibraries.at(-1)).toBe(after)
   })
 })

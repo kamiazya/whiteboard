@@ -21,10 +21,10 @@ import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { reach } from './fetch-failure.js'
 import {
   describeTransferFailure,
   PUSH_FAILURE_COPY,
-  reach,
   type TransferFailure,
 } from './keeper-transfer-failure.js'
 

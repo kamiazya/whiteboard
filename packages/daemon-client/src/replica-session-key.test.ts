@@ -5,6 +5,7 @@ import {
   forgetAllForTests,
   type ReplicaSource,
   replicaKeyProviderFor,
+  requestReplicaKey,
   sessionKey,
   sessionKeyStatus,
 } from './replica-session-key.js'
@@ -162,6 +163,100 @@ describe('replica-session-key: sessionKey', () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ oops: 'not a refusal' }, 500))
     const result = await sessionKey(DAEMON, WORKSPACE, sourceWith(fetchImpl))
     expect(result).toEqual({ kind: 'withheld', reason: 'unreachable' })
+  })
+})
+
+describe('replica-session-key: requestReplicaKey', () => {
+  const ROUTE = '/api/workspaces/ws-1/replica-key'
+
+  afterEach(() => {
+    forgetAllForTests()
+  })
+
+  it('answers the parsed response for a 200 that meets the contract', async () => {
+    const reportDrift = vi.fn()
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(keyResponse()))
+    const result = await requestReplicaKey(fetchImpl, DAEMON, WORKSPACE, reportDrift)
+    expect(result).toEqual({ kind: 'key', response: keyResponse() })
+    expect(fetchImpl).toHaveBeenCalledWith(`${DAEMON}${ROUTE}`, { method: 'POST' })
+    expect(reportDrift).not.toHaveBeenCalled()
+  })
+
+  it('answers the daemon refusal code, so a no-offline workspace is not read as silence', async () => {
+    const reportDrift = vi.fn()
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(
+        {
+          error: 'replica_not_allowed',
+          message: 'this workspace does not allow an offline replica',
+        },
+        403,
+      ),
+    )
+    const result = await requestReplicaKey(fetchImpl, DAEMON, WORKSPACE, reportDrift)
+    expect(result).toEqual({ kind: 'refused', code: 'replica_not_allowed' })
+    expect(reportDrift).not.toHaveBeenCalled()
+  })
+
+  it('answers unreachable for a rejected fetch and for a failure that is not a refusal', async () => {
+    const reportDrift = vi.fn()
+    const rejected = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    const failed = vi.fn(async () => jsonResponse({ oops: 'not a refusal' }, 500))
+    expect(await requestReplicaKey(rejected, DAEMON, WORKSPACE, reportDrift)).toEqual({
+      kind: 'unreachable',
+    })
+    expect(await requestReplicaKey(failed, DAEMON, WORKSPACE, reportDrift)).toEqual({
+      kind: 'unreachable',
+    })
+    expect(reportDrift).not.toHaveBeenCalled()
+  })
+
+  it('answers unreachable for a body cut off mid-read, which is the network and not drift', async () => {
+    const reportDrift = vi.fn()
+    const cut = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new TypeError('network error'))
+        },
+      }),
+      { status: 200 },
+    )
+    const result = await requestReplicaKey(
+      vi.fn(async () => cut),
+      DAEMON,
+      WORKSPACE,
+      reportDrift,
+    )
+    expect(result).toEqual({ kind: 'unreachable' })
+    expect(reportDrift).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a body missing the key', JSON.stringify({ tier: 'offline' })],
+    ['a body that is not JSON', '<html>proxy</html>'],
+  ])('reports a 200 carrying %s as drift, naming the route', async (_label, body) => {
+    const reportDrift = vi.fn()
+    const result = await requestReplicaKey(
+      vi.fn(async () => new Response(body, { status: 200 })),
+      DAEMON,
+      WORKSPACE,
+      reportDrift,
+    )
+    expect(result).toEqual({ kind: 'drifted' })
+    expect(reportDrift).toHaveBeenCalledTimes(1)
+    expect(reportDrift.mock.calls[0]?.[0]).toBe(ROUTE)
+  })
+
+  it('reports drift through the source the session-key holder was given', async () => {
+    const reportDrift = vi.fn()
+    const result = await sessionKey(DAEMON, WORKSPACE, {
+      fetch: vi.fn(async () => jsonResponse({ tier: 'offline' })),
+      reportDrift,
+    })
+    expect(result).toEqual({ kind: 'withheld', reason: 'unreachable' })
+    expect(reportDrift).toHaveBeenCalledTimes(1)
   })
 })
 

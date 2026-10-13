@@ -17,7 +17,7 @@ describe('MarkdownEditor (real browser)', () => {
   it('typing real characters into the source pane produces onChange with the expected document', async () => {
     const onChange = vi.fn()
     const { getByTestId } = render(
-      <MarkdownEditor initialViewMode="split" value="" onChange={onChange} />,
+      <MarkdownEditor theme="light" initialViewMode="split" value="" onChange={onChange} />,
     )
 
     // Focus is a precondition to establish here, not an interaction to
@@ -37,7 +37,12 @@ describe('MarkdownEditor (real browser)', () => {
   it('the catalog Bold wraps the live selection without collapsing it', async () => {
     const onChange = vi.fn()
     const { getByTestId, getByRole } = render(
-      <MarkdownEditor initialViewMode="split" value="make this bold" onChange={onChange} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="split"
+        value="make this bold"
+        onChange={onChange}
+      />,
     )
 
     // Select the word "this" (offsets 5..9) from the document start. Ctrl+Home
@@ -68,10 +73,16 @@ describe('MarkdownEditor (real browser)', () => {
     // real measured width. jsdom has no Canvas 2D backend and falls back to
     // a ratio-based measurer, so this is genuinely browser-only signal.
     const short = render(
-      <MarkdownEditor initialViewMode="split" value="**hi** end" onChange={() => {}} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="split"
+        value="**hi** end"
+        onChange={() => {}}
+      />,
     )
     const long = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="split"
         value="**a much longer bold phrase** end"
         onChange={() => {}}
@@ -105,7 +116,7 @@ describe('MarkdownEditor (real browser)', () => {
 
   it('mounts and unmounts cleanly with no dangling CodeMirror view or thrown error', () => {
     const { unmount } = render(
-      <MarkdownEditor initialViewMode="split" value="content" onChange={() => {}} />,
+      <MarkdownEditor theme="light" initialViewMode="split" value="content" onChange={() => {}} />,
     )
     expect(() => unmount()).not.toThrow()
   })
@@ -126,6 +137,7 @@ describe('MarkdownEditor (real browser)', () => {
   it('draws a checkbox in the preview for each task item, filled when it is ticked', async () => {
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         initialViewMode="split"
         value={'- [ ] ship the fix\n- [x] measure the font\n- an ordinary bullet\n'}
         onChange={() => {}}

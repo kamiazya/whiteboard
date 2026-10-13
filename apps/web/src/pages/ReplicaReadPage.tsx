@@ -42,6 +42,7 @@ import { formatRelative } from '../components/workspace-files/format-relative.js
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
+import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
@@ -463,6 +464,7 @@ function ReplicaReader({
   saveFailed,
   onRetrySave,
 }: ReplicaReaderProps) {
+  const { resolvedTheme } = useThemeMode()
   return (
     <div className="flex h-full flex-col" data-testid="replica-state-readable">
       <ReplicaOfflineBanner name={displayName ?? workspaceId} syncedAt={syncedAt} />
@@ -487,6 +489,7 @@ function ReplicaReader({
               onChange={onDraftChange}
               references={seams}
               tagLibrary={tagLibrary}
+              theme={resolvedTheme}
             />
           )}
           {content?.kind === 'spatial' && spatialDraft !== null && (
@@ -502,6 +505,7 @@ function ReplicaReader({
               references={references}
               tagLibrary={tagLibrary}
               clipboardImages={clipboardImages}
+              theme={resolvedTheme}
               {...spatialLocks}
             />
           )}

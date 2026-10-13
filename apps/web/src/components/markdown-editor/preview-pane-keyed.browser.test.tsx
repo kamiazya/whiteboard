@@ -13,14 +13,24 @@ const measure = (text: string) => ({
 
 it('editing one block patches only that block: the untouched group keeps its DOM element', async () => {
   const { container, rerender } = render(
-    <PreviewPane value={'first paragraph\n\nsecond paragraph'} measure={measure} maxWidth={400} />,
+    <PreviewPane
+      theme="light"
+      value={'first paragraph\n\nsecond paragraph'}
+      measure={measure}
+      maxWidth={400}
+    />,
   )
   const groups = () => [...container.querySelectorAll('[data-wb-key]')]
   expect(groups().length).toBeGreaterThanOrEqual(2)
   const [keptFirst] = groups()
 
   rerender(
-    <PreviewPane value={'first paragraph\n\nsecond EDITED'} measure={measure} maxWidth={400} />,
+    <PreviewPane
+      theme="light"
+      value={'first paragraph\n\nsecond EDITED'}
+      measure={measure}
+      maxWidth={400}
+    />,
   )
   const after = groups()
   expect(after[0]).toBe(keptFirst)

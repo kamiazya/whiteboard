@@ -12,12 +12,18 @@
 
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import type { MdastFlowContent, MdastListItem } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback } from 'react'
-import { renderDiagramFragment, renderMathFragment } from '../lib/markdown-fragment-renderers.js'
+import {
+  fenceFragmentKey,
+  mathFragmentKey,
+  renderDiagramFragment,
+  renderMathFragment,
+} from '../lib/markdown-fragment-renderers.js'
 import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
 
 export interface FragmentRenderers {
-  readonly renderMath: (value: string, displayMode: boolean) => RenderedSvgFragment | undefined
+  readonly renderMath: (value: string) => RenderedSvgFragment | undefined
   readonly renderDiagram: (lang: string, value: string) => RenderedSvgFragment | undefined
 }
 
@@ -32,33 +38,35 @@ const DEFAULT_LOADERS: FragmentLoaders = {
 }
 
 /**
- * Every renderable fragment source in one parsed document. Keys carry a
- * kind namespace and the fence language, so a $$ math block and a
- * ```math fence with identical source never share a cache row. Total:
- * a mid-edit body the schema rejects has no fragments to offer.
+ * Every renderable fragment source in one parsed document, at ANY depth: the
+ * layout reaches a math block in a blockquote or a fence in a list item, so
+ * a collector that stopped at the top level would leave those on their
+ * source placeholder on screen while the export typesets them. Total: a
+ * mid-edit body the schema rejects has no fragments to offer.
  */
 function collectFragmentSources(
   body: string,
   loaders: FragmentLoaders,
 ): readonly PrefetchRequest<RenderedSvgFragment>[] {
   try {
-    const root = parseMarkdownBody(body)
     const wanted: PrefetchRequest<RenderedSvgFragment>[] = []
-    for (const node of root.children) {
-      if (node.type === 'math') {
-        wanted.push({
-          key: `math:${node.value}`,
-          load: () => loaders.math(node.value, true),
-        })
-      }
-      if (node.type === 'code' && node.lang) {
-        const { lang, value } = node
-        wanted.push({
-          key: `fence:${lang}:${value}`,
-          load: () => loaders.diagram(lang, value),
-        })
+    const visit = (nodes: readonly (MdastFlowContent | MdastListItem)[]): void => {
+      for (const node of nodes) {
+        if (node.type === 'math') {
+          const { value } = node
+          wanted.push({ key: mathFragmentKey(value), load: () => loaders.math(value) })
+        } else if (node.type === 'code' && node.lang) {
+          const { lang, value } = node
+          wanted.push({
+            key: fenceFragmentKey(lang, value),
+            load: () => loaders.diagram(lang, value),
+          })
+        } else if (node.type === 'blockquote' || node.type === 'list' || node.type === 'listItem') {
+          visit(node.children)
+        }
       }
     }
+    visit(parseMarkdownBody(body).children)
     return wanted
   } catch {
     return []
@@ -79,12 +87,9 @@ export function useMarkdownFragments({
     useCallback(() => collectFragmentSources(body, loaders), [body, loaders]),
   )
 
-  const renderMath = useCallback(
-    (value: string, _displayMode: boolean) => lookup(`math:${value}`),
-    [lookup],
-  )
+  const renderMath = useCallback((value: string) => lookup(mathFragmentKey(value)), [lookup])
   const renderDiagram = useCallback(
-    (lang: string, value: string) => lookup(`fence:${lang}:${value}`),
+    (lang: string, value: string) => lookup(fenceFragmentKey(lang, value)),
     [lookup],
   )
   return { renderMath, renderDiagram }

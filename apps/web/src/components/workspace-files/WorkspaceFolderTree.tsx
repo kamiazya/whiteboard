@@ -78,7 +78,6 @@ function FolderItem({
 }) {
   return (
     <TreeItemShell
-      path={node.path}
       name={node.name}
       label={node.name}
       hasChildren={node.children.length > 0}

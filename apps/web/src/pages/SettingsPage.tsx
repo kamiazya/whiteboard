@@ -1,5 +1,3 @@
-import { storageReportApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import { storageReportPayloadSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   Cable,
   ChevronLeft,
@@ -35,6 +33,7 @@ import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspace
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
 import { TransferToKeeperSection } from '../components/settings/TransferToKeeperSection.js'
+import { readStorageReport } from '../components/storage-maintenance.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -535,16 +534,11 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
     }
     let cancelled = false
     const daemonFetch = createDaemonFetch(daemonBaseUrl)
-    void (async () => {
-      try {
-        const res = await daemonFetch(storageReportApiUrl())
-        if (!res.ok) return
-        const report = storageReportPayloadSchema.parse(await res.json())
-        if (!cancelled) setDaemonStorageBytes(report.totalBytes)
-      } catch {
-        // No figure — the step reads plain "connected".
-      }
-    })()
+    // No figure on a failure — the step reads plain "connected"; a drifted
+    // report is still logged by the shared reader.
+    void readStorageReport(daemonFetch).then((read) => {
+      if (!cancelled && 'report' in read) setDaemonStorageBytes(read.report.totalBytes)
+    })
     return () => {
       cancelled = true
     }

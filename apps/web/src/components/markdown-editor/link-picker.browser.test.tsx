@@ -61,6 +61,7 @@ function StatefulHost({
   const [value, setValue] = useState(initial)
   return (
     <MarkdownEditor
+      theme="light"
       value={value}
       onChange={(next) => {
         setValue(next)
@@ -75,7 +76,12 @@ describe('the link picker (real browser)', () => {
   it("seeds the search box with the caret's word, so the fast path stays one Enter", async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="see weekly notes" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor
+        theme="light"
+        value="see weekly notes"
+        onChange={onChange}
+        linkTargets={targets}
+      />,
     )
     await caretInto(container, 6) // inside "weekly"
 
@@ -90,7 +96,7 @@ describe('the link picker (real browser)', () => {
   it('narrows as you type and links what you pick', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -110,7 +116,7 @@ describe('the link picker (real browser)', () => {
   it('writes each path when two documents share a name', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -126,7 +132,7 @@ describe('the link picker (real browser)', () => {
   it('offers the URL when what you typed is one', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="the docs" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="the docs" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 5) // inside "docs"
 
@@ -149,7 +155,12 @@ describe('the link picker (real browser)', () => {
   it('writes to the range it was opened for, even if the caret moved meanwhile', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="weekly beta" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor
+        theme="light"
+        value="weekly beta"
+        onChange={onChange}
+        linkTargets={targets}
+      />,
     )
     await caretInto(container, 3) // inside "weekly"
 
@@ -189,7 +200,7 @@ describe('the link picker (real browser)', () => {
   it('moves the highlight with the arrow keys and commits the active row', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -209,7 +220,7 @@ describe('the link picker (real browser)', () => {
   it('says so when nothing matches, and Enter does nothing', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -228,7 +239,12 @@ describe('the link picker (real browser)', () => {
   it('uses the display-text field for both kinds of link', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="see weekly notes" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor
+        theme="light"
+        value="see weekly notes"
+        onChange={onChange}
+        linkTargets={targets}
+      />,
     )
     await caretInto(container, 6) // inside "weekly"
 
@@ -248,7 +264,7 @@ describe('the link picker (real browser)', () => {
   it('applies the display text to an external link too', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="x" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 1)
 
@@ -270,7 +286,7 @@ describe('the link picker (real browser)', () => {
   // rather than showing an empty default.
   it('says the URL will carry itself when there is no text to use', async () => {
     const { container, getByRole } = render(
-      <MarkdownEditor value="a  b" onChange={() => {}} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="a  b" onChange={() => {}} linkTargets={targets} />,
     )
     await caretInto(container, 2) // the gap between the words
 
@@ -285,7 +301,7 @@ describe('the link picker (real browser)', () => {
   it('closes on Escape without touching the document', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="untouched" onChange={onChange} linkTargets={targets} />,
+      <MarkdownEditor theme="light" value="untouched" onChange={onChange} linkTargets={targets} />,
     )
     await caretInto(container, 3)
 
@@ -302,7 +318,7 @@ describe('the link picker (real browser)', () => {
   it('falls back to wrapping the word when the host supplies no targets', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
-      <MarkdownEditor value="see weekly notes" onChange={onChange} />,
+      <MarkdownEditor theme="light" value="see weekly notes" onChange={onChange} />,
     )
     await caretInto(container, 6)
 

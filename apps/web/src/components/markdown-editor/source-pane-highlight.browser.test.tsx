@@ -18,7 +18,7 @@ afterEach(cleanup)
 const SAMPLE = ['# Heading', 'plain paragraph text', '**bold** and *slanted*', '`code`'].join('\n')
 
 function mount() {
-  render(<MarkdownEditor value={SAMPLE} onChange={vi.fn()} />)
+  render(<MarkdownEditor theme="light" value={SAMPLE} onChange={vi.fn()} />)
   return document.querySelector('.cm-content') as HTMLElement
 }
 
@@ -79,7 +79,7 @@ describe('SourcePane markdown highlighting (real browser)', () => {
   // silently disagrees with it: GFM constructs render in the preview while
   // staying unrecognized — and therefore unstyled — in the source.
   it('recognizes GFM strikethrough, matching what the preview renders', async () => {
-    render(<MarkdownEditor value="~~withdrawn~~" onChange={vi.fn()} />)
+    render(<MarkdownEditor theme="light" value="~~withdrawn~~" onChange={vi.fn()} />)
     const content = document.querySelector('.cm-content') as HTMLElement
     await expect.poll(() => spanFor(content, 'withdrawn')).not.toBeNull()
 
@@ -88,7 +88,9 @@ describe('SourcePane markdown highlighting (real browser)', () => {
   })
 
   it('recognizes a GFM table delimiter row', async () => {
-    render(<MarkdownEditor value={'| a | b |\n| - | - |\n| 1 | 2 |'} onChange={vi.fn()} />)
+    render(
+      <MarkdownEditor theme="light" value={'| a | b |\n| - | - |\n| 1 | 2 |'} onChange={vi.fn()} />,
+    )
     const content = document.querySelector('.cm-content') as HTMLElement
     // The delimiter pipes are `processingInstruction` only once the GFM
     // table extension is parsing them.

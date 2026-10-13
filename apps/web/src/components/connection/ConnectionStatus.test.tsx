@@ -134,6 +134,28 @@ describe('ConnectionStatus chip', () => {
     expect(await screen.findByText(/ship to the daemon when it returns/i)).toBeTruthy()
   })
 
+  it('headlines a refused offline-copy write as the failure, not the at-rest sentence', async () => {
+    render(<ConnectionStatus state={{ keeper: 'replica', storage: 'failed' }} />)
+    fireEvent.click(screen.getByRole('button'))
+    expect(await screen.findByText('This browser could not be written to')).toBeTruthy()
+    expect(screen.queryByText("Kept in this browser's copy for now")).toBeNull()
+  })
+
+  it.each([
+    'ok',
+    'stuck',
+    'failed',
+  ] as const)('never tells a browser-kept workspace a daemon keeps it (storage %s)', async (storage) => {
+    render(<ConnectionStatus state={{ keeper: 'browser', storage }} />)
+    fireEvent.click(screen.getByRole('button'))
+    // Wait for the open popover and its browser panel, so the absences below
+    // are read from a rendered panel rather than from a popover not yet open.
+    const popover = await screen.findByTestId('shell-mark-popover')
+    expect(popover.textContent).toMatch(/this browser/i)
+    expect(popover.textContent).not.toMatch(/(ship to|reach) the daemon when it returns/i)
+    expect(popover.textContent).not.toMatch(/Kept in this browser's copy for now/i)
+  })
+
   it('says a write has not landed, in its own words, and explains it', async () => {
     render(<ConnectionStatus state={{ keeper: 'daemon', session: 'write-failed' }} />)
     expect(screen.getByRole('status', { name: /changes not saved yet/i })).toBeTruthy()

@@ -25,11 +25,9 @@
  * a signature a caller could replay somewhere that DOES verify.
  */
 
-import { replicaKeyApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import {
-  type ReplicaKeyResponse,
-  type ReplicaTier,
-  replicaKeyResponseSchema,
+import type {
+  ReplicaKeyResponse,
+  ReplicaTier,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import {
   deriveWrappingKey,
@@ -38,8 +36,10 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/replica-key-wrap'
 import {
   adoptSessionKey,
+  requestReplicaKey,
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { reportDaemonDrift } from './daemon-contract-error.js'
 import {
   assertOfflinePasskey,
   browserCredentials,
@@ -175,8 +175,14 @@ export async function makeReplicaReadableOffline({
   credentials?: OfflinePasskeyCredentials
 }): Promise<{ ok: true } | { ok: false; reason: OfflineOptInFailure }> {
   if (credentials === undefined) return { ok: false, reason: 'unsupported' }
-  const response = await fetchReplicaKey(fetch, daemonBaseUrl, workspaceId)
-  if (response === null) return { ok: false, reason: 'unreachable' }
+  const answer = await requestReplicaKey(fetch, daemonBaseUrl, workspaceId, reportDaemonDrift)
+  if (answer.kind === 'refused' && answer.code === 'replica_not_allowed') {
+    return { ok: false, reason: 'no-offline' }
+  }
+  if (answer.kind !== 'key') return { ok: false, reason: 'unreachable' }
+  const { response } = answer
+  // The daemon refuses a no-offline workspace before building a key; a key
+  // that claims the tier anyway is still not one to keep.
   if (response.tier === 'no-offline') return { ok: false, reason: 'no-offline' }
 
   const created = await createOfflinePasskey({ label, credentials })
@@ -194,22 +200,4 @@ export async function makeReplicaReadableOffline({
 export function stopReplicaReadableOffline(daemonBaseUrl: string, workspaceId: string): void {
   dropWrappedKey(daemonBaseUrl, workspaceId)
   dropOfflinePasskey(daemonBaseUrl, workspaceId)
-}
-
-/** The request the session-key holder makes, answered as the parsed response or null. */
-async function fetchReplicaKey(
-  fetch: typeof globalThis.fetch,
-  daemonBaseUrl: string,
-  workspaceId: string,
-): Promise<ReplicaKeyResponse | null> {
-  try {
-    const res = await fetch(`${daemonBaseUrl}${replicaKeyApiUrl(workspaceId)}`, {
-      method: 'POST',
-    })
-    if (!res.ok) return null
-    const parsed = replicaKeyResponseSchema.safeParse(await res.json())
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
 }

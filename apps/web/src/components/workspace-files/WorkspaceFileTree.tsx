@@ -177,7 +177,6 @@ function TreeItem({
 }) {
   return (
     <TreeItemShell
-      path={node.path}
       name={node.name}
       label={node.canvas === null ? node.name : documentLabel(node.canvas, 'leaf')}
       hasChildren={node.children.length > 0}

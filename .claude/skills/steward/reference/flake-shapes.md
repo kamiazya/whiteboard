@@ -73,6 +73,10 @@ here did not, and its mutation check passed against the unfixed code).
 
 **`await import()` of a heavy module INSIDE a test body.** It charges the transform-and-load of that whole module graph to the per-test timeout (10s in `mcp-node`), which is ample on an idle machine and the first thing to blow once the full suite runs every project in parallel — aggregate import time there is measured in minutes. It reads as a mysterious load-dependent failure and the message names the test, not the import. Hoist it to a static top-level `import`, where the cost lands in the collection phase that no per-test timeout bounds. A dynamic import is only necessary when the file mocks what it imports (`vi.mock` + top-level `await import` is a different, legitimate shape), so **an in-body `await import()` with no `vi.mock` in the file is the tell**.
 
+### handler-lazy-import-race
+
+**A component's event handler that does `await import()` of a module the test does not mock.** Neither `lazy-import-race` (`React.lazy`) nor `in-body-dynamic-import` (an import in the test body) covers it: the import is in PRODUCTION code, runs on the first click, and its module graph's transform-and-load is charged to whatever the test waits with next — Testing Library's 1000ms `waitFor`/`findBy*` default (`LocalCopiesCard.test.tsx`: 12/12 runs failed under a parallel load, 0/12 after) or the per-test timeout (`PromoteWorkspaceSection.carried.test.tsx`: 10/10 → 1/10, and the timed-out handler ran on into the NEXT test's mocks and failed it too). Fix: a static side-effect `import '<module>'` at the top of the test file, so the load lands in collection and the handler's import resolves from cache; keep the real module unless a sibling test really covers what a mock would hide. Discriminator: the warm import turns the loaded-machine loop green. Tell: a `vi.mock` list that covers some of a handler's `await import()` targets but not all.
+
 ### held-element-across-remount
 
 **An element reference held across an action that remounts it.**

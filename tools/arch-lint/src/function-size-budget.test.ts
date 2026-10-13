@@ -289,7 +289,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
   'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
-  'apps/web/src/components/workspace-top-bar/useDocumentNames.ts#useDocumentNames': 55,
   'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 187,
   'apps/web/src/hooks/use-document-favicon.ts#useDocumentFavicon': 52,
   'apps/web/src/hooks/use-document-file-seams.ts#useDocumentFileSeams': 118,

@@ -16,7 +16,7 @@ describe('empty-document caret', () => {
     // place" report on an empty document. The caret must sit where typing
     // will put the first character: the line start.
     const { getByTestId } = render(
-      <MarkdownEditor initialViewMode="write" value="" onChange={() => {}} />,
+      <MarkdownEditor theme="light" initialViewMode="write" value="" onChange={() => {}} />,
     )
     const resolveEditable = () =>
       getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')

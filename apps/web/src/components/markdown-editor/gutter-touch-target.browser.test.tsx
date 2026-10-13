@@ -32,6 +32,7 @@ const MIN_TARGET_PX = 24
 it('answers a press anywhere in a 24x24 box around the dot, not just on the dot', async () => {
   const { container } = render(
     <MarkdownEditor
+      theme="light"
       value={BODY}
       onChange={vi.fn()}
       threads={[THREAD]}

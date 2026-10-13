@@ -10,16 +10,25 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { jsonResponse } from '../test-utils/json-response.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
 import '../index.css'
 
 afterEach(cleanup)
 
+// The bar reads the workspace's names on mount. Answered here so the read
+// meets a daemon's answer rather than the dev server's HTML page, which the
+// shared reader rightly reports as a contract mismatch.
+const namesFetch: typeof globalThis.fetch = async () => jsonResponse({ documents: {}, pinned: [] })
+
 function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
   return render(
-    <div className="h-[200px] w-[1100px] bg-background p-6">
-      <WorkspaceTopBar workspaceId="local" path="my-canvas" {...props} />
-    </div>,
+    <DaemonApiContext.Provider value={namesFetch}>
+      <div className="h-[200px] w-[1100px] bg-background p-6">
+        <WorkspaceTopBar workspaceId="local" path="my-canvas" {...props} />
+      </div>
+    </DaemonApiContext.Provider>,
   )
 }
 

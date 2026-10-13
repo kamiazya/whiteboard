@@ -102,12 +102,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/components/storage-maintenance.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
-    note: "the card's sweep half, extracted from it — same answer, same browser counterpart",
-  },
-  'src/components/StorageReportCard.tsx': {
-    reach: 'both-keepers',
-    browser: 'src/lib/persistent-storage.ts',
-    note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
+    note: "the storage card's daemon half — its report read and its sweeps, which the card and Settings call: the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage",
   },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',
@@ -216,10 +211,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/lib/replica-refresh.ts': {
     reach: 'daemon-itself',
     why: "keeps this browser's cached copy of a daemon workspace fresh while that workspace is open — a browser-kept workspace has no cached copy to refresh",
-  },
-  'src/lib/replica-unlock.ts': {
-    reach: 'daemon-itself',
-    why: "fetches a cached copy's key from the daemon and opens one remembered on disk — only a daemon-kept copy is sealed, so a browser-kept workspace has no key to fetch or open",
   },
   'src/hooks/use-transfer-handshake.ts': {
     reach: 'daemon-itself',
