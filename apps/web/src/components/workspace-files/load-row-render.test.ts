@@ -44,6 +44,7 @@ function deps(over: Partial<RowRenderDeps> = {}): RowRenderDeps {
     theme: 'light',
     // A fresh broker per case, so one case's memo cannot answer another's.
     broker: createInTabRenderBroker(),
+    documents: () => [],
     renderMarkdown: vi.fn(async () => ({ svg: SVG, bounds: BOUNDS })),
     renderSpatial: vi.fn(async () => ({ svg: SVG, bounds: BOUNDS })),
     ...over,
@@ -349,6 +350,7 @@ describe('the theme face a row needs', () => {
       source: fakeFilesSource(),
       theme: 'light',
       broker: createInTabRenderBroker(),
+      documents: () => [],
     })(board)
 
     expect(fonts.loadThemeFontFromSource).toHaveBeenCalledTimes(1)
@@ -364,6 +366,7 @@ describe('the theme face a row needs', () => {
       source: declaring(GREEN),
       theme: 'light',
       broker: createInTabRenderBroker(),
+      documents: () => [],
     })(board)
 
     expect(pool.run).toHaveBeenCalledWith(
@@ -381,6 +384,7 @@ describe('the theme face a row needs', () => {
       source: fakeFilesSource(),
       theme: 'light',
       broker: createInTabRenderBroker(),
+      documents: () => [],
     })(board)
 
     expect(fonts.loadThemeFontFromSource).not.toHaveBeenCalled()

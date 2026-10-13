@@ -11,10 +11,11 @@
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { createRowRenderLoader } from './load-row-render.js'
@@ -62,6 +63,7 @@ it('renders a spatial document from its snapshot bytes through the pool', async 
   const load = createRowRenderLoader({
     theme: 'light',
     broker: createInTabRenderBroker(),
+    documents: () => [],
     source: sourceOf(bytes),
   })
 
@@ -99,6 +101,7 @@ it('draws a tagged board in the colour its tag library declares', async () => {
     createRowRenderLoader({
       theme: 'light',
       broker: createInTabRenderBroker(),
+      documents: () => [],
       source: sourceOf(bytes, readTagLibrary),
     })({ documentId: 'tagged', path: 'tagged', kind: 'spatial' })
 
@@ -108,4 +111,91 @@ it('draws a tagged board in the colour its tag library declares', async () => {
   expect(declared?.svg).toContain(green)
   // The control: the colour comes from the library, not from the board.
   expect(undeclared?.svg).not.toContain(green)
+}, 60_000)
+
+// A board of file nodes previews as the board that opens: what each node
+// embeds is drawn inside it, not left a bare card.
+it('draws the board a file node embeds inside the thumbnail', async () => {
+  const inner: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'i', x: 0, y: 0, width: 200, height: 120, text: 'Embedded', color: '4' }),
+    ],
+    edges: [],
+  }
+  const outer: SpatialCanvas = {
+    nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 400, height: 300, file: 'boards/inner' })],
+    edges: [],
+  }
+  const board: WorkspaceDocumentEntry = {
+    documentId: 'outer',
+    path: 'boards/outer',
+    kind: 'spatial',
+    contentDigest: '0000000000000001',
+  }
+  const embedded: WorkspaceDocumentEntry = {
+    documentId: 'inner',
+    path: 'boards/inner',
+    kind: 'spatial',
+    contentDigest: '0000000000000002',
+  }
+  const bytes = new Map([
+    ['outer', snapshotBytes(outer)],
+    ['inner', snapshotBytes(inner)],
+  ])
+  const green = SPATIAL_LIGHT_PALETTE.presets['4'].fill
+  const draw = (listed: readonly WorkspaceDocumentEntry[]) =>
+    createRowRenderLoader({
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => listed,
+      source: {
+        ...sourceOf(new Uint8Array()),
+        loadSpatialSnapshot: async (entry) => bytes.get(entry.documentId) ?? new Uint8Array(),
+      },
+    })(board)
+
+  const drawn = await draw([board, embedded])
+  // The control: a target the list cannot resolve leaves the card.
+  const dangling = await draw([board])
+
+  expect(drawn?.svg).toContain(green)
+  expect(drawn?.svg).toContain('Embedded')
+  expect(dangling?.svg).not.toContain(green)
+}, 60_000)
+
+// A note that is mostly `![[…]]` previews as the note that opens, not as the
+// syntax that names what it embeds.
+it('draws the note a body embeds inside the thumbnail', async () => {
+  const note: WorkspaceDocumentEntry = {
+    documentId: 'outer-note',
+    path: 'notes/outer',
+    kind: 'markdown',
+    contentDigest: '0000000000000003',
+  }
+  const embedded: WorkspaceDocumentEntry = {
+    documentId: 'inner-note',
+    path: 'notes/inner',
+    kind: 'markdown',
+    contentDigest: '0000000000000004',
+  }
+  const bodies = new Map([
+    ['outer-note', 'Before\n\n![[notes/inner]]'],
+    ['inner-note', 'Quoted paragraph'],
+  ])
+  const draw = (listed: readonly WorkspaceDocumentEntry[]) =>
+    createRowRenderLoader({
+      theme: 'light',
+      broker: createInTabRenderBroker(),
+      documents: () => listed,
+      source: {
+        ...sourceOf(new Uint8Array()),
+        loadMarkdown: async (entry) => ({ body: bodies.get(entry.documentId) ?? '' }),
+      },
+    })(note)
+
+  const drawn = await draw([note, embedded])
+  const dangling = await draw([note])
+
+  expect(drawn?.svg).toContain('Quoted paragraph')
+  expect(dangling?.svg).not.toContain('Quoted paragraph')
 }, 60_000)

@@ -27,9 +27,17 @@
  * preview pane beside a row does not redraw what the row just drew: both
  * ask for the same key, and the second one joins the first rather than
  * starting a second render.
+ *
+ * What a document embeds is part of that picture — a board's file nodes, a
+ * note's `![[…]]` — so a picture drawn without them is only a first answer.
+ * The render that draws it says whether its subject named another document
+ * (`referencesOmitted`), which this thread cannot know of a board it never
+ * decodes; only then are those documents read and the picture drawn again,
+ * keyed by what they were (`row-references.ts`). A document that names
+ * nothing is drawn once and keyed as it always was.
  */
 
-import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -37,16 +45,43 @@ import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
+import { namesADocument } from '../../lib/names-a-document.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
-import { cacheKeyFor, renderKeyOf, tagLibraryKey } from '../../lib/render-key.js'
+import { cacheKeyFor, type RenderKey, renderKeyOf, tagLibraryKey } from '../../lib/render-key.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { loadThemeFontFromSource, themeFacesKey } from '../../lib/theme-fonts.js'
 import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
+import {
+  createRowReferenceReader,
+  type RowReferenceReader,
+  type RowReferences,
+} from './row-references.js'
 
 export interface DocumentRender {
   readonly svg: string
   /** What the SVG's viewBox covers, so a caller can fit it to any box. */
   readonly bounds: BoundingBox
+}
+
+/**
+ * What a note's picture needs once it draws what it embeds. A board inside a
+ * note bakes its palette and its tag colours into the SVG as a board on the
+ * canvas does, so the note's picture takes both — where a note that embeds
+ * nothing takes its ink from CSS and needs neither.
+ */
+interface MarkdownEmbeds {
+  readonly references: ReferenceWire
+  readonly theme: ResolvedTheme
+  readonly tagLibrary: TagLibrary
+}
+
+/**
+ * A render as the pipeline answers it: the picture, and whether it was drawn
+ * without documents its subject names — which only the realm that read the
+ * content can say.
+ */
+export interface RowPicture extends DocumentRender {
+  readonly referencesOmitted?: true
 }
 
 export interface RowRenderDeps {
@@ -59,6 +94,13 @@ export interface RowRenderDeps {
    */
   readonly broker: RenderBroker
   /**
+   * The workspace's documents as the panel last listed them: what an
+   * embedded target resolves against, and what says its content version.
+   * A function, so the loader outlives a list re-read and still keys by the
+   * versions that read reported.
+   */
+  readonly documents: () => readonly WorkspaceDocumentEntry[]
+  /**
    * Both renders are injected like the reads above, so the branch that
    * actually produces a picture is assertable without standing up a worker.
    */
@@ -66,7 +108,8 @@ export interface RowRenderDeps {
     body: string,
     maxWidth: number,
     cacheKey?: string,
-  ) => Promise<DocumentRender | null>
+    embeds?: MarkdownEmbeds,
+  ) => Promise<RowPicture | null>
   /**
    * Takes the stored SNAPSHOT — the worker decodes it, not this thread — and
    * the workspace's tag library, whose declared colours the board is drawn in.
@@ -76,7 +119,8 @@ export interface RowRenderDeps {
     theme: ResolvedTheme,
     tagLibrary: TagLibrary,
     cacheKey?: string,
-  ) => Promise<DocumentRender | null>
+    references?: ReferenceWire,
+  ) => Promise<RowPicture | null>
 }
 
 // `cacheKey` rides ON the request rather than being applied around the call:
@@ -86,7 +130,8 @@ async function renderMarkdownInPool(
   body: string,
   maxWidth: number,
   cacheKey?: string,
-): Promise<DocumentRender | null> {
+  embeds?: MarkdownEmbeds,
+): Promise<RowPicture | null> {
   const reply = await sharedLayoutWorkerPool().run<MarkdownRenderResponse>(
     {
       type: 'markdown-render',
@@ -94,6 +139,7 @@ async function renderMarkdownInPool(
       body,
       maxWidth,
       ...(cacheKey === undefined ? {} : { cacheKey }),
+      ...embeds,
     },
     'background',
   )
@@ -105,7 +151,8 @@ async function renderSpatialInPool(
   theme: ResolvedTheme,
   tagLibrary: TagLibrary,
   cacheKey?: string,
-): Promise<DocumentRender | null> {
+  references?: ReferenceWire,
+): Promise<RowPicture | null> {
   const reply = await sharedLayoutWorkerPool().run<LayoutResponse>(
     {
       type: 'layout',
@@ -114,6 +161,9 @@ async function renderSpatialInPool(
       theme,
       tagLibrary,
       ...(cacheKey === undefined ? {} : { cacheKey }),
+      // A thumbnail has no viewport for a level-of-detail gate to read, and
+      // a miniature of a board is the board with its embeds drawn.
+      ...(references === undefined ? {} : { references, expandAllFileNodes: true as const }),
     },
     'background',
   )
@@ -127,7 +177,11 @@ async function renderSpatialInPool(
   // of fifty boards naming one theme fetches once: the loader refuses a face
   // that is held or already in flight.
   for (const family of reply.fontsMissing ?? []) void loadThemeFontFromSource(family)
-  return { svg: reply.svg, bounds: reply.bounds }
+  return {
+    svg: reply.svg,
+    bounds: reply.bounds,
+    ...(reply.referencesOmitted === true ? { referencesOmitted: true as const } : {}),
+  }
 }
 
 /**
@@ -195,11 +249,26 @@ async function produce(
   document: WorkspaceDocumentEntry,
   tagLibrary: TagLibrary,
   cacheKey: string | undefined,
-): Promise<DocumentRender | null> {
+  references?: ReferenceWire,
+): Promise<RowPicture | null> {
   if (renderedKind(document) === 'markdown') {
     const { body } = await deps.source.loadMarkdown(document)
     if (body.trim() === '') return null
-    return await (deps.renderMarkdown ?? renderMarkdownInPool)(body, ROW_LAYOUT_WIDTH, cacheKey)
+    // Passed only when there are some, so a render without them is the call
+    // it always was.
+    const embeds =
+      references === undefined ? [] : ([{ references, theme: deps.theme, tagLibrary }] as const)
+    const drawn = await (deps.renderMarkdown ?? renderMarkdownInPool)(
+      body,
+      ROW_LAYOUT_WIDTH,
+      cacheKey,
+      ...embeds,
+    )
+    // The body is in hand here, so this thread answers for a note what the
+    // worker answers for a board.
+    return drawn === null || references !== undefined || !namesADocument({ bodies: [body] })
+      ? drawn
+      : { ...drawn, referencesOmitted: true }
   }
 
   const snapshot = await deps.source.loadSpatialSnapshot(document)
@@ -208,39 +277,93 @@ async function produce(
     deps.theme,
     tagLibrary,
     cacheKey,
+    ...(references === undefined ? [] : [references]),
   )
 }
 
+/** The picture alone: whether it omitted anything is this module's business. */
+function pictureOf(drawn: RowPicture | null): DocumentRender | null {
+  return drawn === null ? null : { svg: drawn.svg, bounds: drawn.bounds }
+}
+
+/** Everything a row's key names besides the document itself. */
+interface KeyAxes {
+  readonly theme: ResolvedTheme
+  readonly library: string
+  readonly references: string | null
+}
+
+function rowKey(document: WorkspaceDocumentEntry, axes: KeyAxes): RenderKey {
+  return renderKeyOf(
+    {
+      documentId: document.documentId,
+      kind: renderedKind(document),
+      // The CONTENT's identity, never the stamp: a merge can change the one
+      // and leave the other where it was (see document-entry.ts).
+      ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
+    },
+    axes.theme,
+    // Read at the moment the key is built, never held on the loader: a
+    // surface that asks again after a face landed must produce a different
+    // key, and the loader outlives the landing.
+    themeFacesKey(),
+    axes.library,
+    axes.references,
+  )
+}
+
+/**
+ * The picture again, with what it embeds: the first one when those will not
+ * read, since an embed that cannot be drawn leaves the picture that could be
+ * — never a picture keyed as though the embed were dangling.
+ */
+async function withReferences(
+  deps: RowRenderDeps,
+  reads: { readonly library: () => Promise<KeyedLibrary>; readonly references: RowReferenceReader },
+  document: WorkspaceDocumentEntry,
+  first: RowPicture,
+): Promise<RowPicture | null> {
+  let references: RowReferences
+  try {
+    references = await reads.references(document)
+  } catch {
+    return first
+  }
+  // Whatever the kind: a note drawing a board colours it by the library.
+  const { library, key: libraryKey } = await reads.library()
+  const key = rowKey(document, {
+    theme: deps.theme,
+    library: libraryKey,
+    references: references.key,
+  })
+  const drawn = await deps.broker.render(key, () =>
+    produce(deps, document, library, cacheKeyFor(key), references.wire),
+  )
+  return drawn ?? first
+}
+
 export function createRowRenderLoader(deps: RowRenderDeps) {
-  const libraryOnce = libraryReader(deps.source)
+  const reads = {
+    library: libraryReader(deps.source),
+    references: createRowReferenceReader(deps.source, deps.documents),
+  }
 
   return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
     // The catch stays OUTSIDE the broker: a rejection must not be remembered
     // as an answer, so the broker is allowed to see it and forget the entry,
     // and the totality this loader promises is restored here.
     try {
-      const kind = renderedKind(document)
       // Awaited before the key is built, because the key names the library.
       // Markdown draws no box a declaration could colour, so it neither
-      // waits for the library nor is keyed by it.
+      // waits for the library nor is keyed by it — until it draws an embed.
       const { library, key: libraryKey } =
-        kind === 'spatial' ? await libraryOnce() : { library: {}, key: '' }
-      const key = renderKeyOf(
-        {
-          documentId: document.documentId,
-          kind,
-          // The CONTENT's identity, never the stamp: a merge can change the
-          // one and leave the other where it was (see document-entry.ts).
-          ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
-        },
-        deps.theme,
-        // Read at the moment the key is built, never held on the loader: a
-        // surface that asks again after a face landed must produce a
-        // different key, and the loader outlives the landing.
-        themeFacesKey(),
-        libraryKey,
+        renderedKind(document) === 'spatial' ? await reads.library() : { library: {}, key: '' }
+      const bare = rowKey(document, { theme: deps.theme, library: libraryKey, references: '' })
+      const first = await deps.broker.render(bare, () =>
+        produce(deps, document, library, cacheKeyFor(bare)),
       )
-      return await deps.broker.render(key, () => produce(deps, document, library, cacheKeyFor(key)))
+      if (first?.referencesOmitted !== true) return pictureOf(first)
+      return pictureOf(await withReferences(deps, reads, document, first))
     } catch {
       return null
     }

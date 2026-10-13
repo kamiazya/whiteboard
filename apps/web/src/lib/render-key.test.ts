@@ -4,6 +4,7 @@ import {
   isMemoisableKey,
   outlineKeyOf,
   RENDERER_BUILD_ID,
+  referencesKey,
   renderKeyOf,
   renderKeyPath,
   renderKeySchema,
@@ -272,6 +273,95 @@ describe('the tag library axis', () => {
 
   it('is a valid key by its own schema', async () => {
     const key = renderKeyOf(spatial, 'light', NO_FACES, await tagLibraryKey(green))
+    expect(renderKeySchema.safeParse(key).success).toBe(true)
+  })
+})
+
+// A row's picture draws what its document embeds — a board inside a file
+// node, a note behind `![[…]]` — so what those documents ARE is part of the
+// picture. Without the axis an edit to an embedded note leaves every cached
+// thumbnail of the board that embeds it showing the old note, on disk.
+describe('the references axis', () => {
+  const note = { target: 'notes/a', documentId: 'n1', version: 'v1', label: 'a' }
+
+  it('keys two versions of an embedded document as two pictures', async () => {
+    const before = await referencesKey([note])
+    const after = await referencesKey([{ ...note, version: 'v2' }])
+    expect(before).not.toBe(after)
+    expect(renderKeyPath(renderKeyOf(spatial, 'light', NO_FACES, NO_LIBRARY, before))).not.toBe(
+      renderKeyPath(renderKeyOf(spatial, 'light', NO_FACES, NO_LIBRARY, after)),
+    )
+    // A note embeds too, so the axis is not a spatial-only one.
+    expect(renderKeyPath(renderKeyOf(markdown, 'light', NO_FACES, NO_LIBRARY, before))).not.toBe(
+      renderKeyPath(renderKeyOf(markdown, 'light', NO_FACES, NO_LIBRARY, after)),
+    )
+  })
+
+  // The name an embed is labelled with is drawn, and a rename moves no
+  // content digest.
+  it('keys a renamed embedded document as another picture', async () => {
+    expect(await referencesKey([note])).not.toBe(
+      await referencesKey([{ ...note, label: 'renamed' }]),
+    )
+  })
+
+  it('keys the same references the same, whatever order they were walked in', async () => {
+    const other = { target: 'b', documentId: 'b1', version: 'v9', label: 'b' }
+    expect(await referencesKey([other, note])).toBe(await referencesKey([note, other]))
+  })
+
+  // No churn: a document that embeds nothing keys exactly as it did before
+  // the axis existed, so its stored pictures stay valid.
+  it('leaves the key of a document that references nothing as it was', async () => {
+    expect(await referencesKey([])).toBe('')
+    const plain = renderKeyOf(spatial, 'light', NO_FACES, NO_LIBRARY)
+    expect(renderKeyPath(renderKeyOf(spatial, 'light', NO_FACES, NO_LIBRARY, ''))).toBe(
+      renderKeyPath(plain),
+    )
+    // The leaf as it stood before: version, theme, font set, library.
+    expect(renderKeyPath(plain).split('/').at(-1)).toBe(
+      `~${encodeURIComponent(spatial.state)}-light-~-~.json`,
+    )
+  })
+
+  // An embedded document whose keeper cannot say what its content is gives
+  // the key nothing to notice a change by — the same reason a missing
+  // version refuses the memo.
+  it('refuses the memo when an embedded document has no content digest', async () => {
+    const unknowable = await referencesKey([{ ...note, version: undefined }])
+    expect(unknowable).toBeNull()
+    expect(isMemoisableKey(renderKeyOf(spatial, 'light', NO_FACES, NO_LIBRARY, unknowable))).toBe(
+      false,
+    )
+  })
+
+  // A target that resolves to nothing is drawn as a missing reference, and
+  // that is a stable picture until the list says otherwise.
+  it('keys a dangling target without refusing the memo', async () => {
+    const dangling = await referencesKey([{ target: 'gone' }])
+    expect(dangling).not.toBeNull()
+    expect(dangling).not.toBe('')
+  })
+
+  // A board embedded in a note bakes its palette and tag colours into the
+  // note's picture, so that note can no longer serve both themes from one
+  // entry; a note that embeds nothing still does.
+  it('keys a note that draws embeds on the axes a board has', async () => {
+    const drawn = await referencesKey([note])
+    expect(renderKeyOf(markdown, 'dark', 'Yomogi', 'lib', drawn)).toMatchObject({
+      theme: 'dark',
+      fonts: 'Yomogi',
+      library: 'lib',
+    })
+    expect(renderKeyOf(markdown, 'dark', 'Yomogi', 'lib', '')).toMatchObject({
+      theme: null,
+      fonts: null,
+      library: null,
+    })
+  })
+
+  it('is a valid key by its own schema', async () => {
+    const key = renderKeyOf(spatial, 'light', NO_FACES, NO_LIBRARY, await referencesKey([note]))
     expect(renderKeySchema.safeParse(key).success).toBe(true)
   })
 })

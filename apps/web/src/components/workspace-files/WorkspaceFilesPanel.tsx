@@ -132,10 +132,22 @@ export function WorkspaceFilesPanel({
   // throw both away — which is the measured "dark mode re-renders every row".
   const broker = useMemo(() => createInTabRenderBroker(), [source])
 
+  // What an embedded target resolves against, read through a ref so the
+  // loader below outlives a list re-read: the re-read hands every row a new
+  // entry, which is what asks it to draw again by the versions just listed.
+  const listedRef = useRef<readonly WorkspaceDocumentEntry[]>([])
+  listedRef.current = documents ?? []
+
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
   const loadRender = useMemo(
-    () => createRowRenderLoader({ source, theme: resolvedTheme, broker }),
+    () =>
+      createRowRenderLoader({
+        source,
+        theme: resolvedTheme,
+        broker,
+        documents: () => listedRef.current,
+      }),
     [source, resolvedTheme, broker],
   )
 

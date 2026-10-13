@@ -75,9 +75,9 @@ rendered with `"document"` draws each embedded board in the theme that board nam
 draws them all in the bundled look. A note has no theme of its own to choose.
 
 The daemon's PNG and SVG export routes take the same `style`, optional, with the same default.
-The web editor's own export draws what you see, theme included. The web app's preview pane and
-the file rows' thumbnails always draw the document, so an embedded board looks there the way it
-looks on the canvas.
+The web editor's own export draws what you see, theme included. The web app's preview pane, the
+file rows' thumbnails and Peek always draw the document, with what it embeds: a board in a file
+node or behind a note's `![[board]]` looks there the way it looks on the canvas.
 
 ## Fonts
 
@@ -90,7 +90,9 @@ preview pane beside it. The editor, the row thumbnails, the preview pane and the
 PNG export then draw the same glyphs, and so does the in-place editor when you double-click a
 node or a label. Everything already on screen redraws when the face lands — the open board, the
 rows, the pane. Nothing is fetched for a board that names no theme, and the face is held for
-the tab.
+the tab. A note's thumbnail does not fetch it for a board the note embeds: until a board in that
+theme has been opened or drawn as its own thumbnail in this tab, the miniature inside the note
+uses the bundled family.
 
 For the daemon's own rendering — `wb_scene_render` and the export routes — open **Settings →
 Fonts** while connected and install **Yomogi**. The daemon keeps the file, and lays text out

@@ -104,6 +104,12 @@ export type LayoutRequest = LayoutSubject & {
    */
   readonly expandedFileIds?: readonly string[]
   /**
+   * Expand every file node `references` can draw — a surface with no
+   * viewport, a list row, has no gate to decide by, and its miniature is the
+   * board with its embeds drawn.
+   */
+  readonly expandAllFileNodes?: true
+  /**
    * The math blocks and diagram fences the asking thread has rendered, by
    * key — plain SVG strings, since the engines that make them stay on the
    * thread that loaded them. A body asking for one not here keeps its
@@ -198,16 +204,24 @@ export type MarkdownRailResponse =
  * would be a cost with no reader. A row thumbnail HAS a reader — the SVG is
  * the picture — and it is produced once per document, not per keystroke.
  *
- * The resolver seams do not cross here either, for the same reason (a
- * function cannot be posted). An unresolved reference draws as the literal
- * text the author typed, which at thumbnail scale is a difference no eye can
- * find.
+ * What the body embeds crosses as data, as it does for `layout`: a note
+ * that is mostly `![[…]]` drawn as literal text is a different picture from
+ * the one that opens. Absent, a reference draws as the text the author
+ * typed.
  */
 export type MarkdownRenderRequest = {
   readonly type: 'markdown-render'
   readonly id: number
   readonly body: string
   readonly maxWidth: number
+  readonly references?: ReferenceWire
+  /**
+   * The palette and tag library a board embedded in the body is drawn in.
+   * Sent with `references` and never without: a body that embeds nothing
+   * takes its ink from CSS.
+   */
+  readonly theme?: ResolvedTheme
+  readonly tagLibrary?: TagLibrary
   /**
    * Where this answer may be REMEMBERED, as the render key's own path — the
    * worker's persistent tier (ADR-0027 decision 5) reads it before working
@@ -345,6 +359,13 @@ export type LayoutResponse =
        * asking thread can load the engines. Absent means nothing was missing.
        */
       readonly fragmentsAsked?: readonly FragmentAsk[]
+      /**
+       * Laid out without `references` while the canvas names another
+       * document. Only this realm decodes a list row's board, so it is the
+       * one that can tell the asking thread there is more to read; absent
+       * means the picture is the whole one.
+       */
+      readonly referencesOmitted?: true
     }
   | WorkerFailure
 
