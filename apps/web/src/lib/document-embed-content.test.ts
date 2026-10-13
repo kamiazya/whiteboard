@@ -22,6 +22,7 @@ import {
   loadBrowserReference,
   resetEmbedIndexForTests,
 } from './document-embed-content.js'
+import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 
@@ -241,6 +242,25 @@ describe('BROWSER_FILE_ADAPTER, stored images', () => {
       expect(createObjectURL).not.toHaveBeenCalled()
     } finally {
       createObjectURL.mockRestore()
+    }
+  })
+
+  it('rejects an image the store could not read, so the image seam asks again', async () => {
+    // `undefined` is "no such picture" and is never asked again; a store that
+    // merely failed to open is not that.
+    const failing = vi
+      .spyOn(DocumentFileStore.prototype, 'read')
+      .mockResolvedValue({ kind: 'unreadable', error: new Error('the store could not be read') })
+    try {
+      await expect(BROWSER_FILE_ADAPTER.loadImageBlob('asset:held')).rejects.toThrow(
+        'the store could not be read',
+      )
+      await expect(BROWSER_FILE_ADAPTER.loadImageUrl('asset:held')).rejects.toThrow(
+        'the store could not be read',
+      )
+      await expectLoggedFailure('image asset load failed')
+    } finally {
+      failing.mockRestore()
     }
   })
 

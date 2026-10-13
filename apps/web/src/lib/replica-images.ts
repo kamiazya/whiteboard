@@ -18,7 +18,6 @@
  * under another id fails to open; the index is sealed too, so not even which
  * ids are cached is readable without the key.
  */
-import { documentFileApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { openBytes, sealBytes } from '@kamiazya/whiteboard-daemon-client/read-plane'
 import {
   collectImageRefIds,
@@ -30,6 +29,7 @@ import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { blobRefSchema, docRefKey } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { readDaemonImage } from './daemon-image-read.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import {
   deleteReplicaImageBlobs,
@@ -111,17 +111,25 @@ export interface CacheReplicaImagesOptions {
   blobs?: BlobStore
 }
 
-/** One image off the daemon's file route, or null for anything but a served file. */
+/**
+ * One image off the daemon's file route, or null for anything but a served
+ * file. Best-effort by design: a picture this pass could not fetch is simply
+ * not cached yet, and the next pull's pass asks again.
+ */
 async function fetchImage(
   options: CacheReplicaImagesOptions,
   fileId: string,
   path: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
-  const url = `${options.daemonBaseUrl}${documentFileApiUrl(options.workspaceId, path, fileId)}`
   try {
-    const res = await options.fetch(url)
-    if (!res.ok) return null
-    const blob = await res.blob()
+    const blob = await readDaemonImage(
+      options.fetch,
+      options.daemonBaseUrl,
+      options.workspaceId,
+      path,
+      fileId,
+    )
+    if (blob === undefined) return null
     return { bytes: new Uint8Array(await blob.arrayBuffer()), mimeType: blob.type }
   } catch {
     return null

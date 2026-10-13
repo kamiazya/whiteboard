@@ -137,6 +137,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the two DocumentFileAdapter bindings; the seams above them are keeper-agnostic',
   },
   'src/lib/daemon-files-source.ts': { reach: 'both-keepers', browser: BROWSER_FILES },
+  'src/lib/daemon-image-read.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/document-file-store.ts',
+    note: "the one reader of the daemon's picture route, under the editor's adapter, the list's miniatures and the replica's picture cache; the browser keeper's pictures are read through `DocumentFileStore.read`, which keeps absent and unreadable apart the same way",
+  },
   'src/lib/storage-report.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
@@ -200,10 +205,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/lib/replica-clipboard-images.ts': {
     reach: 'daemon-itself',
     why: "gives the offline copy of a daemon workspace the daemon's file scope for copy and paste — a browser-kept workspace's editor takes its picture seams from its own keeper, with no daemon behind it",
-  },
-  'src/lib/replica-images.ts': {
-    reach: 'daemon-itself',
-    why: "reads the pictures a daemon workspace's documents name into this browser's cached copy of it — a browser-kept workspace's pictures are already in this browser",
   },
   'src/lib/replica-push.ts': {
     reach: 'daemon-itself',

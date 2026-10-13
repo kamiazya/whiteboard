@@ -138,7 +138,9 @@ describe('createDaemonFileAdapter', () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
 
-  it('answers an unreachable daemon with no image, logged, for both image reads', async () => {
+  it('rejects an unreachable daemon, logged, for both image reads', async () => {
+    // A failed read is not an absent picture: the seam that caches this asks
+    // again on a rejection and never on `undefined`.
     const daemonFetch = vi.fn(async () => {
       throw new Error('network down')
     })
@@ -149,10 +151,29 @@ describe('createDaemonFileAdapter', () => {
       path: path,
     })
 
+    await expect(adapter.loadImageBlob('asset:file-abc')).rejects.toThrow('network down')
+    await expect(adapter.loadImageUrl('asset:file-abc')).rejects.toThrow('network down')
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    await expectLoggedFailure('image load failed')
+  })
+
+  it('rejects a busy daemon for both image reads, and answers a 404 with no image', async () => {
+    const status = { current: 503 }
+    const daemonFetch = vi.fn(async () => new Response(null, { status: status.current }))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: path,
+    })
+
+    await expect(adapter.loadImageBlob('asset:file-abc')).rejects.toThrow('503')
+    await expect(adapter.loadImageUrl('asset:file-abc')).rejects.toThrow('503')
+    await expectLoggedFailure('image load failed')
+    status.current = 404
     await expect(adapter.loadImageBlob('asset:file-abc')).resolves.toBeUndefined()
     await expect(adapter.loadImageUrl('asset:file-abc')).resolves.toBeUndefined()
     expect(URL.createObjectURL).not.toHaveBeenCalled()
-    await expectLoggedFailure('image load failed')
   })
 
   it('scopes its files to this workspace on this daemon', () => {
