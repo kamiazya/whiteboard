@@ -58,8 +58,28 @@ export function tableColumnWidths(
     return natural
   }
   const minimum = 2 * options.theme.tableCellPaddingXPx + options.theme.bodyFontSizePx
-  const scale = options.maxWidth / total
-  return natural.map((w) => Math.max(w * scale, minimum))
+  return scaleIntoWidth(natural, options.maxWidth, minimum)
+}
+
+/**
+ * `natural` scaled proportionally into `maxWidth`, no column below `minimum`.
+ *
+ * Flooring after one proportional pass overflows by whatever the floor
+ * added, so a floored column is set aside and the REST are rescaled into
+ * what remains, until no further column falls under the floor. Only when
+ * the floors alone exceed `maxWidth` does the table stay wider than the
+ * node: a column narrower than its padding has no room for a glyph at all.
+ */
+function scaleIntoWidth(natural: readonly number[], maxWidth: number, minimum: number): number[] {
+  const floored = new Set<number>()
+  for (;;) {
+    const flexible = natural.reduce((sum, w, i) => (floored.has(i) ? sum : sum + w), 0)
+    const scale = (maxWidth - floored.size * minimum) / flexible
+    const widths = natural.map((w, i) => (floored.has(i) ? minimum : w * scale))
+    const under = widths.flatMap((w, i) => (!floored.has(i) && w < minimum ? [i] : []))
+    if (under.length === 0) return widths
+    for (const i of under) floored.add(i)
+  }
 }
 
 /** A cell's text with no styling, for width measurement only. */

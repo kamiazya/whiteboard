@@ -103,6 +103,34 @@ const proseBlockArb: fc.Arbitrary<MdastFlowContent> = fc.oneof(
 )
 
 /**
+ * A GFM table, rows of plain prose cells. Its cells translate their runs, and
+ * its columns are sized to content and then SCALED into `maxWidth` — the one
+ * block whose fit is decided before any run wraps, so a table wider than the
+ * node is a case of its own rather than a paragraph in another shape.
+ */
+const tableArb: fc.Arbitrary<MdastFlowContent> = fc
+  .integer({ min: 1, max: 3 })
+  .chain((columns) =>
+    fc.array(fc.array(proseArb, { minLength: columns, maxLength: columns }), {
+      minLength: 1,
+      maxLength: 3,
+    }),
+  )
+  .map(
+    (rows): MdastFlowContent => ({
+      type: 'table',
+      align: [],
+      children: rows.map((cells) => ({
+        type: 'tableRow' as const,
+        children: cells.map((value) => ({
+          type: 'tableCell' as const,
+          children: [{ type: 'text' as const, value }],
+        })),
+      })),
+    }),
+  )
+
+/**
  * Adds the block kinds that emit runs of their OWN (a list emits a bullet
  * or ordinal marker), which the text-preservation property below must not
  * see — it compares against the source text, and a marker has no source.
@@ -125,6 +153,7 @@ const anyBlockArb: fc.Arbitrary<MdastFlowContent> = fc.oneof(
     ),
   ),
   fc.constant({ type: 'thematicBreak' } as const),
+  tableArb,
 )
 
 const rootOf = (blocks: readonly MdastFlowContent[]): MdastRoot => ({
@@ -328,7 +357,7 @@ describe('typesetMdastBlocks properties', () => {
    * Inline code is therefore also weighted down rather than only shortened.
    *
    * The numbers are floors, well under what the generators measure
-   * (114 / 193 / 74 of 200 when this was written), so a real loss of reach
+   * (114 / 193 / 74 / 86-101 of 200 when this was written), so a real loss of reach
    * fails here and sampling noise does not.
    */
   it('each generator reaches the case its property is conditional on', () => {
@@ -337,15 +366,24 @@ describe('typesetMdastBlocks properties', () => {
       textRuns(layout(root)).some(
         ({ run, offsetX }) => offsetX + run.bbox.x + run.bbox.w > MAX_WIDTH + 0.001,
       )
+    // A table is scaled into maxWidth BEFORE any run wraps, so the wrap
+    // property only judges the scaling when a table is wider than that at
+    // its natural, content-sized width.
+    const hasTableWiderThanMaxWidth = (root: MdastRoot) =>
+      typesetMdastBlocks(root, { measure, maxWidth: 10_000, fontFamily: FONT_FAMILY }).nodes.some(
+        (node) => node.kind === 'table' && node.bbox.w > MAX_WIDTH,
+      )
     expect({
       uncutProseDocuments:
         fc.sample(proseRootArb, 200).filter((root) => !hasCut(root)).length >= 60,
       cutAtomicDocuments: fc.sample(truncatingRootArb, 200).filter(hasCut).length >= 180,
       overflowingDocuments: fc.sample(anyRootArb, 200).filter(overflows).length >= 30,
+      tablesScaledToFit: fc.sample(anyRootArb, 200).filter(hasTableWiderThanMaxWidth).length >= 50,
     }).toEqual({
       uncutProseDocuments: true,
       cutAtomicDocuments: true,
       overflowingDocuments: true,
+      tablesScaledToFit: true,
     })
   })
 
