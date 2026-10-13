@@ -55,7 +55,7 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage', 'tmp', '
 
 const TEST_FILE = /\.test\.(tsx?|mts|mjs|js)$/
 /** Shared test scaffolding, which runs once per caller. */
-const TEST_HELPER = /(\/test-utils\/[^/]+|\/_test-[^/]+)\.(tsx?|mts|mjs|js)$/
+const TEST_HELPER = /(\/test-utils\/.+|\/_test-[^/]+)\.(tsx?|mts|mjs|js)$/
 const MAKES = /\bmkdtemp(Sync)?\(/
 const REMOVES = /\b(rm|rmSync|rmdir|rmdirSync)\(/
 const REMOVAL_CALLS = new Set(['rm', 'rmSync', 'rmdir', 'rmdirSync', 'onTestFinished'])
@@ -83,14 +83,34 @@ function isExitHook(node: ts.Node): node is ts.CallExpression {
   )
 }
 
-/** The code with every exit hook blanked out, so a removal inside one is not read as a removal. */
+/**
+ * The code with every exit hook blanked out, so a removal inside one is not
+ * read as a removal — and with the declaration of a callback an exit hook is
+ * handed by name, which runs no sooner.
+ */
 function withoutExitHooks(code: string, fileName: string): string {
   const spans: Array<[number, number]> = []
-  const visit = (node: ts.Node): void => {
-    if (isExitHook(node)) spans.push([node.getStart(), node.getEnd()])
-    else node.forEachChild(visit)
+  const exitCallbacks = new Set<string>()
+  const source = parseSource(fileName, code)
+  const findHooks = (node: ts.Node): void => {
+    if (isExitHook(node)) {
+      spans.push([node.getStart(), node.getEnd()])
+      const callback = node.arguments[1]
+      if (callback !== undefined && ts.isIdentifier(callback)) exitCallbacks.add(callback.text)
+    } else node.forEachChild(findHooks)
   }
-  visit(parseSource(fileName, code))
+  findHooks(source)
+  const findCallbacks = (node: ts.Node): void => {
+    const named =
+      (ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node)) &&
+      node.name !== undefined &&
+      ts.isIdentifier(node.name) &&
+      exitCallbacks.has(node.name.text)
+    if (named) spans.push([node.getStart(), node.getEnd()])
+    else node.forEachChild(findCallbacks)
+  }
+  if (exitCallbacks.size > 0) findCallbacks(source)
+  spans.sort((a, b) => a[0] - b[0])
   let out = code
   for (const [start, end] of spans.reverse()) {
     out = out.slice(0, start) + ' '.repeat(end - start) + out.slice(end)
@@ -140,14 +160,22 @@ function boundName(call: ts.CallExpression): string | undefined {
   return ts.isVariableDeclaration(at) && ts.isIdentifier(at.name) ? at.name.text : undefined
 }
 
-/** Whether a test body removes something itself, or hands `name` to something that will. */
+/** Whether `node` reads the identifier `name` anywhere inside it. */
+function mentions(node: ts.Node, name: string): boolean {
+  if (ts.isIdentifier(node) && node.text === name) return true
+  return node.forEachChild((child) => mentions(child, name) || undefined) ?? false
+}
+
+/** Whether a test body removes `name` itself, or hands it to something that will. */
 function bodyAccountsFor(body: ts.Node, name: string): boolean {
   let found = false
   const visit = (node: ts.Node): void => {
     if (found) return
     if (ts.isCallExpression(node)) {
       const callee = calleeName(node.expression) ?? ''
-      if (REMOVAL_CALLS.has(callee)) found = true
+      if (REMOVAL_CALLS.has(callee) && node.arguments.some((arg) => mentions(arg, name))) {
+        found = true
+      }
       if (
         HAND_ON_CALLS.has(callee) &&
         node.arguments.some((arg) => ts.isIdentifier(arg) && arg.text === name)
@@ -299,6 +327,36 @@ describe('a test file that makes a temp directory removes one', () => {
       ].join('\n')
       expect(leaks('planted.test.ts', planted)).toBe(false)
       expect(leakingCallSites('planted.test.ts', planted)).toEqual([2])
+    })
+
+    it("does not count one directory's removal for another the same test makes", () => {
+      const planted = [
+        "it('makes two', async () => {",
+        "  const first = await mkdtemp('/tmp/x-')",
+        "  const second = await mkdtemp('/tmp/y-')",
+        '  onTestFinished(() => rm(first, { recursive: true, force: true }))',
+        '})',
+      ].join('\n')
+      expect(leakingCallSites('planted.test.ts', planted)).toEqual([3])
+    })
+
+    it('does not count a removal in a named callback registered only on process exit', () => {
+      const planted = [
+        "const dir = mkdtempSync('/tmp/x-')",
+        'const cleanup = () => rmSync(dir, { recursive: true, force: true })',
+        "process.once('exit', cleanup)",
+      ].join('\n')
+      expect(leaks('planted.test.ts', planted)).toBe(true)
+      expect(leaks('planted.test.ts', planted.replace("process.once('exit',", 'afterAll('))).toBe(
+        false,
+      )
+    })
+
+    it('reads a helper nested below test-utils', () => {
+      expect(TEST_HELPER.test('packages/x/src/test-utils/nested/dirs.ts')).toBe(true)
+      expect(TEST_HELPER.test('packages/x/src/test-utils/dirs.ts')).toBe(true)
+      expect(TEST_HELPER.test('packages/x/src/routes/_test-helpers.ts')).toBe(true)
+      expect(TEST_HELPER.test('packages/x/src/routes/dirs.ts')).toBe(false)
     })
 
     it('accepts a test-local directory handed to a tracker a hook removes', () => {

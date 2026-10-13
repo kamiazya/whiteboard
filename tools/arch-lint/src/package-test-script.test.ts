@@ -16,6 +16,9 @@ import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
+// A computed specifier, which the lazy-import scan recognises as the
+// by-path loader it is: `tools/checks` is dependency-free plain `.mjs`, and a
+// relative import would leave this workspace.
 const { readVitestProjects } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
 )) as {

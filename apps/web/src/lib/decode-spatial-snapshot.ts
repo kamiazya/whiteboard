@@ -22,10 +22,17 @@ export async function decodeSpatialSnapshot(bytes: Uint8Array): Promise<SpatialC
   loroBundle ??= Promise.all([
     import('loro-crdt'),
     import('@kamiazya/whiteboard-loro-adapter'),
-  ]).then(([loro, adapter]) => ({
-    LoroDoc: loro.LoroDoc,
-    readSpatialCanvas: adapter.readSpatialCanvas,
-  }))
+  ]).then(
+    ([loro, adapter]) => ({
+      LoroDoc: loro.LoroDoc,
+      readSpatialCanvas: adapter.readSpatialCanvas,
+    }),
+    (error: unknown) => {
+      // A chunk that failed to load once is asked for again by the next decode.
+      loroBundle = undefined
+      throw error
+    },
+  )
   const { LoroDoc, readSpatialCanvas } = await loroBundle
   const doc = new LoroDoc()
   doc.import(bytes)
