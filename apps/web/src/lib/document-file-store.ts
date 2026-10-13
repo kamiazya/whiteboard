@@ -45,6 +45,12 @@ export const documentFileRecordSchema = z.union([
 
 type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
 
+/** What `DocumentFileStore.read` found under a fileId. */
+type DocumentFileRead =
+  | { kind: 'blob'; blob: Blob }
+  | { kind: 'absent' }
+  | { kind: 'unreadable'; error: unknown }
+
 /**
  * Serialises a write of a reference against a sweep's delete, in every tab.
  *
@@ -114,11 +120,24 @@ export class DocumentFileStore {
   /**
    * The stored image for `fileId`, or null for an unknown id, a corrupt or
    * unknown-version record, a reference whose bytes are gone, AND a failure to
-   * open the database. Never throws — a damaged record or an unreachable
-   * store degrades to a missing image rather than taking the read path with
-   * it.
+   * open the database or read the bytes. Never throws — a damaged record or an
+   * unreachable store degrades to a missing image rather than taking the read
+   * path with it. A caller that must tell "gone" from "could not be read"
+   * uses `read`.
    */
   async get(fileId: string): Promise<Blob | null> {
+    const result = await this.read(fileId)
+    return result.kind === 'blob' ? result.blob : null
+  }
+
+  /**
+   * `get`, keeping apart what it folds into null: `absent` when nothing
+   * readable is stored under `fileId` (an unknown id, a corrupt or
+   * unknown-version record, a reference whose bytes are gone), `unreadable`
+   * when opening the store or reading the bytes threw — the bytes may well
+   * be there, and this device could not reach them. Never throws.
+   */
+  async read(fileId: string): Promise<DocumentFileRead> {
     let record: DocumentFileRecord | null
     try {
       record = await inTransaction(this.dbName, [DOCUMENT_FILES_STORE], 'readonly', async (tx) => {
@@ -127,10 +146,10 @@ export class DocumentFileStore {
         const parsed = documentFileRecordSchema.safeParse(raw)
         return parsed.success ? parsed.data : null
       })
-    } catch {
-      return null
+    } catch (error) {
+      return { kind: 'unreadable', error }
     }
-    if (record === null) return null
+    if (record === null) return { kind: 'absent' }
 
     if (record.v === 1) {
       // Read-through migration: the bytes are in hand, so convert rather than
@@ -142,15 +161,15 @@ export class DocumentFileStore {
         blob: record.blob,
         created: record.created,
       }).catch(() => {})
-      return record.blob
+      return { kind: 'blob', blob: record.blob }
     }
 
     try {
       const stored = await this.blobs.get({ ref: record.ref })
-      if (stored === null) return null
-      return new Blob([stored.bytes as BlobPart], { type: record.mimeType })
-    } catch {
-      return null
+      if (stored === null) return { kind: 'absent' }
+      return { kind: 'blob', blob: new Blob([stored.bytes as BlobPart], { type: record.mimeType }) }
+    } catch (error) {
+      return { kind: 'unreadable', error }
     }
   }
 

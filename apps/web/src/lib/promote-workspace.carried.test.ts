@@ -320,15 +320,16 @@ describe('promoteWorkspace failure reasons', () => {
     await expectLoggedFailure('workspace promote failed on this device')
   })
 
-  it('an image this device cannot read fails that image alone and is logged', async () => {
+  it('an image whose stored bytes this device cannot read fails that image alone and is logged', async () => {
     const { index, workspaceId } = await newWorkspace()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
     await storePicture('unreadable-here')
     expect(
       await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('unreadable-here')),
     ).toBe(true)
-    vi.spyOn(DocumentFileStore.prototype, 'get').mockRejectedValue(
-      new DOMException('the quota has been exceeded', 'QuotaExceededError'),
+    // The record names its bytes; the read of those bytes is what fails.
+    vi.spyOn(IdbBlobStore.prototype, 'get').mockRejectedValue(
+      new DOMException('the read was refused', 'NotReadableError'),
     )
     const daemon = daemonStub({ confirms: true })
 

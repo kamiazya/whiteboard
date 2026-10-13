@@ -187,9 +187,9 @@ type PromotedBlobs = Extract<PromoteWorkspaceResult, { kind: 'ok' }>['blobs']
 
 /**
  * One image's bytes, `null` when the store has none, `undefined` when this
- * device refused the read. The record has already merged by the time images
- * are read, so a refused read fails that image alone, the way a refused
- * upload does.
+ * device could not read them. The record has already merged by the time
+ * images are read, so an unreadable image fails that image alone, the way a
+ * refused upload does — and is not `missing`, which claims the bytes are gone.
  */
 async function readImage(
   fileStore: DocumentFileStore,
@@ -201,10 +201,15 @@ async function readImage(
   // speak the bare id. Read under the bare id, every real picture is
   // `missing`, and a missing picture holds the browser copy back from
   // demotion for good.
-  return fileStore.get(newImageRef(fileId)).catch((err: unknown) => {
-    log.warn('image could not be read for the move', { workspaceId, fileId, name: errorName(err) })
-    return undefined
+  const stored = await fileStore.read(newImageRef(fileId))
+  if (stored.kind === 'blob') return stored.blob
+  if (stored.kind === 'absent') return null
+  log.warn('image could not be read for the move', {
+    workspaceId,
+    fileId,
+    name: errorName(stored.error),
   })
+  return undefined
 }
 
 /** Sends each referenced image through the daemon's file route, one outcome per file. */
