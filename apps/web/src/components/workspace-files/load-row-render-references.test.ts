@@ -140,9 +140,11 @@ describe('a row draws what its document embeds', () => {
     const drawnWith = () => d.renderSpatial.mock.calls.filter((call) => call[4] !== undefined)
     expect(drawnWith()).toHaveLength(1)
 
+    d.source.loadMarkdown.mockImplementation(async () => ({ body: '# Edited' }))
     listed = [board, { ...embedded, contentDigest: 'dddddddddddddddd' }]
     await load(board)
     expect(drawnWith()).toHaveLength(2)
+    expect(entryOf(drawnWith().at(-1)?.[4], 'notes/a')).toMatchObject({ body: '# Edited' })
   })
 
   // A folder of boards that all embed one note reads it once per version,
@@ -156,6 +158,15 @@ describe('a row draws what its document embeds', () => {
 
     const reads = d.source.loadMarkdown.mock.calls.filter(([entry]) => entry.documentId === 'n1')
     expect(reads).toHaveLength(1)
+  })
+
+  // A note the renderer draws nothing of has no picture, whatever it names:
+  // it must not come back as a picture of nothing marked as missing embeds.
+  it('answers no picture for a note that names a document and draws nothing', async () => {
+    const d = { ...deps([note, embedded]), renderMarkdown: vi.fn(async () => null) }
+
+    expect(await createRowRenderLoader(d)(note)).toBeNull()
+    expect(d.renderMarkdown).toHaveBeenCalled()
   })
 
   // Total: an embedded document that will not read leaves the row with the
