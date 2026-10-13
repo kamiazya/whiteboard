@@ -3,11 +3,11 @@
  * user, and every credential it held becomes a binding on that account.
  * Mirrors 0030-workspace-members-only.test.ts's shape.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -46,6 +46,10 @@ async function seedProfiles(db: Db): Promise<void> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'accounts-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('turns each profile into one account and each of its credentials into a binding', async () => {

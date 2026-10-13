@@ -1,12 +1,31 @@
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { type ReferenceSeams, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { FragmentLoaders } from '../lib/fragment-requests.js'
+import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js'
+import { layoutMarkdownScene } from '../lib/render-preview.js'
 import { fakeMeasure } from '../test-utils/fake-measure.js'
 import { useMarkdownFragments } from './use-markdown-fragments.js'
 
 const LAYOUT = { measure: fakeMeasure, maxWidth: 480 }
+
+/**
+ * The hook as the preview uses it: the seams are handed to a layout of
+ * `body` on every render, and that layout is what asks for the sources.
+ */
+function useLaidOutFragments({
+  body,
+  loaders,
+  references,
+}: {
+  body: string
+  loaders: FragmentLoaders
+  references?: ReferenceSeams
+}): FragmentSeams {
+  const { seams } = useMarkdownFragments(loaders)
+  layoutMarkdownScene(body, { ...LAYOUT, ...(references ? { references } : {}), ...seams })
+  return seams
+}
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 const MATH_BODY = 'before\n\n$$\nx^2\n$$\n\nafter'
@@ -25,9 +44,7 @@ function loaders(overrides: Partial<FragmentLoaders> = {}): FragmentLoaders {
 describe('useMarkdownFragments', () => {
   it('resolves a math block through the async loader and serves it synchronously', async () => {
     const l = loaders()
-    const { result } = renderHook(() =>
-      useMarkdownFragments({ body: MATH_BODY, layout: LAYOUT, loaders: l }),
-    )
+    const { result } = renderHook(() => useLaidOutFragments({ body: MATH_BODY, loaders: l }))
     // Before the first render lands, the sync seam misses (layout keeps its
     // placeholder fallback).
     expect(result.current.renderMath('x^2')).toBeUndefined()
@@ -43,7 +60,7 @@ describe('useMarkdownFragments', () => {
   it('resolves a mermaid fence and never renders non-diagram fences', async () => {
     const l = loaders()
     const { result, rerender } = renderHook(
-      ({ body }) => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }),
+      ({ body }) => useLaidOutFragments({ body, loaders: l }),
       { initialProps: { body: FENCE_BODY } },
     )
     await waitFor(() =>
@@ -63,7 +80,7 @@ describe('useMarkdownFragments', () => {
   it('never offers a fence with no language to the diagram loader', async () => {
     const l = loaders()
     const body = '```\ngraph TD; A-->B\n```\n\n$$\nx^2\n$$\n'
-    const { result } = renderHook(() => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }))
+    const { result } = renderHook(() => useLaidOutFragments({ body, loaders: l }))
     // The math block is the witness that the body's asks were collected at all.
     await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
     expect(l.diagram).not.toHaveBeenCalled()
@@ -72,7 +89,7 @@ describe('useMarkdownFragments', () => {
   it('keys a rendered fence by its language, so a same-source fence in another language misses', async () => {
     const l = loaders()
     const body = '```mermaid\ngraph TD; A-->B\n```\n\n```plantuml\ngraph TD; A-->B\n```\n'
-    const { result } = renderHook(() => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }))
+    const { result } = renderHook(() => useLaidOutFragments({ body, loaders: l }))
     await waitFor(() =>
       expect(result.current.renderDiagram('mermaid', 'graph TD; A-->B')).toBeDefined(),
     )
@@ -84,7 +101,7 @@ describe('useMarkdownFragments', () => {
   it('never lets a math block and a same-source math fence share a cache row', async () => {
     const l = loaders()
     const body = '$$\nx^2\n$$\n\n```math\nx^2\n```\n'
-    const { result } = renderHook(() => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }))
+    const { result } = renderHook(() => useLaidOutFragments({ body, loaders: l }))
     await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
     await act(async () => {})
     // The fence went to the diagram loader (which declined the language);
@@ -100,7 +117,7 @@ describe('useMarkdownFragments', () => {
     })
     const l = loaders({ math: math as unknown as FragmentLoaders['math'] })
     const { result, rerender } = renderHook(
-      ({ body }) => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }),
+      ({ body }) => useLaidOutFragments({ body, loaders: l }),
       { initialProps: { body: MATH_BODY } },
     )
     await waitFor(() => expect(math).toHaveBeenCalledTimes(1))
@@ -118,19 +135,16 @@ describe('useMarkdownFragments', () => {
     // double-mounts, which is what made this class invisible to tests
     // without this wrapper).
     const l = loaders()
-    const { result } = renderHook(
-      () => useMarkdownFragments({ body: MATH_BODY, layout: LAYOUT, loaders: l }),
-      {
-        wrapper: StrictMode,
-      },
-    )
+    const { result } = renderHook(() => useLaidOutFragments({ body: MATH_BODY, loaders: l }), {
+      wrapper: StrictMode,
+    })
     await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
   })
 
   it('renders math in a blockquote and a diagram fence in a list item', async () => {
     const l = loaders()
     const body = '> $$\n> x^2\n> $$\n\n- item\n\n  ```mermaid\n  graph TD; A-->B\n  ```\n'
-    const { result } = renderHook(() => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }))
+    const { result } = renderHook(() => useLaidOutFragments({ body, loaders: l }))
     await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
     await waitFor(() =>
       expect(result.current.renderDiagram('mermaid', 'graph TD; A-->B')).toBeDefined(),
@@ -147,11 +161,7 @@ describe('useMarkdownFragments', () => {
       ]),
     )
     const { result } = renderHook(() =>
-      useMarkdownFragments({
-        body: `before\n\n![[${TARGET_ID}]]\n`,
-        layout: { ...LAYOUT, references },
-        loaders: l,
-      }),
+      useLaidOutFragments({ body: `before\n\n![[${TARGET_ID}]]\n`, references, loaders: l }),
     )
     await waitFor(() => expect(result.current.renderMath('y^2')).toBeDefined())
     await waitFor(() =>
@@ -163,9 +173,31 @@ describe('useMarkdownFragments', () => {
     expect(l.diagram).toHaveBeenCalledWith('mermaid', 'graph TD; C-->D')
   })
 
+  it("asks for an embedded note's math once its reference loads after the first layout", async () => {
+    // A surface's reference bundle is rebuilt as each load lands, so the
+    // first layout always sees the embed unresolved; the later layout's asks
+    // must still reach the loader after earlier asks are already recorded.
+    const l = loaders()
+    const body = `$$\nx^2\n$$\n\n![[${TARGET_ID}]]\n`
+    const { result, rerender } = renderHook(
+      ({ references }: { references?: ReferenceSeams }) =>
+        useLaidOutFragments({ body, loaders: l, ...(references ? { references } : {}) }),
+      { initialProps: {} as { references?: ReferenceSeams } },
+    )
+    await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
+    expect(l.math).not.toHaveBeenCalledWith('y^2')
+
+    rerender({
+      references: referenceSeams(new Map([[TARGET_ID, { name: 'T', body: '$$\ny^2\n$$\n' }]])),
+    })
+    await waitFor(() => expect(result.current.renderMath('y^2')).toBeDefined())
+    expect(l.math).toHaveBeenCalledWith('y^2')
+    expect(l.math).toHaveBeenCalledTimes(2)
+  })
+
   it('offers nothing for an unparseable mid-edit body', async () => {
     const l = loaders()
-    renderHook(() => useMarkdownFragments({ body: '$$\nx^2', layout: LAYOUT, loaders: l }))
+    renderHook(() => useLaidOutFragments({ body: '$$\nx^2', loaders: l }))
     await act(async () => {})
     // Whatever a broken body parses to, only complete math blocks reach the
     // loader — never a crash.

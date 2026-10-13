@@ -7,7 +7,7 @@
 // The initial snapshot is NOT carried here: GET /api/w/:ws/document/:path/snapshot
 // already serves it as binary, and routing the largest payload through SSE
 // would only add base64 inflation. This stream carries incremental updates.
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { syncSubscribeResponseSchema } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
@@ -28,7 +28,10 @@ import { resolveTestServerDeps, testDataLayout } from './_test-helpers.js'
 // another file running in parallel waits on that file's lock until timeout.
 const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-transport-'))
 setDataDirForTests(dataDir)
-afterAll(() => resetDataDirForTests())
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 
 // The deps the root hands createApp: the real wiring over this file's data
 // dir, since the workspaces these cases create and then subscribe to by

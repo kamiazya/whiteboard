@@ -2,11 +2,11 @@
  * Pins the no-FK house style (0016/0017) and that the three tables do not
  * exist before this migration runs.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -39,6 +39,10 @@ async function foreignKeysOf(db: Db, table: string): Promise<unknown[]> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'member-profiles-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('creates the three membership tables, absent before and empty after it with no foreign keys', async () => {

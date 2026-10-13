@@ -249,6 +249,7 @@ function ReplicaReadScreen({
   return (
     <ReplicaReadPage
       workspaceId={replica.workspaceId}
+      {...(replica.segment === undefined ? {} : { segment: replica.segment })}
       {...(replica.displayName === undefined ? {} : { displayName: replica.displayName })}
       syncedAt={replica.syncedAt}
       daemonBaseUrl={replica.daemonBaseUrl}

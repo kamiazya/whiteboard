@@ -3,6 +3,7 @@ import {
   type TransferStage,
   useTransferHandshake,
 } from '../hooks/use-transfer-handshake.js'
+import { type WorkspaceIdentity, workspaceLabel } from '../lib/workspace-handle.js'
 
 /**
  * The keeper-served /receive-transfer surface: where a workspace record
@@ -124,7 +125,7 @@ function OfferPanel({
   onAccept,
 }: {
   documentCount: number
-  targets: { workspaceId: string; displayName?: string }[]
+  targets: WorkspaceIdentity[]
   targetId: string
   onTargetChange: (id: string) => void
   canAccept: boolean
@@ -154,7 +155,7 @@ function OfferPanel({
           >
             {targets.map((target) => (
               <option key={target.workspaceId} value={target.workspaceId}>
-                {target.displayName ?? target.workspaceId}
+                {workspaceLabel(target)}
               </option>
             ))}
           </select>

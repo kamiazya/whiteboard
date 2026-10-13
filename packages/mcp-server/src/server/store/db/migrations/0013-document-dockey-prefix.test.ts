@@ -1,8 +1,8 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Kysely } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -77,6 +77,10 @@ async function docKeysIn(db: Handle['db'], table: string): Promise<string[]> {
 describe('0013-document-dockey-prefix', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'wb-0013-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('rewrites the canvas: docKey prefix to document: in every docKey table', async () => {

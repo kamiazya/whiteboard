@@ -10,7 +10,7 @@
  * migrator at a different provider tests a database production never has.
  */
 import { readdirSync, readFileSync } from 'node:fs'
-import { access, mkdtemp } from 'node:fs/promises'
+import { access, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { sql } from 'kysely'
@@ -85,6 +85,7 @@ describe('openMigrationHarness', () => {
       await expect(access(join(dataDir, 'whiteboard.db'))).resolves.toBeUndefined()
     } finally {
       await onDisk.db.destroy()
+      await rm(dataDir, { recursive: true, force: true })
     }
   })
 })

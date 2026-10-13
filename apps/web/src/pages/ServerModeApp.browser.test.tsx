@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { resetShellStatusForTests, setShellConnection } from '../lib/shell-status-store.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { ServerModeApp } from './ServerModeApp.js'
 
 // The editor pages are the daemon's, exercised on their own; here only what
@@ -41,7 +42,10 @@ interface Keeper {
 // A same-origin keeper answering the handful of routes the app reads.
 function keeperFetch(keeper: Keeper) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
+    // The workspace seam addresses this origin absolutely; the rest by path.
+    const asked = new URL(String(input), location.origin)
+    const url =
+      asked.origin === location.origin ? `${asked.pathname}${asked.search}` : String(input)
     if (url === '/auth/providers') {
       return keeper.providers === 'none'
         ? Response.json({ error: 'not_found' }, { status: 404 })
@@ -68,24 +72,16 @@ function keeperFetch(keeper: Keeper) {
   })
 }
 
-// The shell's workspace list asks this origin through the global fetch, not
-// the app's fetchFn, and its answer can land after the test that mounted it
-// has ended — so for the whole file the global answers as the current keeper,
-// through a double of its own so no test's call count sees it.
-let currentKeeper: Keeper = {}
+// Every request the app makes, the shell's workspace list included, goes out
+// on the fetch it was handed; one that reached for the global fails here.
 beforeAll(() => {
-  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = new URL(String(input), location.origin)
-    const path = url.origin === location.origin ? `${url.pathname}${url.search}` : String(input)
-    return keeperFetch(currentKeeper)(path, init)
-  })
+  vi.stubGlobal('fetch', () => Promise.reject(new TypeError('global fetch used')))
 })
 afterAll(() => {
   vi.unstubAllGlobals()
 })
 
 function renderAt(path: string, keeper: Keeper) {
-  currentKeeper = keeper
   const fetchFn = keeperFetch(keeper)
   render(
     <MemoryRouter initialEntries={[path]}>
@@ -150,9 +146,12 @@ describe('server mode workspaces', () => {
   })
 
   it('says the list failed, rather than sending a signed-in person to sign in', async () => {
+    const logged = expectLoggedFailures()
     renderAt('/', { signedIn: 'Ada', workspaces: 'failing', providers: [corp] })
     expect((await screen.findByRole('alert')).textContent).toMatch(/could not load/i)
     expect(screen.getByText(/signed in as ada/i)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(logged.some((line) => line.includes('could not list the workspaces'))).toBe(true)
   })
 
   it('stays put and says so when signing out fails', async () => {

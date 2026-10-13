@@ -245,3 +245,32 @@ describe('CanvasViewer draws in the theme its host says it is in', () => {
     expect(darkRect?.getAttribute('stroke')).not.toBe(SPATIAL_LIGHT_PALETTE.node.text.stroke)
   })
 })
+
+describe("CanvasViewer typesets through the host's fragment seams", () => {
+  it("draws a text node's math and diagram fence from the seams", () => {
+    const typeset: SpatialCanvas = {
+      nodes: [
+        textNode({
+          id: 'm',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 300,
+          text: '$$\nx^2\n$$\n\n```mermaid\ngraph TD; A-->B\n```\n',
+        }),
+      ],
+      edges: [],
+    }
+    const { getByTestId } = render(
+      <CanvasViewer
+        canvas={typeset}
+        measure={fakeMeasure}
+        renderMath={(value) => ({ svg: `<g data-math="${value}"/>`, height: 40 })}
+        renderDiagram={(lang) => ({ svg: `<g data-diagram="${lang}"/>`, width: 100, height: 80 })}
+      />,
+    )
+    const html = getByTestId('canvas-viewer').innerHTML
+    expect(html).toContain('data-math="x^2"')
+    expect(html).toContain('data-diagram="mermaid"')
+  })
+})

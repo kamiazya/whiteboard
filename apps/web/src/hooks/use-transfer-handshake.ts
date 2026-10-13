@@ -19,6 +19,7 @@ import {
   readOfferedTransfer,
   type TransferSession,
 } from '../lib/receive-transfer.js'
+import type { WorkspaceIdentity } from '../lib/workspace-handle.js'
 
 export type TransferStage =
   /** No usable fragment: this window was not opened by a transfer. */
@@ -38,7 +39,7 @@ export type TransferOpener = {
 export interface TransferHandshake {
   session: TransferSession | null
   stage: TransferStage
-  targets: { workspaceId: string; displayName?: string }[]
+  targets: WorkspaceIdentity[]
   /** This keeper would not list its workspaces — for a server-mode keeper,
    *  the person is not signed in here. */
   targetsUnavailable: boolean
@@ -143,12 +144,12 @@ function useKeeperWorkspaceTargets({
   enabled: boolean
   keeperFetch: typeof globalThis.fetch
 }): {
-  targets: { workspaceId: string; displayName?: string }[]
+  targets: WorkspaceIdentity[]
   targetsUnavailable: boolean
   targetId: string
   setTargetId: (id: string) => void
 } {
-  const [targets, setTargets] = useState<{ workspaceId: string; displayName?: string }[]>([])
+  const [targets, setTargets] = useState<WorkspaceIdentity[]>([])
   const [targetsUnavailable, setTargetsUnavailable] = useState(false)
   const [targetId, setTargetId] = useState('')
   useEffect(() => {

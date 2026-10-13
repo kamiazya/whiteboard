@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { FragmentLoaders } from '../../lib/fragment-requests.js'
-import { useCanvasFragments } from './use-canvas-fragments.js'
+import type { FragmentLoaders } from '../lib/fragment-requests.js'
+import { useMarkdownFragments } from './use-markdown-fragments.js'
 
 const FRAGMENT = { svg: '<g data-probe="typeset"/>', width: 40, height: 10 }
 
@@ -13,10 +13,10 @@ function loaders(overrides: Partial<FragmentLoaders> = {}): FragmentLoaders {
   }
 }
 
-describe('useCanvasFragments', () => {
+describe('useMarkdownFragments, fed the asks a layout reports', () => {
   it('renders what a layout asked the seams for, then answers it synchronously', async () => {
     const l = loaders()
-    const { result } = renderHook(() => useCanvasFragments(l))
+    const { result } = renderHook(() => useMarkdownFragments(l))
     // A layout's first ask misses: the scene keeps its fallback for now.
     act(() => {
       expect(result.current.seams.renderMath('x^2')).toBeUndefined()
@@ -29,7 +29,7 @@ describe('useCanvasFragments', () => {
 
   it("renders what the worker's layout reported asking for, once per source", async () => {
     const l = loaders()
-    const { result } = renderHook(() => useCanvasFragments(l))
+    const { result } = renderHook(() => useMarkdownFragments(l))
     const ask = { kind: 'diagram', lang: 'mermaid', value: 'graph TD; A-->B' } as const
     act(() => {
       result.current.onFragmentsAsked([ask])
@@ -48,7 +48,7 @@ describe('useCanvasFragments', () => {
       throw new Error('bad tex')
     })
     const { result } = renderHook(() =>
-      useCanvasFragments(loaders({ math: math as unknown as FragmentLoaders['math'] })),
+      useMarkdownFragments(loaders({ math: math as unknown as FragmentLoaders['math'] })),
     )
     act(() => {
       result.current.seams.renderMath('\\bad')

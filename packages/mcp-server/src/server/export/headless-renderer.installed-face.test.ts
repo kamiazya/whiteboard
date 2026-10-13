@@ -8,13 +8,13 @@
 // font is installed before the first export here, which is the state a daemon
 // is in when a user has installed one.
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { renderSpatialCanvasToSvg } from './headless-renderer.js'
@@ -34,11 +34,21 @@ const lines = (svg: string): string[] =>
 
 describe('a theme font the user installed', () => {
   let fontsDir: string
+  const madeDirs: string[] = []
+  const tempDataDir = (prefix: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), prefix))
+    madeDirs.push(dir)
+    return dir
+  }
 
   beforeAll(async () => {
-    fontsDir = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-export-face-')))
+    fontsDir = installedFontsDir(tempDataDir('wb-export-face-'))
     await mkdir(fontsDir, { recursive: true })
     await writeFile(join(fontsDir, 'yomogi.ttf'), syntheticFont(TEXT, 'Yomogi'))
+  })
+
+  afterAll(() => {
+    for (const dir of madeDirs) rmSync(dir, { recursive: true, force: true })
   })
 
   it('is declared and measured by the same face, so the runs wrap where they are painted', async () => {
@@ -50,7 +60,7 @@ describe('a theme font the user installed', () => {
   })
 
   it('declares nothing for a keeper whose fonts directory holds no such face', async () => {
-    const elsewhere = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-export-no-face-')))
+    const elsewhere = installedFontsDir(tempDataDir('wb-export-no-face-'))
 
     const sketch = await renderSpatialCanvasToSvg(sketched, elsewhere, { style: 'document' })
 

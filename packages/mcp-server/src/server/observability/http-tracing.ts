@@ -1,4 +1,4 @@
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api'
 import {
   ATTR_HTTP_REQUEST_METHOD,
@@ -89,7 +89,7 @@ export function tracingMiddleware(): MiddlewareHandler {
       applyRoute()
       span.setStatus({
         code: SpanStatusCode.ERROR,
-        message: messageOf(err, String(err)),
+        message: describeThrown(err),
       })
       span.recordException(err instanceof Error ? err : new Error(String(err)))
       throw err

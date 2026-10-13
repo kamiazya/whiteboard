@@ -3,11 +3,11 @@
  * exist before this migration runs. Mirrors 0028-member-profiles.test.ts's
  * shape.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -47,6 +47,10 @@ async function foreignKeysOf(db: Db, table: string): Promise<unknown[]> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'workspace-replica-keys-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('creates workspaceReplicaKeys and workspaces.replicaTier, absent before and empty/present at head with no foreign keys', async () => {

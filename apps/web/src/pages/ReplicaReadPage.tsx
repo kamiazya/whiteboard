@@ -69,10 +69,13 @@ import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
 import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
+import { workspaceLabel } from '../lib/workspace-handle.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
   workspaceId: string
+  /** What names it in the banner, through `workspaceLabel`'s precedence. */
+  segment?: string
   displayName?: string
   /** When the replica was last synced, from the registry entry. Absent when
    *  the page is mounted directly for a live-daemon refusal rather than for
@@ -345,8 +348,7 @@ function useReplicaSeams(
 
 interface ReplicaReaderProps {
   entries: WorkspaceDocumentEntry[]
-  displayName: ReplicaReadPageProps['displayName']
-  workspaceId: string
+  label: string
   syncedAt: ReplicaReadPageProps['syncedAt']
   selected: WorkspaceDocumentEntry | undefined
   selectedPath: string | null
@@ -445,8 +447,7 @@ function contentPaneClass(content: ReplicaContent | null): string {
 /** The replica as a document surface: the banner, the tree, and the editor. */
 function ReplicaReader({
   entries,
-  displayName,
-  workspaceId,
+  label,
   syncedAt,
   selected,
   selectedPath,
@@ -467,7 +468,7 @@ function ReplicaReader({
   const { resolvedTheme } = useThemeMode()
   return (
     <div className="flex h-full flex-col" data-testid="replica-state-readable">
-      <ReplicaOfflineBanner name={displayName ?? workspaceId} syncedAt={syncedAt} />
+      <ReplicaOfflineBanner name={label} syncedAt={syncedAt} />
       <PublishReplicaSaveHealth failed={saveFailed} onRetry={onRetrySave} />
       <div className="flex min-h-0 flex-1">
         <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
@@ -563,6 +564,7 @@ function replicaLiveStatus({
 
 export function ReplicaReadPage({
   workspaceId,
+  segment,
   displayName,
   syncedAt,
   daemonBaseUrl,
@@ -655,8 +657,7 @@ export function ReplicaReadPage({
       {pageState === 'readable' && state.kind === 'ready' && (
         <ReplicaReader
           entries={state.entries}
-          displayName={displayName}
-          workspaceId={workspaceId}
+          label={workspaceLabel({ workspaceId, segment, displayName })}
           syncedAt={syncedAt}
           selected={selected}
           selectedPath={selectedPath}

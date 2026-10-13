@@ -28,4 +28,22 @@ describe('mcp-e2e-smoke.mjs', () => {
     expect(output).toContain('Cannot find module')
     expect(output).not.toContain('timed out')
   }, 30_000)
+
+  // `pnpm smoke:packaged` points the smoke at dist/. On an unbuilt checkout
+  // that has to answer with the build step CI runs, not a module-resolution
+  // stack trace that names no remedy.
+  it('answers a missing dist entry with the build command', () => {
+    const scriptPath = resolve(import.meta.dirname, 'mcp-e2e-smoke.mjs')
+
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, '--entry=dist/server/mcp/no-such-entry.js'],
+      { encoding: 'utf8', timeout: 25_000 },
+    )
+
+    expect(result.status).toBe(1)
+    const output = `${result.stdout}${result.stderr}`
+    expect(output).toContain('Run `pnpm build`')
+    expect(output).not.toContain('Cannot find module')
+  }, 30_000)
 })

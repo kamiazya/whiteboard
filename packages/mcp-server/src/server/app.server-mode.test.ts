@@ -172,6 +172,20 @@ describe('app — server-mode composition', () => {
       const wellKnownRes = await app.request('/.well-known/unknown')
       expect(wellKnownRes.status).toBe(404)
     })
+
+    // With no browser sign-in configured the `/auth` routes are not mounted,
+    // and the web app reads a 404 there as "no provider" and "signed out". The
+    // shell at 200 would read as a broken contract and a retry that never lands.
+    it.each([
+      '/auth/providers',
+      '/auth/session',
+    ])('%s answers a JSON 404, not the shell, when no sign-in is configured', async (path) => {
+      const app = createApp(makeServerModeOptions([]))
+      const res = await app.request(path)
+      expect(res.status).toBe(404)
+      expect(res.headers.get('content-type')).toContain('application/json')
+      expect(await res.json()).toMatchObject({ error: 'not_found' })
+    })
   })
 
   // Req 2: createApp refuses an invalid server-mode config

@@ -485,12 +485,9 @@ export function MarkdownEditor({
     splitRatio,
     hasContent: debouncedValue.trim() !== '',
   })
-  // The DEBOUNCED value: per keystroke would race the engines for sources nobody sees.
-  const { renderMath, renderDiagram } = useMarkdownFragments({
-    body: debouncedValue,
-    layout: { measure: resolvedMeasure, maxWidth: previewWidth, theme, references, tagLibrary },
-    ...(fragmentLoaders !== undefined ? { loaders: fragmentLoaders } : {}),
-  })
+  // The preview's own layout asks through these, so Write mode — no preview —
+  // asks for nothing.
+  const { renderMath, renderDiagram } = useMarkdownFragments(fragmentLoaders).seams
 
   const divider = useSplitDrag(rootRef, setSplitRatio)
 

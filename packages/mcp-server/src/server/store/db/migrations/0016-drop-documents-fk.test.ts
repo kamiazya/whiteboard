@@ -1,8 +1,8 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Kysely } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -105,6 +105,10 @@ async function seedBranch(db: Handle['db']): Promise<void> {
 describe('0016-drop-documents-fk', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'migration-0016-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   // The documents table stops being the address book (dual-plane collapse

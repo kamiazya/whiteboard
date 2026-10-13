@@ -3,7 +3,7 @@
  * The shell keeps working when the switcher's list will not load — and says
  * so, because an empty switcher otherwise reads as a keeper holding nothing.
  */
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { useShellWorkspaceRows } from './use-shell-workspace-rows.js'
 
@@ -32,5 +32,26 @@ describe('useShellWorkspaceRows', () => {
     )
     expect(result.current.rows).toEqual([])
     expect(result.current.activeName).toBe('design')
+    await vi.waitFor(() => expect(result.current.listFailed).toBe(true))
+  })
+
+  it('lists again on reload, and clears the failure once the list lands', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    onTestFinished(() => {
+      vi.restoreAllMocks()
+    })
+    let failing = true
+    const design = { workspaceId: 'ws-1', displayName: 'Design', segment: 'design' }
+    const list = () =>
+      failing ? Promise.reject(new Error('keeper busy')) : Promise.resolve([design])
+    const workspaces = { source: { list }, onSwitch: () => {} }
+    const { result } = renderHook(() => useShellWorkspaceRows(workspaces, '/w/design'))
+    await vi.waitFor(() => expect(result.current.listFailed).toBe(true))
+
+    failing = false
+    act(() => result.current.reload())
+
+    await vi.waitFor(() => expect(result.current.activeName).toBe('Design'))
+    expect(result.current.listFailed).toBe(false)
   })
 })

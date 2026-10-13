@@ -1,8 +1,8 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -112,6 +112,10 @@ async function seedBranchRow(db: Handle['db'], documentId: string, name: string)
 describe('0015-versions-branches-workspace-id', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'migration-0015-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('backfills workspaceId on versions and branches from the documents join, and drops workspaceScoped', async () => {

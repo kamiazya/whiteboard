@@ -1,4 +1,4 @@
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
@@ -132,7 +132,7 @@ export function registerToolWithAnnotations<
           span.recordException(err instanceof Error ? err : new Error(String(err)))
           span.setStatus({
             code: 2, // SpanStatusCode.ERROR — kept inline for the same reason
-            message: messageOf(err, String(err)),
+            message: describeThrown(err),
           })
           throw err
         } finally {
@@ -152,7 +152,7 @@ export function registerToolWithAnnotations<
     try {
       return await tracedHandler(args, extra)
     } catch (err) {
-      const message = messageOf(err, String(err))
+      const message = describeThrown(err)
       return {
         isError: true,
         content: [{ type: 'text' as const, text: message }],

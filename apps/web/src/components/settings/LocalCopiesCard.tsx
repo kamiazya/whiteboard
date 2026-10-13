@@ -29,6 +29,7 @@ import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
+import { workspaceLabel } from '../../lib/workspace-handle.js'
 import { DaemonAddress } from '../connection/DaemonAddress.js'
 import { Button } from '../ui/button.js'
 import { PinnedConfirmDialog } from '../ui/pinned-confirm-dialog.js'
@@ -40,7 +41,7 @@ const log = getAppLogger('local-copies')
 /** What a row needs, whichever set it came from. */
 interface CopyRow {
   workspaceId: string
-  /** What to call it: the display name a keeper recorded, else its handle. */
+  /** What to call it — `workspaceLabel` of whatever record the row came from. */
   label: string
   keeper: 'browser' | 'daemon'
   /** For a browser-kept row: how many documents it holds, once counted. */
@@ -53,7 +54,7 @@ interface CopyRow {
 function replicaRow(entry: ReplicaMatch): CopyRow {
   return {
     workspaceId: entry.workspaceId,
-    label: entry.displayName ?? entry.segment ?? entry.workspaceId,
+    label: workspaceLabel(entry),
     keeper: 'daemon',
     daemonBaseUrl: entry.daemonBaseUrl,
     syncedAt: entry.syncedAt,
@@ -175,7 +176,7 @@ function useCopyRows(settingsStore: UserSettingsStore) {
       const { listBrowserWorkspaces } = await import('../../lib/browser-workspaces.js')
       kept = (await listBrowserWorkspaces()).map((entry) => ({
         workspaceId: entry.workspaceId,
-        label: entry.displayName ?? entry.segment ?? entry.workspaceId,
+        label: workspaceLabel(entry),
         keeper: 'browser' as const,
       }))
     } catch (error) {

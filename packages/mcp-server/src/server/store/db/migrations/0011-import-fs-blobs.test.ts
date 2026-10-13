@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import type { Kysely } from 'kysely'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../../../shared/test-utils/can-deny-file-read.js'
 import { type AnyTables, migratorFor, openMigrationHarness } from '../test-helpers.js'
 
@@ -120,6 +120,10 @@ async function reassembledRow(db: Kysely<AnyTables>, docKey: string): Promise<Ui
 describe('0011-import-fs-blobs', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'whiteboard-0011-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('imports a blob with no existing row, byte-identical on reassembly, with a matching frontier', async () => {

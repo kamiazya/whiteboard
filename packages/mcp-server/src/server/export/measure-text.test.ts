@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -247,6 +247,12 @@ describe('a descriptor naming an installed family', () => {
   const INSTALLED_FAMILY = 'WhiteboardTestFont'
   const TEXT = 'xxxx xxxx'
   let fontsDir: string
+  const madeDirs: string[] = []
+  const tempDataDir = (prefix: string): string => {
+    const dir = mkdtempSync(join(tmpdir(), prefix))
+    madeDirs.push(dir)
+    return dir
+  }
 
   const descriptor = (family: string): FontDescriptor => ({
     family,
@@ -260,13 +266,14 @@ describe('a descriptor naming an installed family', () => {
     // The parsed faces are cached per fonts directory; a fresh one per test
     // keeps the cache from carrying a family into the next.
     _resetExportMeasureTextCacheForTests()
-    fontsDir = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-measure-family-')))
+    fontsDir = installedFontsDir(tempDataDir('wb-measure-family-'))
     await mkdir(fontsDir, { recursive: true })
     await writeFile(join(fontsDir, 'covered.ttf'), syntheticFont(TEXT))
   })
 
   afterEach(() => {
     _resetExportMeasureTextCacheForTests()
+    for (const dir of madeDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
   })
 
   it('is measured with that face, not with the vendored one', async () => {
@@ -288,7 +295,7 @@ describe('a descriptor naming an installed family', () => {
   })
 
   it('keeps one measurer per fonts directory, so another keeper does not inherit the family', async () => {
-    const empty = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-measure-empty-')))
+    const empty = installedFontsDir(tempDataDir('wb-measure-empty-'))
 
     const withFont = await createExportTextMeasurer({ fontsDir })
     const without = await createExportTextMeasurer({ fontsDir: empty })

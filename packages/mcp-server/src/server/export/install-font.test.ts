@@ -7,7 +7,7 @@
 // catalogue ID and never a URL, and the request is built from a pinned
 // template. Most of what is asserted below is that property holding.
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
@@ -26,13 +26,16 @@ import { FONT_EXTENSIONS, installedFontFiles } from './installed-fonts.js'
 
 const COVERED = 'こ'
 
+let dataDir: string
 let fontsDir: string
 
 beforeEach(() => {
-  fontsDir = installedFontsDir(mkdtempSync(join(tmpdir(), 'wb-font-install-')))
+  dataDir = mkdtempSync(join(tmpdir(), 'wb-font-install-'))
+  fontsDir = installedFontsDir(dataDir)
 })
 afterEach(() => {
   vi.restoreAllMocks()
+  rmSync(dataDir, { recursive: true, force: true })
 })
 
 /** A file that parses as a font and declares zero glyphs: `maxp.numGlyphs` is the uint16 at byte 4 of that table. */

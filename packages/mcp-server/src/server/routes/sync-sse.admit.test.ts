@@ -4,7 +4,7 @@
  * only place the check can live; these cases pin what the gate does with it
  * rather than who a real keeper admits.
  */
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
@@ -16,8 +16,12 @@ import { createSyncSseRouter } from './sync-sse.js'
 
 // Its own data dir: resolving a workspace handle opens the store, and one
 // shared with a file running in parallel waits on that file's lock.
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-admit-')))
-afterAll(() => resetDataDirForTests())
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-admit-'))
+setDataDirForTests(dataDir)
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 afterEach(() => resetSyncStreamsForTests())
 
 const SETTLE = 10_000

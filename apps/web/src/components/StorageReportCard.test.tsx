@@ -652,6 +652,50 @@ describe('StorageReportCard', () => {
     expect(storageReads.count).toBe(1)
   })
 
+  it('says an optimize that freed nothing found the documents already optimal', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') return Promise.resolve(jsonResponse(PAYLOAD))
+      if (url === '/api/workspaces') {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }] }))
+      }
+      if (init?.method === 'POST' && url.endsWith('/documents/optimize-all')) {
+        return Promise.resolve(
+          jsonResponse({
+            compacted: false,
+            beforeBytes: 2048,
+            afterBytes: 2048,
+            reason: 'no-gain',
+          }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => expect(container.textContent).toContain('Total 2.0 KiB'))
+
+    const dbActions = container.querySelector('[data-storage-actions="db"]')!
+    fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
+
+    await waitFor(() => expect(dbActions.textContent).toContain('Already optimal'))
+    expect(dbActions.textContent).not.toContain('Saved')
+  })
+
+  it('says how long ago the daemon last auto-optimised', async () => {
+    const twoHoursAgo = Date.now() - 2 * 3_600_000
+    vi.mocked(globalThis.fetch).mockImplementation(() =>
+      Promise.resolve(jsonResponse({ ...PAYLOAD, lastAutoCompactedAt: twoHoursAgo })),
+    )
+    const { container } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    expect(container.textContent ?? '').toContain('Auto-optimised 2 hours ago')
+  })
+
   it('humanises the "Updated …" line and ticks across humanise boundaries without per-second flicker', async () => {
     const { container } = render(<StorageReportCard />)
     // Settle the initial fetch + min-refresh delay. The fresh fetch lands

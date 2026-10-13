@@ -107,8 +107,10 @@ What the library changes:
   shows in chat — so the legend lists the key because the library said so
   rather than because someone coloured every box by hand. A board drawn
   INSIDE another document is coloured the same way: a file node's
-  miniature, a `![[board]]` embed in a note or a text node, and the cached
-  copy you read while the daemon is unreachable. Its legend stays with the
+  miniature, a `![[board]]` embed in a note or a text node — on the
+  canvas, in the note's preview, and in the document browser's cards,
+  preview pane and Peek — and the cached copy you read while the daemon is
+  unreachable. Its legend stays with the
   board itself; the miniature carries the colours only. A colour set on the
   box itself always wins, and a box carrying two declared colours under two keys gets
   neither. The board reads the library when it opens, and the document

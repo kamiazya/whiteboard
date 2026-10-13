@@ -6,12 +6,12 @@
 // TTF in has installed a font, and a mechanism that only recognises its own
 // downloads would refuse the simplest way to answer "my exports are tofu".
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { renderSpatialCanvasToPng } from './headless-renderer.js'
@@ -24,6 +24,9 @@ let fontsDir: string
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), 'wb-fonts-'))
   fontsDir = installedFontsDir(dataDir)
+})
+afterEach(() => {
+  rmSync(dataDir, { recursive: true, force: true })
 })
 
 describe('installedFontFiles', () => {

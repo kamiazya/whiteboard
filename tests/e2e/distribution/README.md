@@ -28,18 +28,29 @@ The chain has fifteen steps after the initial build prerequisite:
 
 ### Vitest-backed (`mcp-distribution` project, opt-in)
 
-These smokes run as Vitest tests under `vitest.distribution.config.ts`. They are **not**
-included in `pnpm test`; use `pnpm test:distribution` (includes build) or individual
-`pnpm smoke:*` commands:
+These run as Vitest tests under `vitest.distribution.config.ts`. They are **not**
+included in `pnpm test`; `pnpm test:distribution` runs them, building first:
 
-| Command | Vitest test file |
+| Vitest test file | What it drives |
 |---|---|
-| `pnpm smoke:packaged` | `src/server/mcp/packaged.distribution.test.ts` |
-| `pnpm smoke:tarball` | `src/server/mcp/tarball.distribution.test.ts` |
-| `pnpm smoke:codex-config` | `src/server/mcp/codex-config.distribution.test.ts` |
+| `src/server/mcp/packaged.distribution.test.ts` | the checkpoint flow against `dist/server/mcp/stdio.js` |
+| `src/server/mcp/tarball.distribution.test.ts` | the packed `.tgz` |
+| `src/server/mcp/codex-config.distribution.test.ts` | the Codex plugin manifest and MCP config |
 
 The shared TypeScript implementations live alongside the tests as `*.distribution-impl.ts`
 files and are excluded from the server build (`tsconfig.server.json`).
+
+The `pnpm smoke:packaged`, `pnpm smoke:tarball` and `pnpm smoke:codex-config` commands are
+**not** these tests: each is a plain Node script under `packages/mcp-server/scripts/smoke/`.
+`smoke:packaged` in particular runs the full e2e round-trip (`mcp-e2e-smoke.mjs`), a different
+flow from `packaged.distribution.test.ts`'s checkpoint flow.
+
+### Build prerequisite
+
+Every packaged smoke reads `dist/`, and each one names the same remedy when it is missing:
+`pnpm build`, which is what CI's `packaged-smoke` job runs. `pnpm build:mcp` is not a
+substitute — it produces no `dist/web-app`, so a server-mode smoke run after it tests a
+server serving no app. `smoke-helpers.test.mjs` holds every script to the one spelling.
 
 ### Remaining Node-script smokes
 

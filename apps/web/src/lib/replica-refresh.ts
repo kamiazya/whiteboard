@@ -17,7 +17,7 @@
 // page, which already imports daemon-api-client itself — while a dynamic
 // import here charges the whole schema graph's first load to whatever
 // timeout happens to be waiting (the in-body-await-import flake shape).
-import { bytesToBase64, messageOf } from '@kamiazya/whiteboard-model'
+import { bytesToBase64, describeThrown } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { listWorkspaces } from './daemon-api-client.js'
 import { errorName, type TransferFailure } from './keeper-transfer-failure.js'
@@ -81,21 +81,6 @@ function reportRefreshFailure(deps: ReplicaRefreshDeps, err: unknown): void {
       ? {}
       : { causeName: errorName(cause), causeMessage: describeThrown(cause) }),
   })
-}
-
-/**
- * What a thrown value says, for a log field. `String()` turns a plain object
- * into `[object Object]`, which names nothing, so a non-Error object is
- * written as its JSON — and as its type alone when it has none to give.
- */
-function describeThrown(value: unknown): string {
-  if (value instanceof Error) return messageOf(value, String(value))
-  if (typeof value !== 'object' || value === null) return String(value)
-  try {
-    return JSON.stringify(value) ?? typeof value
-  } catch {
-    return typeof value
-  }
 }
 
 function reportNoPull(daemonBaseUrl: string, workspaceId: string, result: TransferFailure): void {

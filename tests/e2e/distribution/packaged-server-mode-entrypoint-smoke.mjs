@@ -50,8 +50,7 @@ const CLI = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 
 if (!existsSync(CLI)) {
   console.error(
-    '[server-run-smoke] FAIL: dist/cli/index.js missing.\n' +
-      'Run `pnpm build:mcp` before this smoke.',
+    '[server-run-smoke] FAIL: dist/cli/index.js missing.\n' + 'Run `pnpm build` before this smoke.',
   )
   process.exit(1)
 }

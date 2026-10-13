@@ -169,6 +169,24 @@ describe('startServerModeHttp', () => {
     expect(passedOptions?.people).not.toHaveProperty('bearerProvisioning')
   })
 
+  // ADR-0049 decision 2: the configuration is how an operator names the first
+  // administrator of a fresh server, before anyone can appoint one — so the
+  // check the app gates tenant administration on must honour that list.
+  it('makes the configured administrators administrators of the app it serves', async () => {
+    const ada = { authenticator: 'oidc:corp', subject: 'ada-1' }
+    const startPromise = startServerModeHttp({
+      ...makeOptions(),
+      configuredAdministrators: [ada],
+    })
+    const server = await serverOnceServing()
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const check = lastServerModeOptions()?.people?.administration.check
+    expect(await check?.isAdministrator(ada)).toBe(true)
+    expect(await check?.isAdministrator({ ...ada, subject: 'bob-1' })).toBe(false)
+  })
+
   // A provider with no client admits bearers and signs nobody in with a browser.
   it('mounts no sign-in route for a bearer-only provider, but provisions its bearers', async () => {
     const bearerOnly = {

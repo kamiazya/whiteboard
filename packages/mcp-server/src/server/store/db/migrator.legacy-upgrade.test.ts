@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../log.js'
 import { openMigrationHarness } from './test-helpers.js'
 
@@ -24,6 +24,11 @@ const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
  * rejects a log with a hole in it).
  */
 const PRE_0008 = '0007-adopt-workspace-tree'
+
+afterEach(async () => {
+  if (dataDir) await rm(dataDir, { recursive: true, force: true })
+  dataDir = ''
+})
 
 it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob follows', async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-boot-verify-'))

@@ -95,6 +95,20 @@ export const renderKeySchema = z.object({
    * in a colour the workspace no longer declares.
    */
   library: z.string().nullable(),
+  /**
+   * What the documents this one embeds or links WERE when it was drawn
+   * (`referencesKey`): '' when the picture was drawn with none supplied —
+   * which is every document that names no other, so its key is the one it
+   * had before this axis existed — and NULL when one of them came from a
+   * keeper that cannot say what its content is.
+   *
+   * Null here means what a null `version` means, and for the same reason:
+   * nothing to notice a change by, so the key is not memoisable. Both kinds
+   * carry the axis, because a note embeds as surely as a board does — and
+   * a note carrying it carries the theme, font and library axes too, since
+   * what it embeds may be a board.
+   */
+  references: z.string().nullable(),
 })
 
 export type RenderKey = z.infer<typeof renderKeySchema>
@@ -138,8 +152,12 @@ export function renderKeyOf(
   theme: ResolvedTheme,
   fonts: string,
   library: string,
+  references: string | null = '',
 ): RenderKey {
-  const spatial = subject.kind === 'spatial'
+  // A note that draws what it embeds may be drawing a board, and a board's
+  // palette, faces and tag colours are baked into the picture wherever it is
+  // drawn — so such a note is keyed on every axis a board is.
+  const spatial = subject.kind === 'spatial' || references !== ''
   return {
     buildId: RENDERER_BUILD_ID,
     pipeline: 'svg',
@@ -154,6 +172,7 @@ export function renderKeyOf(
     fonts: spatial ? fonts : null,
     // And again: only a spatial picture has boxes a declaration colours.
     library: spatial ? library : null,
+    references,
   }
 }
 
@@ -181,13 +200,53 @@ export async function tagLibraryKey(library: TagLibrary): Promise<string> {
       }
     }
   }
-  if (declared.length === 0) return ''
-  declared.sort(compareCodeUnit)
-  const canonical = new TextEncoder().encode(declared.join('\n'))
+  return await digestKey(declared)
+}
+
+/**
+ * '' for nothing, and otherwise a bounded digest of the lines in code-unit
+ * order — the one canonical form both hashed axes share, so neither can key
+ * the same content two ways.
+ */
+async function digestKey(lines: readonly string[]): Promise<string> {
+  if (lines.length === 0) return ''
+  const canonical = new TextEncoder().encode([...lines].sort(compareCodeUnit).join('\n'))
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', canonical))
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0'))
     .join('')
     .slice(0, LIBRARY_KEY_LENGTH)
+}
+
+/**
+ * One reference a picture drew, as the key needs it: the target as written,
+ * the document it resolved to (absent when it names nothing), that
+ * document's content identity, and the label it was drawn under.
+ */
+export interface ReferenceKeyRow {
+  readonly target: string
+  readonly documentId?: string
+  readonly version?: string
+  readonly label?: string
+}
+
+/**
+ * The `references` axis: '' for a picture that draws no other document,
+ * null when a resolved one has no content identity to notice a change by,
+ * and otherwise a digest of every row.
+ *
+ * The label is in it because an embed is drawn under its document's name,
+ * and a rename moves no content digest. A dangling target is a row too: it
+ * is drawn as missing, and the day it resolves is a different picture.
+ */
+export async function referencesKey(rows: readonly ReferenceKeyRow[]): Promise<string | null> {
+  const lines: string[] = []
+  for (const row of rows) {
+    if (row.documentId !== undefined && row.version === undefined) return null
+    lines.push(
+      JSON.stringify([row.target, row.documentId ?? null, row.version ?? null, row.label ?? null]),
+    )
+  }
+  return await digestKey(lines)
 }
 
 /**
@@ -216,6 +275,9 @@ export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
     // An outline's rectangles carry a box's own colour only — the outline
     // request takes no library — so there is nothing for this axis to name.
     library: null,
+    // Nor references: an outline maps the boxes a document declares, and an
+    // embed's content never reaches it.
+    references: '',
   }
 }
 
@@ -230,7 +292,7 @@ export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
  * of the memo and not of the whole broker.
  */
 export function isMemoisableKey(key: RenderKey): boolean {
-  return key.version !== null
+  return key.version !== null && key.references !== null
 }
 
 /**
@@ -299,6 +361,10 @@ export function renderKeyPath(key: RenderKey): string {
     ...(key.theme === null ? [] : [key.theme]),
     ...(key.fonts === null ? [] : [segment(key.fonts)]),
     ...(key.library === null ? [] : [segment(key.library)]),
+    // Only when set, so a document that embeds nothing keeps the path it
+    // had before the axis existed; the `r` names the segment, since a
+    // markdown leaf has no theme or font segment to count from.
+    ...(key.references === null || key.references === '' ? [] : [`r${segment(key.references)}`]),
   ].join('-')
   // The pipeline sits under the build id and above the kind, so a sweep can
   // drop one family the way it can already drop one build: a directory.

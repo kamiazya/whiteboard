@@ -1,8 +1,8 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -50,6 +50,10 @@ async function seedWorkspace(
 describe('0018-workspace-segment', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'migration-0018-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('adds a nullable segment column, preserving pre-existing rows with segment NULL', async () => {

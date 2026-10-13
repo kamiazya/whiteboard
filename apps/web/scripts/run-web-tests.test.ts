@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- a plain .mjs script, imported for the one pure function
 // its behaviour hangs on; there are no types to generate for a CI wrapper.
-import { RUNS, vitestArgv } from './run-web-tests.mjs'
+import { RUNS, reportsNoTestFiles, runAll, vitestArgv } from './run-web-tests.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const webPackageJson = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')) as {
@@ -58,9 +58,62 @@ describe('the apps/web test wrapper runs the whole suite', () => {
       '--shard=2/2',
     ])
   })
+})
 
-  it('stops at the first failing half', () => {
-    const source = readFileSync(join(__dirname, 'run-web-tests.mjs'), 'utf-8')
-    expect(source).toMatch(/if \(result\.status !== 0\) process\.exit/)
+type FakeRun = { status: number | null; empty: boolean }
+
+/**
+ * Stands in for vitest the way it really behaves on an empty match: exit 1
+ * unless `--passWithNoTests` was passed, and the "No test files found" line
+ * either way.
+ */
+function fakeVitest(collects: Record<string, boolean>) {
+  const calls: { label: string; argv: string[] }[] = []
+  const run = async (label: string, argv: string[]): Promise<FakeRun> => {
+    calls.push({ label, argv })
+    const empty = !collects[label]
+    return { status: empty && !argv.includes('--passWithNoTests') ? 1 : 0, empty }
+  }
+  return { calls, run }
+}
+
+describe('a file filter that only one half can match', () => {
+  it('passes when the other half collected the file', async () => {
+    const vitest = fakeVitest({ 'web-jsdom': true, 'web-node': false })
+    expect(await runAll(['src/lib/a.test.ts'], vitest.run)).toBe(0)
+    expect(vitest.calls.map((c) => c.label)).toEqual(['web-jsdom', 'web-node'])
+  })
+
+  it('passes when only the second half matches', async () => {
+    const vitest = fakeVitest({ 'web-jsdom': false, 'web-node': true })
+    expect(await runAll(['scripts/run-web-tests.test.ts'], vitest.run)).toBe(0)
+  })
+
+  it('fails a filter that neither half matches', async () => {
+    // A typo'd path has to stay red, or a mistyped red-first run reads green.
+    const vitest = fakeVitest({ 'web-jsdom': false, 'web-node': false })
+    expect(await runAll(['src/lib/no-such-file.test.ts'], vitest.run)).toBe(1)
+  })
+
+  it('still fails when the half that collected the file fails', async () => {
+    const calls: string[] = []
+    const run = async (label: string): Promise<FakeRun> => {
+      calls.push(label)
+      return label === 'web-jsdom' ? { status: 1, empty: false } : { status: 0, empty: true }
+    }
+    expect(await runAll(['src/lib/a.test.ts'], run)).toBe(1)
+    expect(calls).toEqual(['web-jsdom'])
+  })
+
+  it('leaves an unfiltered run strict, so an empty suite is red', async () => {
+    const vitest = fakeVitest({ 'web-jsdom': true, 'web-node': true })
+    expect(await runAll(['--shard=1/2'], vitest.run)).toBe(0)
+    for (const { argv } of vitest.calls) expect(argv).not.toContain('--passWithNoTests')
+  })
+
+  it("recognises vitest's empty-match line in either exit form", () => {
+    expect(reportsNoTestFiles('\n No test files found, exiting with code 0\n')).toBe(true)
+    expect(reportsNoTestFiles('No test files found, exiting with code 1')).toBe(true)
+    expect(reportsNoTestFiles(' Test Files  1 passed (1)')).toBe(false)
   })
 })

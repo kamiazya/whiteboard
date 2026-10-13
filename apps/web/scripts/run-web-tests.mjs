@@ -13,7 +13,7 @@
 // invocations, which would also have retired the `whiteboard-web test` marker
 // that ci-verify-coverage.test.ts and vitest-projects.mjs both key on.
 
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import process from 'node:process'
 import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
@@ -37,19 +37,89 @@ export function vitestArgv(args, forwarded) {
   return [...args, ...forwarded.filter((arg) => arg !== '--')]
 }
 
-function main() {
-  const passthrough = process.argv.slice(2)
+/**
+ * Whether the forwarded args name a file filter. Anything not starting with a
+ * dash counts — including the value of a spaced option like `-t name`, which
+ * only switches on the tolerant mode below, where "neither half collected a
+ * file" is still red.
+ */
+function hasPositionalFilter(forwarded) {
+  return forwarded.some((arg) => arg !== '--' && !arg.startsWith('-'))
+}
+
+/** Whether a vitest run's output reports that its filter matched no file. */
+export function reportsNoTestFiles(output) {
+  return /No test files found, exiting with code/.test(output)
+}
+
+/**
+ * Runs both halves and answers the exit code.
+ *
+ * A file filter can only ever match one half — a `src/**` file is jsdom's, a
+ * `scripts/**` one is web-node's — and vitest exits 1 on an empty match, so
+ * without this every single-file run of "the command CI runs" was red. With a
+ * filter, each half is told `--passWithNoTests` and the command fails only when
+ * NEITHER half collected a file, so a typo'd path stays red. Without one, both
+ * halves stay strict: an empty suite is a broken config, not a pass.
+ *
+ * @param {string[]} passthrough the caller's argv
+ * @param {(label: string, argv: string[], detectEmpty: boolean) => Promise<{ status: number | null, empty: boolean, error?: unknown }>} runVitest
+ */
+export async function runAll(passthrough, runVitest) {
+  const filtered = hasPositionalFilter(passthrough)
+  let collected = false
   for (const { label, args } of RUNS) {
-    const result = spawnSync('vitest', vitestArgv(args, passthrough), { stdio: 'inherit' })
+    const argv = vitestArgv(args, passthrough)
+    const result = await runVitest(
+      label,
+      filtered ? [...argv, '--passWithNoTests'] : argv,
+      filtered,
+    )
     if (result.error) {
       process.stderr.write(`[run-web-tests] failed to start vitest for ${label}: ${result.error}\n`)
-      process.exit(1)
+      return 1
     }
     // Stop at the first failing half rather than running the second and
     // reporting only its status, which is what `a && b` did.
-    if (result.status !== 0) process.exit(result.status ?? 1)
+    if (result.status !== 0) return result.status ?? 1
+    if (!result.empty) collected = true
   }
+  if (filtered && !collected) {
+    process.stderr.write(
+      `[run-web-tests] no test file in either half matched: ${passthrough.join(' ')}\n`,
+    )
+    return 1
+  }
+  return 0
+}
+
+/**
+ * Spawns one vitest run. Only a filtered run is piped — its output has to be
+ * read for the empty-match line — and it is teed back out as it arrives, with
+ * colour kept when the caller's terminal has it. An unfiltered run (CI's) keeps
+ * plain inherited stdio.
+ */
+function spawnVitest(_label, argv, detectEmpty) {
+  if (!detectEmpty) {
+    const result = spawnSync('vitest', argv, { stdio: 'inherit' })
+    return Promise.resolve({ status: result.status, empty: false, error: result.error })
+  }
+  return new Promise((resolve) => {
+    const env = process.stdout.isTTY ? { ...process.env, FORCE_COLOR: '1' } : process.env
+    const child = spawn('vitest', argv, { stdio: ['inherit', 'pipe', 'pipe'], env })
+    let output = ''
+    const tee = (sink) => (chunk) => {
+      sink.write(chunk)
+      output += chunk.toString()
+    }
+    child.stdout.on('data', tee(process.stdout))
+    child.stderr.on('data', tee(process.stderr))
+    child.on('error', (error) => resolve({ status: null, empty: false, error }))
+    child.on('close', (status) =>
+      resolve({ status, empty: reportsNoTestFiles(output), error: undefined }),
+    )
+  })
 }
 
 // Importable for its own test; still the executable CI and `pnpm test` invoke.
-if (isRunAsScript(import.meta.url)) main()
+if (isRunAsScript(import.meta.url)) process.exit(await runAll(process.argv.slice(2), spawnVitest))

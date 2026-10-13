@@ -1,5 +1,5 @@
 import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 /**
  * Lays a spatial canvas out off the main thread.
  *
@@ -55,6 +55,7 @@ import {
   type WorkerFailure,
 } from './layout-worker-protocol.js'
 import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
+import { namesADocument } from './names-a-document.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
@@ -152,7 +153,7 @@ function fail(id: number, cause: unknown): void {
   const failed: WorkerFailure = {
     type: 'failed',
     id,
-    reason: messageOf(cause, String(cause)),
+    reason: describeThrown(cause),
   }
   self.postMessage(failed)
 }
@@ -230,6 +231,11 @@ async function handleMarkdownRender(request: MarkdownRenderRequest): Promise<voi
     const { keyed, blocks } = renderMarkdownPreview(request.body, {
       measure,
       maxWidth: request.maxWidth,
+      ...(request.references === undefined
+        ? {}
+        : { references: referenceSeamsFromWire(request.references) }),
+      ...(request.theme === undefined ? {} : { theme: request.theme }),
+      ...(request.tagLibrary === undefined ? {} : { tagLibrary: request.tagLibrary }),
     })
     const elapsed = performance.now() - startedAt
     // The preview's SVG carries its own viewBox; the caller needs the
@@ -286,6 +292,23 @@ function fragmentSeamsFor(entries: LayoutRequest['fragments']) {
   return { seams, asked, keys: [...rendered.keys()] }
 }
 
+/** Which file nodes draw their content — a lookup, since the gate that decides read a viewport. */
+function fileNodeExpansion(request: LayoutRequest): (node: { readonly id: string }) => boolean {
+  if (request.expandAllFileNodes === true) return () => true
+  const expanded = new Set(request.expandedFileIds ?? [])
+  return (node) => expanded.has(node.id)
+}
+
+/** What the asking thread must read to draw this canvas whole, when it sent none of it. */
+function omittedReferences(
+  request: LayoutRequest,
+  canvas: SpatialCanvas,
+): { readonly referencesOmitted?: true } {
+  return request.references === undefined && namesADocument({ canvases: [canvas] })
+    ? { referencesOmitted: true }
+    : {}
+}
+
 async function handleLayout(request: LayoutRequest): Promise<void> {
   try {
     if (!(await measurable(request.id))) return
@@ -298,7 +321,6 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
     // The same bundle the main thread builds, from the same bytes.
     const references =
       request.references === undefined ? undefined : referenceSeamsFromWire(request.references)
-    const expanded = new Set(request.expandedFileIds ?? [])
     // What this realm could not measure, and which fragments it was not handed. Reported back,
     // not acted on: only the asking thread can fetch a face (registering it in every realm at
     // once) or load an engine, and a list surface's thread never decodes the canvas.
@@ -314,7 +336,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
         labels,
         missing: missingRefs,
       }),
-      expandFileNode: references === undefined ? undefined : (node) => expanded.has(node.id),
+      expandFileNode: references === undefined ? undefined : fileNodeExpansion(request),
       contentCache: contentCacheFor({
         theme: request.theme,
         // The look the request asks for is part of what its bodies ARE: a
@@ -341,6 +363,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       anchors,
       ...(fontsMissing.size === 0 ? {} : { fontsMissing: [...fontsMissing] }),
       ...(fragments.asked.size === 0 ? {} : { fragmentsAsked: [...fragments.asked.values()] }),
+      ...omittedReferences(request, canvas),
     }
     self.postMessage(response)
     // The whole reply, `scene` and `anchors` included: they are not optional

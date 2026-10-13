@@ -2,11 +2,11 @@
  * The email invitation's column, check constraint and index go; the link
  * invitations a keeper already holds survive the table rebuild unchanged.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -21,6 +21,10 @@ const PRE_0040 = '0039-sign-in-authenticated-at'
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-0040-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('removes the email column and its index, keeping the tenant index', async () => {

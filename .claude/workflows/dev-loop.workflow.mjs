@@ -77,14 +77,16 @@ const DESIGN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    completionCriteria: { type: 'array', items: { type: 'string' } },
+    // Never empty, like the lists below: a design with no criterion and no test scenario plans
+    // nothing a test could check, which is the one thing red-first exists to prevent.
+    completionCriteria: { type: 'array', items: { type: 'string', pattern: '\\S' }, minItems: 1 },
     scope: { type: 'string' },
     contractChanges: { type: 'string', description: 'Zod/contract/type impact, or "none"' },
     testScenarios: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        unit: { type: 'array', items: { type: 'string' } },
+        unit: { type: 'array', items: { type: 'string', pattern: '\\S' }, minItems: 1 },
         browser: { type: 'array', items: { type: 'string' } },
         e2e: { type: 'array', items: { type: 'string' } },
       },
@@ -217,8 +219,8 @@ const FIX_SCHEMA = {
 // provided designDoc is held to the exact same non-blank-entry invariant as an agent-generated
 // design. Mirrors .claude/workflows/lib/design-schema.mjs's isValidDesignShape (see the sync test
 // for why this is duplicated instead of imported).
-// One guard covers every minItems:1 + `\S` list field (properties/blastRadius/userReach) — they
-// share one pattern.
+// One guard covers every minItems:1 + `\S` list field (completionCriteria/testScenarios.unit/
+// properties/blastRadius/userReach) — they share one pattern.
 const nonBlankItem = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
 const isNonBlankList = (v) =>
   Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && nonBlankItem.test(x))
@@ -255,12 +257,12 @@ function isStringArray(v) {
 function isValidDesignShape(d) {
   if (!d || typeof d !== 'object' || Array.isArray(d)) return false
   if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
-  if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
+  if (!isNonBlankList(d.completionCriteria)) return false
   if (typeof d.scope !== 'string') return false
   if (d.contractChanges !== undefined && typeof d.contractChanges !== 'string') return false
   if (!d.testScenarios || typeof d.testScenarios !== 'object') return false
   if (!Object.keys(d.testScenarios).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
-  if (!isStringArray(d.testScenarios.unit)) return false
+  if (!isNonBlankList(d.testScenarios.unit)) return false
   if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
   if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false
   if (d.risks !== undefined && !isStringArray(d.risks)) return false

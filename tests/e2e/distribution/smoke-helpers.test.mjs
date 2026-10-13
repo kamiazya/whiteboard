@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { request } from 'node:https'
 import test from 'node:test'
 import {
@@ -187,4 +187,21 @@ test('elsewhere a container reaches the host by name and publishes the server po
     networkRunArgs: ['--add-host=host.docker.internal:host-gateway', '-p', '4321:3099'],
     serverBaseUrl: 'http://127.0.0.1:4321',
   })
+})
+
+test('every packaged smoke names the build command CI runs', () => {
+  // `pnpm build`, not `pnpm build:mcp`: the latter leaves no dist/web-app, so a
+  // server-mode smoke run after it tests a server serving no app — an artifact
+  // CI never builds. The docker smoke builds its own image and names none.
+  const dir = import.meta.dirname
+  const smokes = readdirSync(dir).filter(
+    (name) => /^packaged-.*\.mjs$/.test(name) && name !== 'packaged-server-mode-docker-smoke.mjs',
+  )
+  assert.ok(smokes.length >= 8, `expected the packaged smokes, found ${smokes.length}`)
+  for (const name of smokes) {
+    const source = readFileSync(`${dir}/${name}`, 'utf8')
+    const named = [...source.matchAll(/`(pnpm build[^`\\]*)\\?`/g)].map((m) => m[1])
+    assert.ok(named.length > 0, `${name} names no build command`)
+    assert.deepEqual([...new Set(named)], ['pnpm build'], `${name} names ${named.join(', ')}`)
+  }
 })

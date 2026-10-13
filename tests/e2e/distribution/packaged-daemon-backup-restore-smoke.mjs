@@ -64,7 +64,7 @@ function dump(message, ctx = {}) {
 
 for (const entry of [DAEMON_ENTRY, CLI_ENTRY, BACKUP_ENTRY]) {
   if (!existsSync(entry)) {
-    dump(`dist artifact missing: ${entry}\nRun \`pnpm build:mcp\`.`)
+    dump(`dist artifact missing: ${entry}\nRun \`pnpm build\`.`)
     process.exit(1)
   }
 }

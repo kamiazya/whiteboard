@@ -146,16 +146,17 @@ describe('line breaking without spaces', () => {
   })
 
   it("declares a block bbox that covers an atomic run's overflow", () => {
-    // Inline code is atomic by contract — an internal space is not a word
-    // boundary — so it can still exceed maxWidth. What must not happen is the
-    // block claiming to be maxWidth wide while painting past it: sceneBounds,
-    // the export viewBox and the editor's auto-fit all read that bbox.
+    // Inline math is atomic AND uncuttable — a cut formula reads as a complete
+    // one that is simply wrong — so it is the run that may still exceed
+    // maxWidth. What must not happen is the block claiming to be maxWidth wide
+    // while painting past it: sceneBounds, the export viewBox and the editor's
+    // auto-fit all read that bbox.
     const scene = layout({
       type: 'root',
       children: [
         {
           type: 'paragraph',
-          children: [{ type: 'inlineCode', value: 'typesetMdastBlocks(root, options, andMore)' }],
+          children: [{ type: 'inlineMath', value: 'x_1+x_2+x_3+x_4+x_5+x_6+x_7+x_8+x_9+x_{10}' }],
         },
       ],
     })
@@ -163,6 +164,8 @@ describe('line breaking without spaces', () => {
     expect(block).toBeDefined()
     if (block === undefined) return
     const inkRight = Math.max(...block.runs.map((run) => run.bbox.x + run.bbox.w))
+    // The fixture must really overflow, or the bbox assertion holds trivially.
+    expect(inkRight).toBeGreaterThan(MAX_WIDTH)
     expect(block.bbox.x + block.bbox.w).toBeGreaterThanOrEqual(inkRight)
   })
 })

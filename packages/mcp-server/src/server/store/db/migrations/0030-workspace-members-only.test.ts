@@ -4,11 +4,11 @@
  * workspaces that already have a membership row. Mirrors
  * 0029-workspace-replica-keys.test.ts's shape.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -41,6 +41,10 @@ async function foreignKeysOf(db: Db, table: string): Promise<unknown[]> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'workspace-members-only-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('is absent before 0030, and backfills one row per distinct workspaceMemberships.workspaceId at head', async () => {

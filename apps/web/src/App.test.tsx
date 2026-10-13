@@ -248,6 +248,9 @@ describe('reconnecting a remembered daemon through the extension', () => {
     const page = await screen.findByTestId('replica-read-page-stub')
     expect(page.getAttribute('data-workspace-id')).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
     expect(receivedReplicaPageProps?.daemonBaseUrl).toBe(BRIDGE_DAEMON_BASE_URL)
+    // The banner's name follows workspaceLabel, which needs the segment for a
+    // workspace nobody gave a display name.
+    expect(receivedReplicaPageProps?.segment).toBe('team')
   })
 
   it('Reconnect re-runs renewal, and a now-paired answer unmounts the replica page for the daemon page', async () => {

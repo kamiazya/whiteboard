@@ -45,8 +45,8 @@ export interface RenderCanvasOptions {
   /** See RenderCanvasCoreOptions: draw resolved comments (muted) too. */
   readonly showResolved?: boolean
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
-  readonly renderMath?: RenderCanvasCoreOptions['renderMath']
-  readonly renderDiagram?: RenderCanvasCoreOptions['renderDiagram']
+  readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
+  readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
 }
 
 /**
@@ -84,8 +84,8 @@ export interface CanvasExportOptions {
   /** The workspace's colour by intent (ADR-0040 decision 5), part of the picture. */
   readonly tagLibrary?: TagLibrary
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
-  readonly renderMath?: RenderCanvasCoreOptions['renderMath']
-  readonly renderDiagram?: RenderCanvasCoreOptions['renderDiagram']
+  readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
+  readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
 }
 
 /**

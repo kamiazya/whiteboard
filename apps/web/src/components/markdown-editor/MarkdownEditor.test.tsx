@@ -1,11 +1,37 @@
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { layoutMdastBlocks, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
+
+// Wrapped, not replaced: the real layout still runs, and the call count is
+// how many times the editor laid a body out on the main thread.
+vi.mock('@kamiazya/whiteboard-canvas-render', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@kamiazya/whiteboard-canvas-render')>()
+  return { ...actual, layoutMdastBlocks: vi.fn(actual.layoutMdastBlocks) }
+})
+const layouts = vi.mocked(layoutMdastBlocks)
+
+/** Math loaders whose renders land only when the test says so. */
+function heldMathLoaders() {
+  const pending = new Map<string, (svg: { svg: string; height: number }) => void>()
+  const loaders: FragmentLoaders = {
+    math: vi.fn(
+      (value: string) =>
+        new Promise<{ svg: string; height: number }>((resolve) => pending.set(value, resolve)),
+    ),
+    diagram: vi.fn(async () => undefined),
+  }
+  const land = async (value: string) => {
+    await act(async () => pending.get(value)?.({ svg: `<g data-math="${value}"/>`, height: 40 }))
+  }
+  return { loaders, pending, land }
+}
 
 afterEach(() => {
   cleanup()
+  layouts.mockClear()
   vi.useRealTimers()
   window.localStorage.clear()
 })
@@ -34,6 +60,44 @@ describe('MarkdownEditor', () => {
       expect(html).toContain('data-math="E=mc^2"')
       expect(html).toContain('data-diagram="yes"')
     })
+  })
+
+  it('lays nothing out and renders no fragment while editing in Write mode', async () => {
+    const { loaders } = heldMathLoaders()
+    const props = {
+      theme: 'light',
+      onChange: () => {},
+      previewDebounceMs: 0,
+      fragmentLoaders: loaders,
+      initialViewMode: 'write',
+    } as const
+    const { rerender } = render(<MarkdownEditor {...props} value={'$$\na\n$$\n'} />)
+    rerender(<MarkdownEditor {...props} value={'$$\na\n$$\n\n$$\nb\n$$\n'} />)
+    await act(async () => {})
+    expect(layouts).not.toHaveBeenCalled()
+    expect(loaders.math).not.toHaveBeenCalled()
+  })
+
+  it('lays the Read preview out once, then once more per fragment that lands', async () => {
+    const { loaders, pending, land } = heldMathLoaders()
+    render(
+      <MarkdownEditor
+        theme="light"
+        value={'$$\na\n$$\n\n$$\nb\n$$\n\n$$\nc\n$$\n'}
+        onChange={() => {}}
+        previewDebounceMs={0}
+        fragmentLoaders={loaders}
+        initialViewMode="read"
+      />,
+    )
+    await vi.waitFor(() => expect(pending.size).toBe(3))
+    // The preview's own layout is what learnt the three asks.
+    expect(layouts).toHaveBeenCalledTimes(1)
+    for (const [landed, value] of ['a', 'b', 'c'].entries()) {
+      await land(value)
+      expect(layouts).toHaveBeenCalledTimes(2 + landed)
+    }
+    expect(loaders.math).toHaveBeenCalledTimes(3)
   })
 
   it('renders both a source pane and a preview pane for the given value', () => {

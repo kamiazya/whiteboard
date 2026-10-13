@@ -1,6 +1,7 @@
 import type {
   MeasureText,
   ReferenceSeams,
+  SpatialLayoutOptions,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -59,6 +60,15 @@ export interface CanvasViewerProps {
    */
   references?: ReferenceSeams
   /**
+   * Typesets a math block in any body this canvas lays out. Synchronous by
+   * canvas-render's contract, so a host with an async engine answers from
+   * what it has already rendered. Absent keeps the escaped-source
+   * placeholder — the MCP Apps widget ships no engine.
+   */
+  renderMath?: SpatialLayoutOptions['renderMath']
+  /** Draws a diagram fence, on the same terms as `renderMath`; absent is a plain code block. */
+  renderDiagram?: SpatialLayoutOptions['renderDiagram']
+  /**
    * The document's conversations, for the chrome the flat comments inside
    * `canvas` cannot carry — a passage's highlight, a node set's outline.
    * The pins still come from the canvas's own projection.
@@ -104,6 +114,8 @@ export function CanvasViewer({
   background,
   measure,
   references,
+  renderMath,
+  renderDiagram,
   threads,
   style,
   theme = 'light',
@@ -163,6 +175,8 @@ export function CanvasViewer({
       // draws at the node's intrinsic size, export's policy.
       ...(references === undefined ? {} : { references, expandFileNode: () => true }),
       ...(threads === undefined ? {} : { threads }),
+      ...(renderMath === undefined ? {} : { renderMath }),
+      ...(renderDiagram === undefined ? {} : { renderDiagram }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).
@@ -193,6 +207,8 @@ export function CanvasViewer({
     padding,
     background,
     references,
+    renderMath,
+    renderDiagram,
     threads,
     style,
     theme,

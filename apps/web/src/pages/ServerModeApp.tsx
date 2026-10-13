@@ -18,7 +18,7 @@ import {
   signInRefusalSchema,
   signInSessionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import type { z } from 'zod'
 import { NewWorkspaceControl } from '../components/server-mode/NewWorkspaceControl.js'
@@ -28,8 +28,9 @@ import { useShellWorkspaces } from '../hooks/use-shell-workspaces.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { type WorkspaceRoute, workspacePath, workspaceRoutePath } from '../lib/app-routes.js'
 import { DaemonContractError, readDaemonJson } from '../lib/daemon-contract-error.js'
-import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
+import { workspaceLabel } from '../lib/workspace-handle.js'
+import type { KeeperWorkspaces, WorkspaceRow } from '../lib/workspace-switcher-source.js'
 import { ReceiveTransferPage } from './ReceiveTransferPage.js'
 import { TenantPeoplePage, WorkspacePeoplePage } from './ServerModePeoplePage.js'
 import { ServerModeWorkspace } from './ServerModeWorkspace.js'
@@ -87,7 +88,7 @@ function useRetryableRead<T>(read: () => Promise<T>): [T | undefined, () => void
   return [result?.value, useCallback(() => setAttempt((n) => n + 1), [])]
 }
 
-function Unavailable({ message, onRetry }: { message: string; onRetry: () => void }) {
+function Unavailable({ message, onRetry }: Readonly<{ message: string; onRetry: () => void }>) {
   return (
     <>
       <p role="alert" className="max-w-md text-center text-sm text-destructive">
@@ -156,7 +157,7 @@ function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: stri
       {providers === 'unavailable' && (
         <Unavailable message="Could not load the ways to sign in." onRetry={retry} />
       )}
-      {providers !== undefined && providers.length === 0 && (
+      {providers?.length === 0 && (
         <p className="max-w-md text-center text-sm text-muted-foreground">
           This server has no sign-in provider configured. Ask the person who runs it.
         </p>
@@ -187,18 +188,13 @@ function InvitePage({ fetchFn }: { fetchFn: Fetch }) {
 
 type SessionUser = Extract<SignInSessionResponse, { signedIn: true }>['user']
 
-interface Signed {
-  user: SessionUser
-  // 'unavailable': the session is real and the list failed — a person who is
-  // signed in must not be sent to sign in again, or they loop.
-  workspaces: MemberWorkspace[] | 'unavailable'
-}
-
 /**
  * The keeper answers a browser with no session `200 { signedIn: false }`, and
- * that alone is "signed out". Any other outcome — a busy keeper's 503, a
- * proxy's 502, no answer — says nothing about the session, and reading it as
- * signed out would send a signed-in person round the sign-in loop.
+ * that alone is "signed out" — as is a 404 from a keeper with no browser
+ * sign-in, which mounts no `/auth` routes, so nobody is signed in to it. Any
+ * other outcome — a busy keeper's 503, a proxy's 502, no answer — says nothing
+ * about the session, and reading it as signed out would send a signed-in
+ * person round the sign-in loop.
  */
 async function readSession(fetchFn: Fetch): Promise<SessionUser | null | 'unavailable'> {
   const session = await readAuth(
@@ -206,6 +202,7 @@ async function readSession(fetchFn: Fetch): Promise<SessionUser | null | 'unavai
     authSessionUrl(),
     signInSessionResponseSchema,
     'the session',
+    { signedIn: false },
   )
   if (session === 'unavailable') return session
   return session.signedIn ? session.user : null
@@ -213,14 +210,33 @@ async function readSession(fetchFn: Fetch): Promise<SessionUser | null | 'unavai
 
 const SESSION_UNAVAILABLE = 'Could not check whether you are signed in.'
 
-function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
-  return workspaces === 'unavailable' ? (
-    <p role="alert" className="text-sm text-destructive">
-      Could not load your workspaces. Reload to try again.
-    </p>
-  ) : workspaces.length === 0 ? (
-    <p className="text-sm text-muted-foreground">You are not a member of any workspace yet.</p>
-  ) : (
+/**
+ * The person's workspaces, read through the same seam the shell switches and
+ * renames through, once the session has said who they are. A list that fails
+ * is not "no workspaces", and the person who is signed in can ask again.
+ */
+function WorkspaceList({ source }: Readonly<{ source: KeeperWorkspaces['source'] }>) {
+  const read = useCallback(
+    () =>
+      source.list().catch((err: unknown): 'unavailable' => {
+        // Drift was already reported by the reader that built it.
+        if (!(err instanceof DaemonContractError))
+          log.warn('could not list the workspaces', { err })
+        return 'unavailable'
+      }),
+    [source],
+  )
+  const [workspaces, retry] = useRetryableRead<readonly WorkspaceRow[] | 'unavailable'>(read)
+  if (workspaces === undefined) return null
+  if (workspaces === 'unavailable') {
+    return <Unavailable message="Could not load your workspaces." onRetry={retry} />
+  }
+  if (workspaces.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">You are not a member of any workspace yet.</p>
+    )
+  }
+  return (
     <ul className="flex w-full max-w-md flex-col gap-1">
       {workspaces.map((w) => (
         <li key={w.workspaceId}>
@@ -228,7 +244,7 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
             to={workspacePath(w.workspaceId)}
             className="block rounded-md border px-3 py-2 text-sm hover:bg-muted"
           >
-            {w.name}
+            {workspaceLabel(w)}
           </Link>
         </li>
       ))}
@@ -243,9 +259,15 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
 function useKeeperWorkspaces(fetchFn: Fetch) {
   const navigate = useNavigate()
   const daemonShellTarget = useMemo(() => ({ baseUrl: window.location.origin }), [])
+  // The seam is memoized on this callback and its list is read in an effect
+  // keyed on the seam, while the router hands out a new `navigate` whenever
+  // the address moves. Read through a ref, so moving the address — a rename
+  // that changes the segment does — is not a fresh list racing the rename.
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
   const setDaemonRoute = useCallback(
-    (route: WorkspaceRoute) => navigate(workspaceRoutePath(route)),
-    [navigate],
+    (route: WorkspaceRoute) => navigateRef.current(workspaceRoutePath(route)),
+    [],
   )
   return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute, fetchFn })
     .daemonWorkspaces
@@ -269,11 +291,7 @@ function OpenWorkspace({
 
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   const keeperWorkspaces = useKeeperWorkspaces(fetchFn)
-  const read = useCallback(async (): Promise<Signed | null | 'unavailable'> => {
-    const user = await readSession(fetchFn)
-    if (user === null || user === 'unavailable') return user
-    return { user, workspaces: await listMemberWorkspaces(fetchFn) }
-  }, [fetchFn])
+  const read = useCallback(() => readSession(fetchFn), [fetchFn])
   const [signed, retry] = useRetryableRead(read)
 
   if (signed === undefined) return null
@@ -289,10 +307,8 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   return (
     <Page>
       <header className="flex w-full max-w-md flex-wrap items-center justify-between gap-4">
-        <span className="text-sm text-muted-foreground">
-          Signed in as {signed.user.displayName}
-        </span>
-        {signed.user.administrator && (
+        <span className="text-sm text-muted-foreground">Signed in as {signed.displayName}</span>
+        {signed.administrator && (
           <Link to="/people" className="text-sm underline">
             People on this server
           </Link>
@@ -300,8 +316,12 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
         <SignOutControl fetchFn={fetchFn} />
       </header>
       <h1 className="text-xl font-semibold">Your workspaces</h1>
-      <WorkspaceList workspaces={signed.workspaces} />
-      {keeperWorkspaces !== undefined && <NewWorkspaceControl workspaces={keeperWorkspaces} />}
+      {keeperWorkspaces !== undefined && (
+        <>
+          <WorkspaceList source={keeperWorkspaces.source} />
+          <NewWorkspaceControl workspaces={keeperWorkspaces} />
+        </>
+      )}
     </Page>
   )
 }
@@ -311,10 +331,10 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
 function SignedInOnly({
   fetchFn,
   children,
-}: {
+}: Readonly<{
   fetchFn: Fetch
   children: (user: SessionUser) => ReactNode
-}) {
+}>) {
   const read = useCallback(() => readSession(fetchFn), [fetchFn])
   const [who, retry] = useRetryableRead(read)
   if (who === undefined) return null

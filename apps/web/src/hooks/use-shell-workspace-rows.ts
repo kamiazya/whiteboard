@@ -1,5 +1,5 @@
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { parseWorkspaceRoute } from '../lib/app-routes.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
@@ -29,6 +29,13 @@ export interface ShellWorkspaceRows {
   readonly applyRename: (entry: WorkspaceEntry) => void
   /** The counts the menu bought, folded back into the rows that carry them. */
   readonly applyCounts: (counted: ReadonlyMap<string, number>) => void
+  /**
+   * Whether the latest list failed. The rows from an earlier list stay, so a
+   * reader that can say "could not load" decides what to show beside them.
+   */
+  readonly listFailed: boolean
+  /** Asks the keeper for the list again. */
+  readonly reload: () => void
 }
 
 /**
@@ -51,26 +58,7 @@ export function useShellWorkspaceRows(
   workspaces: KeeperWorkspaces | undefined,
   pathname: string,
 ): ShellWorkspaceRows {
-  const [rows, setRows] = useState<readonly WorkspaceRow[]>([])
-  const source = workspaces?.source
-
-  useEffect(() => {
-    if (source === undefined) return
-    let cancelled = false
-    source
-      .list()
-      .then((loaded) => {
-        if (!cancelled) setRows(loaded)
-      })
-      // A list that will not load leaves the mark naming the address's
-      // handle, which is still true; failing the shell would take the gear
-      // down too. Info, not warn: a shell with no keeper to ask (offline,
-      // server mode before sign-in) reaches this by design.
-      .catch((cause: unknown) => log.info('could not list the workspaces', cause))
-    return () => {
-      cancelled = true
-    }
-  }, [source])
+  const { rows, setRows, listFailed, reload } = useWorkspaceList(workspaces?.source)
 
   const handleInAddress = parseWorkspaceRoute(pathname)?.workspace ?? null
   const activeRow =
@@ -94,7 +82,41 @@ export function useShellWorkspaceRows(
           return count === undefined ? row : { ...row, documentCount: count }
         }),
       ),
+    listFailed,
+    reload,
   }
+}
+
+/** The keeper's list as state: loaded on mount, again on `reload`, failure kept. */
+function useWorkspaceList(source: KeeperWorkspaces['source'] | undefined) {
+  const [rows, setRows] = useState<readonly WorkspaceRow[]>([])
+  const [listFailed, setListFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    if (source === undefined) return
+    let cancelled = false
+    source
+      .list()
+      .then((loaded) => {
+        if (cancelled) return
+        setRows(loaded)
+        setListFailed(false)
+      })
+      // A list that will not load leaves the mark naming the address's
+      // handle, which is still true; failing the shell would take the gear
+      // down too. Info, not warn: a shell with no keeper to ask (offline,
+      // server mode before sign-in) reaches this by design.
+      .catch((cause: unknown) => {
+        log.info('could not list the workspaces', cause)
+        if (!cancelled) setListFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [source, attempt])
+  const reload = useCallback(() => setAttempt((n) => n + 1), [])
+  return { rows, setRows, listFailed, reload }
 }
 
 function nameFor(handleInAddress: string | null, activeRow: WorkspaceRow | undefined) {

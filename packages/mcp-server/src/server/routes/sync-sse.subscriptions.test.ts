@@ -3,7 +3,7 @@
  * `client_ready` recorded survives a repeat subscribe, and the stream's cap
  * counts what the batch leaves, not what it names on the way.
  */
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MAX_DOCS_PER_STREAM } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
@@ -15,8 +15,12 @@ import { createSyncSseRouter } from './sync-sse.js'
 
 // Its own data dir: resolving a workspace handle opens the store, and one
 // shared with a file running in parallel waits on that file's lock.
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-subscriptions-')))
-afterAll(() => resetDataDirForTests())
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-subscriptions-'))
+setDataDirForTests(dataDir)
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 afterEach(() => resetSyncStreamsForTests())
 
 const SETTLE = 10_000

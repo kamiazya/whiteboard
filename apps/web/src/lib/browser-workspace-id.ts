@@ -25,7 +25,7 @@
  *   surfaced, not remembered forever, because closing the offending tab or
  *   freeing quota is a normal recovery a reload should not be required for.
  */
-import { messageOf, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
+import { describeThrown, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import {
   resolveWorkspaceHandle,
   storedWorkspaceEntrySchema,
@@ -90,7 +90,7 @@ export function browserWorkspaceIdentitySnapshot(): BrowserWorkspaceIdentity | n
 }
 
 function causeMessage(cause: unknown): string {
-  return messageOf(cause, String(cause))
+  return describeThrown(cause)
 }
 
 /**

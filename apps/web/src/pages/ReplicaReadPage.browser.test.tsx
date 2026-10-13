@@ -206,6 +206,21 @@ describe('ReplicaReadPage', () => {
     expect(await screen.findAllByText(/Hello from the cache/)).toHaveLength(2)
   })
 
+  it('the offline banner names a segment-only workspace by its segment', async () => {
+    await seedReplica()
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        segment="dev"
+        daemonBaseUrl={DAEMON}
+        onReconnect={noopReconnect}
+      />,
+    )
+    const banner = await screen.findByTestId('replica-offline-banner')
+    expect(banner.textContent).toMatch(/^dev\b/)
+    expect(banner.textContent).not.toContain(DAEMON_WS)
+  })
+
   it('the offline banner omits the synced clause when syncedAt is absent', async () => {
     await seedReplica()
     render(

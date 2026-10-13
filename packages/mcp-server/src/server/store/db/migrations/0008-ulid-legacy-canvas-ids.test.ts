@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Kysely } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type AnyTables, openMigrationHarness } from '../test-helpers.js'
 import { migration as migration0001 } from './0001-init.js'
 import { migration as migration0002 } from './0002-canvases-last-compacted-at.js'
@@ -76,6 +76,10 @@ async function seed(db: Kysely<AnyTables>, id: string, slug: string) {
 describe('0008-ulid-legacy-canvas-ids', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'whiteboard-0008-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('rewrites a nanoid row to a fresh ULID, carrying versions, branches, and the blob', async () => {

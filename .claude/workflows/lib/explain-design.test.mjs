@@ -79,6 +79,8 @@ test('isValidDesignShape agrees with explainDesignShape on every fixture', () =>
     {},
     null,
     { ...complete, userReach: [] },
+    { ...complete, completionCriteria: [] },
+    { ...complete, testScenarios: { unit: [] } },
     { ...complete, scope: 42 },
     { ...complete, benefit: 'no column named' },
     { ...complete, benefit: undefined },
@@ -136,6 +138,35 @@ test('a missing field says "missing", a present one that fails says it is malfor
   assert.match(
     explainDesignShape({ ...complete, scope: 7 })[0],
     /^scope: present but empty or malformed/,
+  )
+})
+
+// A design that plans no test and names no completion criterion is the one the TDD-first rule
+// exists to stop; an empty list is no more an answer than an absent one.
+test('an empty completionCriteria or unit list is refused by both halves of the gate', () => {
+  for (const [name, design] of [
+    ['completionCriteria', { ...complete, completionCriteria: [] }],
+    ['testScenarios.unit', { ...complete, testScenarios: { unit: [] } }],
+    ['completionCriteria', { ...complete, completionCriteria: ['   '] }],
+    ['testScenarios.unit', { ...complete, testScenarios: { unit: ['ok', ' '] } }],
+  ]) {
+    assert.equal(isValidDesignShape(design), false, `${name}: shape`)
+    const problems = explainDesignShape(design)
+    assert.equal(problems.length, 1, `${name}: explain`)
+    assert.ok(problems[0].startsWith(`${name}:`), problems[0])
+  }
+})
+
+// "malformed" alone sends a reader who wrote `scope: ["a.ts"]` to make the list longer.
+test('a malformed field names the type it expected', () => {
+  assert.match(explainDesignShape({ ...complete, scope: ['a.ts'] })[0], /expected a string/)
+  assert.match(
+    explainDesignShape({ ...complete, completionCriteria: 'one criterion' })[0],
+    /expected a non-empty list of strings/,
+  )
+  assert.match(
+    explainDesignShape({ ...complete, benefit: 'faster' })[0],
+    /expected a string starting with/,
   )
 })
 

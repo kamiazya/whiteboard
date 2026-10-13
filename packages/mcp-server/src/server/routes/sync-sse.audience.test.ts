@@ -6,7 +6,7 @@
  * it means the load balancer is not keeping a browser on one instance.
  */
 
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
@@ -22,8 +22,12 @@ import { testDataLayout } from './_test-helpers.js'
 // Its own data dir, through the seam every reader goes through: opening a
 // stream opens the store, and a store shared with another file running in
 // parallel waits on that file's lock until the test times out.
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-audience-')))
-afterAll(() => resetDataDirForTests())
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-audience-'))
+setDataDirForTests(dataDir)
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 
 afterEach(() => resetSyncStreamsForTests())
 

@@ -4,6 +4,7 @@
  * editor-independent derivation itself is useDocumentSync.test.ts's.
  */
 
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -137,5 +138,41 @@ describe('useDocumentSync exportScene carries the document', () => {
     })
 
     expect(await (svg as Blob | null)?.text()).toContain('export-math')
+  })
+
+  it('fills an uncoloured tagged box with the colour the tag library declares', async () => {
+    const backend = fakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({
+          id: 'n-t',
+          x: 0,
+          y: 0,
+          width: 160,
+          height: 60,
+          text: 'db',
+          tags: ['health:failing'],
+        }),
+      ],
+      edges: [],
+    })
+    await deliver(backend, doc)
+    const declared = SPATIAL_LIGHT_PALETTE.presets['1'].fill
+
+    let plain: Blob | null = null
+    let coloured: Blob | null = null
+    await act(async () => {
+      plain = await result.current.exportScene('svg', { kind: 'spatial' })
+      coloured = await result.current.exportScene('svg', {
+        kind: 'spatial',
+        tagLibrary: { health: { exclusive: true, values: { failing: { color: '1' } } } },
+      })
+    })
+
+    // The library is the only difference, so the declared fill is its doing.
+    expect(await (plain as Blob | null)?.text()).not.toContain(`fill="${declared}"`)
+    expect(await (coloured as Blob | null)?.text()).toContain(`fill="${declared}"`)
   })
 })

@@ -8,7 +8,7 @@
  * workspace the caller may no longer enter, or a count past the stream's
  * limit, then silently ended live sync for every unrelated document too.
  */
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type DocListener, SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
@@ -21,8 +21,12 @@ import { createSyncSseRouter } from './sync-sse.js'
 
 // Its own data dir: resolving a workspace handle opens the store, and one
 // shared with a file running in parallel waits on that file's lock.
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-hub-')))
-afterAll(() => resetDataDirForTests())
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-hub-'))
+setDataDirForTests(dataDir)
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 
 const hubs: SseStreamHub[] = []
 afterEach(() => {

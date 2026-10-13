@@ -56,6 +56,15 @@ test('an incomplete design exits 1 and lists each unmet checkpoint on its own li
   assert.match(lines.join('\n'), /userReach/)
 })
 
+test('a design that plans no test and no criterion is not "all met"', () => {
+  const result = run(
+    [],
+    JSON.stringify({ ...complete, completionCriteria: [], testScenarios: { unit: [] } }),
+  )
+  assert.equal(result.status, 1)
+  assert.match(result.stdout, /2 unmet/)
+})
+
 test('a file argument is read from disk', () => {
   const dir = mkdtempSync(join(tmpdir(), 'check-design-'))
   try {
