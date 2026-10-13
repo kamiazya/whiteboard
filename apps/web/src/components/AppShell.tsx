@@ -341,10 +341,6 @@ function ShellBar({
           fullscreen (iPhone Safari — video-only): a disabled control still
           claims row space and invites a tap that can never work, and there
           is nothing the user could change to enable it. */}
-      {/* Hidden rather than disabled where the browser has no element
-          fullscreen (iPhone Safari — video-only): a disabled control still
-          claims row space and invites a tap that can never work, and there
-          is nothing the user could change to enable it. */}
       {fullscreen.supported && (
         <FullscreenButton buttonRef={toggleRef} onEnter={fullscreen.toggle} />
       )}
