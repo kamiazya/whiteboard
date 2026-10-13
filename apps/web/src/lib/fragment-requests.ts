@@ -40,8 +40,8 @@ export interface FragmentSeams {
  * The cache key of a rendered math block and of a rendered fence. The kind
  * prefix keeps a `$$` block and a same-source ```math fence in separate rows.
  */
-export const mathFragmentKey = (value: string): string => `math:${value}`
-export const fenceFragmentKey = (lang: string, value: string): string => `fence:${lang}:${value}`
+const mathFragmentKey = (value: string): string => `math:${value}`
+const fenceFragmentKey = (lang: string, value: string): string => `fence:${lang}:${value}`
 
 export function fragmentAskKey(ask: FragmentAsk): string {
   return ask.kind === 'math' ? mathFragmentKey(ask.value) : fenceFragmentKey(ask.lang, ask.value)
@@ -76,7 +76,7 @@ export function recordingFragmentSeams(
 }
 
 /** Runs `layout` once with recording seams; the distinct sources it asked for, in order. */
-export function recordFragmentAsks<T>(layout: (seams: FragmentSeams) => T): {
+function recordFragmentAsks<T>(layout: (seams: FragmentSeams) => T): {
   readonly result: T
   readonly asks: readonly FragmentAsk[]
 } {
