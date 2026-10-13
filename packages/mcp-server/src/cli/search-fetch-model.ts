@@ -7,7 +7,7 @@
 // search keep working, and never learn that the half they turned on had
 // silently not engaged.
 
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import {
   classifyEmbedderLoadFailure,
   DEFAULT_MODEL,
@@ -67,7 +67,7 @@ export async function runSearchFetchModel(
     extractor = await loadEmbeddingPipeline({ cacheDir: options.cacheDir, model, dtype })
   } catch (err) {
     const failure = classifyEmbedderLoadFailure(err)
-    const raw = messageOf(err, String(err))
+    const raw = describeThrown(err)
     return {
       result: {
         ...target,

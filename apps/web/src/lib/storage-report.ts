@@ -9,7 +9,7 @@ import {
   storageReportApiUrl,
   storageReportPayloadSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import { readDaemonJson } from './daemon-contract-error.js'
 
 export async function readStorageReport(
@@ -20,6 +20,6 @@ export async function readStorageReport(
     if (!res.ok) return { error: `HTTP ${res.status}` }
     return { report: await readDaemonJson(storageReportApiUrl(), res, storageReportPayloadSchema) }
   } catch (err) {
-    return { error: messageOf(err, String(err)) }
+    return { error: describeThrown(err) }
   }
 }

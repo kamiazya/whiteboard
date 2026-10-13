@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { messageOf } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
@@ -65,7 +65,7 @@ function resolveTokenOrExit(): string | undefined {
     return resolveToken(process.argv, process.env)
   } catch (err) {
     getLogger('server-index').error(
-      { message: messageOf(err, String(err)) },
+      { message: describeThrown(err) },
       'empty daemon token; refusing to start',
     )
     process.exit(1)
@@ -91,7 +91,7 @@ function applyLoadedConfigFileForServerEntrypoint(): void {
   try {
     loaded = loadConfigFile()
   } catch (err) {
-    const message = messageOf(err, String(err))
+    const message = describeThrown(err)
     getLogger('server-index').error(
       { message },
       'invalid whiteboard config file; refusing to start',
