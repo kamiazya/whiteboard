@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -38,12 +39,20 @@ const baselineSignalListeners = {
   sigterm: process.listenerCount('SIGTERM'),
   sigint: process.listenerCount('SIGINT'),
 }
+/** Data dirs the runs below are pointed at; the daemon creates and writes into them. */
+const scratchDirs: string[] = []
+function scratchDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), `${prefix}-`))
+  scratchDirs.push(dir)
+  return dir
+}
 let signalListeners: ReturnType<typeof captureSignalListeners>
 beforeEach(() => {
   signalListeners = captureSignalListeners()
 })
 afterEach(() => {
   signalListeners.restore()
+  for (const dir of scratchDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
 describe('runDaemonRun signal handlers', () => {
@@ -204,7 +213,7 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   })
 
   it('redirects the shared data-dir seam so all storage follows the explicit dataDir', async () => {
-    const dir = join(tmpdir(), `daemon-run-datadir-${Date.now()}`)
+    const dir = scratchDir('daemon-run-datadir')
     const outcome = await runDaemonRun({
       tokenStdin: false,
       dataDir: dir,
@@ -221,7 +230,7 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     // writes into it, the empty dir is invisible to `git status` and just
     // accumulates. Aim the relative path at a temp dir instead: still
     // relative, so it still exercises the resolve(), but nothing lands here.
-    const absolute = join(tmpdir(), `daemon-run-rel-${Date.now()}`)
+    const absolute = scratchDir('daemon-run-rel')
     const rel = relative(process.cwd(), absolute)
     // No relative path exists between two volumes, and path.relative() answers
     // with an absolute one instead — reachable on Windows when TEMP sits on a
@@ -261,7 +270,7 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
 
   it('removes a planted trusted-web-origins.json from the data dir on startup', async () => {
     const fs = await import('node:fs/promises')
-    const dir = join(tmpdir(), `daemon-run-purge-${Date.now()}`)
+    const dir = scratchDir('daemon-run-purge')
     await fs.mkdir(dir, { recursive: true })
     const trustFile = join(dir, 'trusted-web-origins.json')
     await fs.writeFile(trustFile, '{"schemaVersion":2,"origins":[]}')
@@ -282,7 +291,7 @@ describe('runDaemonRun legacy reconnect trust-file purge', () => {
       .spyOn(purgeModule, 'purgeLegacyWebOriginTrustFile')
       .mockRejectedValueOnce(new Error('purge exploded'))
     try {
-      const dir = join(tmpdir(), `daemon-run-purge-fail-${Date.now()}`)
+      const dir = scratchDir('daemon-run-purge-fail')
       // Startup-totality property: an unexpected purge rejection (beyond the
       // ENOENT/permission cases the function already swallows internally)
       // must not change runDaemonRun's outcome — it can only add a log line.

@@ -67,6 +67,7 @@ describe('readExportBody: the optional JSON body', () => {
 describe('resolveRequestedOutputPath', () => {
   it('reads no path or an empty one as "use the default exports directory"', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
     await expect(resolveRequestedOutputPath({}, 'ws', exportsAt(dir))).resolves.toEqual({
       outputPath: undefined,
     })
@@ -79,6 +80,7 @@ describe('resolveRequestedOutputPath', () => {
 
   it('accepts an absolute path inside the exports directory that nothing occupies', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
     const outputPath = join(dir, 'board.png')
     await expect(resolveRequestedOutputPath({ outputPath }, 'ws', exportsAt(dir))).resolves.toEqual(
       {
@@ -89,6 +91,7 @@ describe('resolveRequestedOutputPath', () => {
 
   it('refuses a path outside the exports directory with a status and a body', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
     const outside = join(tmpdir(), 'export-request-elsewhere.png')
     const result = await resolveRequestedOutputPath({ outputPath: outside }, 'ws', exportsAt(dir))
     expect('error' in result).toBe(true)
@@ -97,6 +100,7 @@ describe('resolveRequestedOutputPath', () => {
 
   it('refuses an occupied path unless overwrite is asked for', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
     const outputPath = join(dir, 'taken.png')
     await writeFile(outputPath, 'x')
     const refused = await resolveRequestedOutputPath({ outputPath }, 'ws', exportsAt(dir))
@@ -110,6 +114,7 @@ describe('resolveRequestedOutputPath', () => {
   // answering it as a 400 would blame the caller for it.
   it('rethrows a file-system failure rather than refusing the path', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'export-request-'))
+    onTestFinished(() => rm(dir, { recursive: true, force: true }))
     await writeFile(join(dir, 'a-file'), 'x')
     const throughAFile = join(dir, 'a-file', 'board.png')
     await expect(
