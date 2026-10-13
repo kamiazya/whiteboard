@@ -18,6 +18,13 @@ import {
 } from '../../lib/user-settings-store.js'
 import { jsonResponse } from '../../test-utils/json-response.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
+// The move path loads this module with `await import()` once the promotion
+// answers, and it is the one module on that path the file does not mock.
+// Left cold, its graph's transform-and-load is charged to the first test's
+// `findBy*` and per-test timeout, which a loaded machine outlasts — and the
+// timed-out handler then runs on into the next test's mocks. Loaded here, it
+// is paid at collection, outside every timer.
+import '../../lib/browser-workspace-removal.js'
 
 vi.mock('../../lib/promote-workspace.js', () => ({
   countBrowserWorkspaceDocuments: vi.fn(async () => 2),

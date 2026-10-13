@@ -13,8 +13,19 @@ import { BRIDGE_DAEMON_BASE_URL } from '../../lib/bridge-address.js'
 import { withReplicaEntry } from '../../lib/replicas.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { LocalCopiesCard } from './LocalCopiesCard.js'
+// The card's confirm handler loads this module with `await import()` on the
+// first click. Left cold, that load — the module's whole graph — is charged
+// to the `waitFor` after the click, whose 1 s default it outlasts on a loaded
+// machine. Loaded here, it is paid at collection, outside every timer, and
+// the handler's import resolves from the module cache.
+import '../../lib/browser-workspace-removal.js'
 
-const deleteDoc = vi.fn(async () => {})
+/** Whether the claim was still standing when the record was deleted. */
+let claimStoodAtDelete: boolean | undefined
+const deleteDoc = vi.fn(async ({ docRef }: { docRef: { workspaceId: string } }) => {
+  claimStoodAtDelete =
+    createUserSettingsStore().load().storage.replicas?.[docRef.workspaceId] !== undefined
+})
 
 const listBrowserWorkspaces = vi.fn(async () => [
   { workspaceId: 'ws-browser', segment: 'mine', displayName: 'My own board' },
@@ -61,6 +72,7 @@ function seedReplicas() {
 beforeEach(() => {
   createUserSettingsStore().reset()
   deleteDoc.mockClear()
+  claimStoodAtDelete = undefined
   listBrowserWorkspaces.mockClear()
   browserDocumentCounts.mockClear()
 })
@@ -162,6 +174,9 @@ it('drops the claim and the record, in that order, once the confirm is taken', a
     })
   })
   expect(store.load().storage.replicas?.['ws-cached']).toBeUndefined()
+  // The order: a claim outliving its record points every reader at nothing,
+  // while bytes outliving their claim are overwritten by the next pull.
+  expect(claimStoodAtDelete).toBe(false)
   // Scoped: the other replica's claim survives.
   expect(store.load().storage.replicas?.['ws-open']).toBeDefined()
   await waitFor(() => {
