@@ -8,12 +8,74 @@
 // say what a function scores, which is the number a review of "did this diff
 // make it harder to follow?" needs.
 
-/** `--base <ref>`, `--changed`, and the files named — every other argument. */
+const FLAGS = new Set(['--base', '--changed'])
+
+/**
+ * `--base <ref>`, `--changed`, and the files named — every other argument.
+ * Any other `-`-prefixed argument throws: a misspelled `--changed` would
+ * otherwise leave no files to score and read as a clean measurement.
+ */
 export function argsFrom(argv) {
+  const unknown = argv.find(
+    (a, i) => a.startsWith('-') && !FLAGS.has(a) && argv[i - 1] !== '--base',
+  )
+  if (unknown !== undefined) throw new UsageError(`unknown option ${unknown}`)
   const baseAt = argv.indexOf('--base')
   const base = baseAt === -1 ? null : argv[baseAt + 1]
+  if (base === undefined) throw new UsageError('--base needs a <ref>')
   const files = argv.filter((a, i) => !a.startsWith('--') && (baseAt === -1 || i !== baseAt + 1))
   return { base, changed: argv.includes('--changed'), files }
+}
+
+/** A refusal the CLI answers with its usage and exit 2. */
+export class UsageError extends Error {}
+
+const SCRIPT = /\.(c|m)?[jt]sx?$/
+
+/**
+ * Which repo-relative paths `pnpm lint` scores for cognitive complexity,
+ * derived from `biome.json` rather than restated, so `--changed` measures
+ * exactly the files the rule covers: `files.includes` decides what biome reads
+ * at all, and the rule applies where the top-level config or an override
+ * turns it on. An override that turns it OFF (an exemption) is not
+ * subtracted — measuring an exempt file is this tool's purpose.
+ */
+export function complexityScopeFrom(biomeJson) {
+  const config = JSON.parse(biomeJson)
+  const read = config.files?.includes ? includesMatcher(config.files.includes) : () => true
+  const on = (rules) => isRuleOn(rules?.complexity?.noExcessiveCognitiveComplexity)
+  const scopes = (config.overrides ?? [])
+    .filter((o) => on(o.linter?.rules))
+    .map((o) => includesMatcher(o.includes ?? ['**']))
+  if (on(config.linter?.rules)) scopes.push(() => true)
+  return (path) => SCRIPT.test(path) && read(path) && scopes.some((inScope) => inScope(path))
+}
+
+function isRuleOn(rule) {
+  if (rule === undefined) return false
+  const level = typeof rule === 'string' ? rule : rule.level
+  return level !== 'off'
+}
+
+/** Biome's `includes`: read in order, a `!` pattern excluding what earlier ones took in. */
+function includesMatcher(patterns) {
+  const compiled = patterns.map((p) =>
+    p.startsWith('!')
+      ? { keep: false, re: globToRegExp(p.slice(1)) }
+      : { keep: true, re: globToRegExp(p) },
+  )
+  return (path) => compiled.reduce((kept, { keep, re }) => (re.test(path) ? keep : kept), false)
+}
+
+/** A root-anchored glob: `**` spans directories, `*` and `?` stay inside one. */
+const GLOB_TOKENS = { '**/': '(?:.*/)?', '**': '.*', '*': '[^/]*', '?': '[^/]' }
+
+function globToRegExp(glob) {
+  const body = glob.replace(
+    /\*\*\/|\*\*|\*|\?|[.+^${}()|[\]\\]/g,
+    (t) => GLOB_TOKENS[t] ?? `\\${t}`,
+  )
+  return new RegExp(`^${body}$`)
 }
 
 /** The threshold `biome.json` enforces, read from the config rather than restated. */

@@ -36,7 +36,8 @@ Workflow({ scriptPath: '.claude/workflows/review.workflow.mjs',
   to follow all pass their tests and read as finished to every other
   dimension, so the only reliable catch is a lane that always asks.
   `complexity` measures with `node .claude/scripts/complexity-of.mjs --base
-  origin/main --changed` rather than by editing `biome.json`.
+  origin/main --changed` rather than by editing `biome.json`; `--changed` covers
+  every file the lint rule scores, `.mjs` scripts included.
   They answer `notApplicable` cheaply when the diff has nothing for them. `security` always runs in
   addition, unconditionally. Each entry is either a legacy plain string
   (criteria stays embedded in `reviewer-dimension.md`) or `{name, content}`

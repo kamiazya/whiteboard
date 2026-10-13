@@ -25,6 +25,13 @@ another file is joined to its old self and reads `(from <file>)`, so an
 extracted module shows as a move rather than as new code. Quote those
 numbers in a finding. Never measure by editing `biome.json` in the tree under review.
 
+`--changed` takes exactly the files `pnpm lint` scores for this rule, read from
+`biome.json`'s `files.includes` and the override that turns the rule on: `.ts`,
+`.tsx` AND `.mjs` — the dev proxy, hooks, smokes and these scripts are linted
+source — but not tests, `test-utils/` or `*.workflow.mjs`. A diff that touches
+only scripts is therefore still something to measure. A misspelled flag exits 2
+rather than reporting `no files`.
+
 ## Criteria
 
 ### 1. The exemption list does not grow without an architectural answer
@@ -75,5 +82,5 @@ Check:
   documents list algorithms whose complexity is the point (a search, a cost
   model, a gesture reducer's exhaustive switch). Read the rule for the package
   before raising one of those.
-- **`notApplicable`** when the diff changes no TypeScript logic — docs,
-  configuration, fixtures.
+- **`notApplicable`** when the diff changes no linted source — docs,
+  configuration, fixtures, tests. A `.mjs` script is linted source.

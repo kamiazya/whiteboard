@@ -95,7 +95,7 @@ Do this only while no dev daemon is running — an already-running old daemon ke
 
 **Codex** — nothing to do: the repo-tracked `.codex/config.toml` already registers the dev stdio proxy as `whiteboard_dev` (and disables the plugin-provided published server).
 
-**Claude Code** — register the stdio proxy once per checkout, per [CONTRIBUTING.md](../../CONTRIBUTING.md):
+**Claude Code** — register the stdio proxy once per repository (every worktree shares the main checkout's slot), per [CONTRIBUTING.md](../../CONTRIBUTING.md):
 
 ```bash
 claude mcp add --scope local --transport stdio whiteboard -- \
@@ -111,7 +111,7 @@ Opening this repo in Codex auto-overrides the published `npx` config with the lo
 | File | Launch target | Role |
 |---|---|---|
 | `.mcp.json` | `npx -y @kamiazya/whiteboard-mcp@latest` | Published `stdio` config. The Codex plugin (`./.codex-plugin/plugin.json`) references it via `"mcpServers": "./.mcp.json"`, and it is bundled into the release tarball. |
-| `whiteboard` at `--scope local` in `~/.claude.json` | `node ./packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` | Claude Code dev override, registered once per checkout with the `claude mcp add --scope local` command above. Local scope takes precedence over `.mcp.json`'s project scope. It is machine-private, so it is not tracked here. |
+| `whiteboard` at `--scope local` in `~/.claude.json` | `node ./packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` | Claude Code dev override, registered once per repository with the `claude mcp add --scope local` command above — every worktree resolves to the main checkout's slot. Local scope takes precedence over `.mcp.json`'s project scope. It is machine-private, so it is not tracked here. |
 | `[mcp_servers.whiteboard_dev]` in `.codex/config.toml` | the same stdio proxy | Codex repo-layer dev override. The `_dev` suffix is load-bearing: `[mcp_servers.whiteboard]` in the same file is the published entry, pinned `enabled = false` so it does not compete. Codex merges layers `system < user < cwd < tree < repo < runtime`, with later layers winning. |
 
 The Claude plugin (`.claude-plugin/plugin.json`) carries `mcpServers` inline. Keep it in sync with `.mcp.json`. The Codex plugin (`.codex-plugin/plugin.json`) uses `./`-relative paths. Update both manifests and the actual file layout together.
