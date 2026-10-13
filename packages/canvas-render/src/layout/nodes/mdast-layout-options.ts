@@ -138,7 +138,9 @@ export interface MdastLayoutOptions {
   /** The fill for each token role. Absent, a tokenised run paints as body text. */
   readonly syntax?: Partial<Readonly<Record<CodeTokenRole, string>>>
   /**
-   * Renders a math source string to an SVG fragment. Optional composition-
+   * Renders a display-math source string (a `$$` block) to an SVG fragment.
+   * Inline `$…$` math never reaches this seam: it is drawn as source text
+   * inside its line. Optional composition-
    * root seam — MathJax itself is never imported by this package. Absent a
    * real renderer, math nodes fall back to a deterministic placeholder
    * fragment carrying the raw source as escaped text. A renderer that knows
@@ -148,10 +150,7 @@ export interface MdastLayoutOptions {
    * renderer that has not produced this value yet — an async renderer's
    * cache miss) falls back to the escaped-source placeholder.
    */
-  readonly renderMath?: (
-    value: string,
-    displayMode: boolean,
-  ) => string | RenderedSvgFragment | undefined
+  readonly renderMath?: (value: string) => string | RenderedSvgFragment | undefined
   /**
    * Renders a fenced code block's content as a diagram (mermaid and
    * friends) — same injected-resolver class as `renderMath`: synchronous,

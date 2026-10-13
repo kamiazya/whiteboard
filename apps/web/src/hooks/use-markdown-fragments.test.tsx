@@ -23,9 +23,9 @@ describe('useMarkdownFragments', () => {
     const { result } = renderHook(() => useMarkdownFragments({ body: MATH_BODY, loaders: l }))
     // Before the first render lands, the sync seam misses (layout keeps its
     // placeholder fallback).
-    expect(result.current.renderMath('x^2', true)).toBeUndefined()
+    expect(result.current.renderMath('x^2')).toBeUndefined()
     await waitFor(() =>
-      expect(result.current.renderMath('x^2', true)).toEqual({
+      expect(result.current.renderMath('x^2')).toEqual({
         svg: '<g data-math="x^2"/>',
         height: 40,
       }),
@@ -57,13 +57,13 @@ describe('useMarkdownFragments', () => {
     const l = loaders()
     const body = '$$\nx^2\n$$\n\n```math\nx^2\n```\n'
     const { result } = renderHook(() => useMarkdownFragments({ body, loaders: l }))
-    await waitFor(() => expect(result.current.renderMath('x^2', true)).toBeDefined())
+    await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
     await act(async () => {})
     // The fence went to the diagram loader (which declined the language);
     // its decline must not shadow — nor be shadowed by — the math result.
     expect(l.diagram).toHaveBeenCalledWith('math', 'x^2')
     expect(result.current.renderDiagram('math', 'x^2')).toBeUndefined()
-    expect(result.current.renderMath('x^2', true)).toBeDefined()
+    expect(result.current.renderMath('x^2')).toBeDefined()
   })
 
   it('caches a failed render as terminal instead of retrying it per keystroke', async () => {
@@ -80,7 +80,7 @@ describe('useMarkdownFragments', () => {
     rerender({ body: MATH_BODY })
     await act(async () => {})
     expect(math).toHaveBeenCalledTimes(1)
-    expect(result.current.renderMath('x^2', true)).toBeUndefined()
+    expect(result.current.renderMath('x^2')).toBeUndefined()
   })
 
   it('survives a StrictMode double-mount: completions after the dev remount still land', async () => {
@@ -93,7 +93,19 @@ describe('useMarkdownFragments', () => {
     const { result } = renderHook(() => useMarkdownFragments({ body: MATH_BODY, loaders: l }), {
       wrapper: StrictMode,
     })
-    await waitFor(() => expect(result.current.renderMath('x^2', true)).toBeDefined())
+    await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
+  })
+
+  it('renders math in a blockquote and a diagram fence in a list item', async () => {
+    const l = loaders()
+    const body = '> $$\n> x^2\n> $$\n\n- item\n\n  ```mermaid\n  graph TD; A-->B\n  ```\n'
+    const { result } = renderHook(() => useMarkdownFragments({ body, loaders: l }))
+    await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
+    await waitFor(() =>
+      expect(result.current.renderDiagram('mermaid', 'graph TD; A-->B')).toBeDefined(),
+    )
+    expect(l.math).toHaveBeenCalledWith('x^2')
+    expect(l.diagram).toHaveBeenCalledWith('mermaid', 'graph TD; A-->B')
   })
 
   it('offers nothing for an unparseable mid-edit body', async () => {

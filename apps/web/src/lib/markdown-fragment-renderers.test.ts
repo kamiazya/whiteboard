@@ -12,7 +12,7 @@ import { renderDiagramFragment, renderMathFragment } from './markdown-fragment-r
 
 describe('renderMathFragment (real MathJax)', () => {
   it('renders TeX to a sized SVG fragment', async () => {
-    const fragment = await renderMathFragment('x^2 + y^2 = z^2', true)
+    const fragment = await renderMathFragment('x^2 + y^2 = z^2')
     expect(fragment).toBeDefined()
     expect(fragment?.svg).toMatch(/^<svg/)
     expect(fragment?.svg).toContain('</svg>')
@@ -24,8 +24,8 @@ describe('renderMathFragment (real MathJax)', () => {
     // MathJax renders most malformed TeX as an error node, and this
     // module's own guards map anything else to undefined — totality here
     // means "resolves, never rejects", with either answer valid.
-    await expect(renderMathFragment('\\undefinedmacro{', true)).resolves.not.toThrow
-    const fragment = await renderMathFragment('\\undefinedmacro{', true)
+    await expect(renderMathFragment('\\undefinedmacro{')).resolves.not.toThrow
+    const fragment = await renderMathFragment('\\undefinedmacro{')
     if (fragment !== undefined) expect(fragment.svg).toMatch(/^<svg/)
   })
 
@@ -33,7 +33,7 @@ describe('renderMathFragment (real MathJax)', () => {
     // AllPackages minus `href` plus the output-side guard: whichever layer
     // catches it, no attacker-controlled URL may survive into SVG this app
     // injects verbatim.
-    const fragment = await renderMathFragment('\\href{javascript:alert(1)}{x}', true)
+    const fragment = await renderMathFragment('\\href{javascript:alert(1)}{x}')
     if (fragment !== undefined) {
       expect(fragment.svg).not.toContain('javascript:')
       for (const match of fragment.svg.matchAll(/href\s*=\s*"([^"]*)"/gi)) {

@@ -22,7 +22,12 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer'
 import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { renderDiagramFragment, renderMathFragment } from './markdown-fragment-renderers.js'
+import {
+  fenceFragmentKey,
+  mathFragmentKey,
+  renderDiagramFragment,
+  renderMathFragment,
+} from './markdown-fragment-renderers.js'
 import { embedTextInPng } from './png-embed.js'
 import { rasterizeSvgToPng } from './rasterize-svg.js'
 import { layoutMarkdownScene } from './render-preview.js'
@@ -38,7 +43,7 @@ export interface DrawnDocument {
 
 /** The async engines behind math blocks and diagram fences. */
 interface ExportFragmentLoaders {
-  readonly math: (value: string, displayMode: boolean) => Promise<RenderedSvgFragment | undefined>
+  readonly math: (value: string) => Promise<RenderedSvgFragment | undefined>
   readonly diagram: (lang: string, value: string) => Promise<RenderedSvgFragment | undefined>
 }
 
@@ -139,12 +144,12 @@ async function markdownExportScene(body: string, options: MarkdownExportOptions)
   const wanted = new Map<string, () => Promise<RenderedSvgFragment | undefined>>()
   const first = layoutMarkdownScene(body, {
     ...base,
-    renderMath: (value, displayMode) => {
-      wanted.set(mathKey(value, displayMode), () => loaders.math(value, displayMode))
+    renderMath: (value) => {
+      wanted.set(mathFragmentKey(value), () => loaders.math(value))
       return undefined
     },
     renderDiagram: (lang, value) => {
-      wanted.set(fenceKey(lang, value), () => loaders.diagram(lang, value))
+      wanted.set(fenceFragmentKey(lang, value), () => loaders.diagram(lang, value))
       return undefined
     },
   })
@@ -156,13 +161,10 @@ async function markdownExportScene(body: string, options: MarkdownExportOptions)
   )
   return layoutMarkdownScene(body, {
     ...base,
-    renderMath: (value, displayMode) => rendered.get(mathKey(value, displayMode)),
-    renderDiagram: (lang, value) => rendered.get(fenceKey(lang, value)),
+    renderMath: (value) => rendered.get(mathFragmentKey(value)),
+    renderDiagram: (lang, value) => rendered.get(fenceFragmentKey(lang, value)),
   })
 }
-
-const mathKey = (value: string, displayMode: boolean) => `math:${displayMode}:${value}`
-const fenceKey = (lang: string, value: string) => `fence:${lang}:${value}`
 
 /**
  * The backend emits an `<image href>` verbatim and escapes nothing a blob URL

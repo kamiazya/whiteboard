@@ -30,7 +30,7 @@ const log = getAppLogger('markdown-fragments')
  */
 const MATHJAX_EX_TO_PX = 8
 
-type MathJaxConvert = (value: string, displayMode: boolean) => string
+type MathJaxConvert = (value: string) => string
 
 let mathjaxSingleton: Promise<MathJaxConvert | undefined> | undefined
 
@@ -62,8 +62,8 @@ async function loadMathJax(): Promise<MathJaxConvert | undefined> {
     const tex = new TeX({ packages: AllPackages.filter((name) => name !== 'href') })
     const svg = new SVG({ fontCache: 'local' })
     const doc = mathjax.document('', { InputJax: tex, OutputJax: svg })
-    return (value: string, displayMode: boolean) => {
-      const node = doc.convert(value, { display: displayMode })
+    return (value: string) => {
+      const node = doc.convert(value, { display: true })
       // convert() returns an mjx-container element; the <svg> child is the
       // fragment canvas-render embeds.
       return adaptor.innerHTML(node)
@@ -100,15 +100,23 @@ function exAttrToPx(svg: string, attr: 'width' | 'height'): number | undefined {
   return Number.isFinite(ex) ? ex * MATHJAX_EX_TO_PX : undefined
 }
 
-export async function renderMathFragment(
-  value: string,
-  displayMode: boolean,
-): Promise<RenderedSvgFragment | undefined> {
+/**
+ * The cache key of a rendered math block and of a rendered fence. Both
+ * places that answer the synchronous seams from an async cache — the
+ * preview and the export — key through these, so a fragment one of them
+ * asks for is the fragment the other would serve. The kind prefix keeps a
+ * `$$` block and a same-source ```math fence in separate rows.
+ */
+export const mathFragmentKey = (value: string): string => `math:${value}`
+export const fenceFragmentKey = (lang: string, value: string): string => `fence:${lang}:${value}`
+
+/** Typesets one display-math block; inline math is drawn as source by the layout. */
+export async function renderMathFragment(value: string): Promise<RenderedSvgFragment | undefined> {
   mathjaxSingleton ??= loadMathJax()
   const convert = await mathjaxSingleton
   if (convert === undefined) return undefined
   try {
-    const svg = convert(value, displayMode)
+    const svg = convert(value)
     if (!svg.startsWith('<svg') || !fragmentHrefsAreLocal(svg)) return undefined
     const width = exAttrToPx(svg, 'width')
     const height = exAttrToPx(svg, 'height')
