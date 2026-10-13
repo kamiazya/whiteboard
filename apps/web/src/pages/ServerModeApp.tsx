@@ -18,7 +18,7 @@ import {
   signInRefusalSchema,
   signInSessionResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import type { z } from 'zod'
 import { NewWorkspaceControl } from '../components/server-mode/NewWorkspaceControl.js'
@@ -259,9 +259,15 @@ function WorkspaceList({ source }: Readonly<{ source: KeeperWorkspaces['source']
 function useKeeperWorkspaces(fetchFn: Fetch) {
   const navigate = useNavigate()
   const daemonShellTarget = useMemo(() => ({ baseUrl: window.location.origin }), [])
+  // The seam is memoized on this callback and its list is read in an effect
+  // keyed on the seam, while the router hands out a new `navigate` whenever
+  // the address moves. Read through a ref, so moving the address — a rename
+  // that changes the segment does — is not a fresh list racing the rename.
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
   const setDaemonRoute = useCallback(
-    (route: WorkspaceRoute) => navigate(workspaceRoutePath(route)),
-    [navigate],
+    (route: WorkspaceRoute) => navigateRef.current(workspaceRoutePath(route)),
+    [],
   )
   return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute, fetchFn })
     .daemonWorkspaces

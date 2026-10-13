@@ -77,6 +77,11 @@ function renderSignedIn(
   return fake
 }
 
+const lists = (fake: ReturnType<typeof installFakeDaemonFetch>) =>
+  fake.mock.calls.filter(
+    ([url, init]) => init?.method === undefined && String(url).endsWith('/api/workspaces'),
+  )
+
 const posts = (fake: ReturnType<typeof installFakeDaemonFetch>) =>
   fake.mock.calls.filter(([, init]) => init?.method === 'POST')
 
@@ -237,7 +242,7 @@ describe('the server-mode workspace shell renames the open workspace', () => {
   })
 
   it('still names the workspace in the switcher after its address moves', async () => {
-    renderSignedIn([plans, other], undefined, {
+    const fake = renderSignedIn([plans, other], undefined, {
       at: '/w/plans',
       onPatch: () => jsonResponse({ workspaceId: 'ws-1', displayName: 'Plans', segment: 'notes' }),
     })
@@ -249,6 +254,9 @@ describe('the server-mode workspace shell renames the open workspace', () => {
 
     await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'notes' }))
     expect(await pickerSummary('Plans')).toBeTruthy()
+    // Moving the address is not a reason to list again: a re-list racing the
+    // rename is how the switcher lost the row it had just renamed.
+    expect(lists(fake)).toHaveLength(1)
   })
 })
 
