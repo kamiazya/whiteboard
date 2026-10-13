@@ -31,12 +31,14 @@ export const REFERENCE_BUDGET = 256
  * The ONE definition of "what counts as a reference", so a keeper never
  * decides it alone: a body's `[[target]]` and `![[target]]` (the codec
  * scanner's grammar, the same one the reference index uses), a canvas's
- * file nodes, minus image assets, which are not documents, and whatever
- * its text nodes' bodies write in that grammar. Passing what is
- * already `loaded` extends the walk one step through each loaded body and
- * canvas — so a prefetch loop calls this until it answers nothing new — but
- * only as far as `DEPTH_CAP`, and never past `REFERENCE_BUDGET` targets in
- * order of discovery. Both bounds live here so every keeper inherits them.
+ * file nodes, and whatever its text nodes' bodies write in that grammar —
+ * minus image assets in every one of them, which are not documents
+ * (`imageTargets` answers for those). Passing what is already `loaded`
+ * extends the walk one step through each loaded body and canvas, and
+ * `walkReferences` is the loop that calls this until it answers nothing
+ * new — but only as far as `DEPTH_CAP`, and never past `REFERENCE_BUDGET`
+ * targets in order of discovery. Both bounds live here so every keeper
+ * inherits them.
  */
 export function referenceTargets(seeds: {
   readonly bodies?: readonly string[]
@@ -45,7 +47,10 @@ export function referenceTargets(seeds: {
 }): readonly string[] {
   const targets = new Set<string>()
   const queue: { readonly target: string; readonly depth: number }[] = []
+  // The one image filter, ahead of the budget, so a body or canvas full of
+  // pictures cannot crowd a document out of it, whichever arm names them.
   const add = (target: string, depth: number) => {
+    if (isImageRef(target)) return
     if (targets.size >= REFERENCE_BUDGET || targets.has(target)) return
     targets.add(target)
     queue.push({ target, depth })
@@ -57,7 +62,7 @@ export function referenceTargets(seeds: {
     for (const node of canvas.nodes) {
       const file = nodeFile(node)
       const text = nodeText(node)
-      if (file !== undefined && !isImageRef(file)) add(file, depth)
+      if (file !== undefined) add(file, depth)
       // A text node's body is markdown the composer lays out with the same
       // seams a note gets, so what it embeds and links has to load too.
       else if (text !== undefined) addBody(text, depth)
@@ -120,4 +125,93 @@ export function imageTargets(seeds: {
     else if (entry.canvas !== undefined) addAll(storedImageRefs({ canvas: entry.canvas }))
   }
   return [...images]
+}
+
+/** What a render starts from: the document it draws, before anything is loaded. */
+export interface ReferenceSeeds {
+  readonly bodies?: readonly string[]
+  readonly canvases?: readonly SpatialCanvas[]
+}
+
+export interface WalkReferencesOptions {
+  /**
+   * What a target whose load threw is recorded as. Absent, the throw ends
+   * the walk — right for a caller that must not mistake a failed read for a
+   * dangling reference (a cached picture keyed as though the embed named
+   * nothing). Supplied, the walk is total: answering `null` draws the
+   * reference unresolved and keeps loading the rest.
+   */
+  readonly onFailure?: (target: string, error: unknown) => LoadedReference | null
+}
+
+type Recorded = readonly (readonly [string, LoadedReference | null])[]
+
+/**
+ * The targets `referenceTargets` names that the graph has not asked for yet.
+ * Each target is asked for exactly once — a `null` answer is recorded too —
+ * and the walk ends when a step adds nothing, which it must: the targets
+ * are bounded by `REFERENCE_BUDGET` and every step records at least one.
+ */
+function frontier(seeds: ReferenceSeeds, graph: ReferenceGraph): readonly string[] {
+  return referenceTargets({ ...seeds, loaded: graph }).filter((target) => !graph.has(target))
+}
+
+/**
+ * Loads everything the seeds point at, transitively, into the graph
+ * `referenceSeams` and `referenceWire` read — the ONE loop over
+ * `referenceTargets`, so depth, budget, the image filter and "never load a
+ * target twice" are inherited rather than re-decided by each keeper. The
+ * keeper supplies only how one target is read and what a failed read means.
+ *
+ * Each step's targets load in parallel; the steps themselves are sequential
+ * because what the next one asks for is what this one's bodies and canvases
+ * name. Entries are recorded in discovery order whatever order loads settle
+ * in, so a graph — and every key derived from it — is the same on every run.
+ */
+export async function walkReferences(
+  seeds: ReferenceSeeds,
+  load: (target: string) => Promise<LoadedReference | null>,
+  options: WalkReferencesOptions = {},
+): Promise<ReferenceGraph> {
+  const graph = new Map<string, LoadedReference | null>()
+  const loadOne = async (target: string): Promise<LoadedReference | null> => {
+    try {
+      return await load(target)
+    } catch (error) {
+      if (options.onFailure === undefined) throw error
+      return options.onFailure(target, error)
+    }
+  }
+  for (let wanted = frontier(seeds, graph); wanted.length > 0; wanted = frontier(seeds, graph)) {
+    // Sequential by necessity, parallel within: see the doc above.
+    const step: Recorded = await Promise.all(
+      wanted.map(async (target) => [target, await loadOne(target)] as const),
+    )
+    for (const [target, entry] of step) graph.set(target, entry)
+  }
+  return graph
+}
+
+/**
+ * `walkReferences` for a keeper that holds every document in memory already
+ * (the offline replica), so a render needs no promise to read one.
+ */
+export function walkReferencesSync(
+  seeds: ReferenceSeeds,
+  load: (target: string) => LoadedReference | null,
+  options: WalkReferencesOptions = {},
+): ReferenceGraph {
+  const graph = new Map<string, LoadedReference | null>()
+  const loadOne = (target: string): LoadedReference | null => {
+    try {
+      return load(target)
+    } catch (error) {
+      if (options.onFailure === undefined) throw error
+      return options.onFailure(target, error)
+    }
+  }
+  for (let wanted = frontier(seeds, graph); wanted.length > 0; wanted = frontier(seeds, graph)) {
+    for (const target of wanted) graph.set(target, loadOne(target))
+  }
+  return graph
 }

@@ -195,6 +195,20 @@ describe('referenceTargets', () => {
     expect(referenceTargets({ bodies: ['![[d1]]'], loaded })).toEqual(['d1', 'd2', 'd3'])
   })
 
+  it("leaves a body's image embeds out, so the budget is spent on documents", () => {
+    // `![[asset:…]]` scans as an embed, but a stored picture is not a
+    // document: asking a keeper for it as one costs a lookup that answers
+    // nothing, and every such ref would push a real document past the budget.
+    const pictures = Array.from({ length: REFERENCE_BUDGET }, (_, i) => `![[asset:p${i}]]`)
+    expect(referenceTargets({ bodies: ['![[asset:abc]] and [[note]]'] })).toEqual(['note'])
+    expect(referenceTargets({ bodies: [`${pictures.join(' ')} [[after]]`] })).toEqual(['after'])
+    const withText: SpatialCanvas = {
+      nodes: [textNode({ id: 't', x: 0, y: 0, width: 10, height: 10, text: '![[asset:x]]' })],
+      edges: [],
+    }
+    expect(referenceTargets({ canvases: [withText] })).toEqual([])
+  })
+
   it('caps the total at a budget, and says so in order of discovery', () => {
     const body = Array.from({ length: 300 }, (_, i) => `[[n${i}]]`).join(' ')
     const targets = referenceTargets({ bodies: [body] })

@@ -45,6 +45,13 @@ const note: WorkspaceDocumentEntry = {
   contentDigest: 'cccccccccccccccc',
 }
 
+const pictured: WorkspaceDocumentEntry = {
+  documentId: 'n3',
+  path: 'notes/c',
+  kind: 'markdown',
+  contentDigest: 'eeeeeeeeeeeeeeee',
+}
+
 /**
  * The renderers answer as the worker does: a picture drawn without the
  * documents its subject names says so, and one drawn with them does not.
@@ -55,6 +62,7 @@ function deps(
   const bodies = new Map([
     ['n1', '# Embedded'],
     ['n2', 'see ![[notes/a]]'],
+    ['n3', '![[asset:pic]] beside ![[notes/a]]'],
   ])
   const source = fakeFilesSource({
     loadMarkdown: async (entry) => ({ body: bodies.get(entry.documentId) ?? '' }),
@@ -97,6 +105,17 @@ describe('a row draws what its document embeds', () => {
 
     const wire = d.renderMarkdown.mock.calls.at(-1)?.[3]?.references
     expect(entryOf(wire, 'notes/a')).toMatchObject({ documentId: 'n1', body: '# Embedded' })
+  })
+
+  // A stored picture is drawn from the file store, so the wire never carries
+  // it and the keeper is never asked for it as a document.
+  it('leaves a picture a note embeds off the wire it reads', async () => {
+    const d = deps([pictured, embedded])
+
+    expect(await createRowRenderLoader(d)(pictured)).toEqual(DRAWN)
+
+    const wire = d.renderMarkdown.mock.calls.at(-1)?.[3]?.references
+    expect(wire?.entries.map(([key]) => key)).toEqual(['notes/a'])
   })
 
   // No churn for the common case: a document that names nothing is drawn

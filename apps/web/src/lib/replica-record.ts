@@ -12,8 +12,8 @@ import {
   type ReferenceExtra,
   type ReferenceGraph,
   type ReferenceWire,
-  referenceTargets,
   referenceWire,
+  walkReferencesSync,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
@@ -159,8 +159,8 @@ export interface ReplicaReferences {
  * What the selected document points at, resolved out of the replica itself.
  *
  * Seeded from what the SELECTED document says, then walked the way every
- * other keeper walks it — `referenceTargets` re-reads the graph as it grows,
- * so a referenced body's own links load too, under its own caps. Nothing here
+ * other keeper walks it (`walkReferencesSync`), so a referenced body's own
+ * links load too, under the same caps. Nothing here
  * reaches a keeper: every target's body or canvas is read from the same
  * record, which is what makes references work on the one page that exists
  * BECAUSE the daemon is unreachable.
@@ -189,14 +189,7 @@ export function replicaReferenceGraph({
   }
   const seed = readReplicaContent(record, selected)
   const seeds = seed.kind === 'spatial' ? { canvases: [seed.canvas] } : { bodies: [seed.body] }
-  const graph = new Map<string, LoadedReference | null>()
-  for (;;) {
-    const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
-      (target) => !graph.has(target),
-    )
-    if (wanted.length === 0) break
-    for (const target of wanted) graph.set(target, load(target))
-  }
+  const graph = walkReferencesSync(seeds, load)
   return { graph, images: imageTargets({ ...seeds, loaded: graph }) }
 }
 
