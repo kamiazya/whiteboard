@@ -47,6 +47,12 @@ export interface DocumentFileAdapter {
    * Resolves a reference to the document behind it. Facets ride along on the
    * load the embed seam already performs — a second fetch just to read four
    * frontmatter fields would double every referenced document's cost.
+   *
+   * The two non-answers are opposite instructions to the seam that caches
+   * this. `undefined` asserts the document is ABSENT and is terminal: cached
+   * until the target's stamp moves. A REJECTION means the read failed — a
+   * busy store, a dropped request — and is asked again. Folding a failure
+   * into `undefined` leaves the embed blank for the life of the page.
    */
   loadDocument(ref: string): Promise<LoadedFileDocument | undefined>
   /** Resolves an image reference to a displayable URL, or undefined. */

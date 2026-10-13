@@ -4,9 +4,10 @@
  * editor's `resolveReference` seam is SYNCHRONOUS by contract — so the page
  * pre-fetches referenced documents here and hands the editor a cache lookup.
  *
- * Totality mirrors the layout seam: any load/import failure resolves to
- * `undefined` and the editor keeps the card — a broken reference must never
- * take down the page.
+ * A broken reference must never take down the page, but a document that
+ * could not be READ is not one that is absent: the loaders re-throw a failed
+ * read so the seam that caches them asks again, and answer `undefined` only
+ * for a document the store does not hold (see `DocumentFileAdapter`).
  */
 
 import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
@@ -76,7 +77,10 @@ async function loadDocumentName(documentId: string): Promise<string | undefined>
   return (await loadDocumentEntry(documentId))?.name
 }
 
-/** Loads one referenced canvas's spatial content from IndexedDB. */
+/**
+ * Loads one referenced document from IndexedDB for the canvas's seams.
+ * Re-throws a failed read for the reason `loadBrowserReference` gives.
+ */
 async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocument | undefined> {
   try {
     const doc = await loadDocumentContent(documentId)
@@ -84,7 +88,7 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
     return readLoadedFileDocument(doc, await loadDocumentName(documentId))
   } catch (err) {
     log.warn('embedded document load failed', { documentId, err })
-    return undefined
+    throw err
   }
 }
 

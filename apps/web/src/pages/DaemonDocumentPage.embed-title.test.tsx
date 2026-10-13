@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
@@ -146,5 +147,49 @@ describe('DaemonDocumentPage embedded note title', () => {
       { timeout: 10_000 },
     )
     expect(latestReferences()?.resolveAlias('notes/linked')).toBe(LINKED_ID)
+  })
+
+  it('asks again when the keeper was busy, and draws the embed once it answers', async () => {
+    // A 503 is the daemon's "database busy", not "no such document": the
+    // body's loader must reject so the prefetch retries, rather than answer
+    // the terminal `undefined` that leaves the embed blank for the page's life.
+    let busy = true
+    const snapshotReads = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/names')) return jsonResponse({ documents: {}, pinned: [] })
+        if (url.includes('other') && url.endsWith('/snapshot')) {
+          snapshotReads()
+          if (busy) {
+            busy = false
+            return jsonResponse({ error: 'database_busy', message: 'busy' }, 503)
+          }
+          return new Response(markdownSnapshot('embedded prose') as BodyInit)
+        }
+        return jsonResponse({}, 404)
+      }),
+    )
+    renderInRouter(
+      <DaemonDocumentPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspaceId="w1"
+        path="host"
+        createBackend={() => new FakeDocumentBackend(() => markdownSnapshot('![[notes/other]]\n'))}
+      />,
+    )
+
+    await waitFor(
+      () => {
+        expect(JSON.stringify(latestReferences()?.resolveEmbed(OTHER_ID))).toContain(
+          'embedded prose',
+        )
+      },
+      { timeout: 10_000 },
+    )
+    expect(snapshotReads).toHaveBeenCalledTimes(2)
+    await expectLoggedFailure('referenced document load failed')
+    await expectLoggedFailure('reference load failed')
   })
 })
