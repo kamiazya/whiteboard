@@ -6,8 +6,8 @@ import {
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { type DocumentContainers, EDGES_KEY, MARKDOWN_BODY_KEY, NODES_KEY } from './containers.js'
-import { readSpatialCanvas, writeSpatialCanvasInto } from './loro-bridge.js'
+import { type DocumentContainers, MARKDOWN_BODY_KEY } from './containers.js'
+import { clearSpatialElementsInto, readSpatialCanvas } from './loro-bridge.js'
 import { spliceText } from './minimal-change.js'
 
 /**
@@ -108,11 +108,11 @@ export function writeMarkdownBodyInto(doc: DocumentContainers, body: string): vo
   // every rich-text mark down with the characters it removed — which is the
   // annotation layer's passages. See `minimalChange` for the measurements.
   spliceText(doc.getText(MARKDOWN_BODY_KEY), body)
-  // Only when there is something to clear. This runs on every keystroke in
-  // the browser editor, where the canvas is already empty and an
-  // unconditional rewrite would add CRDT operations — and a save — for a
-  // change nobody made.
-  if (doc.getMap(NODES_KEY).size > 0 || doc.getMap(EDGES_KEY).size > 0) {
-    writeSpatialCanvasInto(doc, { nodes: [], edges: [] })
-  }
+  // Only the elements a legacy body occupied. The note's comment threads
+  // live in the same document and are its readers' content, not part of the
+  // body, so the whole-truth canvas resync — which deletes every thread it
+  // is not handed — must never run here. On the usual note the canvas is
+  // already empty and this adds no op, which matters because it runs on
+  // every keystroke in the browser editor.
+  clearSpatialElementsInto(doc)
 }

@@ -7,10 +7,19 @@
 // carry one, so `readMarkdownBody` falls back to it and `writeMarkdownBody`
 // clears it on the next write. Nothing writes one any more — that is what
 // these tests pin.
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
+import { readCommentThreads, writeCommentThread } from './comment-threads.js'
+import {
+  readEdgeLocks,
+  readNodeLocks,
+  readSpatialCanvas,
+  setEdgeLock,
+  setNodeLock,
+  writeSpatialCanvas,
+} from './loro-bridge.js'
 import { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
@@ -44,6 +53,18 @@ describe('readMarkdownBody', () => {
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [textNode({ id: 'legacy', x: 0, y: 0, width: 600, height: 400, text: BODY })],
+      edges: [],
+    })
+    expect(readMarkdownBody(doc)).toBe(BODY)
+  })
+
+  it('prefers the stable-id node over an earlier text node', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({ id: 'aside', x: 0, y: 0, width: 10, height: 10, text: 'not the body' }),
+        textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: BODY }),
+      ],
       edges: [],
     })
     expect(readMarkdownBody(doc)).toBe(BODY)
@@ -112,6 +133,32 @@ describe('writeMarkdownBody', () => {
     expect(readMarkdownBody(doc)).toBe('fresh')
     expect(readSpatialCanvas(doc).nodes).toEqual([])
   })
+
+  it('supersedes every element an older writer left, with its lock, and keeps the tags', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: 'old' }),
+        textNode({ id: 'aside', x: 700, y: 0, width: 10, height: 10, text: 'aside' }),
+      ],
+      edges: [{ id: 'e', from: { node: 'okf-body' }, to: { node: 'aside' } }],
+      lines: [
+        {
+          id: 'l',
+          from: { kind: 'node', node: 'aside' },
+          to: { kind: 'point', point: { x: 9, y: 9 } },
+        },
+      ],
+      tags: ['weekly'],
+    })
+    setNodeLock(doc, 'aside', true)
+    setEdgeLock(doc, 'l', true)
+    writeMarkdownBody(doc, 'fresh')
+    const canvas = readSpatialCanvas(doc)
+    expect(canvas).toMatchObject({ nodes: [], edges: [], tags: ['weekly'] })
+    expect(canvas.lines ?? []).toEqual([])
+    expect([...readNodeLocks(doc), ...readEdgeLocks(doc)]).toEqual([])
+  })
 })
 
 /**
@@ -172,5 +219,45 @@ describe('writeMarkdownBody writes only what changed', () => {
       at += text.length
     }
     expect({ marked, scanned: at }).toMatchObject({ marked: passage })
+  })
+})
+
+/**
+ * A note's comment threads are user content that lives beside the body, not
+ * in it, so no body write may take them down — neither the everyday write
+ * on an empty canvas nor the one that supersedes a legacy `okf-body` node.
+ */
+describe('writeMarkdownBody leaves the comment threads alone', () => {
+  const textThread: CommentThread = {
+    id: 't1',
+    anchor: {
+      kind: 'text',
+      quote: { prefix: 'the ', exact: 'body', suffix: '' },
+      start: 4,
+      end: 8,
+    },
+    status: 'open',
+    createdAt: '2026-09-02T00:00:00.000Z',
+    messages: [{ id: 'm1', body: 'tighten this', author: 'human:yuki' }],
+  }
+
+  it('keeps a legacy okf-body note threads across the write that supersedes the node', () => {
+    const doc = withBodyNode(new LoroDoc(), 'the body')
+    writeCommentThread(doc, textThread)
+    writeMarkdownBody(doc, 'the body, edited')
+    expect(readMarkdownBody(doc)).toBe('the body, edited')
+    expect(readSpatialCanvas(doc).nodes).toEqual([])
+    expect(readCommentThreads(doc).map((thread) => thread.id)).toEqual(['t1'])
+  })
+
+  it('keeps the threads and adds only the splice when the canvas is already empty', () => {
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, 'the body')
+    writeCommentThread(doc, textThread)
+    const before = doc.oplogVersion()
+    writeMarkdownBody(doc, 'the body!')
+    expect(readCommentThreads(doc).map((thread) => thread.id)).toEqual(['t1'])
+    const ops = doc.exportJsonUpdates(before, doc.oplogVersion()).changes.flatMap((c) => c.ops)
+    expect(ops).toHaveLength(1)
   })
 })
