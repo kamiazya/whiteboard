@@ -129,8 +129,9 @@ function imageReader(source: WorkspaceFilesSource) {
 }
 
 /**
- * The pictures a row draws inline, in the order its content names them,
- * until the row's budget is spent; the rest stay cards. Each is a key row
+ * The pictures a row draws inline, in the order its content names them:
+ * each one that still fits the row's remaining budget is drawn, and one that
+ * does not stays a card without stopping a smaller one after it. Each is a key row
  * carrying the href it was drawn with, or '' for a card, so new bytes — or
  * a picture that arrives where a card was — are a different picture.
  */
