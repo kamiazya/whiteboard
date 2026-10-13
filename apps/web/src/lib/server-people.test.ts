@@ -14,6 +14,7 @@ import { tenantPeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/ap
 import { workspacePeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { describe, expect, it } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { tenantPeople, workspacePeople } from './server-people.js'
 
 const refusing =
@@ -110,5 +111,21 @@ describe('server-people calls', () => {
       ok: false,
       message: 'The server answered in a way this page does not understand.',
     })
+    await expectLoggedFailure('/administrator failed its contract at administrator')
+  })
+
+  it('answers a success body cut mid-stream as the server not reached', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"userId":'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const outcome = await tenantPeople.setAdministrator(
+      async () => new Response(cut, { status: 200 }),
+      'user-1',
+      true,
+    )
+    expect(outcome).toEqual({ ok: false, message: 'Could not reach the server. Try again.' })
   })
 })

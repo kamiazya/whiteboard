@@ -11,7 +11,7 @@ import {
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
-import { daemonContractError } from './daemon-contract-error.js'
+import { readDaemonJson } from './daemon-contract-error.js'
 
 /**
  * A past state, as the panel PREVIEWS it before deciding to restore.
@@ -80,18 +80,14 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       const url = documentVersionsApiUrl(workspaceId, path)
       const res = await fetchFn(url)
       if (!res.ok) throw new VersionsRequestError(res.status, 'versions request')
-      const parsed = listVersionsResponseSchema.safeParse(await res.json())
-      if (!parsed.success) throw daemonContractError(url, parsed.error)
-      return parsed.data.versions
+      return (await readDaemonJson(url, res, listVersionsResponseSchema)).versions
     },
     async loadPast(workspaceId, path, versionId) {
       const url = versionDocumentApiUrl(workspaceId, path, versionId)
       const res = await fetchFn(url)
       if (res.status === 404) return null
       if (!res.ok) throw new VersionsRequestError(res.status, 'version document request')
-      const parsed = versionDocumentResponseSchema.safeParse(await res.json())
-      if (!parsed.success) throw daemonContractError(url, parsed.error)
-      return parsed.data
+      return readDaemonJson(url, res, versionDocumentResponseSchema)
     },
     async save(workspaceId, path, { label }) {
       const url = documentVersionsApiUrl(workspaceId, path)
@@ -101,9 +97,7 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
         body: JSON.stringify({ label } satisfies z.infer<typeof saveVersionRequestSchema>),
       })
       if (!res.ok) throw new VersionsRequestError(res.status, 'save version')
-      const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-      if (!parsed.success) throw daemonContractError(url, parsed.error)
-      return parsed.data.version
+      return (await readDaemonJson(url, res, saveVersionResponseSchema)).version
     },
     async restore(workspaceId, path, versionId) {
       const res = await fetchFn(versionRestoreApiUrl(workspaceId, path, versionId), {

@@ -42,3 +42,18 @@ describe('the daemon versions backend, answered with a body its contract refuses
     await expectLoggedFailure('/versions failed its contract at version')
   })
 })
+
+describe('the daemon versions backend, answered with a body that is not JSON', () => {
+  it.each([
+    ['list', (backend: ReturnType<typeof backendAnswering>) => backend.list('ws', 'notes/a')],
+    [
+      'loadPast',
+      (backend: ReturnType<typeof backendAnswering>) => backend.loadPast('ws', 'notes/a', 'v1'),
+    ],
+  ])('reads it from %s as contract drift, not an untyped parse error', async (_, call) => {
+    const failure = await contractFailure(call(backendAnswering(new Response('<html>'))))
+
+    expect(failure).toBeInstanceOf(DaemonContractError)
+    await expectLoggedFailure('failed its contract at (root)')
+  })
+})

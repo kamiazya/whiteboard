@@ -102,12 +102,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/components/storage-maintenance.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
-    note: "the card's sweep half, extracted from it — same answer, same browser counterpart",
-  },
-  'src/components/StorageReportCard.tsx': {
-    reach: 'both-keepers',
-    browser: 'src/lib/persistent-storage.ts',
-    note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
+    note: "the storage card's daemon half — its report read and its sweeps, which the card and Settings call: the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage",
   },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',

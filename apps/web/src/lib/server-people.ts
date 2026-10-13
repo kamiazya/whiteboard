@@ -15,6 +15,7 @@ import {
   workspacePersonApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import {
   administratorResponseSchema,
   deactivationResponseSchema,
@@ -30,6 +31,7 @@ import {
   workspacePersonSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { z } from 'zod'
+import { DaemonContractError, readDaemonJson } from './daemon-contract-error.js'
 
 type Fetch = typeof globalThis.fetch
 
@@ -73,18 +75,22 @@ function refusal(body: unknown): Refused {
   }
 }
 
-async function call<S extends z.ZodTypeAny>(
+async function call<T>(
   fetchFn: Fetch,
   url: string,
-  schema: S,
+  schema: z.ZodType<T>,
   init?: RequestInit,
-): Promise<Outcome<z.infer<S>>> {
+): Promise<Outcome<T>> {
   const res = await fetchFn(url, init).catch(() => null)
   if (res === null) return { ok: false, message: UNREACHABLE }
-  const body: unknown = await res.json().catch(() => null)
-  if (!res.ok) return refusal(body)
-  const parsed = schema.safeParse(body)
-  return parsed.success ? { ok: true, value: parsed.data } : { ok: false, message: UNEXPECTED }
+  if (!res.ok) return refusal((await refusalReasonOf(res, '')).body)
+  try {
+    return { ok: true, value: await readDaemonJson(url, res, schema) }
+  } catch (err) {
+    // The shared reader throws only these two: a drifted answer (already
+    // logged), or a body the network cut off.
+    return { ok: false, message: err instanceof DaemonContractError ? UNEXPECTED : UNREACHABLE }
+  }
 }
 
 const json = (method: string, body: unknown): RequestInit => ({

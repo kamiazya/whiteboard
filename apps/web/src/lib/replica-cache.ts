@@ -24,11 +24,11 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
+import { reach } from './fetch-failure.js'
 import {
   describeTransferFailure,
   errorName,
   PULL_FAILURE_COPY,
-  reach,
   type TransferFailure,
 } from './keeper-transfer-failure.js'
 import { cacheReplicaImages } from './replica-images.js'

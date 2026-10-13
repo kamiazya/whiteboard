@@ -14,6 +14,7 @@ import {
   resetSwStatusForTests,
 } from '../pwa/sw-status-store.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { SettingsPage } from './SettingsPage.js'
 
 // Every bucket the contract requires: a partial `byCategory` fails the report's
@@ -604,6 +605,22 @@ describe('SettingsPage — storage evidence wiring', () => {
     renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999' })
     const section = screen.getByTestId('settings-section')
     expect(await within(section).findByText(/103\.0 MiB on this computer/)).toBeTruthy()
+  })
+
+  it('reports a drifted companion storage report rather than swallowing it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/runtime/storage')) return jsonResponse({ totalBytes: 'many' })
+        return jsonResponse({}, 404)
+      }),
+    )
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999' })
+    const section = screen.getByTestId('settings-section')
+    expect(await within(section).findByText('connected')).toBeTruthy()
+    await expectLoggedFailure('/api/runtime/storage failed its contract')
+    expect(section.querySelector('[data-journey-detail="daemon"]')).toBeNull()
   })
 
   it('shows no companion figure when the report fetch fails', async () => {

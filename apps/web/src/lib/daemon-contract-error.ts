@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
+import { reach } from './fetch-failure.js'
 
 const log = getAppLogger('daemon-contract')
 
@@ -39,7 +40,7 @@ export class DaemonContractError extends Error {
  * The first issue's path is in the message line, not only the data, because a
  * console shows an object collapsed and a message is what gets searched.
  */
-export function daemonContractError(route: string, error: z.ZodError): DaemonContractError {
+function daemonContractError(route: string, error: z.ZodError): DaemonContractError {
   const failure = new DaemonContractError(route, error.issues)
   const path = failure.issues[0]?.path.join('.') || '(root)'
   log.error(`response from ${route} failed its contract at ${path}`, {
@@ -54,4 +55,28 @@ export function parseDaemonResponse<T>(route: string, schema: z.ZodType<T>, json
   const parsed = schema.safeParse(json)
   if (!parsed.success) throw daemonContractError(route, parsed.error)
   return parsed.data
+}
+
+/**
+ * Reads a daemon answer's body and parses it — the one reader of a success
+ * body, so what a cut body and a drifted one mean is decided here once.
+ *
+ * A body cut mid-stream is the network's failure (`FetchFailedError`); one that
+ * arrived and is not JSON is the daemon's, so it reaches the schema as
+ * `undefined` and is reported as drift like any other mismatch.
+ */
+export async function readDaemonJson<T>(
+  route: string,
+  res: Response,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  return parseDaemonResponse(route, schema, parseJsonOrUndefined(await reach(res.text())))
+}
+
+function parseJsonOrUndefined(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }

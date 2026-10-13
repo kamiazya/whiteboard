@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonApiError } from './daemon-api-client.js'
 import { DaemonContractError } from './daemon-contract-error.js'
-import { reach } from './keeper-transfer-failure.js'
+import { reach } from './fetch-failure.js'
 import { OPEN_CONTRACT_FAILURE, OPEN_FAILURE_COPY, openFailureReason } from './open-move-failure.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 
