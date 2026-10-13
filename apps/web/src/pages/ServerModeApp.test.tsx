@@ -42,6 +42,7 @@ function renderSignedIn(
     ...(onCreateWorkspace === undefined ? {} : { onCreateWorkspace }),
   })
   // The fake answers the workspace routes; the session is the keeper's own.
+  const { onPatch } = options
   const fetchFn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input) === '/auth/session') {
       return Promise.resolve(
@@ -51,18 +52,14 @@ function renderSignedIn(
         }),
       )
     }
+    if (onPatch !== undefined && init?.method === 'PATCH') {
+      return Promise.resolve(onPatch(String(input), JSON.parse(String(init.body))))
+    }
     return fake(input, init)
   })
-  // The shell's rename goes through the daemon client's own fetch, which is
-  // the global one, so the PATCH is answered there rather than on `fetchFn`.
-  const { onPatch } = options
-  if (onPatch !== undefined) {
-    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
-      init?.method === 'PATCH'
-        ? Promise.resolve(onPatch(String(input), JSON.parse(String(init.body))))
-        : fake(input, init),
-    )
-  }
+  // Every request the app makes, the workspace switcher's included, goes out
+  // on the fetch it was handed; one that reached for the global would fail here.
+  vi.stubGlobal('fetch', () => Promise.reject(new TypeError('global fetch used')))
   render(
     <MemoryRouter initialEntries={[options.at ?? '/']}>
       <ServerModeApp fetchFn={fetchFn} />

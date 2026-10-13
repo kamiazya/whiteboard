@@ -231,18 +231,19 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
   )
 }
 
-// The daemon shell's own workspace seam, pointed at this keeper's origin: the
-// session cookie authenticates, and a create is the one call the switcher menu
-// makes. Only the keeper's half is used here; the
-// browser's is built beside it and never touched.
-function useKeeperWorkspaces() {
+// The daemon shell's own workspace seam, pointed at this keeper's origin and
+// sent over the app's fetch like every other request it makes: the session
+// cookie authenticates. Only the keeper's half is used here; the browser's is
+// built beside it and never touched.
+function useKeeperWorkspaces(fetchFn: Fetch) {
   const navigate = useNavigate()
   const daemonShellTarget = useMemo(() => ({ baseUrl: window.location.origin }), [])
   const setDaemonRoute = useCallback(
     (route: WorkspaceRoute) => navigate(workspaceRoutePath(route)),
     [navigate],
   )
-  return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute }).daemonWorkspaces
+  return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute, fetchFn })
+    .daemonWorkspaces
 }
 
 // The shell is built under the workspace route, so the seam it renames through
@@ -251,7 +252,7 @@ function OpenWorkspace({
   fetchFn,
   displayName,
 }: Readonly<{ fetchFn: Fetch; displayName: string }>) {
-  const workspaces = useKeeperWorkspaces()
+  const workspaces = useKeeperWorkspaces(fetchFn)
   return (
     <ServerModeWorkspace
       shell={
@@ -262,7 +263,7 @@ function OpenWorkspace({
 }
 
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
-  const keeperWorkspaces = useKeeperWorkspaces()
+  const keeperWorkspaces = useKeeperWorkspaces(fetchFn)
   const read = useCallback(async (): Promise<Signed | null | 'unavailable'> => {
     const user = await readSession(fetchFn)
     if (user === null || user === 'unavailable') return user
