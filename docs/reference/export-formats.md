@@ -14,6 +14,14 @@ format the document is in, and says which in its `kind` field; there is no
 an explicitly lossy projection rather than a way to read the stored content
 (see [ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
 
+**The daemon does not typeset math or draw diagrams.** `wb_scene_render`, the
+daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
+its TeX source as text, and a `` ```mermaid `` fence as a plain code
+block. Inline `$…$` math is drawn as its source text everywhere, the web app
+included. Only the web app's preview and its exports (see
+[Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
+diagrams.
+
 A document created before formats were recorded has no answer here and is
 refused rather than guessed at; writing its content through a `document.set` op
 gives it one.
@@ -413,7 +421,9 @@ The export draws what the editor shows, including what the document points at:
   miniature whatever its size on screen, as the daemon's export does.
 - **A markdown note** exports as its laid-out body, at the 720-pixel page
   width `wb_scene_render` uses, with its math blocks, Mermaid diagrams,
-  pictures and embeds drawn as the preview draws them.
+  pictures and embeds drawn as the preview draws them — including a math
+  block or a diagram inside a quote or a list item. `wb_scene_render` draws
+  the same note with math and diagrams as source.
 
 Stored pictures are written into the file as PNG `data:` URIs, so a saved SVG
 shows them anywhere it is opened. They are re-encoded from the pixels the
