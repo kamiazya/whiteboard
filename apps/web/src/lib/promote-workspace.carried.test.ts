@@ -306,6 +306,7 @@ describe('promoteWorkspace failure reasons', () => {
 
   it('a record this device cannot open is reported as a device failure and logged', async () => {
     const daemon = daemonStub({ confirms: true })
+    const warn = vi.spyOn(console, 'warn')
 
     const result = await promoteFrom(
       daemon.fetch,
@@ -318,6 +319,11 @@ describe('promoteWorkspace failure reasons', () => {
     })
     expect(daemon.promotes).toEqual([])
     await expectLoggedFailure('workspace promote failed on this device')
+    // The sentence carries no error, so the record is what names it.
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('workspace promote failed on this device'),
+      expect.objectContaining({ name: 'QuotaExceededError' }),
+    )
   })
 
   it('a TypeError from opening the record is a device failure, not a network one', async () => {
