@@ -407,7 +407,7 @@ describe('mcp-http-stdio-proxy standard headers match the SDK client', () => {
     // branches of the encoding.
     const names = [...seen.values()].map((headers) => headers['mcp-name'])
     expect(names.filter((name) => name?.startsWith('=?base64?')).length).toBeGreaterThan(3)
-    expect(names.filter((name) => name !== undefined && !name.startsWith('=?')).length).toBe(5)
+    expect(names.filter((name) => name !== undefined && !name.startsWith('=?'))).toHaveLength(5)
   })
 })
 
