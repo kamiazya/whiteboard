@@ -9,11 +9,11 @@
  * correct rather than merely tidy, so it is pinned against a real
  * pre-migration row rather than argued.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -41,6 +41,10 @@ async function versionColumns(db: Db): Promise<string[]> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'version-content-digest-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('removes a checkpoint that predates the column, since none can be backfilled', async () => {

@@ -11,7 +11,7 @@
  * `documentSnapshotChunks.docKey -> documentSnapshots.docKey`, so the
  * snapshot pair needs 0013's copy-then-delete and nothing else does.
  */
-import { mkdir, mkdtemp, readdir, rename, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
@@ -168,6 +168,10 @@ function failRenameOf(failingSource: string, code: string): { succeeded: string[
 describe('0019-workspace-canonical-id', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'migration-0019-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   afterEach(() => {

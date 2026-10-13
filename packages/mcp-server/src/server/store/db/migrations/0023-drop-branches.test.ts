@@ -3,11 +3,11 @@
  * table is gone at head, and rows sitting in it at upgrade time are
  * discarded loudly rather than silently.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -41,6 +41,10 @@ async function tableNames(db: Handle['db']): Promise<string[]> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'drop-branches-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('drops the branches table, discarding the rows loudly', async () => {

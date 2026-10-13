@@ -5,7 +5,7 @@
  * `canvas-client-notifier.test.ts` replaces the audience module, so it cannot
  * see the cache the notifier has to feed.
  */
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
@@ -19,8 +19,12 @@ import { testDataLayout } from './routes/_test-helpers.js'
 import { resetSyncStreamsForTests } from './sync-streams.js'
 import { VIEWPORT_REPLAY_TTL_MS } from './viewport-requests.js'
 
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-notifier-replay-')))
-afterAll(() => resetDataDirForTests())
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-notifier-replay-'))
+setDataDirForTests(dataDir)
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 afterEach(() => {
   vi.useRealTimers()
   resetSyncStreamsForTests()

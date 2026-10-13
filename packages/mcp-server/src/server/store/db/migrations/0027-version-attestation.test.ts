@@ -6,11 +6,11 @@
  * as true after the migration as before. Pinned against a real pre-migration
  * row so a later "clean it up" cannot quietly take saved points with it.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Kysely, sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -38,6 +38,10 @@ async function versionColumns(db: Db): Promise<string[]> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'version-attestation-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('keeps a checkpoint that predates the column, reading it back with no attestation', async () => {

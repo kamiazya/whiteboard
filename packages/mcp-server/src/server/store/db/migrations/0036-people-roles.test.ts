@@ -3,10 +3,10 @@
  * its owner and the rest become members, which is what the store does for a
  * workspace's first member from here on. Mirrors 0032-accounts.test.ts.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type MigrationHarness, openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -25,6 +25,10 @@ async function openDb(): Promise<MigrationHarness> {
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-0036-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it("makes each workspace's earliest member its owner, per tenant", async () => {

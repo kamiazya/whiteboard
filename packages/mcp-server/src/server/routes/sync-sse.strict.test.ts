@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
@@ -6,8 +6,12 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { createSyncSseRouter } from './sync-sse.js'
 
-setDataDirForTests(mkdtempSync(join(tmpdir(), 'wb-sse-strict-')))
-afterAll(() => resetDataDirForTests())
+const dataDir = mkdtempSync(join(tmpdir(), 'wb-sse-strict-'))
+setDataDirForTests(dataDir)
+afterAll(() => {
+  resetDataDirForTests()
+  rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+})
 
 // Validation answers before any stream is looked up, so no stream is opened.
 const post = (route: 'subscribe' | 'message', body: Record<string, unknown>) =>

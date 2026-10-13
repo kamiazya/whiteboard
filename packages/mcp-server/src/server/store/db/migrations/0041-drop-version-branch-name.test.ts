@@ -4,11 +4,11 @@
  * refuses to leave dangling, so this pins that the rows survive the column
  * and that the history lookup keeps an index over the columns it still reads.
  */
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'kysely'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -23,6 +23,10 @@ const PRE_0041 = '0040-drop-invitation-email'
 
 beforeEach(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'wb-0041-'))
+})
+
+afterEach(async () => {
+  await rm(dataDir, { recursive: true, force: true })
 })
 
 it('removes branchName and the index that named it, keeping a document-history index', async () => {
