@@ -177,6 +177,23 @@ async function pullReplica(deps: ReplicaRefreshDeps, key: string): Promise<void>
   }
 }
 
+/**
+ * A background push has no surface of its own, so the log is the only place
+ * a withheld key, an unreachable daemon or a device failure is recorded.
+ */
+function reportNoPush(
+  daemonBaseUrl: string,
+  workspaceId: string,
+  result: { kind: string; reason?: unknown },
+): void {
+  log.warn('replica push did not push', {
+    daemonBaseUrl,
+    workspaceId,
+    kind: result.kind,
+    ...(result.kind === 'failed' ? { reason: result.reason } : {}),
+  })
+}
+
 /** Returns a CANCEL — see `scheduleCancellable` for what it is for. */
 export function scheduleReplicaRefresh(deps: ReplicaRefreshDeps): () => void {
   const key = `${deps.daemonBaseUrl} ${deps.workspaceId}`
@@ -227,31 +244,15 @@ export function scheduleReplicaPush(deps: ReplicaPushDeps): () => void {
     deps.schedule ?? idleSchedule(),
     async () => {
       try {
-        const settings = createUserSettingsStore().load()
-        const match = findReplicaForHandle(settings, deps.workspaceId)
-        if (match === null || match.daemonBaseUrl !== deps.daemonBaseUrl) return
-        const readStoredFrontier = deps.readStoredFrontier ?? readStoredFrontierFromIdb
-        const stored = await readStoredFrontier(match.workspaceId)
-        if (stored !== null && stored === match.syncedFrontier) return
-        const push = deps.push ?? (await import('./replica-push.js')).pushReplicaEdits
-        const { BrowserWorkspaceDocs } = await import('./browser-workspace-docs.js')
-        const result = await push({
-          fetch: deps.fetch,
+        await pushIfDirty(deps)
+      } catch (err) {
+        // Background best-effort: the page owes nothing to a failed ship, and
+        // the record carries the error's name only, never its message.
+        log.warn('replica push failed', {
           daemonBaseUrl: deps.daemonBaseUrl,
-          workspaceId: match.workspaceId,
-          workspaceDocs: new BrowserWorkspaceDocs(),
-          ...(match.syncedFrontier === undefined ? {} : { syncedFrontier: match.syncedFrontier }),
+          workspaceId: deps.workspaceId,
+          name: err instanceof Error ? err.name : typeof err,
         })
-        if (result.kind !== 'ok') return
-        createUserSettingsStore().update((current) =>
-          withReplicaEntry(current, match.workspaceId, {
-            daemonBaseUrl: deps.daemonBaseUrl,
-            syncedAt: result.syncedAt,
-            syncedFrontier: result.syncedFrontier,
-          }),
-        )
-      } catch {
-        // Background best-effort: the page owes nothing to a failed ship.
       } finally {
         pushing.delete(key)
       }
@@ -259,6 +260,35 @@ export function scheduleReplicaPush(deps: ReplicaPushDeps): () => void {
     () => {
       pushing.delete(key)
     },
+  )
+}
+
+async function pushIfDirty(deps: ReplicaPushDeps): Promise<void> {
+  const settings = createUserSettingsStore().load()
+  const match = findReplicaForHandle(settings, deps.workspaceId)
+  if (match === null || match.daemonBaseUrl !== deps.daemonBaseUrl) return
+  const readStoredFrontier = deps.readStoredFrontier ?? readStoredFrontierFromIdb
+  const stored = await readStoredFrontier(match.workspaceId)
+  if (stored !== null && stored === match.syncedFrontier) return
+  const push = deps.push ?? (await import('./replica-push.js')).pushReplicaEdits
+  const { BrowserWorkspaceDocs } = await import('./browser-workspace-docs.js')
+  const result = await push({
+    fetch: deps.fetch,
+    daemonBaseUrl: deps.daemonBaseUrl,
+    workspaceId: match.workspaceId,
+    workspaceDocs: new BrowserWorkspaceDocs(),
+    ...(match.syncedFrontier === undefined ? {} : { syncedFrontier: match.syncedFrontier }),
+  })
+  if (result.kind !== 'ok') {
+    reportNoPush(deps.daemonBaseUrl, match.workspaceId, result)
+    return
+  }
+  createUserSettingsStore().update((current) =>
+    withReplicaEntry(current, match.workspaceId, {
+      daemonBaseUrl: deps.daemonBaseUrl,
+      syncedAt: result.syncedAt,
+      syncedFrontier: result.syncedFrontier,
+    }),
   )
 }
 

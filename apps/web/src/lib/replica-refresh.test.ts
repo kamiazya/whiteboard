@@ -465,4 +465,39 @@ describe('scheduleReplicaPush', () => {
     scheduleReplicaPush(d as never)
     await vi.waitFor(() => expect(failing).toHaveBeenCalledTimes(2))
   })
+
+  it('a failed push is logged at warning with its reason', async () => {
+    seedEntry(FRONTIER_SYNCED)
+    const failing = vi.fn().mockResolvedValue({ kind: 'failed', reason: 'offline' })
+    scheduleReplicaPush(pushDeps({ push: failing }) as never)
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(message).toMatch(/did not push/)
+    expect(fields).toEqual({
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      kind: 'failed',
+      reason: 'offline',
+    })
+  })
+
+  it('a withheld push is logged at warning by its kind', async () => {
+    seedEntry(FRONTIER_SYNCED)
+    const withheld = vi.fn().mockResolvedValue({ kind: 'withheld' })
+    scheduleReplicaPush(pushDeps({ push: withheld }) as never)
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(message).toMatch(/did not push/)
+    expect(fields).toEqual({ daemonBaseUrl: BASE, workspaceId: WS, kind: 'withheld' })
+  })
+
+  it('a push that throws is logged at warning by the error name, and never escapes', async () => {
+    seedEntry(FRONTIER_SYNCED)
+    const throwing = vi.fn().mockRejectedValue(new RangeError('bad frontier'))
+    scheduleReplicaPush(pushDeps({ push: throwing }) as never)
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [message, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(message).toMatch(/push failed/)
+    expect(fields).toEqual({ daemonBaseUrl: BASE, workspaceId: 'dev', name: 'RangeError' })
+  })
 })
