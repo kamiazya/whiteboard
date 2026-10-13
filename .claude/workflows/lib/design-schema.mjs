@@ -5,14 +5,16 @@ export const DESIGN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    completionCriteria: { type: 'array', items: { type: 'string' } },
+    // Never empty, like the lists below: a design with no criterion and no test scenario plans
+    // nothing a test could check, which is the one thing red-first exists to prevent.
+    completionCriteria: { type: 'array', items: { type: 'string', pattern: '\\S' }, minItems: 1 },
     scope: { type: 'string' },
     contractChanges: { type: 'string', description: 'Zod/contract/type impact, or "none"' },
     testScenarios: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        unit: { type: 'array', items: { type: 'string' } },
+        unit: { type: 'array', items: { type: 'string', pattern: '\\S' }, minItems: 1 },
         browser: { type: 'array', items: { type: 'string' } },
         e2e: { type: 'array', items: { type: 'string' } },
       },
@@ -96,7 +98,8 @@ export const DESIGN_SCHEMA = {
 // Reuses the schema's own item pattern (rather than a second hand-picked regex) so a caller-
 // provided designDoc that bypasses the schema-constrained `agent()` call is held to the exact
 // same non-blank-entry invariant as an agent-generated design. One guard covers every
-// minItems:1 + `\S` list field (properties/blastRadius/userReach) — they share one pattern.
+// minItems:1 + `\S` list field (completionCriteria/testScenarios.unit/properties/blastRadius/
+// userReach) — they share one pattern.
 const nonBlankItem = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
 const isNonBlankList = (v) =>
   Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && nonBlankItem.test(x))
@@ -133,7 +136,7 @@ const optional = (check) => (v) => v === undefined || check(v)
 
 // One entry per top-level field DESIGN_SCHEMA constrains other than `testScenarios`.
 const FIELD_CHECKS = [
-  ['completionCriteria', isStringArray],
+  ['completionCriteria', isNonBlankList],
   ['scope', isString],
   ['contractChanges', optional(isString)],
   ['risks', optional(isStringArray)],
@@ -148,7 +151,7 @@ function isValidTestScenarios(t) {
   if (!t || typeof t !== 'object') return false
   if (!Object.keys(t).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
   return (
-    isStringArray(t.unit) && optional(isStringArray)(t.browser) && optional(isStringArray)(t.e2e)
+    isNonBlankList(t.unit) && optional(isStringArray)(t.browser) && optional(isStringArray)(t.e2e)
   )
 }
 

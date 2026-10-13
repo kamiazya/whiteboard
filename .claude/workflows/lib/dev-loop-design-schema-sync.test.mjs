@@ -414,3 +414,26 @@ test('isValidDesignShape refuses ONE bad entry among good ones, in the inline co
   }
   assert.equal(isValidDesignShape(valid), true)
 })
+
+test('both isValidDesignShape copies refuse an empty completionCriteria or unit list', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const base = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    testScenarios: { unit: ['covers the thing'] },
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+    blastRadius: ['none: new leaf module, no existing callers'],
+    userReach: ['rendered by CanvasList, reachable from /w/:ws'],
+    benefit: 'obvious: a missing affordance, visible in the diff',
+  }
+  for (const design of [
+    { ...base, completionCriteria: [] },
+    { ...base, testScenarios: { unit: [] } },
+    { ...base, completionCriteria: [' '] },
+  ]) {
+    assert.equal(isValidDesignShape(design), false, JSON.stringify(design))
+    assert.equal(sharedIsValidDesignShape(design), false, JSON.stringify(design))
+  }
+  assert.equal(DESIGN_SCHEMA.properties.completionCriteria.minItems, 1)
+  assert.equal(DESIGN_SCHEMA.properties.testScenarios.properties.unit.minItems, 1)
+})

@@ -8,20 +8,25 @@
 
 const nonBlankList = (v) =>
   Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && /\S/.test(x))
-const stringList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string')
 // Kept identical to DESIGN_SCHEMA's `benefit` pattern by design-schema.test.mjs; spelled out here
 // because this module deliberately does not import the schema (it is the inline-mode half).
 const benefitClaim = /^(delta|relocation|elimination|obvious):\s*\S/
 
+// A malformed value is named against the type the gate wanted: `scope` is one string while the
+// fields around it are lists, and "malformed" alone sends a reader the wrong way.
+const LIST = 'a non-empty list of strings, none blank'
+
 const CHECKPOINTS = [
   {
     field: 'completionCriteria',
-    ok: (d) => stringList(d.completionCriteria) && d.completionCriteria !== undefined,
+    ok: (d) => nonBlankList(d.completionCriteria),
+    expects: LIST,
     supply: 'a list of observable criteria, each one a test could check',
   },
   {
     field: 'scope',
     ok: (d) => typeof d.scope === 'string',
+    expects: 'a string',
     supply: 'the files you intend to edit',
   },
   {
@@ -29,30 +34,34 @@ const CHECKPOINTS = [
     ok: (d) =>
       !!d.testScenarios &&
       typeof d.testScenarios === 'object' &&
-      stringList(d.testScenarios.unit) &&
-      d.testScenarios.unit !== undefined,
+      nonBlankList(d.testScenarios.unit),
+    expects: LIST,
     supply: 'at least one nearest-layer test scenario (see the test-layer-selection skill)',
   },
   {
     field: 'properties',
     ok: (d) => nonBlankList(d.properties),
+    expects: LIST,
     supply: 'the invariants/round-trips this change must preserve, or one "none: <reason>" entry',
   },
   {
     field: 'blastRadius',
     ok: (d) => nonBlankList(d.blastRadius),
+    expects: LIST,
     supply:
       'who else in the codebase this reaches and whether a test watches them, or one "none: <reason>" / "unavailable: <reason>" entry',
   },
   {
     field: 'userReach',
     ok: (d) => nonBlankList(d.userReach),
+    expects: LIST,
     supply:
       'the entry point that makes this reachable by a user, or one "foundation: <reason> — wired by <named follow-up>" entry',
   },
   {
     field: 'benefit',
     ok: (d) => typeof d.benefit === 'string' && benefitClaim.test(d.benefit),
+    expects: 'a string starting with "delta:", "relocation:", "elimination:" or "obvious:"',
     supply:
       'which kind of benefit this claims, prefixed with the column that decides the instrument — "delta: <the metric and the bench>", "relocation: <what the waited-on path stops doing, and what the handover costs>", "elimination: <the class of mistake, and what fails when it recurs>", or "obvious: <reason>" (see the measured-change skill)',
   },
@@ -70,10 +79,11 @@ export function explainDesignShape(design) {
     return ['design: supply a design object with the checkpoint fields (see DESIGN_SCHEMA)']
   }
   const problems = []
-  for (const { field, ok, supply } of CHECKPOINTS) {
+  for (const { field, ok, expects, supply } of CHECKPOINTS) {
     if (ok(design)) continue
     const raw = field.split('.').reduce((acc, k) => (acc == null ? acc : acc[k]), design)
-    const state = raw === undefined ? 'missing' : 'present but empty or malformed'
+    const state =
+      raw === undefined ? 'missing' : `present but empty or malformed (expected ${expects})`
     problems.push(`${field}: ${state} — supply ${supply}`)
   }
   return problems
