@@ -36,7 +36,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource, unwrapExpression } from './ast-helpers.js'
+import { isTypeOnlyWrapper, parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT, walk } from './scan-roots.js'
 import { stripComments } from './strip-comments.js'
 
@@ -136,9 +136,7 @@ function enclosingTestBody(node: ts.Node): ts.FunctionLikeDeclaration | undefine
 /** The `const` a call's result is bound to, through `await` and type-only wrappers. */
 function boundName(call: ts.CallExpression): string | undefined {
   let at: ts.Node = call.parent
-  while (ts.isAwaitExpression(at) || ts.isParenthesizedExpression(at) || ts.isAsExpression(at)) {
-    at = at.parent
-  }
+  while (ts.isAwaitExpression(at) || isTypeOnlyWrapper(at)) at = at.parent
   return ts.isVariableDeclaration(at) && ts.isIdentifier(at.name) ? at.name.text : undefined
 }
 
