@@ -13,11 +13,14 @@
  * shared worker pool at background priority — a thumbnail is never what
  * someone is waiting on.
  *
- * Neither is decoded here. A spatial document's snapshot travels to the
- * worker as bytes, so this thread's share of a thumbnail is the read and
- * nothing else: decoding cost 1.20ms at 12 nodes, 2.60ms at 40 and 4.60ms at
- * 120, and handing the bytes over costs nothing measurable. What that buys
- * is not a faster picture but a thread that is free while one is drawn.
+ * Neither is decoded here for its first picture. A spatial document's
+ * snapshot travels to the worker as bytes, so this thread's share of a
+ * thumbnail is the read and nothing else: decoding cost 1.20ms at 12 nodes,
+ * 2.60ms at 40 and 4.60ms at 120, and handing the bytes over costs nothing
+ * measurable. What that buys is not a faster picture but a thread that is
+ * free while one is drawn. The exception is a board whose picture names
+ * another document: `row-references.ts` decodes it, and every board it
+ * embeds, on this thread to build the wire — once per board and version.
  *
  * Total by contract. Every failure answers `null` and the row keeps its kind
  * icon: a list that cannot draw a miniature is a plainer list, a list that

@@ -9,20 +9,22 @@
  *
  * Reads go through the keeper's own source, one per referenced document and
  * version for the loader's life: a folder of boards that all embed one note
- * reads it once. A referenced board's snapshot is decoded on THIS thread,
- * since the wire carries a canvas and the worker cannot read the keeper; that
- * is paid only by rows that embed a board, once per board and version.
+ * reads it once. A board's snapshot — the row's own, and any board it
+ * embeds — is decoded on THIS thread (`decode-spatial-snapshot.ts`), since
+ * the wire carries a canvas and the worker cannot read the keeper; that is
+ * paid only by rows whose picture names another document, once per board
+ * and version.
  */
 
 import {
   type LoadedReference,
   type ReferenceGraph,
   type ReferenceWire,
-  referenceTargets,
   referenceWire,
+  walkReferences,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
-import { isImageRef, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { decodeSpatialSnapshot } from '../../lib/decode-spatial-snapshot.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { linkEntries, linkTitles } from '../../lib/link-entries.js'
@@ -34,31 +36,6 @@ export interface RowReferences {
   readonly key: string | null
 }
 
-let loroBundle:
-  | Promise<{
-      readonly LoroDoc: typeof import('loro-crdt').LoroDoc
-      readonly readSpatialCanvas: typeof import('@kamiazya/whiteboard-loro-adapter').readSpatialCanvas
-    }>
-  | undefined
-
-/**
- * Lazy, like the worker's: the panel's chunk need not carry loro's WASM for a
- * folder in which nothing embeds a board.
- */
-async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
-  loroBundle ??= Promise.all([
-    import('loro-crdt'),
-    import('@kamiazya/whiteboard-loro-adapter'),
-  ]).then(([loro, adapter]) => ({
-    LoroDoc: loro.LoroDoc,
-    readSpatialCanvas: adapter.readSpatialCanvas,
-  }))
-  const { LoroDoc, readSpatialCanvas } = await loroBundle
-  const doc = new LoroDoc()
-  doc.import(bytes)
-  return readSpatialCanvas(doc)
-}
-
 async function readContent(
   source: WorkspaceFilesSource,
   entry: WorkspaceDocumentEntry,
@@ -68,7 +45,7 @@ async function readContent(
     ...(entry.name === undefined ? {} : { name: entry.name }),
   }
   if (entry.kind === 'markdown') return { ...named, body: (await source.loadMarkdown(entry)).body }
-  return { ...named, canvas: await decodeSnapshot(await source.loadSpatialSnapshot(entry)) }
+  return { ...named, canvas: await decodeSpatialSnapshot(await source.loadSpatialSnapshot(entry)) }
 }
 
 /**
@@ -116,23 +93,12 @@ export function createRowReferenceReader(
       root.body !== undefined
         ? { bodies: [root.body] }
         : { canvases: root.canvas === undefined ? [] : [root.canvas] }
-    // Walked as every keeper walks it: `referenceTargets` re-reads the graph
-    // as it grows, under its own depth cap and budget. A picture is not a
-    // document, and a row has no URL to draw one from.
-    const graph = new Map<string, LoadedReference | null>()
-    for (;;) {
-      const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
-        (target) => !graph.has(target) && !isImageRef(target),
-      )
-      if (wanted.length === 0) break
-      const loaded = await Promise.all(
-        wanted.map(async (target) => {
-          const entry = resolve(target)
-          return [target, entry === undefined ? null : await contentOf(entry)] as const
-        }),
-      )
-      for (const [target, content] of loaded) graph.set(target, content)
-    }
+    // No `onFailure`: a failed read rejects the walk, so the row keeps its
+    // bare picture instead of one keyed as though the embed were dangling.
+    const graph = await walkReferences(seeds, async (target) => {
+      const entry = resolve(target)
+      return entry === undefined ? null : await contentOf(entry)
+    })
 
     return {
       wire: referenceWire(graph, { resolveAlias, resolveTitle }),
