@@ -34,12 +34,13 @@ import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { imageRefId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import { Button } from '../components/ui/button.js'
 import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
+import { useReplicaEditing } from '../hooks/use-replica-editing.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
@@ -52,13 +53,10 @@ import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-sta
 import {
   type ReplicaContent,
   type ReplicaRecord,
-  readReplicaContent,
   replicaEntries,
   replicaReferenceGraph,
   replicaReferenceWire,
   replicaTagLibrary,
-  writeReplicaMarkdown,
-  writeReplicaSpatial,
 } from '../lib/replica-record.js'
 import {
   lockedDetail,
@@ -344,66 +342,6 @@ function useReplicaSeams(
   return { seams, references, tagLibrary, clipboardImages }
 }
 
-/**
- * What is being edited, and what an edit does: the record is the source on
- * every selection switch, and a change writes through the containers before
- * the debounced save appends it.
- */
-function useReplicaEditing({
-  state,
-  selected,
-  scheduleSave,
-}: {
-  state: LoadState
-  selected: WorkspaceDocumentEntry | undefined
-  scheduleSave: (record: ReplicaRecord) => void
-}) {
-  const [draft, setDraft] = useState<string | null>(null)
-  const content = useMemo(
-    () =>
-      state.kind !== 'ready' || selected === undefined
-        ? null
-        : readReplicaContent(state.record, selected),
-    [state, selected],
-  )
-
-  // Selection decides the draft; the record is the source on every switch.
-  useEffect(() => {
-    setDraft(content?.kind === 'markdown' ? content.body : null)
-    spatialPrev.current = content?.kind === 'spatial' ? content.canvas : null
-    setSpatialDraft(content?.kind === 'spatial' ? content.canvas : null)
-  }, [content])
-
-  // The spatial draft mirrors the markdown one; `spatialPrev` is what the
-  // visible-diff reconcile compares against, advanced on every commit.
-  const [spatialDraft, setSpatialDraft] = useState<SpatialCanvas | null>(null)
-  const spatialPrev = useRef<SpatialCanvas | null>(null)
-  const onSpatialChange = useCallback(
-    (next: SpatialCanvas) => {
-      if (state.kind !== 'ready' || selected === undefined || selected.kind !== 'spatial') return
-      setSpatialDraft(next)
-      const prev = spatialPrev.current
-      if (prev !== null) {
-        writeReplicaSpatial(state.record, selected.documentId, prev, next)
-      }
-      spatialPrev.current = next
-      scheduleSave(state.record)
-    },
-    [state, selected, scheduleSave],
-  )
-
-  const onDraftChange = useCallback(
-    (next: string) => {
-      if (state.kind !== 'ready' || selected === undefined || selected.kind === 'spatial') return
-      setDraft(next)
-      writeReplicaMarkdown(state.record, selected.documentId, next)
-      scheduleSave(state.record)
-    },
-    [state, selected, scheduleSave],
-  )
-  return { content, draft, spatialDraft, onDraftChange, onSpatialChange }
-}
-
 interface ReplicaReaderProps {
   entries: WorkspaceDocumentEntry[]
   displayName: ReplicaReadPageProps['displayName']
@@ -417,6 +355,7 @@ interface ReplicaReaderProps {
   spatialDraft: SpatialCanvas | null
   onDraftChange: (next: string) => void
   onSpatialChange: (next: SpatialCanvas) => void
+  spatialLocks: ReturnType<typeof useReplicaEditing>['spatialLocks']
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
   tagLibrary: TagLibrary | undefined
@@ -436,7 +375,7 @@ interface ReplicaReaderProps {
  * Mounted with the readable page alone: that is where edits are made, and
  * the only state the "Offline copy" word is true of.
  */
-function ReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+function PublishReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
   useEffect(() => {
     setShellConnection({ state: { keeper: 'replica', storage: failed ? 'failed' : 'ok' } })
     return () => setShellConnection(null)
@@ -490,6 +429,18 @@ function ReplicaOfflineBanner({
   )
 }
 
+/**
+ * The spatial editor measures itself: inside a padded overflow-auto box its
+ * h-full slightly overflows, a scrollbar appears, the box shrinks, the
+ * scrollbar leaves — a ResizeObserver oscillation React reports as "maximum
+ * update depth exceeded". Text content keeps the scrolling pane.
+ */
+function contentPaneClass(content: ReplicaContent | null): string {
+  return content?.kind === 'spatial'
+    ? 'min-w-0 flex-1 overflow-hidden'
+    : 'min-w-0 flex-1 overflow-auto p-4'
+}
+
 /** The replica as a document surface: the banner, the tree, and the editor. */
 function ReplicaReader({
   entries,
@@ -504,6 +455,7 @@ function ReplicaReader({
   spatialDraft,
   onDraftChange,
   onSpatialChange,
+  spatialLocks,
   seams,
   references,
   tagLibrary,
@@ -514,7 +466,7 @@ function ReplicaReader({
   return (
     <div className="flex h-full flex-col" data-testid="replica-state-readable">
       <ReplicaOfflineBanner name={displayName ?? workspaceId} syncedAt={syncedAt} />
-      <ReplicaSaveHealth failed={saveFailed} onRetry={onRetrySave} />
+      <PublishReplicaSaveHealth failed={saveFailed} onRetry={onRetrySave} />
       <div className="flex min-h-0 flex-1">
         <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
           <WorkspaceFileTree
@@ -523,18 +475,7 @@ function ReplicaReader({
             {...(selectedPath === null ? {} : { selectedPath })}
           />
         </div>
-        <div
-          className={
-            // The spatial editor measures itself: inside a padded
-            // overflow-auto box its h-full slightly overflows, a scrollbar
-            // appears, the box shrinks, the scrollbar leaves — a
-            // ResizeObserver oscillation React reports as "maximum update
-            // depth exceeded". Text content keeps the scrolling pane.
-            content?.kind === 'spatial'
-              ? 'min-w-0 flex-1 overflow-hidden'
-              : 'min-w-0 flex-1 overflow-auto p-4'
-          }
-        >
+        <div className={contentPaneClass(content)}>
           {content === null && (
             <p className="text-sm text-muted-foreground">Select a document to read.</p>
           )}
@@ -561,6 +502,7 @@ function ReplicaReader({
               references={references}
               tagLibrary={tagLibrary}
               clipboardImages={clipboardImages}
+              {...spatialLocks}
             />
           )}
         </div>
@@ -690,8 +632,8 @@ export function ReplicaReadPage({
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
   const drawnWith = useReplicaSeams(daemonBaseUrl, workspaceId, state, selected)
-  const { content, draft, spatialDraft, onDraftChange, onSpatialChange } = useReplicaEditing({
-    state,
+  const editing = useReplicaEditing({
+    record: state.kind === 'ready' ? state.record : undefined,
     selected,
     scheduleSave,
   })
@@ -715,11 +657,7 @@ export function ReplicaReadPage({
           selected={selected}
           selectedPath={selectedPath}
           setSelectedPath={setSelectedPath}
-          content={content}
-          draft={draft}
-          spatialDraft={spatialDraft}
-          onDraftChange={onDraftChange}
-          onSpatialChange={onSpatialChange}
+          {...editing}
           {...drawnWith}
           saveFailed={saveFailed}
           onRetrySave={retrySave}
