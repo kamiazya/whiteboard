@@ -19,6 +19,7 @@ describe('MarkdownEditor', () => {
     }
     const { getByTestId, findByTestId } = render(
       <MarkdownEditor
+        theme="light"
         value={'$$\nE=mc^2\n$$\n\n```mermaid\ngraph TD; A-->B\n```\n'}
         onChange={() => {}}
         previewDebounceMs={0}
@@ -36,23 +37,34 @@ describe('MarkdownEditor', () => {
   })
 
   it('renders both a source pane and a preview pane for the given value', () => {
-    const { getByTestId, container } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
+    const { getByTestId, container } = render(
+      <MarkdownEditor theme="light" value="# Hi" onChange={() => {}} />,
+    )
     expect(getByTestId('markdown-source-pane')).toBeTruthy()
     expect(getByTestId('markdown-preview-pane')).toBeTruthy()
     expect(container.textContent).toContain('Hi')
   })
 
   it('renders an empty document without throwing', () => {
-    expect(() => render(<MarkdownEditor value="" onChange={() => {}} />)).not.toThrow()
+    expect(() =>
+      render(<MarkdownEditor theme="light" value="" onChange={() => {}} />),
+    ).not.toThrow()
   })
 
   it('preview reflects the current value once the debounce settles, without mutating the value prop', async () => {
     vi.useFakeTimers()
     const original = '# Original'
     const { getByTestId, rerender } = render(
-      <MarkdownEditor value={original} onChange={() => {}} previewDebounceMs={150} />,
+      <MarkdownEditor theme="light" value={original} onChange={() => {}} previewDebounceMs={150} />,
     )
-    rerender(<MarkdownEditor value="# Changed" onChange={() => {}} previewDebounceMs={150} />)
+    rerender(
+      <MarkdownEditor
+        theme="light"
+        value="# Changed"
+        onChange={() => {}}
+        previewDebounceMs={150}
+      />,
+    )
     await act(async () => {
       vi.advanceTimersByTime(150)
     })
@@ -62,7 +74,7 @@ describe('MarkdownEditor', () => {
 
   it('Read mode hides the source pane without unmounting it; Write mode drops the preview', () => {
     const { getByTestId, getByRole, queryByTestId } = render(
-      <MarkdownEditor value="# Hi" onChange={() => {}} />,
+      <MarkdownEditor theme="light" value="# Hi" onChange={() => {}} />,
     )
     // Default: split — both panes and the divider.
     expect(getByTestId('markdown-split-divider')).toBeTruthy()
@@ -81,11 +93,11 @@ describe('MarkdownEditor', () => {
   })
 
   it('persists the chosen view mode and restores it on the next mount', () => {
-    const first = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
+    const first = render(<MarkdownEditor theme="light" value="# Hi" onChange={() => {}} />)
     fireEvent.click(first.getByRole('button', { name: 'Read' }))
     first.unmount()
 
-    const second = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
+    const second = render(<MarkdownEditor theme="light" value="# Hi" onChange={() => {}} />)
     expect(second.getByTestId('markdown-source-wrap').style.display).toBe('none')
     expect(second.getByRole('button', { name: 'Read' }).getAttribute('aria-pressed')).toBe('true')
   })
@@ -93,7 +105,12 @@ describe('MarkdownEditor', () => {
   it('shows a word count that follows the debounced value', async () => {
     vi.useFakeTimers()
     const { getByTestId, rerender } = render(
-      <MarkdownEditor value="# Hi there" onChange={() => {}} previewDebounceMs={150} />,
+      <MarkdownEditor
+        theme="light"
+        value="# Hi there"
+        onChange={() => {}}
+        previewDebounceMs={150}
+      />,
     )
     await act(async () => {
       vi.advanceTimersByTime(150)
@@ -101,7 +118,12 @@ describe('MarkdownEditor', () => {
     // "#" is markup, not a word.
     expect(getByTestId('markdown-word-count').textContent).toContain('2')
     rerender(
-      <MarkdownEditor value="# Hi there again" onChange={() => {}} previewDebounceMs={150} />,
+      <MarkdownEditor
+        theme="light"
+        value="# Hi there again"
+        onChange={() => {}}
+        previewDebounceMs={150}
+      />,
     )
     await act(async () => {
       vi.advanceTimersByTime(150)
@@ -113,7 +135,9 @@ describe('MarkdownEditor', () => {
     // Read mode has no source pane, so every verb in the catalog would have
     // nothing to act on: the doorway goes away rather than opening onto
     // disabled entries.
-    const { getByRole, queryByRole } = render(<MarkdownEditor value="# Hi" onChange={() => {}} />)
+    const { getByRole, queryByRole } = render(
+      <MarkdownEditor theme="light" value="# Hi" onChange={() => {}} />,
+    )
     expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
 
     fireEvent.click(getByRole('button', { name: 'Read' }))
@@ -143,7 +167,7 @@ describe('MarkdownEditor', () => {
     try {
       window.localStorage.setItem('whiteboard.markdown-view-mode', 'split')
       const { getByRole, queryByTestId, queryByRole, getByTestId } = render(
-        <MarkdownEditor value="# Hi" onChange={() => {}} />,
+        <MarkdownEditor theme="light" value="# Hi" onChange={() => {}} />,
       )
       // Write layout is in effect: source only, no divider, no preview.
       expect(getByTestId('markdown-source-wrap').style.display).not.toBe('none')
@@ -165,6 +189,7 @@ describe('MarkdownEditor', () => {
     const onOpenDocument = vi.fn()
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         value={`See [[${NOTE_ID}|the plan]] and [external](https://example.com).`}
         onChange={() => {}}
         onOpenDocument={onOpenDocument}
@@ -199,6 +224,7 @@ describe('MarkdownEditor', () => {
     const onOpenDocument = vi.fn()
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         value="See [[Snippet]]."
         onChange={() => {}}
         references={referenceSeams(new Map(), {
@@ -238,6 +264,7 @@ describe('MarkdownEditor', () => {
     }
     const { getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         value={`![[${BOARD}]]`}
         onChange={() => {}}
         references={referenceSeams(new Map([[BOARD, { name: 'Board', canvas: board }]]))}
@@ -256,6 +283,7 @@ describe('MarkdownEditor', () => {
   it('renders the core facets as a document header in Read mode', () => {
     const { getByRole, getByTestId } = render(
       <MarkdownEditor
+        theme="light"
         value="body"
         onChange={() => {}}
         title="Release plan"
@@ -280,7 +308,7 @@ describe('MarkdownEditor', () => {
     window.localStorage.setItem('whiteboard.markdown-view-mode', 'read')
 
     const { getByTestId } = render(
-      <MarkdownEditor value="# Hi" onChange={() => {}} initialViewMode="write" />,
+      <MarkdownEditor theme="light" value="# Hi" onChange={() => {}} initialViewMode="write" />,
     )
 
     expect(getByTestId('markdown-source-wrap').style.display).not.toBe('none')
@@ -289,7 +317,7 @@ describe('MarkdownEditor', () => {
   it('mode changes on an explicitly-seeded mount stay OUT of the shared preference', () => {
     window.localStorage.setItem('whiteboard.markdown-view-mode', 'split')
     const { getByRole } = render(
-      <MarkdownEditor value="# Hi" onChange={() => {}} initialViewMode="write" />,
+      <MarkdownEditor theme="light" value="# Hi" onChange={() => {}} initialViewMode="write" />,
     )
 
     fireEvent.click(getByRole('button', { name: 'Read' }))

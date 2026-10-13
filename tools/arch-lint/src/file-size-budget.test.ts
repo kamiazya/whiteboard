@@ -326,7 +326,8 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // deferred-demote case provokes now that app-logger reaches the console.
   // so the deferred-demote case claims the warn it provokes (import + two lines).
   'apps/web/src/components/settings/PromoteWorkspaceSection.browser.test.tsx': 880,
-  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2138,
+  // `theme` is a required editor prop, one attribute line per direct mount.
+  'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2167,
   // The editor-state model and its coverage ledger: a `not modelled` entry
   // per command kind the model cannot drive, each a sentence somebody has to
   // be able to defend (the ledger's fourth direction fails on a `not

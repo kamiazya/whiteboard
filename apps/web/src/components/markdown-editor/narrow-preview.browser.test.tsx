@@ -46,9 +46,12 @@ function mountAt(width: number, body = BODY) {
   const host = document.createElement('div')
   host.style.cssText = `width:${width}px;height:600px`
   document.body.append(host)
-  return render(<MarkdownEditor initialViewMode="read" value={body} onChange={() => {}} />, {
-    container: host,
-  })
+  return render(
+    <MarkdownEditor theme="light" initialViewMode="read" value={body} onChange={() => {}} />,
+    {
+      container: host,
+    },
+  )
 }
 
 describe('a phone-width markdown editor', () => {

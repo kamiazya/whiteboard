@@ -55,6 +55,7 @@ function ControlledEditor({
   const [canvas, setCanvas] = useState(initial)
   return (
     <SpatialEditor
+      theme="light"
       defaultTool="select"
       canvas={canvas}
       onChange={(next, command) => {
@@ -88,6 +89,7 @@ describe('SpatialEditor (browser)', () => {
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -105,6 +107,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={canvasValue}
           onChange={onChange}
@@ -153,6 +156,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -183,6 +187,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -243,6 +248,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -301,6 +307,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -347,6 +354,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -401,6 +409,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -448,6 +457,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -498,6 +508,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -564,6 +575,7 @@ describe('SpatialEditor (browser)', () => {
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -625,6 +637,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -651,6 +664,7 @@ describe('SpatialEditor (browser)', () => {
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -690,6 +704,7 @@ describe('SpatialEditor (browser)', () => {
     const { unmount } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -726,6 +741,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -805,6 +821,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -881,6 +898,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -979,6 +997,7 @@ describe('SpatialEditor (browser)', () => {
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1066,6 +1085,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           ref={ref}
           canvas={twoNodeCanvas()}
@@ -1138,6 +1158,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1182,6 +1203,7 @@ describe('SpatialEditor (browser)', () => {
     const { rerender } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={initial}
           onChange={onChange}
@@ -1219,6 +1241,7 @@ describe('SpatialEditor (browser)', () => {
     rerender(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={sameTargetStillValid}
           onChange={onChange}
@@ -1300,6 +1323,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1327,6 +1351,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1355,6 +1380,7 @@ describe('SpatialEditor (browser)', () => {
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1397,6 +1423,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1433,6 +1460,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1668,6 +1696,7 @@ describe('SpatialEditor (browser)', () => {
     const { rerender } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1697,6 +1726,7 @@ describe('SpatialEditor (browser)', () => {
       rerender(
         <div style={{ width: 600, height: 400 }}>
           <SpatialEditor
+            theme="light"
             defaultTool="select"
             canvas={withoutA}
             onChange={onChange}
@@ -1723,6 +1753,7 @@ describe('SpatialEditor (browser)', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={twoNodeCanvas()}
           onChange={onChange}
@@ -1819,7 +1850,12 @@ describe('SpatialEditor (browser) — spatial text layout defects', () => {
     const onChange = vi.fn()
     const { container } = render(
       <div style={{ width: 900, height: 600 }}>
-        <SpatialEditor defaultTool="select" canvas={fourDefectCanvas()} onChange={onChange} />
+        <SpatialEditor
+          theme="light"
+          defaultTool="select"
+          canvas={fourDefectCanvas()}
+          onChange={onChange}
+        />
       </div>,
     )
 
@@ -2003,6 +2039,7 @@ describe('node placement and affordances', () => {
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           canvas={{ nodes: [], edges: [] }}
           onChange={vi.fn()}
@@ -2051,7 +2088,7 @@ describe('SpatialEditor (browser) — CJK text layout', () => {
     }
     const { container } = render(
       <div style={{ width: 900, height: 600 }}>
-        <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} />
+        <SpatialEditor theme="light" defaultTool="select" canvas={canvas} onChange={vi.fn()} />
       </div>,
     )
 
@@ -2102,7 +2139,7 @@ describe('SpatialEditor (browser) — CJK text layout', () => {
     }
     const { container } = render(
       <div style={{ width: 900, height: 600 }}>
-        <SpatialEditor defaultTool="select" canvas={canvas} onChange={vi.fn()} />
+        <SpatialEditor theme="light" defaultTool="select" canvas={canvas} onChange={vi.fn()} />
       </div>,
     )
 

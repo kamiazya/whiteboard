@@ -28,6 +28,7 @@ function Host({ extensions }: { extensions?: readonly Extension[] }) {
         markdown={{
           body,
           setBody,
+          theme: 'light',
           ...(extensions === undefined ? {} : { sourceExtensions: extensions }),
         }}
       />

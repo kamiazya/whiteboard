@@ -18,6 +18,7 @@ import { TAG_LIBRARY_PATH, VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-v
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { THEME_STORAGE_KEY } from '../hooks/useThemeMode.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
@@ -29,6 +30,7 @@ const DAEMON = 'http://127.0.0.1:3099'
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
   handed: { markdown: undefined as unknown, spatial: undefined as unknown },
+  theme: { markdown: undefined as unknown, spatial: undefined as unknown },
 }))
 
 vi.mock('../lib/browser-workspace-docs.js', () => ({
@@ -39,15 +41,17 @@ vi.mock('../lib/browser-workspace-docs.js', () => ({
 }))
 
 vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
-  MarkdownEditor: (props: { tagLibrary?: unknown }) => {
+  MarkdownEditor: (props: { tagLibrary?: unknown; theme?: unknown }) => {
     store.handed.markdown = props.tagLibrary
+    store.theme.markdown = props.theme
     return <div data-testid="markdown-editor" />
   },
 }))
 
 vi.mock('../components/spatial-editor/SpatialEditor.js', () => ({
-  SpatialEditor: (props: { tagLibrary?: unknown }) => {
+  SpatialEditor: (props: { tagLibrary?: unknown; theme?: unknown }) => {
     store.handed.spatial = props.tagLibrary
+    store.theme.spatial = props.theme
     return <div data-testid="spatial-editor" />
   },
 }))
@@ -99,9 +103,11 @@ async function open(path: string): Promise<void> {
 describe('ReplicaReadPage and the workspace tag library', () => {
   beforeEach(() => {
     store.handed = { markdown: undefined, spatial: undefined }
+    store.theme = { markdown: undefined, spatial: undefined }
   })
   afterEach(() => {
     cleanup()
+    localStorage.removeItem(THEME_STORAGE_KEY)
   })
 
   it("hands a note's preview the library the replica's tags document declares", async () => {
@@ -123,5 +129,23 @@ describe('ReplicaReadPage and the workspace tag library', () => {
     await open('board')
     await screen.findByTestId('spatial-editor')
     expect(store.handed.spatial).toEqual({})
+  })
+
+  // A dark page with a light-themed editor draws the preview's #404040 text
+  // on the near-black background, so the theme travels with the library.
+  it("hands a note's editor the app's dark theme", async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
+    store.record = seedRecord(true)
+    await open('plan')
+    await screen.findByTestId('markdown-editor')
+    expect(store.theme.markdown).toBe('dark')
+  })
+
+  it("hands a board the app's dark theme", async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark')
+    store.record = seedRecord(true)
+    await open('board')
+    await screen.findByTestId('spatial-editor')
+    expect(store.theme.spatial).toBe('dark')
   })
 })

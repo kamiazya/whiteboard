@@ -41,6 +41,7 @@ describe('Add button (creation menu)', () => {
     const onChange = vi.fn()
     const { getByTestId, getByRole } = render(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={twoNodeCanvas()}
         onChange={onChange}
@@ -76,6 +77,7 @@ describe('Add button (creation menu)', () => {
     )
     const { getByTestId } = render(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={twoNodeCanvas()}
         onChange={vi.fn()}
@@ -99,6 +101,7 @@ describe('SpatialEditorHandle', () => {
     const ref = createRef<SpatialEditorHandle>()
     const { container } = render(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         ref={ref}
         canvas={twoNodeCanvas()}
@@ -143,6 +146,7 @@ describe('SpatialEditorHandle', () => {
       const ref = createRef<SpatialEditorHandle>()
       const { container } = render(
         <SpatialEditor
+          theme="light"
           defaultTool="select"
           ref={ref}
           canvas={canvas}
@@ -241,6 +245,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     const canvasValue = twoNodeCanvas()
     const { container, rerender } = render(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={canvasValue}
         externalVersion={0}
@@ -254,6 +259,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     // Same node contents (the undo/redo shape) but externalVersion advanced.
     rerender(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={{ ...canvasValue }}
         externalVersion={1}
@@ -272,6 +278,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     const canvasValue = twoNodeCanvas()
     const { container, rerender } = render(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={canvasValue}
         externalVersion={0}
@@ -286,6 +293,7 @@ describe('SpatialEditor externalVersion origin handling', () => {
     // own controlled re-render after onChange, not an external replacement.
     rerender(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={{ ...canvasValue }}
         externalVersion={0}
@@ -311,6 +319,7 @@ describe('bottom dock composition', () => {
     // overlap this redesign replaces).
     const { container } = render(
       <SpatialEditor
+        theme="light"
         defaultTool="select"
         canvas={{ nodes: [], edges: [] }}
         onChange={vi.fn()}
@@ -338,7 +347,12 @@ describe('paper (ADR-0030)', () => {
 
   it('a canvas naming no theme keeps the bundled paper, which is the page background', () => {
     const { getByTestId } = render(
-      <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+      <SpatialEditor
+        theme="light"
+        canvas={twoNodeCanvas()}
+        onChange={vi.fn()}
+        measure={fakeMeasure}
+      />,
     )
     expect(getByTestId('spatial-editor').style.backgroundColor).toBe('rgb(255, 255, 255)')
   })

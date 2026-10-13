@@ -29,6 +29,7 @@ function mountBound(initialBody: string) {
   const utils = render(
     <div style={{ width: 800, height: 300 }}>
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={initialBody}
         onChange={() => {}}
@@ -107,6 +108,7 @@ it('reports a binding whose container changes under the mounted view', async () 
   const { container } = render(
     <div style={{ width: 800, height: 300 }}>
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value="hello "
         onChange={() => {}}

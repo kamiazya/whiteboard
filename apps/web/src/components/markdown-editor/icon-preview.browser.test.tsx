@@ -19,7 +19,9 @@ import { PreviewPane } from './PreviewPane.js'
 afterEach(cleanup)
 
 function svgOf(value: string): SVGSVGElement {
-  const { container } = render(<PreviewPane value={value} maxWidth={520} measure={fakeMeasure} />)
+  const { container } = render(
+    <PreviewPane theme="light" value={value} maxWidth={520} measure={fakeMeasure} />,
+  )
   const svg = container.querySelector('svg')
   expect(svg).not.toBeNull()
   return svg as SVGSVGElement
@@ -54,7 +56,7 @@ describe('an icon shortcode typed in a note', () => {
     for (const color of ['rgb(17, 24, 39)', 'rgb(229, 231, 235)']) {
       const { container } = render(
         <div style={{ color }}>
-          <PreviewPane value=":icon-star:" maxWidth={520} measure={fakeMeasure} />
+          <PreviewPane theme="light" value=":icon-star:" maxWidth={520} measure={fakeMeasure} />
         </div>,
       )
       const use = container.querySelector('use') as SVGUseElement

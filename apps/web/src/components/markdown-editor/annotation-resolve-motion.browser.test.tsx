@@ -41,6 +41,7 @@ function thread(status: 'open' | 'resolved'): CommentThread {
 
 const view = (status: 'open' | 'resolved') => (
   <MarkdownEditor
+    theme="light"
     value={BODY}
     onChange={vi.fn()}
     initialViewMode="split"

@@ -32,7 +32,7 @@ describe('markdown undo and redo, without a keyboard', () => {
   it('undoes the typing a finger cannot take back with a chord, and redoes it', async () => {
     const onChange = vi.fn()
     const { getByTestId, getByRole } = render(
-      <MarkdownEditor initialViewMode="split" value="" onChange={onChange} />,
+      <MarkdownEditor theme="light" initialViewMode="split" value="" onChange={onChange} />,
     )
 
     await focusSource(getByTestId)
@@ -52,7 +52,12 @@ describe('markdown undo and redo, without a keyboard', () => {
   it('leaves the document alone when there is nothing to undo', async () => {
     const onChange = vi.fn()
     const { getByRole } = render(
-      <MarkdownEditor initialViewMode="split" value="untouched" onChange={onChange} />,
+      <MarkdownEditor
+        theme="light"
+        initialViewMode="split"
+        value="untouched"
+        onChange={onChange}
+      />,
     )
 
     await userEvent.click(getByRole('button', { name: 'Undo' }))
@@ -63,7 +68,7 @@ describe('markdown undo and redo, without a keyboard', () => {
 
   it('hides both when there is no source pane to act on, as Read mode has none', async () => {
     const { queryByRole } = render(
-      <MarkdownEditor initialViewMode="read" value="# Title" onChange={vi.fn()} />,
+      <MarkdownEditor theme="light" initialViewMode="read" value="# Title" onChange={vi.fn()} />,
     )
     expect(queryByRole('button', { name: 'Undo' })).toBeNull()
     expect(queryByRole('button', { name: 'Redo' })).toBeNull()

@@ -15,7 +15,7 @@ const LONG_DOC = Array.from({ length: 80 }, (_, i) => `paragraph ${i}`).join('\n
 function mount(value = '') {
   const utils = render(
     <div style={{ width: 800, height: 300 }}>
-      <MarkdownEditor value={value} onChange={() => {}} previewDebounceMs={0} />
+      <MarkdownEditor theme="light" value={value} onChange={() => {}} previewDebounceMs={0} />
     </div>,
   )
   return utils
@@ -159,6 +159,7 @@ describe('MarkdownEditor split & scroll sync (real browser)', () => {
     render(
       <div style={{ width: 800, height: 300 }}>
         <MarkdownEditor
+          theme="light"
           value={doc}
           onChange={() => {}}
           previewDebounceMs={0}

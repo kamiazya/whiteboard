@@ -76,6 +76,7 @@ const WITHIN_PX = 20
 it('stands each marker beside the block its conversation quotes, measured against the render', async () => {
   render(
     <MarkdownEditor
+      theme="light"
       value={BODY}
       onChange={vi.fn()}
       initialViewMode="read"

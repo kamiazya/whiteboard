@@ -83,8 +83,8 @@ export interface MarkdownEditorProps {
   measure?: MeasureText
   /** Focus the source pane on mount (fresh-note flows). */
   autoFocus?: boolean
-  /** Resolved app theme; drives the preview's inherited text fill. */
-  theme?: ResolvedTheme
+  /** Resolved app theme; drives the preview's text fill. Required: dark-on-dark is unreadable. */
+  theme: ResolvedTheme
   /**
    * Core OKF facets, rendered as the document header in Read mode —
    * display-only; facet editing stays in `DocumentProperties`.
@@ -270,7 +270,7 @@ export function MarkdownEditor({
   initialViewMode,
   measure,
   autoFocus = false,
-  theme = 'light',
+  theme,
   meta,
   title,
   references,

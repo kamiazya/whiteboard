@@ -41,9 +41,10 @@ export interface EditorHostOptions {
   /**
    * Anything else the editor takes (threads, locks, references, ...). The
    * host owns `canvas`, `onChange` and `defaultTool`, so those are not
-   * accepted here.
+   * accepted here. `theme` is `'light'` unless a case says otherwise.
    */
-  editorProps?: Omit<SpatialEditorProps, 'canvas' | 'onChange' | 'defaultTool'>
+  editorProps?: Omit<SpatialEditorProps, 'canvas' | 'onChange' | 'defaultTool' | 'theme'> &
+    Partial<Pick<SpatialEditorProps, 'theme'>>
 }
 
 const DEFAULT_SIZE = { width: 800, height: 600 }

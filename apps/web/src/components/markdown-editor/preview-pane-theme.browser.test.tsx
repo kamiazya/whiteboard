@@ -43,10 +43,4 @@ describe('PreviewPane text color per theme (real browser)', () => {
     const text = await firstPreviewText()
     expect(getComputedStyle(text).fill).toBe(hexToRgb(EDITOR_LIGHT_PALETTE.textFill))
   })
-
-  it('defaults to the light fill when no theme is supplied', async () => {
-    render(<MarkdownEditor value="# Heading" onChange={vi.fn()} />)
-    const text = await firstPreviewText()
-    expect(getComputedStyle(text).fill).toBe(hexToRgb(EDITOR_LIGHT_PALETTE.textFill))
-  })
 })

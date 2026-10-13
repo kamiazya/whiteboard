@@ -56,7 +56,7 @@ describe('a text node embedding a note', () => {
   it('draws the note prose inside the node on the synchronous path', async () => {
     const canvas: SpatialCanvas = { nodes: [embeddingNode], edges: [] }
     const { container } = render(
-      <SpatialEditor canvas={canvas} onChange={() => {}} references={references} />,
+      <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={references} />,
     )
     await waitFor(() => expect(svgText(container)).toContain('PROSE FROM THE NOTE'))
   })
@@ -64,7 +64,7 @@ describe('a text node embedding a note', () => {
   it('keeps drawing it after a change that lays the canvas out in the worker', async () => {
     const canvas: SpatialCanvas = { nodes: [embeddingNode, ...bystanders(12)], edges: [] }
     const { container, rerender } = render(
-      <SpatialEditor canvas={canvas} onChange={() => {}} references={references} />,
+      <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={references} />,
     )
     await waitFor(() => expect(svgText(container)).toContain('PROSE FROM THE NOTE'))
     // A committed change past the threshold is what the worker lays out.
@@ -72,7 +72,9 @@ describe('a text node embedding a note', () => {
       ...canvas,
       nodes: [...canvas.nodes, ...bystanders(13).slice(12)],
     }
-    rerender(<SpatialEditor canvas={changed} onChange={() => {}} references={references} />)
+    rerender(
+      <SpatialEditor theme="light" canvas={changed} onChange={() => {}} references={references} />,
+    )
     await waitFor(() => expect(svgText(container)).toContain('bystander 12'))
     expect(svgText(container)).toContain('PROSE FROM THE NOTE')
   })

@@ -199,11 +199,11 @@ export interface SpatialEditorProps {
   readonly testId?: string
   /**
    * The app's resolved UI theme, threaded straight from `useThemeMode` by
-   * the caller. Defaults to `'light'` so existing mounts render the
-   * pre-existing chrome unchanged; every real page mount must pass its own
-   * `resolvedTheme` or its nodes/edges go invisible in dark mode.
+   * the caller. Required rather than defaulted: a mount that fell back to
+   * `'light'` under a dark page draws its nodes and edges invisibly, and
+   * only the type can make that omission visible.
    */
-  readonly theme?: ResolvedTheme
+  readonly theme: ResolvedTheme
   /**
    * The workspace's tag library (ADR-0040 decision 5), when the keeper
    * answered one: a box or an edge carrying a value it colours, and no
@@ -399,7 +399,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       createId,
       className,
       testId = DEFAULT_TEST_ID,
-      theme = 'light',
+      theme,
       defaultTool = 'hand',
       initialTool,
       lockedNodeIds,

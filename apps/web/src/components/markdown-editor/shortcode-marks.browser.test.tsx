@@ -27,7 +27,11 @@ const shown = (): string[] =>
 describe('a finished shortcode is drawn as its emoji while writing', () => {
   it('draws it in the document editor and leaves the code span alone', async () => {
     render(
-      <MarkdownEditor value={'ship it :rocket: today\n\nnot `:fire:` though'} onChange={vi.fn()} />,
+      <MarkdownEditor
+        theme="light"
+        value={'ship it :rocket: today\n\nnot `:fire:` though'}
+        onChange={vi.fn()}
+      />,
     )
     await expect.poll(shown).toEqual(['🚀'])
 
@@ -41,7 +45,7 @@ describe('a finished shortcode is drawn as its emoji while writing', () => {
    * than dispatched because the caret is the whole subject.
    */
   it('keeps the name as text while it is being typed and draws it once the caret leaves', async () => {
-    render(<MarkdownEditor value={'ship it '} onChange={vi.fn()} />)
+    render(<MarkdownEditor theme="light" value={'ship it '} onChange={vi.fn()} />)
     const content = document.querySelector('.cm-content') as HTMLElement
     await userEvent.click(content)
     // Escape closes the `:` completion popup this typing opens; the popup is
@@ -68,7 +72,7 @@ describe('a finished shortcode is drawn as its emoji while writing', () => {
    * mechanism guessed at.
    */
   it('brings the source back when the emoji itself is clicked', async () => {
-    render(<MarkdownEditor value={'ship it :rocket: today'} onChange={vi.fn()} />)
+    render(<MarkdownEditor theme="light" value={'ship it :rocket: today'} onChange={vi.fn()} />)
     await expect.poll(shown).toEqual(['🚀'])
 
     await userEvent.click(document.querySelector('[data-emoji-shortcode]') as HTMLElement)

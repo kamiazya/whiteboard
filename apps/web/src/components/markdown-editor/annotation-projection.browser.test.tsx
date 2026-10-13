@@ -34,7 +34,13 @@ type EditorProps = Parameters<typeof MarkdownEditor>[0]
 
 function mount(props: Partial<EditorProps>) {
   return render(
-    <MarkdownEditor initialViewMode="write" value={BODY} onChange={vi.fn()} {...props} />,
+    <MarkdownEditor
+      initialViewMode="write"
+      value={BODY}
+      onChange={vi.fn()}
+      theme="light"
+      {...props}
+    />,
   )
 }
 
@@ -145,6 +151,7 @@ describe('markdown annotation projection', () => {
     })
     utils.rerender(
       <MarkdownEditor
+        theme="light"
         initialViewMode="write"
         value={`Standup note.\n${BODY}`}
         onChange={vi.fn()}
@@ -175,6 +182,7 @@ describe('markdown annotation projection', () => {
       const [value, setValue] = useState(BODY)
       return (
         <MarkdownEditor
+          theme="light"
           initialViewMode="write"
           value={value}
           onChange={setValue}
