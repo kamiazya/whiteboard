@@ -183,12 +183,22 @@ describe('useDocumentNames', () => {
     release('ws-new')(jsonResponse({ documents: { foo: 'New name' }, pinned: [] }))
     await waitFor(() => expect(result.current.effectiveNames.documents.foo).toBe('New name'))
 
+    // The stale body's read is observed to its END, not its start: what
+    // follows it in the hook (parse, then the guarded set) is microtasks only,
+    // so one macrotask after the read resolves lets all of it run.
     const stale = jsonResponse({ documents: { foo: 'Old name' }, pinned: ['foo'] })
+    const readText = stale.text.bind(stale)
+    let staleRead: Promise<string> | undefined
+    stale.text = () => {
+      staleRead = readText()
+      return staleRead
+    }
     release('ws-old')(stale)
-    // The stale body has been read; one macrotask lets the hook's
-    // continuation after that read run to completion.
-    await waitFor(() => expect(stale.bodyUsed).toBe(true))
-    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+    await waitFor(() => expect(staleRead).toBeDefined())
+    await act(async () => {
+      await staleRead
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    })
 
     expect(result.current.effectiveNames).toEqual({ documents: { foo: 'New name' }, pinned: [] })
   })
