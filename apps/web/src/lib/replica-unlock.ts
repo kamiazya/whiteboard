@@ -39,7 +39,7 @@ import {
   requestReplicaKey,
   sessionKeyStatus,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import { daemonContractError } from './daemon-contract-error.js'
+import { reportDaemonDrift } from './daemon-contract-error.js'
 import {
   assertOfflinePasskey,
   browserCredentials,
@@ -175,9 +175,7 @@ export async function makeReplicaReadableOffline({
   credentials?: OfflinePasskeyCredentials
 }): Promise<{ ok: true } | { ok: false; reason: OfflineOptInFailure }> {
   if (credentials === undefined) return { ok: false, reason: 'unsupported' }
-  const answer = await requestReplicaKey(fetch, daemonBaseUrl, workspaceId, (route, error) => {
-    daemonContractError(route, error)
-  })
+  const answer = await requestReplicaKey(fetch, daemonBaseUrl, workspaceId, reportDaemonDrift)
   if (answer.kind === 'refused' && answer.code === 'replica_not_allowed') {
     return { ok: false, reason: 'no-offline' }
   }

@@ -50,6 +50,15 @@ function daemonContractError(route: string, error: z.ZodError): DaemonContractEr
   return failure
 }
 
+/**
+ * Reports a daemon answer that failed its contract where the caller does not
+ * throw — a seam (daemon-client's `ReportReplicaKeyDrift`) that maps drift to
+ * an arm of its own result instead.
+ */
+export function reportDaemonDrift(route: string, error: z.ZodError): void {
+  daemonContractError(route, error)
+}
+
 /** Parses a daemon answer, throwing (and so reporting) a `DaemonContractError` rather than a bare `ZodError`. */
 export function parseDaemonResponse<T>(route: string, schema: z.ZodType<T>, json: unknown): T {
   const parsed = schema.safeParse(json)

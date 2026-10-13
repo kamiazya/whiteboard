@@ -27,6 +27,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import type { DeleteDocInput, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { docRefKey, workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
+import { reportDaemonDrift } from './daemon-contract-error.js'
 import { createDaemonFetch } from './daemon-fetch.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentStore } from './idb-document-store.js'
@@ -76,7 +77,7 @@ function heldKeyId(daemonBaseUrl: string, workspaceId: string): string | undefin
 /** A `ReplicaSource` only when the replica's own daemon is the one this tab is connected to. */
 function sourceFor(daemonBaseUrl: string): ReplicaSource | undefined {
   if (connected === null || connected.baseUrl !== daemonBaseUrl) return undefined
-  return { fetch: connected.daemonFetch }
+  return { fetch: connected.daemonFetch, reportDrift: reportDaemonDrift }
 }
 
 const routingProvider: ReplicaKeyProvider = {

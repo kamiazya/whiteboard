@@ -43,11 +43,6 @@ const LEDGER: readonly Exemption[] = [
     why: 'not a daemon answer: `File.text()` on a cached render this browser wrote to its own storage',
   },
   {
-    file: 'apps/web/src/lib/replica-unlock.ts',
-    reads: 1,
-    why: 'debt: the replica-key answer, read by hand and folded to null with no record; belongs on readDaemonJson',
-  },
-  {
     file: 'apps/web/src/pages/ServerModeApp.tsx',
     reads: 3,
     why: 'debt: the server-mode session and sign-in providers answers, parsed with parseDaemonResponse over a bare `res.json()`, so a non-JSON body escapes as an untyped SyntaxError; belongs on readDaemonJson',
