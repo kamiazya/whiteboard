@@ -1,10 +1,18 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const openWhiteboardDbMock = vi.hoisted(() => vi.fn())
-vi.mock('./browser-idb.js', () => ({ openWhiteboardDb: openWhiteboardDbMock }))
+// Partial: the store names `DOCUMENT_FILES_STORE` from this module too, and a
+// mock without it fails BEFORE the open is attempted — which `get`/`read`
+// swallow, so a test of the open failure would pass without reaching it.
+vi.mock('./browser-idb.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./browser-idb.js')>()),
+  openWhiteboardDb: openWhiteboardDbMock,
+}))
 
 const { DocumentFileStore, documentFileRecordSchema } = await import('./document-file-store.js')
+
+afterEach(() => openWhiteboardDbMock.mockReset())
 
 describe('documentFileRecordSchema', () => {
   const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
@@ -46,5 +54,18 @@ describe('DocumentFileStore.get', () => {
     const store = new DocumentFileStore()
 
     await expect(store.get('file-1')).resolves.toBeNull()
+    expect(openWhiteboardDbMock).toHaveBeenCalledOnce()
+  })
+})
+
+describe('DocumentFileStore.read', () => {
+  it('calls a store it could not open unreadable, not absent', async () => {
+    // The bytes may well be there; this device could not reach them, and a
+    // caller reporting "missing" would be saying something it does not know.
+    const error = new Error('VersionError: boom')
+    openWhiteboardDbMock.mockRejectedValueOnce(error)
+
+    expect(await new DocumentFileStore().read('file-1')).toEqual({ kind: 'unreadable', error })
+    expect(openWhiteboardDbMock).toHaveBeenCalledOnce()
   })
 })

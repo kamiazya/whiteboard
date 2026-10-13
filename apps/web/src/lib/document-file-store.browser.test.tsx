@@ -188,6 +188,27 @@ describe('DocumentFileStore over the blob store', () => {
     expect(await (await store.get('legacy'))?.arrayBuffer()).toEqual(PNG.buffer)
   })
 
+  it('reads a reference whose bytes are gone as absent, not unreadable', async () => {
+    // The record still names the bytes, but nothing is stored under them:
+    // the image is missing, and nothing about this device failed.
+    const store = new DocumentFileStore()
+    await store.put('orphan', { mimeType: 'image/png', blob: new Blob([PNG]), created: 1 })
+    const db = await openWhiteboardDb()
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(BLOBS_STORE, 'readwrite')
+        tx.objectStore(BLOBS_STORE).clear()
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+    } finally {
+      db.close()
+    }
+    expect(await blobCount()).toBe(0)
+
+    expect(await store.read('orphan')).toEqual({ kind: 'absent' })
+  })
+
   it('deleting a file id that was never stored is quiet', async () => {
     await expect(new DocumentFileStore().delete('never-here')).resolves.toBeUndefined()
   })

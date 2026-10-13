@@ -55,6 +55,14 @@ describe('the block a caret is NEAREST', () => {
     expect(BODY.slice(range?.from, range?.to)).toBe('# Heading')
   })
 
+  it('takes the paragraph directly above, not the first block, deeper in the document', () => {
+    // The case above cannot tell "the block above" from "the first block":
+    // there they are the same block.
+    const blank = BODY.indexOf('Last.') - 1
+    const range = blockRangeNear(BODY, blank)
+    expect(BODY.slice(range?.from, range?.to)).toBe('First paragraph\nwrapped onto a second line.')
+  })
+
   it('looks forward when there is nothing behind it: a blank first line', () => {
     const body = '\n\nOnly block.'
     const range = blockRangeNear(body, 0)
