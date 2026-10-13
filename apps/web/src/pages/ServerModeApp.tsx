@@ -190,9 +190,11 @@ type SessionUser = Extract<SignInSessionResponse, { signedIn: true }>['user']
 
 /**
  * The keeper answers a browser with no session `200 { signedIn: false }`, and
- * that alone is "signed out". Any other outcome — a busy keeper's 503, a
- * proxy's 502, no answer — says nothing about the session, and reading it as
- * signed out would send a signed-in person round the sign-in loop.
+ * that alone is "signed out" — as is a 404 from a keeper with no browser
+ * sign-in, which mounts no `/auth` routes, so nobody is signed in to it. Any
+ * other outcome — a busy keeper's 503, a proxy's 502, no answer — says nothing
+ * about the session, and reading it as signed out would send a signed-in
+ * person round the sign-in loop.
  */
 async function readSession(fetchFn: Fetch): Promise<SessionUser | null | 'unavailable'> {
   const session = await readAuth(
@@ -200,6 +202,7 @@ async function readSession(fetchFn: Fetch): Promise<SessionUser | null | 'unavai
     authSessionUrl(),
     signInSessionResponseSchema,
     'the session',
+    { signedIn: false },
   )
   if (session === 'unavailable') return session
   return session.signedIn ? session.user : null

@@ -382,3 +382,40 @@ describe('a sign-in provider read that fails is not "none configured"', () => {
     expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toBeTruthy()
   })
 })
+
+// A keeper with no browser sign-in mounts no `/auth` routes and answers them
+// 404. That is "nobody can sign in here", not a read that failed: no retry,
+// and no contract-drift record.
+describe('a keeper with no sign-in routes', () => {
+  function renderWithoutSignIn(at: string) {
+    const fetchFn = vi.fn((input: RequestInfo | URL) =>
+      Promise.resolve(
+        String(input).startsWith('/auth/')
+          ? jsonResponse(
+              { error: 'not_found', message: `No route answers GET ${String(input)}` },
+              404,
+            )
+          : jsonResponse({ error: 'unexpected' }, 500),
+      ),
+    )
+    render(
+      <MemoryRouter initialEntries={[at]}>
+        <ServerModeApp fetchFn={fetchFn} />
+      </MemoryRouter>,
+    )
+  }
+
+  it('says no provider is configured on the sign-in page', async () => {
+    renderWithoutSignIn('/sign-in')
+
+    expect(await screen.findByText(/no sign-in provider configured/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
+  it('reads the workspaces page as signed out, and sends it to sign in', async () => {
+    renderWithoutSignIn('/')
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy()
+    expect(await screen.findByText(/no sign-in provider configured/i)).toBeTruthy()
+  })
+})

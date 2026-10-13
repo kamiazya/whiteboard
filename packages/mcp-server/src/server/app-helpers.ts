@@ -37,21 +37,28 @@ export function toInlineScriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c')
 }
 
-// Paths whose own routes answer them — /api, /mcp, /.well-known — must never
-// fall through to the UI catch-all: an unmatched request under one of these
-// prefixes means "route not found", not "serve index.html".
+// Paths whose own routes answer them — /api, /auth, /mcp, /.well-known — must
+// never fall through to the UI catch-all: an unmatched request under one of
+// these prefixes means "route not found", not "serve index.html". `/auth` is
+// unmatched whenever server mode has no browser sign-in, and its client reads
+// that 404 as "no provider" and "signed out".
 export function isReservedUiPath(path: string): boolean {
   return (
-    path === '/api' ||
-    path.startsWith('/api/') ||
+    isJsonRefusalPath(path) ||
     path === '/mcp' ||
     path.startsWith('/mcp/') ||
     path.startsWith('/.well-known/')
   )
 }
 
+// The prefixes whose clients parse every answer as JSON: the API, and the
+// sign-in routes the web app reads before it knows whether anyone is signed in.
+function isJsonRefusalPath(path: string): boolean {
+  return ['/api', '/auth'].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+}
+
 /**
- * The answer to a request no route claims. Under `/api` that is a refusal in
+ * The answer to a request no route claims. Under `/api` or `/auth` that is a refusal in
  * the one JSON shape every route refuses in, because a client of the API
  * parses the body of whatever it gets back; Hono's own 404 is `text/plain`
  * and made a missing route read as a SyntaxError. Anywhere else a browser or
@@ -60,7 +67,7 @@ export function isReservedUiPath(path: string): boolean {
 export function answerNotFound(c: Context): Response {
   const { method } = c.req
   const { path } = c.req
-  if (path === '/api' || path.startsWith('/api/')) {
+  if (isJsonRefusalPath(path)) {
     return c.json(errorBody('not_found', `No route answers ${method} ${path}`), 404)
   }
   return c.text('404 Not Found', 404)

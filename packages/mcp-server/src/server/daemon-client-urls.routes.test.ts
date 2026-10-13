@@ -430,12 +430,12 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
     expect([...AUTH_BUILDERS].sort()).toEqual(Object.keys(AUTH_SAMPLES).sort())
   })
 
-  // The control: an `/auth` path no route serves is answered by the UI's
-  // catch-all, so "not a plain-text 404" would hold for a renamed route too.
-  it('tells a mounted route from the catch-all that answers every other path', async () => {
+  // The control: an `/auth` path no route serves is refused like an `/api`
+  // one rather than answered with the UI's shell, so a JSON content type alone
+  // would hold for a renamed route too.
+  it('tells a mounted route from an /auth path no route serves', async () => {
     const res = await app.request(`${PUBLIC_URL}/auth/no-such-route`)
-    expect(res.headers.get('content-type') ?? '').not.toMatch(/json/)
-    expect(res.status).not.toBe(302)
+    expect(await unmatched(res), `-> ${res.status}`).toBe(true)
   })
 
   it.each(sampleRows(AUTH_SAMPLES))('$builder $label ($method) is served by a route', async ({
@@ -444,9 +444,11 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
   }) => {
     const res = await app.request(`${PUBLIC_URL}${url}`, { method })
     const contentType = res.headers.get('content-type') ?? ''
-    // Each route answers JSON, a redirect, or nothing at all (sign-out); the
-    // catch-all answers HTML.
-    const served = [204, 302].includes(res.status) || contentType.startsWith('application/json')
+    // Each route answers JSON, a redirect, or nothing at all (sign-out); an
+    // unserved one answers the JSON refusal `unmatched` recognises.
+    const served =
+      [204, 302].includes(res.status) ||
+      (contentType.startsWith('application/json') && !(await unmatched(res)))
     expect(served, `${method} ${url} -> ${res.status} ${contentType}`).toBe(true)
   })
 })
