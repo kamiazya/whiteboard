@@ -24,10 +24,7 @@ const LABEL_SITE = 'apps/web/src/lib/workspace-handle.ts'
  * Files that still spell the precedence inline, each with why. Checked from
  * both sides: an entry whose file no longer spells it fails too.
  */
-const INLINE_LABELS: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/member-workspaces.ts':
-    'server mode member list; its rework onto workspaceLabel is a separate change to that module',
-}
+const INLINE_LABELS: Readonly<Record<string, string>> = {}
 
 /** `displayName ?? <anything>.segment` or `displayName ?? <anything>.workspaceId`. */
 const INLINE_LABEL = /displayName\s*\?\?\s*[\w.?]*\b(?:segment|workspaceId)\b/g
