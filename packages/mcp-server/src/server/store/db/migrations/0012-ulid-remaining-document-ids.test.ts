@@ -40,7 +40,7 @@ async function openDb(): Promise<Handle> {
 
 async function seedThirdSiteRow(
   db: Handle['db'],
-  opts: { id: string; workspaceId: string; path: string },
+  opts: { id: string; workspaceId: string; path: string; snapshot?: boolean },
 ): Promise<void> {
   await db
     .insertInto('workspaces')
@@ -85,20 +85,22 @@ async function seedThirdSiteRow(
     })
     .execute()
   const docKey = `canvas:${opts.id}`
-  await db
-    .insertInto('documentSnapshots')
-    .values({
-      docKey,
-      chunkCount: 1,
-      totalBytes: 3,
-      maxChunkBytes: 1_000_000,
-      frontier: new Uint8Array(),
-    })
-    .execute()
-  await db
-    .insertInto('documentSnapshotChunks')
-    .values({ docKey, chunkIndex: 0, bytes: new Uint8Array([1, 2, 3]) })
-    .execute()
+  if (opts.snapshot !== false) {
+    await db
+      .insertInto('documentSnapshots')
+      .values({
+        docKey,
+        chunkCount: 1,
+        totalBytes: 3,
+        maxChunkBytes: 1_000_000,
+        frontier: new Uint8Array(),
+      })
+      .execute()
+    await db
+      .insertInto('documentSnapshotChunks')
+      .values({ docKey, chunkIndex: 0, bytes: new Uint8Array([1, 2, 3]) })
+      .execute()
+  }
   await db
     .insertInto('documentDeltas')
     .values({ docKey, seq: 0, bytes: new Uint8Array([4]), frontier: new Uint8Array() })
@@ -192,6 +194,36 @@ describe('0012-ulid-remaining-document-ids', () => {
       .where('path', '=', 'blobless-doc')
       .executeTakeFirstOrThrow()) as { id: string }
     expect(row.id).toMatch(ULID)
+    await handle.db.destroy()
+  })
+
+  it('re-mints a row that was never compacted into a snapshot', async () => {
+    const handle = await openDb()
+    await handle.migrateToPre0012()
+    // Deltas and a frontier but no snapshot: a document written to and never
+    // compacted. Nothing is there to copy, so the snapshot step must be skipped
+    // rather than fail on the row it did not find.
+    await seedThirdSiteRow(handle.db, {
+      id: 'Qw3rTy7UiOp9',
+      workspaceId: 'ws-1',
+      path: 'uncompacted-doc',
+      snapshot: false,
+    })
+
+    await handle.migrateTo('0012-ulid-remaining-document-ids')
+
+    const row = (await handle.db
+      .selectFrom('documents')
+      .selectAll()
+      .where('path', '=', 'uncompacted-doc')
+      .executeTakeFirstOrThrow()) as { id: string }
+    expect(row.id).toMatch(ULID)
+    expect(await handle.db.selectFrom('documentSnapshots').selectAll().execute()).toEqual([])
+    const delta = await handle.db
+      .selectFrom('documentDeltas')
+      .select('docKey')
+      .executeTakeFirstOrThrow()
+    expect(delta.docKey).toBe(`canvas:${row.id}`)
     await handle.db.destroy()
   })
 

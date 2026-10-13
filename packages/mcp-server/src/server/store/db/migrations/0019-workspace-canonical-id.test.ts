@@ -11,14 +11,16 @@
  * `documentSnapshotChunks.docKey -> documentSnapshots.docKey`, so the
  * snapshot pair needs 0013's copy-then-delete and nothing else does.
  */
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rename, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { type Kysely, sql } from 'kysely'
 import { LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resolveTestServerDeps } from '../../../routes/_test-helpers.js'
+import { createWorkspacesRouter } from '../../../routes/document/workspaces.js'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -28,6 +30,13 @@ vi.mock('../../../config.js', () => ({
   },
   getDataDir: () => dataDir,
 }))
+
+// A pass-through spy, so a case can make one particular rename fail the way a
+// real filesystem would. Every other caller still gets the real `rename`.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...actual, rename: vi.fn(actual.rename) }
+})
 
 const PRE_0019 = '0018-workspace-segment'
 const CANONICAL = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
@@ -136,9 +145,33 @@ async function idOf(handle: Handle, segment: string | null): Promise<string> {
   return row.id as string
 }
 
+/**
+ * Make the rename of `failingSource` reject with `code`, and record every
+ * rename that went through before it. A real filesystem cannot be made to
+ * refuse one directory and not its sibling without depending on who runs the
+ * test (root ignores the mode bits), so the error is injected rather than
+ * provoked.
+ */
+function failRenameOf(failingSource: string, code: string): { succeeded: string[] } {
+  const succeeded: string[] = []
+  const real = vi.mocked(rename).getMockImplementation() as typeof rename
+  vi.mocked(rename).mockImplementation(async (from, to) => {
+    if (from === failingSource) {
+      throw Object.assign(new Error(`${code}: injected, rename '${String(from)}'`), { code })
+    }
+    await real(from, to)
+    succeeded.push(String(from))
+  })
+  return { succeeded }
+}
+
 describe('0019-workspace-canonical-id', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'migration-0019-'))
+  })
+
+  afterEach(() => {
+    vi.mocked(rename).mockRestore()
   })
 
   it('re-keys a legacy workspace onto a ULID and keeps the old handle as its segment', async () => {
@@ -346,8 +379,6 @@ describe('0019-workspace-canonical-id', () => {
     expect(newId).toMatch(CANONICAL)
     expect(newId).not.toBe('default')
 
-    const { createWorkspacesRouter } = await import('../../../routes/document/workspaces.js')
-    const { resolveTestServerDeps } = await import('../../../routes/_test-helpers.js')
     const app = createWorkspacesRouter({ serverDeps: await resolveTestServerDeps(dataDir) })
     const bySegment = await app.request('/api/workspaces/default/documents')
     const byId = await app.request(`/api/workspaces/${newId}/documents`)
@@ -357,5 +388,46 @@ describe('0019-workspace-canonical-id', () => {
     expect(canonical.documents.map((d) => d.path)).toEqual(['spec'])
     expect(bySegment.status).toBe(200)
     expect(await bySegment.json()).toEqual(canonical)
+  })
+
+  it('moves back every directory it renamed when a later workspace fails', async () => {
+    const handle = await openDb()
+    await handle.migrateTo(PRE_0019)
+    await seedWorkspace(handle, 'default')
+    await seedWorkspace(handle, 'notes')
+    // EACCES rather than ENOENT: a missing source is the one error the
+    // rename may swallow, and any other must stop the migration.
+    const injected = failRenameOf(join(dataDir, 'notes'), 'EACCES')
+
+    await expect(handle.migrateToHead()).rejects.toMatchObject({ code: 'EACCES' })
+
+    // The failure has to come AFTER a completed rename, or there is nothing
+    // to unwind and this case would pass on an empty undo list.
+    expect(injected.succeeded).toEqual(
+      expect.arrayContaining([join(dataDir, 'default'), join(dataDir, 'blobs', 'default')]),
+    )
+    // Back under the old id: the database rolls back to `default`, and a tree
+    // left on the freshly minted ULID would be found by nothing ever again.
+    expect((await readdir(dataDir)).filter((name) => CANONICAL.test(name))).toEqual([])
+    expect((await readdir(join(dataDir, 'blobs'))).sort()).toEqual(['default', 'notes'])
+    expect(await readdir(join(dataDir, 'default', 'files'))).toEqual(['a.png'])
+    expect(await readdir(join(dataDir, 'blobs', 'default', 'ab'))).toEqual(['cdef'])
+  })
+
+  it('gives a lowercase ULID-shaped handle no segment', async () => {
+    const handle = await openDb()
+    await handle.migrateTo(PRE_0019)
+    // Not canonical — the canonical form is upper case — so it is re-keyed;
+    // but as a segment it would still read as a ULID in the address position
+    // it shares with the canonical id.
+    await seedWorkspace(handle, '01arz3ndektsv4rrffq69g5fav')
+
+    await handle.migrateToHead()
+
+    const rows = await handle.db.selectFrom('workspaces').select(['id', 'segment']).execute()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.id).toMatch(CANONICAL)
+    expect(rows[0]?.id).not.toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    expect(rows[0]?.segment).toBeNull()
   })
 })
