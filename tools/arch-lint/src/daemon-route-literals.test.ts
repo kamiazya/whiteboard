@@ -48,21 +48,6 @@ interface Exemption {
 
 const LEDGER: readonly Exemption[] = [
   {
-    file: 'packages/daemon-client/src/sse-stream-hub.ts',
-    literal: '/api/sync/message',
-    why: "the sync protocol's endpoints, which the hub alone requests; mcp-server's web-api-paths-mounted test holds the quoted two to a mounted route",
-  },
-  {
-    file: 'packages/daemon-client/src/sse-stream-hub.ts',
-    literal: '/api/sync/subscribe',
-    why: 'the sync protocol, as above',
-  },
-  {
-    file: 'packages/daemon-client/src/sse-stream-hub.ts',
-    literal: '/api/sync/stream',
-    why: 'the sync protocol, as above; written after the base URL, so web-api-paths-mounted does not read it',
-  },
-  {
     file: 'packages/daemon-client/src/api-client.ts',
     literal: '/api/',
     why: 'a same-origin prefix check (`startsWith`), never a request',

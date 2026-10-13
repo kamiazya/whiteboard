@@ -131,6 +131,23 @@ export function runtimePingApiUrl(): string {
   return '/api/runtime/ping'
 }
 
+// ---- sync: the SSE stream and the two control posts beside it ----
+
+/** GET: the one long-lived event stream a page's sync hub reads. */
+export function syncStreamApiUrl(): string {
+  return '/api/sync/stream'
+}
+
+/** POST: route documents into (or out of) an open stream. */
+export function syncSubscribeApiUrl(): string {
+  return '/api/sync/subscribe'
+}
+
+/** POST: a client's update or awareness frame, addressed to its stream. */
+export function syncMessageApiUrl(): string {
+  return '/api/sync/message'
+}
+
 /** The daemon's own health and configuration, as `whiteboard server doctor` reads it. */
 export function runtimeStatusApiUrl(): string {
   return '/api/runtime/status'

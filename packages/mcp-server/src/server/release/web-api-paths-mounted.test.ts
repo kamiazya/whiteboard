@@ -278,12 +278,17 @@ describe('apps/web only asks for /api and /auth routes the daemon mounts', () =>
     expect(paths.length).toBeGreaterThan(8)
   })
 
-  // The hub's own literals are the subject the scan was extended to reach;
-  // a scan that stops at api-contracts reports them as fine by never seeing them.
-  it('reaches the sync hub in daemon-client', () => {
-    const hub = paths.filter((path) => path.file.endsWith('daemon-client/src/sse-stream-hub.ts'))
-    expect(hub.map((path) => path.normalized).sort()).toEqual([
+  // The sync hub's routes are named by daemon-client's builders; a scan that
+  // stopped reading them would report the sync protocol as fine by never seeing it.
+  it("reaches the sync hub's routes in daemon-client", () => {
+    const sync = paths.filter(
+      (path) =>
+        path.file.endsWith('daemon-client/src/api-contracts/daemon-urls.ts') &&
+        path.normalized.startsWith('/api/sync/'),
+    )
+    expect(sync.map((path) => path.normalized).sort()).toEqual([
       '/api/sync/message',
+      '/api/sync/stream',
       '/api/sync/subscribe',
     ])
   })

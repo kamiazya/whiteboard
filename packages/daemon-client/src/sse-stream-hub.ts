@@ -14,6 +14,11 @@
 
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
+import {
+  syncMessageApiUrl,
+  syncStreamApiUrl,
+  syncSubscribeApiUrl,
+} from './api-contracts/daemon-urls.js'
 import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
 import { refusalReasonOf } from './api-contracts/refusal-reason.js'
 import {
@@ -354,7 +359,7 @@ export class SseStreamHub implements SseStreamSource {
     // have nowhere to apply it. Readiness is replayed once one opens; the other
     // control messages are inert server-side, so dropping them costs nothing.
     if (this.streamId === null) return
-    void this.post('/api/sync/message', {
+    void this.post(syncMessageApiUrl(), {
       streamId: this.streamId,
       doc,
       message,
@@ -423,7 +428,7 @@ export class SseStreamHub implements SseStreamSource {
   // `.strict()`: a body shaped by hand answered 400, which this swallows as
   // best-effort, and sync stopped delivering with nothing red.
   private async post(
-    path: '/api/sync/subscribe' | '/api/sync/message',
+    path: string,
     body: SyncSubscribeRequest | SyncClientMessageRequest,
   ): Promise<number | null> {
     try {
@@ -444,7 +449,7 @@ export class SseStreamHub implements SseStreamSource {
     // set is announced when one opens, so an early subscribe is not lost.
     if (this.streamId === null) return null
     // Best effort: a dropped subscribe is re-sent when the stream reconnects.
-    return await this.post('/api/sync/subscribe', {
+    return await this.post(syncSubscribeApiUrl(), {
       streamId: this.streamId,
       ...body,
     } satisfies SyncSubscribeRequest)
@@ -523,7 +528,7 @@ export class SseStreamHub implements SseStreamSource {
 
     let res: Response
     try {
-      res = await this.options.fetch(`${this.options.baseUrl}/api/sync/stream`, {
+      res = await this.options.fetch(`${this.options.baseUrl}${syncStreamApiUrl()}`, {
         signal: abort.signal,
       })
     } catch {
@@ -577,7 +582,7 @@ export class SseStreamHub implements SseStreamSource {
     if (docs.length > 0) void this.follow(docs)
     for (const [doc, entry] of this.docs) {
       if (!entry.ready) continue
-      void this.post('/api/sync/message', {
+      void this.post(syncMessageApiUrl(), {
         streamId: payload.streamId,
         doc,
         message: { type: 'client_ready' },

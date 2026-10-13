@@ -78,6 +78,9 @@ describe('daemon URL builders keep the bytes clients sent before', () => {
     ],
     ['storageReportApiUrl', urls.storageReportApiUrl(), '/api/runtime/storage'],
     ['runtimePingApiUrl', urls.runtimePingApiUrl(), '/api/runtime/ping'],
+    ['syncStreamApiUrl', urls.syncStreamApiUrl(), '/api/sync/stream'],
+    ['syncSubscribeApiUrl', urls.syncSubscribeApiUrl(), '/api/sync/subscribe'],
+    ['syncMessageApiUrl', urls.syncMessageApiUrl(), '/api/sync/message'],
     ['runtimeStatusApiUrl', urls.runtimeStatusApiUrl(), '/api/runtime/status'],
     [
       'replicaKeyRotateApiUrl',

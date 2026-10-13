@@ -145,6 +145,11 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   ],
   replicaTierApiUrl: [{ label: 'set', method: 'PUT', url: daemonUrls.replicaTierApiUrl(WS) }],
   runtimeStatusApiUrl: [{ label: 'status', method: 'GET', url: daemonUrls.runtimeStatusApiUrl() }],
+  syncStreamApiUrl: [{ label: 'open', method: 'GET', url: daemonUrls.syncStreamApiUrl() }],
+  syncSubscribeApiUrl: [
+    { label: 'subscribe', method: 'POST', url: daemonUrls.syncSubscribeApiUrl() },
+  ],
+  syncMessageApiUrl: [{ label: 'message', method: 'POST', url: daemonUrls.syncMessageApiUrl() }],
   documentsV1ApiUrl: [{ label: 'create', method: 'POST', url: daemonUrls.documentsV1ApiUrl(WS) }],
   documentBacklinksApiUrl: [
     { label: 'backlinks', method: 'GET', url: daemonUrls.documentBacklinksApiUrl(WS, 'doc1') },
@@ -307,7 +312,10 @@ describe('daemon client URLs reach a route', () => {
     url,
   }) => {
     const res = await (await localDaemonApp()).request(url, requestInit(method, `Bearer ${TOKEN}`))
-    expect(await unmatched(res), `${method} ${url} -> ${res.status}`).toBe(false)
+    // The sync stream's body never ends on its own; the headers are the
+    // answer, and cancelling the body closes the stream it opened.
+    const isUnmatched = await unmatched(res).finally(() => res.body?.cancel())
+    expect(isUnmatched, `${method} ${url} -> ${res.status}`).toBe(false)
   })
 })
 
