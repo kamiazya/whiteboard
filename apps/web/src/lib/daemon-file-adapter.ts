@@ -72,10 +72,8 @@ export function createDaemonFileAdapter({
 
     async loadDocument(ref) {
       try {
-        const target = resolveRefPath?.(ref) ?? ref
-        const res = await daemonFetch(
-          `${daemonBaseUrl}${documentApiUrl(workspaceId, target, 'snapshot')}`,
-        )
+        const snapshot = documentApiUrl(workspaceId, resolveRefPath?.(ref) ?? ref, 'snapshot')
+        const res = await daemonFetch(`${daemonBaseUrl}${snapshot}`)
         if (!res.ok) return undefined
         const doc = new Loro()
         doc.import(new Uint8Array(await res.arrayBuffer()))
