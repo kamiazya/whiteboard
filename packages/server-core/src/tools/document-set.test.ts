@@ -1,8 +1,10 @@
 import {
+  readCommentThreads,
   readDocumentKind,
   readFacets,
   readMarkdownBody,
   readSpatialCanvas,
+  writeCommentThread,
   writeDocumentKind,
   writeFacets,
   writeSpatialCanvas,
@@ -261,6 +263,43 @@ describe('wb_document_set tool', () => {
     // The legacy okf-body node it was healed FROM is gone, so a later read
     // cannot find a stale second body behind the fresh one.
     expect(readSpatialCanvas(doc).nodes).toEqual([])
+  })
+
+  test('a note stored in the okf-body shape keeps its comment threads across the write', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({ id: 'okf-body', x: 0, y: 0, width: 600, height: 400, text: 'Old body.' }),
+        ],
+        edges: [],
+      })
+      writeCommentThread(doc, {
+        id: 't1',
+        anchor: {
+          kind: 'text',
+          quote: { prefix: '', exact: 'Old', suffix: ' body.' },
+          start: 0,
+          end: 3,
+        },
+        status: 'open',
+        createdAt: '2026-09-02T00:00:00.000Z',
+        messages: [{ id: 'm1', body: 'tighten this', author: 'human:yuki' }],
+      })
+    })
+    const tool = createDocumentSetOperation(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      markdown: '---\ntype: note\n---\nNew body.',
+    })
+
+    const doc = await loadDoc(store, DOCUMENT_ID)
+    expect(readMarkdownBody(doc)).toBe('New body.')
+    expect(readCommentThreads(doc).map((thread) => thread.id)).toEqual(['t1'])
   })
 
   test('a document predating kinds that holds nodes is refused, not flattened', async () => {

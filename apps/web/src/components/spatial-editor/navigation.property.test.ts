@@ -25,6 +25,7 @@ import {
   type NavigationEffect,
   type NavigationEvent,
   type NavigationMode,
+  type NavigationResult,
   type NavigationState,
   reduceNavigation,
 } from './navigation.js'
@@ -517,6 +518,261 @@ describe('navigation invariants', () => {
             'a double press was claimed between two presses further apart than the slop',
           ).toBeLessThanOrEqual(DOUBLE_PRESS_SLOP_PX)
         })
+      }),
+      { numRuns: 2000 },
+    )
+  })
+})
+
+/**
+ * The multi-finger arms — a gather that keeps growing, a pinch joined by a
+ * third finger, the finger a pinch leaves behind — judged against a MODEL of
+ * what each finger means, written from the spec rather than from the reducer.
+ *
+ * The sequences above cannot be that oracle: they mix mice with fingers and
+ * lose releases on purpose, which is what the lifetime invariants need and
+ * what makes "which finger is the anchor" unknowable from outside. Here every
+ * pointer is a finger, every release is heard, and the tool is fixed for the
+ * whole sequence the way it is for a real hand on a screen — so the model can
+ * say exactly which finger anchors a gather, which ones joined it, and when a
+ * pinch is over.
+ */
+const FINGERS = [1, 2, 3, 4] as const
+
+const fingerStepArb = fc.record({
+  finger: fc.constantFrom(...FINGERS),
+  kind: fc.oneof(
+    { weight: 4, arbitrary: fc.constant('down' as const) },
+    { weight: 4, arbitrary: fc.constant('up' as const) },
+    { weight: 3, arbitrary: fc.constant('move' as const) },
+  ),
+  // Mostly on a node, since a gather needs one under every finger that joins.
+  hitId: fc.option(fc.constantFrom('n1', 'n2', 'n3'), { nil: undefined, freq: 3 }),
+  point: rawPointArb,
+})
+
+const fingerSequenceArb = fc.record({
+  // Hand mode clears the selection, so it never has an anchor to gather onto.
+  // One sequence in four, since only the other three can reach a gather.
+  handMode: fc.oneof(
+    { weight: 1, arbitrary: fc.constant(true) },
+    { weight: 3, arbitrary: fc.constant(false) },
+  ),
+  steps: fc.array(fingerStepArb, { minLength: 2, maxLength: 24 }),
+})
+
+/** What the model says the fingers are doing. */
+interface FingerModel {
+  /** Fingers the machine should hold as pinch candidates. */
+  tracked: Set<number>
+  gather: { anchor: number; members: Set<number> } | null
+  pinching: boolean
+}
+
+/** How often the run reached each multi-finger arm, so a sparse draw cannot pass vacuously. */
+const fingerReach = {
+  secondMemberJoined: 0,
+  memberReleasedMidGather: 0,
+  bystanderReleasedMidGather: 0,
+  thirdFingerInPinch: 0,
+  strandedPinchMove: 0,
+}
+
+afterAllFloor(['every finger matches the model of what it means'], () => {
+  // Floors, not targets: about a third of the lowest of three measured runs
+  // (secondMemberJoined 235-244, memberReleased 188-204, bystander 25-33,
+  // thirdFinger 446-469, stranded 25-44), so a generator change that stops
+  // reaching an arm fails here by name rather than passing over it.
+  expect(fingerReach.secondMemberJoined, 'no gather ever grew past one member').toBeGreaterThan(80)
+  expect(
+    fingerReach.memberReleasedMidGather,
+    'no member lifted while its gather held',
+  ).toBeGreaterThan(60)
+  expect(fingerReach.bystanderReleasedMidGather, 'no non-member lifted mid-gather').toBeGreaterThan(
+    8,
+  )
+  expect(
+    fingerReach.thirdFingerInPinch,
+    'no pinch was ever joined by a third finger',
+  ).toBeGreaterThan(150)
+  expect(fingerReach.strandedPinchMove, 'no finger a pinch left behind ever moved').toBeGreaterThan(
+    8,
+  )
+})
+
+type FingerStep = (typeof fingerSequenceArb extends fc.Arbitrary<infer T>
+  ? T
+  : never)['steps'][number]
+
+/** What the model says a finger landing means, checked against what the machine did. */
+function modelPress(model: FingerModel, finger: number, onNode: boolean, result: NavigationResult) {
+  const gathered = result.effects.some((effect) => effect.kind === 'gather')
+  if (model.pinching) {
+    fingerReach.thirdFingerInPinch += 1
+    expect(result.fallThrough, 'a finger joining a pinch reached the caller').toBe(false)
+    model.tracked.add(finger)
+  } else if (model.gather !== null) {
+    expect(gathered, 'a finger mid-gather gathered iff it landed on a node').toBe(onNode)
+    if (onNode) {
+      fingerReach.secondMemberJoined += 1
+      model.gather.members.add(finger)
+    }
+  } else if (model.tracked.size === 1) {
+    const [other] = model.tracked
+    expect(gathered, 'a second finger gathered iff it landed on a node').toBe(onNode)
+    if (onNode && other !== undefined) {
+      model.gather = { anchor: other, members: new Set([finger]) }
+    } else {
+      model.pinching = true
+      model.tracked.add(finger)
+    }
+  } else {
+    expect(gathered, 'a lone finger gathered').toBe(false)
+    model.tracked.add(finger)
+  }
+}
+
+function pressFinger(
+  model: FingerModel,
+  handMode: boolean,
+  isPrimary: boolean,
+  step: FingerStep,
+  state: NavigationState,
+  clock: number,
+): NavigationState {
+  const result = reduceNavigation(state, {
+    type: 'pointerdown',
+    pointerId: step.finger,
+    pointerType: 'touch',
+    isPrimary,
+    button: 0,
+    point: step.point,
+    timeStamp: clock,
+    context: {
+      handMode,
+      spaceDown: false,
+      hitId: step.hitId,
+      anchorPrimaryId: handMode ? null : 'n0',
+      manipulating: false,
+    },
+  })
+  // The browser marks a touch primary only when no other is down, so a
+  // primary press is the start of a fresh hand.
+  if (isPrimary) Object.assign(model, { tracked: new Set(), gather: null, pinching: false })
+  modelPress(model, step.finger, step.hitId !== undefined && !handMode, result)
+  return result.state
+}
+
+function gathers(model: FingerModel, finger: number): boolean {
+  const { gather } = model
+  return gather !== null && (gather.anchor === finger || gather.members.has(finger))
+}
+
+function moveFinger(model: FingerModel, step: FingerStep, state: NavigationState): NavigationState {
+  const { finger } = step
+  const result = reduceNavigation(state, {
+    type: 'pointermove',
+    pointerId: finger,
+    pointerType: 'touch',
+    point: step.point,
+  })
+  if (gathers(model, finger)) {
+    expect(result, 'a gathering finger dragged').toEqual({ state, effects: [], fallThrough: false })
+  }
+  if (model.pinching && model.tracked.has(finger)) {
+    if (model.tracked.size === 1) fingerReach.strandedPinchMove += 1
+    expect(result.fallThrough, 'a pinching finger’s move reached the caller').toBe(false)
+  }
+  return result.state
+}
+
+function releaseFinger(
+  model: FingerModel,
+  finger: number,
+  state: NavigationState,
+): NavigationState {
+  const inGather = gathers(model, finger)
+  const result = reduceNavigation(state, {
+    type: 'pointerup',
+    pointerId: finger,
+    pointerType: 'touch',
+  })
+  const { gather } = model
+  if (gather !== null) {
+    if (gather.anchor === finger) {
+      model.gather = null
+      model.tracked.delete(finger)
+    } else if (gather.members.has(finger)) {
+      fingerReach.memberReleasedMidGather += 1
+      gather.members.delete(finger)
+    } else {
+      fingerReach.bystanderReleasedMidGather += 1
+    }
+    const consumed = 'a gathering finger’s release was not consumed, or a bystander’s was'
+    expect(result.fallThrough, consumed).toBe(!inGather)
+  } else if (model.pinching) {
+    expect(result.fallThrough, 'a release out of a pinch reached the caller').toBe(false)
+    model.tracked.delete(finger)
+    if (model.tracked.size === 0) model.pinching = false
+  } else {
+    model.tracked.delete(finger)
+  }
+  return result.state
+}
+
+/** One generated step, kept to what a real hand can do: no finger lands twice or lifts unpressed. */
+function stepFinger(
+  model: FingerModel,
+  handMode: boolean,
+  platformDown: Set<number>,
+  step: FingerStep,
+  state: NavigationState,
+  clock: number,
+): NavigationState {
+  const { finger } = step
+  if (step.kind === 'down') {
+    if (platformDown.has(finger)) return state
+    const isPrimary = platformDown.size === 0
+    platformDown.add(finger)
+    return pressFinger(model, handMode, isPrimary, step, state, clock)
+  }
+  if (!platformDown.has(finger)) return state
+  if (step.kind === 'move') return moveFinger(model, step, state)
+  platformDown.delete(finger)
+  return releaseFinger(model, finger, state)
+}
+
+describe('multi-finger navigation', () => {
+  it('every finger matches the model of what it means', () => {
+    fc.assert(
+      fc.property(fingerSequenceArb, ({ handMode, steps }) => {
+        const model: FingerModel = { tracked: new Set(), gather: null, pinching: false }
+        const platformDown = new Set<number>()
+        let state = createIdleNavigation()
+        let clock = 0
+        for (const step of steps) {
+          clock += 50
+          state = stepFinger(model, handMode, platformDown, step, state, clock)
+          const expected = model.pinching
+            ? 'pinching'
+            : model.gather !== null
+              ? 'gathering'
+              : 'other'
+          const actual =
+            state.mode.kind === 'pinching' || state.mode.kind === 'gathering'
+              ? state.mode.kind
+              : 'other'
+          expect(actual, 'the machine’s mode disagrees with the model').toBe(expected)
+          if (model.gather !== null && state.mode.kind === 'gathering') {
+            expect({ anchor: state.mode.anchorId, members: state.mode.memberIds }).toEqual(
+              model.gather,
+            )
+          }
+          expect(
+            [...state.touches.keys()].sort(),
+            'the machine holds a different set of pinch candidates than the model',
+          ).toEqual([...model.tracked].sort())
+        }
       }),
       { numRuns: 2000 },
     )

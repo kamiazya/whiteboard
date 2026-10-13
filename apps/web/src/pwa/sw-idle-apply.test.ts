@@ -95,6 +95,21 @@ describe('startSwIdleAutoApply', () => {
     expect(apply).toHaveBeenCalledTimes(1)
   })
 
+  it('takes the swap once work clears while the tab stays hidden', async () => {
+    const apply = vi.fn()
+    const doc = fakeDoc()
+    let busy = true
+    startSwIdleAutoApply({ apply, doc: doc as unknown as Document, isIdle: () => !busy })
+
+    doc.setVisibility('hidden')
+    await vi.advanceTimersByTimeAsync(SW_IDLE_SETTLE_MS)
+    expect(apply).not.toHaveBeenCalled()
+
+    busy = false
+    await vi.advanceTimersByTimeAsync(SW_IDLE_SETTLE_MS)
+    expect(apply).toHaveBeenCalledTimes(1)
+  })
+
   it('stops listening when the returned stop is called', async () => {
     const apply = vi.fn()
     const doc = fakeDoc()

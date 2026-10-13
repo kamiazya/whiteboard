@@ -20,8 +20,17 @@ import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { Client } from '@modelcontextprotocol/client'
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { type RunningServer, startHttpServer } from '../../src/server/http-server.js'
+import { getLogLevel, type LogLevel, setLogLevel } from '../../src/server/log.js'
+import {
+  claimIsolatedDataDir,
+  releaseIsolatedDataDir,
+} from '../../src/shared/test-utils/isolated-data-dir.js'
 import { repoRoot } from '../../src/shared/test-utils/repo-root.js'
+import { testSocketPath } from '../../src/shared/test-utils/socket-fetch.js'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
 
 const PROXY_SCRIPT_PATH = resolve(import.meta.dirname, 'mcp-http-stdio-proxy.mjs')
@@ -171,6 +180,37 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     expect(parsed.error.message).toContain('HTTP 404')
   })
 
+  it('writes a streamed message as it arrives, before the stream ends', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    // A stream that sends one message and then stays open, the shape of a
+    // long-lived listen: nothing ends it, so a proxy that waits for the end
+    // never writes anything.
+    const open: Array<{ end: () => void }> = []
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write(
+        `event: message\ndata: ${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', data: 'early' } })}\n\n`,
+      )
+      open.push(res)
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(
+      () =>
+        new Promise((r) => {
+          for (const res of open) res.end()
+          server.close(() => r(undefined))
+        }),
+    )
+
+    const proc = spawnProxy(dataDir)
+    proc.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'subscriptions/listen' })}\n`,
+    )
+    const first = JSON.parse(await nextStdoutLine(proc))
+    expect(first.method).toBe('notifications/message')
+    expect(first.params.data).toBe('early')
+  })
+
   it('exits cleanly when stdin closes', async () => {
     const { dataDir, socketPath } = dataDirWithRecord()
     await startResponder(socketPath)
@@ -182,6 +222,100 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     proc.stdin.end()
     expect(await exited).toBe(0)
     child = null
+  })
+})
+
+// A client that negotiates sees exactly what it would see on the daemon's own
+// socket: the proxy derives the modern era's standard request headers from
+// each line, and relays every message of a streamed reply, so the in-call log
+// records a modern request opts into arrive ahead of its result.
+describe('mcp-http-stdio-proxy against the real daemon', () => {
+  const MODERN = '2026-07-28'
+  let running: RunningServer | undefined
+  let scratchDataDir = ''
+  let recordDir = ''
+  let previousLevel: LogLevel = 'warning'
+
+  beforeAll(async () => {
+    scratchDataDir = claimIsolatedDataDir('proxy-eras')
+    previousLevel = getLogLevel()
+    // The records a call emits pass the daemon's own threshold first.
+    setLogLevel('debug')
+    const socketPath = testSocketPath()
+    running = await startHttpServer({ socketPath, token: TOKEN })
+    recordDir = mkdtempSync(join(tmpdir(), 'wb-proxy-real-'))
+    writeFileSync(join(recordDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
+  })
+
+  afterAll(async () => {
+    await running?.close()
+    setLogLevel(previousLevel)
+    rmSync(recordDir, { recursive: true, force: true })
+    releaseIsolatedDataDir(scratchDataDir)
+  })
+
+  async function connect(versionNegotiation?: { mode: 'auto' }) {
+    const client = new Client(
+      { name: 'proxy-eras', version: '1' },
+      versionNegotiation === undefined ? undefined : { versionNegotiation },
+    )
+    const order: string[] = []
+    client.setNotificationHandler('notifications/message', () => {
+      order.push('record')
+    })
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [PROXY_SCRIPT_PATH],
+      env: {
+        ...(process.env as Record<string, string>),
+        WHITEBOARD_DATA_DIR: recordDir,
+        WHITEBOARD_TOKEN: TOKEN,
+        WHITEBOARD_PROXY_SKIP_ENSURE: '1',
+        WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: '5000',
+      },
+      stderr: 'ignore',
+    })
+    cleanups.push(() => client.close())
+    await client.connect(transport)
+    return { client, order }
+  }
+
+  // A fresh path per call: the daemon outlives each test (and each repeat), so
+  // a fixed path would already exist on the second run.
+  let calls = 0
+  function createCall(name: string, meta?: Record<string, unknown>) {
+    calls += 1
+    const path = `${name}-${calls}`
+    return {
+      name: 'wb_workspace_edit',
+      arguments: {
+        workspaceId: 'default',
+        ops: [{ op: 'document.create', path, kind: 'markdown', markdown: '# hi\n' }],
+      },
+      ...(meta === undefined ? {} : { _meta: meta }),
+    }
+  }
+
+  it('carries a negotiating client into the modern era with its log records', async () => {
+    const { client, order } = await connect({ mode: 'auto' })
+    expect(client.getNegotiatedProtocolVersion()).toBe(MODERN)
+
+    const result = await client.callTool(
+      createCall('proxy-modern', { 'io.modelcontextprotocol/logLevel': 'debug' }),
+    )
+    order.push('result')
+
+    expect(result.isError ?? false).toBe(false)
+    expect(order[0]).toBe('record')
+    expect(order.at(-1)).toBe('result')
+  })
+
+  it('still serves a client that never negotiates', async () => {
+    const { client } = await connect()
+    expect(client.getNegotiatedProtocolVersion()).not.toBe(MODERN)
+
+    const result = await client.callTool(createCall('proxy-legacy'))
+    expect(result.isError ?? false).toBe(false)
   })
 })
 

@@ -266,7 +266,11 @@ describe('IdbDocumentStore', () => {
       expect(asList(loaded?.frontier ?? [])).toEqual(asList(frontier))
       expect(await store.readSnapshotManifest({ docRef })).toEqual({ manifest, generation: 1 })
 
-      await store.appendDeltas({ docRef, deltaBatch: { updates, newFrontier } })
+      await store.appendDeltas({
+        docRef,
+        deltaBatch: { updates, newFrontier },
+        requireSnapshot: true,
+      })
       const log = await store.loadDeltas({ docRef, afterSeq: null })
       expect(log.updates.map(asList)).toEqual(updates.map(asList))
       expect(log.lastSeq).toBe(updates.length)

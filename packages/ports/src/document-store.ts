@@ -114,16 +114,19 @@ export const appendDeltasInputSchema = z
     docRef: docRefSchema,
     deltaBatch: deltaBatchSchema,
     /**
-     * Refuse, writing nothing, when the document has no snapshot.
+     * `true`: refuse, writing nothing, when the document has no snapshot.
+     * `false`: an append to an absent document CREATES one — a log with
+     * nothing behind it.
      *
-     * Without it an append to an absent document CREATES one — a log with
-     * nothing behind it — so a writer that read the record, lost it to a
-     * delete, and then appended would bring the deleted record back as a
-     * fragment no reader opens. Checked inside the store's own write, because
-     * a caller's earlier read of the snapshot is exactly what the delete
+     * Required, because `false` is the dangerous one: a writer that read the
+     * record, lost it to a delete, and then appended would bring the deleted
+     * record back as a fragment no reader opens. A writer extending a record
+     * it believes exists wants `true`; `false` is for seeding a log-only
+     * record on purpose. Checked inside the store's own write, because a
+     * caller's earlier read of the snapshot is exactly what the delete
      * slipped past.
      */
-    requireSnapshot: z.boolean().optional(),
+    requireSnapshot: z.boolean(),
   })
   .strict()
 export type AppendDeltasInput = z.infer<typeof appendDeltasInputSchema>

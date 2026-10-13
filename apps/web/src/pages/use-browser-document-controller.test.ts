@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
@@ -662,20 +663,13 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const { result } = renderHook(() =>
-        useBrowserDocumentController(store.index, {
-          loro: new FakeLoroStore(),
-          pointer: store.pointer,
-          clock: store.clock,
-        }),
+      const created = await createSeededDocument(
+        store.index,
+        new FakeLoroStore(),
+        store.clock,
+        'Second',
       )
-      await act(async () => {})
-
-      let created: DocumentSnapshot | undefined
-      await act(async () => {
-        created = await result.current.createDocument('Second')
-      })
-      expect(created?.workspaceId).toBe(getBrowserWorkspaceId())
+      expect(created.workspaceId).toBe(getBrowserWorkspaceId())
     })
 
     // Two documents at one address is the failure the path exists to
@@ -826,7 +820,7 @@ describe('useBrowserDocumentController', () => {
     })
   })
 
-  describe('multi-canvas: listDocuments / createDocument / switchDocument', () => {
+  describe('multi-canvas: listDocuments / createSeededDocument / switchDocument', () => {
     it('listDocuments reflects the auto-created canvas on first mount', async () => {
       const store = new BrowserStoreDouble()
       const loro = new FakeLoroStore()
@@ -843,7 +837,7 @@ describe('useBrowserDocumentController', () => {
       expect(list[0].documentId).toBe(result.current.snapshot?.documentId)
     })
 
-    it('createDocument returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
+    it('createSeededDocument returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
@@ -860,7 +854,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument('Second canvas')
+        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
       })
 
       expect(created).toBeDefined()
@@ -873,14 +867,14 @@ describe('useBrowserDocumentController', () => {
       expect(loro.saved.some((s) => s.id === created!.documentId)).toBe(true)
     })
 
-    it('createDocument with no name places an unnamed document at "untitled"', async () => {
+    it('createSeededDocument with no name places an unnamed document at "untitled"', async () => {
       // Seeded, so the mount does not take 'untitled' for itself first: the
       // index refuses to hand out the same path twice.
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save({ ...snap, path: 'existing', name: 'Existing' })
       const loro = new FakeLoroStore()
-      const { result } = renderHook(() =>
+      renderHook(() =>
         useBrowserDocumentController(store.index, {
           loro: loro,
           pointer: store.pointer,
@@ -890,19 +884,19 @@ describe('useBrowserDocumentController', () => {
       await act(async () => {})
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument()
+        created = await createSeededDocument(store.index, loro, store.clock)
       })
       expect(created?.path).toBe('untitled')
       expect(created?.name).toBeNull()
     })
 
-    it('createDocument rolls back the metadata row when the Loro write fails', async () => {
+    it('createSeededDocument rolls back the metadata row when the Loro write fails', async () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
       const loro = new FakeLoroStore()
       loro.shouldThrow = true
-      const { result } = renderHook(() =>
+      renderHook(() =>
         useBrowserDocumentController(store.index, {
           loro: loro,
           pointer: store.pointer,
@@ -914,7 +908,7 @@ describe('useBrowserDocumentController', () => {
       let thrown: unknown
       await act(async () => {
         try {
-          await result.current.createDocument('Doomed')
+          await createSeededDocument(store.index, loro, store.clock, 'Doomed')
         } catch (err) {
           thrown = err
         }
@@ -926,7 +920,7 @@ describe('useBrowserDocumentController', () => {
       expect(list[0].documentId).toBe(C1)
     })
 
-    it('listDocuments includes documents created via createDocument', async () => {
+    it('listDocuments includes documents created via createSeededDocument', async () => {
       const store = new BrowserStoreDouble()
       const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
@@ -938,7 +932,7 @@ describe('useBrowserDocumentController', () => {
       )
       await act(async () => {})
       await act(async () => {
-        await result.current.createDocument('Second canvas')
+        await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
       })
       const list = await result.current.listDocuments()
       expect(list).toHaveLength(2)
@@ -960,7 +954,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument('Second canvas')
+        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
       })
 
       act(() => {
@@ -1035,7 +1029,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument('Second canvas')
+        created = await createSeededDocument(base.index, loro, base.clock, 'Second canvas')
       })
 
       // Leave a stale degraded banner behind, as a prior corrupt-record
@@ -1101,7 +1095,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument('Second canvas')
+        created = await createSeededDocument(base.index, loro, base.clock, 'Second canvas')
       })
 
       await act(async () => {
@@ -1129,7 +1123,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument('Second canvas')
+        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
       })
 
       // Intercept the next save() (the one renameDocument's fire-and-forget
@@ -1206,7 +1200,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await result.current.createDocument('Second canvas')
+        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
       })
 
       // Intercept the rename write so the test controls exactly when each of

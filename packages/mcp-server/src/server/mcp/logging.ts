@@ -9,14 +9,16 @@ import type { LoggingLevel, McpServer } from '@modelcontextprotocol/server'
 // call's `ctx.mcpReq.log`; the one destination below forwards a record only
 // when it was emitted inside such a scope, and only to that scope's sink.
 // A record emitted anywhere else — a background worker, another user's route,
-// a sync stream — reaches stderr and no MCP client. A process-wide fan-out to
+// a sync stream, or a timer the call armed that fires after it has answered —
+// reaches stderr and no MCP client. A process-wide fan-out to
 // every connected server would hand one caller's records (workspace ids,
 // sign-in failures) to whoever else had a request open.
 //
 // What reaches a client therefore follows the SDK's own per-request rules:
 //   - stdio: one server per connection, so the request's notification goes
 //     out on the one pipe and a 2025-era `logging/setLevel` holds for the
-//     connection. Records outside a tool call are stderr-only here too.
+//     connection. Records outside a tool call, or logged after it has
+//     answered, are stderr-only here too.
 //   - HTTP `/mcp`, modern era (2026-07-28): delivered on the call's own
 //     response stream when the request opts in with `_meta`
 //     `io.modelcontextprotocol/logLevel` (the threshold); `logging/setLevel`
@@ -31,7 +33,15 @@ import { addLogDestination, lineToLogRecord } from '../log.js'
 
 type RequestLog = (level: LoggingLevel, data: unknown, logger?: string) => Promise<void>
 
-const requestLog = new AsyncLocalStorage<RequestLog>()
+// The store outlives its call: a timer or promise continuation armed inside
+// the handler inherits it and may log long after the call has answered.
+// `open` is what bounds a request's sink to the request itself.
+interface RequestScope {
+  readonly log: RequestLog
+  open: boolean
+}
+
+const requestLog = new AsyncLocalStorage<RequestScope>()
 
 // pino writes each line to the fan-out synchronously from the log call, so
 // the store read here is the emitting call's own scope.
@@ -42,15 +52,15 @@ function installForwardingDestination(): void {
   addLogDestination({
     stream: {
       write(line: string) {
-        const log = requestLog.getStore()
-        if (log === undefined) return
+        const scope = requestLog.getStore()
+        if (scope === undefined || !scope.open) return
         const record = lineToLogRecord(line)
         if (!record) return
         // Keep msg inside `data` so structured consumers see the message
         // string alongside its fields.
         const data =
           record.data !== undefined ? { msg: record.msg, ...record.data } : { msg: record.msg }
-        void log(record.level, data, record.scope).catch(() => {
+        void scope.log(record.level, data, record.scope).catch(() => {
           // A dropped connection rejects the send. Logging itself must never
           // throw — stderr already holds the record.
         })
@@ -59,9 +69,27 @@ function installForwardingDestination(): void {
   })
 }
 
-/** Runs `fn` with records it emits forwarded to `log` — one request's sink. */
+/**
+ * Runs `fn` with records it emits forwarded to `log` — one request's sink —
+ * until `fn` has settled. Work it leaves behind (a debounce, a timer) logs to
+ * stderr only, like any other code outside a request.
+ */
 export function runWithRequestLog<T>(log: RequestLog | undefined, fn: () => T): T {
-  return log === undefined ? fn() : requestLog.run(log, fn)
+  if (log === undefined) return fn()
+  const scope: RequestScope = { log, open: true }
+  const close = (): void => {
+    scope.open = false
+  }
+  let result: T
+  try {
+    result = requestLog.run(scope, fn)
+  } catch (err) {
+    close()
+    throw err
+  }
+  if (result instanceof Promise) return result.finally(close) as T
+  close()
+  return result
 }
 
 /**

@@ -101,6 +101,7 @@ it('a mint over a log with nothing behind it reads back what it minted', async (
   await inner.appendDeltas({
     docRef: REF,
     deltaBatch: { updates: [new Uint8Array([1, 2, 3])], newFrontier: new Uint8Array([1]) },
+    requireSnapshot: false,
   })
   const docs = new DocumentStoreWorkspaceDocs(inner)
   const pulled = new LoroDoc()

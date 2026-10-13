@@ -201,6 +201,44 @@ describe('MCP log forwarding over HTTP /mcp, 2025 era', () => {
   })
 })
 
+/**
+ * Deps whose `listDocuments` arms a timer — the shape of a debounced
+ * background job a write schedules — that logs only once `callReturned()`
+ * has been called, i.e. after the tool call has answered. `fired` settles
+ * once it has logged.
+ */
+async function timerDeps() {
+  const base = resolveServerDeps(createContainer(storeMemoryModule))
+  await base.documentIndex.createWorkspace({ workspaceId: WORKSPACE })
+  let callReturned: () => void = () => {}
+  const returned = new Promise<void>((resolve) => {
+    callReturned = resolve
+  })
+  let markFired: () => void = () => {}
+  const fired = new Promise<void>((resolve) => {
+    markFired = resolve
+  })
+  const index = base.documentIndex
+  const documentIndex = new Proxy(index, {
+    get(target, key, receiver) {
+      if (key === 'listDocuments') {
+        return async (input: Parameters<typeof index.listDocuments>[0]) => {
+          setTimeout(async () => {
+            await returned
+            getLogger('log-forwarding').warning('after-the-call')
+            markFired()
+          }, 0)
+          return target.listDocuments(input)
+        }
+      }
+      const value = Reflect.get(target, key, receiver)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  const deps: ServerDeps = { ...base, documentIndex }
+  return { deps, callReturned, fired }
+}
+
 describe('MCP log forwarding over stdio', () => {
   it('holds a 2025-era setLevel for the connection and forwards only in-call records', async () => {
     const { deps, entered, release } = await gatedDeps()
@@ -218,6 +256,23 @@ describe('MCP log forwarding over stdio', () => {
       await a.client.callTool(listCall())
       expect(markers(a.got)).toEqual(['in-call-2'])
       expect(a.got).not.toContain('outside every request')
+    } finally {
+      await a.close()
+    }
+  })
+
+  it('forwards nothing a timer armed inside a call logs after that call has returned', async () => {
+    const { deps, callReturned, fired } = await timerDeps()
+    const a = await stdioClient(deps)
+    try {
+      await a.client.setLoggingLevel('warning')
+      await a.client.callTool(listCall())
+      callReturned()
+      await fired
+      // Round trips after the emission, so a forwarded record has had every
+      // chance to arrive before the assertion.
+      for (let i = 0; i < 5; i++) await a.client.listTools()
+      expect(a.got).not.toContain('after-the-call')
     } finally {
       await a.close()
     }

@@ -75,6 +75,31 @@ describe('createUpdateApplier', () => {
   })
 })
 
+// A reload held by the page's leave prompt never lands either, so the deadline
+// cannot tell it from a lost swap; while work is held in the tab, reloading
+// again unasked would only raise that prompt a second time.
+describe('createUpdateApplier while work is held in the tab', () => {
+  it('leaves the update waiting instead of reloading at the deadline', async () => {
+    const recover = vi.fn()
+    let idle = false
+    const applyUpdate = createUpdateApplier({
+      apply: () => Promise.resolve(),
+      recover,
+      isIdle: () => idle,
+    })
+
+    await applyUpdate()
+    await vi.advanceTimersByTimeAsync(SWAP_DEADLINE_MS)
+    expect(recover).not.toHaveBeenCalled()
+
+    idle = true
+    await applyUpdate()
+    await vi.advanceTimersByTimeAsync(SWAP_DEADLINE_MS)
+    expect(recover).toHaveBeenCalledTimes(1)
+    await expectLoggedFailure('did not take over')
+  })
+})
+
 // The suite above advances by the exported SWAP_DEADLINE_MS, so the value is
 // free to drift; the recovery exists because the browser's own ceiling is five
 // minutes, so a deadline anywhere near that is no recovery at all.

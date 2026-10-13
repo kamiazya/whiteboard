@@ -1,5 +1,5 @@
 /**
- * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createDocument /
+ * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createSeededDocument /
  * switchDocument against the production FoldingBrowserIndex, proving id-addressed
  * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
@@ -7,7 +7,8 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
+import { IdbDefaultDocumentPointer, idbContentClock } from '../lib/browser-document-summary.js'
+import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { loadDocumentContent } from '../lib/workspace-content.js'
@@ -26,6 +27,11 @@ function snapshotWithElements(elements: unknown[]): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
+/** The production create path over the same stores the controller defaults to. */
+function createSeeded(index: FoldingBrowserIndex, name: string) {
+  return createSeededDocument(index, new LoroStore(), idbContentClock(), name)
+}
+
 describe('multi-canvas foundation (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -36,7 +42,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     await clearWhiteboardDb()
   })
 
-  it('createDocument twice persists both, and listDocuments returns both by their real id', async () => {
+  it('createSeededDocument twice persists both, and listDocuments returns both by their real id', async () => {
     const store = new FoldingBrowserIndex()
     const { result } = renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
@@ -44,10 +50,10 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     let idA = ''
     let idB = ''
     await act(async () => {
-      idA = (await result.current.createDocument('Canvas A')).documentId
+      idA = (await createSeeded(store, 'Canvas A')).documentId
     })
     await act(async () => {
-      idB = (await result.current.createDocument('Canvas B')).documentId
+      idB = (await createSeeded(store, 'Canvas B')).documentId
     })
 
     const list = await result.current.listDocuments()
@@ -57,7 +63,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     expect(list.find((c) => c.documentId === idA)?.name).toBe('Canvas A')
     expect(list.find((c) => c.documentId === idB)?.name).toBe('Canvas B')
 
-    // createDocument seeds an empty document so a switch onto a never-edited
+    // createSeededDocument seeds an empty document so a switch onto a never-edited
     // canvas delivers a valid empty doc rather than not-found.
     await expect(loadDocumentContent(idA)).resolves.not.toBeNull()
     await expect(loadDocumentContent(idB)).resolves.not.toBeNull()
@@ -66,16 +72,16 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   it('two documents hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
     const store = new FoldingBrowserIndex()
     const loro = new LoroStore()
-    const { result } = renderHook(() => useBrowserDocumentController(store))
+    renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
 
     let idA = ''
     let idB = ''
     await act(async () => {
-      idA = (await result.current.createDocument('Canvas A')).documentId
+      idA = (await createSeeded(store, 'Canvas A')).documentId
     })
     await act(async () => {
-      idB = (await result.current.createDocument('Canvas B')).documentId
+      idB = (await createSeeded(store, 'Canvas B')).documentId
     })
 
     await loro.save(idA, snapshotWithElements([{ id: 'rect-a', type: 'rectangle' }]))
@@ -103,7 +109,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
 
     let idB = ''
     await act(async () => {
-      idB = (await result.current.createDocument('Canvas B')).documentId
+      idB = (await createSeeded(store, 'Canvas B')).documentId
     })
 
     await act(async () => {

@@ -22,7 +22,7 @@ import {
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { inTransaction } from '../lib/idb-tx.js'
+import { inTransaction, request } from '../lib/idb-tx.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { indexWritesSettled } from '../lib/pending-index-writes.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
@@ -100,9 +100,9 @@ export async function registerTestWorkspace(
 ): Promise<void> {
   const workspaceId = options.workspaceId ?? getBrowserWorkspaceId()
   const segment = options.segment ?? BROWSER_DEFAULT_SEGMENT
-  await inTransaction(undefined, [WORKSPACES_STORE], 'readwrite', async (tx) => {
-    tx.objectStore(WORKSPACES_STORE).put({ workspaceId, segment }, workspaceId)
-  })
+  await inTransaction(undefined, [WORKSPACES_STORE], 'readwrite', (tx) =>
+    request(tx.objectStore(WORKSPACES_STORE).put({ workspaceId, segment }, workspaceId)),
+  )
 }
 
 /**

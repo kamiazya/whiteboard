@@ -140,7 +140,9 @@ export async function armVirtualPasskeys(session, { pollMs = 1_000, onAdded, onR
   })
   return {
     stop() {
-      for (const sessionId of [...watched.keys()]) unwatch(sessionId)
+      // A Map's iterator is live: deleting the entry it is on still visits
+      // every later one, so no snapshot of the keys is needed.
+      for (const sessionId of watched.keys()) unwatch(sessionId)
     },
   }
 }
@@ -183,12 +185,14 @@ export async function connectBrowserSession(webSocketDebuggerUrl) {
     pending.clear()
   })
   return {
-    send(method, params = {}, sessionId) {
+    send(method, params, sessionId) {
       lastId += 1
       const id = lastId
       return new Promise((answer, refuse) => {
         pending.set(id, { answer, refuse, method })
-        socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }))
+        socket.send(
+          JSON.stringify({ id, method, params: params ?? {}, ...(sessionId ? { sessionId } : {}) }),
+        )
       })
     },
     on(event, handler) {

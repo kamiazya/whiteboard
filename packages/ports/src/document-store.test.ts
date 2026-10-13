@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  type AppendDeltasInput,
   appendDeltasInputSchema,
   appendDeltasResultSchema,
   loadDeltasInputSchema,
@@ -71,12 +72,23 @@ describe('DocumentStore method DTOs', () => {
 
   it('appendDeltas: accepts a docRef + deltaBatch input; result requires a frontier', () => {
     const deltaBatch = { updates: [new Uint8Array([1])], newFrontier: frontier }
-    expect(appendDeltasInputSchema.safeParse({ docRef, deltaBatch }).success).toBe(true)
     expect(
       appendDeltasInputSchema.safeParse({ docRef, deltaBatch, requireSnapshot: true }).success,
     ).toBe(true)
+    expect(
+      appendDeltasInputSchema.safeParse({ docRef, deltaBatch, requireSnapshot: false }).success,
+    ).toBe(true)
     expect(appendDeltasResultSchema.safeParse({ ok: true, frontier }).success).toBe(true)
     expect(appendDeltasResultSchema.safeParse({ ok: true }).success).toBe(false)
+  })
+
+  it('appendDeltas: an input that does not choose whether to require a snapshot is refused', () => {
+    const deltaBatch = { updates: [new Uint8Array([1])], newFrontier: frontier }
+    // Omitting the flag is the call that recreates a deleted record as a bare
+    // log, so the type has to make every caller say which one it means.
+    // @ts-expect-error requireSnapshot is required
+    const omitted: AppendDeltasInput = { docRef, deltaBatch }
+    expect(appendDeltasInputSchema.safeParse(omitted).success).toBe(false)
   })
 
   it('appendDeltas: a refusal names why and carries no frontier', () => {

@@ -1,4 +1,4 @@
-import { context, propagation, trace } from '@opentelemetry/api'
+import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
 import {
   BasicTracerProvider,
@@ -101,5 +101,26 @@ describe('tracingMiddleware http.route attribute', () => {
     // url.path stays high-cardinality on purpose — it is the per-request
     // attribute, not the per-route grouper.
     expect(span.attributes['url.path']).toBe('/totally/made/up/url')
+  })
+})
+
+describe('tracingMiddleware span status', () => {
+  // Error-rate dashboards read span status, so the line is a server fault:
+  // 500 and above is ERROR, while a client error or success stays UNSET.
+  it.each([
+    [500, 'ERROR'],
+    [503, 'ERROR'],
+    [499, 'UNSET'],
+    [404, 'UNSET'],
+    [200, 'UNSET'],
+  ] as const)('a %i response leaves the span status %s', async (status, expected) => {
+    const app = new Hono()
+    app.use('*', tracingMiddleware())
+    app.get('/status', (c) => c.body(null, status as 200))
+    const res = await app.request('/status')
+    expect(res.status).toBe(status)
+    const spans = exporter.getFinishedSpans()
+    expect(spans).toHaveLength(1)
+    expect(spans[0].status.code).toBe(SpanStatusCode[expected])
   })
 })

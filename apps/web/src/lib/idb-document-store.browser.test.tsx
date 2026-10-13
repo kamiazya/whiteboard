@@ -184,6 +184,7 @@ describe('IdbDocumentStore layout', () => {
       await store.appendDeltas({
         docRef,
         deltaBatch: { updates: [new Uint8Array([9])], newFrontier: new Uint8Array() },
+        requireSnapshot: false,
       })
 
       const loaded = await store.loadDeltas({ docRef, afterSeq: null })

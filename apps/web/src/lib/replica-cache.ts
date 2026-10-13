@@ -20,14 +20,14 @@
 import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
-import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
+import { type ReplicaFailure, replicaFailure } from './replica-failure.js'
 import { cacheReplicaImages } from './replica-images.js'
 import { markReplica, replicaKeyStatus } from './replica-store.js'
-import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from './sealed-document-store.js'
+import { ReplicaKeyRotatedError } from './sealed-document-store.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
 const log = getAppLogger('replica-cache')
@@ -60,14 +60,7 @@ export type CacheDaemonWorkspaceResult =
        */
       keyId?: string
     }
-  /**
-   * The pull reached the daemon, but this build's session key for the
-   * workspace is withheld (`ReplicaKeyWithheldError`) — a reconnect
-   * question, never a network one. Kept distinct from `'failed'` so a
-   * caller can tell a member to reconnect instead of retrying the request.
-   */
-  | { kind: 'withheld' }
-  | { kind: 'failed'; reason: string }
+  | ReplicaFailure
 
 /**
  * The stored copy to merge the pull into — or a fresh one when the stored
@@ -151,20 +144,6 @@ export async function cacheDaemonWorkspace(
       syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),
     }
   } catch (err) {
-    if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }
-    // The copy already on this device is what failed, and the daemon was
-    // reached: saying otherwise sends a person to check a connection that
-    // works. Worded like the Browser keeper's own unreadable-workspace notice.
-    if (isStoredDocumentUnreadableError(err)) {
-      log.warn('stored replica could not be read; pull not stored', { daemonBaseUrl, workspaceId })
-      return {
-        kind: 'failed',
-        reason:
-          "This browser's copy of this workspace could not be read, so the pull was not stored.",
-      }
-    }
-    // A thrown fetch (daemon offline mid-pull) surfaces as a structured
-    // failure the caller can report; the pull is safe to re-run.
-    return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }
+    return replicaFailure(err, 'pull', { log, daemonBaseUrl, workspaceId })
   }
 }

@@ -11,8 +11,11 @@
 //
 // So the registry is LOAD-BEARING, not documentation: the composition root
 // starts and stops workers through `startBackgroundWork`, a worker with no
-// declaration does not typecheck, and `background-work.guard.test.ts` fails
-// on a `.start()` in the composition root that goes around it. The point is
+// declaration does not typecheck, `background-work.guard.test.ts` fails on a
+// `.start()` in the composition root that goes around it, and
+// `background-work-costs.test.ts` fails on an in-process declaration whose
+// ceiling no test asserts. Nothing reads the entries at runtime beyond arming
+// and stopping them: no status surface reports what is armed. The point is
 // not that the answers here are enforced — nobody can mechanically check
 // whether a stated reason is a good one — but that the questions cannot be
 // skipped, and that all the answers sit in one file a reader can compare.
@@ -91,8 +94,9 @@ export interface BackgroundWork {
   /**
    * The worker itself, or `null` when this deployment did not arm it — a
    * setting left unset, a feature switched off. Declared either way, so the
-   * registry lists what the daemon CAN run rather than what today's
-   * environment happens to have turned on.
+   * three answers are written, and its ceiling asserted by
+   * `background-work-costs.test.ts`, for what the daemon CAN run rather than
+   * only for what today's environment happens to have turned on.
    */
   worker: BackgroundWorker | null
 }
@@ -100,8 +104,6 @@ export interface BackgroundWork {
 export interface BackgroundWorkHandle {
   /** Stops every armed worker, in declaration order, never throwing. */
   stopAll(): Promise<void>
-  /** What was declared, for the runtime status surface and for tests. */
-  declared: readonly BackgroundWork[]
 }
 
 /**
@@ -117,7 +119,6 @@ export function startBackgroundWork(declared: readonly BackgroundWork[]): Backgr
     work.worker?.start()
   }
   return {
-    declared,
     async stopAll(): Promise<void> {
       for (const work of declared) {
         // Never throws: one worker refusing to stop must not leave the rest

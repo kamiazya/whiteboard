@@ -47,21 +47,27 @@ export function startSwIdleAutoApply({
     pending = undefined
   }
 
-  const onVisibilityChange = (): void => {
-    if (doc.visibilityState !== 'hidden') {
-      cancel()
-      return
-    }
-    cancel()
+  const arm = (): void => {
     pending = setTimeout(() => {
       pending = undefined
       // Re-checked rather than trusted from when the timer was set: both can
       // change during the settle period, and applying then would reload a
       // visible tab or drop work that arrived meanwhile.
-      if (doc.visibilityState !== 'hidden' || !isIdle()) return
+      if (doc.visibilityState !== 'hidden') return
+      // Work still held: wait another settle period rather than give up, or
+      // the swap would wait for the next time the tab is hidden.
+      if (!isIdle()) {
+        arm()
+        return
+      }
       log.debug('applying the waiting service worker while the tab is hidden')
       apply()
     }, SW_IDLE_SETTLE_MS)
+  }
+
+  const onVisibilityChange = (): void => {
+    cancel()
+    if (doc.visibilityState === 'hidden') arm()
   }
 
   doc.addEventListener('visibilitychange', onVisibilityChange)

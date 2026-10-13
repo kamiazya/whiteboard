@@ -170,7 +170,7 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
 }
 
 /** The resync itself, without the commit — see `withDocumentBatch`. */
-export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialCanvas): void {
+function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialCanvas): void {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
@@ -216,6 +216,21 @@ export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialC
   dropEvery(doc, nodesMap, staleNodes, NODE_LOCKS_KEY)
   dropEvery(doc, edgesMap, staleEdges, EDGE_LOCKS_KEY)
   dropEvery(doc, linesMap, staleLines, EDGE_LOCKS_KEY)
+}
+
+/**
+ * Removes every node, edge and line, with their locks, and nothing else. Not
+ * the resync with an empty canvas: that states the whole truth, so it would
+ * also delete every comment thread and the canvas's own tags and facets. A
+ * map with nothing in it costs no op.
+ */
+export function clearSpatialElementsInto(doc: DocumentContainers): void {
+  const nodesMap = doc.getMap(NODES_KEY)
+  const edgesMap = doc.getMap(EDGES_KEY)
+  const linesMap = doc.getMap(LINES_KEY)
+  dropEvery(doc, nodesMap, new Set(nodesMap.keys()), NODE_LOCKS_KEY)
+  dropEvery(doc, edgesMap, new Set(edgesMap.keys()), EDGE_LOCKS_KEY)
+  dropEvery(doc, linesMap, new Set(linesMap.keys()), EDGE_LOCKS_KEY)
 }
 
 /**
