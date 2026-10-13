@@ -284,3 +284,160 @@ describe('a number field that is emptied writes no number', () => {
     expect(onWrite).toHaveBeenCalledWith('demo.count/v0', {})
   })
 })
+
+/**
+ * An enum field with no richer declaration is a closed list, so it draws as
+ * one: a free text box would accept a value the schema then refuses.
+ */
+describe('a choice field', () => {
+  const PRIORITY_KEY = 'demo.priority/v0'
+  const priorityRegistry = createFacetRegistry([
+    definePlugin({
+      id: 'demo',
+      displayName: 'Demo',
+      facets: [
+        defineFacet({
+          name: 'priority',
+          displayName: 'Priority',
+          version: 'v0',
+          targets: ['node'],
+          schema: z.object({ level: z.enum(['low', 'high']) }),
+        }),
+      ],
+    }),
+  ])
+
+  it('draws a select of the enum and writes the pick at once', () => {
+    const onWrite = vi.fn()
+    render(
+      <DerivedFacetForm
+        facetKey={PRIORITY_KEY}
+        title="Priority"
+        registry={priorityRegistry}
+        stored={undefined}
+        onWrite={onWrite}
+      />,
+    )
+    const select = screen.getByRole('combobox', { name: 'Priority Level' })
+    expect(Array.from((select as HTMLSelectElement).options).map((option) => option.value)).toEqual(
+      ['', 'low', 'high'],
+    )
+
+    fireEvent.change(select, { target: { value: 'high' } })
+    expect(onWrite).toHaveBeenCalledWith(PRIORITY_KEY, { level: 'high' })
+  })
+})
+
+/**
+ * A union facet's discriminant is not a field of any variant, so nothing a
+ * person edits puts it in the draft — until they touch the variant select.
+ * The payload must carry it regardless, or the default variant can never be
+ * written.
+ */
+describe('a variants facet', () => {
+  const DUE_KEY = 'demo.due/v0'
+  const dueRegistry = createFacetRegistry([
+    definePlugin({
+      id: 'demo',
+      displayName: 'Demo',
+      facets: [
+        defineFacet({
+          name: 'due',
+          displayName: 'Due',
+          version: 'v0',
+          targets: ['node'],
+          schema: z.union([
+            z.object({ mode: z.literal('flag'), done: z.boolean() }),
+            z.object({ mode: z.literal('tier'), tier: z.enum(['soon', 'later']) }),
+          ]),
+        }),
+      ],
+    }),
+  ])
+
+  it('writes the default variant with its discriminant', () => {
+    const onWrite = vi.fn()
+    render(
+      <DerivedFacetForm
+        facetKey={DUE_KEY}
+        title="Due"
+        registry={dueRegistry}
+        stored={undefined}
+        onWrite={onWrite}
+      />,
+    )
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Due Done' }))
+    expect(onWrite).toHaveBeenCalledWith(DUE_KEY, { mode: 'flag', done: true })
+  })
+
+  it("switching variant writes the new variant's shape", () => {
+    const onWrite = vi.fn()
+    render(
+      <DerivedFacetForm
+        facetKey={DUE_KEY}
+        title="Due"
+        registry={dueRegistry}
+        stored={{ mode: 'flag', done: true }}
+        onWrite={onWrite}
+      />,
+    )
+    fireEvent.change(screen.getByRole('combobox', { name: 'Due Mode' }), {
+      target: { value: 'tier' },
+    })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Due Tier' }), {
+      target: { value: 'later' },
+    })
+    expect(onWrite).toHaveBeenLastCalledWith(DUE_KEY, { mode: 'tier', tier: 'later' })
+  })
+})
+
+/**
+ * A catalog's rows load only when the popover opens, so a stored value the
+ * listed options do not name is drawn from the free-entry field the facet
+ * declares — the trigger shows what is set without loading anything.
+ */
+describe("a catalog picker's trigger", () => {
+  const MARK_KEY = 'demo.mark/v0'
+  const load = vi.fn(async () => [])
+  const markRegistry = createFacetRegistry([
+    definePlugin({
+      id: 'demo',
+      displayName: 'Demo',
+      facets: [
+        defineFacet({
+          name: 'mark',
+          displayName: 'Mark',
+          version: 'v0',
+          targets: ['node'],
+          schema: z.object({ kind: z.literal('emoji'), char: z.string().min(1) }),
+          editor: {
+            picker: {
+              options: [{ payload: null, label: 'No mark' }],
+              catalog: {
+                label: 'Search marks',
+                load,
+                entry: { label: 'Any emoji', payload: { kind: 'emoji' }, field: 'char' },
+              },
+            },
+          },
+        }),
+      ],
+    }),
+  ])
+
+  it('draws a stored free-entry value without loading the catalog', () => {
+    render(
+      <DerivedFacetForm
+        facetKey={MARK_KEY}
+        title="Mark"
+        registry={markRegistry}
+        stored={{ kind: 'emoji', char: '⭐' }}
+        onWrite={vi.fn()}
+      />,
+    )
+    const trigger = screen.getByRole('button', { name: 'Choose mark' })
+    expect(trigger.textContent).toContain('⭐')
+    expect(trigger.textContent).not.toContain('Choose')
+    expect(load).not.toHaveBeenCalled()
+  })
+})
