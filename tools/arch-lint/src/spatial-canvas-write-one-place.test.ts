@@ -2,11 +2,11 @@
  * The whole-canvas resync is the loro-adapter's own mechanic, and nothing
  * outside it calls it. The same goes for the three envelope resyncs.
  *
- * `writeSpatialCanvas` / `writeSpatialCanvasInto` set every incoming record
- * and DELETE every stored id the incoming canvas lacks. A caller's canvas
- * comes from `readSpatialCanvas`, which omits any record this build's schema
- * cannot read, so that deletion erases a newer client's records — and a CRDT
- * delete ships to the keeper and every replica. A caller that edits a canvas
+ * `writeSpatialCanvas` sets every incoming record and DELETES every stored
+ * id the incoming canvas lacks. A caller's canvas comes from
+ * `readSpatialCanvas`, which omits any record this build's schema cannot
+ * read, so that deletion erases a newer client's records — and a CRDT delete
+ * ships to the keeper and every replica. A caller that edits a canvas
  * it read applies `reconcileSpatialCanvas(doc, prev, next)`, which deletes
  * only what `prev` held. The browser editor's save fallback and its
  * proposal-adopt arm both called the resync until they were moved over.
@@ -30,7 +30,7 @@ import { REPO_ROOT, SCAN_ROOTS } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
 const OWNER = 'packages/loro-adapter/src/'
-const WRITE_NAMES = ['writeSpatialCanvas', 'writeSpatialCanvasInto']
+const WRITE_NAMES = ['writeSpatialCanvas']
 const ENVELOPE_NAMES = ['writeFacets', 'writeCoreFacets', 'writeTrustFacets']
 
 /** Uses of a name however spelled: bare, qualified, bracketed or through an aliased import. */
@@ -44,12 +44,21 @@ const production = files
   .map((path) => ({ path, rel: relative(REPO_ROOT, path).split(sep).join('/') }))
   .filter(({ rel }) => !rel.startsWith(OWNER))
 
+/** Every function the owning package exports, read from its source. */
+const EXPORTED = new Set(
+  files
+    .filter((path) => relative(REPO_ROOT, path).split(sep).join('/').startsWith(OWNER))
+    .filter((path) => !isTestPath(path))
+    .flatMap((path) =>
+      [...readFileSync(path, 'utf8').matchAll(/^export function (\w+)/gm)].map((m) => m[1] ?? ''),
+    ),
+)
+
 const FIXTURES: readonly { readonly source: string; readonly calls: boolean }[] = [
   { source: 'writeSpatialCanvas(doc, next)', calls: true },
-  { source: 'writeSpatialCanvasInto(doc, next)', calls: true },
   { source: 'writer.writeSpatialCanvas (next)', calls: true },
   { source: 'import { writeSpatialCanvas as save } from "x"\nsave(doc, next)', calls: true },
-  { source: "bridge['writeSpatialCanvasInto'](doc, next)", calls: true },
+  { source: "bridge['writeSpatialCanvas'](doc, next)", calls: true },
   { source: 'import { writeSpatialCanvas } from "x"', calls: false },
   { source: '// writeSpatialCanvas(doc, next) is the resync', calls: false },
   { source: "log.warn('writeSpatialCanvas(doc, next)')", calls: false },
@@ -67,6 +76,13 @@ describe('the whole-canvas resync stays inside loro-adapter', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
     expect(production.length).toBeGreaterThan(1000)
     expect(production.some(({ rel }) => rel === 'apps/web/src/lib/command-writes.ts')).toBe(true)
+  })
+
+  it('lists only names loro-adapter still exports', () => {
+    // A name that no longer exists is a guard that reads as protection while
+    // matching nothing, and points readers at a writer they cannot find.
+    expect(EXPORTED.size).toBeGreaterThan(20)
+    expect([...WRITE_NAMES, ...ENVELOPE_NAMES].filter((name) => !EXPORTED.has(name))).toEqual([])
   })
 
   it('has no caller in a composition root or another package', () => {
