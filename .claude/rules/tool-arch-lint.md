@@ -674,8 +674,7 @@ ways, the fourth being the one that matters: reverting
 
 `writeSpatialCanvas` resyncs by omission — every stored record the reader
 skipped is deleted, as an op that ships — so no non-test source outside
-`packages/loro-adapter` may call it, and every name the guard lists must still
-be a function loro-adapter exports; a writer takes
+`packages/loro-adapter` may call it; a writer takes
 `reconcileSpatialCanvas(doc, prev, next)` with the canvas it last published
 as `prev`.
 
