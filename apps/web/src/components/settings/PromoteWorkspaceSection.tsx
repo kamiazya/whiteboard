@@ -31,14 +31,10 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog.js'
 import { getAppLogger } from '../../lib/app-logger.js'
-import { createDaemonFetch, DaemonApiError, listWorkspaces } from '../../lib/daemon-api-client.js'
-import { DaemonContractError } from '../../lib/daemon-contract-error.js'
+import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
 import type { ConnectedDaemon } from '../../lib/daemon-fetch.js'
-import {
-  describeTransferFailure,
-  type FailureCopy,
-  reach,
-} from '../../lib/keeper-transfer-failure.js'
+import { reach } from '../../lib/keeper-transfer-failure.js'
+import { openFailureReason } from '../../lib/open-move-failure.js'
 import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import {
@@ -52,41 +48,6 @@ const log = getAppLogger('promote-workspace-section')
 
 function daemonFetch(daemon: ConnectedDaemon, baseFetch?: typeof globalThis.fetch) {
   return createDaemonFetch(daemon.baseUrl, baseFetch ?? globalThis.fetch.bind(globalThis))
-}
-
-/**
- * Preparing the move reads the daemon's workspace list AND this browser's own
- * record, so a failure is reported by which of the two failed: someone whose
- * stored copy cannot be read must not be sent to check a connection that works.
- */
-const OPEN_FAILURE_COPY: FailureCopy = {
-  network: 'Could not reach the daemon to prepare the move.',
-  unreadable: "This browser's copy of this workspace could not be read, so it cannot be moved.",
-  device: 'This workspace could not be prepared on this device to move it.',
-  unreadableLog: 'stored workspace could not be read; move not prepared',
-  deviceLog: 'move preparation failed on this device',
-}
-
-function openFailureReason(err: unknown, daemonBaseUrl: string): string {
-  // The daemon answered and refused: its own sentence says why.
-  if (err instanceof DaemonApiError) {
-    log.warn('daemon refused the workspace listing; move not prepared', {
-      daemonBaseUrl,
-      status: err.status,
-    })
-    return err.message
-  }
-  // Already logged where it was raised, with the route and the issues.
-  if (err instanceof DaemonContractError) {
-    return 'The daemon answered with an unexpected response, so the move was not prepared.'
-  }
-  const failure = describeTransferFailure(err, OPEN_FAILURE_COPY, {
-    log,
-    fields: { daemonBaseUrl },
-  })
-  // The browser keeper's own record is read without a replica key, so a
-  // withheld key can only mean that record could not be read.
-  return failure.kind === 'withheld' ? OPEN_FAILURE_COPY.unreadable : failure.reason
 }
 
 export interface PromoteWorkspaceSectionProps {
