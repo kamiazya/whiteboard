@@ -165,13 +165,11 @@ export function useDocumentFileSeams({
         for (const [ref, document] of byReference(loaded, stampOf)) {
           graph.set(ref, loadedReferenceFor(ref, document, resolveAlias))
         }
-        return referenceTargets({ canvases: [canvas], bodies, loaded: graph })
-          .filter((ref) => !adapterRef.current.isImageRef(ref))
-          .map((ref) => ({
-            key: keyOf(ref, stampOf.get(ref) ?? ''),
-            load: () => adapterRef.current.loadDocument(ref),
-            attempts: TRANSIENT_LOAD_ATTEMPTS,
-          }))
+        return referenceTargets({ canvases: [canvas], bodies, loaded: graph }).map((ref) => ({
+          key: keyOf(ref, stampOf.get(ref) ?? ''),
+          load: () => adapterRef.current.loadDocument(ref),
+          attempts: TRANSIENT_LOAD_ATTEMPTS,
+        }))
       },
       [bodies, canvas, resolveAlias, stampOf],
     ),
