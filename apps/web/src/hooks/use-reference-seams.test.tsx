@@ -133,6 +133,40 @@ describe('useReferenceSeams', () => {
     expect(load).toHaveBeenCalledWith('notes/named', B)
   })
 
+  it('titles a nameless embed from the page table, the shape the daemon keeper loads', async () => {
+    // The daemon's loader returns content with no name — a document's name
+    // is the workspace's — so the page's own table is the only title source.
+    const load = vi.fn<ReferenceLoader>(async (_target, id) =>
+      id === B ? { documentId: B, body: 'embedded body' } : undefined,
+    )
+    const { result } = renderHook(() =>
+      useReferenceSeams({
+        body: `![[${B}]]\n`,
+        resolveTitle: (id) => (id === B ? 'Note B' : undefined),
+        load,
+      }),
+    )
+    await waitFor(() => {
+      expect(result.current.resolveEmbed(B)).toBeDefined()
+    })
+    expect(result.current.resolveEmbed(B)?.title).toBe('Note B')
+    expect(result.current.resolveTitle(B)).toBe('Note B')
+  })
+
+  it('answers a link the page table knows even when no load returned it', () => {
+    const load = vi.fn<ReferenceLoader>(async () => undefined)
+    const { result } = renderHook(() =>
+      useReferenceSeams({
+        body: 'see [[notes/other]]\n',
+        resolveAlias: (alias) => (alias === 'notes/other' ? C : null),
+        resolveTitle: (id) => (id === C ? 'Other note' : undefined),
+        load,
+      }),
+    )
+    expect(result.current.resolveAlias('notes/other')).toBe(C)
+    expect(result.current.resolveTitle(C)).toBe('Other note')
+  })
+
   it('a failed load resolves to nothing without retry storms', async () => {
     const load = vi.fn<ReferenceLoader>(async () => undefined)
     const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]\n`, load }))
