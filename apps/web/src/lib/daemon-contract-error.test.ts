@@ -5,26 +5,24 @@ import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   DAEMON_CONTRACT_COPY,
   DaemonContractError,
-  parseDaemonResponse,
   readDaemonJson,
 } from './daemon-contract-error.js'
 
 const schema = z.object({ versions: z.array(z.object({ id: z.string() })) })
 
-/** What `parseDaemonResponse` threw for `input`, which must fail the schema. */
-function failureOf(route: string, input: unknown): DaemonContractError {
-  try {
-    parseDaemonResponse(route, schema, input)
-  } catch (err) {
-    if (err instanceof DaemonContractError) return err
-    throw err
-  }
-  throw new Error('fixture must not parse')
+/** What reading `input` as a daemon answer threw, which must fail the schema. */
+async function failureOf(route: string, input: unknown): Promise<DaemonContractError> {
+  const failure = await readDaemonJson(route, jsonResponse(input), schema).then(
+    () => new Error('fixture must not parse'),
+    (err: unknown) => err,
+  )
+  if (failure instanceof DaemonContractError) return failure
+  throw failure
 }
 
 describe('a contract mismatch', () => {
   it('carries the route and the issues, and tells the person one generic sentence', async () => {
-    const error = failureOf('/api/v1/versions', { versions: [{ id: 7 }] })
+    const error = await failureOf('/api/v1/versions', { versions: [{ id: 7 }] })
 
     expect(error.route).toBe('/api/v1/versions')
     expect(error.issues[0]?.path).toEqual(['versions', 0, 'id'])
@@ -34,36 +32,15 @@ describe('a contract mismatch', () => {
   })
 
   it('logs the route and the first issue path as it builds the error', async () => {
-    failureOf('/api/v1/versions', { versions: [{ id: 7 }] })
+    await failureOf('/api/v1/versions', { versions: [{ id: 7 }] })
 
     await expectLoggedFailure('/api/v1/versions failed its contract at versions.0.id')
   })
 
   it('names a root-level mismatch', async () => {
-    failureOf('/api/v1/x', 'nope')
+    await failureOf('/api/v1/x', 'nope')
 
     await expectLoggedFailure('/api/v1/x failed its contract at (root)')
-  })
-})
-
-describe('parseDaemonResponse', () => {
-  it('returns the parsed answer without logging', () => {
-    expect(parseDaemonResponse('/api/v1/x', schema, { versions: [{ id: 'a' }] })).toEqual({
-      versions: [{ id: 'a' }],
-    })
-  })
-
-  it('throws a DaemonContractError, so a swallowed read still leaves a record', async () => {
-    const failure = (() => {
-      try {
-        return parseDaemonResponse('/api/v1/x', schema, { versions: 3 })
-      } catch (err) {
-        return err
-      }
-    })()
-
-    expect(failure).toBeInstanceOf(DaemonContractError)
-    await expectLoggedFailure('/api/v1/x failed its contract at versions')
   })
 })
 

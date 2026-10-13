@@ -60,7 +60,7 @@ export function reportDaemonDrift(route: string, error: z.ZodError): void {
 }
 
 /** Parses a daemon answer, throwing (and so reporting) a `DaemonContractError` rather than a bare `ZodError`. */
-export function parseDaemonResponse<T>(route: string, schema: z.ZodType<T>, json: unknown): T {
+function parseDaemonResponse<T>(route: string, schema: z.ZodType<T>, json: unknown): T {
   const parsed = schema.safeParse(json)
   if (!parsed.success) throw daemonContractError(route, parsed.error)
   return parsed.data
