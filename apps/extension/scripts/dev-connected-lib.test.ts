@@ -513,6 +513,149 @@ class FakeSocket extends EventTarget {
   close() {}
 }
 
+/**
+ * A CDP session scripted per test: `getCredentials` answers whatever the test
+ * says, so a poll can fail in a way other than losing the authenticator, or
+ * hang for longer than the poll interval.
+ */
+function scriptedPollSession(getCredentials: () => Promise<unknown>) {
+  const sent: Sent[] = []
+  const handlers = new Map<string, (params: never) => void>()
+  return {
+    sent,
+    polls: () => sent.filter((m) => m.method === 'WebAuthn.getCredentials').length,
+    adds: () => sent.filter((m) => m.method === 'WebAuthn.addVirtualAuthenticator').length,
+    session: {
+      send: async (method: string, params?: unknown, sessionId?: string) => {
+        sent.push({ method, params, sessionId })
+        if (method === 'WebAuthn.getCredentials') return getCredentials()
+        if (method === 'WebAuthn.addVirtualAuthenticator') return { authenticatorId: 'auth-1' }
+        return {}
+      },
+      on: (event: string, handler: (params: never) => void) => handlers.set(event, handler),
+    },
+    attach: (sessionId: string) =>
+      (handlers.get('Target.attachedToTarget') as (p: unknown) => void)({
+        sessionId,
+        targetInfo: { type: 'page', targetId: `t-${sessionId}`, url: 'http://localhost:5173/' },
+        waitingForDebugger: true,
+      }),
+  }
+}
+
+describe('armVirtualPasskeys, polling a page that fails or stalls', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('unwatches a tab whose session closed mid-poll, without re-arming or reporting it', async () => {
+    vi.useFakeTimers()
+    const fake = scriptedPollSession(async () => {
+      throw new Error('No session with given id (WebAuthn.getCredentials)')
+    })
+    const reset = vi.fn()
+    const errors = vi.fn()
+    const passkeys = await armVirtualPasskeys(fake.session, {
+      pollMs: 5,
+      onAdded: () => {},
+      onReset: reset,
+      onError: errors,
+    })
+    try {
+      fake.attach('s1')
+      await vi.advanceTimersByTimeAsync(50)
+
+      expect(fake.polls()).toBe(1)
+      expect(fake.adds()).toBe(1)
+      expect(reset).not.toHaveBeenCalled()
+      expect(errors).not.toHaveBeenCalled()
+    } finally {
+      passkeys.stop()
+    }
+  })
+
+  it('starts no second poll while the first is still waiting for its answer', async () => {
+    vi.useFakeTimers()
+    const fake = scriptedPollSession(() => new Promise(() => {}))
+    const passkeys = await armVirtualPasskeys(fake.session, {
+      pollMs: 5,
+      onAdded: () => {},
+      onReset: () => {},
+      onError: () => {},
+    })
+    try {
+      fake.attach('s1')
+      await vi.advanceTimersByTimeAsync(50)
+      expect(fake.polls()).toBe(1)
+    } finally {
+      passkeys.stop()
+    }
+  })
+
+  it('polls no page at all once stop() is called', async () => {
+    vi.useFakeTimers()
+    const fake = scriptedPollSession(async () => ({ credentials: [] }))
+    const passkeys = await armVirtualPasskeys(fake.session, {
+      pollMs: 5,
+      onAdded: () => {},
+      onReset: () => {},
+      onError: () => {},
+    })
+    fake.attach('s1')
+    fake.attach('s2')
+    await vi.advanceTimersByTimeAsync(20)
+    expect(fake.polls()).toBeGreaterThan(1)
+
+    passkeys.stop()
+    const atStop = fake.polls()
+    await vi.advanceTimersByTimeAsync(50)
+
+    expect(fake.polls()).toBe(atStop)
+  })
+})
+
+type Frame = { id: number; method: string; params: unknown; sessionId?: string }
+
+/**
+ * Stands in for the global `WebSocket` `connectBrowserSession` opens: it
+ * opens on the next microtask, records each frame sent, and hands every
+ * request to `reply` so a test can answer it — or push a frame of its own.
+ */
+function stubCdpSocket(reply: (frame: Frame, push: (message: object) => void) => void) {
+  const frames: Frame[] = []
+  let socket: FakeSocket | undefined
+  class FakeSocket {
+    private readonly listeners = new Map<string, Array<(event: unknown) => void>>()
+    constructor(readonly url: string) {
+      socket = this
+      queueMicrotask(() => this.emit('open', {}))
+    }
+    addEventListener(type: string, listener: (event: unknown) => void) {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener])
+    }
+    emit(type: string, event: unknown) {
+      for (const listener of this.listeners.get(type) ?? []) listener(event)
+    }
+    push(message: object) {
+      this.emit('message', { data: JSON.stringify(message) })
+    }
+    send(data: string) {
+      const frame = JSON.parse(data) as Frame
+      frames.push(frame)
+      queueMicrotask(() => reply(frame, (message) => this.push(message)))
+    }
+    close() {
+      this.emit('close', {})
+    }
+  }
+  vi.stubGlobal('WebSocket', FakeSocket)
+  return {
+    frames,
+    push: (message: object) => socket?.push(message),
+    close: () => socket?.close(),
+  }
+}
+
 describe('connectBrowserSession', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -537,5 +680,112 @@ describe('connectBrowserSession', () => {
         sessionId: 's2',
       },
     ])
+  })
+
+  it('pairs each answer with its request by id, whatever order the answers arrive in', async () => {
+    const held: Frame[] = []
+    const socket = stubCdpSocket((frame) => held.push(frame))
+    const session = await connectBrowserSession('ws://127.0.0.1:1/devtools/browser/x')
+
+    const first = session.send('Target.getTargets', { a: 1 }, 's1')
+    const second = session.send('Browser.getVersion')
+    await vi.waitFor(() => expect(held).toHaveLength(2))
+
+    expect(socket.frames).toEqual([
+      { id: 1, method: 'Target.getTargets', params: { a: 1 }, sessionId: 's1' },
+      { id: 2, method: 'Browser.getVersion', params: {} },
+    ])
+    socket.push({ id: 2, result: { product: 'Chrome' } })
+    socket.push({ id: 1, result: { targetInfos: [] } })
+    await expect(second).resolves.toEqual({ product: 'Chrome' })
+    await expect(first).resolves.toEqual({ targetInfos: [] })
+  })
+
+  it("refuses with the error's message and the method that drew it", async () => {
+    stubCdpSocket((frame, push) =>
+      push({ id: frame.id, error: { code: -32000, message: 'No target with given id' } }),
+    )
+    const session = await connectBrowserSession('ws://127.0.0.1:1/devtools/browser/x')
+    await expect(session.send('Target.attachToTarget')).rejects.toThrow(
+      'No target with given id (Target.attachToTarget)',
+    )
+  })
+
+  it('dispatches an event to the handler subscribed to its method, and to nothing else', async () => {
+    const socket = stubCdpSocket(() => {})
+    const session = await connectBrowserSession('ws://127.0.0.1:1/devtools/browser/x')
+    const attached = vi.fn()
+    const detached = vi.fn()
+    session.on('Target.attachedToTarget', attached)
+    session.on('Target.detachedFromTarget', detached)
+
+    socket.push({ method: 'Target.attachedToTarget', params: { sessionId: 's1' } })
+    socket.push({ method: 'Target.targetCreated', params: { sessionId: 's2' } })
+
+    expect(attached).toHaveBeenCalledExactlyOnceWith({ sessionId: 's1' })
+    expect(detached).not.toHaveBeenCalled()
+  })
+
+  it('refuses every request still waiting when the connection closes', async () => {
+    const socket = stubCdpSocket(() => {})
+    const session = await connectBrowserSession('ws://127.0.0.1:1/devtools/browser/x')
+    const waiting = session.send('Browser.getVersion')
+    socket.close()
+    await expect(waiting).rejects.toThrow('CDP connection closed')
+  })
+
+  it("re-arms a page through it when Chromium's error says the authenticator is gone", async () => {
+    // The re-arm decision matches the REFUSAL'S text, which this connection
+    // formats; the two halves only agree if that text still carries
+    // Chromium's message.
+    let getCredentialsCalls = 0
+    let added = 0
+    const socket = stubCdpSocket((frame, push) => {
+      if (frame.method === 'WebAuthn.getCredentials') {
+        getCredentialsCalls += 1
+        if (getCredentialsCalls === 1) {
+          push({
+            id: frame.id,
+            error: {
+              code: -32000,
+              message: 'Could not find a Virtual Authenticator matching the ID',
+            },
+          })
+          return
+        }
+        push({ id: frame.id, result: { credentials: [] } })
+        return
+      }
+      if (frame.method === 'WebAuthn.addVirtualAuthenticator') {
+        added += 1
+        push({ id: frame.id, result: { authenticatorId: `auth-${added}` } })
+        return
+      }
+      push({ id: frame.id, result: {} })
+    })
+    const session = await connectBrowserSession('ws://127.0.0.1:1/devtools/browser/x')
+    const reset = vi.fn()
+    const errors = vi.fn()
+    const passkeys = await armVirtualPasskeys(session, {
+      pollMs: 5,
+      onAdded: () => {},
+      onReset: reset,
+      onError: errors,
+    })
+    try {
+      socket.push({
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: 's1',
+          targetInfo: { type: 'page', targetId: 't1', url: 'http://localhost:5173/' },
+          waitingForDebugger: true,
+        },
+      })
+      await vi.waitFor(() => expect(reset).toHaveBeenCalledOnce())
+      expect(reset.mock.calls[0]?.[0]).toMatchObject({ sessionId: 's1', authenticatorId: 'auth-2' })
+      expect(errors).not.toHaveBeenCalled()
+    } finally {
+      passkeys.stop()
+    }
   })
 })
