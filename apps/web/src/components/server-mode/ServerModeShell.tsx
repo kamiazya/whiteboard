@@ -49,6 +49,20 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
   )
 }
 
+/** A list that failed, said where the switcher would be, with the way to ask again. */
+function PickerUnavailable({ onRetry }: Readonly<{ onRetry: () => void }>) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <span role="alert" className="truncate text-destructive">
+        Could not load your workspaces.
+      </span>
+      <Button variant="outline" size="sm" onClick={onRetry}>
+        Try again
+      </Button>
+    </span>
+  )
+}
+
 /**
  * The person's other workspaces, one step away: links behind a native
  * disclosure. Not a select — a closed select changes on every arrow key in
@@ -63,18 +77,7 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
 function WorkspacePicker({ shell }: Readonly<{ shell: ShellWorkspaceRows }>) {
   const { rows, handleInAddress, listFailed, reload } = shell
   const [open, setOpen] = useState(false)
-  if (listFailed) {
-    return (
-      <span className="flex min-w-0 items-center gap-2">
-        <span role="alert" className="truncate text-destructive">
-          Could not load your workspaces.
-        </span>
-        <Button variant="outline" size="sm" onClick={reload}>
-          Try again
-        </Button>
-      </span>
-    )
-  }
+  if (listFailed) return <PickerUnavailable onRetry={reload} />
   if (rows.length < 2) return null
   // The address may name a workspace by its id rather than its segment.
   const here = rows.find(

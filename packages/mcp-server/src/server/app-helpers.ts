@@ -1,3 +1,4 @@
+import { isSelfOrDescendant } from '@kamiazya/whiteboard-model'
 import { errorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 
@@ -54,7 +55,7 @@ export function isReservedUiPath(path: string): boolean {
 // The prefixes whose clients parse every answer as JSON: the API, and the
 // sign-in routes the web app reads before it knows whether anyone is signed in.
 function isJsonRefusalPath(path: string): boolean {
-  return ['/api', '/auth'].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+  return ['/api', '/auth'].some((prefix) => isSelfOrDescendant(path, prefix))
 }
 
 /**
