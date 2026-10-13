@@ -54,9 +54,10 @@ it('shows the legend for a board whose colour a key carries, with that key’s v
   const boxFill = (
     container.querySelector('svg g[data-wb-key="a"] rect') as SVGRectElement | null
   )?.getAttribute('fill')
-  const swatch = legend.querySelector(
-    '[data-testid="legend-boxes-ok"] span[aria-hidden]',
-  ) as HTMLElement
+  const okRow = [...legend.querySelectorAll('[data-testid="legend-entry"]')].find(
+    (row) => row.textContent === 'ok',
+  )
+  const swatch = okRow?.querySelector('span[aria-hidden]') as HTMLElement
   expect(boxFill).toBeTruthy()
   expect(swatch.style.background).toBe(hexToRgb(boxFill as string))
 })

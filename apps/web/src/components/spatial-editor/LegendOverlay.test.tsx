@@ -5,6 +5,13 @@ import { LegendOverlay } from './LegendOverlay.js'
 
 afterEach(cleanup)
 
+/** The legend row showing `label`, found by what it reads rather than by a test id spelled from it. */
+function entry(label: string): HTMLElement {
+  const row = screen.getAllByTestId('legend-entry').find((el) => el.textContent === label)
+  if (row === undefined) throw new Error(`no legend row reads ${label}`)
+  return row
+}
+
 const legend: SceneLegend = {
   keys: [
     {
@@ -32,15 +39,12 @@ describe('LegendOverlay', () => {
   it('lists each key’s values with the swatch the class is drawn in, the untagged class named', () => {
     render(<LegendOverlay legend={legend} />)
     expect(screen.getByText('health')).not.toBeNull()
-    const failing = screen.getByTestId('legend-boxes-failing')
-    expect(failing.textContent).toBe('failing')
+    const failing = entry('failing')
     const box = failing.querySelector('span[aria-hidden]') as HTMLElement
     expect(box.style.background).toBe('rgb(255, 238, 238)')
     expect(box.style.border).toContain('rgb(204, 0, 0)')
-    expect(screen.getByTestId('legend-boxes-untagged').textContent).toBe('untagged')
-    const slow = screen
-      .getByTestId('legend-edges-slow')
-      .querySelector('span[aria-hidden]') as HTMLElement
+    expect(entry('untagged').querySelector('span[aria-hidden]')).not.toBeNull()
+    const slow = entry('slow').querySelector('span[aria-hidden]') as HTMLElement
     expect(slow.style.borderTop).toContain('rgb(204, 102, 0)')
     expect(screen.getByText('edge colour: no key carries it')).not.toBeNull()
     expect(screen.queryByText('box colour: no key carries it')).toBeNull()
