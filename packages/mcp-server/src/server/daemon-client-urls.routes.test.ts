@@ -1,3 +1,5 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as daemonUrls from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import * as documentUrls from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
@@ -26,13 +28,18 @@ import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
 
+// A block that builds its app once, in `beforeAll`, points the data dir at its
+// own directory for its lifetime (`blockDir`); everything else gets the test's.
+let blockDataRoot: string | undefined
+const dataRoot = () => blockDataRoot ?? tmp.dir
+
 vi.mock('./config.js', () => ({
   get DATA_DIR() {
-    return join(tmp.dir, 'data')
+    return join(dataRoot(), 'data')
   },
-  getDataDir: () => join(tmp.dir, 'data'),
+  getDataDir: () => join(dataRoot(), 'data'),
   get DIST_WEB_APP_DIR() {
-    return join(tmp.dir, 'web-app')
+    return join(dataRoot(), 'web-app')
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
@@ -42,6 +49,28 @@ const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
 const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
+
+/**
+ * A directory for one describe block's database. `tmp` is per TEST: in a
+ * `beforeAll` it still names the previous test's directory, which that test's
+ * teardown already removed, so anything written there re-created it and
+ * nothing removed it again. Registered before the block's own hooks, so it
+ * exists before the database opens and is removed after the database closes.
+ * `holdsDataDir` is for a block whose app is built in `beforeAll`: building
+ * one writes into the data dir, so the block's lifetime is the data dir's.
+ */
+function blockDir(prefix: string, { holdsDataDir = false } = {}): { readonly dir: string } {
+  const held = { dir: '' }
+  beforeAll(async () => {
+    held.dir = await mkdtemp(join(tmpdir(), prefix))
+    if (holdsDataDir) blockDataRoot = held.dir
+  })
+  afterAll(async () => {
+    if (holdsDataDir) blockDataRoot = undefined
+    await rm(held.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+  })
+  return held
+}
 
 const TOKEN = 'urls-token'
 const WS = 'ws-urls'
@@ -263,10 +292,11 @@ it('has a sample for exactly the builders the modules export, each in one app', 
 })
 
 describe('daemon client URLs reach a route', () => {
+  const block = blockDir('whiteboard-client-urls-local-')
   let db: IsolatedDbHandle
 
   beforeAll(async () => {
-    db = await createIsolatedDb({ dataDir: join(tmp.dir, 'local-db') })
+    db = await createIsolatedDb({ dataDir: join(block.dir, 'local-db') })
   })
   afterAll(async () => {
     await db.dispose()
@@ -330,6 +360,7 @@ describe('daemon client URLs reach a route', () => {
 })
 
 describe('daemon client people URLs reach a server-mode route', () => {
+  const block = blockDir('whiteboard-client-urls-people-', { holdsDataDir: true })
   let db: IsolatedDbHandle
   let app: ReturnType<typeof createApp>
 
@@ -337,8 +368,8 @@ describe('daemon client people URLs reach a server-mode route', () => {
   // before any route under it is matched, so for a stranger each of the
   // workspace samples would pass whatever its path.
   beforeAll(async () => {
-    db = await createIsolatedDb({ dataDir: join(tmp.dir, 'people-db') })
-    const stores = serverModePeople(db.db, tmp.dir)
+    db = await createIsolatedDb({ dataDir: join(block.dir, 'people-db') })
+    const stores = serverModePeople(db.db, block.dir)
     const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
     await serverDeps.documentIndex.createWorkspace({ workspaceId: WS, segment: 'urls' })
     const asker = await stores.members.ensureProfile({
@@ -402,11 +433,12 @@ const AUTH_BUILDERS = Object.entries(daemonUrls)
   .map(([name]) => name)
 
 describe('daemon client /auth URLs reach a server-mode route', () => {
+  const block = blockDir('whiteboard-client-urls-auth-', { holdsDataDir: true })
   let db: IsolatedDbHandle
   let app: ReturnType<typeof createApp>
 
   beforeAll(async () => {
-    db = await createIsolatedDb({ dataDir: join(tmp.dir, 'auth-db') })
+    db = await createIsolatedDb({ dataDir: join(block.dir, 'auth-db') })
     const idp = await fakeOidcProvider(IDP, 'wb')
     app = createApp({
       authMode: 'server-mode',
@@ -415,7 +447,7 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
       serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
       dataLayout: testDataLayout(),
       authStrategy: DENY_ALL_STRATEGY,
-      people: serverModePeople(db.db, tmp.dir).people,
+      people: serverModePeople(db.db, block.dir).people,
       touch: () => {},
       getStatus: () => ({}) as never,
       signIn: serverModeSignIn(db.db, createRelyingParty({ fetch: idp.fetch })),
