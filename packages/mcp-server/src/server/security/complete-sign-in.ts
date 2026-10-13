@@ -30,6 +30,7 @@ import {
   type AdmissionRefusal,
   type AdmissionRule,
   admit,
+  type RefusalOf,
   type VerifiedClaims,
 } from './sign-in-admission.js'
 import { providerAuthenticator, type SignInProvider } from './sign-in-config.js'
@@ -76,7 +77,9 @@ interface CompleteSignInInput {
   readonly now: number
 }
 
-type SignInRefusal = AdmissionRefusal | 'invitation_unusable' | 'no_subject' | 'deactivated'
+type SignInRefusal = RefusalOf<
+  AdmissionRefusal | 'invitation_unusable' | 'no_subject' | 'deactivated'
+>
 
 type CompleteSignInResult =
   | { readonly ok: true; readonly sessionToken: string; readonly profile: MemberProfile }
