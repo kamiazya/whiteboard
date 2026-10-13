@@ -16,6 +16,7 @@
 // (which mkdirs on load) or the rest of the daemon startup chain.
 
 import { resolve } from 'node:path'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from '../server/config-file.js'
@@ -219,7 +220,7 @@ async function route(
  * a second report.
  */
 function reportDaemonRefusal(subcommand: DaemonSubcommand, err: unknown): number {
-  const message = (err instanceof Error ? err.message : String(err)).replace(/[\r\n]+/g, ' ')
+  const message = describeThrown(err).replace(/[\r\n]+/g, ' ')
   process.stderr.write(`whiteboard daemon ${subcommand}: ${message}\n`)
   return 1
 }
@@ -287,7 +288,7 @@ async function dispatchMcp(): Promise<number> {
     const { redactDiagnosticText, scrubAuthMarkers } = await import(
       '../shared/diagnostics/redact.js'
     )
-    const raw = err instanceof Error ? err.message : String(err)
+    const raw = describeThrown(err)
     // Two-pass scrub: the shared redactor takes token values, paths and stack
     // frames but keeps the `Authorization` / `Bearer` marker for the doctor
     // surface; this stderr surface is consumed by clients tailing logs that
@@ -629,7 +630,7 @@ function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
   try {
     loaded = loadConfigFile()
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = describeThrown(err)
     return { kind: 'error', message: `whiteboard config file error: ${message}` }
   }
   if (loaded === null) return { kind: 'ok', openBrowser: undefined }
