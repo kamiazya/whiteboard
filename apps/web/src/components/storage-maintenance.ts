@@ -55,9 +55,6 @@ export interface SweepResult<T> {
  *
  * Every answer is read through `schema`, so a response the page cannot read is
  * reported with its route like any other daemon contract mismatch.
- *
- * Sequential on purpose: the doc-cache eviction inside each compact stays
- * coherent only if one workspace finishes before the next begins.
  */
 export async function sweepWorkspaces<T, R>(
   fetchApi: typeof globalThis.fetch,
@@ -76,6 +73,8 @@ export async function sweepWorkspaces<T, R>(
 
   let total = seed
   let failedWorkspaces = 0
+  // Sequential on purpose: the doc-cache eviction inside each compact stays
+  // coherent only if one workspace finishes before the next begins.
   for (const { workspaceId } of workspaces) {
     const url = pathFor(workspaceId)
     const res = await fetchApi(url, { method: 'POST' })
