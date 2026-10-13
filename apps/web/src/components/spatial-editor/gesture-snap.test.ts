@@ -87,4 +87,71 @@ describe('snapGesturePoint', () => {
     const out = snapGesturePoint({ x: 407, y: 25 }, false, inputsFor(canvas, resizingB))
     expect(out).toEqual({ point: { x: 410, y: 25 }, guides: { x: [410], y: [] } })
   })
+
+  it('a bottom-edge resize snaps the trailing edge to a neighbour top edge', () => {
+    // b's bottom edge travels 50 -> 207; a's top edge at 210 is 3 away.
+    const canvas: SpatialCanvas = {
+      nodes: [textNode('a', 600, 210), textNode('b', 300, 0)],
+      edges: [],
+    }
+    const resizingB: GestureState = {
+      kind: 'resizing',
+      nodeId: 'b',
+      startType: 'text',
+      handle: 's',
+      startPoint: { x: 350, y: 50 },
+      startBox: { x: 300, y: 0, width: 100, height: 50 },
+    }
+    const out = snapGesturePoint({ x: 350, y: 207 }, false, inputsFor(canvas, resizingB))
+    expect(out).toEqual({ point: { x: 350, y: 210 }, guides: { x: [], y: [210] } })
+  })
+
+  it('a top-edge resize snaps the leading edge, not the bottom one', () => {
+    // b's top edge travels 0 -> 213 (its bottom would be 263, out of range).
+    const canvas: SpatialCanvas = {
+      nodes: [textNode('a', 600, 210), textNode('b', 300, 0)],
+      edges: [],
+    }
+    const resizingB: GestureState = {
+      kind: 'resizing',
+      nodeId: 'b',
+      startType: 'text',
+      handle: 'n',
+      startPoint: { x: 350, y: 0 },
+      startBox: { x: 300, y: 0, width: 100, height: 50 },
+    }
+    const out = snapGesturePoint({ x: 350, y: 213 }, false, inputsFor(canvas, resizingB))
+    expect(out).toEqual({ point: { x: 350, y: 210 }, guides: { x: [], y: [210] } })
+  })
+
+  it('a bottom-edge resize leaves x alone even beside a neighbour edge', () => {
+    // b's right edge would sit at 395, 5 from a's left edge (and the grid)
+    // at 400 — in range, so only the anchored x axis keeps it from snapping.
+    const canvas: SpatialCanvas = {
+      nodes: [textNode('a', 400, 210), textNode('b', 300, 0)],
+      edges: [],
+    }
+    const resizingB: GestureState = {
+      kind: 'resizing',
+      nodeId: 'b',
+      startType: 'text',
+      handle: 's',
+      startPoint: { x: 350, y: 50 },
+      startBox: { x: 300, y: 0, width: 100, height: 50 },
+    }
+    const out = snapGesturePoint({ x: 345, y: 207 }, false, inputsFor(canvas, resizingB))
+    expect(out).toEqual({ point: { x: 345, y: 210 }, guides: { x: [], y: [210] } })
+  })
+
+  it('a move snaps by the moving box’s own size, not a neighbour’s', () => {
+    // b (100 wide) lands at 590, so its right edge 690 is 4 from a's left
+    // edge at 694. Measured with a's 30 width instead, no line of b is in
+    // range and nothing would snap.
+    const canvas: SpatialCanvas = {
+      nodes: [textNode('a', 694, 300, 30, 30), textNode('b', 300, 7)],
+      edges: [],
+    }
+    const out = snapGesturePoint({ x: 640, y: 30 }, false, inputsFor(canvas, movingB))
+    expect(out).toEqual({ point: { x: 644, y: 30 }, guides: { x: [694], y: [] } })
+  })
 })
