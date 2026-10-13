@@ -53,6 +53,22 @@ export function reportsNoTestFiles(output) {
 }
 
 /**
+ * What a failed spawn says: an Error's stack (which leads with its message),
+ * else the value's JSON, since `String()` of a plain object is
+ * `[object Object]`. Not model's `describeThrown`: that package ships its
+ * TypeScript source, whose `.js` specifiers plain Node cannot resolve.
+ */
+function describeStartFailure(error) {
+  if (error instanceof Error) return error.stack ?? String(error)
+  if (typeof error !== 'object' || error === null) return String(error)
+  try {
+    return JSON.stringify(error) ?? typeof error
+  } catch {
+    return typeof error
+  }
+}
+
+/**
  * Runs both halves and answers the exit code.
  *
  * A file filter can only ever match one half — a `src/**` file is jsdom's, a
@@ -76,7 +92,9 @@ export async function runAll(passthrough, runVitest) {
       filtered,
     )
     if (result.error) {
-      process.stderr.write(`[run-web-tests] failed to start vitest for ${label}: ${result.error}\n`)
+      process.stderr.write(
+        `[run-web-tests] failed to start vitest for ${label}: ${describeStartFailure(result.error)}\n`,
+      )
       return 1
     }
     // Stop at the first failing half rather than running the second and
