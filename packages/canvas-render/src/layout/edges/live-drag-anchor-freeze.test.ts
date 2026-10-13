@@ -66,4 +66,71 @@ describe('live-drag anchor freeze', () => {
     // The carried newcomer lands elsewhere on the side, not on the pin.
     expect(liveC?.to).not.toEqual(liveF?.to)
   })
+
+  // The mirror of the case above: the carried edge joins the side the
+  // bystander LEAVES from, so only the pin's from-half can hold it still.
+  it('a pinned bystander keeps its committed SOURCE anchor when a carried edge joins that side', () => {
+    const edges: CanvasEdge[] = [
+      { id: 'F', from: { node: 'T' }, to: { node: 'N' } },
+      { id: 'C', from: { node: 'T' }, to: { node: 'M' } },
+    ]
+    const committed = assignEdgeAnchors(
+      [N, T, { ...M_DRAGGED, x: 300, y: 300 }],
+      edges,
+      'orthogonal',
+    )
+    const f = committed.get('F')
+    expect([f?.fromSide, f?.toSide]).toEqual(['left', 'right'])
+
+    const live = assignEdgeAnchors(
+      [N, T, M_DRAGGED],
+      edges,
+      'orthogonal',
+      new Map([
+        [
+          'F',
+          {
+            fromSide: 'left' as const,
+            toSide: 'right' as const,
+            from: f?.from,
+            fromLaneDepth: f?.fromLaneDepth,
+            to: f?.to,
+            toLaneDepth: f?.toLaneDepth,
+          },
+        ],
+        ['C', { fromSide: 'left' as const, toSide: 'right' as const }],
+      ]),
+    )
+    expect(live.get('C')?.fromSide).toBe('left')
+    expect(live.get('F')?.from).toEqual(f?.from)
+    expect(live.get('F')?.fromLaneDepth).toBe(f?.fromLaneDepth)
+    expect(live.get('C')?.from).not.toEqual(live.get('F')?.from)
+  })
+
+  // A pin is partial: a drag commits the end it moved and leaves the other
+  // to be placed. Alignment slides BOTH ends of a lone facing pair onto one
+  // lane, so an edge pinned at one end only must be kept out of it, or its
+  // unpinned end slides while the pinned one holds.
+  it('an edge pinned at one end only is not slid onto a shared lane', () => {
+    const a = textNode({ id: 'A', x: 0, y: 0, width: 100, height: 100, text: '' })
+    const b = textNode({ id: 'B', x: 300, y: 40, width: 100, height: 100, text: '' })
+    const edges: CanvasEdge[] = [{ id: 'E', from: { node: 'A' }, to: { node: 'B' } }]
+    const free = assignEdgeAnchors([a, b], edges, 'orthogonal').get('E')
+    expect([free?.fromSide, free?.toSide]).toEqual(['right', 'left'])
+    // Unpinned, the pair is slid onto one lane inside the overlap of the two
+    // sides: a straight segment rather than a jog between the midpoints.
+    expect(free?.from).toBeDefined()
+    expect(free?.from?.y).toBe(free?.to?.y)
+
+    const pinnedTo = { x: 300, y: 90 }
+    const live = assignEdgeAnchors(
+      [a, b],
+      edges,
+      'orthogonal',
+      new Map([['E', { fromSide: 'right' as const, toSide: 'left' as const, to: pinnedTo }]]),
+    ).get('E')
+    expect(live?.to).toEqual(pinnedTo)
+    // The free end keeps the fan-out pass's own point: its side's midpoint.
+    expect(live?.from).toEqual({ x: 100, y: 50 })
+  })
 })
