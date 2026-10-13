@@ -6,8 +6,10 @@
  * only one that says so.
  */
 import {
+  tenantInvitationsApiUrl,
   tenantPersonAdministratorApiUrl,
   tenantPersonDeactivationApiUrl,
+  workspaceInvitationsApiUrl,
   workspacePersonApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { tenantPeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
@@ -74,6 +76,8 @@ function answering(body: unknown) {
   return { calls, fetchFn }
 }
 
+const LINK = { url: 'https://wb.test/invite#token=t-1', expiresAt: '2026-10-03T00:00:00.000Z' }
+
 describe('server-people calls', () => {
   it.each([
     [true, 'POST'],
@@ -102,6 +106,20 @@ describe('server-people calls', () => {
       { url: workspacePersonApiUrl('ws-1', 'user-1'), method: 'DELETE' },
     ])
     expect(outcome).toEqual({ ok: true, value: { removed: true } })
+  })
+
+  it("creates a workspace's invitation link with POST on that workspace's invitations route", async () => {
+    const keeper = answering(LINK)
+    const outcome = await workspacePeople.invite(keeper.fetchFn, 'ws-1')
+    expect(keeper.calls).toEqual([{ url: workspaceInvitationsApiUrl('ws-1'), method: 'POST' }])
+    expect(outcome).toEqual({ ok: true, value: LINK })
+  })
+
+  it("creates the tenant's invitation link with POST on the tenant invitations route", async () => {
+    const keeper = answering(LINK)
+    const outcome = await tenantPeople.invite(keeper.fetchFn)
+    expect(keeper.calls).toEqual([{ url: tenantInvitationsApiUrl(), method: 'POST' }])
+    expect(outcome).toEqual({ ok: true, value: LINK })
   })
 
   it('answers a success body its contract does not admit as unexpected, never as the value', async () => {

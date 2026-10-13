@@ -61,6 +61,17 @@ describe('useReplicaEditing', () => {
     expect(scheduleSave).toHaveBeenCalledWith(doc)
   })
 
+  it('diffs a second canvas change against the first, so removing an added node removes it', () => {
+    const doc = record()
+    const { result } = editing(doc, entry(doc, SP))
+    const loaded = readSpatialCanvas(documentContainers(doc, SP))
+
+    act(() => result.current.onSpatialChange(withNode(loaded)))
+    act(() => result.current.onSpatialChange(loaded))
+
+    expect(readSpatialCanvas(documentContainers(doc, SP)).nodes).toEqual([])
+  })
+
   it('ignores a canvas change while a markdown document is selected', () => {
     const doc = record()
     const { scheduleSave, result } = editing(doc, entry(doc, MD))
