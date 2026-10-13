@@ -10,10 +10,18 @@ import {
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeOidcProvider } from '../shared/test-utils/fake-oidc-provider.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
-import { IDP, PUBLIC_URL, serverModePeople, serverModeSignIn } from './_test-server-mode-harness.js'
+import {
+  bearerNamesItsSubject,
+  IDP,
+  ISSUER,
+  PUBLIC_URL,
+  serverModePeople,
+  serverModeSignIn,
+} from './_test-server-mode-harness.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
 import { DENY_ALL_STRATEGY } from './security/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
+import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
@@ -126,6 +134,8 @@ const SAMPLES: Record<string, readonly Sample[]> = {
     { label: 'purge', method: 'POST', url: daemonUrls.purgeDanglingApiUrl(WS) },
   ],
   storageReportApiUrl: [{ label: 'report', method: 'GET', url: daemonUrls.storageReportApiUrl() }],
+  runtimePingApiUrl: [{ label: 'ping', method: 'GET', url: daemonUrls.runtimePingApiUrl() }],
+  replicaKeyApiUrl: [{ label: 'issue', method: 'POST', url: daemonUrls.replicaKeyApiUrl(WS) }],
   documentsV1ApiUrl: [{ label: 'create', method: 'POST', url: daemonUrls.documentsV1ApiUrl(WS) }],
   documentBacklinksApiUrl: [
     { label: 'backlinks', method: 'GET', url: daemonUrls.documentBacklinksApiUrl(WS, 'doc1') },
@@ -151,12 +161,92 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   fontFileApiUrl: [{ label: 'file', method: 'GET', url: daemonUrls.fontFileApiUrl('f1') }],
 }
 
+// The people routes (ADR-0049) mount only on a server-mode keeper with people
+// to manage, so these are requested against that app, below.
+const SERVER_MODE_SAMPLES: Record<string, readonly Sample[]> = {
+  tenantPeopleApiUrl: [{ label: 'list', method: 'GET', url: daemonUrls.tenantPeopleApiUrl() }],
+  tenantPersonApiUrl: [
+    { label: 'delete', method: 'DELETE', url: daemonUrls.tenantPersonApiUrl('u1') },
+  ],
+  tenantPersonDeactivationApiUrl: [
+    { label: 'deactivate', method: 'POST', url: daemonUrls.tenantPersonDeactivationApiUrl('u1') },
+    {
+      label: 'reactivate',
+      method: 'DELETE',
+      url: daemonUrls.tenantPersonDeactivationApiUrl('u1'),
+    },
+  ],
+  tenantPersonAdministratorApiUrl: [
+    { label: 'appoint', method: 'PUT', url: daemonUrls.tenantPersonAdministratorApiUrl('u1') },
+    {
+      label: 'dismiss',
+      method: 'DELETE',
+      url: daemonUrls.tenantPersonAdministratorApiUrl('u1'),
+    },
+  ],
+  tenantInvitationsApiUrl: [
+    { label: 'invite', method: 'POST', url: daemonUrls.tenantInvitationsApiUrl() },
+  ],
+  workspacePeopleApiUrl: [
+    { label: 'list', method: 'GET', url: daemonUrls.workspacePeopleApiUrl(WS) },
+  ],
+  workspacePersonApiUrl: [
+    { label: 'role', method: 'PATCH', url: daemonUrls.workspacePersonApiUrl(WS, 'u1') },
+    { label: 'remove', method: 'DELETE', url: daemonUrls.workspacePersonApiUrl(WS, 'u1') },
+  ],
+  workspaceInvitationsApiUrl: [
+    { label: 'invite', method: 'POST', url: daemonUrls.workspaceInvitationsApiUrl(WS) },
+  ],
+}
+
 /** Every builder the two modules export; the `ApiUrl` suffix is the convention that names one. */
 const BUILDERS = Object.entries({ ...documentUrls, ...daemonUrls })
   .filter(([name, value]) => name.endsWith('ApiUrl') && typeof value === 'function')
   .map(([name]) => name)
 
+/**
+ * The app's not-found answer: Hono's plain text outside `/api`, and under it
+ * `answerNotFound`'s JSON naming the request. A route that refuses something
+ * it understood answers JSON too, so the content type alone cannot tell the
+ * two apart under `/api` — the check has to read what was said.
+ */
+async function unmatched(res: Response): Promise<boolean> {
+  if (res.status !== 404) return false
+  if ((res.headers.get('content-type') ?? '').startsWith('text/plain')) return true
+  const body: unknown = await res
+    .clone()
+    .json()
+    .catch(() => null)
+  const message =
+    typeof body === 'object' && body !== null && 'message' in body ? body.message : undefined
+  return typeof message === 'string' && message.startsWith('No route answers ')
+}
+
+const sampleRows = (samples: Record<string, readonly Sample[]>) =>
+  Object.entries(samples).flatMap(([builder, rows]) => rows.map((row) => ({ builder, ...row })))
+
+const requestInit = (method: Method, authorization: string): RequestInit => ({
+  method,
+  headers: { Authorization: authorization, 'content-type': 'application/json' },
+  body: method === 'GET' || method === 'DELETE' ? undefined : '{}',
+})
+
+it('has a sample for exactly the builders the modules export, each in one app', () => {
+  // A floor, so an enumeration that found nothing cannot pass.
+  expect(BUILDERS.length).toBeGreaterThan(35)
+  const sampled = [...Object.keys(SAMPLES), ...Object.keys(SERVER_MODE_SAMPLES)]
+  expect([...BUILDERS].sort()).toEqual([...sampled].sort())
+})
+
 describe('daemon client URLs reach a route', () => {
+  let db: IsolatedDbHandle
+
+  beforeAll(async () => {
+    db = await createIsolatedDb({ dataDir: join(tmp.dir, 'local-db') })
+  })
+  afterAll(async () => {
+    await db.dispose()
+  })
   beforeEach(() => {
     clearDocCacheForTests()
   })
@@ -164,22 +254,19 @@ describe('daemon client URLs reach a route', () => {
     vi.restoreAllMocks()
   })
 
-  it('has a sample for exactly the builders the modules export', () => {
-    // A floor, so an enumeration that found nothing cannot pass.
-    expect(BUILDERS.length).toBeGreaterThan(25)
-    expect([...BUILDERS].sort()).toEqual(Object.keys(SAMPLES).sort())
-  })
-
-  const rows = Object.entries(SAMPLES).flatMap(([builder, samples]) =>
-    samples.map((sample) => ({ builder, ...sample })),
-  )
-
-  it.each(rows)('$builder $label ($method) is served by a route', async ({ method, url }) => {
-    const app = createApp({
+  // The workspace every sample names exists: the handle resolver answers an
+  // unknown workspace before any route under it is matched, so against a
+  // missing one each of those samples would pass whatever its path.
+  async function localDaemonApp() {
+    const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
+    await serverDeps.documentIndex.createWorkspace({ workspaceId: WS, segment: 'urls' })
+    await serverDeps.workspaceDocuments.save(WS, await serverDeps.workspaceDocuments.get(WS))
+    return createApp({
       authMode: 'local-daemon',
       token: TOKEN,
-      serverDeps: resolveServerDeps(createContainer(storeMemoryModule)),
+      serverDeps,
       dataLayout: testDataLayout(),
+      replicaKeys: createWorkspaceReplicaKeyStore(db.db, { defaultTier: 'offline' }),
       touch: vi.fn(),
       getStatus: () => ({
         ok: true,
@@ -194,23 +281,82 @@ describe('daemon client URLs reach a route', () => {
         clients: { connected: 0, ready: 0 },
       }),
     } as never)
-    const res = await app.request(url, {
-      method,
-      headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
-      body: method === 'GET' || method === 'DELETE' ? undefined : '{}',
+  }
+
+  // The control: without it, a predicate that never says "unmatched" passes
+  // every sample below, renamed route or not.
+  it('tells a mounted route from a path no route serves', async () => {
+    const res = await (await localDaemonApp()).request(
+      '/api/runtime/no-such-route',
+      requestInit('GET', `Bearer ${TOKEN}`),
+    )
+    expect(await unmatched(res), `-> ${res.status}`).toBe(true)
+  })
+
+  it.each(sampleRows(SAMPLES))('$builder $label ($method) is served by a route', async ({
+    method,
+    url,
+  }) => {
+    const res = await (await localDaemonApp()).request(url, requestInit(method, `Bearer ${TOKEN}`))
+    expect(await unmatched(res), `${method} ${url} -> ${res.status}`).toBe(false)
+  })
+})
+
+describe('daemon client people URLs reach a server-mode route', () => {
+  let db: IsolatedDbHandle
+  let app: ReturnType<typeof createApp>
+
+  // The person asking owns WS: the membership gate answers a workspace path
+  // before any route under it is matched, so for a stranger each of the
+  // workspace samples would pass whatever its path.
+  beforeAll(async () => {
+    db = await createIsolatedDb({ dataDir: join(tmp.dir, 'people-db') })
+    const stores = serverModePeople(db.db, tmp.dir)
+    const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
+    await serverDeps.documentIndex.createWorkspace({ workspaceId: WS, segment: 'urls' })
+    const asker = await stores.members.ensureProfile({
+      binding: { authenticator: ISSUER, subject: 'alice' },
+      displayName: 'alice',
     })
-    // Hono's own unmatched answer is plain text; every route that refuses a
-    // request it understood says so in JSON.
-    const unmatched =
-      res.status === 404 && (res.headers.get('content-type') ?? '').startsWith('text/plain')
-    expect(unmatched, `${method} ${url} -> ${res.status}`).toBe(false)
+    await stores.members.addMember(WS, asker.id)
+    app = createApp({
+      authMode: 'server-mode',
+      publicBaseUrl: PUBLIC_URL,
+      allowedOrigins: [PUBLIC_URL],
+      serverDeps,
+      dataLayout: testDataLayout(),
+      authStrategy: bearerNamesItsSubject,
+      people: stores.people,
+      touch: () => {},
+      getStatus: () => ({}) as never,
+    })
+  })
+  afterAll(async () => {
+    await db.dispose()
+  })
+
+  // The controls: a request has to get past server mode's auth and the
+  // membership gate to the router, or every sample below would be refused
+  // before matching, and a refusal is JSON whether or not a route exists.
+  it.each([
+    '/api/people/u1/no-such-route',
+    `/api/workspaces/${WS}/no-such-route`,
+  ])('tells a mounted route from %s, which no route serves', async (path) => {
+    const res = await app.request(`${PUBLIC_URL}${path}`, requestInit('POST', 'Bearer alice'))
+    expect(await unmatched(res), `-> ${res.status}`).toBe(true)
+  })
+
+  it.each(
+    sampleRows(SERVER_MODE_SAMPLES),
+  )('$builder $label ($method) is served by a route', async ({ method, url }) => {
+    const res = await app.request(`${PUBLIC_URL}${url}`, requestInit(method, 'Bearer alice'))
+    expect(await unmatched(res), `${method} ${url} -> ${res.status}`).toBe(false)
   })
 })
 
 // The `/auth` routes exist only in server mode, and only when a provider is
 // configured (ADR-0046), so they are requested against that app. Their builders
-// do not end in `ApiUrl`: that suffix marks a route the browser keeper must
-// also answer, and these have no browser-keeper counterpart.
+// do not end in `ApiUrl` because they sit outside `/api`.
 const AUTH_SAMPLES: Record<string, readonly Sample[]> = {
   authProvidersUrl: [{ label: 'providers', method: 'GET', url: daemonUrls.authProvidersUrl() }],
   authSignInUrl: [{ label: 'begin', method: 'GET', url: daemonUrls.authSignInUrl('corp') }],
@@ -262,11 +408,10 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
     expect(res.status).not.toBe(302)
   })
 
-  const rows = Object.entries(AUTH_SAMPLES).flatMap(([builder, samples]) =>
-    samples.map((sample) => ({ builder, ...sample })),
-  )
-
-  it.each(rows)('$builder $label ($method) is served by a route', async ({ method, url }) => {
+  it.each(sampleRows(AUTH_SAMPLES))('$builder $label ($method) is served by a route', async ({
+    method,
+    url,
+  }) => {
     const res = await app.request(`${PUBLIC_URL}${url}`, { method })
     const contentType = res.headers.get('content-type') ?? ''
     // Each route answers JSON, a redirect, or nothing at all (sign-out); the
