@@ -624,6 +624,9 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
 describe('node sets and regions (the spatial arm with nodeIds or a rect)', () => {
   const A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' })
   const B = textNode({ id: 'b', x: 300, y: 200, width: 100, height: 50, text: 'b' })
+  // Outside the set, and FIRST on the canvas: an outline that looked a member
+  // up by any other rule than its id would land on this one.
+  const C = textNode({ id: 'c', x: 600, y: 500, width: 80, height: 40, text: 'c' })
   const setThread = (status: 'open' | 'resolved' = 'open'): CommentThread => ({
     id: 'set',
     anchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 10, height: 10 },
@@ -638,11 +641,7 @@ describe('node sets and regions (the spatial arm with nodeIds or a rect)', () =>
     // The flat projection carries a STALE corner (the nodes have moved
     // since it was taken); the pin follows the live box, not the memory.
     const scene = layoutSpatialCanvas(
-      {
-        nodes: [A, B],
-        edges: [],
-        comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }],
-      },
+      { nodes: [C, A, B], edges: [], comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }] },
       baseOptions({ threads: [thread] }),
     )
     expect(outlineOf(scene.nodes)?.bbox).toEqual({ x: 0, y: 0, w: 400, h: 250 })
