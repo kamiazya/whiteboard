@@ -256,6 +256,36 @@ describe('wb_canvas_edit comment ops', () => {
     expect((await storedComments(store)).map((comment) => comment.id)).toEqual(['c1'])
   })
 
+  test('comment.add with an id already on the canvas is refused, and the first comment keeps its text', async () => {
+    // A comment is a person's words; an add that reused an id would replace
+    // them with no error at all.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [NODE], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'comment.add', comment: { id: 'c1', x: 10, y: 10, text: 'first' } }],
+    })
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'comment.add', comment: { id: 'c1', x: 10, y: 10, text: 'second' } }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/comment id "c1" is already on the canvas/),
+    })
+    const stored = await storedComments(store)
+    expect(stored.map((comment) => comment.id)).toEqual(['c1'])
+    expect(stored[0]).toMatchObject({ text: 'first' })
+  })
+
   test('comment.resolve on an unknown id fails loudly', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, { nodes: [], edges: [] })

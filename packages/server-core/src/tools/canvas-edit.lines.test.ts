@@ -136,6 +136,27 @@ describe('wb_canvas_edit — line ops', () => {
     expect(removed?.lines ?? []).toEqual([])
   })
 
+  test('line.remove of an id that is not on the canvas is refused naming the line', async () => {
+    // A remove that answers success for ink that was never there tells the
+    // caller its picture of the board is right when it is not.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, ONE_BOX)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'line.remove', id: 'nope' }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/line "nope" is not on the canvas/),
+    })
+  })
+
   test('removing a node takes the lines anchored to it, and leaves free ink alone', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
