@@ -506,11 +506,12 @@ export function describeDocumentStoreConformance(
 
     it('reports a null generation for a log with no snapshot behind it', async () => {
       await withStore(async (store) => {
-        await store.appendDeltas({
+        const appended = await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(1)], newFrontier: bytes(1) },
-          requireSnapshot: true,
+          requireSnapshot: false,
         })
+        expect(appended.ok).toBe(true)
         expect((await store.loadDeltas({ docRef: DOC, afterSeq: null })).generation).toBeNull()
       })
     })
