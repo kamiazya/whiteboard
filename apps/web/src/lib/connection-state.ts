@@ -1,5 +1,6 @@
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import type { SyncStatus } from './document-sync-types.js'
+import type { ReplicaSaveHealth } from './replica-save-queue.js'
 import type { StorageHealth } from './storage-health.js'
 
 /**
@@ -42,10 +43,18 @@ export function sessionHealthOf(
  * open document are landing (`StorageHealth`, judged from the persistence
  * facts the session reports). Both are quiet when healthy; the shell mark
  * draws only a condition.
+ *
+ * `replica` is the daemon-kept workspace read offline: the daemon is
+ * unreachable, so what keeps the edits until it returns is this browser's
+ * replica copy, and its health is whether the last append to that copy
+ * landed. It is an arm of its own rather than `daemon` with another session
+ * value because no session runs — and a refused append there is the one
+ * copy of the edits failing, which the tab-wide signals must see.
  */
 export type ConnectionState =
   | { readonly keeper: 'browser'; readonly storage: StorageHealth }
   | { readonly keeper: 'daemon'; readonly session: SessionHealth }
+  | { readonly keeper: 'replica'; readonly storage: ReplicaSaveHealth }
 
 /**
  * The one state whose only exit is reconnecting — what the shell's attention
@@ -57,14 +66,16 @@ export function isSyncOff(state: ConnectionState): boolean {
 
 /**
  * The keeper is not keeping: a refused browser write, a rejected daemon
- * session, or a daemon write that has not landed. All draw the broken mark,
- * because all mean the same thing to the person holding the document — what
- * they type now is in this tab and nowhere else.
+ * session, a daemon write that has not landed, or a refused append to the
+ * offline replica. All draw the broken mark, because all mean the same thing
+ * to the person holding the document — what they type now is in this tab
+ * and nowhere else.
  */
 export function isNotKeeping(state: ConnectionState): boolean {
-  return state.keeper === 'browser'
-    ? state.storage === 'failed'
-    : state.session === 'sync-off' || state.session === 'write-failed'
+  if (state.keeper === 'daemon') {
+    return state.session === 'sync-off' || state.session === 'write-failed'
+  }
+  return state.storage === 'failed'
 }
 
 /**
@@ -74,6 +85,6 @@ export function isNotKeeping(state: ConnectionState): boolean {
  */
 export function notKeepingAnnouncement(state: ConnectionState | null): string {
   if (state === null || !isNotKeeping(state)) return ''
-  if (state.keeper === 'browser') return 'Writing to this browser failed'
+  if (state.keeper !== 'daemon') return 'Writing to this browser failed'
   return state.session === 'sync-off' ? 'Live sync off' : 'Changes not saved yet'
 }

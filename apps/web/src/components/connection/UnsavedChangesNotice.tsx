@@ -8,6 +8,10 @@ import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status
  * The shell mark's cap alone is too small to carry that, so it is said in
  * plain sight, and the browser asks before the tab goes.
  *
+ * The offline replica page whose copy refused a write is in the same place
+ * and gets the same leave prompt. It is not given these words: that page
+ * states the failure itself, with the retry beside it.
+ *
  * Dismissing hides the words, never the leave prompt: the changes are just as
  * unsaved once someone has read about them. The notice comes back the next
  * time changes stop landing.
@@ -15,17 +19,19 @@ import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status
 export function UnsavedChangesNotice() {
   const state = useSyncExternalStore(subscribeShellStatus, getShellConnection)?.state
   const holding = state?.keeper === 'daemon' && state.session === 'write-failed'
+  const replicaHolding = state?.keeper === 'replica' && state.storage === 'failed'
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    if (!holding) {
-      setDismissed(false)
-      return
-    }
+    if (!holding) setDismissed(false)
+  }, [holding])
+
+  useEffect(() => {
+    if (!holding && !replicaHolding) return
     const ask = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener('beforeunload', ask)
     return () => window.removeEventListener('beforeunload', ask)
-  }, [holding])
+  }, [holding, replicaHolding])
 
   if (!holding || dismissed) return null
   return (

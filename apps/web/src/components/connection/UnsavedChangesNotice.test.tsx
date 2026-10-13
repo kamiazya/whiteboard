@@ -61,3 +61,15 @@ it('says nothing for a synced page, a browser-kept one, or no session', () => {
   publish(null)
   expect(leaving().defaultPrevented).toBe(false)
 })
+
+// The replica page states its own refused write, with the retry beside it,
+// so this notice adds only what that page cannot: the leave prompt.
+it('asks before leaving an offline replica whose copy refused a write, without a second banner', () => {
+  publish({ keeper: 'replica', storage: 'failed' })
+  render(<UnsavedChangesNotice />)
+  expect(leaving().defaultPrevented).toBe(true)
+  expect(screen.queryByText(/Changes not saved yet/)).toBeNull()
+
+  publish({ keeper: 'replica', storage: 'ok' })
+  expect(leaving().defaultPrevented).toBe(false)
+})

@@ -15,7 +15,10 @@ import {
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { KeeperNotices } from '../components/connection/KeeperNotices.js'
+import { nothingHeldInTab } from '../lib/nothing-held-in-tab.js'
 import { REPLICA_SAVE_FAILED_COPY } from '../lib/replica-state-copy.js'
+import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
@@ -56,16 +59,27 @@ function seedRecord(): LoroDoc {
 }
 
 async function openPlanAndEdit(): Promise<void> {
+  // Beside the shell's notices, as every frame that holds a page mounts
+  // them: the leave prompt is theirs, read from the one shell store.
   render(
-    <ReplicaReadPage
-      workspaceId={DAEMON_WS}
-      daemonBaseUrl={DAEMON}
-      onReconnect={() => Promise.resolve()}
-    />,
+    <>
+      <KeeperNotices />
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        daemonBaseUrl={DAEMON}
+        onReconnect={() => Promise.resolve()}
+      />
+    </>,
   )
   fireEvent.click(await screen.findByText('plan'))
   const editor = await screen.findByTestId('body-editor')
   fireEvent.change(editor, { target: { value: 'cached body, edited offline' } })
+}
+
+function leaveIsPrevented(): boolean {
+  const leave = new Event('beforeunload', { cancelable: true })
+  window.dispatchEvent(leave)
+  return leave.defaultPrevented
 }
 
 describe('ReplicaReadPage save failure', () => {
@@ -75,6 +89,7 @@ describe('ReplicaReadPage save failure', () => {
   })
   afterEach(() => {
     cleanup()
+    resetShellStatusForTests()
   })
 
   it('says the edit is not saved, and logs why, when the append is refused', async () => {
@@ -100,6 +115,34 @@ describe('ReplicaReadPage save failure', () => {
     fireEvent.click(screen.getByRole('button', { name: REPLICA_SAVE_FAILED_COPY.action }))
     await vi.waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
     expect(store.save).toHaveBeenCalledTimes(2)
+  })
+
+  it('holds the tab while a refused edit is its only copy, and lets go once a save lands', async () => {
+    store.save.mockRejectedValueOnce(new Error('QuotaExceededError'))
+    store.save.mockResolvedValue(undefined)
+    await openPlanAndEdit()
+    await screen.findByRole('alert')
+    await expectLoggedFailure('replica save failed')
+
+    // What an unasked reload (a waiting update) and closing the tab both read.
+    expect(nothingHeldInTab()).toBe(false)
+    expect(leaveIsPrevented()).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: REPLICA_SAVE_FAILED_COPY.action }))
+    // Polled on the store itself: the notice leaves in the render, while the
+    // publish is a passive effect that may land a tick after it.
+    await vi.waitFor(() => expect(nothingHeldInTab()).toBe(true))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(leaveIsPrevented()).toBe(false)
+  })
+
+  it('says nothing to the shell once the page is gone', async () => {
+    store.save.mockRejectedValue(new Error('QuotaExceededError'))
+    await openPlanAndEdit()
+    await screen.findByRole('alert')
+    await expectLoggedFailure('replica save failed')
+    cleanup()
+    expect(getShellConnection()).toBeNull()
   })
 
   it('shows nothing while saves land', async () => {

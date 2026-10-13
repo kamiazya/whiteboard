@@ -42,8 +42,8 @@ export function getShellConnection(): ShellConnection | null {
 // shortcut that treats a keeper as "always the same" swallows exactly the
 // transition (a refused browser write) the shell exists to show.
 function sameState(a: ConnectionState, b: ConnectionState): boolean {
-  if (a.keeper === 'browser') return b.keeper === 'browser' && a.storage === b.storage
-  return b.keeper === 'daemon' && a.session === b.session
+  if (a.keeper === 'daemon') return b.keeper === 'daemon' && a.session === b.session
+  return b.keeper !== 'daemon' && b.keeper === a.keeper && a.storage === b.storage
 }
 
 function sameConnection(a: ShellConnection | null, b: ShellConnection | null): boolean {

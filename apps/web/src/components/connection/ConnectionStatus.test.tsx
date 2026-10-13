@@ -118,6 +118,22 @@ describe('ConnectionStatus chip', () => {
     expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
   })
 
+  it('names the offline copy, and says where a refused edit is held', async () => {
+    render(<ConnectionStatus state={{ keeper: 'replica', storage: 'failed' }} />)
+    expect(
+      screen.getByRole('button', { name: 'Workspace — Offline copy — write failed' }),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button'))
+    expect(await screen.findByText(/in this tab only/i)).toBeTruthy()
+  })
+
+  it('says the offline copy is what keeps edits while the daemon is away', async () => {
+    render(<ConnectionStatus state={{ keeper: 'replica', storage: 'ok' }} />)
+    expect(screen.getByRole('button', { name: 'Workspace — Offline copy' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button'))
+    expect(await screen.findByText(/ship to the daemon when it returns/i)).toBeTruthy()
+  })
+
   it('says a write has not landed, in its own words, and explains it', async () => {
     render(<ConnectionStatus state={{ keeper: 'daemon', session: 'write-failed' }} />)
     expect(screen.getByRole('status', { name: /changes not saved yet/i })).toBeTruthy()

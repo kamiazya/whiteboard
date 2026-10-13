@@ -36,6 +36,17 @@ describe('a keeper that is not keeping', () => {
     expect(isNotKeeping({ keeper: 'daemon', session: 'reconnecting' })).toBe(false)
   })
 
+  // The offline replica page's copy is the only one of its edits while the
+  // daemon is away, so a refused append there is the same condition.
+  it('includes a refused write to the offline replica copy', () => {
+    expect(isNotKeeping({ keeper: 'replica', storage: 'failed' })).toBe(true)
+    expect(isNotKeeping({ keeper: 'replica', storage: 'ok' })).toBe(false)
+    expect(notKeepingAnnouncement({ keeper: 'replica', storage: 'failed' })).toBe(
+      'Writing to this browser failed',
+    )
+    expect(notKeepingAnnouncement({ keeper: 'replica', storage: 'ok' })).toBe('')
+  })
+
   it('is announced in words about its own keeper', () => {
     expect(notKeepingAnnouncement({ keeper: 'browser', storage: 'failed' })).toBe(
       'Writing to this browser failed',

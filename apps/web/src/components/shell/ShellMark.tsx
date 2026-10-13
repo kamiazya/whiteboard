@@ -12,11 +12,11 @@
  * - daemon `reconnecting` — the session dropped and is retrying: filled
  *   amber cap over `wb-loader`'s travelling dash, the loader mark's own
  *   gesture on this exact path (BRAND.md reads it as "the pen is moving").
- * - browser `failed` / daemon `sync-off` — the keeper is NOT keeping: the
- *   stroke sits broken and dimmed (`wb-mark-broken`). The daemon's cap is
- *   filled and the browser's is hollow, so the two read apart when both
- *   carry amber and the mark has no word to separate them. The word moves
- *   to the accessible name and the popover.
+ * - browser or replica `failed` / daemon `sync-off` — the keeper is NOT
+ *   keeping: the stroke sits broken and dimmed (`wb-mark-broken`). The
+ *   daemon's cap is filled and the browser's (and replica's) is hollow, so
+ *   the two read apart when both carry amber and the mark has no word to
+ *   separate them. The word moves to the accessible name and the popover.
  *
  * Amber is the only tone left in chrome (DESIGN.md): "safe" is the absence
  * of a cap, not a colour, and a hollow ring rather than a second hue is what
@@ -57,7 +57,7 @@ type CapShape = 'filled' | 'ring'
  * colour literals once did.
  */
 function capOf(state: ConnectionState): CapShape | undefined {
-  if (state.keeper === 'browser') {
+  if (state.keeper !== 'daemon') {
     const by: Record<StorageHealth, CapShape | undefined> = {
       ok: undefined,
       stuck: 'filled',
@@ -89,7 +89,7 @@ function sessionOf(state: ConnectionState | undefined): SessionHealth | undefine
 }
 
 function storageOf(state: ConnectionState | undefined): StorageHealth | undefined {
-  return state !== undefined && state.keeper === 'browser' ? state.storage : undefined
+  return state !== undefined && state.keeper !== 'daemon' ? state.storage : undefined
 }
 
 /**

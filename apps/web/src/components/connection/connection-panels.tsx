@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { settingsPath } from '../../lib/app-routes.js'
 import type { ConnectionState } from '../../lib/connection-state.js'
+import { REPLICA_SAVE_FAILED_COPY } from '../../lib/replica-state-copy.js'
 import { DaemonAddress } from './DaemonAddress.js'
 
 /**
@@ -144,6 +145,28 @@ export function BrowserStoragePanel({
           ? `Edits since ${formatWrittenAt(lastWrittenAt)} are in this tab only. `
           : 'Your edits are in this tab only. '}
         Export the document before closing the tab, or reload to try again.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * The daemon keeps it but cannot be reached, and this browser's copy holds
+ * the edits meanwhile. A refused write there says the page's own sentence,
+ * so the popover and the page cannot describe one failure two ways.
+ */
+export function ReplicaCopyPanel({ state }: { state: ConnectionState | null }) {
+  if (state?.keeper !== 'replica') return null
+  const failed = state.storage === 'failed'
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <p className="font-medium">
+        {failed ? REPLICA_SAVE_FAILED_COPY.title : "Kept in this browser's copy for now"}
+      </p>
+      <p className="text-muted-foreground">
+        {failed
+          ? REPLICA_SAVE_FAILED_COPY.body
+          : 'The daemon that keeps this workspace is unreachable. Edits save to the copy in this browser and ship to the daemon when it returns.'}
       </p>
     </div>
   )

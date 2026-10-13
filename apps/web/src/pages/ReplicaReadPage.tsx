@@ -69,6 +69,7 @@ import {
 import { forgetDaemonKeys, replicaKeyStatus } from '../lib/replica-store.js'
 import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
+import { setShellConnection } from '../lib/shell-status-store.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
@@ -425,6 +426,25 @@ interface ReplicaReaderProps {
 }
 
 /**
+ * Whether the replica's last save landed, said to both audiences: the page,
+ * through the notice below, and the shell, through its one store — the way
+ * the document pages publish theirs. The tab-wide readers (the leave prompt,
+ * the unasked reload a waiting update would take, the shell mark) read only
+ * that store, so a failure kept to this page would let a reload drop the
+ * only copy of the edits.
+ *
+ * Mounted with the readable page alone: that is where edits are made, and
+ * the only state the "Offline copy" word is true of.
+ */
+function ReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  useEffect(() => {
+    setShellConnection({ state: { keeper: 'replica', storage: failed ? 'failed' : 'ok' } })
+    return () => setShellConnection(null)
+  }, [failed])
+  return failed ? <ReplicaSaveFailedNotice onRetry={onRetry} /> : null
+}
+
+/**
  * A persistent notice, not a toast: the condition is "these edits exist only
  * in this tab", and it holds until a save lands. `role="alert"` because it
  * arrives carrying its message, which is the widely-supported shape for a
@@ -494,7 +514,7 @@ function ReplicaReader({
   return (
     <div className="flex h-full flex-col" data-testid="replica-state-readable">
       <ReplicaOfflineBanner name={displayName ?? workspaceId} syncedAt={syncedAt} />
-      {saveFailed && <ReplicaSaveFailedNotice onRetry={onRetrySave} />}
+      <ReplicaSaveHealth failed={saveFailed} onRetry={onRetrySave} />
       <div className="flex min-h-0 flex-1">
         <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
           <WorkspaceFileTree
