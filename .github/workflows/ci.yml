@@ -130,9 +130,20 @@ jobs:
   # that isn't covered by another CI step (PROJECTS_RUN_ELSEWHERE in that
   # file) runs here automatically, so a new shared-layer package is covered
   # by CI the moment it registers a project, with no edit to this file.
+  #
+  # Sharded 2-way like its siblings: unsharded it was the longest job in 8 of
+  # 10 green main runs (267-417s) and the last to finish in half of them,
+  # 27-58s behind dry-run-npm. The script forwards its argv to vitest, which
+  # splits the derived projects' files across the legs.
   test-shared:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      # Same reason as test-unit: a cancelled leg is never revived by
+      # "Re-run failed jobs".
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -145,8 +156,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test shared-layer packages + arch-lint
-        run: node tools/checks/src/run-shared-layer-tests.mjs
+      - name: Test shared-layer packages + arch-lint (shard ${{ matrix.shard }}/2)
+        run: node tools/checks/src/run-shared-layer-tests.mjs --shard=${{ matrix.shard }}/2
 
   test-jsdom:
     runs-on: ubuntu-24.04

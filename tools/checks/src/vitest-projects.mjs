@@ -162,11 +162,23 @@ export function deriveSharedLayerProjectNames(repoRoot) {
 }
 
 /**
+ * `forwarded` goes after the project flags (CI passes `--shard` this way). A
+ * bare `--` is dropped: `pnpm run x -- --shard=1/2` delivers it as an argv
+ * entry, and vitest parses everything after one into `options['--']`, so the
+ * shard would be ignored and every leg would run the whole set.
+ *
  * @param {string[]} names
+ * @param {string[]} [forwarded]
  * @returns {string[]} argv for `pnpm <argv>`, e.g. ['exec', 'vitest', 'run', '--project=a']
  */
-export function buildVitestArgv(names) {
-  return ['exec', 'vitest', 'run', ...names.map((name) => `--project=${name}`)]
+export function buildVitestArgv(names, forwarded = []) {
+  return [
+    'exec',
+    'vitest',
+    'run',
+    ...names.map((name) => `--project=${name}`),
+    ...forwarded.filter((arg) => arg !== '--'),
+  ]
 }
 
 /**
