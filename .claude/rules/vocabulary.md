@@ -156,6 +156,11 @@ a silent source-of-truth swap. The older per-document import panel, which
 preserved no document identity, is DELETED (user decision, 2026-08-28) —
 the whole-workspace move is the only browser-to-daemon transfer.
 
+`ConnectionState`'s `replica` arm is not a third keeper: the daemon keeps the
+workspace, and the arm says that while it is unreachable the browser's replica
+copy holds the edits — its health is whether the last append to that copy
+landed.
+
 `local` was the wrong word for this axis and could never have been the right
 one, because **a daemon is local too**. Two names spelled it that way and
 meant opposite things — `browser-local` (kept in the browser) and

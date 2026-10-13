@@ -26,7 +26,7 @@ const PROXY_SEGMENTS = ['packages', 'mcp-server', 'scripts', 'dev', 'mcp-http-st
 export function buildDesiredConfig({ repoRoot, isMainCheckout = false, name = 'whiteboard' }) {
   if (isMainCheckout) {
     throw new Error(
-      'refusing to build a wiring config for the main checkout — it is registered once by hand (see .claude/settings.json)',
+      'refusing to build a wiring config for the main checkout — it is registered once by hand (see CONTRIBUTING.md step 3)',
     )
   }
   return {
