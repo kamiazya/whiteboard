@@ -8,9 +8,11 @@
  * relying party's validation is exercised rather than stubbed.
  */
 
+import { readFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { signInRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { Hono } from 'hono'
 import type { CustomFetch } from 'openid-client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -316,11 +318,32 @@ describe('sign-in through an OIDC provider', () => {
     expect(res.headers.get('location')).toBe('/sign-in?error=provider_unreachable')
   })
 
-  it('answers an unknown provider with a JSON 404', async () => {
+  it.each([
+    '/auth/sign-in/nobody',
+    '/auth/callback/nobody?code=x&state=y',
+  ])('returns an unknown provider at %s to the sign-in screen', async (path) => {
     const { app } = appFor({})
-    const res = await app.request(`${BASE}/auth/sign-in/nobody`)
-    expect(res.status).toBe(404)
-    expect(await res.json()).toEqual({ error: 'unknown_provider' })
+    const res = await app.request(`${BASE}${path}`)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/sign-in?error=unknown_provider')
+  })
+
+  // Every refusal the web app has copy for must be one the keeper can send:
+  // a member nothing produces is a contract only one side honours.
+  it('produces every declared sign-in refusal somewhere in the keeper', () => {
+    const producers = [
+      new URL('./sign-in.ts', import.meta.url),
+      new URL('../security/complete-sign-in.ts', import.meta.url),
+      new URL('../security/sign-in-admission.ts', import.meta.url),
+    ].map((url) => readFileSync(url, 'utf8'))
+    const produced = new Set(
+      producers.flatMap((source) =>
+        [...source.matchAll(/\b(?:refusedTo\(c, |refuse\()'([a-z_]+)'/g)].map((m) => m[1]),
+      ),
+    )
+    expect(produced.size).toBeGreaterThan(10)
+    const unproduced = signInRefusalSchema.options.filter((reason) => !produced.has(reason))
+    expect(unproduced).toEqual([])
   })
 
   it('ends the session on sign-out', async () => {
