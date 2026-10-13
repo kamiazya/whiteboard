@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Kysely } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../../log.js'
 import { openMigrationHarness } from '../test-helpers.js'
 
@@ -102,6 +102,10 @@ describe('0012 blob-rename compensation', () => {
     dataDir = await mkdtemp(join(tmpdir(), 'whiteboard-0012-comp-'))
     renameCalls = 0
     failOnRenameCalls = new Set()
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('renames completed blobs BACK before rethrowing, so a rolled-back DB matches the disk', async () => {

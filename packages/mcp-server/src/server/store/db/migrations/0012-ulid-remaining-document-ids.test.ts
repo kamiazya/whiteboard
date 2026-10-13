@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Kysely } from 'kysely'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openMigrationHarness } from '../test-helpers.js'
 
 let dataDir = ''
@@ -111,6 +111,10 @@ async function seedThirdSiteRow(
 describe('0012-ulid-remaining-document-ids', () => {
   beforeEach(async () => {
     dataDir = await mkdtemp(join(tmpdir(), 'whiteboard-0012-'))
+  })
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
   })
 
   it('re-mints a third-site nanoid row, carrying versions/branches/docKeys/blob', async () => {
