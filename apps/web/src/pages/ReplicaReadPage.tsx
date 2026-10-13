@@ -40,6 +40,7 @@ import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import { Button } from '../components/ui/button.js'
 import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
+import { TRANSIENT_LOAD_ATTEMPTS } from '../hooks/use-prefetched-cache.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -48,7 +49,7 @@ import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
 import { replicaClipboardImages } from '../lib/replica-clipboard-images.js'
-import { loadReplicaImages } from '../lib/replica-images.js'
+import { loadReplicaImagesRetrying } from '../lib/replica-images.js'
 import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
 import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
 import {
@@ -248,6 +249,11 @@ function useReplicaRecord({
  * Object URLs for the cached images among `refs`, keyed by the reference as
  * written; undefined until the cache has answered for this exact set, so the
  * wire never calls a picture unavailable before it has been looked for.
+ *
+ * A read that fails is asked again up to `TRANSIENT_LOAD_ATTEMPTS` times
+ * before the set is answered, as `useImageUrls` does online; the loader
+ * never rejects, so a lookup that keeps failing still answers, with nothing
+ * found, rather than leaving every picture waiting.
  */
 function useReplicaImageUrls(
   workspaceId: string,
@@ -261,7 +267,9 @@ function useReplicaImageUrls(
     if (refs === undefined) return
     let cancelled = false
     const made: string[] = []
-    void loadReplicaImages(workspaceId, refs.map(imageRefId)).then((blobs) => {
+    void loadReplicaImagesRetrying(workspaceId, refs.map(imageRefId), {
+      attempts: TRANSIENT_LOAD_ATTEMPTS,
+    }).then((blobs) => {
       if (cancelled) return
       const urls = new Map<string, string>()
       for (const ref of refs) {

@@ -24,6 +24,7 @@ import { userEvent } from 'vitest/browser'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { carriedClipboardFiles, clearClipboardFragmentForTests } from '../lib/clipboard-store.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
+import { IdbBlobStore } from '../lib/idb-blob-store.js'
 import { cacheDaemonWorkspace } from '../lib/replica-cache.js'
 import { saveOfflinePasskey } from '../lib/replica-offline-passkey.js'
 import { REPLICA_IMAGE_UNAVAILABLE } from '../lib/replica-record.js'
@@ -154,6 +155,20 @@ describe('ReplicaReadPage images', () => {
       expect(href).toMatch(/^blob:/)
     })
     expect(drawnText()).not.toContain('asset:')
+  })
+
+  it('draws a cached picture whose first read from the store fails', async () => {
+    await pullThenGoOffline(boardNaming('img-cat'), ['img-cat'])
+    vi.spyOn(IdbBlobStore.prototype, 'get').mockRejectedValueOnce(
+      new DOMException('busy', 'UnknownError'),
+    )
+    await unlockAndOpenBoard()
+
+    await vi.waitFor(() => {
+      const href = document.querySelector('svg image')?.getAttribute('href') ?? ''
+      expect(href).toMatch(/^blob:/)
+    })
+    expect(drawnText()).not.toContain(REPLICA_IMAGE_UNAVAILABLE)
   })
 
   it('labels a picture it holds no bytes for as unavailable, never by its raw id', async () => {
