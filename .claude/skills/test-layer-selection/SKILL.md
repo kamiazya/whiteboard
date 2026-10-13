@@ -31,9 +31,12 @@ Notes:
   <pkg> test` is the command that means "this package"** — the same lesson `dev-flow.md` records
   for `--project web-jsdom` against `pnpm --filter @kamiazya/whiteboard-web test`, one level down.
   `tools/arch-lint`'s `package-test-script.test.ts` holds every package's `test` script to every
-  config the root `vitest.config.ts` registers for it, browser halves included. Its ledger names
+  config the root `vitest.config.ts` registers for it, browser halves included, and to ONE
+  `vitest run` over an aggregate `vitest.config.ts` — pnpm appends `pnpm test <file>` to the last
+  command of an `a && b` chain only, so every earlier config ran in full and the last exited 1 on
+  "No test files found" (2m42s and red for one passing canvas-render file). Its ledger names
   the exception: `apps/web`, whose script is CI's `test-jsdom` job and leaves its browser
-  projects to `pnpm test:browser`.
+  projects to `pnpm test:browser`; its wrapper forwards a file filter to both runs itself.
 - **A budget or size guard is a property of the MERGE, not of your branch.** `dev-rules-budget`
   reads the always-on rule files, and CI reads them from the PR's merge ref: an edit that fits
   locally fails there when `main` grew the same file meanwhile. Measured at 119 chars of someone

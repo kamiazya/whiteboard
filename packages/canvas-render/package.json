@@ -24,7 +24,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.node.config.ts && vitest run --config vitest.browser.config.ts",
+    "test": "vitest run",
     "mutation:render": "stryker run"
   },
   "dependencies": {
