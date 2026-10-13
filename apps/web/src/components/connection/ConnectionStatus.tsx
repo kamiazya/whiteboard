@@ -117,7 +117,7 @@ const STORAGE_LABEL: Record<StorageHealth, string> = {
 }
 
 /**
- * The offline replica's word: the daemon keeps the workspace, but what holds
+ * The offline replica's word: the workspace is the daemon's, but what holds
  * the edits right now is the copy in this browser — so neither keeper's word
  * alone would be true.
  */
