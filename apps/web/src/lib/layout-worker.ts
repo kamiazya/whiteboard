@@ -56,7 +56,7 @@ import {
   type WorkerFailure,
 } from './layout-worker-protocol.js'
 import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
-import { namesADocument } from './names-a-document.js'
+import { namesAReference } from './names-a-reference.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
@@ -275,7 +275,7 @@ function omittedReferences(
   request: LayoutRequest,
   canvas: SpatialCanvas,
 ): { readonly referencesOmitted?: true } {
-  return request.references === undefined && namesADocument({ canvases: [canvas] })
+  return request.references === undefined && namesAReference({ canvases: [canvas] })
     ? { referencesOmitted: true }
     : {}
 }

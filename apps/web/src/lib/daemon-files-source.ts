@@ -1,4 +1,5 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { documentFileApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import { type DocumentKind, imageRefId } from '@kamiazya/whiteboard-model'
 import {
   createDocument,
   DaemonApiError,
@@ -163,6 +164,27 @@ function searchResultOf(
   }
 }
 
+/**
+ * A stored picture's bytes off the daemon's file route. The route keeps one
+ * directory per workspace and reads it through any document's path, so the
+ * row's own path reaches a picture an embedded board holds too. Only a 404
+ * is "no such picture"; any other failure rejects.
+ */
+async function loadDaemonImage(
+  daemonFetch: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  path: string,
+  ref: string,
+): Promise<Blob | undefined> {
+  const res = await daemonFetch(
+    `${daemonBaseUrl}${documentFileApiUrl(workspaceId, path, imageRefId(ref))}`,
+  )
+  if (res.status === 404) return undefined
+  if (!res.ok) throw new Error(`image read answered ${res.status}`)
+  return await res.blob()
+}
+
 export function createDaemonFilesSource(
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
@@ -192,12 +214,8 @@ export function createDaemonFilesSource(
       ])
       return { entries, trash: trashRows }
     },
-    async listTagsInUse() {
-      return (await tags.read()).inUse
-    },
-    async readTagLibrary() {
-      return (await tags.read()).library
-    },
+    listTagsInUse: async () => (await tags.read()).inUse,
+    readTagLibrary: async () => (await tags.read()).library,
     readStencilLibrary: async () => (await tags.read()).stencils,
     listDocuments: () => list.read(),
 
@@ -240,6 +258,9 @@ export function createDaemonFilesSource(
     loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {
       return getDocumentSnapshot(daemonFetch, daemonBaseUrl, workspaceId, entry.path)
     },
+
+    loadImage: (entry, ref) =>
+      loadDaemonImage(daemonFetch, daemonBaseUrl, workspaceId, entry.path, ref),
 
     listTrash: () => trash.read(),
 

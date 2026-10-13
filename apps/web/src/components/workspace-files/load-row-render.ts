@@ -32,12 +32,13 @@
  * starting a second render.
  *
  * What a document embeds is part of that picture — a board's file nodes, a
- * note's `![[…]]` — so a picture drawn without them is only a first answer.
- * The render that draws it says whether its subject named another document
+ * note's `![[…]]`, the stored pictures either holds — so a picture drawn
+ * without them is only a first answer. The render that draws it says
+ * whether its subject named another document or a picture
  * (`referencesOmitted`), which this thread cannot know of a board it never
- * decodes; only then are those documents read and the picture drawn again,
- * keyed by what they were (`row-references.ts`). A document that names
- * nothing is drawn once and keyed as it always was.
+ * decodes; only then are those read and the picture drawn again, keyed by
+ * what they were (`row-references.ts`). A document that names nothing is
+ * drawn once and keyed as it always was.
  */
 
 import type { BoundingBox, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
@@ -48,7 +49,7 @@ import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
-import { namesADocument } from '../../lib/names-a-document.js'
+import { namesAReference } from '../../lib/names-a-reference.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, type RenderKey, renderKeyOf, tagLibraryKey } from '../../lib/render-key.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -269,7 +270,7 @@ async function produce(
     )
     // The body is in hand here, so this thread answers for a note what the
     // worker answers for a board.
-    return drawn === null || references !== undefined || !namesADocument({ bodies: [body] })
+    return drawn === null || references !== undefined || !namesAReference({ bodies: [body] })
       ? drawn
       : { ...drawn, referencesOmitted: true }
   }

@@ -685,3 +685,48 @@ describeWorkspaceFilesSourceConformance('createDaemonFilesSource', async (fixtur
     'ws',
   ),
 )
+
+// The list's miniatures draw a stored picture from its bytes: a picture the
+// daemon does not hold draws as its card, one it could not answer for keeps
+// the row's picture as it was.
+describe('createDaemonFilesSource stored pictures', () => {
+  const row = { documentId: 'd', path: 'boards/mood', kind: 'spatial' } as const
+
+  function fileFetch(response: () => Response) {
+    return vi.fn(async (_input: RequestInfo | URL) => response()) as unknown as typeof fetch &
+      ReturnType<typeof vi.fn>
+  }
+
+  it("reads a picture's bytes through the row's file route", async () => {
+    const fetchLike = fileFetch(
+      () => new Response(new Uint8Array([7, 8]), { headers: { 'Content-Type': 'image/png' } }),
+    )
+    const blob = await createDaemonFilesSource(fetchLike, BASE, 'ws').loadImage?.(row, 'asset:f1')
+
+    expect(String(fetchLike.mock.calls[0]?.[0])).toBe(
+      `${BASE}/api/w/ws/document/boards/mood/file/f1`,
+    )
+    expect(blob?.type).toBe('image/png')
+    expect(new Uint8Array((await blob?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(
+      new Uint8Array([7, 8]),
+    )
+  })
+
+  it('answers nothing for a picture the daemon does not hold', async () => {
+    const source = createDaemonFilesSource(
+      fileFetch(() => new Response(null, { status: 404 })),
+      BASE,
+      'ws',
+    )
+    await expect(source.loadImage?.(row, 'asset:gone')).resolves.toBeUndefined()
+  })
+
+  it('rejects when the daemon cannot answer', async () => {
+    const source = createDaemonFilesSource(
+      fileFetch(() => new Response(null, { status: 503 })),
+      BASE,
+      'ws',
+    )
+    await expect(source.loadImage?.(row, 'asset:f1')).rejects.toThrow('503')
+  })
+})

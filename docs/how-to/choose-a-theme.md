@@ -77,7 +77,9 @@ draws them all in the bundled look. A note has no theme of its own to choose.
 The daemon's PNG and SVG export routes take the same `style`, optional, with the same default.
 The web editor's own export draws what you see, theme included. The web app's preview pane, the
 file rows' thumbnails and Peek always draw the document, with what it embeds: a board in a file
-node or behind a note's `![[board]]` looks there the way it looks on the canvas.
+node or behind a note's `![[board]]` looks there the way it looks on the canvas. Images are drawn
+too, up to 256 KiB each and 512 KiB for all the images one picture draws, embedded ones
+included; an image past either limit is drawn as a card labelled with its alt text, or "Image".
 
 ## Fonts
 

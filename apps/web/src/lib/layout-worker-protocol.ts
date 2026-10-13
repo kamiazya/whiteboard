@@ -361,7 +361,7 @@ export type LayoutResponse =
       readonly fragmentsAsked?: readonly FragmentAsk[]
       /**
        * Laid out without `references` while the canvas names another
-       * document. Only this realm decodes a list row's board, so it is the
+       * document or a stored picture. Only this realm decodes a list row's board, so it is the
        * one that can tell the asking thread there is more to read; absent
        * means the picture is the whole one.
        */

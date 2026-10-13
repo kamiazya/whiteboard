@@ -166,3 +166,109 @@ describe('a row draws what its document embeds', () => {
     expect(await createRowRenderLoader(d)(board)).toEqual(BARE)
   })
 })
+
+const pictureBoard: WorkspaceDocumentEntry = {
+  documentId: 'p1',
+  path: 'moodboard',
+  kind: 'spatial',
+  contentDigest: '1111111111111111',
+}
+
+const pictureCanvas: SpatialCanvas = {
+  nodes: [fileNode({ id: 'i', x: 0, y: 0, width: 200, height: 120, file: 'asset:pic' })],
+  edges: [],
+}
+
+// The limits `docs/how-to/choose-a-theme.md` states, so a change to either
+// in `row-references.ts` fails here until the page says it too.
+const ROW_IMAGE_MAX_BYTES = 256 * 1024
+const ROW_IMAGES_MAX_BYTES = 512 * 1024
+
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
+
+/** A source that keeps one stored picture, the bytes a test hands it. */
+function picturing(d: ReturnType<typeof deps>, bytes: () => Uint8Array, type = 'image/png') {
+  const loadImage = vi.fn(async () => new Blob([bytes() as BlobPart], { type }))
+  d.source.loadSpatialSnapshot.mockImplementation(async () => snapshotOf(pictureCanvas))
+  return { ...d, source: { ...d.source, loadImage } }
+}
+
+const imageOf = (wire: ReferenceWire | undefined, ref: string) =>
+  wire?.extras.find(([key]) => key === ref)?.[1].image
+
+describe('a row draws the pictures its document holds', () => {
+  // A mood board is a board of pictures: a miniature of grey cards is a
+  // different picture from the one that opens.
+  it('hands a board of pictures their bytes inline', async () => {
+    const d = picturing(deps([pictureBoard]), () => PNG_BYTES)
+
+    expect(await createRowRenderLoader(d)(pictureBoard)).toEqual(DRAWN)
+
+    const wire = d.renderSpatial.mock.calls.at(-1)?.[4]
+    expect(imageOf(wire, 'asset:pic')?.href).toBe(
+      `data:image/png;base64,${btoa(String.fromCharCode(...PNG_BYTES))}`,
+    )
+  })
+
+  it('draws a note again for a picture it holds inline', async () => {
+    const d = picturing(deps([note]), () => PNG_BYTES)
+    d.source.loadMarkdown.mockImplementation(async () => ({ body: '![a cat](asset:pic)' }))
+
+    expect(await createRowRenderLoader(d)(note)).toEqual(DRAWN)
+
+    const wire = d.renderMarkdown.mock.calls.at(-1)?.[3]?.references
+    expect(imageOf(wire, 'asset:pic')?.href).toMatch(/^data:image\/png;base64,/)
+  })
+
+  // The bytes are in the stored picture, so a picture past the cap would
+  // make every row that holds it that much heavier to keep.
+  it('leaves a picture over the cap as its card', async () => {
+    const d = picturing(deps([pictureBoard]), () => new Uint8Array(ROW_IMAGE_MAX_BYTES + 1))
+
+    await createRowRenderLoader(d)(pictureBoard)
+
+    const wire = d.renderSpatial.mock.calls.at(-1)?.[4]
+    expect(imageOf(wire, 'asset:pic')).toBeUndefined()
+  })
+
+  // The row's budget is spent in the order its content names the pictures,
+  // so which ones draw is the same every time.
+  it('leaves the pictures past the row budget as their cards', async () => {
+    const each = ROW_IMAGE_MAX_BYTES
+    const fit = Math.floor(ROW_IMAGES_MAX_BYTES / each)
+    const refs = Array.from({ length: fit + 1 }, (_, index) => `asset:p${index}`)
+    const d = picturing(deps([pictureBoard]), () => new Uint8Array(each))
+    d.source.loadSpatialSnapshot.mockImplementation(async () =>
+      snapshotOf({
+        nodes: refs.map((file, index) =>
+          fileNode({ id: `n${index}`, x: index * 300, y: 0, width: 200, height: 120, file }),
+        ),
+        edges: [],
+      }),
+    )
+
+    await createRowRenderLoader(d)(pictureBoard)
+
+    const wire = d.renderSpatial.mock.calls.at(-1)?.[4]
+    expect(refs.map((ref) => imageOf(wire, ref) !== undefined)).toEqual([
+      ...refs.slice(0, fit).map(() => true),
+      false,
+    ])
+  })
+
+  // The key names what was drawn, so new bytes are a new picture and the
+  // memo must not answer the old one.
+  it('draws the row again when a picture it holds changes', async () => {
+    let bytes = PNG_BYTES
+    const d = picturing(deps([pictureBoard]), () => bytes)
+    const drawnWith = () => d.renderSpatial.mock.calls.filter((call) => call[4] !== undefined)
+
+    await createRowRenderLoader(d)(pictureBoard)
+    await createRowRenderLoader(d)(pictureBoard)
+    expect(drawnWith()).toHaveLength(1)
+
+    bytes = new Uint8Array([...PNG_BYTES, 4])
+    await createRowRenderLoader(d)(pictureBoard)
+    expect(drawnWith()).toHaveLength(2)
+  })
+})

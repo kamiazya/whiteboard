@@ -34,6 +34,7 @@ import {
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
+import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
@@ -731,5 +732,36 @@ describe('createBrowserFilesSource conformance', () => {
       await index.deleteDocument({ workspaceId, path: gone.path })
     }
     return createBrowserFilesSource({ index })
+  })
+})
+
+// The list's miniatures draw a stored picture from its bytes, so the source
+// tells a picture it does not hold (a card) from one it could not read (keep
+// the picture it had).
+describe('createBrowserFilesSource stored pictures', () => {
+  const row = { documentId: 'd', path: 'board', kind: 'spatial' } as const
+
+  it('answers a stored picture with its bytes, and an unknown one with nothing', async () => {
+    await new DocumentFileStore().put('asset:pic', {
+      mimeType: 'image/png',
+      blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+      created: 0,
+    })
+    const source = createBrowserFilesSource()
+
+    const blob = await source.loadImage?.(row, 'asset:pic')
+    expect(blob?.type).toBe('image/png')
+    expect(new Uint8Array((await blob?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(
+      new Uint8Array([1, 2, 3]),
+    )
+    await expect(source.loadImage?.(row, 'asset:never-stored')).resolves.toBeUndefined()
+  })
+
+  it('rejects when the file store cannot be read', async () => {
+    const error = new Error('store closed')
+    const source = createBrowserFilesSource({
+      files: { read: async () => ({ kind: 'unreadable', error }) },
+    })
+    await expect(source.loadImage?.(row, 'asset:pic')).rejects.toBe(error)
   })
 })
