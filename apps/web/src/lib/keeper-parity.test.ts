@@ -67,10 +67,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "re-reads the daemon index when the daemon's workspace update frame says an agent wrote; a browser keeper has no agent writing beside the page, so its index changes only through the page's own writes",
   },
-  'src/lib/member-workspaces.ts': {
-    reach: 'daemon-itself',
-    why: "lists the workspaces a server-mode keeper lets the signed-in person reach, for its entrance and its shell (ADR-0047); membership is a server keeper's idea, and a browser keeper has one person and every workspace, so there is nothing to mirror",
-  },
   'src/lib/server-people.ts': {
     reach: 'daemon-itself',
     why: "manages a server-mode keeper's people — its users, administrators, workspace owners and invitations (ADR-0049); a browser keeper has one person, who is every workspace's owner, so there is nobody to manage and nothing to mirror",

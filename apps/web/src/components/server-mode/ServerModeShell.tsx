@@ -7,13 +7,16 @@
  * signed in.
  */
 import { authSignOutUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useShellWorkspaceRows } from '../../hooks/use-shell-workspace-rows.js'
+import {
+  type ShellWorkspaceRows,
+  useShellWorkspaceRows,
+} from '../../hooks/use-shell-workspace-rows.js'
 import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
 import { notKeepingAnnouncement } from '../../lib/connection-state.js'
-import { listMemberWorkspaces, type MemberWorkspace } from '../../lib/member-workspaces.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
+import { workspaceHandle, workspaceLabel } from '../../lib/workspace-handle.js'
 import type { KeeperWorkspaces } from '../../lib/workspace-switcher-source.js'
 import { connectionLabel } from '../connection/ConnectionStatus.js'
 import { WorkspaceIdentityFields } from '../shell/WorkspaceIdentityFields.js'
@@ -53,28 +56,38 @@ export function SignOutControl({ fetchFn }: { fetchFn: Fetch }) {
  * keyboard user merely passed through. The list is read again each time it
  * opens, so a workspace made or renamed elsewhere is there when it is used.
  * Absent when there is nothing to switch to.
+ *
+ * Built on the same rows as the rename beside it, so a rename lands in its
+ * label at once rather than when it is next opened.
  */
-function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
-  const current = parseWorkspaceRoute(useLocation().pathname)?.workspace
-  const [workspaces, setWorkspaces] = useState<MemberWorkspace[]>([])
+function WorkspacePicker({ shell }: Readonly<{ shell: ShellWorkspaceRows }>) {
+  const { rows, handleInAddress, listFailed, reload } = shell
   const [open, setOpen] = useState(false)
-  const load = useCallback(() => {
-    void listMemberWorkspaces(fetchFn).then((list) => {
-      if (list !== 'unavailable') setWorkspaces(list)
-    })
-  }, [fetchFn])
-  useEffect(load, [load])
-  if (workspaces.length < 2) return null
-  // The address may name a workspace by its segment rather than its id.
-  const here = workspaces.find((w) => w.workspaceId === current || w.segment === current)
-  const label = here?.name ?? 'Workspaces'
+  if (listFailed) {
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <span role="alert" className="truncate text-destructive">
+          Could not load your workspaces.
+        </span>
+        <Button variant="outline" size="sm" onClick={reload}>
+          Try again
+        </Button>
+      </span>
+    )
+  }
+  if (rows.length < 2) return null
+  // The address may name a workspace by its id rather than its segment.
+  const here = rows.find(
+    (w) => w.workspaceId === handleInAddress || workspaceHandle(w) === handleInAddress,
+  )
+  const label = here === undefined ? 'Workspaces' : workspaceLabel(here)
   return (
     <details
       open={open}
       onToggle={(e) => {
         const next = e.currentTarget.open
         setOpen(next)
-        if (next) load()
+        if (next) reload()
       }}
       className="relative min-w-0"
     >
@@ -85,16 +98,16 @@ function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
         {label}
       </summary>
       <ul className="absolute left-0 top-full z-50 mt-1 flex min-w-48 flex-col rounded-md border bg-background p-1 shadow-md">
-        {workspaces.map((w) => (
+        {rows.map((w) => (
           <li key={w.workspaceId}>
             <Link
               to={workspacePath(w.workspaceId)}
-              title={w.name}
+              title={workspaceLabel(w)}
               aria-current={w === here ? 'page' : undefined}
               onClick={() => setOpen(false)}
               className="block truncate rounded px-2 py-1 hover:bg-muted aria-[current=page]:font-medium"
             >
-              {w.name}
+              {workspaceLabel(w)}
             </Link>
           </li>
         ))}
@@ -112,9 +125,11 @@ function WorkspacePicker({ fetchFn }: { fetchFn: Fetch }) {
  * so a rename in flight is not torn down by closing it. Absent until the
  * list has said which row the address names, and for a keeper with no rename.
  */
-function WorkspaceRenameDisclosure({ workspaces }: Readonly<{ workspaces: KeeperWorkspaces }>) {
-  const pathname = useLocation().pathname
-  const { handleInAddress, activeRow, applyRename } = useShellWorkspaceRows(workspaces, pathname)
+function WorkspaceRenameDisclosure({
+  workspaces,
+  shell,
+}: Readonly<{ workspaces: KeeperWorkspaces; shell: ShellWorkspaceRows }>) {
+  const { handleInAddress, activeRow, applyRename } = shell
   if (activeRow === undefined || workspaces.source.rename === undefined) return null
   return (
     <details className="relative min-w-0">
@@ -154,9 +169,12 @@ export function ServerModeShell({
 }: Readonly<{
   displayName: string
   fetchFn: Fetch
-  /** The keeper's workspace seam; without it the shell offers no rename. */
+  /** The keeper's workspace seam; without it the shell offers no switcher and no rename. */
   workspaces?: KeeperWorkspaces
 }>) {
+  // One list for the switcher and the rename, so neither can name a workspace
+  // the other has already renamed.
+  const shell = useShellWorkspaceRows(workspaces, useLocation().pathname)
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
   const announcement = notKeepingAnnouncement(connection?.state ?? null)
@@ -165,8 +183,10 @@ export function ServerModeShell({
       <Link to="/" className="text-muted-foreground hover:text-foreground">
         All workspaces
       </Link>
-      <WorkspacePicker fetchFn={fetchFn} />
-      {workspaces !== undefined && <WorkspaceRenameDisclosure workspaces={workspaces} />}
+      {workspaces !== undefined && <WorkspacePicker shell={shell} />}
+      {workspaces !== undefined && (
+        <WorkspaceRenameDisclosure workspaces={workspaces} shell={shell} />
+      )}
       <WorkspacePeopleLink />
       <span className="text-muted-foreground">{label ?? ''}</span>
       {/* Mounted even when empty: a live region inserted with its text

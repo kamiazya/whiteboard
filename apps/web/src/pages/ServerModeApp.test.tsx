@@ -34,7 +34,12 @@ type Workspace = { workspaceId: string; displayName?: string; segment?: string }
 function renderSignedIn(
   workspaces: Workspace[],
   onCreateWorkspace?: (displayName: string) => unknown,
-  options: { at?: string; onPatch?: (url: string, body: unknown) => Response } = {},
+  options: {
+    at?: string
+    onPatch?: (url: string, body: unknown) => Response
+    /** An answer to the workspace list that replaces the fake's, while it returns one. */
+    onList?: () => Response | undefined
+  } = {},
 ) {
   const fake = installFakeDaemonFetch({
     workspaces,
@@ -42,7 +47,7 @@ function renderSignedIn(
     ...(onCreateWorkspace === undefined ? {} : { onCreateWorkspace }),
   })
   // The fake answers the workspace routes; the session is the keeper's own.
-  const { onPatch } = options
+  const { onPatch, onList } = options
   const fetchFn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input) === '/auth/session') {
       return Promise.resolve(
@@ -55,7 +60,11 @@ function renderSignedIn(
     if (onPatch !== undefined && init?.method === 'PATCH') {
       return Promise.resolve(onPatch(String(input), JSON.parse(String(init.body))))
     }
-    return fake(input, init)
+    const listed =
+      init?.method === undefined && String(input).endsWith('/api/workspaces')
+        ? onList?.()
+        : undefined
+    return listed === undefined ? fake(input, init) : Promise.resolve(listed)
   })
   // Every request the app makes, the workspace switcher's included, goes out
   // on the fetch it was handed; one that reached for the global would fail here.
@@ -205,6 +214,77 @@ describe('the server-mode workspace shell renames the open workspace', () => {
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/notes/)
     expect(opened.at(-1)).toMatchObject({ workspace: 'plans' })
+  })
+
+  // The switcher beside the rename names the same workspace, so it must read
+  // the rename rather than a list of its own that has not heard of it.
+  const other: Workspace = { workspaceId: 'ws-2', displayName: 'Launch', segment: 'launch' }
+  const pickerSummary = (name: string) => screen.findByText(name, { selector: 'summary' })
+
+  it('names the renamed workspace in the switcher without reopening it', async () => {
+    renderSignedIn([plans, other], undefined, {
+      at: '/w/plans',
+      onPatch: () =>
+        jsonResponse({ workspaceId: 'ws-1', displayName: 'Roadmap', segment: 'plans' }),
+    })
+    await pickerSummary('Plans')
+
+    fireEvent.change(await screen.findByLabelText('Workspace name'), {
+      target: { value: 'Roadmap' },
+    })
+
+    expect(await pickerSummary('Roadmap')).toBeTruthy()
+  })
+
+  it('still names the workspace in the switcher after its address moves', async () => {
+    renderSignedIn([plans, other], undefined, {
+      at: '/w/plans',
+      onPatch: () => jsonResponse({ workspaceId: 'ws-1', displayName: 'Plans', segment: 'notes' }),
+    })
+    await pickerSummary('Plans')
+
+    const url = await screen.findByLabelText('Workspace URL')
+    fireEvent.change(url, { target: { value: 'notes' } })
+    fireEvent.keyDown(url, { key: 'Enter' })
+
+    await waitFor(() => expect(opened.at(-1)).toMatchObject({ workspace: 'notes' }))
+    expect(await pickerSummary('Plans')).toBeTruthy()
+  })
+})
+
+describe('a workspace list that fails to load offers a retry', () => {
+  const plans: Workspace = { workspaceId: 'ws-1', displayName: 'Plans', segment: 'plans' }
+  const other: Workspace = { workspaceId: 'ws-2', displayName: 'Launch', segment: 'launch' }
+
+  function failingOnce() {
+    let failures = 1
+    return () => (failures-- > 0 ? jsonResponse({ error: 'database_busy' }, 503) : undefined)
+  }
+
+  it('on the workspaces page, and lists them once the keeper answers', async () => {
+    renderSignedIn([plans], undefined, { onList: failingOnce() })
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /could not load your workspaces/i,
+    )
+    expect(screen.queryByText(/reload/i)).toBeNull()
+    await expectLoggedFailure('could not list the workspaces')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByRole('link', { name: 'Plans' })).toBeTruthy()
+  })
+
+  it('in the shell, rather than leaving the switcher out', async () => {
+    renderSignedIn([plans, other], undefined, { at: '/w/plans', onList: failingOnce() })
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /could not load your workspaces/i,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('Plans', { selector: 'summary' })).toBeTruthy()
   })
 })
 
