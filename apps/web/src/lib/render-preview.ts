@@ -20,6 +20,7 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { outlineFromScene } from './document-outline.js'
+import { type FragmentAsk, recordFragmentAsks } from './fragment-requests.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
 import type { ResolvedTheme } from './theme.js'
@@ -236,4 +237,18 @@ export function layoutMarkdownScene(
   } catch {
     return { nodes: [] }
   }
+}
+
+/**
+ * Every math block and diagram fence laying `value` out asks for — the
+ * note's own, an embedded note's, an embedded board's text nodes' — as the
+ * layout itself answers it, so a surface prefetching them cannot miss what
+ * the layout reaches. Pass the options the drawing layout takes: an embed
+ * resolves only through the references it will be drawn with.
+ */
+export function fragmentRequests(
+  value: string,
+  options: Omit<RenderMarkdownPreviewOptions, 'background' | 'renderMath' | 'renderDiagram'>,
+): readonly FragmentAsk[] {
+  return recordFragmentAsks((seams) => layoutMarkdownScene(value, { ...options, ...seams })).asks
 }

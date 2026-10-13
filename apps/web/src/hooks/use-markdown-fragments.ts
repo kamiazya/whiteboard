@@ -7,84 +7,49 @@
  * hands the preview cache lookups.
  * Totality mirrors the seams: a render failure caches as "missing" (the
  * layout keeps its documented fallback) and is never re-attempted in a
- * retry storm.
+ * retry storm. A body the layout cannot parse asks for nothing.
  */
 
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import type { MdastFlowContent, MdastListItem } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback } from 'react'
 import {
+  type FragmentLoaders,
+  type FragmentSeams,
   fenceFragmentKey,
+  fragmentAskKey,
+  loadFragment,
   mathFragmentKey,
-  renderDiagramFragment,
-  renderMathFragment,
-} from '../lib/markdown-fragment-renderers.js'
-import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
-
-export interface FragmentRenderers {
-  readonly renderMath: (value: string) => RenderedSvgFragment | undefined
-  readonly renderDiagram: (lang: string, value: string) => RenderedSvgFragment | undefined
-}
-
-export interface FragmentLoaders {
-  readonly math: typeof renderMathFragment
-  readonly diagram: typeof renderDiagramFragment
-}
-
-const DEFAULT_LOADERS: FragmentLoaders = {
-  math: renderMathFragment,
-  diagram: renderDiagramFragment,
-}
-
-/**
- * Every renderable fragment source in one parsed document, at ANY depth: the
- * layout reaches a math block in a blockquote or a fence in a list item, so
- * a collector that stopped at the top level would leave those on their
- * source placeholder on screen while the export typesets them. Total: a
- * mid-edit body the schema rejects has no fragments to offer.
- */
-function collectFragmentSources(
-  body: string,
-  loaders: FragmentLoaders,
-): readonly PrefetchRequest<RenderedSvgFragment>[] {
-  try {
-    const wanted: PrefetchRequest<RenderedSvgFragment>[] = []
-    const visit = (nodes: readonly (MdastFlowContent | MdastListItem)[]): void => {
-      for (const node of nodes) {
-        if (node.type === 'math') {
-          const { value } = node
-          wanted.push({ key: mathFragmentKey(value), load: () => loaders.math(value) })
-        } else if (node.type === 'code' && node.lang) {
-          const { lang, value } = node
-          wanted.push({
-            key: fenceFragmentKey(lang, value),
-            load: () => loaders.diagram(lang, value),
-          })
-        } else if (node.type === 'blockquote' || node.type === 'list' || node.type === 'listItem') {
-          visit(node.children)
-        }
-      }
-    }
-    visit(parseMarkdownBody(body).children)
-    return wanted
-  } catch {
-    return []
-  }
-}
+} from '../lib/fragment-requests.js'
+import { FRAGMENT_ENGINES } from '../lib/markdown-fragment-renderers.js'
+import { fragmentRequests, type RenderMarkdownPreviewOptions } from '../lib/render-preview.js'
+import { usePrefetchedCache } from './use-prefetched-cache.js'
 
 export function useMarkdownFragments({
   body,
-  loaders = DEFAULT_LOADERS,
+  layout: { measure, maxWidth, references, theme, tagLibrary },
+  loaders = FRAGMENT_ENGINES,
 }: {
   body: string
+  /**
+   * What the preview lays `body` out with. The wanted set is what THAT layout
+   * asks for, so an embedded note's math and an embedded board's fences are
+   * prefetched too — they resolve only through these references.
+   */
+  layout: Omit<RenderMarkdownPreviewOptions, 'background' | 'renderMath' | 'renderDiagram'>
   /** Injection seam for tests; defaults to the real MathJax/mermaid loaders. */
   loaders?: FragmentLoaders
-}): FragmentRenderers {
+}): FragmentSeams {
   // No transitive closure here, unlike the embed sibling: a rendered
   // fragment is an SVG string and cannot reference further sources.
   const lookup = usePrefetchedCache<RenderedSvgFragment>(
-    useCallback(() => collectFragmentSources(body, loaders), [body, loaders]),
+    useCallback(
+      () =>
+        fragmentRequests(body, { measure, maxWidth, references, theme, tagLibrary }).map((ask) => ({
+          key: fragmentAskKey(ask),
+          load: () => loadFragment(ask, loaders),
+        })),
+      [body, measure, maxWidth, references, theme, tagLibrary, loaders],
+    ),
   )
 
   const renderMath = useCallback((value: string) => lookup(mathFragmentKey(value)), [lookup])

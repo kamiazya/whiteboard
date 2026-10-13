@@ -19,6 +19,7 @@
  */
 import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
 import { getAppLogger } from './app-logger.js'
+import type { FragmentLoaders } from './fragment-requests.js'
 
 const log = getAppLogger('markdown-fragments')
 
@@ -99,16 +100,6 @@ function exAttrToPx(svg: string, attr: 'width' | 'height'): number | undefined {
   const ex = match?.[1] !== undefined ? Number(match[1]) : Number.NaN
   return Number.isFinite(ex) ? ex * MATHJAX_EX_TO_PX : undefined
 }
-
-/**
- * The cache key of a rendered math block and of a rendered fence. Both
- * places that answer the synchronous seams from an async cache — the
- * preview and the export — key through these, so a fragment one of them
- * asks for is the fragment the other would serve. The kind prefix keeps a
- * `$$` block and a same-source ```math fence in separate rows.
- */
-export const mathFragmentKey = (value: string): string => `math:${value}`
-export const fenceFragmentKey = (lang: string, value: string): string => `fence:${lang}:${value}`
 
 /** Typesets one display-math block; inline math is drawn as source by the layout. */
 export async function renderMathFragment(value: string): Promise<RenderedSvgFragment | undefined> {
@@ -199,4 +190,10 @@ export async function renderDiagramFragment(
     log.warn('mermaid rendering failed; keeping the plain code block', { err })
     return undefined
   }
+}
+
+/** Both engines, as every surface that typesets is handed them. */
+export const FRAGMENT_ENGINES: FragmentLoaders = {
+  math: renderMathFragment,
+  diagram: renderDiagramFragment,
 }

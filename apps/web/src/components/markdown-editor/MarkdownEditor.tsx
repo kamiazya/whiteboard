@@ -18,8 +18,9 @@ import {
   useRef,
   useState,
 } from 'react'
-import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
+import { useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
+import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
@@ -353,13 +354,6 @@ export function MarkdownEditor({
     [annotationExtension, completionExtension, passageProposals.extension, sourceExtensions],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
-  // Watches the DEBOUNCED value: fragment sources only exist once the
-  // preview would draw them, and rendering per raw keystroke would race
-  // the engines for intermediate sources nobody will see.
-  const { renderMath, renderDiagram } = useMarkdownFragments({
-    body: debouncedValue,
-    ...(fragmentLoaders !== undefined ? { loaders: fragmentLoaders } : {}),
-  })
 
   // A resolved wikiLink's anchor carries a bare canvas id as its href —
   // meaningless as a URL, meaningful to the host. Intercept exactly those;
@@ -490,6 +484,12 @@ export function MarkdownEditor({
     maxWidth,
     splitRatio,
     hasContent: debouncedValue.trim() !== '',
+  })
+  // The DEBOUNCED value: per keystroke would race the engines for sources nobody sees.
+  const { renderMath, renderDiagram } = useMarkdownFragments({
+    body: debouncedValue,
+    layout: { measure: resolvedMeasure, maxWidth: previewWidth, theme, references, tagLibrary },
+    ...(fragmentLoaders !== undefined ? { loaders: fragmentLoaders } : {}),
   })
 
   const divider = useSplitDrag(rootRef, setSplitRatio)
