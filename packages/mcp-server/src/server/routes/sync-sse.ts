@@ -163,7 +163,7 @@ function markReady(stream: SyncStream, doc: { key: string; as: string }): void {
   // Replay the latest viewport request so a stream that connected after
   // the request was issued still inherits the same fit/scroll/zoom intent.
   const cached = cachedViewportRequest(doc.key)
-  if (cached !== undefined) stream.send('message', JSON.stringify({ doc: doc.as, raw: cached }))
+  if (cached !== undefined) stream.send({ event: 'message', data: { doc: doc.as, raw: cached } })
 }
 
 const SYNC_BODY: ReadJsonBodyOptions = { voice: 'code', refuseShape: invalidRequestBody }
@@ -265,8 +265,8 @@ export function createSyncSseRouter(options: SyncSseRouterOptions) {
     return streamSSE(c, async (stream) => {
       const entry: SyncStream = {
         docs: new Map(),
-        send: (event, data) => {
-          void stream.writeSSE({ event, data })
+        send: ({ event, data }) => {
+          void stream.writeSSE({ event, data: JSON.stringify(data) })
         },
         userId,
         end: () => stream.abort(),
