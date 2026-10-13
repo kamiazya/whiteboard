@@ -76,11 +76,26 @@ function reportRefreshFailure(deps: ReplicaRefreshDeps, err: unknown): void {
     daemonBaseUrl: deps.daemonBaseUrl,
     workspaceId: deps.workspaceId,
     name: errorName(err),
-    message: messageOf(err, String(err)),
+    message: describeThrown(err),
     ...(cause === undefined
       ? {}
-      : { causeName: errorName(cause), causeMessage: messageOf(cause, String(cause)) }),
+      : { causeName: errorName(cause), causeMessage: describeThrown(cause) }),
   })
+}
+
+/**
+ * What a thrown value says, for a log field. `String()` turns a plain object
+ * into `[object Object]`, which names nothing, so a non-Error object is
+ * written as its JSON — and as its type alone when it has none to give.
+ */
+function describeThrown(value: unknown): string {
+  if (value instanceof Error) return messageOf(value, String(value))
+  if (typeof value !== 'object' || value === null) return String(value)
+  try {
+    return JSON.stringify(value) ?? typeof value
+  } catch {
+    return typeof value
+  }
 }
 
 function reportNoPull(daemonBaseUrl: string, workspaceId: string, result: TransferFailure): void {
