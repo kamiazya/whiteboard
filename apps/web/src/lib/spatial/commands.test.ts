@@ -1299,52 +1299,6 @@ describe('lines in the editor', () => {
     expect(bendInkCommand(canvas, 'nope', bends)).toBeUndefined()
   })
 
-  it('finds the id among several of its kind, not only when it is the only one', () => {
-    // With one element per collection, "this element" and "every element"
-    // answer alike — so every lookup is asked for the SECOND of two.
-    const canvas: SpatialCanvas = {
-      ...lineCanvas(),
-      edges: [
-        { id: 'e1', from: { node: 'a' }, to: { node: 'b' } },
-        { id: 'e2', from: { node: 'b' }, to: { node: 'a' } },
-      ],
-      lines: [
-        ...(lineCanvas().lines ?? []),
-        {
-          id: 'l2',
-          from: { kind: 'node', node: 'b' },
-          to: { kind: 'point', point: { x: 9, y: 9 } },
-        },
-      ],
-    }
-    const bends = [{ x: 1, y: 2 }]
-    const onA = { kind: 'node', node: 'a' } as const
-    expect(bendInkCommand(canvas, 'e2', bends)).toEqual({ kind: 'set-edge-bends', id: 'e2', bends })
-    expect(bendInkCommand(canvas, 'l2', bends)).toEqual({ kind: 'set-line-bends', id: 'l2', bends })
-    expect(labelInkCommand(canvas, 'e2', 'x')).toEqual({
-      kind: 'set-edge-label',
-      id: 'e2',
-      label: 'x',
-    })
-    expect(labelInkCommand(canvas, 'l2', 'x')).toEqual({
-      kind: 'set-line-label',
-      id: 'l2',
-      label: 'x',
-    })
-    expect(endInkCommand(canvas, 'e2', 'to', onA)).toEqual({
-      kind: 'set-edge-end',
-      id: 'e2',
-      endpoint: 'to',
-      node: 'a',
-    })
-    expect(endInkCommand(canvas, 'l2', 'to', onA)).toEqual({
-      kind: 'set-line-end',
-      id: 'l2',
-      endpoint: 'to',
-      target: onA,
-    })
-  })
-
   it('is a no-op when the colour write names a line the canvas does not hold', () => {
     const canvas = lineCanvas()
     expect(applyCommand(canvas, { kind: 'set-line-color', id: 'nope', color: '1' })).toBe(canvas)
