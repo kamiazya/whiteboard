@@ -11,11 +11,11 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useState } from 'react'
+import { useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { createSpatialContentCache } from '../../lib/content-cache.js'
 import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
-import { useCanvasFragments } from './use-canvas-fragments.js'
 
 /**
  * The LOD gate (embed spec v2, user decision 2026-08-08): a file node
@@ -165,7 +165,7 @@ function useBodySeams(
   references: ReferenceSeams | undefined,
   fragmentLoaders: FragmentLoaders | undefined,
 ) {
-  const { seams, entries, onFragmentsAsked } = useCanvasFragments(fragmentLoaders)
+  const { seams, entries, onFragmentsAsked } = useMarkdownFragments(fragmentLoaders)
   const contentCache = useMemo(
     () => createSpatialContentCache(),
     [measure, theme, references, seams],

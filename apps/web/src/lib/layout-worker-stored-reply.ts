@@ -78,6 +78,17 @@ const storedReplySchema = z.discriminatedUnion('type', [
       /** Written as entries, because a Map does not survive JSON. */
       anchors: z.array(z.tuple([z.string(), z.unknown()])),
       fontsMissing: z.array(z.string()).optional(),
+      /** The math and diagram sources the layout asked for and was not given. */
+      fragmentsAsked: z
+        .array(
+          z.discriminatedUnion('kind', [
+            z.object({ kind: z.literal('math'), value: z.string() }),
+            z.object({ kind: z.literal('diagram'), lang: z.string(), value: z.string() }),
+          ]),
+        )
+        .optional(),
+      /** The document names another one that this render was drawn without. */
+      referencesOmitted: z.literal(true).optional(),
     })
     .loose(),
 ])
