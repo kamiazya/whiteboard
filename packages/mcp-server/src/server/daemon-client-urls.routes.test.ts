@@ -82,13 +82,17 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   })),
   documentFileApiUrl: [
     { label: 'file', method: 'GET', url: documentUrls.documentFileApiUrl(...doc, 'img1') },
+    { label: 'upload', method: 'PUT', url: documentUrls.documentFileApiUrl(...doc, 'img1') },
   ],
   workspaceDocumentApiUrl: WORKSPACE_DOCUMENT_API_ACTIONS.map((action) => ({
     label: action,
     method: WORKSPACE_DOCUMENT_ACTION_METHODS[action],
     url: documentUrls.workspaceDocumentApiUrl(WS, action),
   })),
-  workspacesApiUrl: [{ label: 'list', method: 'GET', url: daemonUrls.workspacesApiUrl() }],
+  workspacesApiUrl: [
+    { label: 'list', method: 'GET', url: daemonUrls.workspacesApiUrl() },
+    { label: 'create', method: 'POST', url: daemonUrls.workspacesApiUrl() },
+  ],
   workspaceApiUrl: [{ label: 'rename', method: 'PATCH', url: daemonUrls.workspaceApiUrl(WS) }],
   workspaceNamesApiUrl: [
     { label: 'names', method: 'GET', url: daemonUrls.workspaceNamesApiUrl(WS) },
@@ -136,6 +140,11 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   storageReportApiUrl: [{ label: 'report', method: 'GET', url: daemonUrls.storageReportApiUrl() }],
   runtimePingApiUrl: [{ label: 'ping', method: 'GET', url: daemonUrls.runtimePingApiUrl() }],
   replicaKeyApiUrl: [{ label: 'issue', method: 'POST', url: daemonUrls.replicaKeyApiUrl(WS) }],
+  replicaKeyRotateApiUrl: [
+    { label: 'rotate', method: 'POST', url: daemonUrls.replicaKeyRotateApiUrl(WS) },
+  ],
+  replicaTierApiUrl: [{ label: 'set', method: 'PUT', url: daemonUrls.replicaTierApiUrl(WS) }],
+  runtimeStatusApiUrl: [{ label: 'status', method: 'GET', url: daemonUrls.runtimeStatusApiUrl() }],
   documentsV1ApiUrl: [{ label: 'create', method: 'POST', url: daemonUrls.documentsV1ApiUrl(WS) }],
   documentBacklinksApiUrl: [
     { label: 'backlinks', method: 'GET', url: daemonUrls.documentBacklinksApiUrl(WS, 'doc1') },

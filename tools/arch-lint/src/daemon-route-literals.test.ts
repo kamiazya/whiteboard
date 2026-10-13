@@ -9,8 +9,9 @@
  * server's route for one leaves every client and server test green, because
  * the client's own tests assert the client's own literal.
  *
- * It reads shipped client code — `apps/web/src`, `apps/extension/src` and
- * `packages/daemon-client/src` — with comments removed, and fails on a string
+ * It reads shipped client code — `apps/web/src`, `apps/extension/src`,
+ * `packages/daemon-client/src`, and the CLI that talks to a running daemon
+ * (`packages/mcp-server/src/cli`) — with comments removed, and fails on a string
  * or template literal that writes an `/api/` or `/auth/` path: one that opens
  * on the quote, or follows an interpolation (`${base}/api/…`), which is how a
  * path prefixed with a daemon base URL is spelled.
@@ -25,7 +26,12 @@ import { REPO_ROOT } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 import { stripComments } from './strip-comments.js'
 
-const CLIENT_ROOTS = ['apps/web/src', 'apps/extension/src', 'packages/daemon-client/src']
+const CLIENT_ROOTS = [
+  'apps/web/src',
+  'apps/extension/src',
+  'packages/daemon-client/src',
+  'packages/mcp-server/src/cli',
+]
 
 /** Where a route is named, and so where a route literal belongs. */
 const HOMES: readonly string[] = [

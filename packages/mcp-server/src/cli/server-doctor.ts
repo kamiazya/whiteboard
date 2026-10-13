@@ -12,6 +12,7 @@
 // credentials ever appear in result fields.
 
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
+import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
 import { resolveServerModeExposure } from '../server/security/server-mode-exposure.js'
@@ -137,7 +138,7 @@ async function defaultFetchRuntimeStatus(
 ): Promise<{ ok: boolean; protected: boolean; leakDetected: boolean }> {
   const connectHost = resolveConnectHost(host)
   try {
-    const res = await fetch(`http://${connectHost}:${port}/api/runtime/status`, {
+    const res = await fetch(`http://${connectHost}:${port}${runtimeStatusApiUrl()}`, {
       signal: AbortSignal.timeout(2000),
     })
     // 401/403 means the endpoint is correctly protected by OAuth.
