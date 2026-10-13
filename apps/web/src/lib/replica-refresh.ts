@@ -69,11 +69,17 @@ export interface ReplicaRefreshDeps {
  * deps object, or a token: only what names the pull.
  */
 function reportRefreshFailure(deps: ReplicaRefreshDeps, err: unknown): void {
+  // A rejected fetch arrives as a `FetchFailedError` whose own message is the
+  // same sentence for every cause, so what actually failed is its `cause`.
+  const cause = err instanceof Error && err.cause !== undefined ? err.cause : undefined
   log.warn('replica refresh failed', {
     daemonBaseUrl: deps.daemonBaseUrl,
     workspaceId: deps.workspaceId,
     name: errorName(err),
     message: messageOf(err, String(err)),
+    ...(cause === undefined
+      ? {}
+      : { causeName: errorName(cause), causeMessage: messageOf(cause, String(cause)) }),
   })
 }
 

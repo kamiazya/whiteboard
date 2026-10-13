@@ -299,12 +299,13 @@ describe('scheduleReplicaRefresh', () => {
     expect(fields).toMatchObject({
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      name: 'Error',
-      message: 'network down',
+      name: 'FetchFailedError',
+      causeName: 'Error',
+      causeMessage: 'network down',
     })
   })
 
-  it('a pull that throws a non-Error value is still logged, with typeof standing in for its name', async () => {
+  it('a fetch that throws a non-Error value is still logged, with typeof standing in for its name', async () => {
     // The `instanceof Error` check's other branch — a thrown string, which
     // `fetch` never produces itself but any dependency it calls through
     // (JSON.parse, a rejected native promise) legitimately can.
@@ -318,8 +319,9 @@ describe('scheduleReplicaRefresh', () => {
     expect(fields).toMatchObject({
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      name: 'string',
-      message: 'network down',
+      name: 'FetchFailedError',
+      causeName: 'string',
+      causeMessage: 'network down',
     })
   })
 

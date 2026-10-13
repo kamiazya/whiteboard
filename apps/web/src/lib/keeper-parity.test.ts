@@ -212,10 +212,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'daemon-itself',
     why: "keeps this browser's cached copy of a daemon workspace fresh while that workspace is open — a browser-kept workspace has no cached copy to refresh",
   },
-  'src/lib/replica-unlock.ts': {
-    reach: 'daemon-itself',
-    why: "fetches a cached copy's key from the daemon and opens one remembered on disk — only a daemon-kept copy is sealed, so a browser-kept workspace has no key to fetch or open",
-  },
   'src/hooks/use-transfer-handshake.ts': {
     reach: 'daemon-itself',
     why: 'the receiving side of a cross-origin transfer into a workspace this daemon holds, through `accept-transferred-record.ts` — a browser keeper serves no address a transfer could arrive at, so there is no receiving side to mirror',
