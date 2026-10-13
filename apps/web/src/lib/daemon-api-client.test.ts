@@ -127,6 +127,26 @@ describe('listWorkspaces', () => {
     await expectLoggedFailure('/api/workspaces failed its contract at workspaces.0.workspaceId')
   })
 
+  it('rejects as an unreached daemon when an accepted listing is cut mid-body', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"workspaces":['))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const fetchFn = vi.fn().mockResolvedValue(new Response(cut, { status: 200 }))
+    await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toMatchObject({
+      name: 'FetchFailedError',
+    })
+  })
+
+  it('reads an accepted listing that is not JSON as contract drift, not as the network', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response('<html>', { status: 200 }))
+    const failure = await listWorkspaces(fetchFn, DAEMON_BASE_URL).catch((err: unknown) => err)
+    expect(failure).toBeInstanceOf(DaemonContractError)
+    await expectLoggedFailure('/api/workspaces failed its contract')
+  })
+
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
     await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toThrow(/not found/i)

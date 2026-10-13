@@ -70,6 +70,7 @@ import { daemonContractError } from './daemon-contract-error.js'
 // lives in its own module so a SharedWorker can use it without this file's
 // schema graph.
 import { createDaemonFetch } from './daemon-fetch.js'
+import { reach } from './keeper-transfer-failure.js'
 
 export { createDaemonFetch }
 
@@ -106,10 +107,19 @@ async function fetchAndParse<T>(
     const { message, body } = await parseProblemDetails(res)
     throw new DaemonApiError(message, res.status, body)
   }
-  const json = await res.json()
-  const parsed = schema.safeParse(json)
+  // A body cut mid-stream is the network's failure; one that arrived and is
+  // not JSON is the daemon's, so it reaches the schema and reads as drift.
+  const parsed = schema.safeParse(parseJsonOrUndefined(await reach(res.text())))
   if (!parsed.success) throw daemonContractError(url, parsed.error)
   return parsed.data
+}
+
+function parseJsonOrUndefined(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
 export function listWorkspaces(
