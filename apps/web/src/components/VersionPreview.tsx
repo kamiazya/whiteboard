@@ -4,11 +4,13 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Focus } from 'lucide-react'
 import { type JSX, useMemo } from 'react'
 import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
+import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { PreviewPane } from './markdown-editor/PreviewPane.js'
+import { useCanvasFragments } from './spatial-editor/use-canvas-fragments.js'
 import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewport.js'
 
 /**
@@ -42,6 +44,7 @@ export function VersionPreview({
   theme = 'light',
   maxWidth = 720,
   tags,
+  fragmentLoaders,
 }: {
   readonly past: PastDocument
   readonly theme?: ResolvedTheme
@@ -52,8 +55,13 @@ export function VersionPreview({
    * legended while it was current must not read as grey when looked back on.
    */
   readonly tags?: Pick<TagVocabulary, 'library'>
+  /** Injection seam for tests; defaults to the real MathJax/mermaid loaders. */
+  readonly fragmentLoaders?: FragmentLoaders
 }): JSX.Element {
   const measure = useMemo(() => createBrowserMeasureText(), [])
+  // Typeset as the editor typesets: a formula drawn as source here would
+  // read as a change in what the version holds.
+  const { seams } = useCanvasFragments(fragmentLoaders)
   // The viewer lays out what it is given and knows no library; colour by
   // intent is applied to the canvas, as the layout itself applies it, so the
   // legend (derived from the tags and colours the canvas carries) follows.
@@ -67,11 +75,17 @@ export function VersionPreview({
   if (past.kind === 'markdown') {
     return (
       <div data-testid="document-preview" className="h-full min-h-0 overflow-auto">
-        <PreviewPane value={past.body} maxWidth={maxWidth} measure={measure} theme={theme} />
+        <PreviewPane
+          value={past.body}
+          maxWidth={maxWidth}
+          measure={measure}
+          theme={theme}
+          {...seams}
+        />
       </div>
     )
   }
-  return <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} />
+  return <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} seams={seams} />
 }
 
 /**
@@ -82,10 +96,12 @@ function PastCanvasPreview({
   canvas,
   theme,
   measure,
+  seams,
 }: {
   readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
   readonly measure: MeasureText
+  readonly seams: FragmentSeams
 }): JSX.Element {
   const { viewport, moved, reset, rootRef, surfaceHandlers } = usePreviewViewport()
   return (
@@ -118,6 +134,7 @@ function PastCanvasPreview({
           measure={measure}
           theme={theme}
           label="A past state of this document"
+          {...seams}
         />
       </div>
       {/* The dock's own view control, said the dock's way: a glyph labelled

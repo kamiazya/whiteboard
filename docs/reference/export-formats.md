@@ -18,13 +18,15 @@ an explicitly lossy projection rather than a way to read the stored content
 daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
 its TeX source as text, and a `` ```mermaid `` fence as a plain code
 block. Inline `$…$` math is drawn as its source text everywhere, the web app
-included. In the web app, the note preview, the canvas editor and the SVG/PNG
-exports of either kind (see [Web app exports](#web-app-exports)) typeset math
-blocks and draw Mermaid diagrams — in the document's own text, in a note or
-board it embeds with `![[…]]`, and in the note a canvas file node shows. On
-screen a block shows its source until its engine has rendered it; an export
-waits for every one. The thumbnails and previews in the web app's document
-list draw them as source.
+included. In the web app, the note preview, the canvas editor, a past version
+opened from version history, and the SVG/PNG exports of either kind (see
+[Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
+diagrams — in the document's own text, in a note or board it embeds with
+`![[…]]`, and in the note a canvas file node shows. A past version resolves no
+embed, so there only the version's own text is typeset. On screen a block
+shows its source until its engine has rendered it; an export waits for every
+one. The thumbnails and previews in the web app's document list draw them as
+source.
 
 A document created before formats were recorded has no answer here and is
 refused rather than guessed at; writing its content through a `document.set` op
