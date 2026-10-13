@@ -105,6 +105,17 @@ function nextStdoutLine(proc: ChildProcessWithoutNullStreams): Promise<string> {
   })
 }
 
+/** Every stdout line the proxy writes, once it has exited. Attach before writing to stdin. */
+function stdoutLinesUntilExit(proc: ChildProcessWithoutNullStreams): Promise<string[]> {
+  let out = ''
+  proc.stdout.on('data', (chunk: Buffer) => {
+    out += chunk.toString()
+  })
+  return new Promise((resolveLines) =>
+    proc.once('close', () => resolveLines(out.split('\n').filter((line) => line !== ''))),
+  )
+}
+
 afterEach(async () => {
   if (child) {
     child.kill('SIGTERM')
@@ -219,6 +230,78 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     const first = JSON.parse(await nextStdoutLine(proc))
     expect(first.method).toBe('notifications/message')
     expect(first.params.data).toBe('early')
+  })
+
+  // stdout IS the JSON-RPC channel: a stray SSE line or a duplicated message
+  // corrupts what the client reads, and an SDK client tolerates unparseable
+  // lines, so only a test reading every line sees it. Every line is collected
+  // until the proxy drains and exits on stdin close, so nothing written after
+  // the relay can escape the assertion.
+  const streamNote = JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'notifications/message',
+    params: { level: 'info', data: 'early' },
+  })
+  const streamResult = JSON.stringify({ jsonrpc: '2.0', id: 6, result: { content: [] } })
+  const sse = (message: string) => `event: message\ndata: ${message}\n\n`
+
+  it('puts only the messages of an event stream that ends on stdout, once each', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.end(`${sse(streamNote)}${sse(streamResult)}`)
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(() => new Promise((r) => server.close(() => r(undefined))))
+
+    const proc = spawnProxy(dataDir)
+    const lines = stdoutLinesUntilExit(proc)
+    proc.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'x' } })}\n`,
+    )
+    proc.stdin.end()
+
+    const written = await lines
+    for (const line of written) expect(() => JSON.parse(line), line).not.toThrow()
+    expect(written).toEqual([streamNote, streamResult])
+  })
+
+  it('does not re-send a stream cut after its first message', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    let requests = 0
+    const open: Array<{ destroy: () => void }> = []
+    const server = createHttpServer((_req, res) => {
+      requests += 1
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write(sse(streamNote))
+      // A retry, if one comes, is cut at once so the proxy still drains and exits.
+      if (requests === 1) open.push(res)
+      else res.destroy()
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(
+      () =>
+        new Promise((r) => {
+          server.closeAllConnections()
+          server.close(() => r(undefined))
+        }),
+    )
+
+    // A short retry budget: a proxy that does retry the cut stream still exits.
+    const proc = spawnProxy(dataDir, { WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: '2000' })
+    const lines = stdoutLinesUntilExit(proc)
+    proc.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'x' } })}\n`,
+    )
+    // Cut only once the message has reached the client, so it is a cut AFTER output.
+    expect(JSON.parse(await nextStdoutLine(proc)).params.data).toBe('early')
+    for (const res of open.splice(0)) res.destroy()
+    proc.stdin.end()
+
+    const written = await lines
+    expect(requests).toBe(1)
+    expect(written.filter((line) => line.includes('early'))).toHaveLength(1)
+    expect(JSON.parse(written.at(-1) ?? '{}')).toMatchObject({ id: 7, error: { code: -32000 } })
   })
 
   it('exits cleanly when stdin closes', async () => {
