@@ -94,7 +94,7 @@ it('on hearing the move, lists a workspace still kept here and says why', async 
   expect(screen.queryByRole('alert')).toBeNull()
   // Still there once the tab has landed: the notice explains the switch the
   // person is now looking at, so landing must not be what clears it.
-  expect(screen.queryByTestId('workspace-moved-notice')).not.toBeNull()
+  expect(screen.getByTestId('workspace-moved-notice')).toBeInTheDocument()
 })
 
 it('drops the notice once the person switches to another workspace', async () => {
