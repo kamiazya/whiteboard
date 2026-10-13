@@ -173,6 +173,28 @@ describe('useMarkdownFragments', () => {
     expect(l.diagram).toHaveBeenCalledWith('mermaid', 'graph TD; C-->D')
   })
 
+  it("asks for an embedded note's math once its reference loads after the first layout", async () => {
+    // A surface's reference bundle is rebuilt as each load lands, so the
+    // first layout always sees the embed unresolved; the later layout's asks
+    // must still reach the loader after earlier asks are already recorded.
+    const l = loaders()
+    const body = `$$\nx^2\n$$\n\n![[${TARGET_ID}]]\n`
+    const { result, rerender } = renderHook(
+      ({ references }: { references?: ReferenceSeams }) =>
+        useLaidOutFragments({ body, loaders: l, ...(references ? { references } : {}) }),
+      { initialProps: {} as { references?: ReferenceSeams } },
+    )
+    await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
+    expect(l.math).not.toHaveBeenCalledWith('y^2')
+
+    rerender({
+      references: referenceSeams(new Map([[TARGET_ID, { name: 'T', body: '$$\ny^2\n$$\n' }]])),
+    })
+    await waitFor(() => expect(result.current.renderMath('y^2')).toBeDefined())
+    expect(l.math).toHaveBeenCalledWith('y^2')
+    expect(l.math).toHaveBeenCalledTimes(2)
+  })
+
   it('offers nothing for an unparseable mid-edit body', async () => {
     const l = loaders()
     renderHook(() => useLaidOutFragments({ body: '$$\nx^2', loaders: l }))
