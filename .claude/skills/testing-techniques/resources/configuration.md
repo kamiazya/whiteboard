@@ -250,7 +250,12 @@ error message (use `/^$/` for an empty one), and `vi.useFakeTimers()` fakes `Tem
 the v8 provider (**no effect here** — see the refuted list below); `coverage.thresholds.perFile` accepts objects and glob thresholds no longer
 inherit the top-level `perFile`; include/exclude match relative project paths precisely (a
 bare `'src'` no longer matches unintended paths; `contains` is removed); istanbul moved to
-`@vitest/istanbuljs`. `pnpm test:coverage` is mcp-server's v8 run.
+`@vitest/istanbuljs`. The repo's coverage lane is `pnpm coverage` (`tools/checks/src/run-coverage.mjs`):
+every non-browser project but `mcp-smoke` in one v8 run, configured in the ROOT `vitest.config.ts`
+only, writing `tmp/coverage/lcov.info` for SonarQube. For one project, run
+`pnpm exec vitest run --coverage --project <name>` from the root, which reads the same block. A
+`coverage` block in a config that a `projects` array lists is ignored — `docs/contributing/testing.md`
+has the measurement.
 
 ## Measured and refuted
 
@@ -285,7 +290,7 @@ output volume, not a capability. Leave it at the default; the tree that makes a
 
 ### `coverage.autoAttachSubprocess` — no-op for this repo's coverage lane
 
-`pnpm test:coverage` is `vitest run --coverage --project mcp-node`, and every subprocess call
+`pnpm coverage` measures `mcp-node`, and every subprocess call
 site in that project takes an INJECTED spawn (`backup-subprocess.test.ts` hands
 `runBackupInSubprocess` a fake `spawnBackup` that emits on a stub child). No real child
 process runs, so there is nothing to attach to. The project that does spawn real children,
