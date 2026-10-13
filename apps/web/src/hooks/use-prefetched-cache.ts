@@ -37,7 +37,7 @@
  * completion for the component's whole life — dev-only, and invisible in a
  * production build.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * What a request asks for when its rejections are worth re-asking: three
@@ -117,23 +117,4 @@ export function usePrefetchedEntries<V>(
   }, [cache, collect])
 
   return cache
-}
-
-/**
- * @param collect What this render needs, given everything already loaded.
- *   The `loaded` argument is what makes a TRANSITIVE closure possible (an
- *   embedded body referencing further documents); a consumer with no such
- *   closure ignores it. Called inside the effect, so it must be stable —
- *   wrap it in `useCallback` over the inputs it reads.
- * @returns The synchronous seam: a key that has not loaded, failed, or
- *   resolved to nothing all answer `undefined`, which is what every
- *   canvas-render seam treats as "keep the documented fallback".
- */
-export function usePrefetchedCache<V>(
-  collect: (loaded: readonly V[]) => readonly PrefetchRequest<V>[],
-): (key: string) => V | undefined {
-  const cache = usePrefetchedEntries<V>(
-    useCallback((loaded) => collect([...loaded.values()]), [collect]),
-  )
-  return useCallback((key: string) => cache.get(key) ?? undefined, [cache])
 }

@@ -22,7 +22,7 @@ function useLaidOutFragments({
   loaders: FragmentLoaders
   references?: ReferenceSeams
 }): FragmentSeams {
-  const seams = useMarkdownFragments(loaders)
+  const { seams } = useMarkdownFragments(loaders)
   layoutMarkdownScene(body, { ...LAYOUT, ...(references ? { references } : {}), ...seams })
   return seams
 }

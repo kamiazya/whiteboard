@@ -1,16 +1,15 @@
-import { type MeasureText, withDeclaredColours } from '@kamiazya/whiteboard-canvas-render'
+import { withDeclaredColours } from '@kamiazya/whiteboard-canvas-render'
 import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Focus } from 'lucide-react'
-import { type JSX, useMemo } from 'react'
+import { type ComponentProps, type JSX, useMemo } from 'react'
+import { useMarkdownFragments } from '../hooks/use-markdown-fragments.js'
 import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
-import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js'
+import type { FragmentLoaders } from '../lib/fragment-requests.js'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { PreviewPane } from './markdown-editor/PreviewPane.js'
-import { useCanvasFragments } from './spatial-editor/use-canvas-fragments.js'
 import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewport.js'
 
 /**
@@ -61,7 +60,7 @@ export function VersionPreview({
   const measure = useMemo(() => createBrowserMeasureText(), [])
   // Typeset as the editor typesets: a formula drawn as source here would
   // read as a change in what the version holds.
-  const { seams } = useCanvasFragments(fragmentLoaders)
+  const { seams } = useMarkdownFragments(fragmentLoaders)
   // The viewer lays out what it is given and knows no library; colour by
   // intent is applied to the canvas, as the layout itself applies it, so the
   // legend (derived from the tags and colours the canvas carries) follows.
@@ -85,7 +84,7 @@ export function VersionPreview({
       </div>
     )
   }
-  return <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} seams={seams} />
+  return <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} {...seams} />
 }
 
 /**
@@ -93,16 +92,12 @@ export function VersionPreview({
  * behind the kind branch above.
  */
 function PastCanvasPreview({
-  canvas,
   theme,
-  measure,
-  seams,
-}: {
-  readonly canvas: SpatialCanvas
-  readonly theme: ResolvedTheme
-  readonly measure: MeasureText
-  readonly seams: FragmentSeams
-}): JSX.Element {
+  ...drawn
+}: { readonly theme: ResolvedTheme } & Pick<
+  ComponentProps<typeof CanvasViewer>,
+  'canvas' | 'measure' | 'renderMath' | 'renderDiagram'
+>): JSX.Element {
   const { viewport, moved, reset, rootRef, surfaceHandlers } = usePreviewViewport()
   return (
     <div
@@ -129,13 +124,7 @@ function PastCanvasPreview({
           fill: editorTextFill(theme),
         }}
       >
-        <CanvasViewer
-          canvas={canvas}
-          measure={measure}
-          theme={theme}
-          label="A past state of this document"
-          {...seams}
-        />
+        <CanvasViewer {...drawn} theme={theme} label="A past state of this document" />
       </div>
       {/* The dock's own view control, said the dock's way: a glyph labelled
           "Zoom to fit", no words drawn. This was a text button reading

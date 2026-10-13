@@ -1,17 +1,81 @@
 /**
- * A note's math blocks and diagram fences, typeset — the same hook the
- * canvas editor uses, because the question is the same: which sources does
- * THIS layout ask for. The seams record every source they cannot answer yet,
- * so the preview's own layout is the one that learns the asks (an embedded
- * note's and an embedded board's included), and a surface that lays nothing
- * out — the editor's Write mode — asks for nothing and loads no engine.
+ * Math blocks and diagram fences, typeset — for every surface that lays a
+ * body out: the note preview, the canvas editor, version history.
+ *
+ * The layout's fragment seams are synchronous and the engines are not, and a
+ * surface cannot say up front which sources it holds: a note's own blocks, an
+ * embedded note's, a canvas text node's body, a file node's note and a board
+ * embedded in any of them all ask through the same seams. So the asks are
+ * learnt FROM the layout — the seams handed out here record every source they
+ * could not answer, the layout worker reports its own the same way — and each
+ * is rendered once; when it lands the seams change identity, which is what
+ * lays the surface out again. A surface that lays nothing out (the note
+ * editor's Write mode) therefore asks for nothing and loads no engine.
+ *
+ * A render that fails is terminal: asking again would fail the same way on
+ * every layout.
  */
 
-import { useCanvasFragments } from '../components/spatial-editor/use-canvas-fragments.js'
-import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js'
+import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
+import { useCallback, useMemo, useState } from 'react'
+import {
+  type FragmentAsk,
+  type FragmentEntry,
+  type FragmentLoaders,
+  type FragmentSeams,
+  fragmentAskKey,
+  loadFragment,
+  recordingFragmentSeams,
+} from '../lib/fragment-requests.js'
 import { FRAGMENT_ENGINES } from '../lib/markdown-fragment-renderers.js'
+import { usePrefetchedEntries } from './use-prefetched-cache.js'
+
+export interface MarkdownFragments {
+  /** The seams every synchronous layout of this surface takes. */
+  readonly seams: FragmentSeams
+  /** What has rendered, as plain data for the layout worker. */
+  readonly entries: readonly FragmentEntry[]
+  /** Sources a layout asked for that `entries` could not answer. */
+  readonly onFragmentsAsked: (asks: readonly FragmentAsk[]) => void
+}
 
 /** @param loaders Injection seam for tests; defaults to the real MathJax/mermaid loaders. */
-export function useMarkdownFragments(loaders: FragmentLoaders = FRAGMENT_ENGINES): FragmentSeams {
-  return useCanvasFragments(loaders).seams
+export function useMarkdownFragments(
+  loaders: FragmentLoaders = FRAGMENT_ENGINES,
+): MarkdownFragments {
+  const [asked, setAsked] = useState<ReadonlyMap<string, FragmentAsk>>(new Map())
+  const cache = usePrefetchedEntries<RenderedSvgFragment>(
+    useCallback(
+      () => [...asked].map(([key, ask]) => ({ key, load: () => loadFragment(ask, loaders) })),
+      [asked, loaders],
+    ),
+  )
+  const onFragmentsAsked = useCallback((asks: readonly FragmentAsk[]) => {
+    setAsked((prev) => {
+      const fresh = asks.filter((ask) => !prev.has(fragmentAskKey(ask)))
+      if (fresh.length === 0) return prev
+      return new Map([...prev, ...fresh.map((ask) => [fragmentAskKey(ask), ask] as const)])
+    })
+  }, [])
+
+  const seams = useMemo(
+    () =>
+      recordingFragmentSeams(
+        (key) => cache.get(key) ?? undefined,
+        (ask, key) => {
+          // A synchronous layout runs during render, where state cannot be
+          // set, so the miss is reported once the render is over.
+          if (!cache.has(key)) queueMicrotask(() => onFragmentsAsked([ask]))
+        },
+      ),
+    [cache, onFragmentsAsked],
+  )
+  const entries = useMemo(
+    () =>
+      [...cache].flatMap(([key, fragment]): FragmentEntry[] =>
+        fragment === null ? [] : [[key, fragment]],
+      ),
+    [cache],
+  )
+  return { seams, entries, onFragmentsAsked }
 }

@@ -487,7 +487,7 @@ export function MarkdownEditor({
   })
   // The preview's own layout asks through these, so Write mode — no preview —
   // asks for nothing.
-  const { renderMath, renderDiagram } = useMarkdownFragments(fragmentLoaders)
+  const { renderMath, renderDiagram } = useMarkdownFragments(fragmentLoaders).seams
 
   const divider = useSplitDrag(rootRef, setSplitRatio)
 

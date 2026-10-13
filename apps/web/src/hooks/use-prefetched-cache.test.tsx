@@ -10,8 +10,19 @@ import { describe, expect, it } from 'vitest'
 import {
   type PrefetchRequest,
   TRANSIENT_LOAD_ATTEMPTS,
-  usePrefetchedCache,
+  usePrefetchedEntries,
 } from './use-prefetched-cache.js'
+
+/**
+ * The cache as a seam reads it: not loaded, failed and "nothing here" all
+ * answer `undefined`. `collect` must be stable, as the hook requires.
+ */
+function useLookup(collect: (loaded: readonly string[]) => readonly PrefetchRequest<string>[]) {
+  const cache = usePrefetchedEntries<string>(
+    useCallback((loaded) => collect([...loaded.values()]), [collect]),
+  )
+  return (key: string) => cache.get(key) ?? undefined
+}
 
 /** A loader whose completion the test controls, one gate per key. */
 function gatedLoader() {
@@ -37,11 +48,11 @@ function gatedLoader() {
   }
 }
 
-describe('usePrefetchedCache', () => {
+describe('usePrefetchedEntries', () => {
   it('answers undefined until the load lands, then the value', async () => {
     const loader = gatedLoader()
     const { result } = renderHook(() =>
-      usePrefetchedCache<string>(useCallback(() => [{ key: 'a', load: loader.load('a') }], [])),
+      useLookup(useCallback(() => [{ key: 'a', load: loader.load('a') }], [])),
     )
     expect(result.current('a')).toBeUndefined()
 
@@ -55,9 +66,7 @@ describe('usePrefetchedCache', () => {
     // absent re-fetches a dangling reference on every single render.
     const loader = gatedLoader()
     const { result, rerender } = renderHook(() =>
-      usePrefetchedCache<string>(
-        useCallback(() => [{ key: 'gone', load: loader.load('gone') }], []),
-      ),
+      useLookup(useCallback(() => [{ key: 'gone', load: loader.load('gone') }], [])),
     )
     await loader.settle('gone', undefined)
     await waitFor(() => expect(loader.calls).toEqual(['gone']))
@@ -74,7 +83,7 @@ describe('usePrefetchedCache', () => {
     // is waste on every keystroke.
     const calls: string[] = []
     const { result, rerender } = renderHook(() =>
-      usePrefetchedCache<string>(
+      useLookup(
         useCallback(
           () => [
             {
@@ -105,7 +114,7 @@ describe('usePrefetchedCache', () => {
     // because the throw was swallowed on the way here.
     const calls: string[] = []
     const { result } = renderHook(() =>
-      usePrefetchedCache<string>(
+      useLookup(
         useCallback(
           () => [
             {
@@ -130,7 +139,7 @@ describe('usePrefetchedCache', () => {
   it('stops asking a key that keeps rejecting, so a broken target is not a retry storm', async () => {
     const calls: string[] = []
     const { result, rerender } = renderHook(() =>
-      usePrefetchedCache<string>(
+      useLookup(
         useCallback(
           () => [
             {
@@ -167,7 +176,7 @@ describe('usePrefetchedCache', () => {
     const loader = gatedLoader()
     const { result, rerender } = renderHook(
       ({ nonce }: { nonce: number }) =>
-        usePrefetchedCache<string>(
+        useLookup(
           // `nonce` is the point: it re-identifies the callback the way an
           // edited body does, without changing what is collected.
           useCallback(() => [{ key: 'a', load: loader.load('a') }], [nonce]),
@@ -191,7 +200,7 @@ describe('usePrefetchedCache', () => {
       const keys = ['a', ...loaded.filter((value) => value.startsWith('->')).map((v) => v.slice(2))]
       return keys.map((key) => ({ key, load: loader.load(key) }))
     }
-    const { result } = renderHook(() => usePrefetchedCache<string>(useCallback(collect, [])))
+    const { result } = renderHook(() => useLookup(useCallback(collect, [])))
 
     await loader.settle('a', '->b')
     await waitFor(() => expect(loader.calls).toEqual(['a', 'b']))
