@@ -102,7 +102,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   'src/components/storage-maintenance.ts': {
     reach: 'both-keepers',
     browser: 'src/lib/persistent-storage.ts',
-    note: "the storage card's daemon half — its report read and its sweeps, which the card and Settings call: the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage",
+    note: "the storage card's daemon half — its sweeps: the daemon offers optimize-all over its own disk; the browser answers the same question through navigator.storage",
   },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',
@@ -141,6 +141,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the two DocumentFileAdapter bindings; the seams above them are keeper-agnostic',
   },
   'src/lib/daemon-files-source.ts': { reach: 'both-keepers', browser: BROWSER_FILES },
+  'src/lib/storage-report.ts': {
+    reach: 'both-keepers',
+    browser: 'src/lib/persistent-storage.ts',
+    note: 'the storage report the card and Settings read: the daemon reports its own disk; the browser answers the same question through navigator.storage',
+  },
   'src/lib/versions-backend.ts': { reach: 'both-keepers', browser: BROWSER_VERSIONS },
   'src/pages/DaemonDocumentPage.tsx': {
     reach: 'both-keepers',

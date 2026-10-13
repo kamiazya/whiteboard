@@ -33,7 +33,6 @@ import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspace
 import type { PersistStepState } from '../components/settings/SetupJourney.js'
 import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
 import { TransferToKeeperSection } from '../components/settings/TransferToKeeperSection.js'
-import { readStorageReport } from '../components/storage-maintenance.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -54,6 +53,7 @@ import {
   queryPersistentStorage,
   queryStorageEstimate,
 } from '../lib/persistent-storage.js'
+import { readStorageReport } from '../lib/storage-report.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
 export interface SettingsPageProps {
