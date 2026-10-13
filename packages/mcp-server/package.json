@@ -88,7 +88,6 @@
     "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs",
     "test": "vitest run",
     "test:all": "vitest run",
-    "test:coverage": "vitest run --coverage --project mcp-node",
     "test:node": "vitest run --project mcp-node",
     "test:smoke": "vitest run --project mcp-smoke",
     "test:distribution:only": "vitest run --config vitest.distribution.config.ts",

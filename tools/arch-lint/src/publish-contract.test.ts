@@ -39,10 +39,6 @@ describe('publish contract', () => {
   )
   const claudeMarketplace = readJson(resolve(REPO_ROOT, '.claude-plugin/marketplace.json'))
   const tsconfigServer = readJson(resolve(REPO_ROOT, 'packages/mcp-server/tsconfig.server.json'))
-  const vitestShared = readFileSync(
-    resolve(REPO_ROOT, 'packages/mcp-server/vitest.shared.ts'),
-    'utf-8',
-  )
   const rootReleaseConfig = readJson(resolve(REPO_ROOT, 'release-please-config.json'))
   const publishedMcpConfig = readJson(resolve(REPO_ROOT, '.mcp.json'))
   const claudePlugin = readJson(resolve(REPO_ROOT, '.claude-plugin/plugin.json'))
@@ -94,10 +90,6 @@ describe('publish contract', () => {
     })
     expect(mcpPackage.homepage).toBeTruthy()
     expect(mcpPackage.bugs?.url).toBeTruthy()
-    expect(rootPackage.scripts['test:coverage']).toBe(
-      'pnpm --filter @kamiazya/whiteboard-mcp test:coverage',
-    )
-    expect(mcpPackage.scripts['test:coverage']).toBe('vitest run --coverage --project mcp-node')
   })
 
   // The LICENSE file is not what a plugin user reads: the marketplace card and both
@@ -293,16 +285,5 @@ describe('publish contract', () => {
     expect(wireProtocolDoc).toContain('# Wire Protocol')
     expect(wireProtocolDoc).toContain('/api/sync/stream')
     expect(wireProtocolDoc).toContain('version_created')
-  })
-
-  it('configures shared Vitest coverage output for local inspection', () => {
-    expect(vitestShared).toContain("provider: 'v8'")
-    expect(vitestShared).toContain("reporter: ['text', 'html', 'lcov']")
-    expect(vitestShared).toContain("reportsDirectory: './tmp/coverage'")
-    expect(vitestShared).toContain("include: ['src/**/*.ts']")
-    expect(vitestShared).toContain("'**/*.test.*'")
-    expect(vitestShared).toContain("'**/*.smoke-impl.ts'")
-    expect(vitestShared).toContain("'**/*.distribution-impl.ts'")
-    expect(vitestShared).toContain("'dist/**'")
   })
 })

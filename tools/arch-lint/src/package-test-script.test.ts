@@ -80,13 +80,7 @@ function configsRunByScript(dir: string, script: string): string[] {
  * like the wrapper ledger: an entry must name a registered config the script
  * really does not run.
  */
-const SCRIPT_OMITS: Record<string, Omission> = {
-  'packages/canvas-render': {
-    configs: ['packages/canvas-render/vitest.browser.config.ts'],
-    reason:
-      'ci-policy.test.ts holds this script up as the package script that runs no browser project; that fixture moves first',
-  },
-}
+const SCRIPT_OMITS: Record<string, Omission> = {}
 
 const registered = new Map<string, string[]>()
 for (const { configPath } of readVitestProjects(REPO_ROOT)) {
