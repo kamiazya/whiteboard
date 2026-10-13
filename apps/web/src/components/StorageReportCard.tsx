@@ -13,7 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { formatBytes } from '../lib/format-bytes.js'
-import { readStorageReport, sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
+import { readStorageReport } from '../lib/storage-report.js'
+import { sweepWorkspaces, useMaintenanceRunner } from './storage-maintenance.js'
 import {
   type CategoryDescriptor,
   type RowAction,

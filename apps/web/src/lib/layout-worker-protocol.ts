@@ -41,6 +41,7 @@ import type {
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { FaviconRect } from './favicon.js'
+import type { FragmentAsk, FragmentEntry } from './fragment-requests.js'
 import type { ResolvedTheme } from './theme.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
@@ -102,6 +103,13 @@ export type LayoutRequest = LayoutSubject & {
    * ids and the worker's `expandFileNode` is a lookup.
    */
   readonly expandedFileIds?: readonly string[]
+  /**
+   * The math blocks and diagram fences the asking thread has rendered, by
+   * key — plain SVG strings, since the engines that make them stay on the
+   * thread that loaded them. A body asking for one not here keeps its
+   * fallback and is reported back as `fragmentsAsked`.
+   */
+  readonly fragments?: readonly FragmentEntry[]
   /** File refs the host resolved as dangling — the plain-data form of the
    * seam's `missing` field, precomputed against THIS canvas's file nodes
    * (a function cannot cross the wire; a small ref list can). */
@@ -331,6 +339,12 @@ export type LayoutResponse =
        * travels back rather than being acted on here.
        */
       readonly fontsMissing?: readonly string[]
+      /**
+       * Sources this layout asked a fragment seam for and `fragments` could
+       * not answer — reported for the reason `fontsMissing` is: only the
+       * asking thread can load the engines. Absent means nothing was missing.
+       */
+      readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | WorkerFailure
 

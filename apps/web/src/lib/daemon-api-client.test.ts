@@ -8,6 +8,7 @@ import {
   createWorkspace,
   deleteDocument,
   duplicateDocument,
+  fetchFontFile,
   getDocumentSnapshot,
   listDocuments,
   listWorkspaces,
@@ -183,6 +184,19 @@ describe('listWorkspaces', () => {
       body: undefined,
     })
   })
+
+  it('rejects as an unreached daemon when a refusal is cut mid-body, not as a refusal', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"error":'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const fetchFn = vi.fn().mockResolvedValue(new Response(cut, { status: 403 }))
+    await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toMatchObject({
+      name: 'FetchFailedError',
+    })
+  })
 })
 
 describe('listDocuments', () => {
@@ -345,6 +359,22 @@ describe('getDocumentSnapshot', () => {
       /not found/i,
     )
   })
+
+  it('rejects as an unreached daemon when the fetch or the byte read fails', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const rejected = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    const cutOff = vi.fn().mockResolvedValue(new Response(cut, { status: 200 }))
+    for (const fetchFn of [rejected, cutOff]) {
+      await expect(
+        getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main'),
+      ).rejects.toMatchObject({ name: 'FetchFailedError' })
+    }
+  })
 })
 
 describe('duplicateDocument', () => {
@@ -502,5 +532,14 @@ describe('renameWorkspace', () => {
     await expect(
       renameWorkspace(fetchFn, DAEMON_BASE_URL, 'w1', { segment: 'taken' }),
     ).rejects.toThrow(/already in use/i)
+  })
+})
+
+describe('fetchFontFile', () => {
+  it('rejects as an unreached daemon when the fetch itself rejects', async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    await expect(fetchFontFile(fetchFn, DAEMON_BASE_URL, 'font-1')).rejects.toMatchObject({
+      name: 'FetchFailedError',
+    })
   })
 })

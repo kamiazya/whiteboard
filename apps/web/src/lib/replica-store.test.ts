@@ -5,6 +5,7 @@
  * store-dump guard); this one pins the routing decision at the node layer.
  */
 import 'fake-indexeddb/auto'
+import { replicaKeyApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
@@ -12,6 +13,7 @@ import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { connectReplicaKeeper, markReplica, openDocumentStore } from './replica-store.js'
 
 const DB_NAME = 'whiteboard-replica-store-routing-test'
@@ -102,5 +104,22 @@ describe('openDocumentStore routing', () => {
     markReplica(workspaceId, DAEMON)
     await save({ kind: 'document', workspaceId, documentId: '01JD0ROUTINGTEST00000000001' })
     expect(await storedText()).toContain(MARKER)
+  })
+
+  // The holder maps drift to a withheld key of its own and never throws it, so
+  // the composition root's report is the one place the route and the field
+  // that disagreed are recorded.
+  it('reports a drifted key answer to the app logger, and seals nothing under it', async () => {
+    connectReplicaKeeper({
+      baseUrl: DAEMON,
+      fetch: (async () => jsonResponse({ workspaceKey: 7, tier: 'offline' })) as typeof fetch,
+    })
+    const workspaceId = freshWorkspaceId()
+    markReplica(workspaceId, DAEMON)
+
+    await expect(save({ kind: 'workspace-tree', workspaceId })).rejects.toThrow()
+
+    await expectLoggedFailure(`${replicaKeyApiUrl(workspaceId)} failed its contract`)
+    expect(await storedText()).not.toContain(MARKER)
   })
 })

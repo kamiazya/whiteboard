@@ -62,6 +62,10 @@
       "types": "./src/api-contracts/sync-write-refusal.ts",
       "import": "./src/api-contracts/sync-write-refusal.ts"
     },
+    "./api-contracts/read-body": {
+      "types": "./src/api-contracts/read-body.ts",
+      "import": "./src/api-contracts/read-body.ts"
+    },
     "./api-contracts/refusal-reason": {
       "types": "./src/api-contracts/refusal-reason.ts",
       "import": "./src/api-contracts/refusal-reason.ts"

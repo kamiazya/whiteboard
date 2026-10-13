@@ -40,9 +40,11 @@ abandoned polls do not pile up behind the next test.
   / `render`, so the action double-fires under load and the failure blames the assertion.
   Fire outside, assert inside. Lint rejects it (the `waitFor` side-effect rule).
 - Testing Library's `findBy*` / `waitFor` budget is 1000ms by default — a fast-machine number
-  and far tighter than any per-test timeout. `apps/web`'s browser setup raises it to 5s
-  (`configure({ asyncUtilTimeout })` in `src/test-utils/browser-setup.ts`); ten tests had
-  worked around it locally before that, which is the smell of a default set too low.
+  and far tighter than any per-test timeout. `apps/web` raises it to 5s in BOTH projects
+  (`configure({ asyncUtilTimeout })` in `src/test-utils/browser-setup.ts` and in
+  `vitest.setup.ts`, held by `test-utils/async-util-timeout.test.ts`); ten browser tests had
+  worked around it locally first, which is the smell of a default set too low. The jsdom half
+  followed when a loaded full run failed 4 tests in 3 files at 1.3-1.7s, each passing alone.
 - A `React.lazy` page racing a `findBy*` charges the chunk's transform-and-load to that
   1000ms. `vi.mock` the page or import it statically in the test file;
   `App.lazy-coverage.test.ts` enforces it for `apps/web`'s pages because a count in a comment

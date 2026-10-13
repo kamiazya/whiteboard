@@ -45,6 +45,21 @@ function checkById<T extends { id: string }>(checks: readonly T[], id: string): 
   return found
 }
 
+/**
+ * A valid config, an empty injected env, a JWKS with keys and a writable
+ * data dir: each case overrides only the input it is about. A case that
+ * means to exercise a REAL default seam calls `runServerDoctor` directly.
+ */
+function doctor(overrides: Partial<Parameters<typeof runServerDoctor>[0]> = {}) {
+  return runServerDoctor({
+    flags: { ...VALID_FLAGS, dataDir },
+    env: {},
+    fetchJwks: async () => ({ ok: true, hasKeys: true }),
+    checkDataDir: () => 'ok',
+    ...overrides,
+  })
+}
+
 // Valid record shape for writeServerRecord helper
 function makeRecord(overrides: Record<string, unknown> = {}): unknown {
   return {
@@ -68,13 +83,9 @@ async function writeServerRecord(record: unknown) {
 describe('runServerDoctor', () => {
   it('valid config + all injectable seams ok → overall ok:true, status:ok', async () => {
     await writeServerRecord(makeRecord())
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => true,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
       fetchPing: async () => ({ ok: true, pidMatches: true }),
       fetchRuntimeStatus: async () => ({ ok: true, protected: false, leakDetected: false }),
@@ -98,8 +109,6 @@ describe('runServerDoctor', () => {
     // Result conforms to the shared Zod schema.
     expect(daemonDoctorResultSchema.parse(result)).toEqual(result)
   })
-
-  // ─── 2. Missing required config field ──────────────────────────────────────
 
   it('missing required config field → server.config error, ok:false, no raw values in output', async () => {
     const flags = { ...VALID_FLAGS, dataDir, externalUrl: undefined }
@@ -130,20 +139,14 @@ describe('runServerDoctor', () => {
     expect(stdout).not.toContain('https://')
   })
 
-  // ─── 3. Non-HTTPS JWKS URI → config error ──────────────────────────────────
-
   it('non-HTTPS JWKS URI → server.config error (caught at config parse)', async () => {
-    const { result, exitCode } = await runServerDoctor({
+    const { result, exitCode } = await doctor({
       flags: { ...VALID_FLAGS, dataDir, jwksUri: 'http://auth.example.com/.well-known/jwks.json' },
-      env: {},
-      checkDataDir: () => 'ok',
     })
     expect(exitCode).toBe(1)
     expect(checkById(result.checks, 'server.config').status).toBe('error')
     expect(checkById(result.checks, 'server.jwks').status).toBe('skipped')
   })
-
-  // ─── 4. Credentialed JWKS URI → config error ───────────────────────────────
 
   it('credentialed JWKS URI → server.config error (caught at config parse)', async () => {
     const { result, exitCode } = await runServerDoctor({
@@ -159,53 +162,31 @@ describe('runServerDoctor', () => {
     expect(checkById(result.checks, 'server.config').status).toBe('error')
   })
 
-  // ─── 5. Wildcard allowedOrigins → exposure error ───────────────────────────
-
   it('wildcard allowedOrigins → server.config error (wildcard rejected at config parse)', async () => {
-    const { result, exitCode } = await runServerDoctor({
+    const { result, exitCode } = await doctor({
       flags: { ...VALID_FLAGS, dataDir, allowedOrigins: '*' },
-      env: {},
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
     })
     expect(exitCode).toBe(1)
     // Wildcard is rejected by parseServerModeEnvConfig
     expect(checkById(result.checks, 'server.config').status).toBe('error')
   })
 
-  // ─── 6. JWKS fetch failure → server.jwks error ─────────────────────────────
-
   it('JWKS fetch failure → server.jwks error', async () => {
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       fetchJwks: async () => ({ ok: false, hasKeys: false }),
-      checkDataDir: () => 'ok',
     })
     expect(exitCode).toBe(1)
     expect(checkById(result.checks, 'server.config').status).toBe('ok')
     expect(checkById(result.checks, 'server.jwks').status).toBe('error')
   })
 
-  // ─── 7. JWKS fetch ok → server.jwks ok ────────────────────────────────────
-
   it('JWKS fetch ok → server.jwks ok', async () => {
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
-    })
+    const { result } = await doctor()
     expect(checkById(result.checks, 'server.jwks').status).toBe('ok')
   })
 
-  // ─── 8. Missing data dir ───────────────────────────────────────────────────
-
   it('missing data dir → server.data_dir error', async () => {
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+    const { result, exitCode } = await doctor({
       checkDataDir: () => 'not-exists',
     })
     expect(exitCode).toBe(1)
@@ -213,26 +194,16 @@ describe('runServerDoctor', () => {
   })
 
   it('non-writable data dir → server.data_dir error', async () => {
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+    const { result, exitCode } = await doctor({
       checkDataDir: () => 'not-writable',
     })
     expect(exitCode).toBe(1)
     expect(checkById(result.checks, 'server.data_dir').status).toBe('error')
   })
 
-  // ─── 9. Missing record → downstream checks skipped ────────────────────────
-
   it('missing record → server.record skipped, and dependent checks skipped', async () => {
     // No record file written — dataDir exists but record is absent
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
-    })
+    const { result } = await doctor()
     expect(checkById(result.checks, 'server.record').status).toBe('skipped')
     expect(checkById(result.checks, 'server.record_permissions').status).toBe('skipped')
     expect(checkById(result.checks, 'server.identity').status).toBe('skipped')
@@ -240,32 +211,19 @@ describe('runServerDoctor', () => {
     expect(checkById(result.checks, 'server.runtime_status').status).toBe('skipped')
   })
 
-  // ─── 10. Malformed record → warning ───────────────────────────────────────
-
   it('malformed record → server.record warning', async () => {
     await writeFile(join(dataDir, 'server-mode.json'), '{ not: valid json', { mode: 0o600 })
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
-    })
+    const { result } = await doctor()
     expect(checkById(result.checks, 'server.record').status).toBe('warning')
   })
-
-  // ─── 11. Broad record permissions ─────────────────────────────────────────
 
   // Windows never reads POSIX mode bits, so the check is skipped there by design.
   it.skipIf(process.platform === 'win32')(
     'broad record permissions → server.record_permissions warning (POSIX)',
     async () => {
       await writeServerRecord(makeRecord())
-      const { result } = await runServerDoctor({
-        flags: { ...VALID_FLAGS, dataDir },
-        env: {},
+      const { result } = await doctor({
         isPidAlive: () => false, // keep identity skipped to isolate permissions check
-        fetchJwks: async () => ({ ok: true, hasKeys: true }),
-        checkDataDir: () => 'ok',
         readRecordMode: () => 0o644,
       })
       expect(checkById(result.checks, 'server.record_permissions').status).toBe('warning')
@@ -277,28 +235,18 @@ describe('runServerDoctor', () => {
     // The actual Windows branch requires process.platform override, but we verify
     // the null path is also handled gracefully.
     await writeServerRecord(makeRecord())
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => false,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => null,
     })
     expect(checkById(result.checks, 'server.record_permissions').status).toBe('skipped')
   })
 
-  // ─── 12. PID alive but identity mismatch → warning, NO kill ───────────────
-
   it('pid alive but identity mismatch → server.identity warning, no kill', async () => {
     await writeServerRecord(makeRecord())
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => false,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
     })
     expect(checkById(result.checks, 'server.identity').status).toBe('warning')
@@ -310,7 +258,6 @@ describe('runServerDoctor', () => {
     expect(checkById(result.checks, 'server.runtime_status').status).toBe('skipped')
   })
 
-  // ─── 12b. Legacy record without instanceId → server.identity warning ──────
   // Exercises the real verifyDaemonIdentity (no override injected), same
   // pattern as the "legacy record" tests in server-status.test.ts /
   // server-stop.test.ts, since this is the one branch of the real default
@@ -318,30 +265,20 @@ describe('runServerDoctor', () => {
 
   it('legacy record without instanceId → server.identity warning via the real default verifyIdentity', async () => {
     await writeServerRecord(makeRecord({ instanceId: undefined }))
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => true,
       // No verifyIdentity override — exercises the real default, which must
       // refuse to confirm identity when instanceId is absent.
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
     })
     expect(checkById(result.checks, 'server.identity').status).toBe('warning')
     expect(checkById(result.checks, 'server.runtime_ping').status).toBe('skipped')
   })
 
-  // ─── 13. PID dead → server.identity skipped ───────────────────────────────
-
   it('pid dead → server.identity skipped (not error — server just not running)', async () => {
     await writeServerRecord(makeRecord())
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => false,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
     })
     expect(checkById(result.checks, 'server.identity').status).toBe('skipped')
@@ -349,17 +286,11 @@ describe('runServerDoctor', () => {
     expect(checkById(result.checks, 'server.runtime_status').status).toBe('skipped')
   })
 
-  // ─── 14. Runtime ping ok with pid match ───────────────────────────────────
-
   it('runtime ping ok with pid match → server.runtime_ping ok', async () => {
     await writeServerRecord(makeRecord())
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => true,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
       fetchPing: async () => ({ ok: true, pidMatches: true }),
       fetchRuntimeStatus: async () => ({ ok: true, protected: false, leakDetected: false }),
@@ -367,17 +298,11 @@ describe('runServerDoctor', () => {
     expect(checkById(result.checks, 'server.runtime_ping').status).toBe('ok')
   })
 
-  // ─── 15. Runtime ping pid mismatch → warning ──────────────────────────────
-
   it('runtime ping with pid mismatch → server.runtime_ping warning', async () => {
     await writeServerRecord(makeRecord())
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => true,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
       fetchPing: async () => ({ ok: true, pidMatches: false }),
       fetchRuntimeStatus: async () => ({ ok: true, protected: false, leakDetected: false }),
@@ -385,17 +310,11 @@ describe('runServerDoctor', () => {
     expect(checkById(result.checks, 'server.runtime_ping').status).toBe('warning')
   })
 
-  // ─── 16. Runtime status with leak → warning ───────────────────────────────
-
   it('runtime status with leak detected → server.runtime_status warning', async () => {
     await writeServerRecord(makeRecord())
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => true,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
       fetchPing: async () => ({ ok: true, pidMatches: true }),
       fetchRuntimeStatus: async () => ({ ok: true, protected: false, leakDetected: true }),
@@ -406,20 +325,14 @@ describe('runServerDoctor', () => {
     expect(exitCode).toBe(0)
   })
 
-  // ─── runtime_status: protected endpoint → ok (not error) ─────────────────
-
   it('runtime status endpoint returns 401/403 → server.runtime_status ok (properly protected)', async () => {
     // Regression: a correctly configured server-mode deployment protects
     // /api/runtime/status with OAuth. The unauthenticated doctor probe
     // must not report this as an error — the 401/403 IS the expected behavior.
     await writeServerRecord(makeRecord())
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => true,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
       fetchPing: async () => ({ ok: true, pidMatches: true }),
       fetchRuntimeStatus: async () => ({ ok: true, protected: true, leakDetected: false }),
@@ -428,8 +341,6 @@ describe('runServerDoctor', () => {
     expect(result.ok).toBe(true)
     expect(exitCode).toBe(0)
   })
-
-  // ─── 17. Non-leak guard ────────────────────────────────────────────────────
 
   it('result JSON never contains sensitive tokens, credentials, paths, or JWT prefixes', async () => {
     const SECRET = 'secret-token-XYZ-9999'
@@ -463,14 +374,9 @@ describe('runServerDoctor', () => {
     expect(serialized).not.toMatch(/\.ts:\d+/)
   })
 
-  // ─── 18. Aggregation invariant ────────────────────────────────────────────
-
   it('any error check → ok:false, exit 1', async () => {
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       fetchJwks: async () => ({ ok: false, hasKeys: false }), // causes server.jwks error
-      checkDataDir: () => 'ok',
     })
     expect(result.ok).toBe(false)
     expect(exitCode).toBe(1)
@@ -479,13 +385,9 @@ describe('runServerDoctor', () => {
 
   it('warning only (no error) → ok:true, status:warning, exit 0', async () => {
     await writeServerRecord(makeRecord())
-    const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result, exitCode } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => false, // warning: identity mismatch
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
     })
     expect(result.ok).toBe(true)
@@ -576,13 +478,9 @@ describe('the doctor reports every check it declares', () => {
 
   it('on a valid config, where each one really runs', async () => {
     await writeServerRecord(makeRecord())
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => true,
       verifyIdentity: async () => true,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode: () => 0o600,
       fetchPing: async () => ({ ok: true, pidMatches: true }),
       fetchRuntimeStatus: async () => ({ ok: true, protected: true, leakDetected: false }),
@@ -615,12 +513,8 @@ describe('the record-permissions check on Windows', () => {
     asPlatform('win32')
     const readRecordMode = vi.fn(() => 0o644)
 
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => false,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode,
     })
 
@@ -635,12 +529,8 @@ describe('the record-permissions check on Windows', () => {
     asPlatform('linux')
     const readRecordMode = vi.fn(() => 0o644)
 
-    const { result } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir },
-      env: {},
+    const { result } = await doctor({
       isPidAlive: () => false,
-      fetchJwks: async () => ({ ok: true, hasKeys: true }),
-      checkDataDir: () => 'ok',
       readRecordMode,
     })
 
@@ -743,5 +633,162 @@ describe('server doctor default seams', () => {
   it('a 500 from /api/runtime/status is an error', async () => {
     const c = await runtimeStatusCheckAgainst(500, 'boom')
     expect(c.status).toBe('error')
+  })
+})
+
+// ─── Paths every case above shares, so no case above can tell apart ─────────
+// Each case above passes a `dataDir` flag, an empty injected env, and a JWKS
+// seam answering either "unreachable" or "has keys". These pin the inputs
+// that choice hides: which env is read, which data dir is checked, the
+// reachable-but-empty JWKS, an exposure the config parser lets through, and
+// the real JWKS / data-dir / ping seams.
+
+describe('server doctor inputs the cases above hold fixed', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+  })
+
+  const quietSeams = {
+    isPidAlive: () => false,
+    readRecordMode: () => 0o600,
+  }
+
+  it('a reachable JWKS endpoint with no keys is an error, not ok', async () => {
+    const { result, exitCode } = await runServerDoctor({
+      ...quietSeams,
+      flags: { ...VALID_FLAGS, dataDir },
+      env: {},
+      fetchJwks: async () => ({ ok: true, hasKeys: false }),
+      checkDataDir: () => 'ok',
+    })
+    const c = checkById(result.checks, 'server.jwks')
+    expect(c.status).toBe('error')
+    expect(c.summary).toBe('JWKS endpoint returned no keys')
+    expect(exitCode).toBe(1)
+  })
+
+  it('a plain-http external URL passes config parse and fails the exposure check', async () => {
+    const { result } = await runServerDoctor({
+      ...quietSeams,
+      flags: { ...VALID_FLAGS, dataDir, externalUrl: 'http://whiteboard.example.com' },
+      env: {},
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir: () => 'ok',
+    })
+    expect(checkById(result.checks, 'server.config').status).toBe('ok')
+    const c = checkById(result.checks, 'server.exposure')
+    expect(c.status).toBe('error')
+    expect(c.summary).toBe('Server exposure plan is invalid')
+  })
+
+  it('reads the injected env, not the process env', async () => {
+    const injectedDir = join(dataDir, 'injected')
+    vi.stubEnv('WHITEBOARD_DATA_DIR', join(dataDir, 'from-process-env'))
+    const checkDataDir = vi.fn(() => 'ok' as const)
+    await runServerDoctor({
+      ...quietSeams,
+      flags: { ...VALID_FLAGS, dataDir: undefined },
+      env: { WHITEBOARD_DATA_DIR: injectedDir },
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir,
+    })
+    expect(checkDataDir).toHaveBeenCalledWith(injectedDir)
+  })
+
+  it('with no data dir configured, checks the default one', async () => {
+    const checkDataDir = vi.fn((_dir: string) => 'ok' as const)
+    const { result } = await runServerDoctor({
+      ...quietSeams,
+      flags: { ...VALID_FLAGS, dataDir: undefined },
+      env: {},
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir,
+    })
+    expect(checkDataDir).toHaveBeenCalledTimes(1)
+    const checked = checkDataDir.mock.calls[0]?.[0]
+    expect(typeof checked).toBe('string')
+    expect(checked?.endsWith('.whiteboard')).toBe(true)
+    expect(checkById(result.checks, 'server.data_dir').status).toBe('ok')
+  })
+
+  describe('the default JWKS fetch', () => {
+    async function jwksCheckWhenFetchAnswers(answer: () => Promise<unknown>) {
+      vi.stubGlobal('fetch', answer)
+      const { result } = await runServerDoctor({
+        ...quietSeams,
+        flags: { ...VALID_FLAGS, dataDir },
+        env: {},
+        checkDataDir: () => 'ok',
+      })
+      return checkById(result.checks, 'server.jwks')
+    }
+
+    it('a keys array with an entry is reachable and has keys', async () => {
+      const c = await jwksCheckWhenFetchAnswers(async () => ({
+        ok: true,
+        json: async () => ({ keys: [{ kty: 'RSA' }] }),
+      }))
+      expect(c.status).toBe('ok')
+    })
+
+    it('an empty keys array is "no keys"', async () => {
+      const c = await jwksCheckWhenFetchAnswers(async () => ({
+        ok: true,
+        json: async () => ({ keys: [] }),
+      }))
+      expect(c.summary).toBe('JWKS endpoint returned no keys')
+    })
+
+    it('a keys field that is not an array is "no keys"', async () => {
+      const c = await jwksCheckWhenFetchAnswers(async () => ({
+        ok: true,
+        json: async () => ({ keys: { kty: 'RSA' } }),
+      }))
+      expect(c.summary).toBe('JWKS endpoint returned no keys')
+    })
+
+    it('a non-ok response is "not reachable"', async () => {
+      const c = await jwksCheckWhenFetchAnswers(async () => ({
+        ok: false,
+        json: async () => ({ keys: [{ kty: 'RSA' }] }),
+      }))
+      expect(c.summary).toBe('JWKS endpoint is not reachable')
+    })
+
+    it('a fetch that throws is "not reachable"', async () => {
+      const c = await jwksCheckWhenFetchAnswers(async () => {
+        throw new TypeError('fetch failed')
+      })
+      expect(c.summary).toBe('JWKS endpoint is not reachable')
+    })
+  })
+
+  it('the default data-dir check reports a non-ENOENT failure as not writable', async () => {
+    // A path running through a regular file fails with ENOTDIR: a failure
+    // that is not "missing", and one root cannot bypass the way it bypasses
+    // a mode-bit denial.
+    const file = join(dataDir, 'a-file')
+    await writeFile(file, '')
+    const { result } = await runServerDoctor({
+      ...quietSeams,
+      flags: { ...VALID_FLAGS, dataDir: join(file, 'beneath') },
+      env: {},
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+    })
+    expect(checkById(result.checks, 'server.data_dir').summary).toBe(
+      'Data directory is not writable',
+    )
+  })
+
+  it('the default ping reports pidMatches:false when the instanceId differs', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'instance-b' }),
+    }))
+    await expect(defaultFetchPing('127.0.0.1', 3099, 'instance-a')).resolves.toEqual({
+      ok: true,
+      pidMatches: false,
+    })
   })
 })

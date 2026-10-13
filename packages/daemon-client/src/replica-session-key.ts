@@ -3,6 +3,7 @@ import type { z } from 'zod'
 import { replicaKeyApiUrl } from './api-contracts/daemon-urls.js'
 import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
+import { readJsonOrUndefined } from './api-contracts/read-body.js'
 import type { ReplicaKeyResponse, ReplicaTier } from './api-contracts/replica-key.js'
 import { replicaKeyResponseSchema } from './api-contracts/replica-key.js'
 import { deriveDocumentKey } from './read-plane.js'
@@ -24,18 +25,12 @@ import { deriveDocumentKey } from './read-plane.js'
 
 export interface ReplicaSource {
   fetch: typeof fetch
-  /** Where a 200 that fails its contract is reported; `requestReplicaKey`'s default when absent. */
-  reportDrift?: ReportReplicaKeyDrift
+  /** Where a 200 that fails its contract is reported — the composition root's logger. */
+  reportDrift: ReportReplicaKeyDrift
 }
 
 /** Reports a key answer that arrived and failed its contract, naming the route it came from. */
 export type ReportReplicaKeyDrift = (route: string, error: z.ZodError) => void
-
-// daemon-client cannot reach a composition root's logger; a root that has
-// one passes it in, and every other caller still leaves a record.
-const warnDrift: ReportReplicaKeyDrift = (route, error) => {
-  console.warn(`[whiteboard] response from ${route} failed its contract`, error.issues)
-}
 
 /**
  * The one reading of `POST .../replica-key`, for every caller that asks it.
@@ -56,18 +51,19 @@ export async function requestReplicaKey(
   fetchImpl: typeof fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  reportDrift: ReportReplicaKeyDrift = warnDrift,
+  reportDrift: ReportReplicaKeyDrift,
 ): Promise<ReplicaKeyRequestResult> {
   const route = replicaKeyApiUrl(workspaceId)
   let response: Response
-  let text: string
+  let body: unknown
   try {
     response = await fetchImpl(`${daemonBaseUrl}${route}`, { method: 'POST' })
-    text = await response.text()
+    // A body cut mid-read rejects here and answers `unreachable` by design:
+    // it is the network's silence, not an answer that drifted.
+    body = await readJsonOrUndefined(response)
   } catch {
     return { kind: 'unreachable' }
   }
-  const body = jsonOrUndefined(text)
 
   if (!response.ok) {
     const refusal = membershipRefusalSchema.safeParse(body)
@@ -79,16 +75,6 @@ export async function requestReplicaKey(
     return { kind: 'drifted' }
   }
   return { kind: 'key', response: parsed.data }
-}
-
-// An arrived body that is not JSON is drift, not silence: answered as
-// `undefined` so the contract's own parse fails and reports it.
-function jsonOrUndefined(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
 }
 
 export type SessionKeyResult =

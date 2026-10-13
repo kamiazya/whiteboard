@@ -5,11 +5,11 @@ function ExpandToggle({
   name,
   expanded,
   onToggle,
-}: {
+}: Readonly<{
   name: string
   expanded: boolean
   onToggle: () => void
-}) {
+}>) {
   return (
     <button
       type="button"
@@ -42,7 +42,13 @@ interface TreeItemShellProps {
   children: ReactNode
 }
 
-export function TreeItemShell({ name, label, hasChildren, row, children }: TreeItemShellProps) {
+export function TreeItemShell({
+  name,
+  label,
+  hasChildren,
+  row,
+  children,
+}: Readonly<TreeItemShellProps>) {
   const [expanded, setExpanded] = useState(true)
 
   return (

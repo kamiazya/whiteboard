@@ -20,12 +20,14 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import type { z } from 'zod'
 import { NewWorkspaceControl } from '../components/server-mode/NewWorkspaceControl.js'
 import { ServerModeShell, SignOutControl } from '../components/server-mode/ServerModeShell.js'
-import { buttonVariants } from '../components/ui/button.js'
+import { Button, buttonVariants } from '../components/ui/button.js'
 import { useShellWorkspaces } from '../hooks/use-shell-workspaces.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import { type WorkspaceRoute, workspacePath, workspaceRoutePath } from '../lib/app-routes.js'
-import { parseDaemonResponse } from '../lib/daemon-contract-error.js'
+import { DaemonContractError, readDaemonJson } from '../lib/daemon-contract-error.js'
 import { listMemberWorkspaces, type MemberWorkspace } from '../lib/member-workspaces.js'
 import { GENERIC_SIGN_IN_REFUSAL, SIGN_IN_REFUSAL_COPY } from '../lib/sign-in-refusal-copy.js'
 import { ReceiveTransferPage } from './ReceiveTransferPage.js'
@@ -38,27 +40,83 @@ interface ServerModeAppProps {
   fetchFn?: Fetch
 }
 
-type Providers = SignInProvidersResponse['providers']
+const log = getAppLogger('server-mode')
 
-function useProviders(fetchFn: Fetch): Providers | null {
-  const [providers, setProviders] = useState<Providers | null>(null)
+/**
+ * Reads one of the keeper's `/auth` answers, or `'unavailable'` when it could
+ * not be read. A refusal or a busy keeper's 5xx carries an error body, not the
+ * contract, so the status is checked before the body is parsed: otherwise every
+ * 503 would be reported as client/daemon drift.
+ */
+async function readAuth<T>(
+  fetchFn: Fetch,
+  route: string,
+  schema: z.ZodType<T>,
+  what: string,
+  absent?: T,
+): Promise<T | 'unavailable'> {
+  try {
+    const res = await fetchFn(route)
+    if (res.ok) return await readDaemonJson(route, res, schema)
+    if (res.status === 404 && absent !== undefined) return absent
+    log.warn(`could not read ${what}`, { route, status: res.status })
+  } catch (err) {
+    // Drift was already reported by the reader that built it.
+    if (!(err instanceof DaemonContractError)) log.warn(`could not read ${what}`, { route, err })
+  }
+  return 'unavailable'
+}
+
+/**
+ * One read, re-run by the returned `retry`; `undefined` while it is in flight.
+ * `read` must be stable across renders, or it re-reads on every one.
+ */
+function useRetryableRead<T>(read: () => Promise<T>): [T | undefined, () => void] {
+  const [result, setResult] = useState<{ value: T } | undefined>(undefined)
+  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     let live = true
-    void fetchFn(authProvidersUrl())
-      .then(async (res) =>
-        res.ok
-          ? parseDaemonResponse(authProvidersUrl(), signInProvidersResponseSchema, await res.json())
-          : null,
-      )
-      .catch(() => null)
-      .then((body) => {
-        if (live) setProviders(body?.providers ?? [])
-      })
+    setResult(undefined)
+    void read().then((value) => {
+      if (live) setResult({ value })
+    })
     return () => {
       live = false
     }
-  }, [fetchFn])
-  return providers
+  }, [read, attempt])
+  return [result?.value, useCallback(() => setAttempt((n) => n + 1), [])]
+}
+
+function Unavailable({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <>
+      <p role="alert" className="max-w-md text-center text-sm text-destructive">
+        {message}
+      </p>
+      <Button variant="outline" onClick={onRetry}>
+        Try again
+      </Button>
+    </>
+  )
+}
+
+type Providers = SignInProvidersResponse['providers']
+
+function useProviders(fetchFn: Fetch) {
+  const read = useCallback(
+    () =>
+      readAuth(
+        fetchFn,
+        authProvidersUrl(),
+        signInProvidersResponseSchema,
+        'the sign-in providers',
+        // A server with no provider configured mounts no sign-in routes, so
+        // this route is unknown to it: that is "none", not "unreachable".
+        { providers: [] },
+      ).then((body): Providers | 'unavailable' => (body === 'unavailable' ? body : body.providers)),
+    [fetchFn],
+  )
+  return useRetryableRead(read)
 }
 
 function refusalMessage(search: string): string | null {
@@ -83,7 +141,7 @@ function Page({ children }: { children: React.ReactNode }) {
 }
 
 function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: string }) {
-  const providers = useProviders(fetchFn)
+  const [providers, retry] = useProviders(fetchFn)
   const refusal = refusalMessage(useLocation().search)
   return (
     <Page>
@@ -95,22 +153,26 @@ function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: stri
           {refusal}
         </p>
       )}
-      {providers !== null && providers.length === 0 && (
+      {providers === 'unavailable' && (
+        <Unavailable message="Could not load the ways to sign in." onRetry={retry} />
+      )}
+      {providers !== undefined && providers.length === 0 && (
         <p className="max-w-md text-center text-sm text-muted-foreground">
           This server has no sign-in provider configured. Ask the person who runs it.
         </p>
       )}
       <ul className="flex w-full max-w-xs flex-col gap-2">
-        {providers?.map((provider) => (
-          <li key={provider.id}>
-            <a
-              href={signInHref(provider.id, invitation)}
-              className={buttonVariants({ variant: 'outline', className: 'w-full' })}
-            >
-              Continue with {provider.displayName}
-            </a>
-          </li>
-        ))}
+        {providers !== 'unavailable' &&
+          providers?.map((provider) => (
+            <li key={provider.id}>
+              <a
+                href={signInHref(provider.id, invitation)}
+                className={buttonVariants({ variant: 'outline', className: 'w-full' })}
+              >
+                Continue with {provider.displayName}
+              </a>
+            </li>
+          ))}
       </ul>
     </Page>
   )
@@ -132,15 +194,24 @@ interface Signed {
   workspaces: MemberWorkspace[] | 'unavailable'
 }
 
-async function loadSigned(fetchFn: Fetch): Promise<Signed | null> {
-  const session = parseDaemonResponse(
+/**
+ * The keeper answers a browser with no session `200 { signedIn: false }`, and
+ * that alone is "signed out". Any other outcome — a busy keeper's 503, a
+ * proxy's 502, no answer — says nothing about the session, and reading it as
+ * signed out would send a signed-in person round the sign-in loop.
+ */
+async function readSession(fetchFn: Fetch): Promise<SessionUser | null | 'unavailable'> {
+  const session = await readAuth(
+    fetchFn,
     authSessionUrl(),
     signInSessionResponseSchema,
-    await (await fetchFn(authSessionUrl())).json(),
+    'the session',
   )
-  if (!session.signedIn) return null
-  return { user: session.user, workspaces: await listMemberWorkspaces(fetchFn) }
+  if (session === 'unavailable') return session
+  return session.signedIn ? session.user : null
 }
+
+const SESSION_UNAVAILABLE = 'Could not check whether you are signed in.'
 
 function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
   return workspaces === 'unavailable' ? (
@@ -165,18 +236,19 @@ function WorkspaceList({ workspaces }: { workspaces: Signed['workspaces'] }) {
   )
 }
 
-// The daemon shell's own workspace seam, pointed at this keeper's origin: the
-// session cookie authenticates, and a create is the one call the switcher menu
-// makes. Only the keeper's half is used here; the
-// browser's is built beside it and never touched.
-function useKeeperWorkspaces() {
+// The daemon shell's own workspace seam, pointed at this keeper's origin and
+// sent over the app's fetch like every other request it makes: the session
+// cookie authenticates. Only the keeper's half is used here; the browser's is
+// built beside it and never touched.
+function useKeeperWorkspaces(fetchFn: Fetch) {
   const navigate = useNavigate()
   const daemonShellTarget = useMemo(() => ({ baseUrl: window.location.origin }), [])
   const setDaemonRoute = useCallback(
     (route: WorkspaceRoute) => navigate(workspaceRoutePath(route)),
     [navigate],
   )
-  return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute }).daemonWorkspaces
+  return useShellWorkspaces({ daemonShellTarget, navigate, setDaemonRoute, fetchFn })
+    .daemonWorkspaces
 }
 
 // The shell is built under the workspace route, so the seam it renames through
@@ -185,7 +257,7 @@ function OpenWorkspace({
   fetchFn,
   displayName,
 }: Readonly<{ fetchFn: Fetch; displayName: string }>) {
-  const workspaces = useKeeperWorkspaces()
+  const workspaces = useKeeperWorkspaces(fetchFn)
   return (
     <ServerModeWorkspace
       shell={
@@ -196,22 +268,23 @@ function OpenWorkspace({
 }
 
 function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
-  const keeperWorkspaces = useKeeperWorkspaces()
-  const [signed, setSigned] = useState<Signed | null | 'loading'>('loading')
-  useEffect(() => {
-    let live = true
-    void loadSigned(fetchFn)
-      .catch(() => null)
-      .then((result) => {
-        if (live) setSigned(result)
-      })
-    return () => {
-      live = false
-    }
+  const keeperWorkspaces = useKeeperWorkspaces(fetchFn)
+  const read = useCallback(async (): Promise<Signed | null | 'unavailable'> => {
+    const user = await readSession(fetchFn)
+    if (user === null || user === 'unavailable') return user
+    return { user, workspaces: await listMemberWorkspaces(fetchFn) }
   }, [fetchFn])
+  const [signed, retry] = useRetryableRead(read)
 
-  if (signed === 'loading') return null
+  if (signed === undefined) return null
   if (signed === null) return <Navigate to="/sign-in" replace />
+  if (signed === 'unavailable') {
+    return (
+      <Page>
+        <Unavailable message={SESSION_UNAVAILABLE} onRetry={retry} />
+      </Page>
+    )
+  }
 
   return (
     <Page>
@@ -242,29 +315,18 @@ function SignedInOnly({
   fetchFn: Fetch
   children: (user: SessionUser) => ReactNode
 }) {
-  // undefined while asking, null for no session, the person otherwise.
-  const [who, setWho] = useState<SessionUser | null | undefined>(undefined)
-  useEffect(() => {
-    let live = true
-    void fetchFn(authSessionUrl())
-      .then(async (res) => {
-        const session = parseDaemonResponse(
-          authSessionUrl(),
-          signInSessionResponseSchema,
-          await res.json(),
-        )
-        return session.signedIn ? session.user : null
-      })
-      .catch(() => null)
-      .then((value) => {
-        if (live) setWho(value)
-      })
-    return () => {
-      live = false
-    }
-  }, [fetchFn])
+  const read = useCallback(() => readSession(fetchFn), [fetchFn])
+  const [who, retry] = useRetryableRead(read)
   if (who === undefined) return null
-  return who === null ? <Navigate to="/sign-in" replace /> : children(who)
+  if (who === null) return <Navigate to="/sign-in" replace />
+  if (who === 'unavailable') {
+    return (
+      <Page>
+        <Unavailable message={SESSION_UNAVAILABLE} onRetry={retry} />
+      </Page>
+    )
+  }
+  return children(who)
 }
 
 // One function for the app's lifetime: the pages key their effects on it, so a

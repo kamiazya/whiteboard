@@ -59,7 +59,7 @@ export function replicaEntries(record: ReplicaRecord): WorkspaceDocumentEntry[] 
     ({ documentId, path, kind, name, shadowed }): WorkspaceDocumentEntry => ({
       documentId,
       path,
-      ...(kind === undefined ? {} : { kind }),
+      kind,
       ...(name === undefined ? {} : { name }),
       ...(shadowed === undefined ? {} : { shadowed }),
     }),

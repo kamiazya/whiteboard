@@ -24,6 +24,15 @@ vi.mock('../lib/rasterize-svg.js', async (importOriginal) => {
   return { rasterizeSvgToPng: vi.fn(actual.rasterizeSvgToPng) }
 })
 
+// Stub engines: what is pinned is that the canvas export waits for them, not MathJax.
+vi.mock('../lib/markdown-fragment-renderers.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/markdown-fragment-renderers.js')>()),
+  FRAGMENT_ENGINES: {
+    math: async () => ({ svg: '<g data-probe="export-math"/>', width: 40, height: 10 }),
+    diagram: async () => undefined,
+  },
+}))
+
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import { useDocumentSync } from './useDocumentSync.js'
@@ -110,5 +119,23 @@ describe('useDocumentSync exportScene carries the document', () => {
     expect(markdown).toEqual(expect.objectContaining({ type: 'image/svg+xml' }))
     expect(await (markdown as Blob | null)?.text()).toContain('Weekly')
     expect(await (spatial as Blob | null)?.text()).not.toContain('Weekly')
+  })
+
+  it("typesets a text node's math block in the saved canvas", async () => {
+    const backend = fakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [textNode({ id: 'n-m', x: 0, y: 0, width: 240, height: 120, text: '$$\nx^2\n$$\n' })],
+      edges: [],
+    })
+    await deliver(backend, doc)
+
+    let svg: Blob | null = null
+    await act(async () => {
+      svg = await result.current.exportScene('svg', { kind: 'spatial' })
+    })
+
+    expect(await (svg as Blob | null)?.text()).toContain('export-math')
   })
 })

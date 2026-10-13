@@ -1,5 +1,5 @@
 /**
- * Nearest-layer coverage for the LOD gate the seam hook owns. The browser
+ * Nearest-layer coverage for the LOD gate and the fragment seams the seam hook owns. The browser
  * suites (canvas-embed-lod, drag-ghost-embed) pin what an expanded file
  * node RENDERS as; this file pins the gate's own decisions — hysteresis
  * and the budget — at the layer they live, where each case is a zoom
@@ -8,14 +8,24 @@
 
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { fileNode as buildFileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import {
+  fileNode as buildFileNode,
+  textNode as buildTextNode,
+} from '@kamiazya/whiteboard-model/test-utils'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import { useFileSeamScene } from './use-file-seam-scene.js'
 
 const measure: MeasureText = () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
 const references = referenceSeams(new Map())
+const fixedMeasure = createFixedMeasure({
+  advance: (text) => text.length * 6,
+  ascent: 10,
+  descent: 2,
+})
 
 function fileNode(id: string, width: number, height: number): SpatialNode {
   return buildFileNode({ id, file: `doc-${id}`, x: 0, y: 0, width, height })
@@ -99,5 +109,36 @@ describe('useFileSeamScene LOD gate', () => {
       }),
     )
     expect(result.current.fileSeamOptions.expandFileNode).toBeUndefined()
+  })
+})
+
+describe('useFileSeamScene fragments', () => {
+  it("typesets a text node's math block once its fragment lands, through every sync render", async () => {
+    const fragment = { svg: '<g data-probe="typeset-math"/>', width: 40, height: 10 }
+    const math = vi.fn(async () => fragment)
+    const board = canvasOf([
+      buildTextNode({ id: 't', x: 0, y: 0, width: 240, height: 120, text: '$$\nx^2\n$$\n' }),
+    ])
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: board,
+        zoom: 1,
+        references: undefined,
+        fileRefOptions: undefined,
+        missingFileRef: undefined,
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+        fragmentLoaders: { math, diagram: async () => undefined },
+      }),
+    )
+    const draw = () =>
+      renderCanvasToSvg(board, { measure: fixedMeasure, ...result.current.fileSeamOptions }).svg
+    // The first layout draws the source and is what asks for the fragment.
+    act(() => {
+      expect(draw()).not.toContain('typeset-math')
+    })
+    await waitFor(() => expect(draw()).toContain('typeset-math'))
+    expect(math).toHaveBeenCalledTimes(1)
+    expect(result.current.wire.fragments).toEqual([['math:x^2', fragment]])
   })
 })

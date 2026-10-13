@@ -120,6 +120,24 @@ describe("a theme's palette reaches the markdown body's furniture", () => {
     expect(panelFill(scene)).not.toBe(MARKDOWN_THEME_NODE.chromeColor)
   })
 
+  it("paints a dark board's furniture in the palette's DARK chrome, not the light one", () => {
+    const { light, dark } = VISUAL_THEMES.sketch.palette
+    // The premise: a shipped theme whose two modes disagree, or this pins nothing.
+    expect(dark.markdownChrome).toBeDefined()
+    expect(dark.markdownChrome).not.toBe(light.markdownChrome)
+    const scene = layoutSpatialCanvas(
+      boardIn('visual.sketch', 'visual.theme/v0'),
+      options({
+        style: 'document',
+        renderContributions: undefined,
+        appearance: createSpatialTheme({ mode: 'dark' }),
+      }),
+    )
+    expect(panelFill(scene)).toBe(dark.markdownChrome)
+    expect(railFill(scene)).toBe(dark.markdownChrome)
+    expect(checkboxStroke(scene)).toBe(dark.markdownChrome)
+  })
+
   it('keeps the bundled neutral for a theme that declares no chrome, and for no theme at all', () => {
     const slate = MARKDOWN_THEME_NODE.chromeColor
     for (const scene of [

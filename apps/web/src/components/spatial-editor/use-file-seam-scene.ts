@@ -12,8 +12,10 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useState } from 'react'
 import { createSpatialContentCache } from '../../lib/content-cache.js'
+import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { useCanvasFragments } from './use-canvas-fragments.js'
 
 /**
  * The LOD gate (embed spec v2, user decision 2026-08-08): a file node
@@ -44,6 +46,8 @@ export interface FileSeamSceneInputs {
   readonly missingFileRef: ((file: string) => boolean) | undefined
   readonly resolvedMeasure: MeasureText
   readonly theme: ResolvedTheme
+  /** Injection seam for tests; defaults to the real MathJax/mermaid engines. */
+  readonly fragmentLoaders?: FragmentLoaders
 }
 
 /**
@@ -68,8 +72,10 @@ export function useFileSeamScene({
   missingFileRef,
   resolvedMeasure,
   theme,
+  fragmentLoaders,
 }: FileSeamSceneInputs) {
   const resolveReference = references?.resolveReference
+  const body = useBodySeams(resolvedMeasure, theme, references, fragmentLoaders)
   const [expandedFileIds, setExpandedFileIds] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => {
     if (resolveReference === undefined) return
@@ -119,18 +125,6 @@ export function useFileSeamScene({
     () => (missingRefSet === undefined ? undefined : [...missingRefSet]),
     [missingRefSet],
   )
-  // One text-node body memo per measure+theme (the cache's validity
-  // contract); rides fileSeamOptions so every synchronous render path in
-  // the editor — the committed fallback, the drag backdrop, the live
-  // resize node — shares it. It never crosses to the layout worker
-  // (LayoutRequest carries plain data only); the worker keeps its own.
-  const contentCache = useMemo(
-    () => createSpatialContentCache(),
-    // Theme, measure
-    // and the references a text node's body can embed invalidate cached
-    // layout; nothing else does.
-    [resolvedMeasure, theme, references],
-  )
   const fileSeamOptions = useMemo(
     () => ({
       references,
@@ -140,9 +134,9 @@ export function useFileSeamScene({
         missing: missingRefSet,
       }),
       expandFileNode,
-      contentCache,
+      ...body.options,
     }),
-    [references, resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, contentCache],
+    [references, resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, body.options],
   )
   // The gate's decision as data, for the worker: it reads the viewport,
   // which the worker does not have.
@@ -151,5 +145,31 @@ export function useFileSeamScene({
     [expandFileNode, expandedFileIds],
   )
 
-  return { fileSeamOptions, missingFileRefs, expandedFileIds: expandedFileIdList }
+  // The plain-data twins of `fileSeamOptions`, for `useWorkerScene`'s wire.
+  const wire = { missingFileRefs, expandedFileIds: expandedFileIdList, ...body.wire }
+  return { fileSeamOptions, wire }
+}
+
+/**
+ * What a text node's body is typeset with, and the body memo that is only
+ * valid for it. One memo per measure+theme (the cache's validity contract),
+ * dropped too when the references a body can embed or the fragments it is
+ * typeset with change. It rides `fileSeamOptions`, so every synchronous
+ * render path in the editor — the committed fallback, the drag backdrop, the
+ * live resize node — shares it; it never crosses to the layout worker
+ * (LayoutRequest carries plain data only), which keeps its own.
+ */
+function useBodySeams(
+  measure: MeasureText,
+  theme: ResolvedTheme,
+  references: ReferenceSeams | undefined,
+  fragmentLoaders: FragmentLoaders | undefined,
+) {
+  const { seams, entries, onFragmentsAsked } = useCanvasFragments(fragmentLoaders)
+  const contentCache = useMemo(
+    () => createSpatialContentCache(),
+    [measure, theme, references, seams],
+  )
+  const options = useMemo(() => ({ contentCache, ...seams }), [contentCache, seams])
+  return { options, wire: { fragments: entries, onFragmentsAsked } }
 }

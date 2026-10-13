@@ -1,6 +1,5 @@
 /**
- * The control flow every maintenance button in `StorageReportCard` shares,
- * and the one reader of the storage report it shows.
+ * The control flow every maintenance button in `StorageReportCard` shares.
  *
  * Four of them were the same forty lines with different nouns: set busy,
  * announce, list the workspaces, POST once per workspace, accumulate, say
@@ -10,32 +9,12 @@
 
 import {
   listWorkspacesResponseSchema,
-  type StorageReportPayload,
-  storageReportApiUrl,
-  storageReportPayloadSchema,
   workspacesApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { messageOf } from '@kamiazya/whiteboard-model'
 import type { RefObject } from 'react'
 import { useCallback } from 'react'
 import type { z } from 'zod'
 import { readDaemonJson } from '../lib/daemon-contract-error.js'
-
-/**
- * The storage report, or the reason it could not be read — the one reader of
- * that route, for the card that shows it and the page that quotes its total.
- */
-export async function readStorageReport(
-  fetchApi: typeof globalThis.fetch,
-): Promise<{ report: StorageReportPayload } | { error: string }> {
-  try {
-    const res = await fetchApi(storageReportApiUrl())
-    if (!res.ok) return { error: `HTTP ${res.status}` }
-    return { report: await readDaemonJson(storageReportApiUrl(), res, storageReportPayloadSchema) }
-  } catch (err) {
-    return { error: messageOf(err, String(err)) }
-  }
-}
 
 /** What a sweep produced, plus how many workspaces refused it. */
 export interface SweepResult<T> {
@@ -55,9 +34,6 @@ export interface SweepResult<T> {
  *
  * Every answer is read through `schema`, so a response the page cannot read is
  * reported with its route like any other daemon contract mismatch.
- *
- * Sequential on purpose: the doc-cache eviction inside each compact stays
- * coherent only if one workspace finishes before the next begins.
  */
 export async function sweepWorkspaces<T, R>(
   fetchApi: typeof globalThis.fetch,
@@ -76,6 +52,8 @@ export async function sweepWorkspaces<T, R>(
 
   let total = seed
   let failedWorkspaces = 0
+  // Sequential on purpose: the doc-cache eviction inside each compact stays
+  // coherent only if one workspace finishes before the next begins.
   for (const { workspaceId } of workspaces) {
     const url = pathFor(workspaceId)
     const res = await fetchApi(url, { method: 'POST' })

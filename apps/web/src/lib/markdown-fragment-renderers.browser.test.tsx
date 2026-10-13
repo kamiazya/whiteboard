@@ -8,7 +8,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
-import { renderDiagramFragment } from './markdown-fragment-renderers.js'
+import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
+
+const renderDiagramFragment = FRAGMENT_ENGINES.diagram
 
 describe('renderDiagramFragment (real mermaid)', () => {
   it('renders a flowchart fence to a sized SVG fragment', async () => {

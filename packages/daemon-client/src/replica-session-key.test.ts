@@ -38,7 +38,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 function sourceWith(fetchImpl: typeof fetch): ReplicaSource {
-  return { fetch: fetchImpl }
+  return { fetch: fetchImpl, reportDrift: () => {} }
 }
 
 describe('replica-session-key: sessionKey', () => {

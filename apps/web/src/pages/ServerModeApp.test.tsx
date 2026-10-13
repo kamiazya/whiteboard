@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installFakeDaemonFetch } from '../test-utils/fake-daemon-fetch.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { ServerModeApp } from './ServerModeApp.js'
 
 const opened: Record<string, unknown>[] = []
@@ -41,6 +42,7 @@ function renderSignedIn(
     ...(onCreateWorkspace === undefined ? {} : { onCreateWorkspace }),
   })
   // The fake answers the workspace routes; the session is the keeper's own.
+  const { onPatch } = options
   const fetchFn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input) === '/auth/session') {
       return Promise.resolve(
@@ -50,18 +52,14 @@ function renderSignedIn(
         }),
       )
     }
+    if (onPatch !== undefined && init?.method === 'PATCH') {
+      return Promise.resolve(onPatch(String(input), JSON.parse(String(init.body))))
+    }
     return fake(input, init)
   })
-  // The shell's rename goes through the daemon client's own fetch, which is
-  // the global one, so the PATCH is answered there rather than on `fetchFn`.
-  const { onPatch } = options
-  if (onPatch !== undefined) {
-    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
-      init?.method === 'PATCH'
-        ? Promise.resolve(onPatch(String(input), JSON.parse(String(init.body))))
-        : fake(input, init),
-    )
-  }
+  // Every request the app makes, the workspace switcher's included, goes out
+  // on the fetch it was handed; one that reached for the global would fail here.
+  vi.stubGlobal('fetch', () => Promise.reject(new TypeError('global fetch used')))
   render(
     <MemoryRouter initialEntries={[options.at ?? '/']}>
       <ServerModeApp fetchFn={fetchFn} />
@@ -207,5 +205,100 @@ describe('the server-mode workspace shell renames the open workspace', () => {
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/notes/)
     expect(opened.at(-1)).toMatchObject({ workspace: 'plans' })
+  })
+})
+
+// What the keeper answers when it is busy (`answerUnhandled`), and what a
+// reverse proxy in front of it answers when it is down.
+const failedReads: Record<string, () => Promise<Response>> = {
+  'a 503': () => Promise.resolve(jsonResponse({ error: 'database_busy' }, 503)),
+  "a proxy's HTML 502": () =>
+    Promise.resolve(new Response('<html>Bad Gateway</html>', { status: 502 })),
+  'a rejected fetch': () => Promise.reject(new TypeError('Failed to fetch')),
+}
+
+function renderSession(at: string, session: () => Promise<Response>) {
+  const fake = installFakeDaemonFetch({
+    workspaces: [{ workspaceId: 'ws-1', displayName: 'Plans', segment: 'plans' }],
+    documentsByWorkspace: {},
+  })
+  const answer = { session }
+  const fetchFn = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url === '/auth/session') return answer.session()
+    if (url === '/auth/providers') return Promise.resolve(jsonResponse({ providers: [] }))
+    return fake(input, init)
+  })
+  render(
+    <MemoryRouter initialEntries={[at]}>
+      <ServerModeApp fetchFn={fetchFn} />
+    </MemoryRouter>,
+  )
+  return answer
+}
+
+const signedInAnswer = () =>
+  Promise.resolve(
+    jsonResponse({
+      signedIn: true,
+      user: { userId: 'u-1', displayName: 'Ada', administrator: false },
+    }),
+  )
+
+describe('a session read that fails is not a sign-out', () => {
+  for (const [name, failure] of Object.entries(failedReads)) {
+    it(`offers a retry for ${name} on the workspaces page, and lands once the server answers`, async () => {
+      const answer = renderSession('/', failure)
+
+      const retry = await screen.findByRole('button', { name: 'Try again' })
+      await expectLoggedFailure('could not read the session')
+      expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull()
+
+      answer.session = signedInAnswer
+      fireEvent.click(retry)
+
+      expect(await screen.findByRole('heading', { name: 'Your workspaces' })).toBeTruthy()
+      expect(await screen.findByText('Plans')).toBeTruthy()
+    })
+  }
+
+  it('offers a retry in front of a workspace too', async () => {
+    renderSession('/w/plans', failedReads['a 503'] as () => Promise<Response>)
+
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy()
+    await expectLoggedFailure('could not read the session')
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull()
+  })
+
+  it('still sends a browser the keeper says is signed out to sign in', async () => {
+    renderSession('/w/plans', () => Promise.resolve(jsonResponse({ signedIn: false })))
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy()
+  })
+})
+
+describe('a sign-in provider read that fails is not "none configured"', () => {
+  it('says the options could not be loaded, and lists them on retry', async () => {
+    let providers = () => Promise.resolve(jsonResponse({ error: 'database_busy' }, 503))
+    const fetchFn = vi.fn((input: RequestInfo | URL) =>
+      String(input) === '/auth/providers'
+        ? providers()
+        : Promise.reject(new Error(`unexpected ${String(input)}`)),
+    )
+    render(
+      <MemoryRouter initialEntries={['/sign-in']}>
+        <ServerModeApp fetchFn={fetchFn} />
+      </MemoryRouter>,
+    )
+
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    await expectLoggedFailure('could not read the sign-in providers')
+    expect(screen.queryByText(/no sign-in provider configured/)).toBeNull()
+
+    providers = () =>
+      Promise.resolve(jsonResponse({ providers: [{ id: 'gh', displayName: 'GitHub' }] }))
+    fireEvent.click(retry)
+
+    expect(await screen.findByRole('link', { name: 'Continue with GitHub' })).toBeTruthy()
   })
 })

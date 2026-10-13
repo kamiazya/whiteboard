@@ -125,5 +125,5 @@ inferred** — because a skipped test reads exactly like a passing one. `CAN_DEN
 (`packages/mcp-server/src/shared/test-utils/can-deny-file-read.ts`) writes a file, closes it
 off and tries to read it, rather than asking `getuid() === 0`, and on CI it MUST be true so
 the skip cannot quietly disable those paths for everyone. `local-node-version.test.ts` fails
-naming the consequence of the wrong Node major (nine `web-jsdom` tests fail with a message
-about `Blob` that names neither Node nor the guard).
+naming the consequence of the wrong Node major (a jsdom `Blob` handed to `new Response`
+fails with a message about `Blob` that names neither Node nor the guard).

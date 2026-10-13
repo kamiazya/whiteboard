@@ -5,6 +5,26 @@ import type { ConnectedDaemon } from '../lib/daemon-fetch.js'
 import type { KeeperWorkspaces } from '../lib/workspace-switcher-source.js'
 
 /**
+ * One call into the daemon client, loaded on first use, over the fetch the
+ * caller supplied (or the global one) as `createDaemonFetch` wraps it — so
+ * the address is resolved and an extension-bridged daemon takes the bridge
+ * whichever fetch was handed in.
+ */
+function daemonCall<T>(
+  { baseUrl }: Readonly<ConnectedDaemon>,
+  fetchFn: typeof globalThis.fetch | undefined,
+  call: (
+    m: typeof import('../lib/daemon-api-client.js'),
+    send: typeof globalThis.fetch,
+    baseUrl: string,
+  ) => Promise<T>,
+): Promise<T> {
+  return import('../lib/daemon-api-client.js').then((m) =>
+    call(m, m.createDaemonFetch(baseUrl, fetchFn), baseUrl),
+  )
+}
+
+/**
  * Both keepers' halves of the workspace switcher, built side by side.
  *
  * They answer ONE contract (`WorkspaceSwitcherSource`) from two entirely
@@ -21,6 +41,7 @@ export function useShellWorkspaces({
   daemonShellTarget,
   navigate,
   setDaemonRoute,
+  fetchFn,
 }: {
   readonly daemonShellTarget: Readonly<ConnectedDaemon> | undefined
   readonly navigate: (to: string) => void
@@ -32,6 +53,12 @@ export function useShellWorkspaces({
    * arrow at the call site would not be.
    */
   readonly setDaemonRoute: (route: WorkspaceRoute) => void
+  /**
+   * The fetch the daemon's requests go out on, for a caller that already
+   * holds the one its keeper answers on; absent, the global one. Stable
+   * across renders, for the same reason `setDaemonRoute` is.
+   */
+  readonly fetchFn?: typeof globalThis.fetch
 }): {
   readonly daemonWorkspaces: KeeperWorkspaces | undefined
   readonly browserWorkspaces: KeeperWorkspaces
@@ -51,38 +78,24 @@ export function useShellWorkspaces({
         : {
             source: {
               list: () =>
-                import('../lib/daemon-api-client.js').then((m) =>
-                  m
-                    .listWorkspaces(
-                      m.createDaemonFetch(daemonShellTarget.baseUrl),
-                      daemonShellTarget.baseUrl,
-                    )
-                    .then((res) => res.workspaces),
+                daemonCall(daemonShellTarget, fetchFn, (m, send, baseUrl) =>
+                  m.listWorkspaces(send, baseUrl).then((res) => res.workspaces),
                 ),
               // Both halves take the same arguments as the browser's, which
               // is the point: the switcher asks its source, and the source is
               // the only thing that knows which keeper answered.
               create: (displayName: string) =>
-                import('../lib/daemon-api-client.js').then((m) =>
-                  m.createWorkspace(
-                    m.createDaemonFetch(daemonShellTarget.baseUrl),
-                    daemonShellTarget.baseUrl,
-                    displayName,
-                  ),
+                daemonCall(daemonShellTarget, fetchFn, (m, send, baseUrl) =>
+                  m.createWorkspace(send, baseUrl, displayName),
                 ),
               rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
-                import('../lib/daemon-api-client.js').then((m) =>
-                  m.renameWorkspace(
-                    m.createDaemonFetch(daemonShellTarget.baseUrl),
-                    daemonShellTarget.baseUrl,
-                    workspaceId,
-                    input,
-                  ),
+                daemonCall(daemonShellTarget, fetchFn, (m, send, baseUrl) =>
+                  m.renameWorkspace(send, baseUrl, workspaceId, input),
                 ),
             },
             onSwitch: (workspace: string) => setDaemonRoute({ kind: 'index', workspace }),
           },
-    [daemonShellTarget, setDaemonRoute],
+    [daemonShellTarget, setDaemonRoute, fetchFn],
   )
 
   // Nothing here re-points the keeper, and that is the whole reason a switch

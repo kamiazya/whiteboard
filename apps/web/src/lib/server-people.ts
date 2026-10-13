@@ -83,12 +83,12 @@ async function call<T>(
 ): Promise<Outcome<T>> {
   const res = await fetchFn(url, init).catch(() => null)
   if (res === null) return { ok: false, message: UNREACHABLE }
-  if (!res.ok) return refusal((await refusalReasonOf(res, '')).body)
   try {
+    if (!res.ok) return refusal((await refusalReasonOf(res, '')).body)
     return { ok: true, value: await readDaemonJson(url, res, schema) }
   } catch (err) {
-    // The shared reader throws only these two: a drifted answer (already
-    // logged), or a body the network cut off.
+    // The shared readers throw only these two: a drifted answer (already
+    // logged), or a body — refusal or success — the network cut off.
     return { ok: false, message: err instanceof DaemonContractError ? UNEXPECTED : UNREACHABLE }
   }
 }

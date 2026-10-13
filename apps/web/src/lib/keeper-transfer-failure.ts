@@ -12,9 +12,10 @@
  * device-side arm leaves a log record naming the error, since the reason a
  * person reads carries none of it.
  */
+
+import { FetchFailedError } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { AppLogger } from './app-logger.js'
-import { FetchFailedError } from './fetch-failure.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 
 export type TransferFailure =

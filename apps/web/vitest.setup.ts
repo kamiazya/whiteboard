@@ -1,6 +1,6 @@
 import { clearCatalogRecents } from '@kamiazya/whiteboard-facet-ui'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, expect, vi } from 'vitest'
 import { BROWSER_DEFAULT_SEGMENT } from './src/lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from './src/lib/browser-workspace-id.js'
@@ -25,6 +25,15 @@ import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
 // quietly render the index instead. `default` is the same segment the v15
 // carrier mints in production, so the fixture and the product agree.
 setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
+
+// Testing Library's `findBy*`/`waitFor` default is 1000ms, a fast-machine
+// number: on a loaded machine a render plus a lazy chunk plus one promise
+// round trip routinely spends most of it, and the test fails as a missing
+// element in whatever file happened to be slowest. `browser-setup.ts` raised
+// the browser project's ceiling for the same reason. A ceiling, not a delay —
+// it slows nothing that succeeds; a file that needs more still configures its
+// own, and a test that expects a wait to give up passes its own timeout.
+configure({ asyncUtilTimeout: 5_000 })
 
 // jsdom ships no ResizeObserver; Radix popper-positioned surfaces
 // (DropdownMenu/Popover content) observe their anchor on mount and throw

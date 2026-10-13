@@ -28,6 +28,8 @@ import {
 } from '../lib/document-sync-session.js'
 import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
+import { layoutWithFragments } from '../lib/fragment-requests.js'
+import { FRAGMENT_ENGINES } from '../lib/markdown-fragment-renderers.js'
 import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
@@ -538,10 +540,13 @@ export function useDocumentSync(
         return savedPicture(format, await renderMarkdownForExport(body, options))
       }
       const exported = session?.getCanvas() ?? canvas
-      const drawn = renderCanvasForExport(exported, {
-        ...options,
-        measure: createBrowserMeasureText(),
-      })
+      const measure = createBrowserMeasureText()
+      // Waits for every math block and diagram fence the layout asks for —
+      // a text node's, a file node's note's — so the file is typeset as the screen is.
+      const drawn = await layoutWithFragments(
+        (seams) => renderCanvasForExport(exported, { ...options, measure, ...seams }),
+        FRAGMENT_ENGINES,
+      )
       return savedPicture(format, drawn, {
         // Editable PNG (the draw.io pattern): the extended JSON Canvas
         // document rides in an iTXt chunk under `whiteboard`, so the image

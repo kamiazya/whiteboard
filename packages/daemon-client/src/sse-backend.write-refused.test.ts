@@ -35,7 +35,7 @@ function handlersRecording() {
   return { handlers, snapshots, updates, refusals }
 }
 
-/** The daemon, answering each update POST with `status` and `body`. */
+/** The daemon, answering each update POST with `status` and `body` (a function builds a raw body). */
 function daemonAnswering(status: number, body: unknown) {
   let snapshotCount = 0
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -46,7 +46,8 @@ function daemonAnswering(status: number, body: unknown) {
     }
     if (url.includes('/api/sync/stream')) return new Response(new ReadableStream(), { status: 200 })
     if (url.includes('/update') && init?.method === 'POST') {
-      return new Response(JSON.stringify(body), { status })
+      const raw = typeof body === 'function' ? (body as () => BodyInit)() : JSON.stringify(body)
+      return new Response(raw, { status })
     }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   })
@@ -160,6 +161,29 @@ describe('SseBackend through a source that writes onward itself', () => {
     // every later edit from another writer never reaches this copy.
     for (const l of s.listeners) l.onUpdate([10] as unknown as Uint8Array)
     expect(r.updates).toEqual([[10]])
+    backend.disconnect()
+  })
+
+  it('leaves a refusal whose body is cut mid-read to the caller as the network, keeping the bytes', async () => {
+    const cut = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"error":'))
+          controller.error(new TypeError('network error'))
+        },
+      })
+    const daemon = daemonAnswering(413, cut)
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, daemon.transport)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+
+    await expect(backend.pushLocalUpdate(new Uint8Array([4, 5]))).rejects.toMatchObject({
+      name: 'FetchFailedError',
+    })
+    await flush()
+    expect(r.refusals).toEqual([])
+    expect(r.snapshots).toHaveLength(1)
     backend.disconnect()
   })
 })

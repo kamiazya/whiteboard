@@ -8,7 +8,9 @@
  * markdown-fragment-renderers.browser.test.tsx instead.
  */
 import { describe, expect, it } from 'vitest'
-import { renderDiagramFragment, renderMathFragment } from './markdown-fragment-renderers.js'
+import { FRAGMENT_ENGINES } from './markdown-fragment-renderers.js'
+
+const { math: renderMathFragment, diagram: renderDiagramFragment } = FRAGMENT_ENGINES
 
 describe('renderMathFragment (real MathJax)', () => {
   it('renders TeX to a sized SVG fragment', async () => {
@@ -18,6 +20,16 @@ describe('renderMathFragment (real MathJax)', () => {
     expect(fragment?.svg).toContain('</svg>')
     expect(fragment?.width).toBeGreaterThan(0)
     expect(fragment?.height).toBeGreaterThan(0)
+  })
+
+  // A `$$` block is DISPLAY math: a sum's limits stack above and below it
+  // rather than sitting beside it, so the same source typeset in text style
+  // is measurably shorter. `\textstyle` is the engine's own text style, an
+  // oracle independent of the option under test.
+  it('typesets in display style, stacking limits above and below a sum', async () => {
+    const display = await renderMathFragment('\\sum_{i=0}^{n} i')
+    const text = await renderMathFragment('\\textstyle\\sum_{i=0}^{n} i')
+    expect(display?.height).toBeGreaterThan(text?.height ?? Number.POSITIVE_INFINITY)
   })
 
   it('is total against TeX the engine rejects outright', async () => {

@@ -114,6 +114,14 @@ export interface RenderCanvasCoreOptions {
    * without decoding the canvas itself.
    */
   readonly onDegrade?: SpatialLayoutOptions['onDegrade']
+  /**
+   * Typeset math blocks and diagram fences in every body the layout reaches
+   * (canvas-render's seams, threaded verbatim). Synchronous: a host answers
+   * from fragments it rendered ahead (`lib/fragment-requests.ts`). Absent,
+   * math keeps its source placeholder and a fence is a plain code block.
+   */
+  readonly renderMath?: SpatialLayoutOptions['renderMath']
+  readonly renderDiagram?: SpatialLayoutOptions['renderDiagram']
 }
 
 export interface RenderedCanvas {
@@ -168,6 +176,8 @@ export function renderCanvasToSvgWith(
     proposals: options.proposals,
     onDegrade: options.onDegrade,
     tagLibrary: options.tagLibrary,
+    renderMath: options.renderMath,
+    renderDiagram: options.renderDiagram,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

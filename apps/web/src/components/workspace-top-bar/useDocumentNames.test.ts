@@ -157,4 +157,49 @@ describe('useDocumentNames', () => {
     await waitFor(() => expect(result.current.effectiveNames.documents.bar).toBe('Bar'))
     expect(result.current.effectiveNames.documents.foo).toBe(expected)
   })
+
+  it("keeps the newer workspace's names when an older read answers after it", async () => {
+    // Each workspace's read is held until the test releases it, so the two
+    // can answer in the order a slow daemon would: the newer one first.
+    const pending = new Map<string, (response: Response) => void>()
+    const daemonFetch = vi.fn(
+      (input: RequestInfo | URL) =>
+        new Promise<Response>((resolve) => {
+          pending.set(String(input), resolve)
+        }),
+    )
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useDocumentNames({ workspaceId, keptByBrowser: false, daemonFetch }),
+      { initialProps: { workspaceId: 'ws-old' } },
+    )
+    rerender({ workspaceId: 'ws-new' })
+    await waitFor(() => expect(pending.size).toBe(2))
+    const release = (workspaceId: string) => {
+      const entry = [...pending].find(([url]) => url.includes(`/${workspaceId}/`))
+      if (entry === undefined) throw new Error(`no read for ${workspaceId}`)
+      return entry[1]
+    }
+
+    release('ws-new')(jsonResponse({ documents: { foo: 'New name' }, pinned: [] }))
+    await waitFor(() => expect(result.current.effectiveNames.documents.foo).toBe('New name'))
+
+    // The stale body's read is observed to its END, not its start: what
+    // follows it in the hook (parse, then the guarded set) is microtasks only,
+    // so one macrotask after the read resolves lets all of it run.
+    const stale = jsonResponse({ documents: { foo: 'Old name' }, pinned: ['foo'] })
+    const readText = stale.text.bind(stale)
+    let staleRead: Promise<string> | undefined
+    stale.text = () => {
+      staleRead = readText()
+      return staleRead
+    }
+    release('ws-old')(stale)
+    await waitFor(() => expect(staleRead).toBeDefined())
+    await act(async () => {
+      await staleRead
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(result.current.effectiveNames).toEqual({ documents: { foo: 'New name' }, pinned: [] })
+  })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FetchFailedError } from './read-body.js'
 import { refusalReasonOf } from './refusal-reason.js'
 
 const FALLBACK = 'Request failed (409).'
@@ -61,5 +62,17 @@ describe('refusalReasonOf', () => {
   it('hands back undefined for a body that was not JSON', async () => {
     const { body } = await refusalReasonOf(new Response('nope', { status: 502 }), FALLBACK)
     expect(body).toBeUndefined()
+  })
+
+  it("names a body cut after the status line the network's failure, not a refusal without a reason", async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"error":"path_'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    await expect(
+      refusalReasonOf(new Response(cut, { status: 409 }), FALLBACK),
+    ).rejects.toBeInstanceOf(FetchFailedError)
   })
 })

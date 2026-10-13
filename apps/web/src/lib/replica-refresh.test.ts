@@ -325,6 +325,20 @@ describe('scheduleReplicaRefresh', () => {
     })
   })
 
+  it('a fetch that throws a plain object logs its JSON, not "[object Object]"', async () => {
+    const fetchThatThrowsAnObject = (async () => {
+      throw { code: 'ECONNRESET' }
+    }) as unknown as typeof globalThis.fetch
+    scheduleReplicaRefresh(deps({ fetch: fetchThatThrowsAnObject }))
+    await vi.waitFor(() => expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1))
+    const [, fields] = appLoggerSpies.warn.mock.calls[0] as [string, Record<string, unknown>]
+    expect(fields).toMatchObject({
+      name: 'FetchFailedError',
+      causeName: 'object',
+      causeMessage: '{"code":"ECONNRESET"}',
+    })
+  })
+
   // The production `schedule` default (no `deps.schedule` override) is what
   // bounds a background pull to a real deadline — a page kept continuously
   // busy must not leave a replica-registry write waiting indefinitely. Every

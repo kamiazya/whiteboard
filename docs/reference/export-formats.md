@@ -18,9 +18,13 @@ an explicitly lossy projection rather than a way to read the stored content
 daemon's `POST …/export` and the `canvas_view` widget draw a `$$` math block as
 its TeX source as text, and a `` ```mermaid `` fence as a plain code
 block. Inline `$…$` math is drawn as its source text everywhere, the web app
-included. Only the web app's preview and its exports (see
-[Web app exports](#web-app-exports)) typeset math blocks and draw Mermaid
-diagrams.
+included. In the web app, the note preview, the canvas editor and the SVG/PNG
+exports of either kind (see [Web app exports](#web-app-exports)) typeset math
+blocks and draw Mermaid diagrams — in the document's own text, in a note or
+board it embeds with `![[…]]`, and in the note a canvas file node shows. On
+screen a block shows its source until its engine has rendered it; an export
+waits for every one. The thumbnails and previews in the web app's document
+list draw them as source.
 
 A document created before formats were recorded has no answer here and is
 refused rather than guessed at; writing its content through a `document.set` op
@@ -418,11 +422,14 @@ The export draws what the editor shows, including what the document points at:
 - **A canvas** exports with its pictures, the note or board a file node points
   at, what a text node embeds with `![[…]]`, and the highlights of comment
   threads about a passage. A file node pointing at another board draws its
-  miniature whatever its size on screen, as the daemon's export does.
+  miniature whatever its size on screen, as the daemon's export does. Math
+  blocks and Mermaid diagrams are drawn as the editor draws them, in a text
+  node and in the note a file node or an embed shows; `wb_scene_render` draws
+  the same canvas with them as source.
 - **A markdown note** exports as its laid-out body, at the 720-pixel page
   width `wb_scene_render` uses, with its math blocks, Mermaid diagrams,
   pictures and embeds drawn as the preview draws them — including a math
-  block or a diagram inside a quote or a list item. `wb_scene_render` draws
+  block or a diagram inside a quote, a list item or an embedded note. `wb_scene_render` draws
   the same note with math and diagrams as source.
 
 Stored pictures are written into the file as PNG `data:` URIs, so a saved SVG

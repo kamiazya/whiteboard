@@ -27,6 +27,7 @@ import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-ren
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { FragmentAsk, FragmentEntry } from '../../lib/fragment-requests.js'
 import {
   type FileRefLabel,
   FONT_DEGRADED,
@@ -82,6 +83,23 @@ function createLayoutWorker(): Worker | null {
 }
 
 /**
+ * The plain-data twins of the seams in `fileSeamOptions`: the label table,
+ * the refs the host resolved as dangling in THIS canvas, the reference graph
+ * with its tables, the ids the LOD gate expanded, and the fragments rendered
+ * so far. The composed seams serve the synchronous path; only this can cross
+ * to the worker, which rebuilds the same seams from it.
+ */
+interface WorkerSceneWire {
+  readonly fileRefLabels?: readonly FileRefLabel[]
+  readonly missingFileRefs?: readonly string[]
+  readonly references?: ReferenceWire
+  readonly expandedFileIds?: readonly string[]
+  readonly fragments?: readonly FragmentEntry[]
+  /** Where a worker layout's fragment misses go, to be rendered on this thread. */
+  readonly onFragmentsAsked?: (asks: readonly FragmentAsk[]) => void
+}
+
+/**
  * The seams arrive as ONE memoized object rather than spread, because the
  * synchronous path memoizes on their identity. Hand-listing them here is how
  * the LOD gate (`expandFileNode`, which changes with zoom) went missing from
@@ -113,24 +131,13 @@ export function useWorkerScene(
     readonly fontsGeneration?: number
   },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
-  /**
-   * The plain-data twins of the seams in `fileSeamOptions`: the label
-   * table, the refs the host resolved as dangling in THIS canvas, the
-   * reference graph with its tables, and the ids the LOD gate expanded.
-   * The composed seams serve the synchronous path; only this can cross to
-   * the worker, which rebuilds the same seams from it.
-   */
-  wire?: {
-    readonly fileRefLabels?: readonly FileRefLabel[]
-    readonly missingFileRefs?: readonly string[]
-    readonly references?: ReferenceWire
-    readonly expandedFileIds?: readonly string[]
-  },
+  wire?: WorkerSceneWire,
 ): RenderedCanvas & { readonly sceneCurrent: boolean } {
   const fileRefLabels = wire?.fileRefLabels
   const missingFileRefs = wire?.missingFileRefs
   const references = wire?.references
   const expandedFileIds = wire?.expandedFileIds
+  const fragments = wire?.fragments
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
     [
@@ -179,6 +186,7 @@ export function useWorkerScene(
       missingFileRefs,
       references,
       expandedFileIds,
+      fragments,
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
       showResolved: options.showResolved,
       threads: options.threads,
@@ -196,6 +204,7 @@ export function useWorkerScene(
       missingFileRefs,
       references,
       expandedFileIds,
+      fragments,
       options.suppressedBodyNodeIds,
       options.showResolved,
       options.threads,
@@ -240,6 +249,7 @@ export function useWorkerScene(
         worker.terminate()
         workerRef.current = null
       }
+      if (response.type === 'laid-out') wire?.onFragmentsAsked?.(response.fragmentsAsked ?? [])
       setRendered(response.type === 'laid-out' ? response : renderNow())
     }
     worker.addEventListener('message', onMessage)
@@ -269,6 +279,7 @@ export function useWorkerScene(
       missingFileRefs: inputs.missingFileRefs,
       references: inputs.references,
       expandedFileIds: inputs.expandedFileIds,
+      fragments: inputs.fragments,
       suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
       showResolved: inputs.showResolved,
       threads: inputs.threads,
