@@ -123,12 +123,23 @@ const run = (...args) => spawnSync('node', [script, ...args], { cwd: dir, env, e
 // Decided when the case runs, after `before` has probed: the option form would read `premise` at registration.
 const probed = (body) => (t) => (premise === null ? body() : t.skip(premise))
 
+// A run that forgot its file list must not read as a clean measurement.
 test(
-  'no files names that and exits 0',
+  'no files and no --changed refuses with exit 2 and the usage',
   probed(() => {
     const result = run()
+    assert.equal(result.status, 2, result.stdout)
+    assert.match(result.stderr, /^usage: complexity-of\.mjs/m)
+    assert.doesNotMatch(result.stdout, /no files/)
+  }),
+)
+
+test(
+  '--help prints the usage and exits 0',
+  probed(() => {
+    const result = run('--help')
     assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /complexity-of: no files/)
+    assert.match(result.stdout, /^usage: complexity-of\.mjs/m)
   }),
 )
 
@@ -182,11 +193,13 @@ test(
 )
 
 test(
-  '--changed without --base refuses',
+  '--changed without --base refuses with exit 2 and the usage, not a stack',
   probed(() => {
     const result = run('--changed')
-    assert.notEqual(result.status, 0)
+    assert.equal(result.status, 2, result.stdout)
     assert.match(result.stderr, /--changed needs --base/)
+    assert.match(result.stderr, /^usage: complexity-of\.mjs/m)
+    assert.doesNotMatch(result.stderr, /^\s+at /m)
   }),
 )
 
