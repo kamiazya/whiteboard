@@ -20,9 +20,13 @@ import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client
 import {
   documentContainers,
   readDocumentContent,
+  readEdgeLocks,
   readFacets,
+  readNodeLocks,
   readWorkspaceDocuments,
   reconcileSpatialCanvas,
+  setEdgeLock,
+  setNodeLock,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -90,6 +94,32 @@ export function writeReplicaSpatial(
   next: SpatialCanvas,
 ): void {
   reconcileSpatialCanvas(documentContainers(record, documentId), prev, next)
+}
+
+/**
+ * The canvas's locked nodes and edges. A lock is record content beside the
+ * canvas, so the replica carries the daemon's locks and an offline edit is
+ * held to them exactly as a live one is — without them an edit made here
+ * could move or delete a locked element and ship that to the keeper.
+ */
+export function readReplicaLocks(
+  record: ReplicaRecord,
+  documentId: string,
+): { nodes: ReadonlySet<string>; edges: ReadonlySet<string> } {
+  const containers = documentContainers(record, documentId)
+  return { nodes: readNodeLocks(containers), edges: readEdgeLocks(containers) }
+}
+
+/** Locks or unlocks one node or edge; a data-plane write, like any canvas edit. */
+export function writeReplicaLock(
+  record: ReplicaRecord,
+  documentId: string,
+  target: { node: string } | { edge: string },
+  locked: boolean,
+): void {
+  const containers = documentContainers(record, documentId)
+  if ('node' in target) setNodeLock(containers, target.node, locked)
+  else setEdgeLock(containers, target.edge, locked)
 }
 
 /**

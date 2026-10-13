@@ -383,7 +383,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // states share ONE `ReplicaActionPanel` instead of a near-identical block
   // each. The save queue, the record load, the reference seams, the editing
   // drafts and the reader's own chrome are each a named piece, which is what
-  // keeps the page's cognitive complexity under the threshold; the three entries
+  // keeps the page's cognitive complexity under the threshold; the entries
   // below are the pieces still over the line budget, and each is one concern
   // rather than several.
   'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 138,
@@ -391,7 +391,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // leaves on screen. The states are ADR-0042 decision 6's and they share
   // the same `setState`, so splitting them would split one transition.
   'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 70,
-  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaEditing': 54,
   // The read surface: the banner, the tree and the editor. JSX, and the
   // three are what a replica IS to a reader. +3: the replica's tag library,
   // handed to both editors. +2: the picture seams a copy and paste carry.

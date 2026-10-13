@@ -37,6 +37,10 @@ const USAGE = 'usage: complexity-of.mjs [--base <ref>] (--changed | <file>...)'
 const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim()
 const { base, changed, files: named } = parsedArgs(process.argv.slice(2))
 function parsedArgs(argv) {
+  if (argv.includes('--help')) {
+    process.stdout.write(`${USAGE}\n`)
+    process.exit(0)
+  }
   try {
     return argsFrom(argv)
   } catch (error) {
@@ -51,7 +55,6 @@ const git = (...a) =>
 
 let files = named
 if (changed) {
-  if (base === null) throw new Error('--changed needs --base <ref>')
   const linted = complexityScopeFrom(readFileSync(join(ROOT, 'biome.json'), 'utf-8'))
   files = git('diff', '--name-only', '--diff-filter=AMR', `${base}...HEAD`)
     .split('\n')

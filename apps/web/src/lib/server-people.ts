@@ -4,6 +4,16 @@
  * people as its owners manage them. Each answer is parsed with the keeper's
  * own contract; a refusal comes back as the sentence the keeper wrote for it.
  */
+import {
+  tenantInvitationsApiUrl,
+  tenantPeopleApiUrl,
+  tenantPersonAdministratorApiUrl,
+  tenantPersonApiUrl,
+  tenantPersonDeactivationApiUrl,
+  workspaceInvitationsApiUrl,
+  workspacePeopleApiUrl,
+  workspacePersonApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   administratorResponseSchema,
@@ -83,57 +93,40 @@ const json = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 })
 
-const workspace = (workspaceId: string) => `/api/workspaces/${encodeURIComponent(workspaceId)}`
-
 export const tenantPeople = {
-  list: (fetchFn: Fetch) => call(fetchFn, '/api/people', tenantPeopleResponseSchema),
+  list: (fetchFn: Fetch) => call(fetchFn, tenantPeopleApiUrl(), tenantPeopleResponseSchema),
   setDeactivated: (fetchFn: Fetch, userId: string, deactivated: boolean) =>
-    call(
-      fetchFn,
-      `/api/people/${encodeURIComponent(userId)}/deactivation`,
-      deactivationResponseSchema,
-      {
-        method: deactivated ? 'POST' : 'DELETE',
-      },
-    ),
-  setAdministrator: (fetchFn: Fetch, userId: string, administrator: boolean) =>
-    call(
-      fetchFn,
-      `/api/people/${encodeURIComponent(userId)}/administrator`,
-      administratorResponseSchema,
-      {
-        method: administrator ? 'PUT' : 'DELETE',
-      },
-    ),
-  invite: (fetchFn: Fetch) =>
-    call(fetchFn, '/api/invitations', invitationLinkResponseSchema, json('POST', {})),
-  delete: (fetchFn: Fetch, userId: string) =>
-    call(fetchFn, `/api/people/${encodeURIComponent(userId)}`, deletionResponseSchema, {
-      method: 'DELETE',
+    call(fetchFn, tenantPersonDeactivationApiUrl(userId), deactivationResponseSchema, {
+      method: deactivated ? 'POST' : 'DELETE',
     }),
+  setAdministrator: (fetchFn: Fetch, userId: string, administrator: boolean) =>
+    call(fetchFn, tenantPersonAdministratorApiUrl(userId), administratorResponseSchema, {
+      method: administrator ? 'PUT' : 'DELETE',
+    }),
+  invite: (fetchFn: Fetch) =>
+    call(fetchFn, tenantInvitationsApiUrl(), invitationLinkResponseSchema, json('POST', {})),
+  delete: (fetchFn: Fetch, userId: string) =>
+    call(fetchFn, tenantPersonApiUrl(userId), deletionResponseSchema, { method: 'DELETE' }),
 }
 
 export const workspacePeople = {
   list: (fetchFn: Fetch, workspaceId: string) =>
-    call(fetchFn, `${workspace(workspaceId)}/people`, workspacePeopleResponseSchema),
+    call(fetchFn, workspacePeopleApiUrl(workspaceId), workspacePeopleResponseSchema),
   setRole: (fetchFn: Fetch, workspaceId: string, userId: string, role: WorkspacePerson['role']) =>
     call(
       fetchFn,
-      `${workspace(workspaceId)}/people/${encodeURIComponent(userId)}`,
+      workspacePersonApiUrl(workspaceId, userId),
       workspacePersonSchema,
       json('PATCH', { role }),
     ),
   remove: (fetchFn: Fetch, workspaceId: string, userId: string) =>
-    call(
-      fetchFn,
-      `${workspace(workspaceId)}/people/${encodeURIComponent(userId)}`,
-      removeWorkspacePersonResponseSchema,
-      { method: 'DELETE' },
-    ),
+    call(fetchFn, workspacePersonApiUrl(workspaceId, userId), removeWorkspacePersonResponseSchema, {
+      method: 'DELETE',
+    }),
   invite: (fetchFn: Fetch, workspaceId: string) =>
     call(
       fetchFn,
-      `${workspace(workspaceId)}/invitations`,
+      workspaceInvitationsApiUrl(workspaceId),
       invitationLinkResponseSchema,
       json('POST', {}),
     ),

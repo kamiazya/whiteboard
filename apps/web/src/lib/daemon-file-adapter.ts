@@ -9,6 +9,10 @@
  * carries no reference to bytes the daemon never stored.
  */
 
+import {
+  documentApiUrl,
+  documentFileApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
@@ -44,14 +48,14 @@ export function createDaemonFileAdapter({
   path,
   resolveRefPath,
 }: DaemonFileAdapterOptions): DocumentFileAdapter {
-  const documentPath = (target: string) =>
-    `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/document/${encodeURIComponent(target)}`
+  const fileUrl = (fileId: string) =>
+    `${daemonBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`
 
   async function loadImageBlob(ref: string): Promise<Blob | undefined> {
     try {
       // This canvas's own path, not the reference: the file route scopes
       // reads by the canvas that owns the workspace's file directory.
-      const res = await daemonFetch(`${documentPath(path)}/file/${imageRefId(ref)}`)
+      const res = await daemonFetch(fileUrl(imageRefId(ref)))
       if (!res.ok) return undefined
       return await res.blob()
     } catch (err) {
@@ -68,8 +72,8 @@ export function createDaemonFileAdapter({
 
     async loadDocument(ref) {
       try {
-        const target = resolveRefPath?.(ref) ?? ref
-        const res = await daemonFetch(`${documentPath(target)}/snapshot`)
+        const snapshot = documentApiUrl(workspaceId, resolveRefPath?.(ref) ?? ref, 'snapshot')
+        const res = await daemonFetch(`${daemonBaseUrl}${snapshot}`)
         if (!res.ok) return undefined
         const doc = new Loro()
         doc.import(new Uint8Array(await res.arrayBuffer()))
@@ -87,7 +91,7 @@ export function createDaemonFileAdapter({
     async storeImage(file) {
       const id = crypto.randomUUID()
       try {
-        const res = await daemonFetch(`${documentPath(path)}/file/${id}`, {
+        const res = await daemonFetch(fileUrl(id), {
           method: 'PUT',
           // The route answers 415 for a Content-Type it has no extension
           // mapping for, so the picked file's own type has to travel.

@@ -25,6 +25,7 @@
  * a signature a caller could replay somewhere that DOES verify.
  */
 
+import { replicaKeyApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import {
   type ReplicaKeyResponse,
   type ReplicaTier,
@@ -202,10 +203,9 @@ async function fetchReplicaKey(
   workspaceId: string,
 ): Promise<ReplicaKeyResponse | null> {
   try {
-    const res = await fetch(
-      `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/replica-key`,
-      { method: 'POST' },
-    )
+    const res = await fetch(`${daemonBaseUrl}${replicaKeyApiUrl(workspaceId)}`, {
+      method: 'POST',
+    })
     if (!res.ok) return null
     const parsed = replicaKeyResponseSchema.safeParse(await res.json())
     return parsed.success ? parsed.data : null

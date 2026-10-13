@@ -173,4 +173,26 @@ describe('requestPromote', () => {
     })
     await expectLoggedFailure('/workspace-document/promote failed its contract at recorded')
   })
+
+  it('rejects as an unreached keeper when an accepted answer is cut mid-body', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"ok":tr'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const fetch = keeper({ promote: () => new Response(cut, { status: 200 }) })
+    // A dropped connection is the network's, not the keeper's contract: it
+    // must reach the caller's network sentence, and leave no drift record.
+    await expect(request(fetch)).rejects.toMatchObject({ name: 'FetchFailedError' })
+  })
+
+  it('reads an accepted answer that is not JSON as contract drift, not as the network', async () => {
+    const fetch = keeper({ promote: () => new Response('<html>', { status: 200 }) })
+    expect(await request(fetch)).toEqual({
+      ok: false,
+      reason: 'This keeper answered the merge with an unexpected response.',
+    })
+    await expectLoggedFailure('/workspace-document/promote failed its contract at (root)')
+  })
 })

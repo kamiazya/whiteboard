@@ -5,6 +5,7 @@
  * its owner-only socket with the daemon's own credential — so a connection is
  * a daemon that answers.
  */
+import { runtimePingApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { bridgeFetch } from './bridge-loader.js'
 
@@ -25,7 +26,7 @@ export async function connectThroughExtension(
   const giveUp = new AbortController()
   const timer = setTimeout(() => giveUp.abort(), CONNECT_TIMEOUT_MS)
   try {
-    const res = await fetchFn(`${BRIDGE_DAEMON_BASE_URL}/api/runtime/ping`, {
+    const res = await fetchFn(`${BRIDGE_DAEMON_BASE_URL}${runtimePingApiUrl()}`, {
       signal: giveUp.signal,
     })
     if (res.ok) return { status: 'connected', daemonBaseUrl: BRIDGE_DAEMON_BASE_URL }

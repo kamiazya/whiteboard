@@ -2,8 +2,11 @@ import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  readEdgeLocks,
   readMarkdownBody,
+  readNodeLocks,
   readSpatialCanvas,
+  setNodeLock,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -13,9 +16,11 @@ import { linkEntries, linkTitles } from './link-entries.js'
 import {
   REPLICA_IMAGE_UNAVAILABLE,
   readReplicaContent,
+  readReplicaLocks,
   replicaEntries,
   replicaReferenceGraph,
   replicaReferenceWire,
+  writeReplicaLock,
   writeReplicaMarkdown,
   writeReplicaSpatial,
 } from './replica-record.js'
@@ -80,6 +85,19 @@ describe('replica record', () => {
     const added = textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 40, text: 'hi' })
     writeReplicaSpatial(doc, SP, prev, { ...prev, nodes: [...prev.nodes, added] })
     expect(readSpatialCanvas(documentContainers(doc, SP)).nodes.map((n) => n.id)).toEqual(['n1'])
+  })
+
+  it("reads a canvas's locks from the record, and writes a toggle back into it", () => {
+    const doc = record()
+    setNodeLock(documentContainers(doc, SP), 'held', true)
+    expect(readReplicaLocks(doc, SP)).toEqual({ nodes: new Set(['held']), edges: new Set() })
+
+    writeReplicaLock(doc, SP, { node: 'held' }, false)
+    writeReplicaLock(doc, SP, { edge: 'e1' }, true)
+    expect([...readNodeLocks(documentContainers(doc, SP))]).toEqual([])
+    expect([...readEdgeLocks(documentContainers(doc, SP))]).toEqual(['e1'])
+    // Another document's locks are its own.
+    expect(readReplicaLocks(doc, MD)).toEqual({ nodes: new Set(), edges: new Set() })
   })
 
   it('resolves what the selected document links to from the record alone', () => {

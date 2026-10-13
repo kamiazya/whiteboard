@@ -165,20 +165,12 @@ describe('a contributed edge router', () => {
     })
   })
 
-  it('falls back to the built-in when the router declines', () => {
-    const path = routedEdge(board('decline'))?.path ?? []
-    expect(path.some((point) => point.x === DETOUR.x)).toBe(false)
-    expect(path.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it('falls back to the built-in for a route too short to draw', () => {
-    const path = routedEdge(board('point'))?.path ?? []
-    expect(path.some((point) => point.x === DETOUR.x)).toBe(false)
-    expect(path.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it('falls back to the built-in for a name the contribution never registered', () => {
-    const path = routedEdge(board('nosuchrouter'))?.path ?? []
+  it.each([
+    ['the router declines', 'decline'],
+    ['the route is too short to draw', 'point'],
+    ['the name is one the contribution never registered', 'nosuchrouter'],
+  ])('falls back to the built-in when %s', (_why, routing) => {
+    const path = routedEdge(board(routing))?.path ?? []
     expect(path.some((point) => point.x === DETOUR.x)).toBe(false)
     expect(path.length).toBeGreaterThanOrEqual(2)
   })

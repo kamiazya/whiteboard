@@ -13,7 +13,8 @@ const FLAGS = new Set(['--base', '--changed'])
 /**
  * `--base <ref>`, `--changed`, and the files named — every other argument.
  * Any other `-`-prefixed argument throws: a misspelled `--changed` would
- * otherwise leave no files to score and read as a clean measurement.
+ * otherwise leave no files to score and read as a clean measurement. So does
+ * naming neither files nor `--changed`, and `--changed` with no `--base`.
  */
 export function argsFrom(argv) {
   const unknown = argv.find(
@@ -26,7 +27,11 @@ export function argsFrom(argv) {
   // No ref starts with `-` (git refuses one), so a flag here is a missing ref.
   if (base?.startsWith('-')) throw new UsageError(`--base needs a <ref>, not ${base}`)
   const files = argv.filter((a, i) => !a.startsWith('--') && (baseAt === -1 || i !== baseAt + 1))
-  return { base, changed: argv.includes('--changed'), files }
+  const changed = argv.includes('--changed')
+  if (changed && base === null) throw new UsageError('--changed needs --base <ref>')
+  // An empty list would score nothing and read as a clean measurement.
+  if (!changed && files.length === 0) throw new UsageError('no files named, and no --changed')
+  return { base, changed, files }
 }
 
 /** A refusal the CLI answers with its usage and exit 2. */

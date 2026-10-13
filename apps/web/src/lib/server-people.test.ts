@@ -5,6 +5,11 @@
  * page as its sentence, and the one that asks for a fresh sign-in is the
  * only one that says so.
  */
+import {
+  tenantPersonAdministratorApiUrl,
+  tenantPersonDeactivationApiUrl,
+  workspacePersonApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { tenantPeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
 import { workspacePeopleRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { describe, expect, it } from 'vitest'
@@ -55,5 +60,55 @@ describe('server-people refusals', () => {
     expect(outcome).toEqual({ ok: false, message: 'That was refused.' })
     const html = await tenantPeople.list(async () => new Response('<html/>', { status: 502 }))
     expect(html).toEqual({ ok: false, message: 'That was refused.' })
+  })
+})
+
+/** A keeper that answers every call with `body`, remembering what was asked. */
+function answering(body: unknown) {
+  const calls: { url: string; method: string }[] = []
+  const fetchFn: typeof globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), method: init?.method ?? 'GET' })
+    return jsonResponse(body, 200)
+  }
+  return { calls, fetchFn }
+}
+
+describe('server-people calls', () => {
+  it.each([
+    [true, 'POST'],
+    [false, 'DELETE'],
+  ] as const)('sets deactivated=%s with %s on the deactivation route', async (deactivated, method) => {
+    const keeper = answering({ userId: 'user-1', deactivated })
+    const outcome = await tenantPeople.setDeactivated(keeper.fetchFn, 'user-1', deactivated)
+    expect(keeper.calls).toEqual([{ url: tenantPersonDeactivationApiUrl('user-1'), method }])
+    expect(outcome).toEqual({ ok: true, value: { userId: 'user-1', deactivated } })
+  })
+
+  it.each([
+    [true, 'PUT'],
+    [false, 'DELETE'],
+  ] as const)('sets administrator=%s with %s on the administrator route', async (administrator, method) => {
+    const keeper = answering({ userId: 'user-1', administrator })
+    const outcome = await tenantPeople.setAdministrator(keeper.fetchFn, 'user-1', administrator)
+    expect(keeper.calls).toEqual([{ url: tenantPersonAdministratorApiUrl('user-1'), method }])
+    expect(outcome).toEqual({ ok: true, value: { userId: 'user-1', administrator } })
+  })
+
+  it("removes a workspace's person with DELETE on that person's route", async () => {
+    const keeper = answering({ removed: true })
+    const outcome = await workspacePeople.remove(keeper.fetchFn, 'ws-1', 'user-1')
+    expect(keeper.calls).toEqual([
+      { url: workspacePersonApiUrl('ws-1', 'user-1'), method: 'DELETE' },
+    ])
+    expect(outcome).toEqual({ ok: true, value: { removed: true } })
+  })
+
+  it('answers a success body its contract does not admit as unexpected, never as the value', async () => {
+    const keeper = answering({ userId: 'user-1', administrator: 'yes' })
+    const outcome = await tenantPeople.setAdministrator(keeper.fetchFn, 'user-1', true)
+    expect(outcome).toEqual({
+      ok: false,
+      message: 'The server answered in a way this page does not understand.',
+    })
   })
 })

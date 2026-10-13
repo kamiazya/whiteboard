@@ -33,6 +33,8 @@ import {
 import { getAppLogger } from '../../lib/app-logger.js'
 import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
 import type { ConnectedDaemon } from '../../lib/daemon-fetch.js'
+import { reach } from '../../lib/keeper-transfer-failure.js'
+import { openFailureReason } from '../../lib/open-move-failure.js'
 import type { PromoteWorkspaceResult } from '../../lib/promote-workspace.js'
 import { REPLICA_TIER_COPY } from '../../lib/replica-tier-copy.js'
 import {
@@ -357,14 +359,14 @@ export function PromoteWorkspaceSection({
         import('../../lib/promote-workspace.js'),
         import('../../lib/browser-workspace-docs.js'),
         import('../../lib/fold-workspace.js'),
-        listWorkspaces(fetchImpl, daemon.baseUrl),
+        listWorkspaces((input, init) => reach(fetchImpl(input, init)), daemon.baseUrl),
       ])
       // Settings can be a session's first surface (deep-link/reload), so the
       // startup fold may not have run yet — and this count reads the
       // workspace record, which without the fold silently omits an older
       // build's per-document records. A fold failure degrades to the
-      // pre-fold count and never reaches the outer catch: it is a
-      // storage-side problem, not "could not reach the daemon".
+      // pre-fold count rather than refusing the move: the record itself is
+      // still read below, and a record that cannot be read is what refuses.
       await foldOrServeTheTree(log)
       const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
       const targets: WorkspaceIdentity[] = workspaces.workspaces.map((ws) => ({
@@ -389,8 +391,8 @@ export function PromoteWorkspaceSection({
         targets,
         targetId: (targets[0] as { workspaceId: string }).workspaceId,
       })
-    } catch {
-      setFlow({ step: 'unavailable', reason: 'Could not reach the daemon to prepare the move.' })
+    } catch (err) {
+      setFlow({ step: 'unavailable', reason: openFailureReason(err, daemon.baseUrl) })
     }
   }, [daemon, baseFetch])
 

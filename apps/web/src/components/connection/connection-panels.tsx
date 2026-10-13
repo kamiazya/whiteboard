@@ -155,7 +155,7 @@ export function BrowserStoragePanel({
  * the edits meanwhile. A refused write there says the page's own sentence,
  * so the popover and the page cannot describe one failure two ways.
  */
-export function ReplicaCopyPanel({ state }: { state: ConnectionState | null }) {
+export function ReplicaCopyPanel({ state }: Readonly<{ state: ConnectionState | null }>) {
   if (state?.keeper !== 'replica') return null
   const failed = state.storage === 'failed'
   return (

@@ -1,7 +1,8 @@
 /**
  * What a move of a workspace record between this browser and a keeper tells
  * the person when it threw, by what failed — one policy for the replica pull,
- * the replica push and the move to the daemon, each supplying its sentences.
+ * the replica push, preparing and running the move to the daemon, and a
+ * keeper accepting a transferred record, each supplying its sentences.
  *
  * Every such `try` covers the network AND this device's own storage — the
  * stored copy, the IndexedDB write, the CRDT bytes. Reporting all of it as an
@@ -15,7 +16,7 @@ import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { AppLogger } from './app-logger.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 
-export type ReplicaFailure =
+export type TransferFailure =
   /**
    * The daemon was reached, but this build's session key for the workspace
    * is withheld (`ReplicaKeyWithheldError`) — a reconnect question, never a
@@ -75,11 +76,11 @@ export async function reach<T>(attempt: Promise<T>): Promise<T> {
   }
 }
 
-export function describeFailure(
+export function describeTransferFailure(
   err: unknown,
   copy: FailureCopy,
   context: { log: AppLogger; fields: Readonly<Record<string, string>> },
-): ReplicaFailure {
+): TransferFailure {
   const { log, fields } = context
   if (err instanceof ReplicaKeyWithheldError) return { kind: 'withheld' }
   if (isStoredDocumentUnreadableError(err)) {

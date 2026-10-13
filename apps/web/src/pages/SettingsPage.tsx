@@ -1,3 +1,4 @@
+import { storageReportApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { storageReportPayloadSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   Cable,
@@ -536,7 +537,7 @@ export function SettingsPage({ daemon, onDisconnected, workspaceId }: SettingsPa
     const daemonFetch = createDaemonFetch(daemonBaseUrl)
     void (async () => {
       try {
-        const res = await daemonFetch('/api/runtime/storage')
+        const res = await daemonFetch(storageReportApiUrl())
         if (!res.ok) return
         const report = storageReportPayloadSchema.parse(await res.json())
         if (!cancelled) setDaemonStorageBytes(report.totalBytes)

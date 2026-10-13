@@ -22,11 +22,11 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import {
-  describeFailure,
+  describeTransferFailure,
   PUSH_FAILURE_COPY,
-  type ReplicaFailure,
   reach,
-} from './replica-failure.js'
+  type TransferFailure,
+} from './keeper-transfer-failure.js'
 
 const log = getAppLogger('replica-push')
 
@@ -44,7 +44,7 @@ export interface PushReplicaEditsOptions {
 export type PushReplicaEditsResult =
   | { kind: 'clean' }
   | { kind: 'ok'; syncedAt: string; syncedFrontier: string }
-  | ReplicaFailure
+  | TransferFailure
 
 export async function pushReplicaEdits(
   options: PushReplicaEditsOptions,
@@ -83,6 +83,9 @@ export async function pushReplicaEdits(
       syncedFrontier: bytesToBase64(current.encode()),
     }
   } catch (err) {
-    return describeFailure(err, PUSH_FAILURE_COPY, { log, fields: { daemonBaseUrl, workspaceId } })
+    return describeTransferFailure(err, PUSH_FAILURE_COPY, {
+      log,
+      fields: { daemonBaseUrl, workspaceId },
+    })
   }
 }

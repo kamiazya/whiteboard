@@ -87,6 +87,27 @@ describe('createDaemonFileAdapter', () => {
     expect(url).toBe(FAKE_OBJECT_URL)
   })
 
+  it('sends a nested document path one encoded segment at a time', async () => {
+    // The document-path grammar is document-url.ts's: a `/` separates
+    // segments and only a segment's own characters are escaped. The answers
+    // are refusals: only the requested URLs are under test.
+    const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      path: 'notes/a plan',
+    })
+
+    await adapter.loadImageUrl('asset:file-abc')
+    await adapter.loadDocument('notes/sibling')
+
+    expect(daemonFetch).toHaveBeenCalledWith(
+      `${BASE}/api/w/${WS}/document/notes/a%20plan/file/file-abc`,
+    )
+    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/notes/sibling/snapshot`)
+  })
+
   it('resolves a missing image to undefined instead of throwing', async () => {
     const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
     const adapter = createDaemonFileAdapter({

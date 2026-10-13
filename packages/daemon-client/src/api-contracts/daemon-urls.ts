@@ -7,6 +7,8 @@
 // Each `/api` builder ends in `ApiUrl`: that suffix is how both that test and
 // the keeper-parity scan in apps/web recognise a module that reaches the
 // daemon. The `/auth` builders at the end are the one exception, and say why.
+// tools/arch-lint's `daemon-route-literals.test.ts` fails a client module that
+// spells an `/api/` or `/auth/` path itself instead of calling a builder here.
 //
 // Segments are encoded one by one; the separators between them are structure.
 // Paths come back relative — the caller prefixes the daemon's base URL.
@@ -124,6 +126,58 @@ export function storageReportApiUrl(): string {
   return '/api/runtime/storage'
 }
 
+/** The cheapest authenticated answer a daemon gives: "something is listening, and lets you in". */
+export function runtimePingApiUrl(): string {
+  return '/api/runtime/ping'
+}
+
+/** POST: the workspace key an offline replica is sealed with (ADR-0042). */
+export function replicaKeyApiUrl(workspaceId: string): string {
+  return `${workspaceApiUrl(workspaceId)}/replica-key`
+}
+
+// ---- people: mounted only by a server-mode keeper (ADR-0049) ----
+
+/** A tenant's users, as its administrators manage them. */
+export function tenantPeopleApiUrl(): string {
+  return '/api/people'
+}
+
+/** DELETE: remove a user from the tenant. */
+export function tenantPersonApiUrl(userId: string): string {
+  return `${tenantPeopleApiUrl()}/${enc(userId)}`
+}
+
+/** POST deactivates, DELETE reactivates. */
+export function tenantPersonDeactivationApiUrl(userId: string): string {
+  return `${tenantPersonApiUrl(userId)}/deactivation`
+}
+
+/** PUT appoints, DELETE dismisses. */
+export function tenantPersonAdministratorApiUrl(userId: string): string {
+  return `${tenantPersonApiUrl(userId)}/administrator`
+}
+
+/** POST: an invitation link into the tenant. */
+export function tenantInvitationsApiUrl(): string {
+  return '/api/invitations'
+}
+
+/** A workspace's people, as its owners manage them. */
+export function workspacePeopleApiUrl(workspaceId: string): string {
+  return `${workspaceApiUrl(workspaceId)}/people`
+}
+
+/** PATCH changes the role, DELETE removes the person from the workspace. */
+export function workspacePersonApiUrl(workspaceId: string, userId: string): string {
+  return `${workspacePeopleApiUrl(workspaceId)}/${enc(userId)}`
+}
+
+/** POST: an invitation link into the workspace. */
+export function workspaceInvitationsApiUrl(workspaceId: string): string {
+  return `${workspaceApiUrl(workspaceId)}/invitations`
+}
+
 // ---- /api/v1: documents addressed by id ----
 
 function v1WorkspaceUrl(workspaceId: string): string {
@@ -171,9 +225,9 @@ export function fontFileApiUrl(fontId: string): string {
 
 // ---- /auth: the sign-in routes a server-mode keeper mounts (ADR-0046) ----
 //
-// Not `*ApiUrl`: that suffix marks a route the browser keeper must also
-// answer, and these exist only on a server keeper, which has no browser-keeper
-// twin. They are pinned the same way, against a server-mode app, by
+// Not `*ApiUrl`: these sit outside `/api`, and the keeper-parity scan
+// recognises them by their own `auth*Url` spelling. They are pinned the same
+// way as the people builders, against a server-mode app, by
 // `daemon-client-urls.routes.test.ts`. A caller appends its own query string.
 
 export function authProvidersUrl(): string {

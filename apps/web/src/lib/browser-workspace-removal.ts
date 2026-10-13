@@ -29,11 +29,13 @@ type PromotedOutcome = Extract<PromoteWorkspaceResult, { kind: 'ok' }>
 
 /**
  * Whether the move left nothing only the browser copy holds — deliberately
- * strict. `missing` refuses alongside `failed` because the file store folds
- * read errors into "missing", so those references may be retryable and the
- * source record is the retry vehicle. `leftBehind` refuses for the same
- * reason: a trash entry or a saved version the daemon did not confirm
- * holding exists only in the copy a demote would delete.
+ * strict. `failed` refuses because a re-run may cure it, and the source
+ * record is the retry vehicle. `missing` refuses although no re-run will: it
+ * means this browser has no readable bytes for the reference — gone, or a
+ * record too corrupt to parse — so the move could not carry them, and the
+ * source copy is the only evidence of what the document pointed at.
+ * `leftBehind` refuses because a trash entry or a saved version the daemon
+ * did not confirm holding exists only in the copy a demote would delete.
  */
 function canDemote(outcome: PromotedOutcome): boolean {
   return (
