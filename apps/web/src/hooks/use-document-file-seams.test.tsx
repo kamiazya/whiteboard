@@ -8,9 +8,9 @@ import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard
  */
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
+import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
 import { toFacetCard, useDocumentFileSeams } from './use-document-file-seams.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
@@ -147,14 +147,12 @@ describe('useDocumentFileSeams', () => {
 
   it('keeps the newer revision when a load under an earlier stamp lands after it', async () => {
     let releaseFirst: () => void = () => {}
+    const first = new Promise<LoadedFileDocument>((resolve) => {
+      releaseFirst = () => resolve({ canvas: embedded('first') })
+    })
     const loadDocument = vi
       .fn<DocumentFileAdapter['loadDocument']>()
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            releaseFirst = () => resolve({ canvas: embedded('first') })
-          }),
-      )
+      .mockReturnValueOnce(first)
       .mockResolvedValueOnce({ canvas: embedded('second') })
     const adapter = makeAdapter({ loadDocument })
     const canvas = canvasWith('other')
@@ -170,8 +168,12 @@ describe('useDocumentFileSeams', () => {
       expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('second')),
     )
 
-    releaseFirst()
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The hook's completion is registered on `first` before this await is,
+    // so it has written the late answer by the time `act` returns.
+    await act(async () => {
+      releaseFirst()
+      await first
+    })
     expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('second'))
   })
 
@@ -562,7 +564,11 @@ describe('useDocumentFileSeams facets', () => {
     renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map(), bodies: [] }))
 
     await waitFor(() => expect(loadDocument).toHaveBeenCalledTimes(TRANSIENT_LOAD_ATTEMPTS))
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // Settle the last rejection inside `act`: the hook's handler runs first,
+    // and the pass it schedules is what would ask a fourth time.
+    await act(async () => {
+      await loadDocument.mock.results.at(-1)?.value.catch(() => {})
+    })
     expect(loadDocument).toHaveBeenCalledTimes(TRANSIENT_LOAD_ATTEMPTS)
   })
 })
