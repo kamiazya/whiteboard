@@ -1,14 +1,39 @@
 import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PENDING_WRITES_DIRNAME, writeFileAtomicStaged } from './atomic-write.js'
+
+// What the staged write did to the disk, in order: which path a handle was
+// synced for, and when the rename ran. Records only; every call is real.
+const fsEvents = vi.hoisted(() => ({ log: [] as string[] }))
+vi.mock('node:fs/promises', async (original) => {
+  const real = await original<typeof import('node:fs/promises')>()
+  return {
+    ...real,
+    open: (async (...args: Parameters<typeof real.open>) => {
+      const handle = await real.open(...args)
+      const path = String(args[0])
+      const sync = handle.sync.bind(handle)
+      handle.sync = async () => {
+        await sync()
+        fsEvents.log.push(`sync ${path}`)
+      }
+      return handle
+    }) as typeof real.open,
+    rename: (async (...args: Parameters<typeof real.rename>) => {
+      await real.rename(...args)
+      fsEvents.log.push(`rename ${String(args[0])}`)
+    }) as typeof real.rename,
+  }
+})
 
 let dir: string
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'wb-atomic-write-'))
 })
 afterEach(async () => {
+  fsEvents.log = []
   await rm(dir, { recursive: true, force: true })
 })
 
@@ -51,5 +76,17 @@ describe('writeFileAtomicStaged', () => {
       writeFileAtomicStaged(dir, join(dir, 'no', 'such', 'dir', 'x.bin'), new Uint8Array(8)),
     ).rejects.toThrow()
     expect(await readdir(join(dir, PENDING_WRITES_DIRNAME))).toEqual([])
+  })
+
+  it('syncs the staged bytes before the rename names them', async () => {
+    // Without it a crash after the rename can leave the final name on a
+    // zero-length file: a filesystem need not order a new file's data before
+    // a rename of it.
+    await writeFileAtomicStaged(dir, join(dir, 'durable.bin'), new Uint8Array(16))
+
+    const renamed = fsEvents.log.findIndex((e) => e.startsWith('rename '))
+    expect(renamed).toBeGreaterThan(-1)
+    const stagedPath = fsEvents.log[renamed]?.slice('rename '.length)
+    expect(fsEvents.log.slice(0, renamed)).toContain(`sync ${stagedPath}`)
   })
 })
