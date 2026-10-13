@@ -18,7 +18,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { ServerModeApp } from './ServerModeApp.js'
 
@@ -26,6 +26,19 @@ vi.mock('./DaemonIndexPage.js', () => ({ DaemonIndexPage: () => <p>workspace ind
 vi.mock('./DaemonDocumentPage.js', () => ({ DaemonDocumentPage: () => <p>document editor</p> }))
 
 afterEach(cleanup)
+
+// The shell's workspace list asks the page's own origin through the global
+// fetch, and its answer can land after the test that mounted it has ended, so
+// the stub lives for the whole file and answers as whichever keeper is current.
+let currentKeeper: ReturnType<typeof fakeKeeper> | undefined
+beforeAll(() => {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+    (currentKeeper ?? fakeKeeper('ada'))(input, init),
+  )
+})
+afterAll(() => {
+  vi.unstubAllGlobals()
+})
 
 interface User {
   userId: string
@@ -133,7 +146,10 @@ function fakeKeeper(self: 'ada' | 'bob', { stale = false, cy = false } = {}) {
   ]
   const me = users.find((u) => u.userId === `u-${self}`) as User
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
+    // A request through the global fetch arrives absolute; it names the same route.
+    const parsed = new URL(String(input), location.origin)
+    const url =
+      parsed.origin === location.origin ? `${parsed.pathname}${parsed.search}` : String(input)
     if (url === authSessionUrl()) {
       return Response.json({
         signedIn: true,
@@ -152,6 +168,7 @@ function fakeKeeper(self: 'ada' | 'bob', { stale = false, cy = false } = {}) {
 }
 
 function renderAt(path: string, fetchFn: ReturnType<typeof fakeKeeper>) {
+  currentKeeper = fetchFn
   render(
     <MemoryRouter initialEntries={[path]}>
       <ServerModeApp fetchFn={fetchFn} />

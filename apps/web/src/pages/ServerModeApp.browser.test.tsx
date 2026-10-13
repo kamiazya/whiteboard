@@ -5,7 +5,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { resetShellStatusForTests, setShellConnection } from '../lib/shell-status-store.js'
 import { ServerModeApp } from './ServerModeApp.js'
 
@@ -68,7 +68,24 @@ function keeperFetch(keeper: Keeper) {
   })
 }
 
+// The shell's workspace list asks this origin through the global fetch, not
+// the app's fetchFn, and its answer can land after the test that mounted it
+// has ended — so for the whole file the global answers as the current keeper,
+// through a double of its own so no test's call count sees it.
+let currentKeeper: Keeper = {}
+beforeAll(() => {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), location.origin)
+    const path = url.origin === location.origin ? `${url.pathname}${url.search}` : String(input)
+    return keeperFetch(currentKeeper)(path, init)
+  })
+})
+afterAll(() => {
+  vi.unstubAllGlobals()
+})
+
 function renderAt(path: string, keeper: Keeper) {
+  currentKeeper = keeper
   const fetchFn = keeperFetch(keeper)
   render(
     <MemoryRouter initialEntries={[path]}>
