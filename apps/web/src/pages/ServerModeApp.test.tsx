@@ -7,7 +7,7 @@
  * daemon-client contract (`createWorkspaceRequestSchema`) rather than against
  * a shape this test wrote down.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installFakeDaemonFetch } from '../test-utils/fake-daemon-fetch.js'
@@ -362,6 +362,59 @@ describe('a session read that fails is not a sign-out', () => {
     renderSession('/w/plans', () => Promise.resolve(jsonResponse({ signedIn: false })))
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeTruthy()
+  })
+})
+
+function held<T>() {
+  let answer: (value: T) => void = () => {}
+  const promise = new Promise<T>((resolve) => {
+    answer = resolve
+  })
+  return { promise, answer }
+}
+
+describe('a session read answers for the read it belongs to', () => {
+  it('goes back to loading while a retried read is in flight', async () => {
+    const answer = renderSession('/', failedReads['a 503'] as () => Promise<Response>)
+    const retry = await screen.findByRole('button', { name: 'Try again' })
+    await expectLoggedFailure('could not read the session')
+
+    const second = held<Response>()
+    answer.session = () => second.promise
+    fireEvent.click(retry)
+
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    second.answer(await signedInAnswer())
+    expect(await screen.findByRole('heading', { name: 'Your workspaces' })).toBeTruthy()
+  })
+
+  it('keeps the newer answer when an earlier read lands after it', async () => {
+    const fake = installFakeDaemonFetch({ workspaces: [], documentsByWorkspace: {} })
+    const sessionAs = (displayName: string) =>
+      jsonResponse({ signedIn: true, user: { userId: 'u-1', displayName, administrator: false } })
+    const first = held<Response>()
+    const late = sessionAs('Ada')
+    const keeper = (session: () => Promise<Response>) =>
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+        String(input) === '/auth/session' ? session() : fake(input, init),
+      )
+    const app = (fetchFn: typeof globalThis.fetch) => (
+      <MemoryRouter initialEntries={['/']}>
+        <ServerModeApp fetchFn={fetchFn} />
+      </MemoryRouter>
+    )
+    const { rerender } = render(app(keeper(() => first.promise)))
+    rerender(app(keeper(() => Promise.resolve(sessionAs('Bob')))))
+    expect(await screen.findByText('Signed in as Bob')).toBeTruthy()
+
+    await act(async () => first.answer(late))
+    await vi.waitFor(() => expect(late.bodyUsed).toBe(true))
+    // The read finishes in microtasks once its body is read; one macrotask drains them.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+
+    expect(screen.getByText('Signed in as Bob')).toBeTruthy()
+    expect(screen.queryByText('Signed in as Ada')).toBeNull()
   })
 })
 
