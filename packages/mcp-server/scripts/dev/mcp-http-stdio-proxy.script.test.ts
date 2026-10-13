@@ -249,7 +249,12 @@ describe('mcp-http-stdio-proxy against the real daemon', () => {
     return { client, order }
   }
 
-  function createCall(path: string, meta?: Record<string, unknown>) {
+  // A fresh path per call: the daemon outlives each test (and each repeat), so
+  // a fixed path would already exist on the second run.
+  let calls = 0
+  function createCall(name: string, meta?: Record<string, unknown>) {
+    calls += 1
+    const path = `${name}-${calls}`
     return {
       name: 'wb_workspace_edit',
       arguments: {
