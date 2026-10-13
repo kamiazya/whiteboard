@@ -4,10 +4,13 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConfiguredProvider } from '../server/security/oidc-relying-party.js'
 import { signsInWithBrowser } from '../server/security/oidc-relying-party.js'
+import { providerAuthenticator } from '../server/security/sign-in-config.js'
 import { serverRunDryRunOutputSchema, serverRunReadyOutputSchema } from './operator-json.js'
 import type { StartServerFn } from './server-run.js'
 import { runServerRun } from './server-run.js'
 import type { ServerRunArgs } from './server-run-args.js'
+
+type StartServerOptions = Parameters<StartServerFn>[0]
 
 // Minimal env that satisfies all required fields for a valid server-mode config.
 const VALID_ENV: NodeJS.ProcessEnv = {
@@ -458,6 +461,46 @@ describe('runServerRun — sign-in configuration', () => {
     expect(
       captured?.map((p) => [p.id, signsInWithBrowser(p) ? p.clientSecretValue : undefined]),
     ).toEqual([['corp', 'abc']])
+  })
+
+  // ADR-0049 decision 2: the config's administrators are how an operator names
+  // the first administrator of a fresh server, so they must reach the server
+  // as the bindings a request resolves to.
+  it('hands the configured administrators, as bindings, to the server', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'wb-server-run-admins-'))
+    try {
+      const path = join(dir, 'sign-in.json')
+      const issuer = 'https://sso.corp.example'
+      await writeFile(
+        path,
+        JSON.stringify({
+          providers: [{ id: 'corp', kind: 'oidc', issuer, admission: { bearerClients: ['cli'] } }],
+          administrators: [{ provider: 'corp', subject: 'ada-1' }],
+        }),
+      )
+      let captured: StartServerOptions['configuredAdministrators']
+      const startServer: StartServerFn = async (opts) => {
+        captured = opts.configuredAdministrators
+        return {
+          port: opts.port,
+          host: opts.host,
+          startedAt: new Date().toISOString(),
+          resolvedDataDir: '/tmp/mock',
+          instanceId: 'mock-instance-id',
+          close: async () => {},
+        }
+      }
+      await runServerRun({
+        flags: dryRunFlags({ dryRun: false }),
+        env: { ...VALID_ENV, WHITEBOARD_SIGN_IN_CONFIG: path },
+        startServer,
+      })
+      expect(captured).toEqual([
+        { authenticator: providerAuthenticator({ issuer }), subject: 'ada-1' },
+      ])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
 
