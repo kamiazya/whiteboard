@@ -73,3 +73,15 @@ it('asks before leaving an offline replica whose copy refused a write, without a
   publish({ keeper: 'replica', storage: 'ok' })
   expect(leaving().defaultPrevented).toBe(false)
 })
+
+// The browser panel tells the person to export before closing the tab; the
+// prompt is what backs that sentence. The words stay daemon-only.
+it('asks before leaving a browser-kept page whose storage refused a write, without a second banner', () => {
+  publish({ keeper: 'browser', storage: 'failed' })
+  render(<UnsavedChangesNotice />)
+  expect(leaving().defaultPrevented).toBe(true)
+  expect(screen.queryByText(/Changes not saved yet/)).toBeNull()
+
+  publish({ keeper: 'browser', storage: 'ok' })
+  expect(leaving().defaultPrevented).toBe(false)
+})
