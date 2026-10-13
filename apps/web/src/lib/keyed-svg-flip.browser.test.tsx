@@ -1,11 +1,11 @@
 import { renderSceneToKeyedSvg, type SceneNode } from '@kamiazya/whiteboard-canvas-render'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mountKeyedSvg } from './keyed-svg-patcher'
 
-const shape = (id: string, x: number, fill = '#fff'): SceneNode => ({
+const shape = (id: string, x: number, fill = '#fff', y = 0): SceneNode => ({
   kind: 'shape',
   id,
-  bbox: { x, y: 0, w: 100, h: 60 },
+  bbox: { x, y, w: 100, h: 60 },
   appearance: { fill, stroke: '#333' },
 })
 
@@ -16,6 +16,7 @@ let mounted: HTMLElement | null = null
 afterEach(() => {
   mounted?.remove()
   mounted = null
+  vi.restoreAllMocks()
 })
 
 /** FLIP needs real layout, so the container must be in the document. */
@@ -83,6 +84,39 @@ describe('keyed patching animates moves (FLIP)', () => {
     const keyframes =
       animation?.effect instanceof KeyframeEffect ? animation.effect.getKeyframes() : []
     expect(keyframes[0]?.transform).toBe('translate(-240px, 0px)')
+  })
+
+  it('a reduced-motion preference disables move animation', () => {
+    // The global CSS reduced-motion collapse does not reach
+    // `element.animate()`, so the patcher's own media query is the only
+    // thing standing between that preference and a FLIP.
+    const real = window.matchMedia.bind(window)
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) =>
+      query.includes('prefers-reduced-motion')
+        ? ({ matches: true, media: query } as MediaQueryList)
+        : real(query),
+    )
+    const { patcher, byKey } = mount([shape('a', 0)])
+    patcher.update(keyedOf([shape('a', 240)]))
+    expect(byKey('a')?.getAnimations() ?? []).toHaveLength(0)
+  })
+
+  it('a vertical move delta is measured in user units under zoom too', () => {
+    // The y axis has its own scale, so an x-only move cannot pin it.
+    const parent = document.createElement('div')
+    parent.style.transform = 'scale(2)'
+    parent.style.transformOrigin = '0 0'
+    document.body.appendChild(parent)
+    mounted = parent
+    const container = document.createElement('div')
+    parent.appendChild(container)
+    const patcher = mountKeyedSvg(container, keyedOf([shape('a', 0)]))
+    patcher.update(keyedOf([shape('a', 0, '#fff', 200)]))
+    const group = container.querySelector('[data-wb-key="a"]') as SVGGElement
+    const [animation] = group.getAnimations()
+    const keyframes =
+      animation?.effect instanceof KeyframeEffect ? animation.effect.getKeyframes() : []
+    expect(keyframes[0]?.transform).toBe('translate(0px, -200px)')
   })
 
   it('the animation ends at the natural position (no lingering transform)', async () => {

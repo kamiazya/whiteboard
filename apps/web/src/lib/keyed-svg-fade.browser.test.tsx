@@ -28,11 +28,11 @@ const node = (id: string, fill = '#fff'): SceneNode => ({
 })
 
 /** A comment pin: the producer marks it, and this layer never guesses. */
-const pin = (id: string, fill = '#d97706'): SceneNode => ({
+const pin = (id: string, fill = '#d97706', x = 200): SceneNode => ({
   kind: 'shape',
   id: `${id}/pin`,
   commentChrome: true,
-  bbox: { x: 200, y: 0, w: 20, h: 20 },
+  bbox: { x, y: 0, w: 20, h: 20 },
   radius: 10,
   appearance: { fill },
 })
@@ -101,6 +101,23 @@ describe('an annotation group arriving or changing paint', () => {
     const { patcher, byKey } = mount([node('a')])
     patcher.update(keyedOf([node('a', '#eee')]))
     expect(byKey('a')?.getAnimations() ?? []).toHaveLength(0)
+  })
+})
+
+describe('an annotation group that moved', () => {
+  it('flies to its new spot and leaves no fading ghost at the old one', () => {
+    // A moved pin is already animating from where its predecessor sat; a
+    // ghost fading at that same spot would be a second pin on screen.
+    const { patcher, container } = mount([pin('c1')])
+    patcher.update(keyedOf([pin('c1', '#d97706', 400)]))
+    const pins = container.querySelectorAll('[data-wb-key="c1/pin"]')
+    expect(pins).toHaveLength(1)
+    const animations = pins[0]?.getAnimations() ?? []
+    expect(animations).toHaveLength(1)
+    const [animation] = animations
+    const keyframes =
+      animation?.effect instanceof KeyframeEffect ? animation.effect.getKeyframes() : []
+    expect(String(keyframes[0]?.transform)).toContain('translate(')
   })
 })
 
