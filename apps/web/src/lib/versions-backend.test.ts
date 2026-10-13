@@ -57,3 +57,18 @@ describe('the daemon versions backend, answered with a body that is not JSON', (
     await expectLoggedFailure('failed its contract at (root)')
   })
 })
+
+describe('the daemon versions backend, refused', () => {
+  it('rejects a restore whose refusal is cut mid-body as the network, carrying no keeper reason', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"error":'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const backend = backendAnswering(new Response(cut, { status: 409 }))
+    await expect(backend.restore('ws', 'notes/a', 'v1')).rejects.toMatchObject({
+      name: 'FetchFailedError',
+    })
+  })
+})

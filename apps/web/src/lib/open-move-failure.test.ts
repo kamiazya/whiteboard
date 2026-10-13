@@ -3,12 +3,13 @@
  * refusal, a response that broke its contract, an unreachable daemon, this
  * browser's unreadable record, or a defect on this device.
  */
+
+import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonApiError } from './daemon-api-client.js'
 import { DaemonContractError } from './daemon-contract-error.js'
-import { reach } from './fetch-failure.js'
 import { OPEN_CONTRACT_FAILURE, OPEN_FAILURE_COPY, openFailureReason } from './open-move-failure.js'
 import { ReplicaKeyWithheldError } from './sealed-document-store.js'
 

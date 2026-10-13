@@ -15,12 +15,12 @@ import {
   workspaceDocumentApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
+import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import { z } from 'zod'
 import { unconfirmedPlanes } from './carried-planes.js'
 import { listDocuments } from './daemon-api-client.js'
 import { DaemonContractError, readDaemonJson } from './daemon-contract-error.js'
-import { reach } from './fetch-failure.js'
 
 /** How a caller's sentences name its keeper and its operation. */
 export interface PromoteWording {

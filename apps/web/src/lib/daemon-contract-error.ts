@@ -1,6 +1,6 @@
+import { readJsonOrUndefined } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import type { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
-import { reach } from './fetch-failure.js'
 
 const log = getAppLogger('daemon-contract')
 
@@ -79,13 +79,5 @@ export async function readDaemonJson<T>(
   res: Response,
   schema: z.ZodType<T>,
 ): Promise<T> {
-  return parseDaemonResponse(route, schema, parseJsonOrUndefined(await reach(res.text())))
-}
-
-function parseJsonOrUndefined(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
+  return parseDaemonResponse(route, schema, await readJsonOrUndefined(res))
 }

@@ -1,4 +1,5 @@
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core/api-errors'
+import { readJsonOrUndefined } from './read-body.js'
 
 /**
  * The reason a keeper gave for refusing a request, and the body it was read
@@ -9,14 +10,15 @@ import { apiErrorReason } from '@kamiazya/whiteboard-server-core/api-errors'
  * swallow a body that is not JSON, fall back to a sentence of its own — drifted
  * into two different swallow policies. `fallback` is the only per-caller part,
  * because what to say when the keeper said nothing is the caller's wording.
- * `body` is `undefined` when it was not JSON; it is the seam a typed refusal
- * (e.g. `membershipRefusalSchema`) is read back through, by code rather than
- * by matching the sentence.
+ * `body` is `undefined` when it was not JSON; a body cut off mid-read is not a
+ * refusal at all and rejects as `FetchFailedError`, the network's failure.
+ * `body` is the seam a typed refusal (e.g. `membershipRefusalSchema`) is read
+ * back through, by code rather than by matching the sentence.
  */
 export async function refusalReasonOf(
   res: Response,
   fallback: string,
 ): Promise<{ reason: string; body: unknown }> {
-  const body: unknown = await res.json().catch(() => undefined)
+  const body = await readJsonOrUndefined(res)
   return { reason: apiErrorReason(body) ?? fallback, body }
 }

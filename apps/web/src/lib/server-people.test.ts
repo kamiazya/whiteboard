@@ -146,4 +146,15 @@ describe('server-people calls', () => {
     )
     expect(outcome).toEqual({ ok: false, message: 'Could not reach the server. Try again.' })
   })
+
+  it('answers a refusal body cut mid-stream as the server not reached', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"error":'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const outcome = await tenantPeople.list(async () => new Response(cut, { status: 403 }))
+    expect(outcome).toEqual({ ok: false, message: 'Could not reach the server. Try again.' })
+  })
 })

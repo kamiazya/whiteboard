@@ -18,13 +18,13 @@
  */
 
 import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
-import { reach } from './fetch-failure.js'
 import {
   describeTransferFailure,
   errorName,

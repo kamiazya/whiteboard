@@ -187,6 +187,17 @@ describe('requestPromote', () => {
     await expect(request(fetch)).rejects.toMatchObject({ name: 'FetchFailedError' })
   })
 
+  it('rejects as an unreached keeper when a refusal is cut mid-body', async () => {
+    const cut = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"error":'))
+        controller.error(new TypeError('network error'))
+      },
+    })
+    const fetch = keeper({ promote: () => new Response(cut, { status: 400 }) })
+    await expect(request(fetch)).rejects.toMatchObject({ name: 'FetchFailedError' })
+  })
+
   it('reads an accepted answer that is not JSON as contract drift, not as the network', async () => {
     const fetch = keeper({ promote: () => new Response('<html>', { status: 200 }) })
     expect(await request(fetch)).toEqual({

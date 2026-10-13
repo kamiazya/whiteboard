@@ -62,6 +62,7 @@ import {
   workspaceSummarySchema,
   workspacesApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
@@ -70,7 +71,6 @@ import { readDaemonJson } from './daemon-contract-error.js'
 // lives in its own module so a SharedWorker can use it without this file's
 // schema graph.
 import { createDaemonFetch } from './daemon-fetch.js'
-import { reach } from './fetch-failure.js'
 
 export { createDaemonFetch }
 
@@ -268,11 +268,11 @@ export async function getDocumentSnapshot(
   path: string,
 ): Promise<Uint8Array> {
   const url = `${daemonBaseUrl}${documentApiUrl(workspaceId, path, 'snapshot')}`
-  const res = await fetchFn(url)
+  const res = await reach(fetchFn(url))
   if (!res.ok) {
     throw new Error((await parseProblemDetails(res)).message)
   }
-  return new Uint8Array(await res.arrayBuffer())
+  return new Uint8Array(await reach(res.arrayBuffer()))
 }
 
 /**
@@ -499,10 +499,10 @@ export async function fetchFontFile(
   daemonBaseUrl: string,
   fontId: string,
 ): Promise<ArrayBuffer> {
-  const res = await fetchFn(`${daemonBaseUrl}${fontFileApiUrl(fontId)}`)
+  const res = await reach(fetchFn(`${daemonBaseUrl}${fontFileApiUrl(fontId)}`))
   if (!res.ok) {
     const { message, body } = await parseProblemDetails(res)
     throw new DaemonApiError(message, res.status, body)
   }
-  return await res.arrayBuffer()
+  return await reach(res.arrayBuffer())
 }
