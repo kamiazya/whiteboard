@@ -60,7 +60,9 @@ export function isPidAlive(pid) {
  * @param {{ socketPath: string }} record
  * `onChunk` sees each body chunk as it arrives, with the status and content
  * type already known — what a caller relaying a stream that may never end
- * needs, since the promise settles only at the end.
+ * needs, since the promise settles only at the end. A 2xx event stream handed
+ * to `onChunk` is not also kept: its caller has relayed it, and holding a
+ * stream that never ends would grow for its whole life, so `text` is empty.
  *
  * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: string, timeoutMs?: number, onChunk?: (chunk: string, head: { status: number, contentType: string }) => void }} req
  * @returns {Promise<{ status: number, contentType: string, text: string }>}
@@ -76,18 +78,17 @@ export function requestDaemon(
         status: res.statusCode ?? 0,
         contentType: String(res.headers['content-type'] ?? '').toLowerCase(),
       }
+      const relayedStream =
+        onChunk !== undefined &&
+        head.status >= 200 &&
+        head.status < 300 &&
+        head.contentType.includes('text/event-stream')
       res.setEncoding('utf8')
       res.on('data', (chunk) => {
-        text += chunk
+        if (!relayedStream) text += chunk
         onChunk?.(chunk, head)
       })
-      res.on('end', () =>
-        resolveRequest({
-          status: res.statusCode ?? 0,
-          contentType: String(res.headers['content-type'] ?? '').toLowerCase(),
-          text,
-        }),
-      )
+      res.on('end', () => resolveRequest({ ...head, text }))
       res.on('error', rejectRequest)
     })
     req.on('error', rejectRequest)

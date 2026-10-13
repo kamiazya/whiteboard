@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
@@ -12,6 +13,7 @@ import {
   isPidAlive,
   readDaemonRecord,
   readProcessStartMs,
+  requestDaemon,
 } from './dev-daemon-socket-lib.mjs'
 
 const dirs: string[] = []
@@ -197,4 +199,55 @@ describe('assessRecordedDaemon', () => {
       }
     },
   )
+})
+
+describe('requestDaemon', () => {
+  async function answering(contentType: string, chunks: string[]) {
+    const socketPath = join(dataDirWith(null), 'daemon.sock')
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': contentType })
+      for (const chunk of chunks) res.write(chunk)
+      res.end()
+    })
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    return {
+      socketPath,
+      close: () => new Promise<void>((closed) => server.close(() => closed())),
+    }
+  }
+
+  // A relayed stream may never end, so holding its body would grow for its life.
+  it('keeps no body for a 2xx event stream it hands to onChunk', async () => {
+    const chunks = ['data: {"a":1}\n\n', 'data: {"b":2}\n\n']
+    const daemon = await answering('text/event-stream', chunks)
+    try {
+      const seen: string[] = []
+      const answer = await requestDaemon(daemon, {
+        path: '/mcp',
+        onChunk: (chunk: string) => seen.push(chunk),
+      })
+      expect(seen.join('')).toBe(chunks.join(''))
+      expect(answer).toEqual({ status: 200, contentType: 'text/event-stream', text: '' })
+    } finally {
+      await daemon.close()
+    }
+  })
+
+  it('keeps the body of any other reply, relayed or not', async () => {
+    const daemon = await answering('application/json', ['{"ok":', 'true}'])
+    try {
+      const relayed = await requestDaemon(daemon, { path: '/mcp', onChunk: () => {} })
+      expect(relayed.text).toBe('{"ok":true}')
+      const plain = await requestDaemon(daemon, { path: '/mcp' })
+      expect(plain.text).toBe('{"ok":true}')
+    } finally {
+      await daemon.close()
+    }
+    const stream = await answering('text/event-stream', ['data: {}\n\n'])
+    try {
+      expect((await requestDaemon(stream, { path: '/mcp' })).text).toBe('data: {}\n\n')
+    } finally {
+      await stream.close()
+    }
+  })
 })

@@ -53,7 +53,7 @@ function installForwardingDestination(): void {
     stream: {
       write(line: string) {
         const scope = requestLog.getStore()
-        if (scope === undefined || !scope.open) return
+        if (!scope?.open) return
         const record = lineToLogRecord(line)
         if (!record) return
         // Keep msg inside `data` so structured consumers see the message

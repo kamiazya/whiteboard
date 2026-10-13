@@ -34,8 +34,8 @@
 // Requests go to the socket the daemon's record names (ADR-0050 decision 2),
 // never to a port this derives: while there is no record — the daemon is
 // starting, or is between the two halves of a watch restart — a request
-// waits within its retry budget for one to appear. (Windows is the one
-// exception, until its daemon records a named pipe: dev-daemon-socket-lib.mjs.)
+// waits within its retry budget for one to appear — a Unix socket, or a named
+// pipe on Windows.
 //
 // Env:
 //   WHITEBOARD_DATA_DIR             where to read daemon.json (default: .dev-data)
@@ -46,6 +46,7 @@ import { spawn } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
+import { PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/client'
 import { readDaemonRecord, requestDaemon } from './dev-daemon-socket-lib.mjs'
 import { resolveDevDataDirEnv, resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 
@@ -105,10 +106,9 @@ const MCP_HEADERS = {
   Authorization: `Bearer ${TOKEN}`,
 }
 
-const PROTOCOL_VERSION_META_KEY = 'io.modelcontextprotocol/protocolVersion'
-
 // Which body field `Mcp-Name` mirrors, per method — the SDK's
-// MCP_NAME_HEADER_SOURCE, which its public surface does not export.
+// MCP_NAME_HEADER_SOURCE, which its public surface does not export. The
+// script test holds this and `encodeHeaderValue` to the installed SDK client.
 const MCP_NAME_SOURCE = {
   'tools/call': 'name',
   'prompts/get': 'name',
@@ -213,7 +213,7 @@ async function forwardOnce(line) {
   }
   // A 2xx event stream was written as it arrived (`streamRelay`).
   if (contentType.includes('text/event-stream')) return null
-  return [text]
+  return text
 }
 
 function isJson(text) {
@@ -265,8 +265,8 @@ rl.on('line', (line) => {
   const task = (async () => {
     await ready
     try {
-      const messages = await forwardWithRetry(line)
-      if (messages !== null) process.stdout.write(messages.map((m) => `${m}\n`).join(''))
+      const message = await forwardWithRetry(line)
+      if (message !== null) process.stdout.write(`${message}\n`)
     } catch (error) {
       log(`request failed after retries: ${String(error)}`)
       const errorResponse = errorResponseFor(line, error)

@@ -14,6 +14,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
@@ -467,6 +468,12 @@ function checkoutWithDevScripts(): { root: string; proxy: string } {
   cpSync(
     resolve(import.meta.dirname, '../../package.json'),
     join(root, 'packages/mcp-server/package.json'),
+  )
+  // The proxy imports the MCP SDK, which an installed checkout resolves here.
+  symlinkSync(
+    resolve(import.meta.dirname, '../../node_modules'),
+    join(root, 'packages/mcp-server/node_modules'),
+    'dir',
   )
   mkdirSync(join(root, '.claude/scripts'), { recursive: true })
   cpSync(SCRIPT_FLAGS_PATH, join(root, '.claude/scripts/script-flags.mjs'))
