@@ -7,12 +7,13 @@
 // names a threshold of 3, which makes small fixture functions cross it.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
+import { complexityScopeFrom } from './complexity-of-lib.mjs'
 import { isolatedGitEnv } from './git-test-utils.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -67,7 +68,24 @@ before(() => {
   writeFileSync(join(dir, 'package.json'), '{"name":"fixture","private":true}\n')
   writeFileSync(
     join(dir, 'biome.json'),
-    '{"linter":{"rules":{"complexity":{"noExcessiveCognitiveComplexity":{"options":{"maxAllowedComplexity":3}}}}}}\n',
+    JSON.stringify({
+      files: { includes: ['**/*.mjs', '**/*.md', '!wf/*.workflow.mjs'] },
+      overrides: [
+        {
+          includes: ['**/*.mjs', '!**/*.test.mjs'],
+          linter: {
+            rules: {
+              complexity: {
+                noExcessiveCognitiveComplexity: {
+                  level: 'error',
+                  options: { maxAllowedComplexity: 3 },
+                },
+              },
+            },
+          },
+        },
+      ],
+    }),
   )
   writeFileSync(join(dir, 'm.mjs'), BASE_SOURCE)
   symlinkSync(repoModules, join(dir, 'node_modules'))
@@ -85,7 +103,13 @@ before(() => {
     premise = 'needs git and a runnable `pnpm exec biome` in a scratch repository'
   else {
     writeFileSync(join(dir, 'm.mjs'), HEAD_SOURCE)
-    git(dir, 'commit', '-aqm', 'grow')
+    // Grown beside m.mjs, and each outside what biome's complexity rule lints.
+    mkdirSync(join(dir, 'wf'))
+    writeFileSync(join(dir, 'wf', 'x.workflow.mjs'), HEAD_SOURCE)
+    writeFileSync(join(dir, 'm.test.mjs'), HEAD_SOURCE)
+    writeFileSync(join(dir, 'notes.md'), '# notes\n')
+    git(dir, 'add', 'm.mjs', 'wf/x.workflow.mjs', 'm.test.mjs', 'notes.md')
+    git(dir, 'commit', '-qm', 'grow')
   }
 })
 after(() => rmSync(dir, { recursive: true, force: true }))
@@ -165,3 +189,64 @@ test(
     assert.match(result.stderr, /--changed needs --base/)
   }),
 )
+
+test(
+  '--changed scores a grown .mjs file, which the lint rule covers',
+  probed(() => {
+    const result = run('--base', 'fixture-base', '--changed')
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /^! +10 +3 +\+7 +m\.mjs:7 {2}grows$/m)
+  }),
+)
+
+test(
+  '--changed leaves out the test and workflow files biome does not score',
+  probed(() => {
+    const result = run('--base', 'fixture-base', '--changed')
+    assert.equal(result.status, 0, result.stderr)
+    assert.doesNotMatch(result.stdout, /workflow|m\.test\.mjs|notes\.md/)
+  }),
+)
+
+test(
+  'a misspelled flag refuses with exit 2 and names the flag',
+  probed(() => {
+    const result = run('--base', 'fixture-base', '--chaged')
+    assert.equal(result.status, 2, result.stdout)
+    assert.match(result.stderr, /unknown option --chaged/)
+    assert.doesNotMatch(result.stdout, /no files/)
+  }),
+)
+
+test(
+  'a flag where --base wants its ref refuses with exit 2 rather than reading it as the ref',
+  probed(() => {
+    const result = run('--base', '--chaged')
+    assert.equal(result.status, 2, result.stdout)
+    assert.match(result.stderr, /--base needs a <ref>, not --chaged/)
+  }),
+)
+
+test("--changed's scope is this repo's biome.json: scripts in, tests and workflow scripts out", () => {
+  const linted = complexityScopeFrom(readFileSync(join(here, '..', '..', 'biome.json'), 'utf-8'))
+  const scored = [
+    'packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs',
+    '.claude/scripts/complexity-of.mjs',
+    'packages/mcp-server/src/server/app.ts',
+    'apps/web/src/components/App.tsx',
+  ]
+  const unscored = [
+    '.claude/scripts/complexity-of.test.mjs',
+    '.claude/workflows/dev-loop.workflow.mjs',
+    'apps/web/src/App.test.tsx',
+    'packages/mcp-server/src/shared/test-utils/fast-check.ts',
+    'packages/mcp-server/dist/index.mjs',
+    'biome.json',
+    'README.md',
+  ]
+  assert.deepEqual(
+    scored.filter((f) => !linted(f)),
+    [],
+  )
+  assert.deepEqual(unscored.filter(linted), [])
+})

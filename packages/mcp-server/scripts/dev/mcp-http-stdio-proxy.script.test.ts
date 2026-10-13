@@ -14,17 +14,27 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { Client } from '@modelcontextprotocol/client'
+import {
+  Client,
+  PROTOCOL_VERSION_META_KEY,
+  StreamableHTTPClientTransport,
+} from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { type RunningServer, startHttpServer } from '../../src/server/http-server.js'
 import { getLogLevel, type LogLevel, setLogLevel } from '../../src/server/log.js'
+import {
+  CANVAS_VIEW_RESOURCE_URI,
+  resetWidgetHtmlCacheForTests,
+} from '../../src/server/mcp/mcp-apps.js'
+import { WHITEBOARD_DRAW_PROMPT } from '../../src/server/mcp/standalone-help.js'
 import {
   claimIsolatedDataDir,
   releaseIsolatedDataDir,
@@ -93,6 +103,17 @@ function nextStdoutLine(proc: ChildProcessWithoutNullStreams): Promise<string> {
     proc.stdout.on('data', onData)
     proc.once('exit', onExit)
   })
+}
+
+/** Every stdout line the proxy writes, once it has exited. Attach before writing to stdin. */
+function stdoutLinesUntilExit(proc: ChildProcessWithoutNullStreams): Promise<string[]> {
+  let out = ''
+  proc.stdout.on('data', (chunk: Buffer) => {
+    out += chunk.toString()
+  })
+  return new Promise((resolveLines) =>
+    proc.once('close', () => resolveLines(out.split('\n').filter((line) => line !== ''))),
+  )
 }
 
 afterEach(async () => {
@@ -211,6 +232,78 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     expect(first.params.data).toBe('early')
   })
 
+  // stdout IS the JSON-RPC channel: a stray SSE line or a duplicated message
+  // corrupts what the client reads, and an SDK client tolerates unparseable
+  // lines, so only a test reading every line sees it. Every line is collected
+  // until the proxy drains and exits on stdin close, so nothing written after
+  // the relay can escape the assertion.
+  const streamNote = JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'notifications/message',
+    params: { level: 'info', data: 'early' },
+  })
+  const streamResult = JSON.stringify({ jsonrpc: '2.0', id: 6, result: { content: [] } })
+  const sse = (message: string) => `event: message\ndata: ${message}\n\n`
+
+  it('puts only the messages of an event stream that ends on stdout, once each', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.end(`${sse(streamNote)}${sse(streamResult)}`)
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(() => new Promise((r) => server.close(() => r(undefined))))
+
+    const proc = spawnProxy(dataDir)
+    const lines = stdoutLinesUntilExit(proc)
+    proc.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'x' } })}\n`,
+    )
+    proc.stdin.end()
+
+    const written = await lines
+    for (const line of written) expect(() => JSON.parse(line), line).not.toThrow()
+    expect(written).toEqual([streamNote, streamResult])
+  })
+
+  it('does not re-send a stream cut after its first message', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    let requests = 0
+    const open: Array<{ destroy: () => void }> = []
+    const server = createHttpServer((_req, res) => {
+      requests += 1
+      res.writeHead(200, { 'content-type': 'text/event-stream' })
+      res.write(sse(streamNote))
+      // A retry, if one comes, is cut at once so the proxy still drains and exits.
+      if (requests === 1) open.push(res)
+      else res.destroy()
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(
+      () =>
+        new Promise((r) => {
+          server.closeAllConnections()
+          server.close(() => r(undefined))
+        }),
+    )
+
+    // A short retry budget: a proxy that does retry the cut stream still exits.
+    const proc = spawnProxy(dataDir, { WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: '2000' })
+    const lines = stdoutLinesUntilExit(proc)
+    proc.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'x' } })}\n`,
+    )
+    // Cut only once the message has reached the client, so it is a cut AFTER output.
+    expect(JSON.parse(await nextStdoutLine(proc)).params.data).toBe('early')
+    for (const res of open.splice(0)) res.destroy()
+    proc.stdin.end()
+
+    const written = await lines
+    expect(requests).toBe(1)
+    expect(written.filter((line) => line.includes('early'))).toHaveLength(1)
+    expect(JSON.parse(written.at(-1) ?? '{}')).toMatchObject({ id: 7, error: { code: -32000 } })
+  })
+
   it('exits cleanly when stdin closes', async () => {
     const { dataDir, socketPath } = dataDirWithRecord()
     await startResponder(socketPath)
@@ -225,12 +318,106 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
   })
 })
 
+// The endpoint refuses a modern request whose standard headers do not mirror
+// its body, and which method mirrors which field — plus how a value is encoded
+// — is the SDK's private table, copied into the proxy. So the proxy is held to
+// whatever SDK is installed: the same line through the SDK's own HTTP transport
+// and through the proxy must carry the same standard headers.
+describe('mcp-http-stdio-proxy standard headers match the SDK client', () => {
+  const STANDARD_HEADERS = ['mcp-protocol-version', 'mcp-method', 'mcp-name'] as const
+  type StandardHeaders = Record<(typeof STANDARD_HEADERS)[number], string | undefined>
+  const pick = (read: (name: string) => string | undefined): StandardHeaders =>
+    Object.fromEntries(STANDARD_HEADERS.map((name) => [name, read(name)])) as StandardHeaders
+
+  const modern = (method: string, params: Record<string, unknown>) => ({
+    method,
+    params: { ...params, _meta: { [PROTOCOL_VERSION_META_KEY]: '2026-07-28' } },
+  })
+  const cases = [
+    modern('tools/call', { name: 'wb_workspace_edit', arguments: {} }),
+    modern('tools/call', { name: 'ツール', arguments: {} }),
+    // Already shaped like the sentinel, so it must be encoded to stay unambiguous.
+    modern('tools/call', { name: '=?base64?aGk=?=', arguments: {} }),
+    modern('tools/call', { name: ' padded ', arguments: {} }),
+    modern('resources/read', { uri: 'ui://whiteboard/canvas-view' }),
+    modern('resources/read', { uri: 'ui://whiteboard/ノート' }),
+    modern('prompts/get', { name: 'whiteboard.draw_diagram', arguments: {} }),
+    modern('prompts/get', { name: '図を描く', arguments: {} }),
+    modern('tasks/get', { taskId: 'task-1' }),
+    modern('tasks/update', { taskId: 'task-2' }),
+    modern('tasks/cancel', { taskId: 'タスク' }),
+    // Off the Mcp-Name table: no Mcp-Name on either path.
+    modern('tools/list', {}),
+    // No era claim: a legacy request carries none of the three.
+    { method: 'tools/call', params: { name: 'wb_workspace_edit', arguments: {} } },
+  ]
+
+  async function headersFromSdk(message: object): Promise<StandardHeaders> {
+    let sent: Headers | undefined
+    const transport = new StreamableHTTPClientTransport(new URL('http://sdk.invalid/mcp'), {
+      fetch: async (_url, init) => {
+        sent = new Headers(init?.headers)
+        return new Response(null, { status: 202 })
+      },
+    })
+    await transport.start()
+    await transport.send(message as Parameters<typeof transport.send>[0])
+    await transport.close()
+    if (sent === undefined) throw new Error('the SDK transport sent nothing')
+    const headers = sent
+    return pick((name) => headers.get(name) ?? undefined)
+  }
+
+  it('sends the SDK transport’s MCP-Protocol-Version, Mcp-Method and Mcp-Name', async () => {
+    const { dataDir, socketPath } = dataDirWithRecord()
+    const seen = new Map<number, StandardHeaders>()
+    const server = createHttpServer((req, res) => {
+      let body = ''
+      req.setEncoding('utf8')
+      req.on('data', (chunk) => {
+        body += chunk
+      })
+      req.on('end', () => {
+        const { id } = JSON.parse(body)
+        seen.set(
+          id,
+          pick((name) => {
+            const value = req.headers[name]
+            return Array.isArray(value) ? value.join(', ') : value
+          }),
+        )
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ jsonrpc: '2.0', id, result: {} }))
+      })
+    })
+    await new Promise<void>((r) => server.listen(socketPath, () => r()))
+    cleanups.push(() => new Promise((r) => server.close(() => r(undefined))))
+    const proc = spawnProxy(dataDir)
+
+    for (const [index, shape] of cases.entries()) {
+      const message = { jsonrpc: '2.0' as const, id: index + 1, ...shape }
+      proc.stdin.write(`${JSON.stringify(message)}\n`)
+      expect(JSON.parse(await nextStdoutLine(proc)).id).toBe(message.id)
+      expect({ method: shape.method, headers: seen.get(message.id) }).toEqual({
+        method: shape.method,
+        headers: await headersFromSdk(message),
+      })
+    }
+    // The comparison reaches every row the proxy's table holds, and both
+    // branches of the encoding.
+    const names = [...seen.values()].map((headers) => headers['mcp-name'])
+    expect(names.filter((name) => name?.startsWith('=?base64?')).length).toBeGreaterThan(3)
+    expect(names.filter((name) => name !== undefined && !name.startsWith('=?')).length).toBe(5)
+  })
+})
+
 // A client that negotiates sees exactly what it would see on the daemon's own
 // socket: the proxy derives the modern era's standard request headers from
 // each line, and relays every message of a streamed reply, so the in-call log
 // records a modern request opts into arrive ahead of its result.
 describe('mcp-http-stdio-proxy against the real daemon', () => {
   const MODERN = '2026-07-28'
+  const WIDGET_HTML = '<!doctype html><title>proxy widget</title>'
   let running: RunningServer | undefined
   let scratchDataDir = ''
   let recordDir = ''
@@ -245,10 +432,15 @@ describe('mcp-http-stdio-proxy against the real daemon', () => {
     running = await startHttpServer({ socketPath, token: TOKEN })
     recordDir = mkdtempSync(join(tmpdir(), 'wb-proxy-real-'))
     writeFileSync(join(recordDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
+    // The widget is a build output a test run need not have; a fixture stands in.
+    const widgetPath = join(recordDir, 'canvas-viewer.html')
+    writeFileSync(widgetPath, WIDGET_HTML)
+    resetWidgetHtmlCacheForTests(widgetPath)
   })
 
   afterAll(async () => {
     await running?.close()
+    resetWidgetHtmlCacheForTests()
     setLogLevel(previousLevel)
     rmSync(recordDir, { recursive: true, force: true })
     releaseIsolatedDataDir(scratchDataDir)
@@ -310,6 +502,22 @@ describe('mcp-http-stdio-proxy against the real daemon', () => {
     expect(order.at(-1)).toBe('result')
   })
 
+  // The endpoint checks Mcp-Name against params.uri and params.name for these,
+  // the rows besides tools/call the daemon serves.
+  it('reads the widget resource and gets the prompt in the modern era', async () => {
+    const { client } = await connect({ mode: 'auto' })
+    expect(client.getNegotiatedProtocolVersion()).toBe(MODERN)
+
+    const resource = await client.readResource({ uri: CANVAS_VIEW_RESOURCE_URI })
+    expect(resource.contents).toEqual([expect.objectContaining({ text: WIDGET_HTML })])
+
+    const prompt = await client.getPrompt({
+      name: WHITEBOARD_DRAW_PROMPT,
+      arguments: { goal: 'map the proxy' },
+    })
+    expect(JSON.stringify(prompt.messages)).toContain('map the proxy')
+  })
+
   it('still serves a client that never negotiates', async () => {
     const { client } = await connect()
     expect(client.getNegotiatedProtocolVersion()).not.toBe(MODERN)
@@ -343,6 +551,12 @@ function checkoutWithDevScripts(): { root: string; proxy: string } {
   cpSync(
     resolve(import.meta.dirname, '../../package.json'),
     join(root, 'packages/mcp-server/package.json'),
+  )
+  // The proxy imports the MCP SDK, which an installed checkout resolves here.
+  symlinkSync(
+    resolve(import.meta.dirname, '../../node_modules'),
+    join(root, 'packages/mcp-server/node_modules'),
+    'dir',
   )
   mkdirSync(join(root, '.claude/scripts'), { recursive: true })
   cpSync(SCRIPT_FLAGS_PATH, join(root, '.claude/scripts/script-flags.mjs'))

@@ -24,7 +24,12 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
-import { type ReplicaFailure, replicaFailure } from './replica-failure.js'
+import {
+  describeFailure,
+  PULL_FAILURE_COPY,
+  type ReplicaFailure,
+  reach,
+} from './replica-failure.js'
 import { cacheReplicaImages } from './replica-images.js'
 import { markReplica, replicaKeyStatus } from './replica-store.js'
 import { ReplicaKeyRotatedError } from './sealed-document-store.js'
@@ -124,11 +129,13 @@ export async function cacheDaemonWorkspace(
   // only from the second pull on, once the registry entry exists.
   markReplica(workspaceId, daemonBaseUrl)
   try {
-    const res = await fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'snapshot')}`)
+    const res = await reach(
+      fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'snapshot')}`),
+    )
     if (!res.ok) {
       return { kind: 'failed', reason: `Snapshot request failed (${res.status}).` }
     }
-    const bytes = new Uint8Array(await res.arrayBuffer())
+    const bytes = new Uint8Array(await reach(res.arrayBuffer()))
     const daemonOnly = new LoroDoc()
     daemonOnly.import(bytes)
     const doc = await openForMerge(workspaceDocs, workspaceId, daemonBaseUrl)
@@ -144,6 +151,6 @@ export async function cacheDaemonWorkspace(
       syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),
     }
   } catch (err) {
-    return replicaFailure(err, 'pull', { log, daemonBaseUrl, workspaceId })
+    return describeFailure(err, PULL_FAILURE_COPY, { log, fields: { daemonBaseUrl, workspaceId } })
   }
 }

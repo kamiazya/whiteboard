@@ -220,7 +220,7 @@ function wireWorktree({
 
   if (mainCheckout) {
     log(
-      `[wire-worktree-mcp] ${repoRoot} is the main checkout — it is registered once by hand (see .claude/settings.json); nothing to do.`,
+      `[wire-worktree-mcp] ${repoRoot} is the main checkout — it is registered once by hand (see CONTRIBUTING.md step 3); nothing to do.`,
     )
     return
   }

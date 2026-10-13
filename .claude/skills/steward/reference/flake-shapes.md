@@ -265,7 +265,8 @@ SKIP_WAITING fails 8/8, none fails 0/6, +40 ms fails 0/4.
 The app is fixed too, since a real page can issue that request:
 `createUpdateApplier` (`pwa/apply-update.ts`) arms a 10 s deadline when an
 update is accepted and falls back to `reloadFresh()` if the page is still alive
-when it fires, because a swap that lands reloads the page and takes the timer
+when it fires — unless `nothingHeldInTab()` says the tab holds work, in which
+case the update stays waiting for the next apply — because a swap that lands reloads the page and takes the timer
 with it. The smoke's last scenario accepts an update under a 100 ms burst of
 fetches and asserts the page ends on the new worker.
 

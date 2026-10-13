@@ -101,6 +101,25 @@ describe('shell-status-store', () => {
     expect(getShellConnection()?.lastWrittenAt).toBe('2026-01-01T00:00:05.000Z')
   })
 
+  it('a replica save health change notifies, and the same one again does not', () => {
+    setShellConnection({ state: { keeper: 'replica', storage: 'ok' } })
+    const listener = vi.fn()
+    subscribeShellStatus(listener)
+    setShellConnection({ state: { keeper: 'replica', storage: 'failed' } })
+    setShellConnection({ state: { keeper: 'replica', storage: 'failed' } })
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  // Same health word, different keeper: the browser's own document and the
+  // offline replica of a daemon workspace are told apart by the shell.
+  it('switching between the browser keeper and the replica notifies', () => {
+    setShellConnection({ state: { keeper: 'browser', storage: 'failed' } })
+    const listener = vi.fn()
+    subscribeShellStatus(listener)
+    setShellConnection({ state: { keeper: 'replica', storage: 'failed' } })
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
   it('switching keeper under the same address notifies', () => {
     setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     const listener = vi.fn()

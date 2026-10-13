@@ -11,19 +11,40 @@
 // or not. Writing it in the tree instead would have a reviewer editing
 // `biome.json`, which is how a review lane's change once reached a commit.
 // `--base` scores each file as it was at that ref (read with `git show` into
-// the same temp dir) and prints the delta. `--changed` takes the TS files the
-// diff against `--base` touched. See the review-gate `complexity` criteria.
+// the same temp dir) and prints the delta. `--changed` takes the files the
+// diff against `--base` touched that `pnpm lint` scores for complexity — the
+// scope read from `biome.json`, so `.mjs` scripts count and tests and workflow
+// scripts do not. See the review-gate `complexity` criteria.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
-import { argsFrom, compare, formatTable, scoresFrom, thresholdFrom } from './complexity-of-lib.mjs'
+import {
+  argsFrom,
+  compare,
+  complexityScopeFrom,
+  formatTable,
+  scoresFrom,
+  thresholdFrom,
+  UsageError,
+} from './complexity-of-lib.mjs'
+
+const USAGE = 'usage: complexity-of.mjs [--base <ref>] (--changed | <file>...)'
 
 // The tree being measured is the caller's, not the one this script sits in:
 // a worktree runs its own copy, but a reviewer may run this one against another.
 const ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).trim()
-const { base, changed, files: named } = argsFrom(process.argv.slice(2))
+const { base, changed, files: named } = parsedArgs(process.argv.slice(2))
+function parsedArgs(argv) {
+  try {
+    return argsFrom(argv)
+  } catch (error) {
+    if (!(error instanceof UsageError)) throw error
+    process.stderr.write(`complexity-of: ${error.message}\n${USAGE}\n`)
+    process.exit(2)
+  }
+}
 // stderr is dropped: `git show` of a file new in this diff is expected to fail.
 const git = (...a) =>
   execFileSync('git', a, { cwd: ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] })
@@ -31,9 +52,10 @@ const git = (...a) =>
 let files = named
 if (changed) {
   if (base === null) throw new Error('--changed needs --base <ref>')
+  const linted = complexityScopeFrom(readFileSync(join(ROOT, 'biome.json'), 'utf-8'))
   files = git('diff', '--name-only', '--diff-filter=AMR', `${base}...HEAD`)
     .split('\n')
-    .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f))
+    .filter((f) => f !== '' && linted(f))
 }
 if (files.length === 0) {
   process.stdout.write('complexity-of: no files\n')

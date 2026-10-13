@@ -26,6 +26,10 @@
  *                polite sr-only live region announces the
  *                transition so dropping the old role="alert" banner loses no
  *                assistive-tech signal.
+ *
+ * Keeper `replica` — a daemon-kept workspace read offline; this browser's
+ * copy holds the edits until the daemon returns, and a refused write to it
+ * is the not-keeping state.
  */
 import type { ReactNode } from 'react'
 import {
@@ -34,6 +38,7 @@ import {
   notKeepingAnnouncement,
   type SessionHealth,
 } from '../../lib/connection-state.js'
+import type { ReplicaSaveHealth } from '../../lib/replica-save-queue.js'
 import type { StorageHealth } from '../../lib/storage-health.js'
 import { ShellMark } from '../shell/ShellMark.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
@@ -42,6 +47,7 @@ import {
   DaemonReconnectingPanel,
   DaemonSyncedPanel,
   DaemonWriteFailedPanel,
+  ReplicaCopyPanel,
   SyncOffPanel,
 } from './connection-panels.js'
 
@@ -94,7 +100,9 @@ const SESSION_LABEL: Record<SessionHealth, string> = {
  */
 export function connectionLabel(state: ConnectionState | null): string | null {
   if (state === null) return null
-  return state.keeper === 'browser' ? STORAGE_LABEL[state.storage] : SESSION_LABEL[state.session]
+  if (state.keeper === 'browser') return STORAGE_LABEL[state.storage]
+  if (state.keeper === 'replica') return REPLICA_LABEL[state.storage]
+  return SESSION_LABEL[state.session]
 }
 
 /**
@@ -106,6 +114,16 @@ const STORAGE_LABEL: Record<StorageHealth, string> = {
   ok: 'Browser',
   stuck: 'Browser — still writing',
   failed: 'Browser — write failed',
+}
+
+/**
+ * The offline replica's word: the workspace is the daemon's, but what holds
+ * the edits right now is the copy in this browser — so neither keeper's word
+ * alone would be true.
+ */
+const REPLICA_LABEL: Record<ReplicaSaveHealth, string> = {
+  ok: 'Offline copy',
+  failed: 'Offline copy — write failed',
 }
 
 /**
@@ -184,10 +202,6 @@ export function ConnectionStatus({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" data-testid="shell-mark-popover">
-        {/* The workspace block comes FIRST and carries its own head, because
-            that head is an editable name and editing belongs to the component
-            that owns the rename. Without one — no workspace known — the
-            session word still needs stating, so the bare head stands in. */}
         <PopoverHead label={label} workspaceMenu={workspaceMenu} />
         <DaemonSyncedPanel state={state} daemonBaseUrl={daemonBaseUrl}>
           {children}
@@ -197,6 +211,7 @@ export function ConnectionStatus({
         <BrowserStoragePanel state={state} lastWrittenAt={lastWrittenAt ?? null}>
           {children}
         </BrowserStoragePanel>
+        <ReplicaCopyPanel state={state} />
         <SyncOffPanel show={syncOff} onWorkInBrowser={onWorkInBrowser} />
       </PopoverContent>
     </Popover>

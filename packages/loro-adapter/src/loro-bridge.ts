@@ -165,12 +165,6 @@ function assertWritableComment(comment: CanvasComment): void {
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
-  writeSpatialCanvasInto(doc, canvas)
-  doc.commit()
-}
-
-/** The resync itself, without the commit — see `withDocumentBatch`. */
-function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialCanvas): void {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
@@ -216,6 +210,7 @@ function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialCanvas):
   dropEvery(doc, nodesMap, staleNodes, NODE_LOCKS_KEY)
   dropEvery(doc, edgesMap, staleEdges, EDGE_LOCKS_KEY)
   dropEvery(doc, linesMap, staleLines, EDGE_LOCKS_KEY)
+  doc.commit()
 }
 
 /**

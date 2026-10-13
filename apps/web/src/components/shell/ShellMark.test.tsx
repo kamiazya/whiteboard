@@ -63,6 +63,13 @@ describe('ShellMark', () => {
     expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('failed')
   })
 
+  it('paints a refused write to the offline replica like the browser one', () => {
+    render(<ShellMark state={{ keeper: 'replica', storage: 'failed' }} />)
+    expect(screen.getByTestId('shell-mark-stroke').getAttribute('class')).toMatch(/wb-mark-broken/)
+    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-shape')).toBe('ring')
+    expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBe('replica')
+  })
+
   it('publishes the storage health as data for the page tests to read', () => {
     render(<ShellMark state={BROWSER('stuck')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('stuck')
