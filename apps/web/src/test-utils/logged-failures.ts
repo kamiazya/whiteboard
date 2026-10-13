@@ -34,9 +34,34 @@ const globalScope = globalThis as Record<string, unknown>
 globalScope[KEY] ??= { seen: [], claimed: [] } satisfies LoggedFailureState
 const state = globalScope[KEY] as LoggedFailureState
 
+/** Long enough for a logger's data object to say which and why; short enough to read. */
+const ARG_CAP = 400
+
+function formatArg(arg: unknown): string {
+  if (typeof arg === 'string') return arg
+  if (arg instanceof Error) return `${arg.name}: ${arg.message}`
+  let text: string
+  try {
+    text = JSON.stringify(arg) ?? String(arg)
+  } catch {
+    // A cycle, or a BigInt: JSON cannot hold it, and the bare spelling is all there is.
+    text = String(arg)
+  }
+  return text.length > ARG_CAP ? `${text.slice(0, ARG_CAP)}…` : text
+}
+
+/**
+ * One record as the failure message prints it. The app logger takes
+ * `(message, data)`, so the data object is the part that says which documents
+ * and why — `String` would print every one of them as `[object Object]`.
+ */
+export function formatLoggedFailure(level: string, args: readonly unknown[]): string {
+  return `${level}: ${args.map(formatArg).join(' ')}`
+}
+
 /** Called by the setup's console interception. Not for tests. */
 export function recordLoggedFailure(level: string, args: readonly unknown[]): void {
-  state.seen.push(`${level}: ${args.map((arg) => String(arg)).join(' ')}`)
+  state.seen.push(formatLoggedFailure(level, args))
 }
 
 /**
