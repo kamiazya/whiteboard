@@ -19,8 +19,12 @@ export async function imageDataUrl(blob: Blob, maxBytes: number): Promise<string
   if (blob.size > maxBytes || !isUploadableImageType(blob.type)) return undefined
   return await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
+    reader.onload = () => {
+      const { result } = reader
+      if (typeof result === 'string') resolve(result)
+      else reject(new Error('the reader answered something that is not a data: URL'))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('the picture could not be read'))
     reader.readAsDataURL(blob)
   })
 }
