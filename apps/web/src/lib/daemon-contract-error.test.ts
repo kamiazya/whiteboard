@@ -6,6 +6,7 @@ import {
   DAEMON_CONTRACT_COPY,
   DaemonContractError,
   readDaemonJson,
+  reportDaemonDrift,
 } from './daemon-contract-error.js'
 
 const schema = z.object({ versions: z.array(z.object({ id: z.string() })) })
@@ -41,6 +42,19 @@ describe('a contract mismatch', () => {
     await failureOf('/api/v1/x', 'nope')
 
     await expectLoggedFailure('/api/v1/x failed its contract at (root)')
+  })
+})
+
+describe('reportDaemonDrift', () => {
+  // The seam a caller uses when drift is an arm of its own result rather than
+  // a throw: nothing downstream logs it, so this record is the only one.
+  it('logs the route and the first issue path of a mismatch nobody throws', async () => {
+    const parsed = schema.safeParse({ versions: [{ id: 7 }] })
+    if (parsed.success) throw new Error('fixture must not parse')
+
+    reportDaemonDrift('/api/workspaces/w/replica-key', parsed.error)
+
+    await expectLoggedFailure('/api/workspaces/w/replica-key failed its contract at versions.0.id')
   })
 })
 

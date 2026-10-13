@@ -60,6 +60,27 @@ describe('useMarkdownFragments', () => {
     expect(result.current.renderDiagram('ts', 'const x = 1')).toBeUndefined()
   })
 
+  it('never offers a fence with no language to the diagram loader', async () => {
+    const l = loaders()
+    const body = '```\ngraph TD; A-->B\n```\n\n$$\nx^2\n$$\n'
+    const { result } = renderHook(() => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }))
+    // The math block is the witness that the body's asks were collected at all.
+    await waitFor(() => expect(result.current.renderMath('x^2')).toBeDefined())
+    expect(l.diagram).not.toHaveBeenCalled()
+  })
+
+  it('keys a rendered fence by its language, so a same-source fence in another language misses', async () => {
+    const l = loaders()
+    const body = '```mermaid\ngraph TD; A-->B\n```\n\n```plantuml\ngraph TD; A-->B\n```\n'
+    const { result } = renderHook(() => useMarkdownFragments({ body, layout: LAYOUT, loaders: l }))
+    await waitFor(() =>
+      expect(result.current.renderDiagram('mermaid', 'graph TD; A-->B')).toBeDefined(),
+    )
+    await waitFor(() => expect(l.diagram).toHaveBeenCalledWith('plantuml', 'graph TD; A-->B'))
+    await act(async () => {})
+    expect(result.current.renderDiagram('plantuml', 'graph TD; A-->B')).toBeUndefined()
+  })
+
   it('never lets a math block and a same-source math fence share a cache row', async () => {
     const l = loaders()
     const body = '$$\nx^2\n$$\n\n```math\nx^2\n```\n'

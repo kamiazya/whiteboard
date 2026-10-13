@@ -22,6 +22,16 @@ describe('renderMathFragment (real MathJax)', () => {
     expect(fragment?.height).toBeGreaterThan(0)
   })
 
+  // A `$$` block is DISPLAY math: a sum's limits stack above and below it
+  // rather than sitting beside it, so the same source typeset in text style
+  // is measurably shorter. `\textstyle` is the engine's own text style, an
+  // oracle independent of the option under test.
+  it('typesets in display style, stacking limits above and below a sum', async () => {
+    const display = await renderMathFragment('\\sum_{i=0}^{n} i')
+    const text = await renderMathFragment('\\textstyle\\sum_{i=0}^{n} i')
+    expect(display?.height).toBeGreaterThan(text?.height ?? Number.POSITIVE_INFINITY)
+  })
+
   it('is total against TeX the engine rejects outright', async () => {
     // MathJax renders most malformed TeX as an error node, and this
     // module's own guards map anything else to undefined — totality here
