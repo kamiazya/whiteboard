@@ -6,9 +6,10 @@
  * Every such `try` covers the network AND this device's own storage — the
  * stored copy, the IndexedDB write, the CRDT bytes. Reporting all of it as an
  * unreachable keeper sends someone whose disk is full to check a connection
- * that works, so only the error a failed `fetch` raises (a `TypeError`) is
- * reported that way, and every device-side arm leaves a log record naming the
- * error, since the reason a person reads carries none of it.
+ * that works, so only a `FetchFailedError` — what `reach` makes of a fetch's
+ * rejection where the fetch is called — is reported that way, and every
+ * device-side arm leaves a log record naming the error, since the reason a
+ * person reads carries none of it.
  */
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { AppLogger } from './app-logger.js'
@@ -51,6 +52,29 @@ export const PUSH_FAILURE_COPY: FailureCopy = {
   deviceLog: 'replica push failed on this device',
 }
 
+/**
+ * A fetch, or the read of its body, rejected: the keeper was not reached.
+ *
+ * Named at the call because a failed fetch rejects with a bare `TypeError`,
+ * the same class a defect in this device's own reads and writes throws — so
+ * by the time a `catch` sees one, the class can no longer say which it was.
+ */
+class FetchFailedError extends Error {
+  override readonly name = 'FetchFailedError'
+  constructor(cause: unknown) {
+    super('the keeper could not be reached', { cause })
+  }
+}
+
+/** `attempt`, with its rejection named a `FetchFailedError`. */
+export async function reach<T>(attempt: Promise<T>): Promise<T> {
+  try {
+    return await attempt
+  } catch (err) {
+    throw new FetchFailedError(err)
+  }
+}
+
 export function describeFailure(
   err: unknown,
   copy: FailureCopy,
@@ -62,9 +86,8 @@ export function describeFailure(
     log.warn(copy.unreadableLog, { ...fields })
     return { kind: 'failed', reason: copy.unreadable }
   }
-  // A failed fetch rejects with a TypeError and nothing more specific; every
-  // flow using this is safe to re-run once the keeper answers.
-  if (err instanceof TypeError) return { kind: 'failed', reason: copy.network }
+  // Every flow using this is safe to re-run once the keeper answers.
+  if (err instanceof FetchFailedError) return { kind: 'failed', reason: copy.network }
   log.warn(copy.deviceLog, { ...fields, name: errorName(err) })
   return { kind: 'failed', reason: copy.device }
 }

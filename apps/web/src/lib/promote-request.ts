@@ -20,6 +20,7 @@ import { z } from 'zod'
 import { unconfirmedPlanes } from './carried-planes.js'
 import { listDocuments } from './daemon-api-client.js'
 import { daemonContractError } from './daemon-contract-error.js'
+import { reach } from './replica-failure.js'
 
 /** How a caller's sentences name its keeper and its operation. */
 export interface PromoteWording {
@@ -91,8 +92,8 @@ async function refusedReason(
 
 /**
  * POSTs the record and its planes to the keeper's promote route, and reads
- * back what the keeper reports holding. A thrown fetch propagates: each
- * caller already turns one into its own sentence.
+ * back what the keeper reports holding. A thrown fetch propagates as a
+ * `FetchFailedError`: each caller turns one into its own sentence.
  */
 export async function requestPromote(
   options: PromoteRequestOptions,
@@ -100,11 +101,13 @@ export async function requestPromote(
   const { fetch, keeperBaseUrl, workspaceId, wording } = options
   const body = promoteBody(options.snapshot, options.planes)
   const promoteUrl = `${keeperBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'promote')}`
-  const res = await fetch(promoteUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  const res = await reach(
+    fetch(promoteUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
   if (!res.ok) return { ok: false, reason: await refusedReason(res, body, wording) }
   const promoted = promoteWorkspaceResponseSchema.safeParse(await res.json().catch(() => null))
   if (!promoted.success) {

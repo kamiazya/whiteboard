@@ -21,7 +21,12 @@ import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { VersionVector } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
-import { describeFailure, PUSH_FAILURE_COPY, type ReplicaFailure } from './replica-failure.js'
+import {
+  describeFailure,
+  PUSH_FAILURE_COPY,
+  type ReplicaFailure,
+  reach,
+} from './replica-failure.js'
 
 const log = getAppLogger('replica-push')
 
@@ -64,11 +69,13 @@ export async function pushReplicaEdits(
       payload = doc.export({ mode: 'update', from: synced })
     }
 
-    const res = await fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'update')}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: payload as BodyInit,
-    })
+    const res = await reach(
+      fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'update')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: payload as BodyInit,
+      }),
+    )
     if (!res.ok) return { kind: 'failed', reason: `Update request failed (${res.status}).` }
     return {
       kind: 'ok',

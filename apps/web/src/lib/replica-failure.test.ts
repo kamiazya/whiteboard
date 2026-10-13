@@ -65,6 +65,12 @@ const quotaExceeded = async (): Promise<never> => {
   throw new DOMException('the quota has been exceeded', 'QuotaExceededError')
 }
 
+// What a defect in this device's own read or write throws — the same class a
+// failed fetch rejects with, which is why the class alone cannot say network.
+const localTypeError = async (): Promise<never> => {
+  throw new TypeError("Cannot read properties of undefined (reading 'export')")
+}
+
 afterEach(() => {
   unmarkReplica(DAEMON_WS)
 })
@@ -103,6 +109,13 @@ describe('cacheDaemonWorkspace failure reasons', () => {
     expect(result.reason).toMatch(/could not be stored on this device/)
     await expectLoggedFailure('replica pull failed on this device')
   })
+
+  it('a TypeError from the local save is a device failure, not a network one', async () => {
+    const result = await pull(snapshotFetch(), workspaceDocs({ save: localTypeError }))
+    if (result.kind !== 'failed') throw new Error(`expected a failed pull, got ${result.kind}`)
+    expect(result.reason).toMatch(/could not be stored on this device/)
+    await expectLoggedFailure('replica pull failed on this device')
+  })
 })
 
 describe('pushReplicaEdits failure reasons', () => {
@@ -129,6 +142,13 @@ describe('pushReplicaEdits failure reasons', () => {
     const result = await push(offline, workspaceDocs({ open: quotaExceeded }))
     if (result.kind !== 'failed') throw new Error(`expected a failed push, got ${result.kind}`)
     expect(result.reason).not.toBe(NETWORK_SENTENCE)
+    expect(result.reason).toMatch(/on this device/)
+    await expectLoggedFailure('replica push failed on this device')
+  })
+
+  it('a TypeError from opening the local copy is a device failure, not a network one', async () => {
+    const result = await push(offline, workspaceDocs({ open: localTypeError }))
+    if (result.kind !== 'failed') throw new Error(`expected a failed push, got ${result.kind}`)
     expect(result.reason).toMatch(/on this device/)
     await expectLoggedFailure('replica push failed on this device')
   })

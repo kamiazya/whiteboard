@@ -320,6 +320,21 @@ describe('promoteWorkspace failure reasons', () => {
     await expectLoggedFailure('workspace promote failed on this device')
   })
 
+  it('a TypeError from opening the record is a device failure, not a network one', async () => {
+    const daemon = daemonStub({ confirms: true })
+
+    const result = await promoteFrom(
+      daemon.fetch,
+      openThrowing(new TypeError("Cannot read properties of undefined (reading 'export')")),
+    )
+
+    expect(result).toEqual({
+      kind: 'failed',
+      reason: 'This workspace could not be prepared on this device to move it.',
+    })
+    await expectLoggedFailure('workspace promote failed on this device')
+  })
+
   it('an image whose stored bytes this device cannot read fails that image alone and is logged', async () => {
     const { index, workspaceId } = await newWorkspace()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
