@@ -1,4 +1,5 @@
 import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
+import { replicaKeyApiUrl } from './api-contracts/daemon-urls.js'
 import type { MembershipRefusalCode } from './api-contracts/membership.js'
 import { membershipRefusalSchema } from './api-contracts/membership.js'
 import type { ReplicaKeyResponse, ReplicaTier } from './api-contracts/replica-key.js'
@@ -145,10 +146,9 @@ async function fetchSessionKey(
   let response: Response
   let body: unknown
   try {
-    response = await source.fetch(
-      `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/replica-key`,
-      { method: 'POST' },
-    )
+    response = await source.fetch(`${daemonBaseUrl}${replicaKeyApiUrl(workspaceId)}`, {
+      method: 'POST',
+    })
     body = await response.json()
   } catch {
     return { kind: 'withheld', reason: 'unreachable' }

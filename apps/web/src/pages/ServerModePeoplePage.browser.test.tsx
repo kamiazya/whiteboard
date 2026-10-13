@@ -3,6 +3,19 @@
  * that keeps its own state: an administrator manages the server's people, an
  * owner a workspace's, and a refusal is shown in the keeper's words.
  */
+import {
+  authSessionUrl,
+  tenantInvitationsApiUrl,
+  tenantPeopleApiUrl,
+  tenantPersonAdministratorApiUrl,
+  tenantPersonApiUrl,
+  tenantPersonDeactivationApiUrl,
+  workspaceApiUrl,
+  workspaceInvitationsApiUrl,
+  workspacePeopleApiUrl,
+  workspacePersonApiUrl,
+  workspacesApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -25,7 +38,9 @@ const refuse = (error: string, message: string, status: number) =>
   Response.json({ error, message }, { status })
 const LINK = { url: 'https://wb.test/invite#token=t-1', expiresAt: '2026-10-03T00:00:00.000Z' }
 
-// `/api/people` and `/api/invitations`, as the keeper answers an administrator.
+// The tenant's people and invitations, as the keeper answers an administrator.
+// Routed by the client's own builders, which daemon-client-urls.routes.test.ts
+// holds to the server's routes.
 function tenantRoute(
   users: User[],
   me: User,
@@ -40,15 +55,22 @@ function tenantRoute(
   if (stale && method !== 'GET') {
     return refuse('reauthentication_required', 'sign in again to confirm it is you', 403)
   }
-  if (url === '/api/invitations') return Response.json(LINK, { status: 201 })
-  if (url === '/api/people') return Response.json({ people: users })
-  const [, , , id, what] = url.split('/')
-  const user = users.find((u) => u.userId === id) as User
-  if (what === undefined && method === 'DELETE') return deleteRoute(users, user)
-  if (what === 'deactivation') user.deactivated = method === 'POST'
-  if (what === 'administrator') user.administrator = method === 'PUT'
+  if (url === tenantInvitationsApiUrl()) return Response.json(LINK, { status: 201 })
+  if (url === tenantPeopleApiUrl()) return Response.json({ people: users })
+  const personRoutes = [
+    tenantPersonApiUrl,
+    tenantPersonDeactivationApiUrl,
+    tenantPersonAdministratorApiUrl,
+  ]
+  const user = users.find((u) => personRoutes.some((route) => route(u.userId) === url)) as User
+  if (url === tenantPersonApiUrl(user.userId) && method === 'DELETE') {
+    return deleteRoute(users, user)
+  }
+  const deactivation = url === tenantPersonDeactivationApiUrl(user.userId)
+  if (deactivation) user.deactivated = method === 'POST'
+  if (url === tenantPersonAdministratorApiUrl(user.userId)) user.administrator = method === 'PUT'
   return Response.json(
-    what === 'deactivation'
+    deactivation
       ? { userId: user.userId, deactivated: user.deactivated }
       : { userId: user.userId, administrator: user.administrator },
   )
@@ -79,18 +101,18 @@ interface Member {
   deactivated: boolean
 }
 
-// `/api/workspaces/ws-1/...`, as the keeper answers its members and owners.
+// Workspace ws-1's people, as the keeper answers its members and owners.
 function workspaceRoute(members: Member[], me: User, url: string, init?: RequestInit) {
   const owner = members.some((m) => m.userId === me.userId && m.role === 'owner')
-  if (url === '/api/workspaces/ws-1/people') {
+  if (url === workspacePeopleApiUrl('ws-1')) {
     return Response.json({ people: members, canManage: owner })
   }
-  if (url === '/api/workspaces/ws-1/invitations') {
+  if (url === workspaceInvitationsApiUrl('ws-1')) {
     return owner
       ? Response.json(LINK, { status: 201 })
       : refuse('not_an_owner', 'only an owner of this workspace can change its people', 403)
   }
-  const member = members.find((m) => m.userId === url.split('/').at(-1)) as Member
+  const member = members.find((m) => workspacePersonApiUrl('ws-1', m.userId) === url) as Member
   const { role } = JSON.parse(String(init?.body)) as { role: string }
   if (role === 'member' && members.filter((m) => m.role === 'owner').length === 1) {
     return refuse('last_owner', 'a workspace keeps at least one owner', 409)
@@ -112,19 +134,19 @@ function fakeKeeper(self: 'ada' | 'bob', { stale = false, cy = false } = {}) {
   const me = users.find((u) => u.userId === `u-${self}`) as User
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
-    if (url === '/auth/session') {
+    if (url === authSessionUrl()) {
       return Response.json({
         signedIn: true,
         user: { userId: me.userId, displayName: me.displayName, administrator: me.administrator },
       })
     }
-    if (url === '/api/workspaces') {
+    if (url === workspacesApiUrl()) {
       return Response.json({ workspaces: [{ workspaceId: 'ws-1', displayName: 'Plans' }] })
     }
-    if (url.startsWith('/api/people') || url === '/api/invitations') {
+    if (url.startsWith(tenantPeopleApiUrl()) || url === tenantInvitationsApiUrl()) {
       return tenantRoute(users, me, url, init?.method ?? 'GET', stale)
     }
-    if (url.startsWith('/api/workspaces/ws-1/')) return workspaceRoute(members, me, url, init)
+    if (url.startsWith(`${workspaceApiUrl('ws-1')}/`)) return workspaceRoute(members, me, url, init)
     return Response.json({ error: 'not_found', message: 'no such route' }, { status: 404 })
   })
 }
