@@ -55,7 +55,15 @@ function senderSnapshot(): Uint8Array {
 function keeperStub(
   target: LoroDoc,
   promotes: unknown[],
-  { signedIn = true, refusePromote }: { signedIn?: boolean; refusePromote?: Response } = {},
+  {
+    signedIn = true,
+    refusePromote,
+    workspaces = [{ workspaceId: 'ws-here', displayName: 'Here' }],
+  }: {
+    signedIn?: boolean
+    refusePromote?: Response
+    workspaces?: { workspaceId: string; segment?: string; displayName?: string }[]
+  } = {},
 ): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
@@ -64,7 +72,7 @@ function keeperStub(
       return jsonResponse({ error: 'unauthorized' }, 401)
     }
     if (url.endsWith('/api/workspaces')) {
-      return Response.json({ workspaces: [{ workspaceId: 'ws-here', displayName: 'Here' }] })
+      return Response.json({ workspaces })
     }
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
       const body = JSON.parse(init.body as string) as { snapshot: string; attestation?: unknown }
@@ -239,6 +247,19 @@ describe('ReceiveTransferPage', () => {
     )
     expect(screen.getByTestId<HTMLButtonElement>('receive-transfer-accept').disabled).toBe(true)
     expect(promotes).toEqual([])
+  })
+
+  it('names a segment-only target workspace by its segment, never its id', async () => {
+    const workspaces = [
+      { workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FB1', segment: 'dev' },
+      { workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FB2', segment: 'ops' },
+    ]
+    render(
+      <ReceiveTransferPage fetchFn={keeperStub(new LoroDoc(), [], { workspaces })} opener={null} />,
+    )
+    arrive(SENDER, offer())
+    const picker = await screen.findByTestId<HTMLSelectElement>('receive-transfer-target')
+    expect(Array.from(picker.options, (option) => option.textContent)).toEqual(['dev', 'ops'])
   })
 
   it('says there is nothing to receive when opened without a transfer fragment', () => {
