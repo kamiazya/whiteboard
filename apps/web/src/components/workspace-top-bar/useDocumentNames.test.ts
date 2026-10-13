@@ -157,4 +157,39 @@ describe('useDocumentNames', () => {
     await waitFor(() => expect(result.current.effectiveNames.documents.bar).toBe('Bar'))
     expect(result.current.effectiveNames.documents.foo).toBe(expected)
   })
+
+  it("keeps the newer workspace's names when an older read answers after it", async () => {
+    // Each workspace's read is held until the test releases it, so the two
+    // can answer in the order a slow daemon would: the newer one first.
+    const pending = new Map<string, (response: Response) => void>()
+    const daemonFetch = vi.fn(
+      (input: RequestInfo | URL) =>
+        new Promise<Response>((resolve) => {
+          pending.set(String(input), resolve)
+        }),
+    )
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useDocumentNames({ workspaceId, keptByBrowser: false, daemonFetch }),
+      { initialProps: { workspaceId: 'ws-old' } },
+    )
+    rerender({ workspaceId: 'ws-new' })
+    await waitFor(() => expect(pending.size).toBe(2))
+    const release = (workspaceId: string) => {
+      const entry = [...pending].find(([url]) => url.includes(`/${workspaceId}/`))
+      if (entry === undefined) throw new Error(`no read for ${workspaceId}`)
+      return entry[1]
+    }
+
+    release('ws-new')(jsonResponse({ documents: { foo: 'New name' }, pinned: [] }))
+    await waitFor(() => expect(result.current.effectiveNames.documents.foo).toBe('New name'))
+
+    const stale = jsonResponse({ documents: { foo: 'Old name' }, pinned: ['foo'] })
+    release('ws-old')(stale)
+    // The stale body has been read; one macrotask lets the hook's
+    // continuation after that read run to completion.
+    await waitFor(() => expect(stale.bodyUsed).toBe(true))
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+
+    expect(result.current.effectiveNames).toEqual({ documents: { foo: 'New name' }, pinned: [] })
+  })
 })
