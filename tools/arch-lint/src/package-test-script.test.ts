@@ -75,6 +75,19 @@ function configsRunByScript(dir: string, script: string): string[] {
   return out
 }
 
+/**
+ * Configs a plain `vitest run` script leaves out, with the reason. Both-sided
+ * like the wrapper ledger: an entry must name a registered config the script
+ * really does not run.
+ */
+const SCRIPT_OMITS: Record<string, Omission> = {
+  'packages/canvas-render': {
+    configs: ['packages/canvas-render/vitest.browser.config.ts'],
+    reason:
+      'ci-policy.test.ts holds this script up as the package script that runs no browser project; that fixture moves first',
+  },
+}
+
 const registered = new Map<string, string[]>()
 for (const { configPath } of readVitestProjects(REPO_ROOT)) {
   const dir = dirname(configPath)
@@ -101,8 +114,19 @@ describe('package test scripts run every registered project', () => {
     const script = testScript(dir)
     expect(script, `${dir}/package.json has no "test" script`).toBeDefined()
     const ran = new Set(configsRunByScript(dir, script ?? ''))
-    const missing = (registered.get(dir) ?? []).filter((config) => !ran.has(config))
+    const omitted = SCRIPT_OMITS[dir]?.configs ?? []
+    const missing = (registered.get(dir) ?? []).filter(
+      (config) => !ran.has(config) && !omitted.includes(config),
+    )
     expect(missing, `${dir}'s "test" script does not run: ${missing.join(', ')}`).toEqual([])
+  })
+
+  it.each(Object.entries(SCRIPT_OMITS))('ledgered omission in %s is still real', (dir, entry) => {
+    const ran = configsRunByScript(dir, testScript(dir) ?? '')
+    for (const config of entry.configs) {
+      expect(registered.get(dir) ?? [], `${config} is not registered`).toContain(config)
+      expect(ran, `${dir}'s "test" script now runs ${config}; drop the entry`).not.toContain(config)
+    }
   })
 
   it.each(
