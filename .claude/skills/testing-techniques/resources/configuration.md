@@ -8,7 +8,7 @@ version before relying on one.
 
 ## Projects and filters
 
-- The root `vitest.config.ts` lists every project config file; each declares a `name:`
+- The root `vitest.config.ts` registers every project config file listed in `vitest.projects.json` (data, so every guard parses it rather than reading the config as text); each declares a `name:`
   (`tools/checks/src/vitest-projects.mjs` throws on one without, since CI derives the
   shared-layer step from the list). `vitest run --project <name>` runs one;
   `pnpm test:browser` runs every browser project.

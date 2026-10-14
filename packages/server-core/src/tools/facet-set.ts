@@ -79,9 +79,9 @@ export class NodeTargetNeedsOneDocumentError extends Error {
 }
 
 /**
- * `nodeId` names a node and `target: 'canvas'` names the canvas around it;
- * a write cannot land on both. Refused, like the batch case above and for
- * the same reason it is not a schema `.refine`.
+ * `nodeId` names a node and `edgeId` names an edge; a write lands on one
+ * element. Refused, like the batch case above and for the same reason it is
+ * not a schema `.refine`.
  */
 export class NodeAndEdgeTargetError extends Error {
   constructor() {
