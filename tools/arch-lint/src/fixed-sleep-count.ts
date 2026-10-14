@@ -14,7 +14,8 @@
  *   — the definition is not counted, each call is, since each call is a wait.
  *   A function that sleeps and then does more is a fake with injected
  *   latency, so a call to it is configuration rather than a wait;
- * - the one-argument call of `setTimeout` imported from `node:timers/promises`.
+ * - the one-argument call of `setTimeout` imported from `node:timers/promises`,
+ *   by name or alias, or read off a namespace or default import of the module.
  *   The two-argument form resolves a value for a `Promise.race` timeout, which
  *   bounds a wait rather than being one.
  *
@@ -26,7 +27,7 @@
  * and balanced parentheses are not a regular language.
  */
 import ts from '@typescript/typescript6'
-import { parseSource, unwrapExpression } from './ast-helpers.js'
+import { bindingsOfImport, importedBindings, parseSource, unwrapExpression } from './ast-helpers.js'
 
 interface PromiseSleep {
   readonly node: ts.NewExpression
@@ -156,24 +157,33 @@ function definedHelper(sleep: PromiseSleep): ts.Node | undefined {
   return isOwnParameter && isWholeBody(owner, node) ? boundDeclaration(owner) : undefined
 }
 
-/** The import specifiers that bind `setTimeout` from `node:timers/promises`. */
-function timerAliases(sourceFile: ts.SourceFile): Set<ts.Node> {
-  const aliases = new Set<ts.Node>()
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      continue
-    }
-    if (!TIMERS_MODULES.has(statement.moduleSpecifier.text)) continue
-    const bindings = statement.importClause?.namedBindings
-    if (bindings === undefined || !ts.isNamedImports(bindings)) continue
-    for (const element of bindings.elements) {
-      if ((element.propertyName ?? element.name).text === 'setTimeout') aliases.add(element)
-    }
-  }
-  return aliases
+/**
+ * The import nodes that bind `node:timers/promises`' `setTimeout` (`sleeps`)
+ * or the whole module (`modules`, whose `.setTimeout` is the same sleep). The
+ * module is CommonJS-shaped, so a default import is the whole module too.
+ */
+function timerBindings(sourceFile: ts.SourceFile): { sleeps: Set<ts.Node>; modules: Set<ts.Node> } {
+  const { locals, namespaces } = importedBindings(
+    sourceFile,
+    (spec) => TIMERS_MODULES.has(spec),
+    'setTimeout',
+    { defaultIsNamespace: true },
+  )
+  return { sleeps: new Set(locals.values()), modules: new Set(namespaces.values()) }
 }
 
-/** What one statement declares under `name`: a function, a variable, or a named import. */
+/** The name a call resolves through and whether it reads `.setTimeout` off it: `f(…)` or `x.setTimeout(…)`. */
+function calleeRoot(call: ts.CallExpression): { name: string; member: boolean } | undefined {
+  const callee = call.expression
+  if (ts.isIdentifier(callee)) return { name: callee.text, member: false }
+  return ts.isPropertyAccessExpression(callee) &&
+    callee.name.text === 'setTimeout' &&
+    ts.isIdentifier(callee.expression)
+    ? { name: callee.expression.text, member: true }
+    : undefined
+}
+
+/** What one statement declares under `name`: a function, a variable, or an import. */
 function declaredBy(statement: ts.Statement, name: string): ts.Node | undefined {
   if (ts.isFunctionDeclaration(statement)) {
     return statement.name?.text === name ? statement : undefined
@@ -184,9 +194,7 @@ function declaredBy(statement: ts.Statement, name: string): ts.Node | undefined 
     )
   }
   if (ts.isImportDeclaration(statement)) {
-    const bindings = statement.importClause?.namedBindings
-    if (bindings === undefined || !ts.isNamedImports(bindings)) return undefined
-    return bindings.elements.find((e) => e.name.text === name)
+    return bindingsOfImport(statement).find((binding) => binding.local === name)?.node
   }
   return undefined
 }
@@ -231,17 +239,33 @@ function nearestBinding(from: ts.Node, name: string): ts.Node | undefined {
   return undefined
 }
 
+/** Whether `call` is a fixed sleep: a defined helper, the imported `setTimeout`, or the module's `.setTimeout`, with one fixed delay. */
+function sleepsFixed(
+  call: ts.CallExpression,
+  helpers: ReadonlySet<ts.Node>,
+  timers: ReturnType<typeof timerBindings>,
+): boolean {
+  const root = calleeRoot(call)
+  const [only, ...rest] = call.arguments
+  if (root === undefined || rest.length > 0 || !isFixedNonZero(only)) return false
+  const binding = nearestBinding(call, root.name)
+  if (binding === undefined) return false
+  return root.member
+    ? timers.modules.has(binding)
+    : helpers.has(binding) || timers.sleeps.has(binding)
+}
+
 export function countFixedSleeps(source: string): number {
   if (!/setTimeout|timers\/promises/.test(source)) return 0
   const sourceFile = parseSource('t.tsx', source)
-  const aliases = timerAliases(sourceFile)
+  const timers = timerBindings(sourceFile)
   const promiseSleeps: PromiseSleep[] = []
   const calls: ts.CallExpression[] = []
   const visit = (node: ts.Node): void => {
     if (ts.isNewExpression(node)) {
       const sleep = asPromiseSleep(node)
       if (sleep !== undefined) promiseSleeps.push(sleep)
-    } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+    } else if (ts.isCallExpression(node) && calleeRoot(node) !== undefined) {
       calls.push(node)
     }
     ts.forEachChild(node, visit)
@@ -255,12 +279,6 @@ export function countFixedSleeps(source: string): number {
     if (helper !== undefined) helpers.add(helper)
     else if (isFixedNonZero(sleep.delay)) count += 1
   }
-  for (const call of calls) {
-    const name = (call.expression as ts.Identifier).text
-    const [only, ...rest] = call.arguments
-    if (rest.length > 0 || !isFixedNonZero(only)) continue
-    const binding = nearestBinding(call, name)
-    if (binding !== undefined && (helpers.has(binding) || aliases.has(binding))) count += 1
-  }
+  for (const call of calls) if (sleepsFixed(call, helpers, timers)) count += 1
   return count
 }

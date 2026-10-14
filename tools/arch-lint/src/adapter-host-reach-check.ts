@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
 import { adapterFiles } from './adapter-files.js'
-import { parseSource, unwrapExpression } from './ast-helpers.js'
+import {
+  type ImportedBindings,
+  importedBindings,
+  parseSource,
+  unwrapExpression,
+} from './ast-helpers.js'
 import { collectModuleSpecifiers } from './scanner.js'
 
 /**
@@ -65,34 +70,13 @@ function isProcessObject(expression: ts.Expression, bindings: ReadonlySet<string
   return ts.isIdentifier(inner) ? bindings.has(inner.text) : accessedName(inner) === 'process'
 }
 
-/** The names an import of `node:process` binds the object to, if the declaration is one. */
-function importedProcessNames(node: ts.Node): string[] {
-  if (
-    !ts.isImportDeclaration(node) ||
-    !ts.isStringLiteralLike(node.moduleSpecifier) ||
-    !isProcessModule(node.moduleSpecifier.text) ||
-    node.importClause === undefined ||
-    node.importClause.isTypeOnly
-  ) {
-    return []
-  }
-  const { name, namedBindings } = node.importClause
-  return [
-    name,
-    namedBindings && ts.isNamespaceImport(namedBindings) ? namedBindings.name : undefined,
-  ]
-    .filter((id): id is ts.Identifier => id !== undefined)
-    .map((id) => id.text)
-}
-
 /** The local names a file binds the `process` object to: a default or namespace import, or a `const p = process`. */
-function processBindings(source: ts.SourceFile): Set<string> {
-  const names = new Set<string>(['process'])
+function processBindings(source: ts.SourceFile, imported: ImportedBindings): Set<string> {
+  const names = new Set<string>(['process', ...imported.namespaces.keys()])
   let grown = true
   while (grown) {
     const before = names.size
     const visit = (node: ts.Node): void => {
-      for (const name of importedProcessNames(node)) names.add(name)
       if (
         ts.isVariableDeclaration(node) &&
         ts.isIdentifier(node.name) &&
@@ -132,32 +116,23 @@ function destructuresEnv(node: ts.Node, bindings: ReadonlySet<string>): boolean 
   )
 }
 
-/** `import { env } from 'node:process'`. */
-function importsEnv(node: ts.Node): boolean {
-  if (!ts.isImportSpecifier(node) || node.isTypeOnly || node.parent.parent.isTypeOnly) return false
-  const declaration = node.parent.parent.parent
-  return (
-    keyText(node.propertyName ?? node.name) === 'env' &&
-    ts.isStringLiteralLike(declaration.moduleSpecifier) &&
-    isProcessModule(declaration.moduleSpecifier.text)
-  )
-}
-
 /**
  * The environment, however it is reached: `process.env` or `process['env']`
  * (through any local binding of `process`, or `globalThis.process`), a
  * destructured `{ env }` of it, or `env` imported from `node:process`.
  */
 function readsProcessEnv(source: ts.SourceFile): boolean {
-  const bindings = processBindings(source)
+  // `node:process` is CommonJS-shaped: its default import is the object itself.
+  const imported = importedBindings(source, isProcessModule, 'env', { defaultIsNamespace: true })
+  if (imported.locals.size > 0) return true
+  const bindings = processBindings(source, imported)
   let found = false
   const visit = (node: ts.Node): void => {
     if (
       ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) &&
         accessedName(node) === 'env' &&
         isProcessObject(node.expression, bindings)) ||
-      destructuresEnv(node, bindings) ||
-      importsEnv(node)
+      destructuresEnv(node, bindings)
     ) {
       found = true
       return

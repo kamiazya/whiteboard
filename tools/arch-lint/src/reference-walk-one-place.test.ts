@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { importBindingsOf, parseSource } from './ast-helpers.js'
 import { REPO_ROOT, SCAN_ROOTS } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -45,19 +45,13 @@ const isLoop = (node: ts.Node): boolean =>
  * gives that name to something else, plus whatever an import renames it to.
  */
 function targetsNames(file: ts.SourceFile): ReadonlySet<string> {
-  const aliases = new Set<string>()
-  let shadowed = false
-  for (const statement of file.statements) {
-    const bindings = ts.isImportDeclaration(statement)
-      ? statement.importClause?.namedBindings
-      : undefined
-    if (bindings === undefined || !ts.isNamedImports(bindings)) continue
-    for (const spec of bindings.elements) {
-      const imported = (spec.propertyName ?? spec.name).text
-      if (imported === 'referenceTargets') aliases.add(spec.name.text)
-      else if (spec.name.text === 'referenceTargets') shadowed = true
-    }
-  }
+  const bindings = importBindingsOf(file)
+  const aliases = new Set(
+    bindings.filter((b) => b.imported === 'referenceTargets').map((b) => b.local),
+  )
+  const shadowed = bindings.some(
+    (b) => b.local === 'referenceTargets' && b.imported !== 'referenceTargets',
+  )
   if (!shadowed) aliases.add('referenceTargets')
   return aliases
 }

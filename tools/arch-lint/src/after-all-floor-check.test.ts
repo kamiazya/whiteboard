@@ -15,7 +15,8 @@
  * `assert.ok` and the rest included) or an `assert*` helper, or a `throw`,
  * anywhere inside the hook's callback — inline, or a function passed by name
  * that this file declares or imports from a relative path. `afterAll` is
- * recognised under whatever local name vitest's import binds it to. A cleanup
+ * recognised under whatever local name vitest's import binds it to, and read
+ * off a namespace import of vitest. A cleanup
  * hook (`rm`, `dispose`, `close`) asserts nothing and is left alone.
  *
  * Blind spots, each a shape no test in the repo uses: a helper imported from a
@@ -26,7 +27,12 @@ import { readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import {
+  type ImportedBindings,
+  importBindingsOf,
+  importedBindings,
+  parseSource,
+} from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { listTestFiles, listTestHelperFiles, TEST_SCAN_DIRS } from './test-scan-dirs.js'
 
@@ -72,20 +78,16 @@ function declarationNamed(source: ts.SourceFile, name: string): ts.Node | undefi
   return declaration
 }
 
-/** The local names vitest's `afterAll` is imported under: `afterAll`, or its alias. */
-function afterAllNames(source: ts.SourceFile): Set<string> {
-  const names = new Set(['afterAll'])
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement)) continue
-    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue
-    if (statement.moduleSpecifier.text !== 'vitest') continue
-    const bindings = statement.importClause?.namedBindings
-    if (!bindings || !ts.isNamedImports(bindings)) continue
-    for (const element of bindings.elements) {
-      if ((element.propertyName ?? element.name).text === 'afterAll') names.add(element.name.text)
-    }
-  }
-  return names
+/** Whether `call` is vitest's `afterAll`: by its name or an alias of it, or read off a namespace import. */
+function isAfterAllCall(call: ts.CallExpression, vitest: ImportedBindings): boolean {
+  const callee = call.expression
+  if (ts.isIdentifier(callee)) return callee.text === 'afterAll' || vitest.locals.has(callee.text)
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    callee.name.text === 'afterAll' &&
+    ts.isIdentifier(callee.expression) &&
+    vitest.namespaces.has(callee.expression.text)
+  )
 }
 
 /** The relative module a name is imported from in this file, and the name it is exported as. */
@@ -93,17 +95,10 @@ function relativeImportOf(
   source: ts.SourceFile,
   name: string,
 ): { readonly specifier: string; readonly exported: string } | undefined {
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement)) continue
-    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue
-    const specifier = statement.moduleSpecifier.text
-    if (!specifier.startsWith('.')) continue
-    const bindings = statement.importClause?.namedBindings
-    if (!bindings || !ts.isNamedImports(bindings)) continue
-    const element = bindings.elements.find((one) => one.name.text === name)
-    if (element) return { specifier, exported: (element.propertyName ?? element.name).text }
-  }
-  return undefined
+  const binding = importBindingsOf(source).find(
+    (one) => one.local === name && one.kind !== 'namespace' && one.spec.startsWith('.'),
+  )
+  return binding && { specifier: binding.spec, exported: binding.imported }
 }
 
 /** Reads the module a relative specifier names, or `undefined` when there is none to read. */
@@ -147,14 +142,14 @@ function namedCallback(
 
 function scan(fileName: string, text: string, readImport: ImportReader = readRelativeImport): Scan {
   const source = parseSource(fileName, text, true)
-  const hookNames = afterAllNames(source)
+  const vitest = importedBindings(source, (spec) => spec === 'vitest', 'afterAll')
   const unguarded: number[] = []
   let floors = 0
   let bareHooks = 0
   const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-      if (node.expression.text === 'afterAllFloor') floors += 1
-      if (hookNames.has(node.expression.text)) {
+    if (ts.isCallExpression(node)) {
+      if (ts.isIdentifier(node.expression) && node.expression.text === 'afterAllFloor') floors += 1
+      if (isAfterAllCall(node, vitest)) {
         bareHooks += 1
         const [callback] = node.arguments
         const body =
@@ -213,6 +208,10 @@ describe('assertions in afterAll go through afterAllFloor', () => {
         'x.test.ts',
         "import { afterAll as after } from 'vitest'\nafter(() => expect(drawn).toBe(1))",
       ).unguarded,
+    ).toEqual([2])
+    expect(
+      scan('x.test.ts', "import * as v from 'vitest'\nv.afterAll(() => expect(drawn).toBe(1))")
+        .unguarded,
     ).toEqual([2])
     // A cleanup helper of that name stays a cleanup: `assertions` is not `assert`.
     expect(scan('x.test.ts', 'afterAll(() => assertions.clear())').unguarded).toEqual([])

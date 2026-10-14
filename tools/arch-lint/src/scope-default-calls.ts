@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import ts from '@typescript/typescript6'
-import { parseSource, unwrapExpression } from './ast-helpers.js'
+import { importBindingsOf, parseSource, unwrapExpression } from './ast-helpers.js'
 import { walk } from './scan-roots.js'
 
 /**
@@ -170,19 +170,10 @@ export function scopeDefaultingExports(srcDir: string): ReadonlyMap<string, Shap
 
 /** Local name -> exported name, for what `source` imports from a `store/` module. */
 function storeImports(source: ts.SourceFile): Map<string, string> {
-  const locals = new Map<string, string>()
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) {
-      continue
-    }
-    if (!/(^|\/)store\/[^'"]+$/.test(statement.moduleSpecifier.text)) continue
-    const bindings = statement.importClause?.namedBindings
-    if (bindings === undefined || !ts.isNamedImports(bindings)) continue
-    for (const element of bindings.elements) {
-      locals.set(element.name.text, (element.propertyName ?? element.name).text)
-    }
-  }
-  return locals
+  const fromStore = importBindingsOf(source).filter(
+    (binding) => binding.kind === 'named' && /(^|\/)store\/[^'"]+$/.test(binding.spec),
+  )
+  return new Map(fromStore.map((binding) => [binding.local, binding.imported]))
 }
 
 /** The identifiers a callee expression may resolve to: `a`, `(a ?? b)`, `x ? a : b`. */

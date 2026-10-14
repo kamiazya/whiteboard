@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { importedBindings, parseSource } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -72,31 +72,13 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
 /** Every call to an fs `rename`/`renameSync` the file imports, as its source text. */
 function fsRenames(fileName: string, source: string): string[] {
   const file = parseSource(fileName, source)
-  const named = new Set<string>()
-  const namespaces = new Set<string>()
-  for (const statement of file.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      !FS_MODULES.has(statement.moduleSpecifier.text)
-    ) {
-      continue
-    }
-    const defaultName = statement.importClause?.name
-    if (defaultName !== undefined) namespaces.add(defaultName.text)
-    const bindings = statement.importClause?.namedBindings
-    if (bindings === undefined) continue
-    if (ts.isNamespaceImport(bindings)) {
-      namespaces.add(bindings.name.text)
-      continue
-    }
-    for (const element of bindings.elements) {
-      const imported = (element.propertyName ?? element.name).text
-      if (RENAMES.has(imported)) named.add(element.name.text)
-      // `node:fs`'s `promises` is the promise API under another name.
-      if (imported === 'promises') namespaces.add(element.name.text)
-    }
-  }
+  const isFs = (spec: string) => FS_MODULES.has(spec)
+  // `node:fs` is CommonJS-shaped: its default import is the whole module.
+  const renames = importedBindings(file, isFs, RENAMES, { defaultIsNamespace: true })
+  const named = new Set(renames.locals.keys())
+  // `node:fs`'s `promises` is the promise API under another name.
+  const promises = importedBindings(file, isFs, 'promises').locals.keys()
+  const namespaces = new Set([...renames.namespaces.keys(), ...promises])
   const found: string[] = []
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
