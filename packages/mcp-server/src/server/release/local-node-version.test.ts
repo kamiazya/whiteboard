@@ -62,7 +62,8 @@ describe('the checkout runs the Node the suite is calibrated for', () => {
     expect(
       running,
       `This checkout is on Node ${process.versions.node} but .node-version pins ${pinned}, which is what CI installs. ` +
-        'A jsdom Blob passed to new Response fails on the wrong major with a message about Blob that names neither Node nor this file, ' +
+        'A jsdom Blob passed to new Response fails on the wrong major with `TypeError: object.stream is not a function`, ' +
+        'which names neither Node, Blob nor this file, ' +
         'and packages/search snippet.test.ts "honours a Prepend" fails on the ICU/Unicode table with a message that names ' +
         'neither — so a run on the wrong major looks like real regressions. Switch (nvm/fnm/asdf use ' +
         `${pinned}) and re-run before believing any red. See this file's header for the mechanism.`,

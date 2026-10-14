@@ -31,10 +31,20 @@ function markdownFiles(dir: string): string[] {
   })
 }
 
+const read = (path: string) => ({
+  rel: relative(REPO_ROOT, path),
+  text: readFileSync(path, 'utf-8'),
+})
+
 /** Decision records are history: they name the shapes as they stood when decided. */
 const docs = markdownFiles(DOCS)
   .filter((path) => !path.includes(`${join('docs', 'contributing', 'adr')}`))
-  .map((path) => ({ rel: relative(REPO_ROOT, path), text: readFileSync(path, 'utf-8') }))
+  .map(read)
+
+/** The contributor-facing prose a session loads: always-on and path-scoped rules, and skills. */
+const devProse = ['.claude/rules', '.claude/skills']
+  .flatMap((dir) => markdownFiles(join(REPO_ROOT, dir)))
+  .map(read)
 
 describe('the operator reference lists only variables something shipped reads', () => {
   const reference = readFileSync(join(DOCS, 'reference/configuration.md'), 'utf-8')
@@ -66,6 +76,8 @@ interface RetiredClaim {
   readonly why: string
   /** Text the pattern must match, so the entry cannot go inert unnoticed. */
   readonly example: string
+  /** Also held across `devProse`, for a claim that lived there as well as in `docs/`. */
+  readonly devProse?: true
 }
 
 const RETIRED: readonly RetiredClaim[] = [
@@ -114,6 +126,12 @@ const RETIRED: readonly RetiredClaim[] = [
     why: 'a sibling of `.dev-data/` is not git-ignored and would hold the dev token; back up under `tmp/`',
     example: 'cp -r .dev-data .dev-data.bak',
   },
+  {
+    pattern: /message\s+about\s+`?Blob/,
+    why: 'on the wrong Node major a jsdom Blob handed to `new Response` throws `TypeError: object.stream is not a function`, which does not contain "Blob": a reader grepping a red log for it finds nothing and reads the failure as a real regression',
+    example: 'fails on 22 with a message about\n`Blob`, and',
+    devProse: true,
+  },
 ]
 
 describe('docs carry no retired claim', () => {
@@ -121,12 +139,15 @@ describe('docs carry no retired claim', () => {
     expect(pattern.test(example)).toBe(true)
   })
 
-  it('reads the docs tree', () => {
+  it('reads the docs tree and the contributor prose', () => {
     expect(docs.length).toBeGreaterThan(20)
+    expect(devProse.map((doc) => doc.rel)).toContain(join('.claude', 'rules', 'dev-flow.md'))
+    expect(devProse.length).toBeGreaterThan(100)
   })
 
-  it.each(RETIRED)('is absent from every doc: $pattern', ({ pattern, why }) => {
-    const hits = docs.filter((doc) => pattern.test(doc.text)).map((doc) => doc.rel)
+  it.each(RETIRED)('is absent from every doc: $pattern', ({ pattern, why, devProse: wide }) => {
+    const corpus = wide ? [...docs, ...devProse] : docs
+    const hits = corpus.filter((doc) => pattern.test(doc.text)).map((doc) => doc.rel)
     expect(hits, `${why}`).toEqual([])
   })
 })

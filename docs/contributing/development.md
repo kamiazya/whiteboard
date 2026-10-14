@@ -15,7 +15,8 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
   pinned by `package.json`'s `packageManager` (pnpm@11.12.0): run `corepack enable`
   before `pnpm install`, or an older global pnpm rewrites the lockfile.
   Not a recommendation: `local-node-version.test.ts` fails on any other major,
-  because a jsdom `Blob` handed to `new Response` fails on 22 with a message about `Blob`, and
+  because a jsdom `Blob` handed to `new Response` fails on 22 with
+  `TypeError: object.stream is not a function` from inside undici, and
   `packages/search`'s "honours a Prepend" fails on its older ICU/Unicode table,
   and neither message names Node or the cause, so a run on the wrong major looks
   like real regressions. A root `globalSetup` prints a banner naming both on any
