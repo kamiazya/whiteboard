@@ -151,4 +151,30 @@ describe('entryAwaitFailures', () => {
 
     expect(entryAwaitFailures(dist).failures).toBe(0)
   })
+
+  it('still sees a deferred chunk whose export is followed by a comment', () => {
+    writeFileSync(
+      join(dist, 'assets', 'shell-b.js'),
+      'let a; let __tla = (async () => { a = () => 1 })(); export { a as a, __tla };\n//# sourceMappingURL=shell-b.js.map\n/* licence */\n',
+    )
+    writeFileSync(join(dist, 'assets', 'index-a.js'), 'import{a as e}from"./shell-b.js";e();')
+
+    expect(entryAwaitFailures(dist).failures).toBe(1)
+  })
+
+  it('reports an imported chunk missing from dist as a failure', () => {
+    writeFileSync(join(dist, 'assets', 'index-a.js'), 'import{a as e}from"./gone-c.js";e();')
+
+    const report = entryAwaitFailures(dist)
+
+    expect(report.failures).toBe(1)
+    expect(report.lines.map((l) => l.text).join('\n')).toMatch(/gone-c\.js.*missing/)
+  })
+
+  it('reports an entry script missing from dist as a failure', () => {
+    const report = entryAwaitFailures(dist)
+
+    expect(report.failures).toBe(1)
+    expect(report.lines.map((l) => l.text).join('\n')).toMatch(/index-a\.js.*missing/)
+  })
 })

@@ -142,19 +142,42 @@ export function entryAwaitFailures(dist) {
   let failures = 0
   const indexHtmlPath = join(dist, 'index.html')
   if (!existsSync(indexHtmlPath)) return { failures, lines }
-  const readAsset = (file) => readFileSync(join(dist, 'assets', file), 'utf8')
-  const deferred = (file) => /export\s*\{[^}]*\b__tla\b[^}]*\}\s*;?\s*$/.test(readAsset(file))
+  const fail = (text) => {
+    lines.push({ stream: 'error', text })
+    failures++
+  }
+  // A missing asset is a broken build, said as a failure rather than an
+  // ENOENT that ends the gate before it reports anything.
+  const readAsset = (file) => {
+    const path = join(dist, 'assets', file)
+    return existsSync(path) ? readFileSync(path, 'utf8') : undefined
+  }
+  // The export clause ends the module, but a comment (a source map pointer,
+  // a licence banner) may follow it.
+  const deferred = (source) =>
+    /export\s*\{[^}]*\b__tla\b[^}]*\}\s*;?(?:\s*(?:\/\/[^\r\n]*|\/\*[\s\S]*?\*\/))*\s*$/.test(
+      source,
+    )
   for (const src of extractEntryScripts(readFileSync(indexHtmlPath, 'utf8'))) {
     const entry = src.replace(/^\/assets\//, '')
-    for (const [, names, file] of readAsset(entry).matchAll(
+    const entrySource = readAsset(entry)
+    if (entrySource === undefined) {
+      fail(`  FAIL  entry ${entry} is named by index.html but missing from dist/assets`)
+      continue
+    }
+    for (const [, names, file] of entrySource.matchAll(
       /import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+)["']/g,
     )) {
-      if (/\b__tla\b/.test(names) || !deferred(file)) continue
-      lines.push({
-        stream: 'error',
-        text: `  FAIL  entry ${entry} reads ${file} without awaiting its __tla — the page will not mount`,
-      })
-      failures++
+      if (/\b__tla\b/.test(names)) continue
+      const imported = readAsset(file)
+      if (imported === undefined) {
+        fail(`  FAIL  entry ${entry} imports ${file}, which is missing from dist/assets`)
+        continue
+      }
+      if (!deferred(imported)) continue
+      fail(
+        `  FAIL  entry ${entry} reads ${file} without awaiting its __tla — the page will not mount`,
+      )
     }
   }
   return { failures, lines }

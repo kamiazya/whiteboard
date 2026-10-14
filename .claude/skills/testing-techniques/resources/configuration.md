@@ -27,8 +27,9 @@ all of them:
 export default defineConfig({ test: { projects: ['./unit.config.ts', './e2e.config.ts'] } })
 ```
 
-Do NOT nest here yet: `vitest-projects.mjs` regex-scans the ROOT config for quoted
-`*.config.ts` paths, and a nested list would silently leave CI's shared-layer step.
+Do NOT nest here yet: `vitest-projects.mjs` reads the root list from `vitest.projects.json`
+only and does not follow a nested `projects` list, so a nested project would silently leave
+CI's shared-layer step.
 
 ### Inline projects inherit the root config and share one Vite server
 
