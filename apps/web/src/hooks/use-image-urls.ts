@@ -5,9 +5,7 @@
  * Extracted rather than copied, for the reason `use-document-file-seams`'s own
  * header gives about the caching rules it holds: there are two surfaces now —
  * the board and the markdown preview — and the subtleties here each exist
- * because of a defect. A load that answers nothing must return the SAME map
- * instance, or the fresh (equal) map republishes state, re-runs this effect
- * and spins the read forever. An asset is immutable once stored, so a hit is
+ * because of a defect. An asset is immutable once stored, so a hit is
  * never invalidated; the URLs are revoked on unmount, since leaking them keeps
  * the decoded image alive for the tab's lifetime.
  *
