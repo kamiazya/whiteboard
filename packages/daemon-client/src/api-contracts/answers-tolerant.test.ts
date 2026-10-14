@@ -144,6 +144,8 @@ function strictEnums(root: unknown, name: string): Map<string, string> {
     if (!isSchema(value) || seen.has(value)) return
     seen.add(value)
     const def = value._zod.def as Def
+    const closed = closedSetOf(def)
+    if (closed !== undefined) found.set(setSignature(closed), path)
     switch (def.type) {
       case 'enum':
         found.set(signatureOf(def), path)
@@ -184,9 +186,43 @@ function strictEnums(root: unknown, name: string): Map<string, string> {
 }
 
 function signatureOf(def: Def): string {
-  return Object.values(def.entries as Record<string, string>)
-    .sort()
-    .join('|')
+  return setSignature(Object.values(def.entries as Record<string, string>))
+}
+
+function setSignature(values: readonly unknown[]): string {
+  return values.map(String).sort().join('|')
+}
+
+/** The values a single field may hold, when it is a literal or an enum. */
+function fieldValues(schema: unknown): unknown[] | undefined {
+  if (!isSchema(schema)) return undefined
+  const def = schema._zod.def as Def
+  if (def.type === 'literal') return def.values as unknown[]
+  if (def.type === 'enum') return Object.values(def.entries as Def)
+  return undefined
+}
+
+/**
+ * The closed set spelled without `z.enum`: a literal of several values, a
+ * union whose options are all literals, or a discriminated union's
+ * discriminator values. A new value fails the parse the same way a new enum
+ * member does, so it is the same decision. A single literal is a constant.
+ */
+function closedSetOf(def: Def): unknown[] | undefined {
+  if (def.type === 'literal') {
+    const values = def.values as unknown[]
+    return values.length > 1 ? values : undefined
+  }
+  if (def.type !== 'union') return undefined
+  const options = def.options as unknown[]
+  const discriminator = def.discriminator
+  const picked = options.map((option) => {
+    if (typeof discriminator !== 'string') return fieldValues(option)
+    if (!isSchema(option) || option._zod.def.type !== 'object') return undefined
+    return fieldValues((option._zod.def.shape as Def)[discriminator])
+  })
+  if (picked.some((values) => values === undefined)) return undefined
+  return picked.flatMap((values) => values ?? [])
 }
 
 const syncFrames = import.meta.glob<Record<string, unknown>>('../sync-frames.ts', { eager: true })
@@ -252,6 +288,28 @@ const LOCKSTEP: ReadonlyMap<string, string> = new Map([
     'sign-in refusal codes: read with safeParse; an unrecognised refusal shows the generic sign-in failure',
   ],
   [
+    ['spatial', 'markdown'].sort().join('|'),
+    'document kind of a past version: it decides which reader draws the body, and a kind this build has no reader for cannot be shown, so the version reads as unreadable rather than as the wrong document',
+  ],
+  [
+    ['node', 'point'].sort().join('|'),
+    'what a line end is attached to: the model package this build ships draws an end it can place or refuses the past state, as with the colour presets',
+  ],
+  [
+    ['false', 'true'].sort().join('|'),
+    'signed-in session: a boolean, so no third value exists to arrive — what a session can be is the two arms, and a new state would be a new answer shape',
+  ],
+  [
+    ['version_created', 'restore_started', 'restore_complete', 'viewport_request', 'agent_activity']
+      .sort()
+      .join('|'),
+    'server sync frames: each type is an event the reader acts on, and a frame type this build cannot read is dropped by parseServerTextMessage, which is the right outcome for an event',
+  ],
+  [
+    'client_ready',
+    'client sync frames: the browser SENDS these and the daemon parses them strictly as a request, so a type the daemon has not heard of is refused rather than ignored',
+  ],
+  [
     signatureOfSchema(syncWriteRefusalSchema.shape.code.unwrap()),
     "sync write refusal codes: read with safeParse; a code this build cannot name is still a refusal, told with the keeper's own sentence",
   ],
@@ -277,6 +335,25 @@ describe('api-contracts: no browser-parsed enum fails on a member it has not hea
     const strict = z.object({ kind: z.enum(['a', 'b']) })
     expect(strictEnums(degraded, 'x').size).toBe(0)
     expect([...strictEnums(strict, 'x').keys()]).toEqual(['a|b'])
+  })
+
+  it('sees a closed set spelled as literals, which fails on a new value exactly as an enum does', () => {
+    const literals = z.object({ custody: z.union([z.literal('held'), z.literal('sealed')]) })
+    const multi = z.object({ mode: z.literal(['b', 'a']) })
+    const framed = z.discriminatedUnion('type', [
+      z.object({ type: z.literal('ready') }),
+      z.object({ type: z.literal('gone'), at: z.string() }),
+    ])
+    const flag = z.discriminatedUnion('signedIn', [
+      z.object({ signedIn: z.literal(true) }),
+      z.object({ signedIn: z.literal(false) }),
+    ])
+    expect([...strictEnums(literals, 'x').keys()]).toEqual(['held|sealed'])
+    expect([...strictEnums(multi, 'x').keys()]).toEqual(['a|b'])
+    expect([...strictEnums(framed, 'x').keys()]).toEqual(['gone|ready'])
+    expect([...strictEnums(flag, 'x').keys()]).toEqual(['false|true'])
+    // One literal is a constant, not a set a newer daemon can grow.
+    expect(strictEnums(z.object({ v: z.literal(1) }), 'x').size).toBe(0)
   })
 
   it('lists every strict enum with its reason', () => {
