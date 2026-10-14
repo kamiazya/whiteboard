@@ -37,7 +37,7 @@ function imageStore() {
       ),
     }),
     isImageFileRef: (file: string) => file.startsWith('asset:'),
-    onOpenFileRef: (file: string) => {
+    onOpenDocument: (file: string) => {
       opened.push(file)
     },
   }

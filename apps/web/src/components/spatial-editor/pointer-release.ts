@@ -47,7 +47,7 @@ export interface PointerReleaseContext {
   readonly lastStrokeRef: EditorPointerInputs['lastStrokeRef']
   readonly marquee: EditorPointerInputs['marquee']
   readonly missingFileRef: EditorPointerInputs['missingFileRef']
-  readonly onOpenFileRef: EditorPointerInputs['onOpenFileRef']
+  readonly onOpenDocument: EditorPointerInputs['onOpenDocument']
   readonly openLinkNode: EditorPointerInputs['openLinkNode']
   readonly pasteClipboard: EditorPointerInputs['pasteClipboard']
   readonly pendingCut: EditorPointerInputs['pendingCut']
@@ -200,7 +200,7 @@ function runPrimaryAction(
     canvas,
     isImageFileRef,
     missingFileRef,
-    onOpenFileRef,
+    onOpenDocument,
     openLinkNode,
     setGroupLabelEditId,
   } = ctx
@@ -224,12 +224,12 @@ function runPrimaryAction(
   const file = nodeFile(node)
   if (
     file !== undefined &&
-    onOpenFileRef !== undefined &&
+    onOpenDocument !== undefined &&
     isImageFileRef?.(file) !== true &&
     missingFileRef?.(file) !== true
   ) {
     applyResult(result)
-    onOpenFileRef(file)
+    onOpenDocument(file)
     return true
   }
   return false

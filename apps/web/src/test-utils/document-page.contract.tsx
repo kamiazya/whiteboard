@@ -216,7 +216,7 @@ export function describeDocumentPageContract(fixture: DocumentPageFixture): void
           expect(latestEditorProps()?.fileRefOptions?.length ?? 0).toBeGreaterThan(0),
         )
         await act(async () => {
-          latestEditorProps()?.onOpenFileRef?.(TARGET.id)
+          latestEditorProps()?.onOpenDocument?.(TARGET.id)
         })
         await fixture.expectOpened(TARGET.path)
       })

@@ -26,7 +26,7 @@ const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
   onOpenDocument: undefined as ((documentId: string) => void) | undefined,
   linkTargets: undefined as readonly LinkTarget[] | undefined,
-  onOpenFileRef: undefined as ((file: string) => void) | undefined,
+  canvasOpener: undefined as ((file: string) => void) | undefined,
 }))
 
 vi.mock('../lib/browser-workspace-docs.js', () => ({
@@ -49,8 +49,8 @@ vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
 }))
 
 vi.mock('../components/spatial-editor/SpatialEditor.js', () => ({
-  SpatialEditor: (props: { onOpenFileRef?: (file: string) => void }) => {
-    store.onOpenFileRef = props.onOpenFileRef
+  SpatialEditor: (props: { onOpenDocument?: (file: string) => void }) => {
+    store.canvasOpener = props.onOpenDocument
     return <div data-testid="spatial-editor" />
   },
 }))
@@ -87,7 +87,7 @@ describe('ReplicaReadPage following a link', () => {
     cleanup()
     store.onOpenDocument = undefined
     store.linkTargets = undefined
-    store.onOpenFileRef = undefined
+    store.canvasOpener = undefined
   })
 
   it('opens the linked document from the replica in place', async () => {
@@ -123,25 +123,25 @@ describe('ReplicaReadPage following a link', () => {
       )
       fireEvent.click(await screen.findByText('board'))
       await screen.findByTestId('spatial-editor')
-      expect(store.onOpenFileRef).toBeTypeOf('function')
+      expect(store.canvasOpener).toBeTypeOf('function')
     }
 
     it('opens a document a node names by id', async () => {
       await openBoard()
-      act(() => store.onOpenFileRef?.(DOC_PLAN))
+      act(() => store.canvasOpener?.(DOC_PLAN))
       expect((await screen.findByText('the plan')).dataset.testid).toBe('markdown-editor')
     })
 
     it('opens a document a node names by path', async () => {
       await openBoard()
-      act(() => store.onOpenFileRef?.('plan'))
+      act(() => store.canvasOpener?.('plan'))
       expect((await screen.findByText('the plan')).dataset.testid).toBe('markdown-editor')
     })
 
     it('opens nothing for a file the replica does not hold', async () => {
       await openBoard()
-      act(() => store.onOpenFileRef?.('missing'))
-      act(() => store.onOpenFileRef?.(UNKNOWN))
+      act(() => store.canvasOpener?.('missing'))
+      act(() => store.canvasOpener?.(UNKNOWN))
       expect(screen.getByTestId('spatial-editor')).toBeDefined()
     })
   })

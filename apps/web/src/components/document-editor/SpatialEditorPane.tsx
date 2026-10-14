@@ -128,7 +128,7 @@ export function SpatialEditorPane({
         }
         ref={editorRef}
         {...editorProps}
-        onOpenFileRef={onOpenDocument}
+        onOpenDocument={onOpenDocument}
         {...fileSeams}
         onOpenInEditor={nodeInEditor.open}
         paletteLeading={<HistoryCluster {...history} />}

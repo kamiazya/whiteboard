@@ -583,7 +583,7 @@ function ReplicaReader({
               defaultTool="select"
               className="h-full"
               references={references}
-              onOpenFileRef={markdownLinks.onOpenDocument}
+              onOpenDocument={markdownLinks.onOpenDocument}
               tagLibrary={tagLibrary}
               tagSuggestions={tagsInUse}
               facetRegistry={facetRegistry}

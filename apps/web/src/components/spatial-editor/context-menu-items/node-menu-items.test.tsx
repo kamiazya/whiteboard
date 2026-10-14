@@ -85,7 +85,7 @@ function baseInput(
     reorderSelection: vi.fn(),
     groupSelection: vi.fn(),
     openLinkNode: vi.fn(),
-    onOpenFileRef: undefined,
+    onOpenDocument: undefined,
     onAddImage: undefined,
     onToggleNodeLock: undefined,
     setGroupLabelEditId: vi.fn(),
@@ -147,19 +147,19 @@ describe('nodeMenuItems', () => {
 
   it('hides Open canvas for a missing file ref, and offers it for a live one', () => {
     const canvas: SpatialCanvas = { nodes: [fileNode], edges: [] }
-    const onOpenFileRef = vi.fn()
+    const onOpenDocument = vi.fn()
     const missing = nodeMenuItems(
-      baseInput(fileNode, canvas, { onOpenFileRef, missingFileRef: () => true }),
+      baseInput(fileNode, canvas, { onOpenDocument, missingFileRef: () => true }),
     )
     expect(missing.some((item) => labelOf(item) === 'Open canvas')).toBe(false)
 
     const live = nodeMenuItems(
-      baseInput(fileNode, canvas, { onOpenFileRef, missingFileRef: () => false }),
+      baseInput(fileNode, canvas, { onOpenDocument, missingFileRef: () => false }),
     )
     const openItem = live.find((item) => labelOf(item) === 'Open canvas')
     expect(openItem).toBeDefined()
     ;(openItem as { onSelect: () => void }).onSelect()
-    expect(onOpenFileRef).toHaveBeenCalledWith('doc-1')
+    expect(onOpenDocument).toHaveBeenCalledWith('doc-1')
   })
 
   it('contributes the facet doorway only when a plugin targets a node', () => {

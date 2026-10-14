@@ -35,7 +35,7 @@ const references = referenceWire(
 
 afterEach(cleanup)
 
-function mount(onOpenFileRef?: (id: string) => void) {
+function mount(onOpenDocument?: (id: string) => void) {
   return render(
     <div style={{ width: 800, height: 600 }}>
       <SpatialEditor
@@ -43,7 +43,7 @@ function mount(onOpenFileRef?: (id: string) => void) {
         canvas={canvas}
         onChange={() => {}}
         references={references}
-        {...(onOpenFileRef === undefined ? {} : { onOpenFileRef })}
+        {...(onOpenDocument === undefined ? {} : { onOpenDocument })}
       />
     </div>,
   )

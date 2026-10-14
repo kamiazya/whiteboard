@@ -78,7 +78,7 @@ describe('DaemonDocumentPage file refs', () => {
   it('passes an unknown ref through unchanged as a legacy path reference', async () => {
     await renderPage()
     await act(async () => {
-      latestEditorProps()?.onOpenFileRef?.('second')
+      latestEditorProps()?.onOpenDocument?.('second')
     })
     await waitFor(() =>
       expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path: 'second' }),
