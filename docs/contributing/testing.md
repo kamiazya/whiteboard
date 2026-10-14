@@ -254,22 +254,30 @@ Keep E2E suites small and focused. If E2E finds a bug, add the nearest-layer reg
 
 ## Smoke & Distribution Tests
 
-MCP startup, protocol, and distribution-artifact smokes run as Vitest projects. The shared implementations under `src/server/mcp/*.smoke-impl.ts` and `*.distribution-impl.ts` are used by both the Vitest tests and the `scripts/smoke/mcp-*.mjs` CLI wrappers.
+MCP startup, protocol, and distribution-artifact smokes run as Vitest projects. The shared implementations under `src/server/mcp/*.smoke-impl.ts` and `*.distribution-impl.ts` are used by both the Vitest tests and the CLI wrappers listed under CLI wrapper scripts below. `pnpm smoke:e2e` is the exception: a standalone script with no Vitest counterpart (see its own section).
 
 ### `mcp-smoke` — included in `pnpm test`
 
 Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. The project runs with `maxWorkers: 1` (`packages/mcp-server/vitest.smoke.config.ts`), so each test's daemon process runs alone; the daemon listens on an owner-only socket rather than a TCP port (ADR-0050), so this is about process and data-dir contention, not port conflicts.
 
-| Script | What it covers |
+| Entry | What it covers |
 |---|---|
 | `pnpm smoke` | Startup-only: MCP server starts without fatal errors and stays alive for 3 s |
-| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_workspace_edit` → `wb_facet_set` → `wb_canvas_edit` (seed, duplicate-id / dangling-endpoint / locked refusals, rejected-batch rollback, tidy) → `wb_scene_render` / `wb_canvas_snapshot` (default, and `layout:true`) / `wb_viewport_set` → version save/list/restore → `document.set` → `wb_document_get` |
+| `mcp-e2e-checkpoint.smoke.test.ts` | Checkpoint flow over stdio: `tools/list` equals `ALL_REGISTERED_TOOLS`, then `wb_workspace_edit` → `wb_facet_set` → `wb_version_save` / `wb_version_list` / `wb_version_restore` |
 
 Run all mcp-smoke tests together:
 
 ```bash
 pnpm --filter @kamiazya/whiteboard-mcp test:smoke    # vitest run --project mcp-smoke
 ```
+
+### `pnpm smoke:e2e` — standalone script, NOT in `pnpm test`
+
+`packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs` is a node script, not a Vitest test: no project spawns it, so `pnpm test` and `test:smoke` never run it. CI runs it as its own step after `mcp-smoke`; run it yourself after an MCP tool or route change.
+
+| Script | What it covers |
+|---|---|
+| `pnpm smoke:e2e` | Full stdio MCP tool tour, every tool in `COVERED_TOOLS`: `wb_workspace_edit` → `wb_facet_set` → `wb_canvas_edit` (seed, duplicate-id / dangling-endpoint / locked refusals, rejected-batch rollback, tidy) → `wb_scene_render` / `wb_canvas_snapshot` (default, and `layout:true`) / `wb_viewport_set` → version save/list/restore → `document.set` → `wb_document_get` |
 
 ### `mcp-distribution` — opt-in, requires build
 
@@ -320,7 +328,7 @@ These scripts require a running Claude or Codex CLI and consume API quota. Not i
 
 ### CLI wrapper scripts
 
-The `scripts/smoke/mcp-*.mjs` files are secondary entry points that delegate to the same shared TypeScript implementations used by the Vitest tests. Prefer `pnpm smoke:*` / `pnpm test:*` for day-to-day use. If you invoke the wrappers directly, they run from `packages/mcp-server`, where tsx is installed:
+The wrappers below are secondary entry points that delegate to the same shared TypeScript implementations used by the Vitest tests (`mcp-e2e-smoke.mjs`, the `smoke:e2e` tour, is not one of them: it has no Vitest counterpart). Prefer `pnpm smoke:*` / `pnpm test:*` for day-to-day use. If you invoke the wrappers directly, they run from `packages/mcp-server`, where tsx is installed:
 
 ```bash
 cd packages/mcp-server && node --import tsx/esm scripts/smoke/mcp-smoke.mjs
@@ -430,7 +438,7 @@ pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
 pnpm test           # optional: every project at once, CI runs the matrix; full suite (see vitest.projects.json): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
-pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
+pnpm smoke:e2e      # stdio MCP tool tour; a standalone script, not part of pnpm test
 pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info
 ```
 

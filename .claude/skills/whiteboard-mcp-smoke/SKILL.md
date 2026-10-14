@@ -8,20 +8,28 @@ description: A skill that standardizes whiteboard MCP and daemon verification. U
 This repository splits verification targets into two categories.
 
 - **Server/daemon-side changes**
-  Example: `src/server/**`, `src/daemon/**`, and the browser's sync client
-  `packages/daemon-client/src/sse-backend.ts` (the only transport since the
-  WebSocket client went, ADR-0050)
-- **MCP schema/registration-side changes**
-  Example: descriptions, schemas, or registration in `src/server/mcp/server.ts` (the factory), `src/server/mcp/document-tools.ts` and `src/server/mcp/tools/**`
+  Example: `packages/mcp-server/src/server/**` outside `mcp/`, `packages/mcp-server/src/daemon/**`,
+  and the browser's sync client `packages/daemon-client/src/sse-backend.ts` (the only transport
+  since the WebSocket client went, ADR-0050)
+- **MCP tool-list changes** — anything that changes what `tools/list` answers
+  - Definitions: every tool's name, description and input/output schema live in
+    `packages/server-core/src/tools/**`
+  - Registration: `packages/mcp-server/src/server/mcp/**` — the factory
+    `packages/mcp-server/src/server/mcp/server.ts`, and
+    `packages/mcp-server/src/server/mcp/document-tools.ts`
 
 ## Decide First
 
-- If you only touched `src/server/**` or `src/daemon/**`:
-  - Restarting the Claude session is usually unnecessary
-  - Verify through the watched dev daemon, `pnpm mcp:http:dev` (the `SessionStart` hook usually has it up already)
-- If you touched `src/server/mcp/**`:
+- **A changed tool list needs a client reload, whichever package the tool lives in.** The stdio
+  proxy does not carry `listChanged` (`docs/contributing/mcp-debugging.md`), so a client keeps the
+  `tools/list` it read at connect time even after the watched daemon restarts on the new code.
+  That covers an edit under `packages/server-core/src/tools/**` exactly as much as one under
+  `packages/mcp-server/src/server/mcp/**`:
   - The MCP client must reconnect
   - Do not treat daemon watch mode as sufficient
+- If the change leaves `tools/list` as it was (a handler body, a route, a store, the daemon):
+  - Restarting the Claude session is usually unnecessary
+  - Verify through the watched dev daemon, `pnpm mcp:http:dev` (the `SessionStart` hook usually has it up already)
   - If the change is to what a model READS (a name, description, schema, annotation), the smoke
     proves the tool still works and says nothing about whether a model still finds it: that is
     the `mcp-tool-surface` skill and ADR-0031's scoreboards, run beside this one
@@ -42,7 +50,7 @@ Meaning:
   its owner-only socket, never the real `~/.whiteboard`
 - The registered stdio proxy reaches it, so a client verifies against the code you just saved
 - Server, route, store, and daemon changes restart the daemon, not the client's MCP session
-- MCP schema changes are not picked up by a connected client
+- A changed tool list (name, description, schema) is not picked up by a connected client
 - The loop, the socket and the spawn lock are `docs/contributing/development.md` and `mcp-debugging.md`
 
 ### 2. Unit Tests
@@ -69,8 +77,9 @@ pnpm smoke:e2e
 
 `packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and calls
 every tool in `COVERED_TOOLS`, asserting each one's `structuredContent` against
-its `outputSchema`. It also exercises the error paths and the no-browser cases — a viewport set answering `no_client`, and a scene
-render succeeding through headless rendering with nothing connected.
+its `outputSchema`. It also exercises the error paths and the no-browser cases — a viewport set answering
+`delivered: false` as a success, and a scene render succeeding through headless rendering with
+nothing connected.
 
 **Read the covered set from `server/mcp/mcp-smoke-coverage.ts`, not from here.**
 That file is the source of truth and `smoke-tool-list-parity.test.ts` keeps it in
@@ -117,15 +126,22 @@ first passes. Do not open with a quota-consuming one.
 - `RPC <method> timed out`
   - MCP failed to start, or stdio is blocked
 - If the target tool does not appear in `tools/list`
-  - It is likely missing from `src/server/mcp/document-tools.ts` (the factory is `src/server/mcp/server.ts`)
-- If you get an error other than `no_client`
-  - A guard likely regressed in `routes/export.ts`, `viewport-requests.ts`, or `sync-audience.ts` (the latter two under `src/server/`)
+  - It is likely missing from `packages/mcp-server/src/server/mcp/document-tools.ts` (the factory
+    is `packages/mcp-server/src/server/mcp/server.ts`), which registers what server-core's
+    `createServer(deps).tools` hands it from `packages/server-core/src/tools/**`
+- If `wb_viewport_set` with no browser attached answers anything but `delivered: false` (an error
+  included)
+  - A guard likely regressed in `viewport-requests.ts` or `sync-audience.ts` (both under
+    `packages/mcp-server/src/server/`)
+- If a headless scene render fails
+  - Look at `packages/mcp-server/src/server/export/headless-renderer.ts` and `routes/export.ts`
 - If version restore returns the wrong element count
   - There is likely a regression in `routes/document.ts` or `store/version-store.ts`
 
 ## Working Rules
 
 - After server/daemon changes, verify against `pnpm mcp:http:dev` and try verification without restarting Claude
-- If you touched MCP schema or registration, explicitly state that a restart is required
+- If the change alters what `tools/list` answers — in `server-core` or in `mcp-server` — explicitly
+  state that a client reload is required
 - In general, progress through `test -> typecheck -> smoke:e2e`, stopping on failures
 - When you add a new tool, add one case to `packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs` when feasible

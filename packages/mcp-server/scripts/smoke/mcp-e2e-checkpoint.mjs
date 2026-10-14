@@ -2,21 +2,18 @@
 // End-to-end smoke test that runs through an MCP stdio subprocess.
 //
 // Purpose:
-// Start the MCP server outside the parent client's context and verify that each
-// tool behaves according to spec even with no prior conversation context, using
-// JSON-RPC stdio. This is the standard repeatable verification pattern when you
-// want deterministic behavior without reconnecting the main client.
+// A CLI entry to the same checkpoint flow the `mcp-smoke` Vitest project runs
+// (mcp-e2e-checkpoint.smoke.test.ts), through the shared
+// mcp-e2e-checkpoint.smoke-impl.ts, against a fresh data dir.
 //
 // Coverage:
-//   1. wb_workspace_edit -> wb_canvas_edit -> wb_canvas_snapshot
-//   2. wb_version_save -> wb_version_restore -> wb_canvas_snapshot element recovery
-//   3. checkpoint_restore branches for overwrite=true and validation errors
-//   4. viewport_set rejects immediately with no_client when no browser is connected
-//   5. export_canvas(format:png/svg/json) succeeds via headless rendering with no browser connected
+//   1. tools/list equals ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts
+//   2. wb_workspace_edit creates and moves a document
+//   3. wb_facet_set seeds its state
+//   4. wb_version_save -> wb_version_list -> wb_version_restore
 //
-// For 4 and 5 there is no browser sync client, so success behavior is not
-// observed. Instead, the smoke proves that both route wiring and MCP wrapping
-// are correct because the no_client error is returned immediately.
+// The full tool tour is `pnpm smoke:e2e` (mcp-e2e-smoke.mjs), a different and
+// much wider flow.
 //
 // This does not consume API quota, so it is safe in CI. For real LLM-driven
 // execution, use scripts/smoke/mcp-claude-cli-smoke.mjs.
