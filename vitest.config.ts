@@ -1,4 +1,8 @@
 import { defineConfig } from 'vitest/config'
+// Imported WITHOUT its extension on purpose: the project inventory scans this
+// file for every quoted path ending in the config suffix, and a full one here
+// would register the web jsdom project twice.
+import webJsdom from './apps/web/vitest.config'
 
 export default defineConfig({
   test: {
@@ -8,6 +12,11 @@ export default defineConfig({
     // not reach the guard that does. Same no-apostrophe, no-quoted-glob rule as
     // the comment below, since this file is read as text.
     globalSetup: ['./.claude/scripts/node-version-banner.mjs'],
+    // Read from the ROOT config only, so the web jsdom project filter is
+    // carried up here or a run of that project through this config (a
+    // project filter, the coverage lane) drops it. Narrow by construction:
+    // it matches one post-teardown React scheduler error and nothing else.
+    onUnhandledError: webJsdom.test?.onUnhandledError,
     // Coverage is configured ONLY here: with `projects` the runner reads it
     // from the root config, and a per-project coverage block is ignored. The
     // consumer is the SonarQube lane (.github/workflows/sonarqube.yml), which
