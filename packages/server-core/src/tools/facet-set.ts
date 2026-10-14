@@ -28,6 +28,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
+import { announceAgentActivity } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { lockedDetail } from './element-lock.js'
 import { DocumentKindMismatchError, EdgeNotFoundError, NodeNotFoundError } from './errors.js'
@@ -531,6 +532,8 @@ async function setElementFacets(
     [target.collection]: members.map((candidate) => (candidate.id === id ? next : candidate)),
   } as SpatialCanvas)
   await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  const at = { workspaceId: input.workspaceId, documentId }
+  announceAgentActivity(deps, { ...at, [target.collection]: [id] }, 'changed 1')
   return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
 }
 
@@ -628,6 +631,9 @@ async function setCanvasFacets(
     ...withTags(tags ?? canvas.tags),
   })
   await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  // The envelope is no one element, so the chip shows and nothing is outlined.
+  const at = { workspaceId: input.workspaceId, documentId }
+  if (kind === 'spatial') announceAgentActivity(deps, at, 'changed the canvas')
   return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
 }
 

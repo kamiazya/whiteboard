@@ -27,6 +27,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
+import { announceAgentActivity } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -196,6 +197,8 @@ interface ThreadEditContext {
   readonly content: DocumentContent
   /** The thread ids this document holds, grown as the batch opens more. */
   readonly held: Set<string>
+  /** The threads the batch opened, replied to, resolved or reopened. */
+  readonly touched: Set<string>
   /** One timestamp for the whole batch, so a batch reads as one act. */
   readonly now: string
   readonly index: number
@@ -246,6 +249,7 @@ const THREAD_EDIT_HANDLERS: {
       ],
     })
     held.add(id)
+    ctx.touched.add(id)
   },
 
   'message.add': (ctx, op) => {
@@ -274,6 +278,7 @@ const THREAD_EDIT_HANDLERS: {
       createdAt: now,
       ...(op.author === undefined ? {} : { author: op.author }),
     })
+    ctx.touched.add(op.threadId)
   },
 
   'thread.resolve': (ctx, op) => {
@@ -282,7 +287,29 @@ const THREAD_EDIT_HANDLERS: {
       throw new ThreadEditError(index, op.op, `thread "${op.threadId}" is not on this document`)
     }
     setCommentThreadStatus(doc, op.threadId, op.resolved === false ? 'open' : 'resolved')
+    ctx.touched.add(op.threadId)
   },
+}
+
+/**
+ * The word a watching person reads for each op, in the voice of
+ * `wb_canvas_edit`'s summary ("commented 1, resolved 1"). Keyed by the op
+ * union, so a fourth op owes a word; a reopen is told apart below.
+ */
+const THREAD_OP_WORD = {
+  'thread.add': 'commented',
+  'message.add': 'replied',
+  'thread.resolve': 'resolved',
+} as const satisfies Record<ThreadOp['op'], string>
+
+function summarizeThreadOps(ops: readonly ThreadOp[]): string {
+  const counts = new Map<string, number>()
+  for (const op of ops) {
+    const word =
+      op.op === 'thread.resolve' && op.resolved === false ? 'reopened' : THREAD_OP_WORD[op.op]
+    counts.set(word, (counts.get(word) ?? 0) + 1)
+  }
+  return [...counts].map(([word, count]) => `${word} ${count}`).join(', ')
 }
 
 function applyThreadOp(ctx: ThreadEditContext, op: ThreadOp): void {
@@ -317,11 +344,22 @@ async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<Th
   const content = readDocumentContent(doc, indexed?.kind)
   const held = new Set(readAnnotations(doc).map((thread) => thread.id))
   const now = new Date().toISOString()
+  const touched = new Set<string>()
   for (const [index, op] of input.ops.entries()) {
-    applyThreadOp({ doc, content, held, now, index }, op)
+    applyThreadOp({ doc, content, held, touched, now, index }, op)
   }
 
   await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+  // Only a board has a presence surface to show it on; a note has no chip.
+  if (content.kind === 'spatial') {
+    const { workspaceId, documentId } = input
+    const comments = [...touched].sort()
+    announceAgentActivity(
+      deps,
+      { workspaceId, documentId, comments },
+      summarizeThreadOps(input.ops),
+    )
+  }
 
   return { threads: readAnnotations(doc) }
 }
