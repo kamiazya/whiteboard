@@ -203,14 +203,23 @@ const MKDTEMP_UNDER_TMPDIR =
 const TEST_SOURCE_PATH =
   /\.test\.[cm]?[jt]sx?$|(^|\/)test-utils\/|test-helpers|(^|\/)_test-|\.smoke(-impl)?\.|(^|\/)smoke\/|-smoke\.|(^|\/)e2e\//
 const MIN_PREFIX_STEM = 3
+/**
+ * Test source whose `mkdtemp` calls are QUOTED fixture text rather than calls:
+ * this script's own test writes them into a throwaway repo, and a prefix read
+ * from there would sweep a directory nothing in this repo creates.
+ */
+const FIXTURE_ONLY_SOURCES = [':(exclude).claude/scripts/cleanup-worktrees.test.mjs']
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 function repoTempDirPatterns() {
   let listing
   try {
-    listing = git(['grep', '-E', '-e', 'mkdtemp(Sync)?\\('])
-  } catch {
-    return [] // git grep exits 1 when nothing matches
+    listing = git(['grep', '-E', '-e', 'mkdtemp(Sync)?\\(', '--', '.', ...FIXTURE_ONLY_SOURCES], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    if (error.status === 1) return [] // git grep exits 1 when nothing matches
+    throw new Error(`git grep for temp dir prefixes failed: ${error.stderr || error.message}`)
   }
   const patterns = new Map()
   for (const line of listing.split('\n')) {

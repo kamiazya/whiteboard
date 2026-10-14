@@ -581,6 +581,13 @@ test("sweeps the temp dirs this repo's own tests name, untouched for a day, and 
   // A tool's temp dir can outlive its run on purpose: mutate.mjs's backup is
   // the only restore after a SIGKILL.
   writeFileSync(join(repoDir, 'src', 'mutate.mjs'), "mkdtempSync(join(tmpdir(), 'mutate-'))\n")
+  // This script's own test quotes source text as fixtures, and a prefix read
+  // from one would sweep a directory nothing in the repo creates.
+  mkdirSync(join(repoDir, '.claude', 'scripts'), { recursive: true })
+  writeFileSync(
+    join(repoDir, '.claude', 'scripts', 'cleanup-worktrees.test.mjs'),
+    "const f = '\"mkdtempSync(join(tmpdir(), 'quoted-fixture-'))\"'\n",
+  )
   git(repoDir, ['add', '.'])
   git(repoDir, ['commit', '--quiet', '-m', 'fixtures'])
 
@@ -604,6 +611,7 @@ test("sweeps the temp dirs this repo's own tests name, untouched for a day, and 
     seed('wb-fixture-toolongsuffix', 2 * day),
     seed('mutate-Ab3dE9', 2 * day),
     seed('someone-else-Ab3dE9', 2 * day),
+    seed('quoted-fixture-Ab3dE9', 2 * day),
   ]
   const env = { ...realEnv(repoDir), TMPDIR: root, TMP: root, TEMP: root }
 
@@ -620,4 +628,20 @@ test("sweeps the temp dirs this repo's own tests name, untouched for a day, and 
   assert.equal(existsSync(literal), false)
   assert.equal(existsSync(templated), false)
   for (const dir of kept) assert.equal(existsSync(dir), true, `${dir} is not ours to sweep`)
+})
+
+test('fails rather than sweeping nothing when the prefix scan itself errors', () => {
+  // Not a repository, so `git grep` exits 128 — an answer about the scan,
+  // not "no test names a temp dir".
+  const notARepo = makeScratch()
+  const result = spawnSync('node', [scriptPath, '--dry-run'], {
+    cwd: notARepo,
+    encoding: 'utf-8',
+    env: isolatedGitEnv({
+      CLEANUP_WORKTREES_REPO_ROOT: notARepo,
+      GIT_CEILING_DIRECTORIES: privateTmp,
+    }),
+  })
+  assert.notEqual(result.status, 0, result.stdout)
+  assert.match(result.stderr, /git grep/)
 })
