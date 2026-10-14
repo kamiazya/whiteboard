@@ -47,6 +47,10 @@ vi.mock('../store/workspace-lock.js', async () => {
 const { createFilesRouter } = await import('./files.js')
 const { IncompleteFileGcScanError } = await import('../store/file-gc.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
+const { getDb } = await import('../store/db/index.js')
+const { prepareDataDir } = await import('../store/db/prepare.js')
+const { createContainer, resolveServerDeps } = await import('../../di/container.js')
+const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
 
 describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   beforeEach(async () => {
@@ -360,6 +364,48 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
 
     const badFileId = await app.request('/api/w/session1/document/canvas-a/file/bad.id')
     expect(badFileId.status).toBe(400)
+  })
+})
+
+// ADR-0019: an address carries a handle, a segment or the id. The bytes live
+// under the CANONICAL id's directory, which is where the reader by id and the
+// file GC look, so an upload by segment must land there too.
+describe('a document file addressed by workspace segment', () => {
+  const CANONICAL = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const SEGMENT = 'design'
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-segment-'))
+    await prepareDataDir(tempDir)
+    const deps = resolveServerDeps(
+      createContainer(createSelfHostStoreLocalModule(await getDb(tempDir), tempDir)),
+    )
+    await deps.documentIndex.createWorkspace({ workspaceId: CANONICAL, segment: SEGMENT })
+    const entry = (await deps.documentIndex.listWorkspaces()).find(
+      (w) => w.workspaceId === CANONICAL,
+    )
+    expect(entry?.segment).toBe(SEGMENT)
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('stores an upload by segment under the canonical id, readable by either handle', async () => {
+    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const put = await app.request(`/api/w/${SEGMENT}/document/canvas-a/file/file-seg`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    })
+    expect(put.status).toBe(204)
+
+    const byId = await app.request(`/api/w/${CANONICAL}/document/canvas-a/file/file-seg`)
+    expect(byId.status).toBe(200)
+    expect(new Uint8Array(await byId.arrayBuffer())[0]).toBe(0x89)
+    const bySegment = await app.request(`/api/w/${SEGMENT}/document/canvas-a/file/file-seg`)
+    expect(bySegment.status).toBe(200)
+    expect(withWorkspaceWriteLockMock).toHaveBeenLastCalledWith(CANONICAL, expect.any(Function))
   })
 })
 
