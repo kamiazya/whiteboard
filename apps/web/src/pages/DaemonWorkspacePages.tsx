@@ -44,11 +44,11 @@ export function DaemonWorkspacePages({
   serverMode = false,
   waitingMessage,
 }: {
-  daemonBaseUrl: string
-  view: WorkspaceRoute
-  onView: (view: WorkspaceRoute) => void
-  serverMode?: boolean
-  waitingMessage: string
+  readonly daemonBaseUrl: string
+  readonly view: WorkspaceRoute
+  readonly onView: (view: WorkspaceRoute) => void
+  readonly serverMode?: boolean
+  readonly waitingMessage: string
 }) {
   return (
     <ErrorBoundary resetKey={workspaceRoutePath(view)}>
