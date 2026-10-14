@@ -3,6 +3,7 @@
 // validation authority: release-gate-matrix.test.ts imports the same module
 // instead of re-implementing validateGate, so the two can never drift apart.
 
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -18,12 +19,14 @@ async function importSchema() {
     validateMatrix: (matrix: unknown) => { ok: boolean; reason?: string }
     validatePrCoverage: (prCoverage: unknown) => { ok: boolean; reason?: string }
     validateGateEnv?: (env: unknown) => { ok: boolean; reason?: string }
+    KNOWN_CATEGORIES: Set<string>
   }
 }
 
 // Loaded once at collection, not per test: an import inside a test body is
 // charged to that test's timeout.
-const { validateGate, validateMatrix, validatePrCoverage, validateGateEnv } = await importSchema()
+const { validateGate, validateMatrix, validatePrCoverage, validateGateEnv, KNOWN_CATEGORIES } =
+  await importSchema()
 
 const VALID_GATE = {
   id: 'test',
@@ -150,6 +153,20 @@ describe('validateMatrix', () => {
   it('rejects a matrix containing an invalid gate', () => {
     const badGate = { ...VALID_GATE, requiresDocker: true, requiredFor: ['ci'] }
     expect(validateMatrix({ schemaVersion: 1, gates: [badGate] }).ok).toBe(false)
+  })
+})
+
+// The other half of the closed vocabulary: validateGate rejects a category the
+// set does not hold, and this rejects a set member no gate holds. A retired
+// category left in the set would let a gate be re-added under it unnoticed.
+describe('KNOWN_CATEGORIES', () => {
+  it('names only categories some gate in the real matrix uses', () => {
+    const matrix = JSON.parse(
+      readFileSync(join(ROOT, 'tests/e2e/distribution/release-gate-matrix.json'), 'utf-8'),
+    ) as { gates: { category: string }[] }
+    expect(matrix.gates.length).toBeGreaterThan(10)
+    const used = new Set(matrix.gates.map((gate) => gate.category))
+    expect([...KNOWN_CATEGORIES].filter((category) => !used.has(category))).toEqual([])
   })
 })
 
