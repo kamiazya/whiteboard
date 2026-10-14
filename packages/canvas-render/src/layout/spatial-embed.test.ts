@@ -113,6 +113,28 @@ describe('file-node inline embeds', () => {
     expect(embedOf(unresolvable)).toBeUndefined()
   })
 
+  it('keeps the card for a resolved canvas when no expansion policy is given', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({ resolveReference: () => ({ canvas: childCanvas }) }),
+    )
+    expect(embedOf(scene)).toBeUndefined()
+  })
+
+  it('degrades an expanded embed in a box smaller than its padding to the plain card', () => {
+    const tiny: SpatialCanvas = { nodes: [fileNode({ width: 4, height: 4 })], edges: [] }
+    const baseline = layoutSpatialCanvas(tiny, baseOptions())
+    expect(baseline.nodes.some((n) => n.kind === 'shape')).toBe(true)
+    const scene = layoutSpatialCanvas(
+      tiny,
+      baseOptions({
+        resolveReference: () => ({ canvas: childCanvas }),
+        expandFileNode: () => true,
+      }),
+    )
+    expect(scene).toEqual(baseline)
+  })
+
   it('a resolved canvas embed wins over a resolved facet card', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },
@@ -391,6 +413,17 @@ describe('file-node facet cards', () => {
     expect(scene.nodes.some((n) => n.kind === 'heading' || n.kind === 'paragraph')).toBe(false)
   })
 
+  it('degrades a card too short for even its title to the plain chrome+label rendering', () => {
+    const flat: SpatialCanvas = { nodes: [fileNode({ height: 6 })], edges: [] }
+    const baseline = layoutSpatialCanvas(flat, baseOptions())
+    expect(baseline.nodes.some((n) => n.kind === 'shape')).toBe(true)
+    const scene = layoutSpatialCanvas(
+      flat,
+      baseOptions({ resolveReference: () => ({ facets: card }) }),
+    )
+    expect(scene).toEqual(baseline)
+  })
+
   it('renders byte-identical SVG for the same canvas laid out twice (determinism)', () => {
     const canvas: SpatialCanvas = { nodes: [fileNode()], edges: [] }
     const options = baseOptions({ resolveReference: () => ({ facets: card }) })
@@ -473,6 +506,20 @@ describe('shape facets inside an embedded canvas', () => {
       baseOptions({
         resolveReference: () => ({ canvas: childCanvas }),
         expandFileNode: (n) => nodeFile(n) !== undefined,
+      }),
+    )
+    const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
+    expect(childShape).toBeDefined()
+    expect(childShape?.shape).toBeUndefined()
+  })
+
+  it('an explicit root-keyed outline override does not descend into the embedded canvas', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveReference: () => ({ canvas: childCanvas }),
+        expandFileNode: () => true,
+        nodeOutlines: { c1: 'visual.diamond' },
       }),
     )
     const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
