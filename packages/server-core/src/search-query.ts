@@ -8,13 +8,18 @@
  */
 import type { DocumentSearchInput } from './tools/document-search.schemas.js'
 
-/** The names the query string carries, keyed by the input field each one is. */
+/**
+ * The names the query string carries, keyed by the input field each one is.
+ * Keyed by the input type, so a field the tool gains owes a wire name here —
+ * and an arm in both codecs below — before it compiles, rather than being
+ * honoured over MCP and refused as an unknown parameter over HTTP.
+ */
 const SEARCH_QUERY_PARAMS = {
   query: 'q',
   kind: 'kind',
   tags: 'tag',
   limit: 'limit',
-} as const
+} as const satisfies Record<keyof SearchQueryInput, string>
 
 /** The keys the route reads; any other is refused rather than ignored. */
 export const SEARCH_QUERY_KEYS: readonly string[] = Object.values(SEARCH_QUERY_PARAMS)
