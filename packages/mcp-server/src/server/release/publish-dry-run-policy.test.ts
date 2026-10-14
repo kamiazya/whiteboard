@@ -2,7 +2,7 @@
 // Drift guard:
 //   - futureGateId ↔ package.json scripts, futureGateId NOT in
 //     release-gate-matrix (implementedNow: false)
-//   - ci.yml has dry-run-npm and dry-run-docker jobs (consolidated from publish-dry-run.yml)
+//   - ci.yml runs the npm dry-run inside verify, and has a dry-run-docker job (consolidated from publish-dry-run.yml)
 //   - ci.yml cleanliness: no id-token:write, no packages:write, no npm publish, no cosign sign
 // PBT: validateFutureGateCoverage() and validateCiWorkflowPolicy() catch structural violations.
 
@@ -195,10 +195,8 @@ describe('implementedNow is false — locally-runnable gate not yet wired', () =
 // ── ci.yml dry-run job existence ──────────────────────────────────────────────
 
 describe('ci.yml dry-run jobs exist (consolidated from publish-dry-run.yml)', () => {
-  it('dry-run-npm job exists in ci.yml', () => {
-    expect(readWorkflow(CI_WORKFLOW), 'dry-run-npm job must exist in ci.yml').toContain(
-      '  dry-run-npm:',
-    )
+  it('the verify job exists in ci.yml', () => {
+    expect(readWorkflow(CI_WORKFLOW), 'verify job must exist in ci.yml').toContain('  verify:')
   })
 
   it('dry-run-docker job exists in ci.yml', () => {
@@ -207,8 +205,8 @@ describe('ci.yml dry-run jobs exist (consolidated from publish-dry-run.yml)', ()
     )
   })
 
-  it('dry-run-npm job references publish:dry-run:npm', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
+  it('verify job references publish:dry-run:npm', () => {
+    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).toContain('publish:dry-run:npm')
   })
 
@@ -221,23 +219,23 @@ describe('ci.yml dry-run jobs exist (consolidated from publish-dry-run.yml)', ()
 // ── ci.yml dry-run artifact uploads ──────────────────────────────────────────
 
 describe('ci.yml dry-run jobs upload artifacts', () => {
-  it('dry-run-npm job uploads artifacts via actions/upload-artifact', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
+  it('verify job uploads the npm dry-run artifacts via actions/upload-artifact', () => {
+    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).toContain('actions/upload-artifact')
   })
 
-  it('dry-run-npm artifact name contains npm-tarball-dry-run', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
+  it('verify npm dry-run artifact name contains npm-tarball-dry-run', () => {
+    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).toContain('name: npm-tarball-dry-run-')
   })
 
-  it('dry-run-npm artifact path is the publish-dry-run directory', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
+  it('verify npm dry-run artifact path is the publish-dry-run directory', () => {
+    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).toContain('path: packages/mcp-server/tmp/publish-dry-run/')
   })
 
-  it('dry-run-npm artifact upload fails the job if no files are found', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
+  it('verify npm dry-run artifact upload fails the job if no files are found', () => {
+    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).toContain('if-no-files-found: error')
   })
 

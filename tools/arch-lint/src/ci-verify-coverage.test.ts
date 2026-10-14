@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
+import { extractWorkflowJobs } from './workflow-jobs.js'
 
 const ROOT = REPO_ROOT
 
@@ -111,30 +112,26 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
     expect(flaggedProjects).toEqual(expect.arrayContaining(browserProjectNames))
   })
 
-  it('dry-run-npm still rides the verify dist, the one needs edge that carries an artifact', () => {
-    // verify's `needs` on the test jobs was removed deliberately (measured
-    // 2026-09-04: that chain was the whole wall clock — see the comment in
-    // ci.yml). The "a release tag points at a commit where the tests ran"
-    // property this test used to pin moved to branch protection, which
-    // requires every test job individually and which no in-repo test can
-    // read — the Actions token cannot see it, so the settings page is the
-    // source of truth and this comment is the pointer. What remains
-    // assertable in-repo is the one dependency that is REAL: dry-run-npm
-    // downloads the dist verify built, so losing that edge would hand it a
-    // stale or absent artifact.
-    const npmIdx = text.indexOf('\n  dry-run-npm:')
-    expect(npmIdx, 'dry-run-npm job must exist').toBeGreaterThanOrEqual(0)
-    const npmSection = text.slice(npmIdx, npmIdx + 400)
-    // Anchored to a line START so a comment SAYING "needs: verify" (which
-    // dry-run-docker's why-not comment does) can never satisfy or trip it.
-    expect(npmSection).toMatch(/^\s*needs:\s*verify/m)
-    // And the inverse guard: dry-run-docker must NOT grow the edge back by
-    // reflex — it consumes no artifact, and the edge serialized the two
-    // longest jobs in the workflow.
-    const dockerIdx = text.indexOf('\n  dry-run-docker:')
-    expect(dockerIdx, 'dry-run-docker job must exist').toBeGreaterThanOrEqual(0)
-    const dockerSection = text.slice(dockerIdx, text.indexOf('steps:', dockerIdx))
-    expect(dockerSection).not.toMatch(/^\s*needs:\s*verify/m)
+  it('verify runs the npm publish dry-run itself, after Build, so no job waits on verify', () => {
+    // A job that `needs: verify` starts only after verify's ~4-5 minutes, then
+    // pays its own queue, checkout and install before doing anything: the
+    // dry-run was 2 seconds of a 68-second job that ended the run's wall
+    // clock. Run where the dist already is, it costs its 2 seconds. The
+    // "a release tag points at a commit where the tests ran" property is
+    // carried by `ci-gate` and branch protection, not by a needs edge, so
+    // nothing below verify needs it either.
+    const verify = readCiJob('verify')
+    const build = verify.indexOf('run: pnpm build\n')
+    const dryRun = verify.indexOf('run: pnpm publish:dry-run:npm\n')
+    expect(build, 'verify must build').toBeGreaterThanOrEqual(0)
+    expect(dryRun, 'verify must run the npm publish dry-run').toBeGreaterThan(build)
+    const upload = verify.indexOf('name: npm-tarball-dry-run-', dryRun)
+    expect(upload, 'verify must upload the dry-run tarball it made').toBeGreaterThan(dryRun)
+
+    const waiting = extractWorkflowJobs(text)
+      .filter((job) => job.id !== 'ci-gate' && job.needs.includes('verify'))
+      .map((job) => job.id)
+    expect(waiting, 'a job that needs verify serialises behind it').toEqual([])
   })
 
   // Which browser CI runs is not a detail: local runs use Playwright's Chromium

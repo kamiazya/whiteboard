@@ -133,7 +133,7 @@ jobs:
   #
   # Sharded 2-way like its siblings: unsharded it was the longest job in 8 of
   # 10 green main runs (267-417s) and the last to finish in half of them,
-  # 27-58s behind dry-run-npm. The script forwards its argv to vitest, which
+  # 27-58s behind the then-separate npm dry-run job. The script forwards its argv to vitest, which
   # splits the derived projects' files across the legs.
   test-shared:
     runs-on: ubuntu-24.04
@@ -565,14 +565,19 @@ jobs:
       - name: Distribution vitest suite
         run: pnpm --filter @kamiazya/whiteboard-mcp test:distribution:only
 
-      # dry-run-npm reuses this dist instead of rebuilding from scratch.
-      - name: Upload mcp-server dist
+      # Here rather than in a job of its own: the pack and checksum take about
+      # 2s, and a job that `needs: verify` paid ~100s of queue, setup and a
+      # dist download after verify ended, which made it the last job of the
+      # run. ci-verify-coverage.test.ts keeps every job off verify.
+      - name: npm publish dry-run
+        run: pnpm publish:dry-run:npm
+
+      - name: Upload npm dry-run artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: mcp-server-dist-${{ github.run_id }}
-          path: packages/mcp-server/dist/
+          name: npm-tarball-dry-run-${{ github.run_id }}
+          path: packages/mcp-server/tmp/publish-dry-run/
           if-no-files-found: error
-          retention-days: 1
 
       - name: Web app artifact smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:artifact
@@ -623,8 +628,8 @@ jobs:
   # ADR-0050's bridge and ADR-0042's read plane in real browsers. They run
   # from source, build their own extension and web app (smoke-kit.mjs), and
   # consume nothing `verify` produces. Inside `verify` they sat on the
-  # verify -> dry-run-npm -> ci-gate chain and added their ~2 minutes to the
-  # run's wall clock; as a job of their own they overlap the other jobs.
+  # verify -> ci-gate chain and added their ~2 minutes to the run's wall
+  # clock; as a job of their own they overlap the other jobs.
   # ci-gate.test.ts keeps them out of `verify`.
   extension-smokes:
     runs-on: ubuntu-24.04
@@ -668,40 +673,11 @@ jobs:
           BRIDGE_SMOKE_PREBUILT: '1'
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:read-plane
 
-  dry-run-npm:
-    needs: verify
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: ./.github/actions/setup-pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Reuse the dist already built and verified by the `verify` job instead
-      # of rebuilding from scratch.
-      - name: Download mcp-server dist
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: mcp-server-dist-${{ github.run_id }}
-          path: packages/mcp-server/dist/
-
-      - name: npm publish dry-run
-        run: pnpm publish:dry-run:npm
-
-      - name: Upload npm dry-run artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: npm-tarball-dry-run-${{ github.run_id }}
-          path: packages/mcp-server/tmp/publish-dry-run/
-          if-no-files-found: error
-
   dry-run-docker:
-    # No `needs: verify`, deliberately: unlike dry-run-npm this job downloads
-    # no artifact from verify — it checks out and builds the image from
-    # source — so the edge was pure ordering, and it serialized the two
-    # longest jobs in the workflow back to back.
+    # No `needs: verify`, deliberately: this job downloads no artifact from
+    # verify — it checks out and builds the image from source — so the edge
+    # was pure ordering, and it serialized the two longest jobs in the
+    # workflow back to back.
     runs-on: ubuntu-24.04
     steps:
       # fetch-depth 2 rather than 0: on a pull_request event the checked-out
@@ -832,7 +808,6 @@ jobs:
       - native-host-windows
       - extension-smokes
       - verify
-      - dry-run-npm
       - dry-run-docker
     runs-on: ubuntu-24.04
     timeout-minutes: 5

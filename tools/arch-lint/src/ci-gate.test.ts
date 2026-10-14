@@ -86,7 +86,7 @@ describe('ci.yml has one aggregate gate that covers every job', () => {
   })
 })
 
-// `verify` -> `dry-run-npm` -> `ci-gate` is a serial chain, so a step that
+// `verify` -> `ci-gate` is a serial chain, so a step that
 // needs nothing from `verify` and sits inside it lengthens the whole run by
 // its own duration. The three extension smokes share one prebuilt extension
 // and Playwright's Chromium, consume nothing `verify` produces, and cost
@@ -104,7 +104,7 @@ describe('the extension smokes run beside verify, not inside it', () => {
     }
   })
 
-  it('keeps them out of verify, which dry-run-npm waits for', () => {
+  it('keeps them out of verify, which ci-gate waits for', () => {
     for (const script of EXTENSION_SMOKES) {
       expect(stepsRunning('verify', script), script).toEqual([])
     }

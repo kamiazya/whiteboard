@@ -253,7 +253,7 @@
       "prCoverage": {
         "kind": "workflow-step",
         "workflow": "ci.yml",
-        "jobId": "dry-run-npm",
+        "jobId": "verify",
         "stepName": "npm publish dry-run"
       }
     },
