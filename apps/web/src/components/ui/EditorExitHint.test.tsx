@@ -72,6 +72,26 @@ describe('EditorExitHint on a coarse pointer', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it("hangs the placed pill off a zero-size anchor at the node's right edge", () => {
+    stubCoarsePointer()
+    render(
+      <EditorExitHint
+        className="anchor-class"
+        placement={{ left: 10, right: 120, top: 30, scale: 2 }}
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+    const pill = screen.getByTestId('editor-exit-hint')
+    const anchor = pill.parentElement as HTMLElement
+    expect(anchor.className).toBe('anchor-class')
+    expect(anchor.style).toMatchObject({ left: '120px', top: '30px', width: '0px', height: '0px' })
+    // The class goes to the anchor, not the pill; the pill scales about its
+    // top-right so the edge it hangs from stays put.
+    expect(pill.className).not.toContain('anchor-class')
+    expect(pill.style).toMatchObject({ transform: 'scale(2)', transformOrigin: 'top right' })
+  })
+
   it('stays the decorative strip when no handler is offered', () => {
     stubCoarsePointer()
     render(<EditorExitHint />)
