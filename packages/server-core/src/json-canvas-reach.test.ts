@@ -4,8 +4,9 @@ import {
   type FieldProjection,
   JSON_CANVAS_PROJECTION,
 } from '@kamiazya/whiteboard-codec'
+import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
 /**
  * How far JSON Canvas 1.0 reaches into the spatial model this product
@@ -33,6 +34,11 @@ const bundledFacets: readonly CensusFacet[] = bundledFacetRegistry.plugins.flatM
 )
 
 const census = censusSpatialModel(bundledFacets)
+
+// The census spells the facet targets itself (codec cannot depend on the
+// engine), and places each by a table keyed on them, so a target the engine
+// gains must reach that table rather than being skipped as nowhere.
+expectTypeOf<CensusFacet['targets'][number]>().toEqualTypeOf<FacetTarget>()
 const positions = [...census.paths, ...census.facetBuckets]
 const kindOf = (path: string) => JSON_CANVAS_PROJECTION[path]?.kind
 const withKind = (kind: FieldProjection['kind']) =>
@@ -132,10 +138,18 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // One field on one target (edge, which is where a line's facets live),
     // so one position. The format has no word for a handwritten character
     // being several strokes, which is the column doing its job again.
-    expect(census.facet).toHaveLength(16)
+    //
+    // 16 -> 19 when the census learned that an EDGE facet sits on a line as
+    // well as on an edge (a line is ink, and ink takes the edge slot), which
+    // writes always allowed. Nothing in the model changed: the census had
+    // been placing the edge target on `edges[].facets` alone, so `group` was
+    // reported only where a relation holds it and every position a line can
+    // hold went uncounted — `visual.ink/v0`'s `group` and `visual.edges/v0`'s
+    // `lineJumps` and `routing`, under `lines[].facets`.
+    expect(census.facet).toHaveLength(19)
   })
 
-  it('so 52 of the 74 positions a document can hold are outside the format', () => {
+  it('so 56 of the 78 positions a document can hold are outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
@@ -181,8 +195,12 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // so the share outside barely moves (70.3% -> 70.7%). The same shape as
     // the axes and classification facets — a position that only ever lives
     // in the extension raises numerator and denominator together.
+    //
+    // 53/75 -> 56/78, a correction of the instrument rather than a move of
+    // the model: the three line positions of an edge-target facet, which the
+    // census had not placed. Both halves again, so 70.7% -> 71.8%.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(53)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(75)
+    expect(outside).toBe(56)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(78)
   })
 })

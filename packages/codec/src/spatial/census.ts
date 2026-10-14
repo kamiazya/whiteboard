@@ -76,10 +76,14 @@ export function jsonSchemaLeafPaths(schema: z.ZodType): readonly string[] {
   return [...new Set(out)].sort()
 }
 
-/** A facet as this census needs to read one — the shape `defineFacet` produces. */
+/**
+ * A facet as this census needs to read one — the shape `defineFacet` produces.
+ * `targets` spells facet-engine's `FacetTarget`, which this package cannot
+ * import; the reach test in server-core holds the two equal.
+ */
 export interface CensusFacet {
   readonly key: string
-  readonly targets: readonly string[]
+  readonly targets: readonly ('document' | 'canvas' | 'node' | 'edge')[]
   readonly schema: z.ZodType
 }
 
@@ -92,11 +96,16 @@ export interface SpatialModelCensus {
   readonly facet: readonly string[]
 }
 
-/** Where in a spatial document a facet target attaches, if anywhere. */
-const SITE_PREFIX: Record<string, string> = {
-  canvas: 'facets',
-  node: 'nodes[].facets',
-  edge: 'edges[].facets',
+/**
+ * Where in a spatial document each facet target attaches. A line is ink and
+ * ink takes the EDGE slot, so an edge facet sits on both collections; a
+ * `document` facet belongs to a markdown document and has no spatial site.
+ */
+const SITE_PREFIX: Record<CensusFacet['targets'][number], readonly string[]> = {
+  document: [],
+  canvas: ['facets'],
+  node: ['nodes[].facets'],
+  edge: ['edges[].facets', 'lines[].facets'],
 }
 
 /**
@@ -124,13 +133,13 @@ export function censusSpatialModel(facets: readonly CensusFacet[]): SpatialModel
     else paths.push(path)
   }
   const facet = facets.flatMap((definition) =>
-    definition.targets.flatMap((target) => {
-      const prefix = SITE_PREFIX[target]
-      if (prefix === undefined) return []
-      return jsonSchemaLeafPaths(definition.schema).map(
-        (leaf) => `${prefix}["${definition.key}"].${leaf}`,
-      )
-    }),
+    definition.targets.flatMap((target) =>
+      SITE_PREFIX[target].flatMap((prefix) =>
+        jsonSchemaLeafPaths(definition.schema).map(
+          (leaf) => `${prefix}["${definition.key}"].${leaf}`,
+        ),
+      ),
+    ),
   )
   return { paths, facetBuckets, facet: [...new Set(facet)].sort() }
 }
