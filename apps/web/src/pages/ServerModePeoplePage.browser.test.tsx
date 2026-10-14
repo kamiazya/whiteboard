@@ -4,6 +4,7 @@
  * owner a workspace's, and a refusal is shown in the keeper's words.
  */
 import {
+  authReauthenticateUrl,
   authSessionUrl,
   tenantInvitationsApiUrl,
   tenantPeopleApiUrl,
@@ -243,7 +244,7 @@ describe('the server people screen', () => {
     renderAt('/people', fakeKeeper('ada', { stale: true }))
     fireEvent.click(await screen.findByRole('button', { name: 'Deactivate Bob' }))
     const again = await screen.findByRole('link', { name: 'Sign in again' })
-    expect(again.getAttribute('href')).toBe('/auth/reauthenticate?return=%2Fpeople')
+    expect(again.getAttribute('href')).toBe(authReauthenticateUrl({ returnTo: '/people' }))
     expect(screen.getByRole('button', { name: 'Deactivate Bob' })).toBeTruthy()
   })
 

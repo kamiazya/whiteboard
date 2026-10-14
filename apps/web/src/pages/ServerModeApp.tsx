@@ -10,6 +10,11 @@ import {
   authProvidersUrl,
   authSessionUrl,
   authSignInUrl,
+  INVITE_PAGE_PATH,
+  inviteTokenOf,
+  SIGN_IN_PAGE_PATH,
+  signInPageUrl,
+  signInRefusalOf,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import {
   type SignInProvidersResponse,
@@ -121,16 +126,17 @@ function useProviders(fetchFn: Fetch) {
 }
 
 function refusalMessage(search: string): string | null {
-  const error = new URLSearchParams(search).get('error')
-  if (error === null) return null
+  const error = signInRefusalOf(search)
+  if (error === undefined) return null
   const reason = signInRefusalSchema.safeParse(error)
   return reason.success ? SIGN_IN_REFUSAL_COPY[reason.data] : GENERIC_SIGN_IN_REFUSAL
 }
 
 function signInHref(providerId: string, invitation: string | undefined): string {
-  const query = new URLSearchParams({ return: '/' })
-  if (invitation !== undefined) query.set('invitation', invitation)
-  return `${authSignInUrl(providerId)}?${query}`
+  return authSignInUrl(providerId, {
+    returnTo: '/',
+    ...(invitation === undefined ? {} : { invitation }),
+  })
 }
 
 function Page({ children }: { children: React.ReactNode }) {
@@ -182,7 +188,7 @@ function SignInPage({ fetchFn, invitation }: { fetchFn: Fetch; invitation?: stri
 // The token rides the fragment, which the browser never sends to a server
 // or puts in a Referer.
 function InvitePage({ fetchFn }: { fetchFn: Fetch }) {
-  const token = new URLSearchParams(useLocation().hash.slice(1)).get('token') ?? undefined
+  const token = inviteTokenOf(useLocation().hash)
   return <SignInPage fetchFn={fetchFn} {...(token === undefined ? {} : { invitation: token })} />
 }
 
@@ -295,7 +301,7 @@ function WorkspacesPage({ fetchFn }: { fetchFn: Fetch }) {
   const [signed, retry] = useRetryableRead(read)
 
   if (signed === undefined) return null
-  if (signed === null) return <Navigate to="/sign-in" replace />
+  if (signed === null) return <Navigate to={signInPageUrl()} replace />
   if (signed === 'unavailable') {
     return (
       <Page>
@@ -338,7 +344,7 @@ function SignedInOnly({
   const read = useCallback(() => readSession(fetchFn), [fetchFn])
   const [who, retry] = useRetryableRead(read)
   if (who === undefined) return null
-  if (who === null) return <Navigate to="/sign-in" replace />
+  if (who === null) return <Navigate to={signInPageUrl()} replace />
   if (who === 'unavailable') {
     return (
       <Page>
@@ -356,8 +362,8 @@ const sameOriginFetch: Fetch = (input, init) => globalThis.fetch(input, init)
 export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps) {
   return (
     <Routes>
-      <Route path="/sign-in" element={<SignInPage fetchFn={fetchFn} />} />
-      <Route path="/invite" element={<InvitePage fetchFn={fetchFn} />} />
+      <Route path={SIGN_IN_PAGE_PATH} element={<SignInPage fetchFn={fetchFn} />} />
+      <Route path={INVITE_PAGE_PATH} element={<InvitePage fetchFn={fetchFn} />} />
       {/* Outside SignedInOnly: sending a signed-out popup to /sign-in would
           drop the fragment that carries the handshake, so the page says what
           to do instead. */}

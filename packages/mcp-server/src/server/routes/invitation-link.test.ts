@@ -5,6 +5,10 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  INVITE_PAGE_PATH,
+  inviteTokenOf,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createInvitationStore } from '../security/invitation-store.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
@@ -30,8 +34,9 @@ it('links to the invite page with the token in the fragment, and the token opens
     workspaceId: 'ws-1',
   })
   const url = new URL(link.url)
-  expect(`${url.origin}${url.pathname}${url.search}`).toBe('https://wb.test/invite')
-  const token = new URLSearchParams(url.hash.slice(1)).get('token') ?? ''
+  expect(`${url.origin}${url.pathname}${url.search}`).toBe(`https://wb.test${INVITE_PAGE_PATH}`)
+  // Read back the way the web app's invite page reads it.
+  const token = inviteTokenOf(url.hash) ?? ''
   expect(await invitations.openLink(token, Date.now())).toMatchObject({
     ok: true,
     invitation: { workspaceId: 'ws-1', invitedBy: 'u-ada' },

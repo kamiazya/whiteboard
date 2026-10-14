@@ -17,6 +17,7 @@ import {
   searchQueryString,
 } from '@kamiazya/whiteboard-server-core/search-query'
 import { encodeDocumentPath } from './document-url.js'
+import type { SignInRefusal } from './sign-in.js'
 
 const enc = encodeURIComponent
 
@@ -260,14 +261,56 @@ export function fontFileApiUrl(fontId: string): string {
 // Not `*ApiUrl`: these sit outside `/api`, and the keeper-parity scan
 // recognises them by their own `auth*Url` spelling. They are pinned the same
 // way as the people builders, against a server-mode app, by
-// `daemon-client-urls.routes.test.ts`. A caller appends its own query string.
+// `daemon-client-urls.routes.test.ts`. The query a sign-in carries is built
+// and read here, by the web app and the keeper alike, so a key cannot be
+// spelled differently on the two sides.
+
+/** The names a sign-in's query string carries, keyed by the field each one is. */
+const SIGN_IN_QUERY_PARAMS = {
+  returnTo: 'return',
+  invitation: 'invitation',
+} as const
+
+/**
+ * Where to land once signed in, and the invitation the sign-in accepts.
+ * `returnTo` is the request as sent: the keeper keeps it only when it names
+ * a path on its own origin.
+ */
+export interface SignInQuery {
+  readonly returnTo?: string
+  readonly invitation?: string
+}
+
+function withSignInQuery(path: string, query: SignInQuery): string {
+  const params = new URLSearchParams()
+  for (const field of ['returnTo', 'invitation'] as const) {
+    const value = query[field]
+    if (value !== undefined) params.set(SIGN_IN_QUERY_PARAMS[field], value)
+  }
+  const search = params.toString()
+  return search === '' ? path : `${path}?${search}`
+}
+
+/**
+ * What a sign-in request's query string says — the inverse of the builders
+ * below. Takes a reader rather than a URL so the server keeps its framework's
+ * own decoding of the string.
+ */
+export function signInQueryOf(read: (name: string) => string | undefined): SignInQuery {
+  const returnTo = read(SIGN_IN_QUERY_PARAMS.returnTo)
+  const invitation = read(SIGN_IN_QUERY_PARAMS.invitation)
+  return {
+    ...(returnTo === undefined ? {} : { returnTo }),
+    ...(invitation === undefined ? {} : { invitation }),
+  }
+}
 
 export function authProvidersUrl(): string {
   return '/auth/providers'
 }
 
-export function authSignInUrl(providerId: string): string {
-  return `/auth/sign-in/${enc(providerId)}`
+export function authSignInUrl(providerId: string, query: SignInQuery = {}): string {
+  return withSignInQuery(`/auth/sign-in/${enc(providerId)}`, query)
 }
 
 export function authSessionUrl(): string {
@@ -278,6 +321,50 @@ export function authSignOutUrl(): string {
   return '/auth/sign-out'
 }
 
-export function authReauthenticateUrl(): string {
-  return '/auth/reauthenticate'
+export function authReauthenticateUrl(query: Pick<SignInQuery, 'returnTo'> = {}): string {
+  return withSignInQuery('/auth/reauthenticate', query)
+}
+
+// ---- the web app's server-mode pages the keeper sends a browser to ----
+//
+// Pages, not routes: the keeper serves the app's shell at them and the web
+// app's router mounts them. The keeper links to them (an invitation, a
+// refused sign-in), so their paths and keys are fixed here for both sides.
+
+/** ADR-0049 decision 3: the page an invitation link opens. */
+export const INVITE_PAGE_PATH = '/invite'
+const INVITE_TOKEN_KEY = 'token'
+
+/**
+ * The link an invitation travels as, on `origin`. The token rides the
+ * fragment, which a browser never sends to a server or puts in a Referer.
+ */
+export function invitePageUrl(origin: string, token: string): string {
+  const url = new URL(INVITE_PAGE_PATH, origin)
+  url.hash = new URLSearchParams({ [INVITE_TOKEN_KEY]: token }).toString()
+  return url.toString()
+}
+
+/** The invitation token an invite page's fragment carries, `#` included or not. */
+export function inviteTokenOf(hash: string): string | undefined {
+  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
+  return params.get(INVITE_TOKEN_KEY) ?? undefined
+}
+
+/** The sign-in page, which also explains a refused sign-in. */
+export const SIGN_IN_PAGE_PATH = '/sign-in'
+const SIGN_IN_REFUSAL_KEY = 'error'
+
+export function signInPageUrl(refusal?: SignInRefusal): string {
+  if (refusal === undefined) return SIGN_IN_PAGE_PATH
+  return `${SIGN_IN_PAGE_PATH}?${new URLSearchParams({ [SIGN_IN_REFUSAL_KEY]: refusal })}`
+}
+
+/**
+ * The refusal a sign-in page's query string names, as sent: a value from an
+ * older or newer keeper is still a refusal, so the caller judges it against
+ * `signInRefusalSchema` rather than this reader dropping it.
+ */
+export function signInRefusalOf(search: string): string | undefined {
+  return new URLSearchParams(search).get(SIGN_IN_REFUSAL_KEY) ?? undefined
 }
