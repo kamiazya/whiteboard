@@ -74,11 +74,7 @@ export function VersionPreview({
   )
   if (past.kind === 'markdown') {
     return (
-      <div
-        data-testid="document-preview"
-        onClickCapture={keepSceneLinksInert}
-        className="h-full min-h-0 overflow-auto"
-      >
+      <div {...NOTE_HOST}>
         <PreviewPane
           value={past.body}
           maxWidth={maxWidth}
@@ -156,6 +152,12 @@ function PastCanvasPreview({
       )}
     </div>
   )
+}
+
+const NOTE_HOST = {
+  'data-testid': 'document-preview',
+  className: 'h-full min-h-0 overflow-auto',
+  onClickCapture: keepSceneLinksInert,
 }
 
 /**

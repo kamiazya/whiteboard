@@ -102,3 +102,32 @@ it('a link inside a card picture opens the card, not the link', async () => {
   expect(clickAnchor(anchor)).toBe(true)
   expect(opened).toEqual(['linker'])
 })
+
+it('nothing drawn in a card picture takes keyboard focus', async () => {
+  const load = createRowRenderLoader({
+    theme: 'light',
+    broker: createInTabRenderBroker(),
+    documents: () => docs,
+    source: source(),
+  })
+  render(
+    <RecentLane
+      documents={docs}
+      recentIds={[LINKER]}
+      onOpen={() => {}}
+      renderThumbnail={(entry) => (
+        <DocumentThumbnail document={entry} loadRender={load} className="size-full" />
+      )}
+    />,
+  )
+  const anchor = await anchorIn('[data-testid="document-thumbnail"]')
+  const card = screen.getByRole('button', { name: /linker/i })
+
+  // Focus is the probe rather than a tabindex read: an aria-hidden picture
+  // whose link a Tab can still reach is the defect, however it is reached.
+  ;(anchor as HTMLElement | SVGElement).focus()
+  expect(document.activeElement).not.toBe(anchor)
+  card.focus()
+  await userEvent.tab()
+  expect(anchor.contains(document.activeElement)).toBe(false)
+})
