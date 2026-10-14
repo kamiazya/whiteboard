@@ -13,6 +13,7 @@ import {
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { LinkTarget } from '../lib/link-target.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
@@ -23,6 +24,7 @@ const UNKNOWN = '01ARZ3NDEKTSV4RRFFQ69G5FB9'
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
   onOpenDocument: undefined as ((documentId: string) => void) | undefined,
+  linkTargets: undefined as readonly LinkTarget[] | undefined,
 }))
 
 vi.mock('../lib/browser-workspace-docs.js', () => ({
@@ -33,8 +35,13 @@ vi.mock('../lib/browser-workspace-docs.js', () => ({
 }))
 
 vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
-  MarkdownEditor: (props: { value: string; onOpenDocument?: (documentId: string) => void }) => {
+  MarkdownEditor: (props: {
+    value: string
+    onOpenDocument?: (documentId: string) => void
+    linkTargets?: readonly LinkTarget[]
+  }) => {
     store.onOpenDocument = props.onOpenDocument
+    store.linkTargets = props.linkTargets
     return <div data-testid="markdown-editor">{props.value}</div>
   },
 }))
@@ -69,6 +76,7 @@ describe('ReplicaReadPage following a link', () => {
   afterEach(() => {
     cleanup()
     store.onOpenDocument = undefined
+    store.linkTargets = undefined
   })
 
   it('opens the linked document from the replica in place', async () => {
@@ -76,6 +84,12 @@ describe('ReplicaReadPage following a link', () => {
     await openLinker()
     act(() => store.onOpenDocument?.(DOC_PLAN))
     expect((await screen.findByText('the plan')).dataset.testid).toBe('markdown-editor')
+  })
+
+  it('offers the link picker every other document, never the open one', async () => {
+    store.record = seedRecord()
+    await openLinker()
+    expect(store.linkTargets?.map((target) => target.id)).toEqual([DOC_PLAN])
   })
 
   it('opens nothing for an id the replica does not hold', async () => {

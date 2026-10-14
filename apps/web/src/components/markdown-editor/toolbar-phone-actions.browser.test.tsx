@@ -204,6 +204,39 @@ it("opens the conversation the caret's paragraph already has, instead of startin
   expect(onComposeThread).not.toHaveBeenCalled()
 })
 
+// A thread is usually opened on a phrase, not on its whole paragraph, so the
+// paragraph only has to OVERLAP the thread's passage to count as having it.
+const ON_A_PHRASE: CommentThread = {
+  ...EXISTING,
+  anchor: { kind: 'text', quote: { exact: 'line' }, start: 6, end: 10 },
+}
+
+it('opens a conversation on a phrase inside the caret paragraph, instead of starting a second one', async () => {
+  const onSelectThread = vi.fn()
+  const onComposeThread = vi.fn()
+  const { container } = render(
+    <MarkdownEditor
+      theme="light"
+      value={`Intro line.\n\n${BODY}`}
+      onChange={vi.fn()}
+      threads={[ON_A_PHRASE]}
+      onSelectThread={onSelectThread}
+      onComposeThread={onComposeThread}
+    />,
+  )
+  await focusSource(container)
+  const button = await vi.waitFor(() => {
+    const found = [...container.querySelectorAll('button')].find(
+      (one) => one.getAttribute('aria-label') === 'Comment',
+    )
+    if (found === undefined) throw new Error('no Comment button')
+    return found
+  })
+  button.click()
+  expect(onSelectThread).toHaveBeenCalledWith('thread-1')
+  expect(onComposeThread).not.toHaveBeenCalled()
+})
+
 it('still composes from a paragraph no conversation is about', async () => {
   const onSelectThread = vi.fn()
   const onComposeThread = vi.fn()

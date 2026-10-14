@@ -417,8 +417,8 @@ describe('ReplicaReadPage', () => {
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     await userEvent.keyboard('{Control>}{End}{/Control} offline addition')
-    // Unmount flushes the debounce — the daemon returning swaps this page
-    // out, and that moment must not eat the last keystrokes.
+    // Not a pin of the unmount flush: the debounce outlives the unmount and
+    // lands inside this wait either way. `use-replica-save-queue.test.ts` is.
     unmount()
 
     await vi.waitFor(async () => {
