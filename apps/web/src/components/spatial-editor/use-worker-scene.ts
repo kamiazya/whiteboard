@@ -130,7 +130,10 @@ export function useWorkerScene(
      */
     readonly fontsGeneration?: number
   },
-  fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
+  // `commentObstacles` is left out because the worker request cannot carry
+  // it: past the offload threshold it would be dropped, and a large canvas
+  // would draw differently from a small one.
+  fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme' | 'commentObstacles'>,
   wire?: WorkerSceneWire,
 ): RenderedCanvas & { readonly sceneCurrent: boolean } {
   const fileRefLabels = wire?.fileRefLabels
@@ -192,6 +195,7 @@ export function useWorkerScene(
       threads: options.threads,
       proposals: options.proposals,
       tagLibrary: options.tagLibrary,
+      style: options.style,
       // Not sent to the worker — it asks `hasLoadedFace` itself — but a
       // change here is what makes an OFFLOADED scene lay out again once a
       // theme's face lands; the synchronous path re-runs off `options`.
@@ -210,6 +214,7 @@ export function useWorkerScene(
       options.threads,
       options.proposals,
       options.tagLibrary,
+      options.style,
       options.fontsGeneration,
     ],
   )
@@ -285,6 +290,7 @@ export function useWorkerScene(
       threads: inputs.threads,
       proposals: inputs.proposals,
       tagLibrary: inputs.tagLibrary,
+      style: inputs.style,
     }
     worker.postMessage(request)
     return () => {
