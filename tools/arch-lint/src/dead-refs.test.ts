@@ -69,6 +69,17 @@ describe('a ref nothing reads is not kept', () => {
       expect(dead("const a = useRef(0)\na.current = 1\n// a.current\nconst s = 'a'")).toEqual(['a'])
     })
 
+    it('does not count a property NAME spelled like the ref as a read', () => {
+      const written = 'const a = useRef(0)\na.current = 1\n'
+      expect(dead(`${written}const o = { a: 1 }`)).toEqual(['a'])
+      expect(dead(`${written}const n = other.a`)).toEqual(['a'])
+      expect(dead(`${written}const el = <div a={1} />`)).toEqual(['a'])
+      expect(dead(`${written}const { a: b } = other`)).toEqual(['a'])
+      expect(dead(`${written}class C { a = 1; a2() {} }`)).toEqual(['a'])
+      // Shorthand IS a read: `{ a }` hands the ref itself over.
+      expect(dead(`${written}const o = { a }`)).toEqual([])
+    })
+
     it('ignores a binding that is not a ref', () => {
       expect(dead('const a = useState(0)\nconst b = makeRef()')).toEqual([])
     })

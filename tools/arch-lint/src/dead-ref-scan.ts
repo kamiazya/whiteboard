@@ -28,6 +28,25 @@ function isCurrentWrite(identifier: ts.Identifier): boolean {
 }
 
 /**
+ * `a` in `{ a: 1 }`, `o.a`, `<div a={1} />`, `{ a: b } = o` or a class
+ * member `a` — a property NAME spelled like the binding, which reads nothing.
+ * Shorthand `{ a }` is not one: it hands the binding over.
+ */
+function isPropertyName(identifier: ts.Identifier): boolean {
+  const parent = identifier.parent
+  if (ts.isPropertyAccessExpression(parent)) return parent.name === identifier
+  if (ts.isBindingElement(parent)) return parent.propertyName === identifier
+  return (
+    (ts.isPropertyAssignment(parent) ||
+      ts.isJsxAttribute(parent) ||
+      ts.isClassElement(parent) ||
+      ts.isTypeElement(parent) ||
+      ts.isEnumMember(parent)) &&
+    parent.name === identifier
+  )
+}
+
+/**
  * The names of every `const x = useRef(…)` in `source` that nothing reads:
  * the binding appears only in its own declaration and on the left of
  * `x.current = …`. Handing the ref to `ref={x}`, reading `x.current`, or a
@@ -59,7 +78,8 @@ export function writtenNeverReadRefs(fileName: string, source: string): readonly
       ts.isIdentifier(node) &&
       declared.has(node.text) &&
       declared.get(node.text) !== node &&
-      !isCurrentWrite(node)
+      !isCurrentWrite(node) &&
+      !isPropertyName(node)
     ) {
       read.add(node.text)
     }

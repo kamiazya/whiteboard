@@ -55,4 +55,67 @@ describe('create, then open', () => {
     await screen.findByTestId('okf-preview')
     expect(readRecentIds('browser:W')).toEqual([])
   })
+
+  // Two windows, one per await in the create: the write itself, and the
+  // re-read that follows it. A switch in either leaves a result that names
+  // the departed workspace.
+  it.each([
+    ['the write', 'write'],
+    ['the re-read after it', 'reread'],
+  ] as const)('a switch during %s opens and remembers nothing', async (_, held) => {
+    let finish: () => void = () => {}
+    const hold = () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    const seed: readonly WorkspaceDocumentEntry[] = [
+      { documentId: 'd1', path: 'seed', kind: 'markdown' },
+    ]
+    let lists = 0
+    const departed = fakeFilesSource({
+      listDocuments: async () => {
+        lists += 1
+        if (held === 'reread' && lists > 1) await hold()
+        return lists > 1
+          ? [...seed, { documentId: 'd2', path: 'untitled', kind: 'markdown' }]
+          : seed
+      },
+      createDocument: held === 'write' ? hold : async () => {},
+    })
+    const next = fakeFilesSource({
+      listDocuments: async () => [{ documentId: 'e1', path: 'other', kind: 'markdown' }],
+    })
+    const onOpenDocument = vi.fn()
+    const { rerender } = render(
+      <WorkspaceFilesPanel
+        source={departed}
+        onOpenDocument={onOpenDocument}
+        memoryScope="browser:A"
+      />,
+    )
+    await screen.findAllByTestId('card-title')
+    await pickNewDocumentKind('markdown')
+    await waitFor(() =>
+      expect(departed.listDocuments).toHaveBeenCalledTimes(held === 'write' ? 1 : 2),
+    )
+    await waitFor(() => expect(departed.createDocument).toHaveBeenCalled())
+
+    rerender(
+      <WorkspaceFilesPanel source={next} onOpenDocument={onOpenDocument} memoryScope="browser:B" />,
+    )
+    await waitFor(() => expect(next.listDocuments).toHaveBeenCalled())
+    finish()
+
+    // The create's own `finally` is what re-enables the menu, so this waits
+    // for the whole create to settle rather than for time.
+    await waitFor(() =>
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'New document' }).disabled).toBe(
+        false,
+      ),
+    )
+    expect(onOpenDocument).not.toHaveBeenCalled()
+    expect(readRecentIds('browser:B')).toEqual([])
+    // The departed workspace's list is not read back onto this one.
+    expect(screen.queryByText('seed')).toBeNull()
+  })
 })

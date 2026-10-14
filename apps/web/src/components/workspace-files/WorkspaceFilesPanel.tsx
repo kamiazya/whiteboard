@@ -213,6 +213,7 @@ export function WorkspaceFilesPanel({
   const refreshAndSelect = useCallback(
     async (path: string) => {
       const entries = await readList()
+      if (lastReadListRef.current !== readList) return null // switched away meanwhile
       setDocuments(entries)
       const found = entries.find((row) => row.path === path) ?? null
       setSelected(found)
@@ -439,16 +440,13 @@ export function WorkspaceFilesPanel({
         }
         try {
           const created = await refreshAndSelect(path)
-          // Creating exists to produce content, and an empty document is
-          // worth nothing until it is open — so the create ends where the
-          // next thing happens, as every other creation path in the app
-          // already did.
-          //
-          // Only affordable because the open folder is in the address now:
-          // the way back returns to the folder this was made in, rather than
-          // to the workspace root. The selection above still lands, so a
-          // host that offers no way to open leaves someone looking at the
-          // new document rather than at nothing.
+          // Switched away mid-create: this path and id are the other workspace's.
+          if (lastReadListRef.current !== readList) return
+          // An empty document is worth nothing until it is open, so a create
+          // ends in an open, as every other creation path does. Affordable
+          // because the open folder is in the address: the way back returns
+          // to the folder this was made in. The selection still lands, so a
+          // host with no open leaves the new document on screen.
           openPath(path, created)
         } catch {
           // Swallowed as a REJECTION, reported as its own message. The

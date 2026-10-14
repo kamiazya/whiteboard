@@ -16,8 +16,11 @@ import { rootOf } from '../../test-utils/spatial-editor-root.js'
 // A real click opens Chromium's chooser, which a harness that has served one
 // before dismisses by itself, after the test's pick. So the chooser never
 // opens here, and every dismissal is one the browser does not report.
+let opened: { mock: { calls: unknown[] } }
+let openedAtLastPick = 0
 beforeEach(() => {
-  vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+  opened = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
+  openedAtLastPick = 0
 })
 afterEach(() => {
   cleanup()
@@ -42,6 +45,10 @@ const input = (c: HTMLElement) =>
   c.querySelector('[data-testid="image-file-input"]') as HTMLInputElement
 /** What a real pick leaves behind: the chosen file, and a non-empty value. */
 function pick(c: HTMLElement) {
+  // A pick is only real if an opener opened the input since the last one;
+  // dispatching `change` alone would pass with every opener disconnected.
+  expect(opened.mock.calls.length).toBeGreaterThan(openedAtLastPick)
+  openedAtLastPick = opened.mock.calls.length
   const chosen = new DataTransfer()
   chosen.items.add(png())
   input(c).files = chosen.files
