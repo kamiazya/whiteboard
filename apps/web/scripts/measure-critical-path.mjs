@@ -60,26 +60,47 @@ import { existsSync } from 'node:fs'
 // establishes that — it was added after the first run, where a 2% spread on
 // an unverified number read as "gateable".
 //
-// ## The floor, and why it is deliberately far away (decision 2026-08-30)
+// ## What drives it: requests, not bytes (re-measured 2026-10-14)
 //
-// `LCP_FLOOR_MS=1000` gates CI. Current median is 492 ms, so the floor sits at
-// roughly twice the measurement and catches only a serious accident — about
-// 100 KB gzipped of new critical path. That distance is the POINT, not slack
-// left over from picking a round number.
+// The 4.9 ms per KB above held while the critical path was a handful of
+// files, and it stopped describing CI as the file count grew. CI medians on
+// main (verify job, 5 runs each): 516-548 ms on 2026-09-02 at 23 files,
+// 592-600 ms on 10-01 at 28 files and 141.3 KB, 840-900 ms on 10-05 at 36
+// files and 148.5 KB, 772-944 ms over 60 runs 10-12..10-14 at 38 files and
+// 151.6 KB — one of them a FAILED floor at 1116 ms whose own fastest run was
+// 724. Bytes predicted about +50 ms over that span; LCP rose about +280.
 //
-// The reason is what this rig actually measures. LCP here is dominated by
-// CDP-emulated transfer, and the response is linear at **4.9 ms per gzipped
-// KB** — so on this machine LCP is very nearly a function of bytes. Set close
-// to the measurement and it becomes a second byte budget, with 2.5 KB of
-// resolution against `smoke-bundle-size.mjs`'s 335 bytes, plus a noise band
-// the byte count does not have. Seven times coarser and less certain, for the
-// same question, is not a gate worth having.
+// The local A/B that separates the two (this container under load, 5 runs a
+// set, two or three sets each, medians):
 //
-// So the two are given different jobs rather than different numbers:
-// bytes DETECT CHANGE, this states an ABSOLUTE FLOOR — "a mid-range phone on
-// a decent connection sees the shell inside a second, whatever the code does".
-// A regression small enough to matter reaches the byte budget first, by
-// design; anything that reaches this one has gone badly wrong.
+//   main as it was     38 files  151.6 KB    872-1012 ms
+//   bytes cut only     38 files  143.8 KB    912 ms
+//   files cut too       9 files  136.1 KB    516-608 ms
+//
+// Taking 7.8 KB off moved nothing measurable; collapsing 38 preloads into 9
+// took about a third off. The likely mechanism is the rig itself: it serves
+// HTTP/1.1, where Chrome opens at most six connections to an origin, so 38
+// modulepreloads queue in rounds of the emulated 40 ms latency. How much of
+// that a visitor on the deployed origin's HTTP/2 pays is not measured.
+// That is why `smoke-bundle-size.mjs` budgets the critical path's FILE COUNT
+// beside its bytes — the byte budget cannot see a request, and the count is
+// deterministic where this is not.
+//
+// ## The floor (decision 2026-08-30)
+//
+// `LCP_FLOOR_MS=1000` gates CI, stated as "a mid-range phone on a decent
+// connection sees the shell inside a second, whatever the code does". It was
+// set at roughly twice a 492 ms median, to catch only a serious accident.
+// Measured locally now at 516-608 ms for 9 files, it is back near that
+// distance; at 38 files CI ran within 6-20% of it on a per-run spread of
+// 10-130%, which is how a required gate goes red on noise. A floor red whose
+// own fastest run is far under the floor is that noise; one whose fastest run
+// is over it is not.
+//
+// It is still not a second byte budget. Set close to the measurement it would
+// resolve about 2.5 KB against `smoke-bundle-size.mjs`'s few hundred bytes,
+// with a noise band the byte count does not have. So the jobs stay split:
+// the byte and file budgets DETECT CHANGE, this states an ABSOLUTE FLOOR.
 //
 // What would make LCP an independent signal is the CPU-bound half — the
 // parse/execute cost bytes cannot see. `longTasks` is that quantity and it
