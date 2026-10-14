@@ -18,6 +18,7 @@ import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { formatRelative } from '../../lib/format-relative.js'
+import { sceneLinkTarget } from '../../lib/scene-link.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
 import type { DocumentRender } from './load-row-render.js'
@@ -216,25 +217,18 @@ export function DocumentPreview({
   )
 }
 
-const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
-
 /**
- * The renderer draws a reference as `<a href="<documentId>">` (a canvas
- * embed as `#<documentId>`): an address only this app can resolve. Left to
- * the browser, the bare id resolves against the page URL and reloads the tab
- * onto a route that names no document, so every scheme-less link is answered
- * here — opened when the id is listed, inert when it is not. A link with a
- * scheme is a real URL from the markdown and keeps the browser's default.
+ * A drawn link that names a document opens it when the list holds it, and
+ * is inert when it does not; either way the browser never follows it.
  */
 function followSceneLink(
   event: MouseEvent,
   findDocument: DocumentPreviewProps['findDocument'],
   onOpen: DocumentPreviewProps['onOpen'],
 ): void {
-  const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null
-  const href = anchor?.getAttribute('href')
-  if (href == null || URL_SCHEME.test(href)) return
+  const documentId = sceneLinkTarget(event.target)
+  if (documentId === undefined) return
   event.preventDefault()
-  const target = findDocument?.(href.replace(/^#/, ''))
+  const target = findDocument?.(documentId)
   if (target !== undefined) onOpen?.(target)
 }
