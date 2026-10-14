@@ -276,6 +276,31 @@ describe('the pictures a row draws inline', () => {
     expect(card.key).not.toBe((await drawn.read(note)).key)
   })
 
+  it('draws the picture on a board the row embeds', async () => {
+    const board: WorkspaceDocumentEntry = {
+      documentId: 'b1',
+      path: 'boards/b',
+      kind: 'spatial',
+      contentDigest: 'b0b0b0b0b0b0b0b0',
+    }
+    const source = fakeFilesSource({
+      loadMarkdown: async () => ({ body: 'see ![[boards/b]]' }),
+      loadSpatialSnapshot: async () =>
+        snapshotOf({
+          nodes: [fileNode({ id: 'p', x: 0, y: 0, width: 100, height: 100, file: 'asset:pic' })],
+          edges: [],
+        }),
+    })
+    const read = createRowReferenceReader({ ...source, loadImage: async () => png(8) }, () => [
+      note,
+      board,
+    ])
+
+    const { wire } = await read(note)
+
+    expect(imageOf(wire, 'asset:pic')?.href).toMatch(/^data:image\/png;base64,/)
+  })
+
   // A picture is drawn from the file store, never read as a document.
   it('reads no picture as a document', async () => {
     const { plain } = picturing('![[asset:pic]]', async () => png(8))
