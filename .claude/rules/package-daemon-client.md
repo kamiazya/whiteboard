@@ -50,6 +50,11 @@ paths:
   retried; the backend reports `onWriteRefused` and re-delivers the keeper's
   snapshot. The daemon's `sync-update-body-limit.test.ts` reads every refusal
   through it, so the two cannot drift.
+  A non-permanent failure (5xx, 408, 429, a dropped request) is retried by
+  `write-chain`'s `WriteChain` — the ONE chain both the SharedWorker and a page
+  owning its hub (`SseBackend`'s `QueuedWriter`) write through, honouring
+  `Retry-After` as a floor — so the delivery guarantee cannot differ by which
+  `SseStreamSource` a page got.
 - `api-client` (same-origin fetch wrapper — injects a `traceparent` header
   through @opentelemetry/api's no-op surface, no SDK shipped), the extension
   bridge the hosted page reaches a daemon through, the read plane and the
