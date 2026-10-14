@@ -562,3 +562,62 @@ test('sweeps vitest scratch untouched for a day, and only that', () => {
     assert.equal(existsSync(kept), true, `${kept} is not stale vitest scratch`)
   }
 })
+
+test("sweeps the temp dirs this repo's own tests name, untouched for a day, and only those", () => {
+  const { repoDir } = setupRepos(makeScratch())
+  // The prefixes are read from tracked test source, never from a list kept here.
+  mkdirSync(join(repoDir, 'src', 'test-utils'), { recursive: true })
+  writeFileSync(
+    join(repoDir, 'src', 'thing.test.ts'),
+    "const a = mkdtempSync(join(tmpdir(), 'wb-fixture-'))\n",
+  )
+  writeFileSync(
+    join(repoDir, 'src', 'test-utils', 'dir.ts'),
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: source text for the scan
+    'export const d = (label) => mkdtempSync(join(tmpdir(), `wb-${label}-`))\n' +
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: source text for the scan
+      'export const e = (prefix) => mkdtempSync(join(tmpdir(), `${prefix}-`))\n',
+  )
+  // A tool's temp dir can outlive its run on purpose: mutate.mjs's backup is
+  // the only restore after a SIGKILL.
+  writeFileSync(join(repoDir, 'src', 'mutate.mjs'), "mkdtempSync(join(tmpdir(), 'mutate-'))\n")
+  git(repoDir, ['add', '.'])
+  git(repoDir, ['commit', '--quiet', '-m', 'fixtures'])
+
+  const root = mkdtempSync(join(privateTmp, 'prefix-sweep-'))
+  scratchDirs.push(root)
+  const day = 24 * 60 * 60 * 1000
+  const seed = (name, ageMs) => {
+    const dir = join(root, name)
+    mkdirSync(join(dir, 'data'), { recursive: true })
+    writeFileSync(join(dir, 'data', 'db.sqlite'), 'rows')
+    const at = (Date.now() - ageMs) / 1000
+    utimesSync(join(dir, 'data', 'db.sqlite'), at, at)
+    utimesSync(join(dir, 'data'), at, at)
+    utimesSync(dir, at, at)
+    return dir
+  }
+  const literal = seed('wb-fixture-Ab3dE9', 2 * day)
+  const templated = seed('wb-member-profiles-prop-x9Y8z7', 2 * day)
+  const kept = [
+    seed('wb-fixture-Fr35h1', 60_000),
+    seed('wb-fixture-toolongsuffix', 2 * day),
+    seed('mutate-Ab3dE9', 2 * day),
+    seed('someone-else-Ab3dE9', 2 * day),
+  ]
+  const env = { ...realEnv(repoDir), TMPDIR: root, TMP: root, TEMP: root }
+
+  const dry = execFileSync('node', [scriptPath, '--dry-run'], {
+    cwd: repoDir,
+    encoding: 'utf-8',
+    env,
+  })
+  assert.match(dry, /would sweep 2 stale repo temp dir/)
+  assert.equal(existsSync(literal), true, 'a dry run removes nothing')
+
+  const real = execFileSync('node', [scriptPath], { cwd: repoDir, encoding: 'utf-8', env })
+  assert.match(real, /swept 2 stale repo temp dir/)
+  assert.equal(existsSync(literal), false)
+  assert.equal(existsSync(templated), false)
+  for (const dir of kept) assert.equal(existsSync(dir), true, `${dir} is not ours to sweep`)
+})
