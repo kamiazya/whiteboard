@@ -30,7 +30,7 @@ export function testSocketPath(): string {
 export const TEST_SOCKET_PATH_MAX_BYTES = process.platform === 'darwin' ? 103 : 107
 
 /** Throws, naming the limit and the remedy, for a path the kernel would truncate. */
-export function assertTestSocketPathFits(path: string): void {
+function assertTestSocketPathFits(path: string): void {
   const bytes = Buffer.byteLength(path)
   if (bytes <= TEST_SOCKET_PATH_MAX_BYTES) return
   throw new Error(
