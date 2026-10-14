@@ -38,17 +38,6 @@ export interface AgentActivity {
 }
 
 /**
- * The subset of an op `summarizeOps` reads. Declared here rather than
- * imported from the tool so the port file does not depend on the tool that
- * uses it.
- */
-export type CanvasOpSummaryInput = {
-  readonly op: string
-  readonly locked?: boolean
-  readonly resolved?: boolean
-}
-
-/**
  * The seam through which a tool reaches a browser watching the same
  * document. Everything here is BEST EFFORT and one-way: a headless daemon
  * with no tab open is the normal case, not an error, so nothing a tool does
