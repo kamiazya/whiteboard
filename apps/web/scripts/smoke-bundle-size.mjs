@@ -49,14 +49,12 @@ const BUDGETS = [
 // set ~10% above the measured size rather than at the aspirational floor: a
 // budget with no headroom is a tripwire on whoever commits next, not a
 // regression stop, so a raise restores that headroom instead of adding one byte.
-// Measured at 136.1 KB in 9 files (local build, 2026-10-14). The critical path
+// Measured at 132.8 KB in 9 files (local build, 2026-10-14). The critical path
 // is not thin by choice — react-router, zod, the workspace-address parser and
 // the identity resolver have to be on it, because boot decides which page to
 // lazy-load and which workspace it means before first paint.
 //
-// How first paint is cut into chunks, and the two minified-build-only
-// defects that decide it (lucide's icons beside loro's top-level await, and a
-// shared chunk rewritten for a dynamic import), are vite-code-splitting.ts.
+// How first paint is cut into chunks, and why, is vite-code-splitting.ts.
 //
 // Whether this much critical path is the right size is a product call about
 // first paint, and this gate is the wrong place to make it. `measure-critical-path.mjs`
@@ -125,77 +123,33 @@ export function extractCriticalPathFiles(html) {
   return [...new Set([...extractEntryScripts(html), ...modulepreloads])]
 }
 
-/** `source` with every comment that follows its last statement removed. */
-function withoutTrailingComments(source) {
-  let rest = source.trimEnd()
-  for (;;) {
-    if (rest.endsWith('*/')) {
-      const open = rest.lastIndexOf('/*')
-      if (open < 0) return rest
-      rest = rest.slice(0, open).trimEnd()
-      continue
-    }
-    const lastLine = rest.slice(rest.lastIndexOf('\n') + 1)
-    if (!lastLine.trimStart().startsWith('//')) return rest
-    rest = rest.slice(0, rest.length - lastLine.length).trimEnd()
-  }
-}
-
 /**
- * Every entry script awaits the `__tla` promise of each chunk it imports
- * that exports one.
+ * Every built chunk that exports a `__tla` promise, each a failure.
  *
- * vite-plugin-top-level-await turns a chunk holding a top-level await OR a
- * dynamic import into an async body whose exports are assigned only when that
- * body runs, and exports `__tla` for it. An importer it did not rewrite the
- * same way reads those exports before they are assigned. A lazy page gets
- * away with it, since it loads long after the body ran; the entry runs in
- * the same tick, so its first call into such a chunk throws and the page
- * never mounts — in a minified build only, which no source-level test runs.
+ * `__tla` is the late-export protocol a build-time top-level-await shim
+ * rewrites chunks into: exports assigned inside an async body, which an
+ * importer that does not await the promise reads as `undefined`. Only a
+ * minified build shows it, and the entry runs in the same tick as its
+ * imports, so the page never mounts. The build emits native top-level await
+ * instead, and this keeps a shim from coming back unnoticed.
  */
-export function entryAwaitFailures(dist) {
-  const lines = []
-  let failures = 0
-  const indexHtmlPath = join(dist, 'index.html')
-  if (!existsSync(indexHtmlPath)) return { failures, lines }
-  const fail = (text) => {
-    lines.push({ stream: 'error', text })
-    failures++
-  }
-  // A missing asset is a broken build, said as a failure rather than an
-  // ENOENT that ends the gate before it reports anything.
-  const readAsset = (file) => {
-    const path = join(dist, 'assets', file)
-    return existsSync(path) ? readFileSync(path, 'utf8') : undefined
-  }
-  // The export clause ends the module, but a comment (a source map pointer,
-  // a licence banner) may follow it. Comments are peeled off the tail by hand
-  // rather than matched by one pattern, which would backtrack exponentially.
-  const deferred = (source) =>
-    /export\s*\{[^}]*\b__tla\b[^}]*\}\s*;?$/.test(withoutTrailingComments(source))
-  for (const src of extractEntryScripts(readFileSync(indexHtmlPath, 'utf8'))) {
-    const entry = src.replace(/^\/assets\//, '')
-    const entrySource = readAsset(entry)
-    if (entrySource === undefined) {
-      fail(`  FAIL  entry ${entry} is named by index.html but missing from dist/assets`)
-      continue
+export function deferredExportFailures(dist) {
+  const assets = join(dist, 'assets')
+  const deferred = readdirSync(assets).filter((file) => {
+    if (!file.endsWith('.js')) return false
+    const source = readFileSync(join(assets, file), 'utf8')
+    for (const [, names] of source.matchAll(/\bexport\s*\{([^}]*)\}/g)) {
+      if (names.split(',').some((name) => /(?:^|\s)__tla$/.test(name.trim()))) return true
     }
-    for (const [, names, file] of entrySource.matchAll(
-      /import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+)["']/g,
-    )) {
-      if (/\b__tla\b/.test(names)) continue
-      const imported = readAsset(file)
-      if (imported === undefined) {
-        fail(`  FAIL  entry ${entry} imports ${file}, which is missing from dist/assets`)
-        continue
-      }
-      if (!deferred(imported)) continue
-      fail(
-        `  FAIL  entry ${entry} reads ${file} without awaiting its __tla — the page will not mount`,
-      )
-    }
+    return false
+  })
+  return {
+    failures: deferred.length,
+    lines: deferred.map((file) => ({
+      stream: 'error',
+      text: `  FAIL  ${file} exports __tla — a top-level-await shim rewrote it, and an importer that does not await it reads undefined`,
+    })),
   }
-  return { failures, lines }
 }
 
 function gzipSize(path) {
@@ -325,9 +279,9 @@ function main() {
     byteBudgetKb: CRITICAL_PATH_BUDGET_KB,
     fileBudget: CRITICAL_PATH_FILE_BUDGET,
   })
-  const awaited = entryAwaitFailures(DIST)
-  for (const { stream, text } of [...critical.lines, ...awaited.lines]) console[stream](text)
-  failures += critical.failures + awaited.failures
+  const deferred = deferredExportFailures(DIST)
+  for (const { stream, text } of [...critical.lines, ...deferred.lines]) console[stream](text)
+  failures += critical.failures + deferred.failures
 
   if (failures > 0) {
     console.error(`\nbundle-size gate: ${failures} failure(s)`)

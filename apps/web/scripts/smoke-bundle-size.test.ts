@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   criticalPathReport,
-  entryAwaitFailures,
+  deferredExportFailures,
   extractCriticalPathFiles,
 } from './smoke-bundle-size.mjs'
 
@@ -112,69 +112,47 @@ describe('criticalPathReport', () => {
   })
 })
 
-describe('entryAwaitFailures', () => {
+describe('deferredExportFailures', () => {
   let dist: string
 
   beforeEach(() => {
-    dist = mkdtempSync(join(tmpdir(), 'smoke-bundle-entry-'))
+    dist = mkdtempSync(join(tmpdir(), 'smoke-bundle-deferred-'))
     mkdirSync(join(dist, 'assets'))
-    writeFileSync(
-      join(dist, 'index.html'),
-      '<script type="module" crossorigin src="/assets/index-a.js"></script>',
-    )
-    // What vite-plugin-top-level-await makes of a chunk holding a dynamic
-    // import: exports assigned inside an async body, plus the promise for it.
-    writeFileSync(
-      join(dist, 'assets', 'shell-b.js'),
-      'let a; let __tla = (async () => { a = () => 1 })(); export { a as a, __tla };',
-    )
   })
 
   afterEach(() => {
     rmSync(dist, { recursive: true, force: true })
   })
 
-  it('fails an entry that reads a deferred chunk without awaiting it', () => {
-    writeFileSync(join(dist, 'assets', 'index-a.js'), 'import{a as e}from"./shell-b.js";e();')
+  const asset = (file: string, source: string) => writeFileSync(join(dist, 'assets', file), source)
+  const text = (report: { lines: { text: string }[] }) => report.lines.map((l) => l.text).join('\n')
 
-    const report = entryAwaitFailures(dist)
-
-    expect(report.failures).toBe(1)
-    expect(report.lines.map((l) => l.text).join('\n')).toMatch(/index-a\.js.*shell-b\.js/)
-  })
-
-  it('passes an entry that awaits the chunk before running', () => {
-    writeFileSync(
-      join(dist, 'assets', 'index-a.js'),
-      'import { a as e, __tla as __tla_0 } from "./shell-b.js"; Promise.all([__tla_0]).then(async () => { e() });',
+  it('fails every chunk that exports a __tla promise, by name', () => {
+    asset(
+      'shell-b.js',
+      'let a; let __tla = (async () => { a = () => 1 })(); export { a as a, __tla };',
     )
+    asset('page-c.js', 'let b;let __tla=(async()=>{b=2})();export{b as t,__tla};')
+    asset('index-a.js', 'import{a as e}from"./shell-b.js";e();')
 
-    expect(entryAwaitFailures(dist).failures).toBe(0)
+    const report = deferredExportFailures(dist)
+
+    expect(report.failures).toBe(2)
+    expect(text(report)).toMatch(/shell-b\.js/)
+    expect(text(report)).toMatch(/page-c\.js/)
+    expect(text(report)).not.toMatch(/index-a\.js/)
   })
 
-  it('still sees a deferred chunk whose export is followed by a comment', () => {
-    writeFileSync(
-      join(dist, 'assets', 'shell-b.js'),
-      'let a; let __tla = (async () => { a = () => 1 })(); export { a as a, __tla };\n//# sourceMappingURL=shell-b.js.map\n/* licence */\n',
-    )
-    writeFileSync(join(dist, 'assets', 'index-a.js'), 'import{a as e}from"./shell-b.js";e();')
+  it('sees an export clause followed by a source-map comment', () => {
+    asset('shell-b.js', 'let a;export{a as a,__tla};\n//# sourceMappingURL=shell-b.js.map\n')
 
-    expect(entryAwaitFailures(dist).failures).toBe(1)
+    expect(deferredExportFailures(dist).failures).toBe(1)
   })
 
-  it('reports an imported chunk missing from dist as a failure', () => {
-    writeFileSync(join(dist, 'assets', 'index-a.js'), 'import{a as e}from"./gone-c.js";e();')
+  it('passes chunks that only mention the word or use native top-level await', () => {
+    asset('shell-b.js', 'const m = await fetch("/x.wasm"); export { m as a };')
+    asset('notes-c.js', 'const s = "__tla"; export { s as __tlaNote };')
 
-    const report = entryAwaitFailures(dist)
-
-    expect(report.failures).toBe(1)
-    expect(report.lines.map((l) => l.text).join('\n')).toMatch(/gone-c\.js.*missing/)
-  })
-
-  it('reports an entry script missing from dist as a failure', () => {
-    const report = entryAwaitFailures(dist)
-
-    expect(report.failures).toBe(1)
-    expect(report.lines.map((l) => l.text).join('\n')).toMatch(/index-a\.js.*missing/)
+    expect(deferredExportFailures(dist).failures).toBe(0)
   })
 })

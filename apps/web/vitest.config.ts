@@ -2,7 +2,6 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
-import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { rendererBuildDefine } from './renderer-build-id.js'
@@ -11,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   define: { ...rendererBuildDefine },
-  plugins: [react(), svgr(), wasm(), topLevelAwait()],
+  plugins: [react(), svgr(), wasm()],
   resolve: {
     alias: {
       // Subpath aliases must precede the root alias: rollup-alias prefix-matches,

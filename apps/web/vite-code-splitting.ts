@@ -2,8 +2,8 @@
  * How the production build is cut into chunks (rolldown's `codeSplitting`).
  *
  * Extracted from `vite.config.ts` so `vite-code-splitting.test.ts` can assert
- * on the rule directly: every hazard below is invisible in every test that
- * runs against source, and only appears in a minified production bundle.
+ * on the rule directly: what it decides is visible only in a production
+ * bundle, which no test that runs against source builds.
  */
 import type { Rolldown } from 'vite'
 
@@ -26,21 +26,18 @@ type ModuleGraph = Pick<Rolldown.ChunkingContext, 'getModuleInfo'>
  * Answers whether nothing `id` statically reaches holds a dynamic import,
  * remembering answers across one build.
  *
- * Why it matters: vite-plugin-top-level-await rewrites every chunk that holds
- * a dynamic import into an async body whose exports are `let`s assigned only
- * when that body runs. If the rewritten chunk also imports another rewritten
- * chunk, the body waits a microtask for it — and an importer the plugin did
- * NOT rewrite, evaluated in the same tick, reads those exports as
- * `undefined` (it awaits only for a top-level await, not a dynamic import).
- * A chunk that every lazy page imports must therefore never be rewritten,
- * which a group can only promise by capturing nothing that reaches an
- * `import()`. Captured together with the app's `lazy()` pages, the first
- * attempt at this grouping left the entry and a lazy canvas chunk calling
- * functions that were not assigned yet.
+ * Why it matters: it is what keeps the ENTRY chunk. The modules that reach a
+ * dynamic import (main, boot, App and the screens that `lazy()` a page) are
+ * left out of the first-paint groups, so they stay in `index-*.js` with
+ * `index-*.css` beside it — the names the bundle-size gate's budgets key on.
+ * Measured with this test dropped from `firstPaint`: the
+ * entry module itself is captured, no `index-*` file is emitted at all, and
+ * the gate fails both required budgets (the critical path falls to 5 files,
+ * 130.7 KB gz, so a gate re-keyed on the HTML's entry script could take it).
  *
  * The call is matched in the source as well as read from
  * `dynamicallyImportedIds`, because a computed specifier (react-router's
- * route modules) never resolves to an id and the plugin keys on the call.
+ * route modules) never resolves to an id.
  */
 function staticClosureIsSync(): (id: string, graph: ModuleGraph) => boolean {
   const clean = new Map<string, boolean>()
@@ -87,26 +84,24 @@ export function createCodeSplittingGroups(): Rolldown.CodeSplittingGroup[] {
       ? name
       : null
   // loro-crdt deliberately gets no group: only lazy pages import it, so it
-  // already lands in a chunk they share. A named loro group once pulled
-  // vite-plugin-top-level-await's shared dynamic-import helper in beside the
-  // WASM bindings, and since the entry imports that helper for its own
-  // `lazy()` calls, first paint loaded all of loro with it.
+  // already lands in a chunk they share, and a named group is a place for a
+  // helper the entry needs to land beside the WASM bindings — which once put
+  // all of loro on first paint.
   return [
     // React separated from app code so a deploy that touches only the app
     // leaves the (much larger) vendor chunk cached.
     { name: 'vendor-react', test: REACT, priority: 4 },
-    // Icons get a chunk of their own, and it is not cosmetic. Left
-    // unassigned they are merged into whichever chunk imports them —
-    // which for this app is one carrying the Loro WASM's TOP-LEVEL
-    // AWAIT. Rolldown compiles such a chunk to `let Copy, Undo2, …`
-    // declared at module scope and assigned inside the TLA body, so
-    // every icon it exports reads `undefined` until that body runs.
-    // A component rendering one then calls createElement(undefined)
-    // and React throws #130 with no name in it. Measured on the
-    // document kebab: `Copy` (the Duplicate row) was undefined and
-    // took the whole page to the error screen — minified only, since
-    // an unminified build lays the module out differently and hides
-    // it entirely.
+    // Icons get a chunk of their own. Left unassigned they merged into a
+    // chunk carrying the Loro WASM's top-level await, and a build-time TLA
+    // shim compiled that chunk's exports to `let`s assigned inside an async
+    // body: `Copy` on the document kebab read `undefined`, and React threw
+    // #130 to the error screen, minified only. The build now emits native
+    // top-level await (smoke-bundle-size fails any `__tla` export), under
+    // which an importer waits for the body instead of reading early.
+    // ponytail: no longer load-bearing under native top-level await. Without
+    // it the minified kebab renders its icons, and first paint is 8 files
+    // and 124.9 KB gz against 9 and 132.8; dropping it re-pins this file's
+    // test and the bundle-size gate's file budget.
     { name: 'vendor-icons', test: LUCIDE, priority: 3 },
     // The rest of first paint (`$initial`: an entry's static import chain),
     // as one vendor chunk and one app chunk. Rolldown turns its common-chunk

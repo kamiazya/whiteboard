@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import svgr from 'vite-plugin-svgr'
-import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { createCodeSplittingGroups } from './vite-code-splitting.js'
@@ -63,7 +62,6 @@ export default defineConfig({
     tailwindcss(),
     // Required for the browser bundle that includes the Loro CRDT WASM build.
     wasm(),
-    topLevelAwait(),
     // Must run before VitePWA: see stripWasmSourceMapPlugin's doc comment —
     // VitePWA hashes dist/ contents for the precache manifest in closeBundle,
     // so the wasm bytes must already be stripped when that hook runs.
