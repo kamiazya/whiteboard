@@ -159,7 +159,7 @@ describe('nodeMenuItems', () => {
     const openItem = live.find((item) => labelOf(item) === 'Open canvas')
     expect(openItem).toBeDefined()
     ;(openItem as { onSelect: () => void }).onSelect()
-    expect(onOpenFileRef).toHaveBeenCalledWith('doc-1', undefined)
+    expect(onOpenFileRef).toHaveBeenCalledWith('doc-1')
   })
 
   it('contributes the facet doorway only when a plugin targets a node', () => {

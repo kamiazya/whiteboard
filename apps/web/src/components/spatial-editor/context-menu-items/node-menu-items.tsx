@@ -15,7 +15,6 @@ import {
   frameBackgroundStyle,
   isFrame,
   nodeFile,
-  nodeSubpath,
   nodeText,
   nodeUrl,
   type SpatialCanvas,
@@ -215,7 +214,7 @@ function pushReferenceBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput)
       verbs.push({
         label: 'Open canvas',
         icon: <ExternalLink />,
-        onSelect: () => onOpenFileRef(fileRef, nodeSubpath(node)),
+        onSelect: () => onOpenFileRef(fileRef),
       })
     }
     if (fileRefOptions !== undefined) {

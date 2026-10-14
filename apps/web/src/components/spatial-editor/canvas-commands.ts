@@ -63,7 +63,7 @@ export interface CanvasCommands {
   readonly createNodeAt: (point: Point) => void
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly openLinkNode: (node: SpatialNode) => void
-  readonly onOpenFileRef?: (file: string, subpath?: string) => void
+  readonly onOpenFileRef?: (file: string) => void
   readonly onAddImage?: (file: File) => Promise<ImageStoreResult>
   readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
   readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void

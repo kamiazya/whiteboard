@@ -10,7 +10,7 @@
 // decided.
 
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { isFrame, nodeFile, nodeSubpath, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
+import { isFrame, nodeFile, nodeText, nodeUrl } from '@kamiazya/whiteboard-model'
 import { hitTest } from '../../lib/spatial/geometry.js'
 import { strokeBounds } from '../../lib/spatial/stroke-group.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -229,7 +229,7 @@ function runPrimaryAction(
     missingFileRef?.(file) !== true
   ) {
     applyResult(result)
-    onOpenFileRef(file, nodeSubpath(node))
+    onOpenFileRef(file)
     return true
   }
   return false

@@ -273,8 +273,10 @@ export interface SpatialEditorProps {
   /**
    * Opens the document a reference names: a file node's, and a document link
    * drawn in a text node. Absent → follow hides, and such a link is inert.
+   * A file node's `subpath` is a label on its card only: no host scrolls to
+   * a heading, so the opener is not handed one.
    */
-  readonly onOpenFileRef?: (file: string, subpath?: string) => void
+  readonly onOpenFileRef?: (file: string) => void
   /**
    * Opens a text node's body on a surface the HOST owns — the composition
    * root already holds the seams a full markdown editor needs (alias
