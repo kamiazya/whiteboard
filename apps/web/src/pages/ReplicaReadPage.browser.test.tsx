@@ -375,11 +375,11 @@ describe('ReplicaReadPage', () => {
     document.removeEventListener('click', record)
     expect(prevented).toEqual([true])
     await screen.findAllByText(/Hello from the cache/)
-    // Switching documents can leave a save pending, which the unmount flushes;
-    // it must land while the key is held, before teardown forgets it.
-    cleanup()
+    // Opening a note is not an edit: nothing is waiting to be saved, which
+    // `pagehide` would flush at once.
+    window.dispatchEvent(new Event('pagehide'))
     await Promise.resolve()
-    await Promise.all(save.mock.results.map((result) => result.value))
+    expect(save).not.toHaveBeenCalled()
     save.mockRestore()
   })
 
