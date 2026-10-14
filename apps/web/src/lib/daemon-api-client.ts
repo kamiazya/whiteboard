@@ -1,4 +1,5 @@
 import {
+  type CreateDocumentV1Request,
   createDocumentV1ResponseSchema,
   type createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
@@ -27,6 +28,7 @@ import {
   type InstallFontResponse,
   installFontResponseSchema,
   type LinkifyMentionsResponse,
+  type LinkifyMentionsV1Request,
   type ListDocumentsResponse,
   type ListFontsResponse,
   type ListTrashResponse,
@@ -210,7 +212,11 @@ export function createDocument(
       headers: { 'Content-Type': 'application/json' },
       // `name` stays omitted rather than null: v1's input is `.strict()` and
       // the field is optional, so a null would be refused outright.
-      body: JSON.stringify({ path, kind, ...(name === undefined ? {} : { name }) }),
+      body: JSON.stringify({
+        path,
+        kind,
+        ...(name === undefined ? {} : { name }),
+      } satisfies CreateDocumentV1Request),
     },
   )
 }
@@ -443,7 +449,7 @@ export function linkifyDocumentMentions(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetDocumentId }),
+      body: JSON.stringify({ targetDocumentId } satisfies LinkifyMentionsV1Request),
     },
   )
 }

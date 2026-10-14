@@ -24,6 +24,7 @@ import {
   tenantPeopleResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/tenant-people'
 import {
+  type changeWorkspaceRoleRequestSchema,
   invitationLinkResponseSchema,
   removeWorkspacePersonResponseSchema,
   workspacePeopleRefusalSchema,
@@ -123,7 +124,7 @@ export const workspacePeople = {
       fetchFn,
       workspacePersonApiUrl(workspaceId, userId),
       workspacePersonSchema,
-      json('PATCH', { role }),
+      json('PATCH', { role } satisfies z.infer<typeof changeWorkspaceRoleRequestSchema>),
     ),
   remove: (fetchFn: Fetch, workspaceId: string, userId: string) =>
     call(fetchFn, workspacePersonApiUrl(workspaceId, userId), removeWorkspacePersonResponseSchema, {

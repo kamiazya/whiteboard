@@ -23,12 +23,13 @@ import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client
 import {
   type ReplicaTier,
   rotateReplicaKeyResponseSchema,
+  type setReplicaTierRequestSchema,
   setReplicaTierResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { describeThrown } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
-import type { ZodType } from 'zod'
+import type { ZodType, z } from 'zod'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
 import {
@@ -246,7 +247,7 @@ export async function runDaemonSetReplicaTier(
     {
       method: 'PUT',
       pathFor: replicaTierApiUrl,
-      body: { tier: options.tier },
+      body: { tier: options.tier } satisfies z.infer<typeof setReplicaTierRequestSchema>,
     },
     setReplicaTierResponseSchema,
   )
