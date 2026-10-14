@@ -149,7 +149,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect(census.facet).toHaveLength(19)
   })
 
-  it('so 56 of the 78 positions a document can hold are outside the format', () => {
+  it('classifies the positions outside the format', () => {
     // Both numbers move for DIFFERENT reasons, which is the reading.
     //
     // The denominator grew by 14 because a LINE is a new element with its own
