@@ -7,8 +7,8 @@ Consolidation complete. No public release has been cut from this path yet.
 - `release.yml`: single production path — release-please + npm OIDC provenance
   (`publish-mcp` job) + Docker build/push/SBOM/cosign keyless sign
   (`docker-publish-sign` job).
-- `ci.yml`: non-destructive publish dry-run verification (`dry-run-npm` and
-  `dry-run-docker` jobs, no OIDC/push/sign).
+- `ci.yml`: non-destructive publish dry-run verification (the npm dry-run as
+  steps of `verify`, and the `dry-run-docker` job; no OIDC/push/sign).
 - `publish-production.yml` and `publish-dry-run.yml` deleted.
 
 ## Target artifacts
@@ -111,7 +111,7 @@ publish or signing gate:
   says the real step runs in `release.yml` (`npm publish --provenance`).
 - `publish:docker-sign` (root package.json) — placeholder; exits 1 and says
   the real step runs in `release.yml` (cosign keyless signing).
-- `ci.yml` dry-run jobs — `dry-run-npm` and `dry-run-docker`.
+- `ci.yml` dry-run steps — `verify`'s npm dry-run and the `dry-run-docker` job.
   No `id-token: write`, no secrets, no registry push, no cosign signing.
 - Static drift tests: `publish-dry-run-policy.test.ts` — verifies
   `futureGateId` → script mapping, `implementedNow: false`, no premature

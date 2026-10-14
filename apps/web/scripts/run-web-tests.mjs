@@ -17,10 +17,15 @@ import { spawn, spawnSync } from 'node:child_process'
 import process from 'node:process'
 import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 
-/** The two configs that together are "the apps/web suite". */
+/**
+ * The two projects that together are "the apps/web suite", each run through
+ * the `vitest.suite.config.ts` aggregate: a run of a single config directly
+ * leaves vitest's scratch directory behind in TMPDIR.
+ */
+const SUITE = ['run', '--config', 'vitest.suite.config.ts', '--project']
 export const RUNS = [
-  { label: 'web-jsdom', args: ['run'] },
-  { label: 'web-node', args: ['run', '--config', 'vitest.node.config.ts'] },
+  { label: 'web-jsdom', args: [...SUITE, 'web-jsdom'] },
+  { label: 'web-node', args: [...SUITE, 'web-node'] },
 ]
 
 /**

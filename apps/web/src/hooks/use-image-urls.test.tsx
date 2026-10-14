@@ -106,6 +106,51 @@ describe('useImageUrls', () => {
     await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:asset:slow'))
   })
 
+  it('never installs a URL its cancelled load revoked, so a ref asked for again is fresh', async () => {
+    // A row scrolls away mid-load and back. Were the revoked URL installed,
+    // the ref would count as held, never be asked for again, and its picture
+    // would stay broken for the life of the page.
+    const revoked = new Set<string>()
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => {
+      revoked.add(url)
+    })
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let minted = 0
+    const load = vi.fn(async (ref: string) => {
+      if (ref === 'asset:a' && minted === 0) await gate
+      minted += 1
+      return `blob:${ref}:${minted}`
+    })
+    const { result, rerender } = renderHook(({ refs }) => useImageUrls(refs, load), {
+      initialProps: { refs: ['asset:a'] },
+    })
+    await waitFor(() => expect(load).toHaveBeenCalledWith('asset:a'))
+    rerender({ refs: ['asset:b'] })
+    await waitFor(() => expect(result.current.get('asset:b')).toBeDefined())
+    release?.()
+    await waitFor(() => expect(revoked.size).toBeGreaterThan(0))
+    rerender({ refs: ['asset:a'] })
+    await waitFor(() => expect(result.current.get('asset:a')).toBeDefined())
+    expect(revoked.has(result.current.get('asset:a') as string)).toBe(false)
+  })
+
+  it('does not ask again for a picture it already holds when another ref joins', async () => {
+    // A viewport change adds refs beside held ones; re-reading the held ones
+    // would fetch a board's pictures again on every scroll.
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const load = vi.fn(async (ref: string) => `blob:${ref}`)
+    const { result, rerender } = renderHook(({ refs }) => useImageUrls(refs, load), {
+      initialProps: { refs: ['asset:a'] },
+    })
+    await waitFor(() => expect(result.current.get('asset:a')).toBe('blob:asset:a'))
+    rerender({ refs: ['asset:a', 'asset:b'] })
+    await waitFor(() => expect(result.current.get('asset:b')).toBe('blob:asset:b'))
+    expect(load.mock.calls.filter(([ref]) => ref === 'asset:a')).toHaveLength(1)
+  })
+
   it('revokes what it installed, on unmount', async () => {
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
     const { result, unmount } = renderHook(() =>

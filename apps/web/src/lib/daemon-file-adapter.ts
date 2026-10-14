@@ -67,6 +67,46 @@ async function loadSnapshotDocument(
   }
 }
 
+/**
+ * What one PUT of the daemon's file route came to, worded for the person:
+ * `status` when the daemon answered and refused, `error` when it could not be
+ * reached.
+ */
+export type DaemonImagePut =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string; readonly status: number }
+  | {
+      readonly ok: false
+      readonly reason: string
+      readonly status?: undefined
+      readonly error: unknown
+    }
+
+/**
+ * The one writer of the file route, shared by the daemon keeper's image seam
+ * and the workspace move, so a refusal reads the same from both. It never
+ * throws and logs nothing: the move reports its outcomes as a list, the seam
+ * as a log line.
+ */
+export async function putDaemonImage(
+  daemonFetch: typeof fetch,
+  url: string,
+  image: Blob,
+  contentType: string,
+): Promise<DaemonImagePut> {
+  try {
+    const res = await daemonFetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: image,
+    })
+    if (res.ok) return { ok: true }
+    return { ok: false, reason: uploadRefusalReason(res.status), status: res.status }
+  } catch (error) {
+    return { ok: false, reason: 'Could not reach the daemon to store that image.', error }
+  }
+}
+
 export function createDaemonFileAdapter({
   daemonFetch,
   daemonBaseUrl,
@@ -105,23 +145,13 @@ export function createDaemonFileAdapter({
 
     async storeImage(file) {
       const id = crypto.randomUUID()
-      try {
-        const res = await daemonFetch(fileUrl(id), {
-          method: 'PUT',
-          // The route answers 415 for a Content-Type it has no extension
-          // mapping for, so the picked file's own type has to travel.
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-        if (!res.ok) {
-          log.warn('image upload rejected', { status: res.status })
-          return { ok: false, reason: uploadRefusalReason(res.status) }
-        }
-        return { ok: true, ref: newImageRef(id) }
-      } catch (err) {
-        log.warn('image upload failed', { err })
-        return { ok: false, reason: 'Could not reach the daemon to store that image.' }
-      }
+      // The route answers 415 for a Content-Type it has no extension
+      // mapping for, so the picked file's own type has to travel.
+      const put = await putDaemonImage(daemonFetch, fileUrl(id), file, file.type)
+      if (put.ok) return { ok: true, ref: newImageRef(id) }
+      if (put.status === undefined) log.warn('image upload failed', { err: put.error })
+      else log.warn('image upload rejected', { status: put.status })
+      return { ok: false, reason: put.reason }
     },
   }
 }

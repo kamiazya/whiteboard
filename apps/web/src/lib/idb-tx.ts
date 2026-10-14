@@ -10,10 +10,29 @@
 import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb } from './browser-idb.js'
 
+/** True for `any` and nothing else: only `any` absorbs the `1 &` intersection. */
+type IsAny<T> = 0 extends 1 & T ? true : false
+
+/**
+ * What a request answers, with the DOM's `any` turned into `unknown`. The DOM
+ * types a stored value (`get`, `getAll`) as `any`, which is assignable
+ * anywhere with no visible cast — a read that skipped its schema would
+ * compile and no `as` grep would find it. `unknown` makes the compiler send
+ * every stored value through a parse or a type check before use.
+ */
+export type Answered<T> =
+  IsAny<T> extends true
+    ? unknown
+    : T extends readonly (infer E)[]
+      ? IsAny<E> extends true
+        ? unknown[]
+        : T
+      : T
+
 /** One IndexedDB request as a promise. */
-export function request<T>(req: IDBRequest<T>): Promise<T> {
+export function request<T>(req: IDBRequest<T>): Promise<Answered<T>> {
   return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => resolve(req.result as Answered<T>)
     req.onerror = () => reject(req.error)
   })
 }

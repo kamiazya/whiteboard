@@ -45,8 +45,9 @@ import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { type CarriedPlanes, fitCarriedPlanes, readCarriedPlanes } from './carried-planes.js'
+import { putDaemonImage } from './daemon-file-adapter.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { imageRefusal, uploadRefusalReason } from './image-upload-policy.js'
+import { imageRefusal } from './image-upload-policy.js'
 import { describeTransferFailure, errorName, type FailureCopy } from './keeper-transfer-failure.js'
 import { type PromoteWording, requestPromote } from './promote-request.js'
 
@@ -243,15 +244,10 @@ async function transferImages(
       blobs.failed.push({ fileId, reason: refusal })
       continue
     }
-    const res = await fetch(`${keeperBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': contentType },
-      body: blob,
-    }).catch(() => null)
-    if (res === null) {
-      blobs.failed.push({ fileId, reason: 'Could not reach the daemon to store that image.' })
-    } else if (res.ok) blobs.transferred.push(fileId)
-    else blobs.failed.push({ fileId, reason: uploadRefusalReason(res.status) })
+    const url = `${keeperBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`
+    const put = await putDaemonImage(fetch, url, blob, contentType)
+    if (put.ok) blobs.transferred.push(fileId)
+    else blobs.failed.push({ fileId, reason: put.reason })
   }
   return blobs
 }

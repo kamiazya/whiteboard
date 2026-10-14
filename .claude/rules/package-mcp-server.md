@@ -214,6 +214,12 @@ roots, `startStdioServer` for stdio, both through `routeServerCoreLogs()`.
 Loading the tool registry arms nothing; `composition-roots.guard.test.ts`
 reads `createApp`'s source and requires the stdio root to call it.
 
+## Every atomic write is durable
+
+`writeFileAtomic` (beside the target) and `writeFileAtomicStaged` (under
+`.pending-writes/`) share one commit tail, and `writeSecretFileAtomicSync`
+fsyncs too. Choose by where the write may stage, never by durability.
+
 ## A store follows the directory it is handed
 
 **Through a `StoreScope`.** `bootSelfHostDeps(dataDir)` builds the document

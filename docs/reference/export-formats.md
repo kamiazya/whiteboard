@@ -424,7 +424,8 @@ The export draws what the editor shows, including what the document points at:
 - **A canvas** exports with its pictures, the note or board a file node points
   at, what a text node embeds with `![[…]]`, and the highlights of comment
   threads about a passage. A file node pointing at another board draws its
-  miniature whatever its size on screen, as the daemon's export does. Math
+  miniature whatever its size on screen, as `wb_scene_render` does with
+  `embedReferences`. Math
   blocks and Mermaid diagrams are drawn as the editor draws them, in a text
   node and in the note a file node or an embed shows; `wb_scene_render` draws
   the same canvas with them as source.

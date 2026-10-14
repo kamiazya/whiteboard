@@ -16,6 +16,15 @@ import { writeFileAtomic } from './write-file-atomic.js'
 // The chmod after the write is best-effort, so a test can refuse it to see
 // what the write carried on its own.
 const chmodGate = vi.hoisted(() => ({ refuse: false }))
+// What the write did to the disk, in order: which path a handle was synced
+// for, and when the rename ran. Records only; every call is real.
+const fsEvents = vi.hoisted(() => ({
+  log: [] as string[],
+  /** A sync of this path fails with this code, as a disk would report it. */
+  failSync: undefined as { path: string; code: string } | undefined,
+  /** An open of this path fails with this code, as Windows does for a directory. */
+  failOpen: undefined as { path: string; code: string } | undefined,
+}))
 vi.mock('node:fs/promises', async (original) => {
   const real = await original<typeof import('node:fs/promises')>()
   return {
@@ -24,6 +33,30 @@ vi.mock('node:fs/promises', async (original) => {
       chmodGate.refuse
         ? Promise.reject(Object.assign(new Error('operation not permitted'), { code: 'EPERM' }))
         : real.chmod(...args),
+    open: (async (...args: Parameters<typeof real.open>) => {
+      if (fsEvents.failOpen?.path === String(args[0])) {
+        throw Object.assign(new Error(`open failed: ${fsEvents.failOpen.code}`), {
+          code: fsEvents.failOpen.code,
+        })
+      }
+      const handle = await real.open(...args)
+      const path = String(args[0])
+      const sync = handle.sync.bind(handle)
+      handle.sync = async () => {
+        if (fsEvents.failSync?.path === path) {
+          throw Object.assign(new Error(`sync failed: ${fsEvents.failSync.code}`), {
+            code: fsEvents.failSync.code,
+          })
+        }
+        await sync()
+        fsEvents.log.push(`sync ${path}`)
+      }
+      return handle
+    }) as typeof real.open,
+    rename: (async (...args: Parameters<typeof real.rename>) => {
+      await real.rename(...args)
+      fsEvents.log.push(`rename ${String(args[0])}`)
+    }) as typeof real.rename,
   }
 })
 
@@ -53,6 +86,9 @@ describe('writeFileAtomic', () => {
   })
   afterEach(() => {
     chmodGate.refuse = false
+    fsEvents.log = []
+    fsEvents.failSync = undefined
+    fsEvents.failOpen = undefined
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -85,6 +121,61 @@ describe('writeFileAtomic', () => {
     mkdirSync(target)
     await expect(writeFileAtomic(target, 'x')).rejects.toThrow()
     expect(readdirSync(dir)).toEqual(['is-a-dir'])
+  })
+
+  it('syncs the staged bytes before the rename names them', async () => {
+    // Without it a crash after the rename can leave the final name on a
+    // zero-length file: a filesystem need not order a new file's data before
+    // a rename of it.
+    await writeFileAtomic(join(dir, 'durable.bin'), new Uint8Array(16))
+
+    const renamed = fsEvents.log.findIndex((e) => e.startsWith('rename '))
+    expect(renamed).toBeGreaterThan(-1)
+    const stagedPath = fsEvents.log[renamed]?.slice('rename '.length)
+    expect(fsEvents.log.slice(0, renamed)).toContain(`sync ${stagedPath}`)
+  })
+
+  it('syncs the target directory after the rename, so the rename survives too', async () => {
+    await writeFileAtomic(join(dir, 'durable.bin'), new Uint8Array(16))
+
+    const renamed = fsEvents.log.findIndex((e) => e.startsWith('rename '))
+    expect(renamed).toBeGreaterThan(-1)
+    expect(fsEvents.log.slice(renamed + 1)).toContain(`sync ${dir}`)
+  })
+
+  it('fails the write when the directory sync reports a storage error', async () => {
+    fsEvents.failSync = { path: dir, code: 'EIO' }
+    await expect(writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))).rejects.toMatchObject({
+      code: 'EIO',
+    })
+  })
+
+  // Each code says the platform cannot sync a directory at all, and each can
+  // arrive from either step: Windows refuses the open (EISDIR, EPERM,
+  // EACCES), some filesystems refuse the fsync of an open directory.
+  const CANNOT_SYNC_DIRECTORY = ['EISDIR', 'EPERM', 'EACCES', 'EINVAL', 'ENOTSUP', 'EBADF']
+
+  it.each(
+    CANNOT_SYNC_DIRECTORY,
+  )('lets the write land where the directory cannot be opened (%s)', async (code) => {
+    fsEvents.failOpen = { path: dir, code }
+    await writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))
+    expect([...readFileSync(join(dir, 'blob'))]).toEqual([1])
+  })
+
+  it.each(
+    CANNOT_SYNC_DIRECTORY,
+  )('lets the write land where the directory cannot be synced (%s)', async (code) => {
+    fsEvents.failSync = { path: dir, code }
+    await writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))
+    expect([...readFileSync(join(dir, 'blob'))]).toEqual([1])
+  })
+
+  it('fails the write when opening the directory reports a storage error', async () => {
+    fsEvents.failOpen = { path: dir, code: 'EIO' }
+    await expect(writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))).rejects.toMatchObject({
+      code: 'EIO',
+    })
   })
 
   it.skipIf(!CHMOD_IS_OBSERVABLE)('honours the mode when one is given', async () => {

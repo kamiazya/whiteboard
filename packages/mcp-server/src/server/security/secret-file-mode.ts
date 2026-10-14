@@ -15,9 +15,21 @@
  * because both touch the filesystem.
  */
 
-import { chmodSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname } from 'node:path'
 import { isMissingFileError } from '../../shared/errno.js'
+import { syncDirectorySync } from '../../shared/write-file-atomic.js'
 
 const OWNER_ONLY_FILE = 0o600
 const OWNER_ONLY_DIR = 0o700
@@ -97,13 +109,33 @@ export function readSecretFileIfPresentSync(filepath: string): string | null {
  * temp file the rename then carries those bits onto the secret itself.
  * Measured against Node: a 0o644 file rewritten with `{ mode: 0o600 }` reads
  * back 0o644.
+ *
+ * The staged secret is fsynced before the rename and the directory after it,
+ * as `commitStagedWrite` does for the async writers: without that a crash can
+ * leave the name on a zero-length file, which every caller reads as invalid
+ * and mints over — a new root key invalidates every issued token, a new
+ * identity is someone else to every client that pinned the old one.
  */
 export function writeSecretFileAtomicSync(filepath: string, contents: string): void {
   const dir = dirname(filepath)
   mkdirSync(dir, { recursive: true, mode: OWNER_ONLY_DIR })
   chmodBestEffort(dir, OWNER_ONLY_DIR)
   const tmpPath = `${filepath}.tmp`
-  writeFileSync(tmpPath, contents, { mode: OWNER_ONLY_FILE })
-  chmodBestEffort(tmpPath, OWNER_ONLY_FILE)
-  renameSync(tmpPath, filepath)
+  try {
+    const fd = openSync(tmpPath, 'w', OWNER_ONLY_FILE)
+    try {
+      writeFileSync(fd, contents)
+      chmodBestEffort(tmpPath, OWNER_ONLY_FILE)
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    renameSync(tmpPath, filepath)
+  } catch (err) {
+    // The staging name is fixed, so a leftover would hold a secret that never
+    // went live until the next write happened to reuse it.
+    rmSync(tmpPath, { force: true })
+    throw err
+  }
+  syncDirectorySync(dir)
 }

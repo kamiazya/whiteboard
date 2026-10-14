@@ -1,5 +1,15 @@
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  truncate,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -156,6 +166,40 @@ describe('the backup blob mirror', () => {
     expect((await stat(mirroredPath)).mtimeMs).toBe(first.mtimeMs)
   })
 
+  // What a crash after an unsynced rename can leave: the name, and fewer
+  // bytes than were written. A skip on "occupied" alone would make it
+  // permanent in every later backup that references the blob.
+  it('repairs a mirrored blob left shorter than its source', async () => {
+    const contents = 'x'.repeat(10_000)
+    const digest = await putBlob(contents)
+    await mirrorBlobsIntoBackup(dataDir, backupRoot)
+    const mirroredPath = join(backupRoot, 'blobs', digest.slice(0, 2), digest.slice(2))
+
+    await truncate(mirroredPath, 0)
+    await mirrorBlobsIntoBackup(dataDir, backupRoot)
+    expect(await readFile(mirroredPath, 'utf8')).toBe(contents)
+
+    await truncate(mirroredPath, 4_000)
+    await mirrorBlobsIntoBackup(dataDir, backupRoot)
+    expect(await readFile(mirroredPath, 'utf8')).toBe(contents)
+  })
+
+  // The live store is not the judge: a SOURCE left short is the damaged
+  // side, and copying it over the mirror would destroy the one good copy.
+  it('keeps a mirrored blob when the source is the shorter one', async () => {
+    const contents = 'y'.repeat(10_000)
+    const digest = await putBlob(contents)
+    await mirrorBlobsIntoBackup(dataDir, backupRoot)
+    const mirroredPath = join(backupRoot, 'blobs', digest.slice(0, 2), digest.slice(2))
+
+    await truncate(
+      join(blobsRoot(dataDir, SELF_HOST_TENANT_ID), digest.slice(0, 2), digest.slice(2)),
+      0,
+    )
+    await mirrorBlobsIntoBackup(dataDir, backupRoot)
+    expect(await readFile(mirroredPath, 'utf8')).toBe(contents)
+  })
+
   /**
    * The instrument, kept as an assertion rather than a note: three passes
    * over a store that grows a little each time must not cost three copies of
@@ -294,6 +338,16 @@ describe('the backup blob mirror', () => {
       expect(selfFiles(manifest)).toEqual({
         '01JWORKSPACE00000000000000/versions/v1.png': digest,
       })
+    })
+
+    it('repairs a mirrored file whose bytes no longer match its digest', async () => {
+      const digest = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'thumb bytes')
+      await mirrorBlobsIntoBackup(dataDir, backupRoot)
+      const mirroredPath = join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2))
+
+      await truncate(mirroredPath, 0)
+      await mirrorBlobsIntoBackup(dataDir, backupRoot)
+      expect(await readFile(mirroredPath, 'utf8')).toBe('thumb bytes')
     })
 
     /**

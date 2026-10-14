@@ -13,6 +13,12 @@ import { DocumentFileStore, documentFileRecordSchema } from './document-file-sto
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
 claimIsolatedWhiteboardDb('document-file-store')
 
+/** The bytes read back under `fileId`, or null when the read found no blob. */
+async function bytesOf(store: DocumentFileStore, fileId: string): Promise<ArrayBuffer | null> {
+  const read = await store.read(fileId)
+  return read.kind === 'blob' ? read.blob.arrayBuffer() : null
+}
+
 /** Rounds of the put-vs-sweep race: unserialised, most of them lose the image. */
 const ROUNDS = 12
 
@@ -20,17 +26,17 @@ describe('DocumentFileStore', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(clearWhiteboardDb)
 
-  it('put then get round-trips a Blob with identical bytes and mimeType', async () => {
+  it('put then read round-trips a Blob with identical bytes and mimeType', async () => {
     const store = new DocumentFileStore()
     const bytes = new Uint8Array([1, 2, 3, 4, 5])
     const blob = new Blob([bytes], { type: 'image/png' })
 
     await store.put('file-1', { mimeType: 'image/png', blob, created: 123 })
-    const result = await store.get('file-1')
+    const result = await store.read('file-1')
 
-    expect(result).not.toBeNull()
-    expect(result?.type).toBe('image/png')
-    const resultBytes = new Uint8Array(await (result as Blob).arrayBuffer())
+    if (result.kind !== 'blob') throw new Error(`expected a blob, read ${result.kind}`)
+    expect(result.blob.type).toBe('image/png')
+    const resultBytes = new Uint8Array(await result.blob.arrayBuffer())
     expect(Array.from(resultBytes)).toEqual(Array.from(bytes))
   })
 
@@ -60,9 +66,9 @@ describe('DocumentFileStore', () => {
     }
   })
 
-  it('get returns null for an unknown fileId', async () => {
+  it('reads an unknown fileId as absent', async () => {
     const store = new DocumentFileStore()
-    expect(await store.get('does-not-exist')).toBeNull()
+    expect(await store.read('does-not-exist')).toEqual({ kind: 'absent' })
   })
 
   it('a put racing a sweep keeps its image when a swept sibling shared its bytes', async () => {
@@ -92,7 +98,9 @@ describe('DocumentFileStore', () => {
           })
         })(),
       ])
-      if ((await new DocumentFileStore().get(`asset:new-${round}`)) === null) lost.push(round)
+      if ((await new DocumentFileStore().read(`asset:new-${round}`)).kind !== 'blob') {
+        lost.push(round)
+      }
     }
     expect(lost).toEqual([])
   })
@@ -126,8 +134,8 @@ describe('DocumentFileStore over the blob store', () => {
     await store.put('file-b', { mimeType: 'image/png', blob: new Blob([PNG]), created: 2 })
 
     expect(await blobCount()).toBe(1)
-    expect(await (await store.get('file-a'))?.arrayBuffer()).toEqual(PNG.buffer)
-    expect(await (await store.get('file-b'))?.arrayBuffer()).toEqual(PNG.buffer)
+    expect(await bytesOf(store, 'file-a')).toEqual(PNG.buffer)
+    expect(await bytesOf(store, 'file-b')).toEqual(PNG.buffer)
   })
 
   it('keeps the bytes while another file still references them', async () => {
@@ -140,8 +148,8 @@ describe('DocumentFileStore over the blob store', () => {
 
     await store.delete('file-a')
 
-    expect(await store.get('file-a')).toBeNull()
-    expect(await (await store.get('file-b'))?.arrayBuffer()).toEqual(PNG.buffer)
+    expect(await store.read('file-a')).toEqual({ kind: 'absent' })
+    expect(await bytesOf(store, 'file-b')).toEqual(PNG.buffer)
     expect(await blobCount()).toBe(1)
   })
 
@@ -153,7 +161,7 @@ describe('DocumentFileStore over the blob store', () => {
 
     await store.delete('only')
 
-    expect(await store.get('only')).toBeNull()
+    expect(await store.read('only')).toEqual({ kind: 'absent' })
     expect(await blobCount()).toBe(0)
   })
 
@@ -179,13 +187,13 @@ describe('DocumentFileStore over the blob store', () => {
     })
 
     const store = new DocumentFileStore()
-    expect(await (await store.get('legacy'))?.arrayBuffer()).toEqual(PNG.buffer)
+    expect(await bytesOf(store, 'legacy')).toEqual(PNG.buffer)
 
     // Converted: the bytes are in the blob store, and the record now points
     // at them. Polled, because the conversion is deliberately not awaited —
     // it must not delay the image the caller asked for.
     await vi.waitFor(async () => expect(await blobCount()).toBe(1), { timeout: 3000 })
-    expect(await (await store.get('legacy'))?.arrayBuffer()).toEqual(PNG.buffer)
+    expect(await bytesOf(store, 'legacy')).toEqual(PNG.buffer)
   })
 
   it('reads a reference whose bytes are gone as absent, not unreadable', async () => {

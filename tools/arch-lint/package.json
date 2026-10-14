@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.node.config.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@typescript/typescript6": "^6.0.2"

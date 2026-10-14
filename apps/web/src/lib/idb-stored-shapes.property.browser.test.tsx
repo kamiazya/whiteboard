@@ -67,6 +67,13 @@ afterAll(clearWhiteboardDb)
 const bytesArb = fc.uint8Array({ maxLength: 2048 })
 const asList = (bytes: ArrayLike<number>): number[] => Array.from(bytes)
 
+/** The image stored under `fileId`; anything but a blob fails the property. */
+async function blobRead(store: DocumentFileStore, fileId: string): Promise<Blob> {
+  const read = await store.read(fileId)
+  if (read.kind !== 'blob') throw new Error(`expected a blob under ${fileId}, read ${read.kind}`)
+  return read.blob
+}
+
 /**
  * What an upload can carry as its type: the ordinary ones, arbitrary text,
  * and the EMPTY one a `Blob` answers for a type it will not carry.
@@ -151,12 +158,11 @@ describe('DocumentFileStore', () => {
       const store = new DocumentFileStore()
       const fileId = `file-${generateDocumentId()}`
       await store.put(fileId, { mimeType, blob: new Blob([bytes], { type: mimeType }), created })
-      const got = await store.get(fileId)
-      expect(got).not.toBeNull()
-      expect(asList(new Uint8Array(await (got as Blob).arrayBuffer()))).toEqual(asList(bytes))
+      const got = await blobRead(store, fileId)
+      expect(asList(new Uint8Array(await got.arrayBuffer()))).toEqual(asList(bytes))
       // The record keeps the type as given; the Blob built from it normalises
       // the way every Blob does, so the expectation is built the same way.
-      expect(got?.type).toBe(new Blob([], { type: mimeType }).type)
+      expect(got.type).toBe(new Blob([], { type: mimeType }).type)
     },
   )
 
@@ -176,9 +182,8 @@ describe('DocumentFileStore', () => {
         files.put({ v: 1, mimeType, created, blob }, fileId),
       )
       const store = new DocumentFileStore()
-      const got = await store.get(fileId)
-      expect(got).not.toBeNull()
-      expect(asList(new Uint8Array(await (got as Blob).arrayBuffer()))).toEqual(asList(bytes))
+      const got = await blobRead(store, fileId)
+      expect(asList(new Uint8Array(await got.arrayBuffer()))).toEqual(asList(bytes))
 
       const rewritten = await vi.waitFor(async () => {
         const record = documentFileRecordSchema.parse(
@@ -191,8 +196,8 @@ describe('DocumentFileStore', () => {
       expect(rewritten).toMatchObject({ mimeType, created })
       expect(await new IdbBlobStore().has({ ref: rewritten.ref })).toEqual({ exists: true })
       // And the image still reads, now through the blob store.
-      const again = await store.get(fileId)
-      expect(asList(new Uint8Array(await (again as Blob).arrayBuffer()))).toEqual(asList(bytes))
+      const again = await blobRead(store, fileId)
+      expect(asList(new Uint8Array(await again.arrayBuffer()))).toEqual(asList(bytes))
     },
   )
 })

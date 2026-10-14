@@ -740,6 +740,7 @@ describe('auto-compact disposal', () => {
       releaseReschedule = resolve
     })
     const rescheduleCallCount = { count: 0 }
+    let timersAfterReschedule: number | null = null
     const countingStore = new Proxy(store, {
       get(target, prop, receiver) {
         if (prop === 'earliestWorkspaceFrontiers') {
@@ -757,6 +758,7 @@ describe('auto-compact disposal', () => {
           return async (workspaceId: string) => {
             await rescheduleGate
             scheduleAutoCompact('session1', countingStore, { debounceMs: 0 })
+            timersAfterReschedule = _autoCompactTimerCountForTests()
             return target.earliestWorkspaceFrontiers(workspaceId)
           }
         }
@@ -779,6 +781,8 @@ describe('auto-compact disposal', () => {
     await disposePromise
 
     expect(_inFlightAutoCompactCountForTests()).toBe(0)
+    // Read before the next clear pass, which would cancel an accepted timer too.
+    expect(timersAfterReschedule).toBe(0)
     // debounceMs: 0 still yields a macrotask tick before firing; give it a
     // chance to fire if it were ever going to, then confirm it didn't.
     await new Promise((r) => setTimeout(r, 20))

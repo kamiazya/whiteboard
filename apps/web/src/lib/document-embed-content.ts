@@ -23,6 +23,7 @@ import type {
 } from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
+import { imageRefusal } from './image-upload-policy.js'
 import { readLoadedFileDocument } from './read-loaded-file-document.js'
 import { loadDocumentContent } from './workspace-content.js'
 
@@ -129,8 +130,13 @@ export async function loadBrowserReference(
 /**
  * Stores a picked/dropped/pasted image in the canvas file store and answers
  * the reference for the created file node, or why it could not be stored.
+ * The upload policy is applied here, in the keeper, so a writer into the
+ * seam that never asked (a paste carrying another page's clipboard payload)
+ * cannot store a picture the workspace could not later move to a daemon.
  */
 async function storeImageAsset(file: File): Promise<ImageStoreResult> {
+  const refusal = imageRefusal(file)
+  if (refusal !== null) return { ok: false, reason: refusal }
   try {
     const ref = newImageRef(crypto.randomUUID())
     await new DocumentFileStore().put(ref, {

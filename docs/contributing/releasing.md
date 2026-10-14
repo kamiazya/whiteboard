@@ -207,7 +207,7 @@ pnpm publish:dry-run:docker # docker build (no push)
 
 `ci.yml` jobs:
 
-- `dry-run-npm`: installs, builds, runs `pnpm publish:dry-run:npm`, uploads tarball
+- `verify`: after its build, runs `pnpm publish:dry-run:npm` and uploads tarball
   artifacts to `npm-tarball-dry-run` (`if-no-files-found: error`).
 - `dry-run-docker`: installs, runs `pnpm publish:dry-run:docker`, uploads metadata to
   `docker-image-dry-run` (`if-no-files-found: warn` — Docker daemon may be unavailable).

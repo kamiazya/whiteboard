@@ -14,15 +14,17 @@
  * naming `ENOENT` is not a hit and neither is a spelling a text pattern
  * would have keyed past. It looks for two families: what makes `.code`
  * readable off a thrown value (an assertion to `ErrnoException` under any
- * alias, or a variable declared as one), and a comparison of a `code` read
- * against an errno literal in any order, as a `switch` case, or through an
- * `includes` over a list of them. POSIX names carry no underscore, which is
+ * alias or to an inline type with a `code` member, or a variable declared as
+ * either), and a comparison of a `code` read against an errno literal in any
+ * order, as a `switch` case, or through an `includes`/`has` over a list or
+ * `Set` of them, inline or bound to a name. POSIX names carry no underscore, which is
  * what keeps Node's own `ERR_*` codes out of it.
  *
- * Only migrations are allowlisted, as history: their text is not edited
- * after the fact. Every other site in the daemon package goes through the
- * helper, and an entry that stops matching fails as stale, like every
- * allowlist here.
+ * Migrations are allowlisted, as history: their text is not edited after
+ * the fact. Beside them, two sites read a driver's non-errno code next to a
+ * sibling field the helper does not answer, each null-safe and each with its
+ * reason. Every other site in the daemon package goes through the helper,
+ * and an entry that stops matching fails as stale, like every allowlist here.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -45,6 +47,15 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     MIGRATION_HISTORY,
   'packages/mcp-server/src/server/store/db/migrations/0019-workspace-canonical-id.ts':
     MIGRATION_HISTORY,
+  // Shape-checked rather than cast, so a null throw cannot raise from it; the
+  // code is jose's `ERR_JWT_*`, read in one destructure beside `claim`, which
+  // `errnoCode` does not answer.
+  'packages/mcp-server/src/server/security/oauth-jwt-validator.ts':
+    "reads jose's ERR_JWT_ code beside `claim` through a shape check, not a cast",
+  // Behind `instanceof Error`, so never a null; libsql's `SQLITE_*` code is
+  // read beside `extendedCode`, which `errnoCode` does not answer.
+  'packages/mcp-server/src/server/store/db/upsert-workspace.ts':
+    "reads libsql's SQLITE_ code beside `extendedCode`, after an instanceof Error check",
 }
 
 const errnoSpellings = (source: string, fileName = 'fixture.ts'): string[] =>
@@ -91,6 +102,17 @@ describe('an error code is read in one place', () => {
     ['a cast read later', 'const e = err as NodeJS.ErrnoException\nthrow e'],
     ['an angle-bracket cast', 'const c = (<NodeJS.ErrnoException>err).code'],
     ['a typed local', 'const e: NodeJS.ErrnoException = err\nreturn e.code'],
+    ['a cast to an inline code type', 'const c = (err as { code?: unknown } | null)?.code'],
+    ['an angle-bracket inline code type', 'const c = (<{ code: string }>err).code'],
+    ['a parenthesised inline code type', 'const c = (err as ({ code: string }) | null)?.code'],
+    [
+      'a Set of errno literals asked about a code read',
+      "const TOLERATED = new Set(['EISDIR', 'EPERM'])\nif (TOLERATED.has(code)) x()",
+    ],
+    [
+      'a named list of errno literals asked about a code read',
+      "const TOLERATED = ['EISDIR', 'EPERM'] as const\nif (TOLERATED.includes(err.code)) x()",
+    ],
   ])('recognises %s', (_label, source) => {
     expect(errnoSpellings(source)).not.toEqual([])
   })
@@ -106,9 +128,38 @@ describe('an error code is read in one place', () => {
     // has to have one.
     expect(errnoSpellings("if (['ENOENT', 'READY'].includes(code)) x()")).toEqual([])
     expect(errnoSpellings('if ([].includes(code)) x()')).toEqual([])
+    // A named set is a spelling only when asked about a code READ: asking it
+    // about `errnoCode(err)` is the helper doing the reading.
+    expect(errnoSpellings("const S = new Set(['EISDIR'])\nif (S.has(errnoCode(err))) x()")).toEqual(
+      [],
+    )
+    expect(errnoSpellings("const S = new Set(['READY'])\nif (S.has(code)) x()")).toEqual([])
+    expect(errnoSpellings('const S = new Set()\nif (S.has(code)) x()')).toEqual([])
+    // An inline type is the reader only when it has a `code` member.
+    expect(errnoSpellings('const m = (err as { message?: unknown }).message')).toEqual([])
     expect(errnoSpellings("const m = { code: 'ENOENT' }")).toEqual([])
+    // ...a member of the asserted type itself, not of a type nested inside it.
+    expect(errnoSpellings('const m = (x as { metadata: { code: string } }).metadata')).toEqual([])
     expect(
       errnoSpellings('const t = (err: unknown): err is NodeJS.ErrnoException => !!err'),
+    ).toEqual([])
+  })
+
+  it('asks the binding a query sees, not any collection of that name', () => {
+    const source = [
+      "function tolerated(code: string) {\n  const CODES = ['EPERM']\n  return CODES.includes(code)\n}",
+      "function ready(code: string) {\n  const CODES = ['READY']\n  return CODES.includes(code)\n}",
+    ].join('\n')
+    expect(errnoSpellings(source)).toEqual(['CODES.includes(code)'])
+    expect(
+      errnoSpellings(
+        "const CODES = new Set(['ENOENT'])\nfunction f(code: string) {\n  const CODES = new Set(['READY'])\n  return CODES.has(code)\n}",
+      ),
+    ).toEqual([])
+    expect(
+      errnoSpellings(
+        "const CODES = ['ENOENT']\nconst f = (CODES: string[], code: string) => CODES.includes(code)",
+      ),
     ).toEqual([])
   })
 
@@ -122,6 +173,6 @@ describe('an error code is read in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(6)
   })
 })

@@ -9,6 +9,12 @@
 // The inventory is derived from the root config (the same parser CI's
 // shared-layer step uses), so a new package or a new config is checked with
 // no edit here.
+//
+// The script must also run through a `projects` aggregate. vitest removes
+// each project's scratch directory on close, but the instance a single,
+// non-aggregate config runs as writes its transformed modules to a
+// `<tmpdir>/<id>/ssr` it never removes, so every green run of such a script
+// leaves 3-80 MB behind in TMPDIR.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -23,6 +29,11 @@ const { readVitestProjects } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
 )) as {
   readVitestProjects: (repoRoot: string) => { configPath: string; name: string | undefined }[]
+}
+
+interface WebRun {
+  label: string
+  args: string[]
 }
 
 interface Omission {
@@ -51,6 +62,29 @@ const LEDGER: Record<string, { wrapper: string; omits: Omission }> = {
         'the wrapper is CI test-jsdom (jsdom + web-node); browser halves run via test:browser',
     },
   },
+}
+
+/** The vitest runs a ledgered wrapper makes, read from the wrapper itself. */
+async function wrapperRuns(dir: string, wrapper: string): Promise<WebRun[]> {
+  const module = (await import(pathToFileURL(join(REPO_ROOT, dir, wrapper)).href)) as {
+    RUNS: WebRun[]
+  }
+  return module.RUNS
+}
+
+/** The value of `--config`/`-c` in an argv, or vitest's default config. */
+function configOf(args: readonly string[]): string {
+  const at = args.findIndex((arg) => arg === '--config' || arg === '-c')
+  const inline = args.find((arg) => arg.startsWith('--config='))
+  return (at >= 0 ? args[at + 1] : inline?.slice('--config='.length)) ?? 'vitest.config.ts'
+}
+
+/** Every `--project` value in an argv. */
+function projectFilters(args: readonly string[]): string[] {
+  return args.flatMap((arg, i) => {
+    if (arg.startsWith('--project=')) return [arg.slice('--project='.length)]
+    return arg === '--project' && args[i + 1] !== undefined ? [args[i + 1] as string] : []
+  })
 }
 
 /** `projects: ['./a.config.ts', ...]` in a workspace-level aggregate config. */
@@ -86,9 +120,20 @@ function configsRunByScript(dir: string, script: string): string[] {
 const SCRIPT_OMITS: Record<string, Omission> = {}
 
 const registered = new Map<string, string[]>()
-for (const { configPath } of readVitestProjects(REPO_ROOT)) {
+const projectName = new Map<string, string | undefined>()
+for (const { configPath, name } of readVitestProjects(REPO_ROOT)) {
   const dir = dirname(configPath)
   registered.set(dir, [...(registered.get(dir) ?? []), configPath])
+  projectName.set(configPath, name)
+}
+
+/** The registered configs one wrapper run executes: its aggregate's projects, narrowed by `--project`. */
+function configsRunByWrapperRun(dir: string, run: WebRun): string[] | undefined {
+  const projects = aggregateProjects(dir, configOf(run.args))
+  if (projects === undefined) return undefined
+  const filters = projectFilters(run.args)
+  if (filters.length === 0) return projects
+  return projects.filter((config) => filters.includes(projectName.get(config) ?? ''))
 }
 
 function testScript(dir: string): string | undefined {
@@ -134,6 +179,20 @@ describe('package test scripts run every registered project', () => {
     ).toBeLessThanOrEqual(1)
   })
 
+  it.each(
+    [...registered.keys()].filter((dir) => !(dir in LEDGER)),
+  )('%s runs its test script over a projects aggregate', (dir) => {
+    const script = (testScript(dir) ?? '').trim()
+    expect(
+      script,
+      `${dir}'s "test" script names a single config; a non-aggregate run leaves its scratch directory in TMPDIR — make it a bare \`vitest run\``,
+    ).toBe('vitest run')
+    expect(
+      aggregateProjects(dir, 'vitest.config.ts')?.length ?? 0,
+      `${dir}/vitest.config.ts is not a projects aggregate naming at least one project`,
+    ).toBeGreaterThan(0)
+  })
+
   it.each(Object.entries(SCRIPT_OMITS))('ledgered omission in %s is still real', (dir, entry) => {
     const ran = configsRunByScript(dir, testScript(dir) ?? '')
     for (const config of entry.configs) {
@@ -144,26 +203,35 @@ describe('package test scripts run every registered project', () => {
 
   it.each(
     Object.entries(LEDGER),
-  )('ledgered wrapper %s omits only what it records', (dir, entry) => {
+  )('ledgered wrapper %s runs each half over an aggregate', async (dir, entry) => {
+    const runs = await wrapperRuns(dir, entry.wrapper)
+    expect(runs.length).toBeGreaterThan(1)
+    for (const run of runs) {
+      expect(
+        configsRunByWrapperRun(dir, run),
+        `${entry.wrapper}'s ${run.label} run loads ${configOf(run.args)}, which is not a projects aggregate`,
+      ).toBeDefined()
+      expect(configsRunByWrapperRun(dir, run), `${run.label} selects no project`).not.toEqual([])
+    }
+  })
+
+  it.each(
+    Object.entries(LEDGER),
+  )('ledgered wrapper %s omits only what it records', async (dir, entry) => {
     const script = testScript(dir) ?? ''
     expect(script).toContain(entry.wrapper)
-    const wrapperText = readFileSync(join(REPO_ROOT, dir, entry.wrapper), 'utf-8')
+    const runs = await wrapperRuns(dir, entry.wrapper)
+    const ran = new Set(runs.flatMap((run) => configsRunByWrapperRun(dir, run) ?? []))
     const configs = registered.get(dir) ?? []
     for (const omitted of entry.omits.configs) {
       expect(configs, `${omitted} is not registered`).toContain(omitted)
-      const base = omitted.slice(dir.length + 1)
       expect(
-        wrapperText,
-        `${entry.wrapper} now runs ${base}; drop it from the ledger`,
-      ).not.toContain(base)
+        ran.has(omitted),
+        `${entry.wrapper} now runs ${omitted}; drop it from the ledger`,
+      ).toBe(false)
     }
-    for (const config of configs.filter((c) => !entry.omits.configs.includes(c))) {
-      const base = config.slice(dir.length + 1)
-      // The wrapper's default config is the bare `vitest run`; any other must be named.
-      if (base !== 'vitest.config.ts') {
-        expect(wrapperText, `${entry.wrapper} does not run ${base}`).toContain(base)
-      }
-    }
+    const missing = configs.filter((c) => !entry.omits.configs.includes(c) && !ran.has(c))
+    expect(missing, `${entry.wrapper} does not run: ${missing.join(', ')}`).toEqual([])
   })
 })
 

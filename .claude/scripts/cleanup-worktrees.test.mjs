@@ -16,6 +16,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -29,6 +30,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'cleanup-worktrees.mjs')
 
 const scratchDirs = []
+
+// Every run of the script sweeps vitest scratch out of the OS temp dir, so the
+// runs here get a private one: a real run must never reach this machine's.
+const privateTmp = mkdtempSync(join(tmpdir(), 'cleanup-worktrees-tmp-'))
+scratchDirs.push(privateTmp)
+process.env.TMPDIR = privateTmp
+process.env.TMP = privateTmp
+process.env.TEMP = privateTmp
 
 /** The fixtures' git, and the script's own, without the contributor's global config. */
 // stderr is captured, never echoed: `clone --quiet` still warns about an empty origin there,
@@ -491,4 +500,65 @@ test('a real run signals no process that took over a stale record’s pid', {
   assert.equal(existsSync(marker), false)
   assert.equal(standIn.exitCode, null)
   assert.equal(existsSync(laneDir), false)
+})
+
+/**
+ * A vitest-shaped scratch directory under `root`, its mtimes set `ageMs` into
+ * the past. `freshModule` leaves one nested module file at the current time:
+ * rewriting an existing file bumps no directory's mtime, so only the file says
+ * a run is still using the directory.
+ */
+function seedScratch(root, name, { children = ['ssr'], file = false, freshModule = false, ageMs }) {
+  const dir = join(root, name)
+  const at = new Date(Date.now() - ageMs)
+  for (const child of children) {
+    mkdirSync(join(dir, child), { recursive: true })
+    writeFileSync(join(dir, child, 'a1b2c3'), 'transformed module')
+    if (!freshModule) utimesSync(join(dir, child, 'a1b2c3'), at, at)
+  }
+  if (file) writeFileSync(join(dir, 'notes.txt'), 'not vitest')
+  for (const child of children) utimesSync(join(dir, child), at, at)
+  utimesSync(dir, at, at)
+  return dir
+}
+
+test('sweeps vitest scratch untouched for a day, and only that', () => {
+  const { repoDir } = setupRepos(makeScratch())
+  const root = mkdtempSync(join(privateTmp, 'sweep-'))
+  scratchDirs.push(root)
+  const day = 24 * 60 * 60 * 1000
+  const stale = seedScratch(root, 'dnvID6_lgziDyDWR38k8K', { ageMs: 2 * day })
+  const staleBoth = seedScratch(root, 'K7FVEw3oddD2BEmS3CAtm', {
+    children: ['ssr', 'client'],
+    ageMs: 2 * day,
+  })
+  const fresh = seedScratch(root, 'f-BPkosa6ZVYdaJahmAq2', { ageMs: 60_000 })
+  const freshModule = seedScratch(root, 'Hq3x9_ZpLmN0aBcDeFgHi', {
+    children: ['ssr', 'client'],
+    freshModule: true,
+    ageMs: 2 * day,
+  })
+  const withFile = seedScratch(root, 'QT6U47naGXXVnueMtHqNo', { file: true, ageMs: 2 * day })
+  const otherName = seedScratch(root, 'not-a-vitest-dir', { ageMs: 2 * day })
+  const otherChild = seedScratch(root, 'URao62CTUjYtKU-MLRWeh', {
+    children: ['data'],
+    ageMs: 2 * day,
+  })
+  const env = (extra) => ({ ...realEnv(repoDir), TMPDIR: root, TMP: root, TEMP: root, ...extra })
+
+  const dry = execFileSync('node', [scriptPath, '--dry-run'], {
+    cwd: repoDir,
+    encoding: 'utf-8',
+    env: env(),
+  })
+  assert.match(dry, /would sweep 2 stale vitest scratch/)
+  assert.equal(existsSync(stale), true, 'a dry run removes nothing')
+
+  const real = execFileSync('node', [scriptPath], { cwd: repoDir, encoding: 'utf-8', env: env() })
+  assert.match(real, /swept 2 stale vitest scratch/)
+  assert.equal(existsSync(stale), false)
+  assert.equal(existsSync(staleBoth), false)
+  for (const kept of [fresh, freshModule, withFile, otherName, otherChild]) {
+    assert.equal(existsSync(kept), true, `${kept} is not stale vitest scratch`)
+  }
 })

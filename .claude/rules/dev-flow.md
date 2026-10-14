@@ -103,8 +103,8 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 **Run the Node in `.node-version`** (24 today, which is what CI installs).
 `local-node-version.test.ts` fails naming the consequence, and carries the
-mechanism — on the wrong major `new Response(jsdomBlob)` fails with a message about
-`Blob`, and `packages/search`'s "honours a Prepend" fails on the older Unicode
+mechanism — on the wrong major `new Response(jsdomBlob)` throws
+`object.stream is not a function`, and `packages/search`'s "honours a Prepend" fails on the older Unicode
 table; neither names Node, so they read as real regressions. That guard lives in
 `mcp-node`, so a scoped run does not get it — the root `globalSetup`
 (`.claude/scripts/node-version-banner.mjs`) prints a banner on any project's run

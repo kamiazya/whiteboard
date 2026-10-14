@@ -230,7 +230,14 @@ async function captureBoards(wb, task, trial) {
 
 const scratch = mkdtempSync(join(tmpdir(), 'whiteboard-tool-surface-eval-'))
 const template = join(scratch, 'template')
-const cleanup = () => rmSync(scratch, { recursive: true, force: true })
+// Every trial copies a whole daemon data dir in here, identity file included,
+// so the directory must not outlive the run however it ends. An `exit` hook
+// rather than `finally`: it also runs on each `process.exit` below and on an
+// uncaught throw. A signal does not emit `exit` by itself, so SIGINT/SIGTERM
+// are turned into one — and the lane is long enough that interrupting it once
+// the needed answer has printed is the common way it ends.
+process.once('exit', () => rmSync(scratch, { recursive: true, force: true }))
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => process.exit(130))
 
 console.log('[eval] seeding the fixture workspace')
 const seeded = await connectWhiteboard(template)
@@ -259,7 +266,6 @@ if (DRY_RUN) {
   console.log(
     `[eval] read tasks: ${tasks.filter((t) => t.answer !== undefined).length}, write tasks verified: ${tasks.filter((t) => t.verify !== undefined).length}`,
   )
-  cleanup()
   process.exit(failed === 0 ? 0 : 1)
 }
 
@@ -267,7 +273,6 @@ if (!isCliAvailable('claude')) {
   console.log(
     '[eval] SKIP: claude CLI not found on PATH — this lane needs a local claude install and API quota',
   )
-  cleanup()
   process.exit(0)
 }
 
@@ -574,5 +579,4 @@ if (OUT !== undefined) {
   writeFileSync(OUT, JSON.stringify({ summary, runs }, null, 2))
   console.log(`[eval] wrote ${OUT}`)
 }
-cleanup()
 process.exit(0)

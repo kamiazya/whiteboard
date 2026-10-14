@@ -248,6 +248,18 @@ describe('createOAuthJwtValidator — claim validation', () => {
     if (!result.ok) expect(result.reason).toBe('expired')
   })
 
+  // Production passes a configured skew and relies on the 60 s default when none is set.
+  it.each([
+    { ageSeconds: 30, skew: 'default' as const, expected: { ok: true } },
+    { ageSeconds: 600, skew: 'default' as const, expected: { ok: false, reason: 'expired' } },
+    { ageSeconds: 120, skew: 300, expected: { ok: true } },
+  ])('expired $ageSeconds s ago under skew $skew → $expected', async (row) => {
+    const token = await buildToken({ expOffset: -row.ageSeconds })
+    const overrides = row.skew === 'default' ? {} : { clockSkewSeconds: row.skew }
+    const result = await makeValidator(overrides).validate({ token, requiredScopes: [] })
+    expect(result).toMatchObject(row.expected)
+  })
+
   it('nbf in future → malformed', async () => {
     const nbf = Math.floor(Date.now() / 1000) + 7200 // valid in 2h
     const token = await buildToken({ nbf })
@@ -371,10 +383,10 @@ describe('createOAuthJwtValidator — algorithm policy', () => {
     expect(result.ok).toBe(true)
   })
 
-  it('HS256 when allowedAlgorithms is [RS256, ES256] → invalid_signature', async () => {
+  it('HS256 under the default allowlist → invalid_signature, even with the matching secret', async () => {
     const hmacKey = new TextEncoder().encode('secret-key-at-least-256-bits-xxxxx')
     const token = await buildToken({ alg: 'HS256', key: hmacKey })
-    const result = await makeValidator({ allowedAlgorithms: ['RS256', 'ES256'] }).validate({
+    const result = await makeValidator({ keyResolver: async () => hmacKey }).validate({
       token,
       requiredScopes: [],
     })

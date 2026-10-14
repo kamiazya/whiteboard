@@ -278,10 +278,10 @@ describe('generate-npm-sbom.mjs non-leak contract', () => {
 describe('ci.yml dry-run SBOM regression safety', () => {
   const CI_WORKFLOW = '.github/workflows/ci.yml'
 
-  it('ci.yml dry-run-npm job does not contain generate:sbom:npm', () => {
+  it('ci.yml verify job, which runs the npm dry-run, does not contain generate:sbom:npm', () => {
     // SBOM generation in dry-run is premature; dry-run does not produce a publishable artifact.
     // SBOM generation only runs as a publish-tier gate via `pnpm publish-gate` (release.yml publish-mcp job).
-    const section = jobSection(readFile(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
+    const section = jobSection(readFile(CI_WORKFLOW), 'verify', 'extension-smokes')
     expect(section).not.toContain('generate:sbom:npm')
   })
 

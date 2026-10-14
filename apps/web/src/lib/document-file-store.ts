@@ -118,24 +118,14 @@ export class DocumentFileStore {
   }
 
   /**
-   * The stored image for `fileId`, or null for an unknown id, a corrupt or
-   * unknown-version record, a reference whose bytes are gone, AND a failure to
-   * open the database or read the bytes. Never throws — a damaged record or an
-   * unreachable store degrades to a missing image rather than taking the read
-   * path with it. A caller that must tell "gone" from "could not be read"
-   * uses `read`.
-   */
-  async get(fileId: string): Promise<Blob | null> {
-    const result = await this.read(fileId)
-    return result.kind === 'blob' ? result.blob : null
-  }
-
-  /**
-   * `get`, keeping apart what it folds into null: `absent` when nothing
-   * readable is stored under `fileId` (an unknown id, a corrupt or
-   * unknown-version record, a reference whose bytes are gone), `unreadable`
-   * when opening the store or reading the bytes threw — the bytes may well
-   * be there, and this device could not reach them. Never throws.
+   * The stored image for `fileId`, keeping apart the two ways there is none:
+   * `absent` when nothing readable is stored under it (an unknown id, a
+   * corrupt or unknown-version record, a reference whose bytes are gone),
+   * `unreadable` when opening the store or reading the bytes threw — the
+   * bytes may well be there, and this device could not reach them. Never
+   * throws. There is deliberately no read that folds the two into one
+   * answer: a caller that treats `unreadable` as `absent` stops retrying a
+   * picture that was only briefly out of reach.
    */
   async read(fileId: string): Promise<DocumentFileRead> {
     let record: DocumentFileRecord | null

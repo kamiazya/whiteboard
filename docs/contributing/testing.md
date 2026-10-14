@@ -45,6 +45,16 @@ changed since `origin/main` (`--base=<ref>` to change the base, `--only=node` or
 for one leg, `--dry-run` to print the plan); a test in `tools/arch-lint` keeps it in step with the
 job.
 
+vitest writes transformed-module copies to `<tmpdir>/<21-char id>/ssr` (and `client/`). Each
+project's directory is removed when the run closes, but a run through a single config with no
+`projects` array leaves its directory behind even when it passes — 3 to 80 MB a run. So every
+package's `test` script is a bare `vitest run` over an aggregate `vitest.config.ts`, and
+`apps/web`'s wrapper runs each half through `vitest.suite.config.ts`;
+`tools/arch-lint/src/package-test-script.test.ts` holds both. `vitest run --config
+vitest.node.config.ts` by hand still leaks, and so does any run killed before it closes, the root
+config's included. `node .claude/scripts/cleanup-worktrees.mjs` sweeps the ones nothing has written
+to for a day (`--dry-run` lists them).
+
 ---
 
 ## Test Layer Selection
@@ -374,7 +384,7 @@ on the run's line rather than something only the rendered SVG could show.
 | LCP floor | `pnpm --filter @kamiazya/whiteboard-web smoke:lcp-floor` | Median Largest Contentful Paint of the built shell over five runs, under CDP-emulated CPU and network throttling, stays under 1000 ms. An absolute floor that refuses a serious accident, not a regression stop (the bundle-size gate is that) | Build + Playwright |
 | PWA update-lifecycle smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:pwa-lifecycle` | Built `dist/` served to real Chromium and one service worker walked through install, control, a waiting update the user accepts through the update toast, and the error screen's recovery (`reloadFresh` leaves no registration and no cache). `dist/` is never modified: the script's server appends a version handler to `/sw.js` to simulate a deploy. The mocks in `register-sw.test.ts` and `reload-fresh.test.ts` cannot notice a build whose worker behaves differently | Build + Playwright |
 | Cross-origin transfer smoke | `pnpm smoke:transfer` | The browser app at one origin sends its workspace to a real server-mode keeper at another, behind a TLS-terminating proxy and a signed-in OIDC person: signed out the window shows the sign-in notice and merges nothing; signed in, Accept merges and the keeper's own API lists the document. Only this sees the keeper's real headers (a `same-origin` COOP would sever the popup's opener) | `pnpm build` first (web and mcp-server `dist/`) + Playwright |
-| Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserDocumentPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
+| Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserDocumentPage.browser.test.tsx`, over real IndexedDB: the editor loads and fills the viewport below the header (three layout cases), deleting the last canvas leaves a fresh one that survives a remount, a pointer naming a deleted document opens what is left, and the network-negative gate (no `/api/*` or daemon fetch during editing). An edit saved to IndexedDB and read back after a reload is `lib/browser-backend.browser.test.tsx`'s "a pushed edit lands on the document tree node and survives a reload" | Real browser (Playwright) |
 | Origin policy | `pnpm --filter @kamiazya/whiteboard-web test` (`pages-origin-policy.test.ts`, `headers-policy.test.ts`) | `classifyPagesOrigin` keeps preview origins a distinct rejected class — a preview origin is never `production`, so it never enters a trusted/local-daemon allowlist; `_headers` CSP shape | jsdom only |
 | Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `arch-lint-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; only the allowlisted workflows (`release.yml`, `deploy-preview.yml`, `preview-pr-deploy.yml`) hold the Cloudflare deploy secrets for `apps/web`; `apps/` stays out of the npm tarball | none |
 
