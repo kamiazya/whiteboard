@@ -54,8 +54,9 @@ export function useImageUrls(
   )
 
   // An array identity changes every render, so the effect keys on the CONTENT.
-  // The refs are asset ids, which cannot hold a newline.
-  const key = refs.join('\n')
+  // The refs are asset ids, which cannot hold a newline. Once per image: a
+  // board drawing one picture twice is one read against the retry bound.
+  const key = [...new Set(refs)].join('\n')
   useEffect(() => {
     const loader = loadRef.current
     if (loader === undefined) return

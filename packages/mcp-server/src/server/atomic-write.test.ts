@@ -6,7 +6,11 @@ import { PENDING_WRITES_DIRNAME, writeFileAtomicStaged } from './atomic-write.js
 
 // What the staged write did to the disk, in order: which path a handle was
 // synced for, and when the rename ran. Records only; every call is real.
-const fsEvents = vi.hoisted(() => ({ log: [] as string[] }))
+const fsEvents = vi.hoisted(() => ({
+  log: [] as string[],
+  /** A sync of this path fails with this code, as a disk would report it. */
+  failSync: undefined as { path: string; code: string } | undefined,
+}))
 vi.mock('node:fs/promises', async (original) => {
   const real = await original<typeof import('node:fs/promises')>()
   return {
@@ -16,6 +20,11 @@ vi.mock('node:fs/promises', async (original) => {
       const path = String(args[0])
       const sync = handle.sync.bind(handle)
       handle.sync = async () => {
+        if (fsEvents.failSync?.path === path) {
+          throw Object.assign(new Error(`sync failed: ${fsEvents.failSync.code}`), {
+            code: fsEvents.failSync.code,
+          })
+        }
         await sync()
         fsEvents.log.push(`sync ${path}`)
       }
@@ -76,6 +85,31 @@ describe('writeFileAtomicStaged', () => {
       writeFileAtomicStaged(dir, join(dir, 'no', 'such', 'dir', 'x.bin'), new Uint8Array(8)),
     ).rejects.toThrow()
     expect(await readdir(join(dir, PENDING_WRITES_DIRNAME))).toEqual([])
+  })
+
+  it('fails the write when the directory sync reports a storage error', async () => {
+    const target = join(dir, 'shard', 'blob')
+    await mkdir(join(dir, 'shard'), { recursive: true })
+    fsEvents.failSync = { path: join(dir, 'shard'), code: 'EIO' }
+    try {
+      await expect(writeFileAtomicStaged(dir, target, new Uint8Array([1]))).rejects.toMatchObject({
+        code: 'EIO',
+      })
+    } finally {
+      fsEvents.failSync = undefined
+    }
+  })
+
+  it('lets the write land where the directory cannot be synced at all', async () => {
+    const target = join(dir, 'shard', 'blob')
+    await mkdir(join(dir, 'shard'), { recursive: true })
+    fsEvents.failSync = { path: join(dir, 'shard'), code: 'EINVAL' }
+    try {
+      await writeFileAtomicStaged(dir, target, new Uint8Array([1]))
+      expect([...(await readFile(target))]).toEqual([1])
+    } finally {
+      fsEvents.failSync = undefined
+    }
   })
 
   it('syncs the staged bytes before the rename names them', async () => {

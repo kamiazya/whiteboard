@@ -68,15 +68,39 @@ export async function writeFileAtomicStaged(
   await syncDirectory(dirname(targetPath))
 }
 
+/**
+ * Errors that say a directory cannot be synced here at all — Windows cannot
+ * open one, and some filesystems refuse fsync on it — rather than that the
+ * sync failed. Anything else (EIO, ENOSPC) means the rename may not be
+ * durable, and the write must not report success.
+ */
+const DIRECTORY_SYNC_UNSUPPORTED = new Set([
+  'EISDIR',
+  'EPERM',
+  'EACCES',
+  'EINVAL',
+  'ENOTSUP',
+  'EBADF',
+])
+
 async function syncDirectory(path: string): Promise<void> {
+  let dir: Awaited<ReturnType<typeof open>>
   try {
-    const dir = await open(path, 'r')
-    try {
-      await dir.sync()
-    } finally {
-      await dir.close()
-    }
-  } catch {
-    /* Best-effort: Windows cannot open a directory for this. */
+    dir = await open(path, 'r')
+  } catch (err) {
+    if (isUnsupported(err)) return
+    throw err
   }
+  try {
+    await dir.sync()
+  } catch (err) {
+    if (!isUnsupported(err)) throw err
+  } finally {
+    await dir.close()
+  }
+}
+
+function isUnsupported(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code
+  return typeof code === 'string' && DIRECTORY_SYNC_UNSUPPORTED.has(code)
 }

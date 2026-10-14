@@ -140,6 +140,7 @@ async function expectSchedule(attempts: () => number, what: string): Promise<voi
   for (const [index, delay] of EXPECTED_DELAYS_MS.entries()) {
     const before = attempts()
     vi.advanceTimersByTime(delay - 1)
+    expect(attempts(), `${what} ${index + 1} fired before ${delay}ms`).toBe(before)
     expect(vi.getTimerCount(), `${what} ${index + 1} fired before ${delay}ms`).toBe(1)
     vi.advanceTimersByTime(1)
     await until(

@@ -45,6 +45,22 @@ describe('useImageUrls', () => {
     expect(load).toHaveBeenCalledTimes(2)
   })
 
+  it('counts a picture drawn twice as one read against its retry bound', async () => {
+    // A board showing one picture in two places names it twice; each copy
+    // counted as an attempt would spend the bound in a single batch.
+    let failures = TRANSIENT_LOAD_ATTEMPTS - 1
+    const load = vi.fn(async (ref: string) => {
+      if (failures > 0) {
+        failures -= 1
+        throw new Error('busy')
+      }
+      return `blob:${ref}`
+    })
+    const { result } = renderHook(() => useImageUrls(['asset:a', 'asset:a'], load))
+    await waitFor(() => expect(result.current.get('asset:a')).toBe('blob:asset:a'))
+    expect(load).toHaveBeenCalledTimes(TRANSIENT_LOAD_ATTEMPTS)
+  })
+
   it('stops asking after a bounded number of rejections, and never re-asks an absent picture', async () => {
     const load = vi.fn(async (ref: string) => {
       if (ref === 'asset:broken') throw new Error('busy')
