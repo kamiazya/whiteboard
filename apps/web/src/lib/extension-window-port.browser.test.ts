@@ -56,7 +56,11 @@ describe('windowHello', () => {
       protocol: 1,
     })
     const frame = document.createElement('iframe')
-    frame.src = `data:text/html,<script>setInterval(() => parent.postMessage(${encodeURIComponent(spoof)}, '*'), 20)</script>`
+    // The frame's script is a constant; the spoof rides the URL fragment as
+    // data, so no code is built from a value.
+    const poster =
+      "<script>const m = JSON.parse(decodeURIComponent(location.hash.slice(1))); setInterval(() => parent.postMessage(m, '*'), 20)</script>"
+    frame.src = `data:text/html,${encodeURIComponent(poster)}#${encodeURIComponent(spoof)}`
     let spoofsHeard = 0
     const count = (event: MessageEvent) => {
       if (event.source === frame.contentWindow) spoofsHeard += 1
