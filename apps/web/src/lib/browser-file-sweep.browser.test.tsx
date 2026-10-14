@@ -193,7 +193,7 @@ describe('sweepUnreferencedFiles', () => {
 
     expect(result).toEqual({ kind: 'swept', deleted: [newImageRef('img-a')] })
     expect(await bytesHeld('img-a')).toBe(false)
-    expect(await new DocumentFileStore().get(newImageRef('img-a'))).toBeNull()
+    expect(await new DocumentFileStore().read(newImageRef('img-a'))).toEqual({ kind: 'absent' })
   })
 
   it('keeps an image a live document draws and drops the one nothing names', async () => {

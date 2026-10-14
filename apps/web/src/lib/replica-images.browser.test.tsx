@@ -213,8 +213,10 @@ describe('replica images', () => {
     expect(readReplicaImagePointer(DAEMON_WS)).toBeUndefined()
     const blobs = new IdbBlobStore()
     expect((await blobs.has({ ref: refs[0]! })).exists).toBe(false)
-    const own = await new DocumentFileStore().get(newImageRef('img-cat'))
-    expect(await textOf(own ?? undefined)).toBe('picture-plaintext:img-cat')
+    const own = await new DocumentFileStore().read(newImageRef('img-cat'))
+    expect(await textOf(own.kind === 'blob' ? own.blob : undefined)).toBe(
+      'picture-plaintext:img-cat',
+    )
   })
 
   it("the browser's file sweep leaves a replica's pictures alone", async () => {

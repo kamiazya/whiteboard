@@ -48,12 +48,13 @@ describe('documentFileRecordSchema', () => {
   })
 })
 
-describe('DocumentFileStore.get', () => {
-  it('resolves null instead of rejecting when opening the database fails', async () => {
-    openWhiteboardDbMock.mockRejectedValueOnce(new Error('VersionError: boom'))
+describe('DocumentFileStore.read', () => {
+  it('answers unreadable instead of rejecting when opening the database fails', async () => {
+    const failure = new Error('VersionError: boom')
+    openWhiteboardDbMock.mockRejectedValueOnce(failure)
     const store = new DocumentFileStore()
 
-    await expect(store.get('file-1')).resolves.toBeNull()
+    await expect(store.read('file-1')).resolves.toEqual({ kind: 'unreadable', error: failure })
     expect(openWhiteboardDbMock).toHaveBeenCalledOnce()
   })
 })

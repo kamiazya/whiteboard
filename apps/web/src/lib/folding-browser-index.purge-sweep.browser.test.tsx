@@ -74,7 +74,9 @@ describe('FoldingBrowserIndex.purgeTrashEntry', () => {
     expect(await index.purgeTrashEntry({ workspaceId, documentId: doomedId })).toBe(true)
 
     const files = new DocumentFileStore()
-    await expect.poll(() => files.get(doomedRef), { timeout: 15_000 }).toBeNull()
-    expect(await files.get(keptRef)).not.toBeNull()
+    await expect
+      .poll(async () => (await files.read(doomedRef)).kind, { timeout: 15_000 })
+      .toBe('absent')
+    expect((await files.read(keptRef)).kind).toBe('blob')
   })
 })
