@@ -7,7 +7,7 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
-import { manualChunks } from './vite-manual-chunks.js'
+import { createCodeSplittingGroups } from './vite-manual-chunks.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
@@ -75,8 +75,7 @@ export default defineConfig({
         // a TLA-bearing chunk to also import (and await) its `__tla` export,
         // the entry ended up eagerly loading the whole vendor-loro-crdt
         // chunk through a dependency that had nothing to do with loro.
-        //
-        manualChunks,
+        codeSplitting: { groups: createCodeSplittingGroups() },
       },
     },
   },
