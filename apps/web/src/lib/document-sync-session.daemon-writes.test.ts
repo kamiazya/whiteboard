@@ -23,6 +23,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
 import { applyCommand, type EditorCommand } from './spatial/commands.js'
@@ -69,15 +70,14 @@ function fakeDaemon(busyPosts: ReadonlySet<number>) {
     if (init?.method === 'POST' && url.endsWith('/update')) {
       posts += 1
       if (busyPosts.has(posts)) {
-        return new Response('{"error":"database_busy"}', {
-          status: 503,
-          headers: { 'Retry-After': '1' },
-        })
+        const busy = jsonResponse({ error: 'database_busy' }, 503)
+        busy.headers.set('Retry-After', '1')
+        return busy
       }
       accepted.push(new Uint8Array(init.body as ArrayBuffer))
-      return new Response('{}', { status: 200 })
+      return jsonResponse({})
     }
-    if (init?.method === 'POST') return new Response('{}', { status: 200 })
+    if (init?.method === 'POST') return jsonResponse({})
     return new Response(seedBytes.slice().buffer as ArrayBuffer, { status: 200 })
   }) as typeof fetch
   return {
