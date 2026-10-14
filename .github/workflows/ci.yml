@@ -543,8 +543,8 @@ jobs:
 
       # mcp-smoke spawns the MCP stdio server, which serves in-process.
       # WHITEBOARD_DEV=1 makes it resolve its own tree against source rather
-      # than dist, which does not exist before build, matching how
-      # pnpm smoke:e2e runs the same flow.
+      # than dist, which does not exist before build; the Stdio E2E smoke
+      # step below runs the same way.
       - name: Test mcp-smoke
         env:
           WHITEBOARD_DEV: '1'
