@@ -6,7 +6,7 @@
 // for the bundled one cannot tell a library defect from that plugin's own
 // declaration.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { clearCatalogRecents, DerivedFacetForm, EMOJI_FONT_STACK } from './index.js'
@@ -114,6 +114,13 @@ function mount(stored?: unknown) {
 async function loaded() {
   fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
   return screen.findByRole('radio', { name: 'grinning face' })
+}
+
+const searchBox = () => screen.getByRole('searchbox', { name: 'Search symbols' })
+
+/** A pick closes the popover; the next pick opens it again, as a person would. */
+async function reopened() {
+  if (screen.queryByRole('searchbox', { name: 'Search symbols' }) === null) await loaded()
 }
 
 describe('a catalog picker offers more than the definition listed', () => {
@@ -263,6 +270,22 @@ describe('search finds a row by any of the words it carries', () => {
     expect(screen.queryByRole('radio', { name: 'fire' })).toBeNull()
   })
 
+  /** A second word narrows; it never widens the result to another row. */
+  it('requires every term, so words naming two different rows match neither', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: 'grinning fire' } })
+    expect(screen.queryByRole('radio', { name: 'grinning face' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'fire' })).toBeNull()
+  })
+
+  it('says one match in the singular', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: 'rocket' } })
+    expect(screen.getByRole('status').textContent).toBe('1 match')
+  })
+
   it('says so rather than showing an empty band when nothing matches', async () => {
     mount()
     await loaded()
@@ -301,6 +324,32 @@ describe('free entry is a RESULT, not a second input', () => {
     fireEvent.change(search(), { target: { value: '🦖' } })
     fireEvent.keyDown(search(), { key: 'Enter' })
     expect(onWrite).toHaveBeenCalledWith(SYMBOL_KEY, { kind: 'emoji', char: '🦖' })
+  })
+
+  /** A paste routinely carries the whitespace around what was copied. */
+  it('takes a pasted character with spaces around it', async () => {
+    const onWrite = mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: ' 🦖 ' } })
+    fireEvent.keyDown(search(), { key: 'Enter' })
+    expect(onWrite).toHaveBeenCalledWith(SYMBOL_KEY, { kind: 'emoji', char: '🦖' })
+  })
+
+  it('takes the typed value on Enter alone, not on any other key', async () => {
+    const onWrite = mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: '🦖' } })
+    fireEvent.keyDown(search(), { key: 'a' })
+    fireEvent.keyDown(search(), { key: 'Tab' })
+    expect(onWrite).not.toHaveBeenCalled()
+  })
+
+  /** The picker can sit inside a form, which an unprevented Enter submits. */
+  it('keeps the Enter that takes a typed value from submitting anything around it', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: '🦖' } })
+    expect(fireEvent.keyDown(search(), { key: 'Enter' })).toBe(false)
   })
 
   /**
@@ -405,6 +454,33 @@ describe('what was picked here comes back on top', () => {
     expect(screen.getByRole('radiogroup', { name: 'Symbol recently used' }).textContent).toContain(
       '🔥',
     )
+  })
+
+  it('keeps one recent for a symbol picked twice', async () => {
+    mount()
+    await loaded()
+    fireEvent.click(screen.getByRole('radio', { name: 'fire' }))
+    await reopened()
+    fireEvent.click(screen.getAllByRole('radio', { name: 'fire' })[0] as HTMLElement)
+    await reopened()
+    const recent = screen.getByRole('radiogroup', { name: 'Symbol recently used' })
+    expect(within(recent).getAllByRole('radio')).toHaveLength(1)
+  })
+
+  it('keeps the twelve latest and lets the oldest go', async () => {
+    mount()
+    await loaded()
+    const typed = [...'🦖🦕🐙🦑🦀🐡🐠🐟🐬🐳🐋🦈🐊']
+    for (const char of typed) {
+      await reopened()
+      fireEvent.change(searchBox(), { target: { value: char } })
+      fireEvent.keyDown(searchBox(), { key: 'Enter' })
+    }
+    await reopened()
+    const recent = screen.getByRole('radiogroup', { name: 'Symbol recently used' })
+    expect(within(recent).getAllByRole('radio')).toHaveLength(12)
+    expect(recent.textContent).toContain(typed.at(-1))
+    expect(recent.textContent).not.toContain(typed[0])
   })
 })
 
