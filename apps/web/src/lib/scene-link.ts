@@ -1,19 +1,32 @@
+import { documentIdOfHref } from '@kamiazya/whiteboard-canvas-render'
+
 /**
- * The renderer draws a reference as `<a href="<documentId>">`, and a canvas
- * embed as `#<documentId>`: an address only this app can resolve. Left to the
- * browser, the bare id resolves against the page URL and reloads the tab onto
- * a route that names no document. A link with a scheme, or one starting with
- * `/` (root- or protocol-relative), is a real URL from the markdown and is
- * not one of these: no document id starts with a slash.
+ * The document a click on a drawn scene landed on a link to, or `undefined`
+ * when it did not land on one. Which hrefs address a document is the
+ * renderer's to say (`documentIdOfHref`, beside the code that writes them);
+ * this only finds the anchor the click was inside.
  *
- * Answers the document id a click on a drawn scene landed on such a link
- * for, or `undefined` when the click was not on one.
+ * Left to the browser, a document link resolves against the page URL and
+ * reloads the tab onto a route that names no document, so every surface that
+ * mounts scene SVG cancels a click this answers for.
  */
 export function sceneLinkTarget(target: EventTarget | null): string | undefined {
   const anchor = target instanceof Element ? target.closest('a[href]') : null
-  const href = anchor?.getAttribute('href')
-  if (href == null || URL_SCHEME.test(href) || href.startsWith('/')) return undefined
-  return href.replace(/^#/, '')
+  return documentIdOfHref(anchor?.getAttribute('href'))
 }
 
-const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+/**
+ * Answers a click on a drawn scene the way an editing surface must: a click
+ * on a document link is always cancelled, and opens the document through
+ * `open` when the host has somewhere to open it. Any other link keeps the
+ * browser's default, as an ordinary link in the markdown preview does.
+ */
+export function openSceneLink(
+  event: { readonly target: EventTarget | null; preventDefault(): void },
+  open: ((documentId: string) => void) | undefined,
+): void {
+  const documentId = sceneLinkTarget(event.target)
+  if (documentId === undefined) return
+  event.preventDefault()
+  open?.(documentId)
+}

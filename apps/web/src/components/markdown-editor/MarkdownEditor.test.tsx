@@ -280,20 +280,15 @@ describe('MarkdownEditor', () => {
     expect(onOpenDocument).toHaveBeenCalledTimes(1)
   })
 
-  it('intercepts browser UUID canvas ids too, not only daemon ULIDs', async () => {
+  it('leaves a UUID-shaped href alone: no document id is one', async () => {
     vi.useFakeTimers()
-    // Documents kept in the browser mint crypto.randomUUID() ids; the daemon mints
-    // ULIDs. Both travel through the alias resolver into anchor hrefs.
     const UUID = '68f94ee9-80fe-4e7e-b1fc-dcf853e26da3'
     const onOpenDocument = vi.fn()
     const { getByTestId } = render(
       <MarkdownEditor
         theme="light"
-        value="See [[Snippet]]."
+        value={`See [snippet](${UUID}).`}
         onChange={() => {}}
-        references={referenceSeams(new Map(), {
-          resolveAlias: (alias) => (alias === 'Snippet' ? UUID : null),
-        })}
         onOpenDocument={onOpenDocument}
         previewDebounceMs={150}
       />,
@@ -304,9 +299,28 @@ describe('MarkdownEditor', () => {
     const anchor = getByTestId('markdown-preview-scroll').querySelector(`a[href="${UUID}"]`)
     expect(anchor).not.toBeNull()
     if (!anchor) throw new Error('unreachable')
-    const intercepted = !fireEvent.click(anchor)
-    expect(onOpenDocument).toHaveBeenCalledWith(UUID)
-    expect(intercepted).toBe(true)
+    expect(fireEvent.click(anchor)).toBe(true)
+    expect(onOpenDocument).not.toHaveBeenCalled()
+  })
+
+  it('never follows a document link, even with nowhere to open it', async () => {
+    vi.useFakeTimers()
+    const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const { getByTestId } = render(
+      <MarkdownEditor
+        theme="light"
+        value={`See [[${NOTE_ID}|the plan]].`}
+        onChange={() => {}}
+        previewDebounceMs={150}
+      />,
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    const anchor = getByTestId('markdown-preview-scroll').querySelector(`a[href="${NOTE_ID}"]`)
+    expect(anchor).not.toBeNull()
+    if (!anchor) throw new Error('unreachable')
+    expect(fireEvent.click(anchor)).toBe(false)
   })
 
   it('colours a board the note embeds by the tag library it is given', async () => {

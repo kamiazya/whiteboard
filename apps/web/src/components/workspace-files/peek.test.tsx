@@ -61,14 +61,18 @@ afterEach(() => {
 
 describe('a link drawn in the peek', () => {
   it('opens the linked document and closes the peek', async () => {
-    const plan = { documentId: 'd2', path: 'plan', kind: 'markdown' as const }
+    const plan = {
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FB2',
+      path: 'plan',
+      kind: 'markdown' as const,
+    }
     const onOpen = vi.fn()
     const onClose = vi.fn()
     render(
       <PeekDialog
         document={entries[0] ?? null}
         loadRender={async () => ({
-          svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="d2"><text>plan</text></a></svg>',
+          svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="${plan.documentId}"><text>plan</text></a></svg>`,
           bounds: { x: 0, y: 0, w: 10, h: 10 },
         })}
         onOpen={onOpen}

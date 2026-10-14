@@ -94,8 +94,8 @@ describe('VersionPreview typesets what the editor typesets', () => {
 })
 
 describe('a link drawn in a version', () => {
-  const BODY =
-    '[plan](plan) and [site](https://example.com/) and [guide](/guide) and [mirror](//example.com/x)'
+  const PLAN = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
+  const BODY = `[plan](${PLAN}) and [site](https://example.com/) and [guide](/guide) and [mirror](//example.com/x) and [file](guide.md)`
   const board: PastDocument = {
     kind: 'spatial',
     canvas: {
@@ -119,7 +119,7 @@ describe('a link drawn in a version', () => {
     ['note', { kind: 'markdown', body: BODY } as PastDocument],
     ['board', board],
   ])('a bare-id link in a past %s never navigates the tab', async (_kind, pastDocument) => {
-    expect(await click(pastDocument, 'plan')).toBe(true)
+    expect(await click(pastDocument, PLAN)).toBe(true)
   })
 
   it('a URL with a scheme keeps the browser default', async () => {
@@ -129,6 +129,7 @@ describe('a link drawn in a version', () => {
   it.each([
     ['root-relative', '/guide'],
     ['protocol-relative', '//example.com/x'],
+    ['document-relative', 'guide.md'],
   ])('a %s URL keeps the browser default', async (_shape, href) => {
     expect(await click({ kind: 'markdown', body: BODY }, href)).toBe(false)
   })

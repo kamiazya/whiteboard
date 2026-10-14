@@ -3,12 +3,11 @@ import { redo, undo } from '@codemirror/commands'
 import type { Extension, StateEffect } from '@codemirror/state'
 import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import {
-  type CommentThread,
-  type CommentThreadStatus,
-  documentIdSchema,
-  type Proposal,
-  type StoredCoreFacets,
+import type {
+  CommentThread,
+  CommentThreadStatus,
+  Proposal,
+  StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import {
   type MouseEvent as ReactMouseEvent,
@@ -25,6 +24,7 @@ import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor, RenderMarkdownPreviewOptions } from '../../lib/render-preview.js'
 import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
+import { openSceneLink } from '../../lib/scene-link.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
@@ -220,17 +220,6 @@ function countWords(value: string): number {
 }
 
 /**
- * Whether an anchor href is a bare canvas id rather than a URL. Two id
- * grammars coexist by construction: the daemon mints ULIDs
- * (`documentIdSchema`), the browser store mints `crypto.randomUUID()`
- * v4 UUIDs — both reach the preview through the alias resolver.
- */
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-function isDocumentIdHref(href: string): boolean {
-  return documentIdSchema.safeParse(href).success || UUID_PATTERN.test(href)
-}
-
-/**
  * A controlled markdown editor: one source-of-truth `value` string, edited
  * through a CodeMirror 6 source pane and previewed through
  * `renderMarkdownPreview` — the same parse -> layout -> SVG path the
@@ -355,18 +344,10 @@ export function MarkdownEditor({
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
 
-  // A resolved wikiLink's anchor carries a bare canvas id as its href —
-  // meaningless as a URL, meaningful to the host. Intercept exactly those;
-  // ordinary http(s) anchors keep default browser behavior.
-  const onPreviewClick = (event: ReactMouseEvent<HTMLDivElement>) => {
-    if (!onOpenDocument) return
-    const anchor = event.target instanceof Element ? event.target.closest('a') : null
-    if (!anchor) return
-    const href = anchor.getAttribute('href')
-    if (href === null || !isDocumentIdHref(href)) return
-    event.preventDefault()
-    onOpenDocument(href)
-  }
+  // A document link's href is a bare id: meaningless to the browser, which
+  // would resolve it against the page URL. Ordinary links keep the default.
+  const onPreviewClick = (event: ReactMouseEvent<HTMLDivElement>) =>
+    openSceneLink(event, onOpenDocument)
 
   const [mode, setMode] = useState<MarkdownViewMode>(() => initialViewMode ?? readStoredViewMode())
   const changeMode = (next: MarkdownViewMode) => {

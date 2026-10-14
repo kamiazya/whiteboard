@@ -224,7 +224,8 @@ describe('DocumentPreview', () => {
 })
 
 describe('a link drawn in the picture', () => {
-  const target: WorkspaceDocumentEntry = { documentId: 'd2', path: 'design/plan', kind: 'markdown' }
+  const PLAN = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
+  const target: WorkspaceDocumentEntry = { documentId: PLAN, path: 'design/plan', kind: 'markdown' }
   const linked = (href: string) => ({
     ...drawn,
     svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><a href="${href}"><text>plan</text></a></svg>`,
@@ -245,18 +246,18 @@ describe('a link drawn in the picture', () => {
   }
 
   it('opens the listed document a bare-id link names, instead of navigating', async () => {
-    const { prevented, onOpen } = await clickLink('d2')
+    const { prevented, onOpen } = await clickLink(PLAN)
     expect(prevented).toBe(true)
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(target)
   })
 
   it('opens the document a canvas embed names by fragment', async () => {
-    const { onOpen } = await clickLink('#d2')
+    const { onOpen } = await clickLink(`#${PLAN}`)
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(target)
   })
 
   it('stays put on an id the list does not hold', async () => {
-    const { prevented, onOpen } = await clickLink('gone')
+    const { prevented, onOpen } = await clickLink('01ARZ3NDEKTSV4RRFFQ69G5FB3')
     expect(prevented).toBe(true)
     expect(onOpen).not.toHaveBeenCalled()
   })
@@ -270,6 +271,7 @@ describe('a link drawn in the picture', () => {
   it.each([
     ['root-relative', '/guide'],
     ['protocol-relative', '//example.com/x'],
+    ['document-relative', 'guide.md'],
   ])('leaves a %s URL to the browser', async (_shape, href) => {
     const { prevented, onOpen } = await clickLink(href)
     expect(prevented).toBe(false)
