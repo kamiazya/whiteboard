@@ -278,6 +278,23 @@ describe('a document in the trash, on the document routes', () => {
     expect(await liveDocuments(d)).toEqual(['doc'])
   })
 
+  // The refusal is about the path the trash names, so a trashed neighbour
+  // must not stop a new document beginning anywhere else.
+  it('lets a never-created path begin while the trash holds a different one', async () => {
+    const d = await daemon()
+    await trashed(d, KNOWN)
+    const update = probeFor('POST', 'update')
+    const elsewhere = {
+      ...update,
+      suffix: update.suffix.replace('/document/doc/', '/document/other/'),
+    }
+
+    const res = await send(d, elsewhere, KNOWN)
+
+    expect(res.status).toBe(200)
+    expect(await liveDocuments(d)).toEqual(['other'])
+  })
+
   it('takes writes again once a document is created at the path the trash entry names', async () => {
     const d = await daemon()
     await trashed(d, KNOWN)

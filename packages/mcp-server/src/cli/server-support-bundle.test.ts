@@ -536,3 +536,84 @@ describe('runServerSupportBundle', () => {
     expect(record.kind).toBe('stale')
   })
 })
+
+// A failure the filesystem reports carries the path it failed on in its
+// message, so the generic sentence is the only thing either catch may print.
+describe('runServerSupportBundle on a filesystem failure', () => {
+  const GENERIC = 'support bundle failed\n'
+  const SENTINEL = 'written by someone else\n'
+
+  it('prints only the generic sentence when the output dir cannot be prepared', async () => {
+    const notADirectory = join(tmpRoot, 'a-file')
+    await writeFile(notADirectory, 'x')
+
+    const outcome = await runServerSupportBundle({
+      dataDir: join(tmpRoot, 'data'),
+      outputDir: join(notADirectory, 'out'),
+      ...defaultSeams,
+    })
+
+    expect(outcome).toEqual({ stdout: '', stderr: GENERIC, exitCode: 1 })
+  })
+
+  // The emptiness check runs before collection, so a file can appear in
+  // between; `wx` is what keeps the bundle from overwriting it.
+  it.each([
+    'status.json',
+    'manifest.json',
+  ])('refuses to overwrite a %s that appeared after the emptiness check', async (name) => {
+    const outputDir = join(tmpRoot, 'raced-out')
+    const outcome = await runServerSupportBundle({
+      dataDir: join(tmpRoot, 'data'),
+      outputDir,
+      ...defaultSeams,
+      doRunStatus: vi.fn(async () => {
+        await writeFile(join(outputDir, name), SENTINEL)
+        return makeStatusOutcome('missing')
+      }),
+    })
+
+    expect(outcome).toEqual({ stdout: '', stderr: GENERIC, exitCode: 1 })
+    expect(await readFile(join(outputDir, name), 'utf-8')).toBe(SENTINEL)
+  })
+})
+
+describe('runServerSupportBundle with the real doctor', () => {
+  // The doctor reads its data dir from the environment, so the bundle must
+  // point it at the directory being bundled rather than whatever the
+  // caller's environment named.
+  it('checks the data dir it was given, not the one the environment names', async () => {
+    const dataDir = join(tmpRoot, 'served-data')
+    await mkdir(dataDir)
+    const outputDir = join(tmpRoot, 'doctor-out')
+    // No network: the doctor's JWKS probe is answered here, unreachable.
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 503 }))
+    try {
+      const outcome = await runServerSupportBundle({
+        dataDir,
+        outputDir,
+        env: {
+          WHITEBOARD_SERVER_EXTERNAL_URL: 'https://whiteboard.example.com',
+          WHITEBOARD_SERVER_AUTH_STRATEGY: 'oauth-jwt',
+          WHITEBOARD_SERVER_JWT_ISSUER: 'https://auth.example.com',
+          WHITEBOARD_SERVER_JWT_AUDIENCE: 'whiteboard',
+          WHITEBOARD_SERVER_JWKS_URI: 'https://auth.example.com/.well-known/jwks.json',
+          WHITEBOARD_DATA_DIR: join(tmpRoot, 'never-created'),
+        },
+        doRunStatus: defaultSeams.doRunStatus,
+        doReadRecord: defaultSeams.doReadRecord,
+      })
+      expect(outcome.exitCode).toBe(0)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+
+    const doctor = supportBundleDoctorSectionSchema.parse(
+      JSON.parse(await readFile(join(outputDir, 'doctor.json'), 'utf-8')),
+    )
+    expect(doctor.checks.find((c) => c.id === 'server.config')?.status).toBe('ok')
+    expect(doctor.checks.find((c) => c.id === 'server.data_dir')).toMatchObject({ status: 'ok' })
+  })
+})
