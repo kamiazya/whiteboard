@@ -5,13 +5,14 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import {
   NATIVE_HOST_NAME,
   WHITEBOARD_EXTENSION_ID,
   WHITEBOARD_GECKO_ID,
 } from '@kamiazya/whiteboard-daemon-client/extension-names'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CHMOD_IS_OBSERVABLE } from '../../shared/test-utils/chmod-is-observable.js'
 import { installNativeHost, nativeHostManifestDirs } from './install.js'
 
 let scratch: string
@@ -20,7 +21,11 @@ beforeEach(() => {
 })
 afterEach(() => rmSync(scratch, { recursive: true, force: true }))
 
-const launcherFor = (entry: string) => ({ execPath: process.execPath, execArgv: [], entry })
+const launcherFor = (entry: string, execArgv: readonly string[] = []) => ({
+  execPath: process.execPath,
+  execArgv,
+  entry,
+})
 
 describe('nativeHostManifestDirs', () => {
   it('names each installed Chromium browser on Linux, and none it cannot find', () => {
@@ -104,6 +109,20 @@ describe('installNativeHost', () => {
     expect(statSync(result.launcher).mode & 0o777).toBe(0o700)
   })
 
+  // The browser runs the launcher as this user, and the file's own mode does
+  // not stop another user renaming a script over it in a looser directory.
+  it.skipIf(!CHMOD_IS_OBSERVABLE)(
+    'keeps the launcher in a directory only this user may change',
+    async () => {
+      const { launcher } = await installNativeHost({
+        dataDir: join(scratch, 'data'),
+        manifestDirs: [],
+        launcher: launcherFor('/opt/whiteboard/cli.js'),
+      })
+      expect(statSync(dirname(launcher)).mode & 0o777).toBe(0o700)
+    },
+  )
+
   // The browser starts the launcher with its own arguments and environment,
   // so the data dir it relays to is fixed at install time — through a shell
   // script, where a path with a space or a quote is the usual way to break.
@@ -112,18 +131,24 @@ describe('installNativeHost', () => {
     const entry = join(scratch, 'entry.mjs')
     writeFileSync(
       entry,
-      'process.stdout.write(JSON.stringify({ argv: process.argv.slice(2), dataDir: process.env.WHITEBOARD_DATA_DIR }))',
+      'process.stdout.write(JSON.stringify({ execArgv: process.execArgv, argv: process.argv.slice(2), dataDir: process.env.WHITEBOARD_DATA_DIR }))',
     )
+    // The Node flags the installing process ran under (a loader in dev) are
+    // the ones the host needs to start at all.
     const { launcher } = await installNativeHost({
       dataDir,
       manifestDirs: [],
-      launcher: launcherFor(entry),
+      launcher: launcherFor(entry, ['--no-deprecation']),
     })
 
     const out = JSON.parse(
       execFileSync(launcher, ['chrome-extension://abc/'], { encoding: 'utf8' }),
     )
-    expect(out).toEqual({ argv: ['native-host', 'run', 'chrome-extension://abc/'], dataDir })
+    expect(out).toEqual({
+      execArgv: ['--no-deprecation'],
+      argv: ['native-host', 'run', 'chrome-extension://abc/'],
+      dataDir,
+    })
   })
 })
 
@@ -186,6 +211,23 @@ describe('installNativeHost on Windows', () => {
     const script = readFileSync(launcher, 'utf8')
     expect(script).toContain(`set "WHITEBOARD_DATA_DIR=${dataDir}"`)
     expect(script).toContain('"C:\\whiteboard\\cli.js" native-host run %*')
+  })
+
+  // cmd expands `%NAME%` even inside quotes, so a path holding one would
+  // relay to wherever the variable points at launch.
+  it('keeps a percent sign in a path literal in the cmd launcher', async () => {
+    const dataDir = join(scratch, '%TEMP%')
+    const { launcher } = await installNativeHost({
+      dataDir,
+      manifestDirs: [],
+      launcher: launcherFor('C:\\100%\\cli.js'),
+      platform: 'win32',
+      register: async () => {},
+    })
+
+    const script = readFileSync(launcher, 'utf8')
+    expect(script).toContain(`set "WHITEBOARD_DATA_DIR=${join(scratch, '%%TEMP%%')}"`)
+    expect(script).toContain('"C:\\100%%\\cli.js" native-host run %*')
   })
 
   // cmd has no quoting a `"` can live inside, so such a path is refused rather
