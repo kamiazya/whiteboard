@@ -97,30 +97,11 @@ function registerFonts(): void {
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
 
-// Both `ui/notifications/tool-result` and the CallToolResult that
-// `app.callServerTool` resolves with wrap canvas_view's payload the same
-// way: `{structuredContent: {documentId, scene}}`. Sharing one extraction +
-// validation path for the initial mount and every refresh keeps the
-// malformed-payload defense (parseViewerScene before remount) and the
-// documentId commit rule (never commit from a result that failed validation)
-// in exactly one place. The envelope crosses the host↔widget process
-// boundary, so it gets a Zod schema instead of a cast; `scene` stays
-// deliberately unknown here — parseViewerScene is its real validator.
-// `references` is validated HERE rather than trusted: it arrives from the
-// host, and a malformed entry reaches canvas-render's layout seams as
-// whatever the host sent.
-//
-// Validates BEFORE remount: remount disposes the live viewer first, so a
-// malformed payload would otherwise trade a working view for an empty
-// container. `onValidResult` only fires once parseViewerScene has actually
-// accepted the scene, which is what lets the documentId commit rule ("never
-// remember an ID from an unvalidated result") hold for both the initial
-// tool-result and every subsequent refresh response.
-// Also whether a result is an application-level failure rather than a
+// Whether a result is an application-level failure rather than a
 // transport-level rejection: the ext-apps host resolves (never rejects) a
 // server-side tool handler exception as `{isError: true}` — treating that as
-// success would remount on annotate's own error payload or skip the
-// required post-annotation refresh.
+// success would remount on a failed comment write's error payload or skip
+// the refresh that has to follow a comment write.
 function isErrorResult(payload: unknown): boolean {
   return (
     typeof payload === 'object' &&
@@ -197,6 +178,14 @@ function failureReason(result: unknown, fallback: string): string {
 /** Counts applied results, so a late font load can tell whether it is stale. */
 let appliedGeneration = 0
 
+// The initial tool-result and every refresh response arrive in the same
+// envelope, so one path applies both and holds the malformed-payload defense
+// and the id commit rule in one place. It validates BEFORE remount: remount
+// disposes the live viewer first, so a malformed payload would otherwise
+// trade a working view for an empty container. `onValidResult` fires only
+// once parseViewerScene has accepted the scene, which is what keeps ids from
+// an unvalidated result from ever being committed. Reading the envelope
+// itself is `readCanvasViewResult`'s job.
 function applyToolResult(
   payload: unknown,
   container: HTMLElement,
@@ -348,10 +337,10 @@ async function mountFromHost(
   if (connected && canUseServerTools) {
     let refreshInFlight = false
     // Set whenever a refresh is REQUIRED while one is already in flight (a
-    // manual Refresh click racing a just-succeeded annotate, or vice versa)
+    // manual Refresh click racing a just-succeeded comment write, or vice versa)
     // — the in-flight run loops once more instead of the caller's request
     // being silently dropped. A single boolean (rather than a queue) is
-    // enough because every refresh call targets the same committedCanvasId
+    // enough because every refresh call targets the same `committed` ids
     // and asks for the same thing: "the latest scene".
     let pendingRefresh = false
 
