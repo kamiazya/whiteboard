@@ -2,11 +2,12 @@ import type { SpatialThemeMode } from '@kamiazya/whiteboard-canvas-render'
 
 // Stored preference. `'system'` defers to `prefers-color-scheme`, which lets
 // users keep the OS setting authoritative without sacrificing manual override.
-// The render's own modes plus `'system'`; useThemeMode.test.tsx holds this
-// list equal to canvas-render's schema. It is a type-only tie on purpose: this
+// The render's own modes plus `'system'`; `satisfies` refuses a mode the
+// render does not know, and useThemeMode.test.tsx round-trips every mode in
+// canvas-render's schema, so one missing here fails there. It is a type-only tie on purpose: this
 // module runs before first paint, and a value import of canvas-render's index
 // pulls the renderer into the critical path.
-export const THEME_MODES = ['light', 'dark', 'system'] as const satisfies readonly (
+const THEME_MODES = ['light', 'dark', 'system'] as const satisfies readonly (
   | SpatialThemeMode
   | 'system'
 )[]
