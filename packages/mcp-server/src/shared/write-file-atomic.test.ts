@@ -22,6 +22,8 @@ const fsEvents = vi.hoisted(() => ({
   log: [] as string[],
   /** A sync of this path fails with this code, as a disk would report it. */
   failSync: undefined as { path: string; code: string } | undefined,
+  /** An open of this path fails with this code, as Windows does for a directory. */
+  failOpen: undefined as { path: string; code: string } | undefined,
 }))
 vi.mock('node:fs/promises', async (original) => {
   const real = await original<typeof import('node:fs/promises')>()
@@ -32,6 +34,11 @@ vi.mock('node:fs/promises', async (original) => {
         ? Promise.reject(Object.assign(new Error('operation not permitted'), { code: 'EPERM' }))
         : real.chmod(...args),
     open: (async (...args: Parameters<typeof real.open>) => {
+      if (fsEvents.failOpen?.path === String(args[0])) {
+        throw Object.assign(new Error(`open failed: ${fsEvents.failOpen.code}`), {
+          code: fsEvents.failOpen.code,
+        })
+      }
       const handle = await real.open(...args)
       const path = String(args[0])
       const sync = handle.sync.bind(handle)
@@ -81,6 +88,7 @@ describe('writeFileAtomic', () => {
     chmodGate.refuse = false
     fsEvents.log = []
     fsEvents.failSync = undefined
+    fsEvents.failOpen = undefined
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -142,10 +150,32 @@ describe('writeFileAtomic', () => {
     })
   })
 
-  it('lets the write land where the directory cannot be synced at all', async () => {
-    fsEvents.failSync = { path: dir, code: 'EINVAL' }
+  // Each code says the platform cannot sync a directory at all, and each can
+  // arrive from either step: Windows refuses the open (EISDIR, EPERM,
+  // EACCES), some filesystems refuse the fsync of an open directory.
+  const CANNOT_SYNC_DIRECTORY = ['EISDIR', 'EPERM', 'EACCES', 'EINVAL', 'ENOTSUP', 'EBADF']
+
+  it.each(
+    CANNOT_SYNC_DIRECTORY,
+  )('lets the write land where the directory cannot be opened (%s)', async (code) => {
+    fsEvents.failOpen = { path: dir, code }
     await writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))
     expect([...readFileSync(join(dir, 'blob'))]).toEqual([1])
+  })
+
+  it.each(
+    CANNOT_SYNC_DIRECTORY,
+  )('lets the write land where the directory cannot be synced (%s)', async (code) => {
+    fsEvents.failSync = { path: dir, code }
+    await writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))
+    expect([...readFileSync(join(dir, 'blob'))]).toEqual([1])
+  })
+
+  it('fails the write when opening the directory reports a storage error', async () => {
+    fsEvents.failOpen = { path: dir, code: 'EIO' }
+    await expect(writeFileAtomic(join(dir, 'blob'), new Uint8Array([1]))).rejects.toMatchObject({
+      code: 'EIO',
+    })
   })
 
   it.skipIf(!CHMOD_IS_OBSERVABLE)('honours the mode when one is given', async () => {
