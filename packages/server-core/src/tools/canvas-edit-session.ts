@@ -409,30 +409,11 @@ export class CanvasEditSession {
       )
     }
     const parsed = spatialNodeSchema.safeParse(applied)
+    // Every key the patch schema admits either lands or is refused as
+    // unheld above, and a stored node was parsed strictly on read, so the
+    // re-parse names no unknown key. What it can still refuse is the
+    // combination: the node the patch produced, judged whole.
     if (!parsed.success) {
-      // A patch key the TARGET's type does not have. `label` on a text
-      // node is the case that exists today: it is on the patch allowlist
-      // because a GROUP has one, so the key is known to the union and
-      // wrong for this member.
-      //
-      // Before ADR-0037 the node schemas were non-strict, the re-parse
-      // stripped such a key, and this was a hand-written diff of the keys
-      // that survived. Strictness detects it exhaustively now — but it
-      // reports "Unrecognized key", which names the key and NOT the type,
-      // and a caller told only `label` is invalid is left guessing which
-      // of its nodes was wrong. So strictness is the detector and the
-      // message is still written here.
-      const unknown = parsed.error.issues.flatMap((issue) =>
-        issue.code === 'unrecognized_keys' ? issue.keys : [],
-      )
-      if (unknown.length > 0) {
-        fail(
-          index,
-          opName,
-          `a ${publishedKind(node)} node has no ${unknown.join(', ')} — the patch would have been ` +
-            'accepted and silently dropped, so it is refused instead',
-        )
-      }
       fail(index, opName, this.issues(parsed.error))
     }
     const updated = parsed.data

@@ -625,7 +625,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/canvas-edit.ts#editCanvas': 72,
   // Arrow-valued class properties: bound to the session so they can be passed as callbacks.
   'packages/server-core/src/tools/canvas-edit-session.ts#growToHold': 59,
-  'packages/server-core/src/tools/canvas-edit-session.ts#patchNode': 69,
   'packages/server-core/src/tools/canvas-edit-session.ts#placeAround': 56,
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 147,
