@@ -8,7 +8,7 @@
   "scripts": {
     "build": "vite build && vite build --mode development && vite build --mode firefox-production && vite build --mode firefox-development",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.node.config.ts",
+    "test": "vitest run",
     "smoke:bridge": "node scripts/bridge-smoke.mjs",
     "smoke:bridge:firefox": "node scripts/firefox-bridge-smoke.mjs",
     "smoke:native-host": "node scripts/native-host-smoke.mjs",
