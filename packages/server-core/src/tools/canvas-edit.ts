@@ -15,7 +15,12 @@ import type { LoroDoc } from 'loro-crdt'
 import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
-import { announceAgentActivity, notificationFailed } from './agent-activity.js'
+import {
+  announceAgentActivity,
+  COMMENT_SUMMARY_WORDS,
+  notificationFailed,
+  resolveSummaryWord,
+} from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { CanvasEditError, describeIssues, fail } from './canvas-edit-error.js'
 import { applyCanvasOp, type CanvasEditContext } from './canvas-edit-handlers.js'
@@ -264,7 +269,7 @@ async function announceEdit(
   }
 }
 
-type SummaryBucket = 'added' | 'changed' | 'removed' | 'commented' | 'resolved' | 'tidied'
+type SummaryBucket = 'added' | 'changed' | 'removed' | 'commented' | 'tidied'
 
 /**
  * Which tally an op contributes to, as a table.
@@ -275,8 +280,9 @@ type SummaryBucket = 'added' | 'changed' | 'removed' | 'commented' | 'resolved' 
  * fall through it — and absence now reads as a decision rather than as the
  * end of a list.
  *
- * `node.lock` / `edge.lock` are absent for a different reason: which tally
- * they land in depends on the op's own `locked`, so they are resolved below.
+ * `node.lock` / `edge.lock` and `comment.resolve` are absent for a different
+ * reason: which tally they land in depends on the op's own `locked` /
+ * `resolved`, so they are resolved below.
  * The table cannot be `satisfies Record<op, …>`: `CanvasOpSummaryInput` is
  * deliberately structural (`{ op: string }`) so the notifier contract does not
  * depend on the op union.
@@ -292,20 +298,27 @@ const OP_SUMMARY_BUCKET: Readonly<Record<string, SummaryBucket>> = {
   'edge.remove': 'removed',
   'line.remove': 'removed',
   'comment.add': 'commented',
-  'comment.resolve': 'resolved',
   tidy: 'tidied',
 }
 
-/** The order a summary reads in, with the word each tally is reported as. */
-const SUMMARY_ORDER: readonly (readonly [SummaryBucket | 'locked' | 'unlocked', string])[] = [
-  ['added', 'added'],
-  ['changed', 'changed'],
-  ['removed', 'removed'],
-  ['locked', 'locked'],
-  ['unlocked', 'unlocked'],
-  ['commented', 'commented'],
-  ['resolved', 'resolved'],
+/**
+ * The order a summary reads in; each tally is reported under its own name.
+ * The comment words are the thread plane's shared ones.
+ */
+const SUMMARY_ORDER: readonly string[] = [
+  'added',
+  'changed',
+  'removed',
+  'locked',
+  'unlocked',
+  ...COMMENT_SUMMARY_WORDS,
 ]
+
+function summaryBucketOf(op: CanvasOpSummaryInput): string | undefined {
+  if (op.op === 'node.lock' || op.op === 'edge.lock') return op.locked ? 'locked' : 'unlocked'
+  if (op.op === 'comment.resolve') return resolveSummaryWord(op.resolved)
+  return OP_SUMMARY_BUCKET[op.op]
+}
 
 /**
  * One human-readable line for the toast a browser shows. Counted from the
@@ -315,16 +328,11 @@ const SUMMARY_ORDER: readonly (readonly [SummaryBucket | 'locked' | 'unlocked', 
 function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
   const counts = new Map<string, number>()
   for (const op of ops) {
-    const bucket =
-      op.op === 'node.lock' || op.op === 'edge.lock'
-        ? op.locked
-          ? 'locked'
-          : 'unlocked'
-        : OP_SUMMARY_BUCKET[op.op]
+    const bucket = summaryBucketOf(op)
     if (bucket !== undefined) counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
   }
-  const parts = SUMMARY_ORDER.filter(([bucket]) => (counts.get(bucket) ?? 0) > 0).map(
-    ([bucket, word]) => `${word} ${counts.get(bucket)}`,
+  const parts = SUMMARY_ORDER.filter((word) => (counts.get(word) ?? 0) > 0).map(
+    (word) => `${word} ${counts.get(word)}`,
   )
   if ((counts.get('tidied') ?? 0) > 0) parts.push('tidied the layout')
   // `ops` is `.min(1)`, and every op kind above contributes, so this is

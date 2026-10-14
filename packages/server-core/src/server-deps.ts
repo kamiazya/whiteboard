@@ -46,7 +46,11 @@ export interface AgentActivity {
  * imported from the tool so the port file does not depend on the tool that
  * uses it.
  */
-export type CanvasOpSummaryInput = { readonly op: string; readonly locked?: boolean }
+export type CanvasOpSummaryInput = {
+  readonly op: string
+  readonly locked?: boolean
+  readonly resolved?: boolean
+}
 
 /**
  * The seam through which a tool reaches a browser watching the same

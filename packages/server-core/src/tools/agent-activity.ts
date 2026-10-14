@@ -48,6 +48,19 @@ export function announceAgentActivity(
   }
 }
 
+/**
+ * The words a watching person reads for a write to a document's threads, in
+ * the order a summary lists them. Both `wb_canvas_edit` and `wb_thread_edit`
+ * write the same thread plane (ADR-0026), so they share one vocabulary: the
+ * same act must read the same whichever tool the agent reached for.
+ */
+export const COMMENT_SUMMARY_WORDS = ['commented', 'replied', 'resolved', 'reopened'] as const
+
+/** A resolve op closes unless it says `resolved: false`, which reopens. */
+export function resolveSummaryWord(resolved: boolean | undefined): 'resolved' | 'reopened' {
+  return resolved === false ? 'reopened' : 'resolved'
+}
+
 export function notificationFailed(
   write: { readonly workspaceId: string; readonly documentId: string },
   notification: 'agentActivity' | 'requestViewport',
