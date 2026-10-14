@@ -1,4 +1,7 @@
-import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
+import {
+  spatialRenderStyleSchema,
+  spatialThemeModeSchema,
+} from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
 
 // Request schema for POST /api/w/:workspaceId/document/<path>/export-svg.
@@ -17,7 +20,7 @@ export const exportSvgRequestSchema = z
     padding: z.number().nonnegative().max(1024).optional(),
     outputPath: z.string().optional(),
     overwrite: z.boolean().optional(),
-    theme: z.enum(['light', 'dark']).optional(),
+    theme: spatialThemeModeSchema.optional(),
     // style: which look to draw (ADR-0030 decision 6). Absent is 'clean', so
     // an export never picks up the document's theme unasked; 'document' draws
     // the theme the canvas names; a theme id previews one.

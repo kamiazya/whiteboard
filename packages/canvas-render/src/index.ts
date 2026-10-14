@@ -190,7 +190,7 @@ export type {
 } from './theme/spatial-palette.js'
 export { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-theme.js'
-export { createSpatialTheme } from './theme/spatial-theme.js'
+export { createSpatialTheme, spatialThemeModeSchema } from './theme/spatial-theme.js'
 export type { ThemedAppearanceOptions } from './theme/theme-asset.js'
 export { createThemedAppearance, paletteFromTokens } from './theme/theme-asset.js'
 export { type ThemeFont, themeFontSchema } from './theme/theme-font.js'
