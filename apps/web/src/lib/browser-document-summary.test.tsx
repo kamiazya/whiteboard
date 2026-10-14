@@ -22,6 +22,7 @@ import {
   idbContentClock,
   listBrowserDocuments,
 } from './browser-document-summary.js'
+import { openWhiteboardDb } from './browser-idb.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { LoroStore } from './loro-store.js'
 
@@ -109,5 +110,20 @@ describe('browser document summary', () => {
 
     await pointer.clear()
     expect(await pointer.get()).toBeNull()
+  })
+
+  it('reads a stored pointer that is not a document id as no pointer at all', async () => {
+    const db = await openWhiteboardDb(DB_NAME)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('meta', 'readwrite')
+        tx.objectStore('meta').put({ documentId: 'not-a-string-pointer' }, 'defaultDocumentId')
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+    } finally {
+      db.close()
+    }
+    expect(await new IdbDefaultDocumentPointer(DB_NAME).get()).toBeNull()
   })
 })

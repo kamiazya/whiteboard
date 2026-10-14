@@ -1,6 +1,7 @@
 import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { CONTENT_TIMESTAMPS_STORE, openWhiteboardDb } from './browser-idb.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import type { Answered } from './idb-tx.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 
 // What `DocumentIndex` deliberately does not own, for browser mode.
@@ -154,11 +155,11 @@ function metaTransaction<T>(
   db: IDBDatabase,
   mode: IDBTransactionMode,
   body: (store: IDBObjectStore) => IDBRequest<T>,
-): Promise<T> {
+): Promise<Answered<T>> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('meta', mode)
     const req = body(tx.objectStore('meta'))
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => resolve(req.result as Answered<T>)
     req.onerror = () => reject(req.error)
     tx.onerror = () => reject(tx.error)
     // An abort with no handler leaves this promise pending forever, which
@@ -173,7 +174,7 @@ export class IdbDefaultDocumentPointer implements DefaultDocumentPointer {
   private async withDb<T>(
     mode: IDBTransactionMode,
     body: (store: IDBObjectStore) => IDBRequest<T>,
-  ): Promise<T> {
+  ): Promise<Answered<T>> {
     const db = await openWhiteboardDb(this.dbName)
     try {
       return await metaTransaction(db, mode, body)
@@ -184,7 +185,7 @@ export class IdbDefaultDocumentPointer implements DefaultDocumentPointer {
 
   async get(): Promise<string | null> {
     const value = await this.withDb('readonly', (store) => store.get(DEFAULT_POINTER_KEY))
-    return (value as string | undefined) ?? null
+    return typeof value === 'string' ? value : null
   }
 
   async set(documentId: string): Promise<void> {
