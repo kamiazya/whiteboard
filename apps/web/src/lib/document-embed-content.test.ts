@@ -5,8 +5,9 @@
  * both answer with their name. The legacy case is served by the fold, not
  * by a second read path of its own.
  */
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
+import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
@@ -17,6 +18,7 @@ import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { transferFragmentImages } from './clipboard-images.js'
 import {
   BROWSER_FILE_ADAPTER,
   loadBrowserReference,
@@ -266,5 +268,59 @@ describe('BROWSER_FILE_ADAPTER, stored images', () => {
 
   it('scopes its files to this origin, the one store every browser workspace shares', () => {
     expect(BROWSER_FILE_ADAPTER.fileScope).toBe(`browser:${location.origin}`)
+  })
+})
+
+describe('BROWSER_FILE_ADAPTER, the upload policy', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+  })
+
+  // The browser could hold any bytes, but a workspace moves to a daemon only
+  // with what the daemon accepts — so the keeper itself refuses, and no
+  // writer into the seam has to remember to ask first.
+  it.each([
+    [
+      'a type the daemon does not store',
+      new File([new Uint8Array(4)], 'p.bmp', { type: 'image/bmp' }),
+    ],
+    [
+      'a picture over the upload ceiling',
+      new File([new Uint8Array(MAX_FILE_UPLOAD_BYTES + 1)], 'p.png', { type: 'image/png' }),
+    ],
+  ])('refuses %s without writing it', async (_case, file) => {
+    const put = vi.spyOn(DocumentFileStore.prototype, 'put')
+    try {
+      const stored = await BROWSER_FILE_ADAPTER.storeImage(file)
+      expect(stored.ok).toBe(false)
+      expect(put).not.toHaveBeenCalled()
+    } finally {
+      put.mockRestore()
+    }
+  })
+
+  it('leaves an off-policy pasted picture out, saying why, and stores nothing', async () => {
+    const put = vi.spyOn(DocumentFileStore.prototype, 'put')
+    try {
+      const { fragment, notice } = await transferFragmentImages(
+        {
+          nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 10, height: 10, file: 'asset:p' })],
+          edges: [],
+          files: { 'asset:p': { mimeType: 'image/bmp', dataBase64: btoa('bmp') } },
+        },
+        {
+          fileScope: BROWSER_FILE_ADAPTER.fileScope,
+          readImage: BROWSER_FILE_ADAPTER.loadImageBlob,
+          storeImage: BROWSER_FILE_ADAPTER.storeImage,
+        },
+      )
+      expect(put).not.toHaveBeenCalled()
+      expect(fragment.nodes).toEqual([])
+      expect(notice).toBe(
+        'A picture was left out of the paste: image/bmp is not supported. Images can be PNG, JPEG, GIF, WebP, SVG.',
+      )
+    } finally {
+      put.mockRestore()
+    }
   })
 })
