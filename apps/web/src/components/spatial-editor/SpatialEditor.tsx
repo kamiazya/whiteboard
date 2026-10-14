@@ -1527,6 +1527,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onAddImage === undefined
               ? undefined
               : () => {
+                  pendingBackgroundGroupIdRef.current = null
                   pendingImagePointRef.current = null
                   imageInputRef.current?.click()
                 }
@@ -1573,12 +1574,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             inputRef={imageInputRef}
             notice={imageNotice}
             onDismissNotice={dismissImageNotice}
-            onFile={(file) => {
-              const backgroundGroupId = pendingBackgroundGroupIdRef.current
-              pendingBackgroundGroupIdRef.current = null
+            backgroundRequestRef={pendingBackgroundGroupIdRef}
+            pointRequestRef={pendingImagePointRef}
+            onFile={(file, { backgroundGroupId, point }) => {
               if (backgroundGroupId === null) {
-                addImageFile(file, pendingImagePointRef.current ?? undefined)
-                pendingImagePointRef.current = null
+                addImageFile(file, point ?? undefined)
                 return
               }
               storeImageFile(file, (ref) =>

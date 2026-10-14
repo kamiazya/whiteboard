@@ -7,18 +7,59 @@
  * refusal of anything else — or of an upload the daemon turned away anyway —
  * is said, so no pick, drop or paste ends with nothing happening.
  */
-import type { RefObject } from 'react'
+import { type MutableRefObject, type RefObject, useEffect } from 'react'
 import { IMAGE_FILE_ACCEPT } from '../../lib/image-upload-policy.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 import { CanvasNotice } from './CanvasNotice.js'
+
+/** What the opener of the picker asked the next pick to be. */
+interface ImageRequest {
+  /** The frame whose background the pick becomes; null for an image node. */
+  readonly backgroundGroupId: string | null
+  /** Where an image node lands; null for the viewport centre. */
+  readonly point: Point | null
+}
 
 export interface ImageIntakeProps {
   readonly inputRef: RefObject<HTMLInputElement | null>
-  readonly onFile: (file: File) => void
+  /** Set by whichever opener ran last. */
+  readonly backgroundRequestRef: MutableRefObject<string | null>
+  readonly pointRequestRef: MutableRefObject<Point | null>
+  readonly onFile: (file: File, request: ImageRequest) => void
   readonly notice: string | null
   readonly onDismissNotice: () => void
 }
 
-export function ImageIntake({ inputRef, onFile, notice, onDismissNotice }: ImageIntakeProps) {
+export function ImageIntake({
+  inputRef,
+  backgroundRequestRef,
+  pointRequestRef,
+  onFile,
+  notice,
+  onDismissNotice,
+}: ImageIntakeProps) {
+  // A pick spends the request and a dismissed picker withdraws it, both in
+  // one place: an opener that does not restate a request would otherwise
+  // inherit it. React binds `onCancel` for <dialog> only, hence the listener.
+  const takeRequest = (): ImageRequest => {
+    const request = {
+      backgroundGroupId: backgroundRequestRef.current,
+      point: pointRequestRef.current,
+    }
+    backgroundRequestRef.current = null
+    pointRequestRef.current = null
+    return request
+  }
+  useEffect(() => {
+    const input = inputRef.current
+    if (input === null) return
+    const withdraw = () => {
+      backgroundRequestRef.current = null
+      pointRequestRef.current = null
+    }
+    input.addEventListener('cancel', withdraw)
+    return () => input.removeEventListener('cancel', withdraw)
+  }, [inputRef, backgroundRequestRef, pointRequestRef])
   return (
     <>
       <input
@@ -31,7 +72,7 @@ export function ImageIntake({ inputRef, onFile, notice, onDismissNotice }: Image
         onChange={(e) => {
           const file = e.target.files?.[0]
           e.target.value = ''
-          if (file !== undefined) onFile(file)
+          if (file !== undefined) onFile(file, takeRequest())
         }}
       />
       <CanvasNotice testId="image-notice" notice={notice} onDismiss={onDismissNotice} />
