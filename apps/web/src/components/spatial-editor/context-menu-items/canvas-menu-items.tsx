@@ -20,6 +20,7 @@ import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 import { CREATION_LABELS } from '../creation-labels.js'
+import { type ImagePicker, openImagePicker } from '../ImageIntake.js'
 import { commentHereItem, resolvedCommentsItem } from './annotation-verbs.js'
 
 export interface CanvasMenuItemsInput {
@@ -29,8 +30,7 @@ export interface CanvasMenuItemsInput {
   readonly isLocked: (nodeId: string) => boolean
   readonly fileRefOptions?: readonly FileRefOption[]
   readonly onAddImage: CanvasCommands['onAddImage']
-  readonly pendingImagePointRef: MutableRefObject<Point | null>
-  readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
+  readonly imagePicker: ImagePicker
   readonly pasteClipboard: CanvasCommands['pasteClipboard']
   readonly createNodeAt: CanvasCommands['createNodeAt']
   readonly setLinkDialog: CanvasCommands['setLinkDialog']
@@ -49,8 +49,7 @@ export function canvasMenuItems({
   isLocked,
   fileRefOptions,
   onAddImage,
-  pendingImagePointRef,
-  imageInputRef,
+  imagePicker,
   pasteClipboard,
   createNodeAt,
   setLinkDialog,
@@ -104,10 +103,7 @@ export function canvasMenuItems({
     emptyItems.push({
       label: CREATION_LABELS.image,
       icon: <ImageIcon />,
-      onSelect: () => {
-        pendingImagePointRef.current = point
-        imageInputRef.current?.click()
-      },
+      onSelect: () => openImagePicker(imagePicker, { backgroundGroupId: null, point }),
     })
   }
   // Tidy needs a second node to tidy AGAINST — the item appears

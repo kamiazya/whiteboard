@@ -133,7 +133,7 @@ import { isFollowableUrl } from './followable-url.js'
 import { GestureOverlays } from './gesture-overlays.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
-import { ImageIntake } from './ImageIntake.js'
+import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
@@ -1200,11 +1200,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       createImageNodeAt,
     })
 
-    const imageInputRef = useRef<HTMLInputElement | null>(null)
-    /** When set, the next picked image becomes this group's background instead of a new node. */
-    const pendingBackgroundGroupIdRef = useRef<string | null>(null)
-    /** Where the pending picker-created image should land; null = viewport center. */
-    const pendingImagePointRef = useRef<Point | null>(null)
+    const imagePicker = useImagePicker()
 
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
@@ -1465,9 +1461,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             gestureState={gestureState}
             isEdgeLocked={isEdgeLocked}
             fileRefOptions={fileRefOptions}
-            pendingImagePointRef={pendingImagePointRef}
-            imageInputRef={imageInputRef}
-            pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
+            imagePicker={imagePicker}
             isLocked={isLocked}
             extraIds={extraIds}
             selectedId={selectedId}
@@ -1526,11 +1520,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateImage={
             onAddImage === undefined
               ? undefined
-              : () => {
-                  pendingBackgroundGroupIdRef.current = null
-                  pendingImagePointRef.current = null
-                  imageInputRef.current?.click()
-                }
+              : () => openImagePicker(imagePicker, { backgroundGroupId: null, point: null })
           }
           tool={tool}
           onToolChange={(next) => {
@@ -1571,11 +1561,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           <CanvasNotice testId="image-notice" notice={imageNotice} onDismiss={dismissImageNotice} />
         ) : (
           <ImageIntake
-            inputRef={imageInputRef}
+            picker={imagePicker}
             notice={imageNotice}
             onDismissNotice={dismissImageNotice}
-            backgroundRequestRef={pendingBackgroundGroupIdRef}
-            pointRequestRef={pendingImagePointRef}
             onFile={(file, { backgroundGroupId, point }) => {
               if (backgroundGroupId === null) {
                 addImageFile(file, point ?? undefined)

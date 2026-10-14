@@ -13,10 +13,9 @@ import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
-// Once the harness has served one file chooser, a real click on the input is
-// dismissed by the browser itself: a `cancel` the test never sent, landing
-// after its pick. So the chooser never opens, and a test that means a
-// dismissal says so.
+// A real click opens Chromium's chooser, which a harness that has served one
+// before dismisses by itself, after the test's pick. So the chooser never
+// opens here, and every dismissal is one the browser does not report.
 beforeEach(() => {
   vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
 })
@@ -78,13 +77,13 @@ it('clears the input after a pick, so the same file can be picked again', async 
   expect(input(container).value).toBe('')
 })
 
-it('spends a background request on its pick; the next Image is a node', async () => {
+it('after a background pick, the next menu Image is an ordinary node', async () => {
   const { Host, latest } = makeEditorHost({ initial: withFrame, editorProps: imageStore() })
   const { container } = render(<Host />)
   await contextMenuItem(container, 550, 400, 'Set background image')
   pick(container)
   await vi.waitFor(() => expect(frame(latest.canvas)).toMatchObject({ background: 'asset:1' }))
-  // The menu's Image restates only its point, so only the spend can stop it.
+  // A different opener than the + menu's, so each states its own request.
   await contextMenuItem(container, 60, 60, 'Image')
   pick(container)
   await vi.waitFor(() =>
@@ -100,7 +99,7 @@ it('a dismissed background picker does not capture the next + Image', async () =
   const { Host, latest } = makeEditorHost({ initial: withFrame, editorProps: imageStore() })
   const { container } = render(<Host />)
   await contextMenuItem(container, 550, 400, 'Set background image')
-  // Dismissed with no event at all: the + opener alone must withdraw it.
+  // Dismissed with no event at all: the + opener's own request replaces it.
   plusImage(container)
   pick(container)
   await vi.waitFor(() =>
@@ -112,11 +111,12 @@ it('a dismissed background picker does not capture the next + Image', async () =
   expect(latest.canvas.nodes).toHaveLength(3)
 })
 
-it('a cancelled background picker does not capture the next menu Image', async () => {
+it('a background picker dismissed with no event does not capture a menu Image', async () => {
   const { Host, latest } = makeEditorHost({ initial: withFrame, editorProps: imageStore() })
   const { container } = render(<Host />)
   await contextMenuItem(container, 550, 400, 'Set background image')
-  fireEvent(input(container), new Event('cancel'))
+  // Not every browser reports a dismissed file picker, and the stubbed click
+  // dispatches nothing: the menu's own request must replace the frame's.
   await contextMenuItem(container, 60, 60, 'Image')
   pick(container)
   await vi.waitFor(() =>
