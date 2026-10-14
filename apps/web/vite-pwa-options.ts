@@ -1,4 +1,5 @@
 import type { VitePWAOptions } from 'vite-plugin-pwa'
+import { NEW_CANVAS_SHORTCUT } from './src/lib/new-canvas-shortcut.js'
 
 // The app's light ground (index.css --background); the installed titlebar
 // should read as the app, not the pre-design-refactor navy.
@@ -44,14 +45,15 @@ export const pwaOptions: Partial<VitePWAOptions> = {
         form_factor: 'wide',
       },
     ],
-    // Long-press / right-click the installed icon. `?new=canvas` is handled
-    // by the browser keeper's document list (BrowserIndexPage), which creates
-    // a canvas and opens it; in daemon mode it degrades to the daemon's list,
+    // Long-press / right-click the installed icon. The shortcut's parameter
+    // (lib/new-canvas-shortcut.ts, read by the page too) is handled by the
+    // browser keeper's document list (BrowserIndexPage), which creates a
+    // canvas and opens it; in daemon mode it degrades to the daemon's list,
     // one click from the same action.
     shortcuts: [
       {
         name: 'New canvas',
-        url: '/?new=canvas',
+        url: NEW_CANVAS_SHORTCUT.url,
         icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
       },
     ],

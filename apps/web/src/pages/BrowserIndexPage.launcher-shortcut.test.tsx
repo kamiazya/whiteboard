@@ -3,15 +3,20 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { NEW_CANVAS_SHORTCUT } from '../lib/new-canvas-shortcut.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 afterEach(cleanup)
 
-// The installed app's "New canvas" launcher shortcut lands on this page at
-// `?new=canvas`. Reaching it through App's routing — the address sync rewrites
-// `/` to the workspace's own address on the way — is App's to keep; this pins
-// what the page does once the parameter arrives.
+const { key, value } = NEW_CANVAS_SHORTCUT
+const SHORTCUT = `${key}=${value}`
+
+// The installed app's "New canvas" launcher shortcut lands on this page
+// carrying `NEW_CANVAS_SHORTCUT`'s parameter. Reaching it through App's
+// routing — the address sync rewrites `/` to the workspace's own address on
+// the way — is App's to keep; this pins what the page does once the
+// parameter arrives.
 describe('the New canvas launcher shortcut on the list', () => {
   function renderAt(store: BrowserStoreDouble, entry: string) {
     const onOpenDocument = vi.fn()
@@ -39,7 +44,7 @@ describe('the New canvas launcher shortcut on the list', () => {
 
   it('creates one canvas, opens it, and drops the parameter from the address', async () => {
     const store = new BrowserStoreDouble()
-    const { onOpenDocument, at } = renderAt(store, '/w/default?new=canvas&folder=plans')
+    const { onOpenDocument, at } = renderAt(store, `/w/default?${SHORTCUT}&folder=plans`)
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     const all = await store.listDocuments()
@@ -53,7 +58,7 @@ describe('the New canvas launcher shortcut on the list', () => {
   it('a refused create says so in place and still drops the parameter', async () => {
     const store = new BrowserStoreDouble()
     store.index.createDocument = () => Promise.reject(new Error('quota exceeded'))
-    const { onOpenDocument, at } = renderAt(store, '/w/default?new=canvas')
+    const { onOpenDocument, at } = renderAt(store, `/w/default?${SHORTCUT}`)
 
     expect((await screen.findByRole('alert')).textContent).toBe(
       'Failed to create a canvas in this browser.',
@@ -68,11 +73,11 @@ describe('the New canvas launcher shortcut on the list', () => {
     let refusals = 1
     store.index.createDocument = (input) =>
       refusals-- > 0 ? Promise.reject(new Error('quota exceeded')) : create(input)
-    const { onOpenDocument, at } = renderAt(store, '/w/default?new=canvas')
+    const { onOpenDocument, at } = renderAt(store, `/w/default?${SHORTCUT}`)
     await screen.findByRole('alert')
     await waitFor(() => expect(at.search).toBe(''))
 
-    act(() => at.go('/w/default?new=canvas'))
+    act(() => at.go(`/w/default?${SHORTCUT}`))
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     expect(await store.listDocuments()).toHaveLength(1)
@@ -80,7 +85,7 @@ describe('the New canvas launcher shortcut on the list', () => {
 
   it('another value of the parameter creates nothing', async () => {
     const store = new BrowserStoreDouble()
-    const { onOpenDocument } = renderAt(store, '/w/default?new=note')
+    const { onOpenDocument } = renderAt(store, `/w/default?${key}=note`)
 
     await screen.findByText('What will you make first?')
     expect(onOpenDocument).not.toHaveBeenCalled()

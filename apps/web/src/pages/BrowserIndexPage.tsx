@@ -33,6 +33,7 @@ import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { followBrowserWorkspaceWrites } from '../lib/follow-workspace-writes.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { NEW_CANVAS_SHORTCUT } from '../lib/new-canvas-shortcut.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
@@ -542,8 +543,8 @@ function useBrowserCreate({
 
 /**
  * The installed app's "New canvas" launcher shortcut (the manifest's
- * `shortcuts`, `/?new=canvas`): one create through this page's own create
- * path, which opens what it made. The parameter leaves the address first, by
+ * `shortcuts`, declared in `lib/new-canvas-shortcut.ts`): one create through
+ * this page's own create path, which opens what it made. The parameter leaves the address first, by
  * REPLACING the entry, so neither a reload nor a Back into it creates a
  * second document.
  */
@@ -553,20 +554,13 @@ function useLauncherShortcut(onCreate: (kind: DocumentKind) => Promise<void>): v
   useEffect(() => {
     // Re-armed once the parameter is gone, so a later visit retries a create
     // that failed; held while it is present, so one visit creates once.
-    if (params.get('new') !== 'canvas') {
+    if (!NEW_CANVAS_SHORTCUT.isRequestedBy(params)) {
       handled.current = false
       return
     }
     if (handled.current) return
     handled.current = true
-    setParams(
-      (current) => {
-        const rest = new URLSearchParams(current)
-        rest.delete('new')
-        return rest
-      },
-      { replace: true },
-    )
+    setParams(NEW_CANVAS_SHORTCUT.removedFrom, { replace: true })
     void onCreate('spatial')
   }, [params, setParams, onCreate])
 }

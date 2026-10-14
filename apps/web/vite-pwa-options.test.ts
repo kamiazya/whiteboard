@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { NEW_CANVAS_SHORTCUT } from './src/lib/new-canvas-shortcut.js'
 import { pwaOptions } from './vite-pwa-options.js'
 
 describe('pwaOptions', () => {
@@ -124,6 +125,9 @@ describe('manifest install-surface enrichment', () => {
 
   it('offers a New-canvas shortcut', () => {
     const shortcut = pwaOptions.manifest?.shortcuts?.find((s) => s.name === 'New canvas')
-    expect(shortcut?.url).toBe('/?new=canvas')
+    // Opens the app's root carrying the parameter the list page reads.
+    const url = new URL(shortcut?.url ?? '', 'https://app.invalid')
+    expect(url.pathname).toBe('/')
+    expect(NEW_CANVAS_SHORTCUT.isRequestedBy(url.searchParams)).toBe(true)
   })
 })
