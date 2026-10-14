@@ -33,18 +33,81 @@ function namesErrnoException(type: ts.TypeNode): boolean {
   return found
 }
 
-/** `['ENOENT', 'EEXIST'].includes(err.code)`: a list of errno literals asked about a `code` read. */
-function isErrnoListIncludes(node: ts.Node): boolean {
-  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false
-  const [asked] = node.arguments
-  const list = unwrapExpression(node.expression.expression)
+/** `{ code?: unknown }`, alone or inside a union: an inline type that makes `.code` readable. */
+function namesInlineCodeMember(type: ts.TypeNode): boolean {
+  let found = false
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isTypeLiteralNode(node) &&
+      node.members.some(
+        (member) =>
+          ts.isPropertySignature(member) &&
+          (ts.isIdentifier(member.name) || ts.isStringLiteralLike(member.name)) &&
+          member.name.text === 'code',
+      )
+    ) {
+      found = true
+    }
+    if (!found) ts.forEachChild(node, visit)
+  }
+  visit(type)
+  return found
+}
+
+const isErrnoType = (type: ts.TypeNode): boolean =>
+  namesErrnoException(type) || namesInlineCodeMember(type)
+
+/** A non-empty array literal of errno literals, or `new Set(...)` over one. */
+function isErrnoCollection(node: ts.Expression): boolean {
+  const inner = unwrapExpression(node)
+  const list =
+    ts.isNewExpression(inner) &&
+    ts.isIdentifier(inner.expression) &&
+    inner.expression.text === 'Set' &&
+    inner.arguments?.[0] !== undefined
+      ? unwrapExpression(inner.arguments[0])
+      : inner
   return (
-    node.expression.name.text === 'includes' &&
-    asked !== undefined &&
-    isCodeRead(asked) &&
     ts.isArrayLiteralExpression(list) &&
     list.elements.length > 0 &&
     list.elements.every(isErrnoLiteral)
+  )
+}
+
+/** The names a file binds to an errno collection: `const TOLERATED = new Set(['EPERM'])`. */
+function errnoCollectionNames(file: ts.SourceFile): ReadonlySet<string> {
+  const names = new Set<string>()
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer !== undefined &&
+      isErrnoCollection(node.initializer)
+    ) {
+      names.add(node.name.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return names
+}
+
+/**
+ * `['ENOENT', 'EEXIST'].includes(err.code)`, or `.has`/`.includes` on a name
+ * bound to such a list or a `Set` of one: errno literals asked about a `code`
+ * read.
+ */
+function isErrnoCollectionQuery(node: ts.Node, collections: ReadonlySet<string>): boolean {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return false
+  const [asked] = node.arguments
+  if (asked === undefined || !isCodeRead(asked)) return false
+  const method = node.expression.name.text
+  const receiver = unwrapExpression(node.expression.expression)
+  if (ts.isIdentifier(receiver) && collections.has(receiver.text)) {
+    return method === 'has' || method === 'includes'
+  }
+  return (
+    method === 'includes' && ts.isArrayLiteralExpression(receiver) && isErrnoCollection(receiver)
   )
 }
 
@@ -56,10 +119,8 @@ const COMPARISON_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
 ])
 
 function isErrnoTyping(node: ts.Node): boolean {
-  if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) {
-    return namesErrnoException(node.type)
-  }
-  return ts.isVariableDeclaration(node) && node.type !== undefined && namesErrnoException(node.type)
+  if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) return isErrnoType(node.type)
+  return ts.isVariableDeclaration(node) && node.type !== undefined && isErrnoType(node.type)
 }
 
 function isErrnoComparison(node: ts.Node): boolean {
@@ -80,11 +141,11 @@ function isErrnoSwitchCase(node: ts.Node): boolean {
   )
 }
 
-const SPELLINGS: readonly ((node: ts.Node) => boolean)[] = [
+const SPELLINGS: readonly ((node: ts.Node, collections: ReadonlySet<string>) => boolean)[] = [
   isErrnoTyping,
   isErrnoComparison,
   isErrnoSwitchCase,
-  isErrnoListIncludes,
+  isErrnoCollectionQuery,
 ]
 
 /**
@@ -93,16 +154,22 @@ const SPELLINGS: readonly ((node: ts.Node) => boolean)[] = [
  *
  * Two families, read from the syntax tree because a text pattern keys on one
  * spelling of each: the TYPE that makes `.code` readable off a thrown value
- * (an assertion to `ErrnoException` or a variable declared as one, whatever
- * the alias and wherever `.code` is read afterwards), and the COMPARISON of a
- * `code` read against an errno literal (either operand order, a `switch`, an
- * `includes` over a list of them).
+ * (an assertion to `ErrnoException` or to an inline type with a `code`
+ * member, or a variable declared as either, whatever the alias and wherever
+ * `.code` is read afterwards), and the COMPARISON of a `code` read against an
+ * errno literal (either operand order, a `switch`, an `includes` over a list
+ * of them, or a `has`/`includes` on a name the file binds to such a list or
+ * a `Set` of one). A collection asked about `errnoCode(err)` is not a hit:
+ * there the helper did the reading.
  */
 export function errnoSpellings(fileName: string, source: string): string[] {
   const file = parseSource(fileName, source)
+  const collections = errnoCollectionNames(file)
   const found: string[] = []
   const visit = (node: ts.Node): void => {
-    if (SPELLINGS.some((isSpelling) => isSpelling(node))) found.push(node.getText(file))
+    if (SPELLINGS.some((isSpelling) => isSpelling(node, collections))) {
+      found.push(node.getText(file))
+    }
     ts.forEachChild(node, visit)
   }
   visit(file)
