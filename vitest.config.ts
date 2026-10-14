@@ -1,8 +1,11 @@
+// biome-ignore-all assist/source/organizeImports: the import order is read by the text guards described below
+// Double-quoted and FIRST on purpose: the guards that read this file as text
+// take a single-quoted span naming a config as a registered project, so a
+// single-quoted specifier would be counted twice, and one placed after the
+// next import would join the span its closing quote opens.
+// biome-ignore format: so is the quote style
+import webJsdom from "./apps/web/vitest.config.ts"
 import { defineConfig } from 'vitest/config'
-// Imported WITHOUT its extension on purpose: the project inventory scans this
-// file for every quoted path ending in the config suffix, and a full one here
-// would register the web jsdom project twice.
-import webJsdom from './apps/web/vitest.config'
 
 export default defineConfig({
   test: {
