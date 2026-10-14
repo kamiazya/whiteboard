@@ -19,7 +19,7 @@ import '@vitest/web-worker'
 import { LoroDoc } from 'loro-crdt'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const BASE = 'http://127.0.0.1:3099'
 
@@ -32,6 +32,8 @@ const snapshotHits: string[] = []
 /** Docs whose snapshot fetch answers 503 while listed — the outage case. */
 const failingSnapshots = new Set<string>()
 const updateWrites: { doc: string; body: Uint8Array }[] = []
+/** Docs whose update write answers 503 while listed — a daemon briefly unable to take writes. */
+const failingWrites = new Set<string>()
 
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
@@ -59,6 +61,8 @@ const server = setupServer(
     HttpResponse.json({ ok: true }),
   ),
   http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
+    if (failingWrites.has(`${String(params.workspaceId)}/${String(params.path)}`))
+      return HttpResponse.json({ title: 'busy' }, { status: 503 })
     updateWrites.push({
       doc: `${String(params.workspaceId)}/${String(params.path)}`,
       body: new Uint8Array(await request.arrayBuffer()),
@@ -87,14 +91,24 @@ let docSeq = 0
 const nextDoc = () => `seed-ws/doc-${++docSeq}`
 
 let port: MessagePort
+/** Every write-state the worker told this port, in order. */
+const writeStates: { doc: string; landed: boolean }[] = []
 beforeAll(() => {
   const worker = new SharedWorker(new URL('./sse-shared-worker.ts', import.meta.url), {
     type: 'module',
   })
   port = worker.port
   port.start()
+  port.addEventListener('message', (e: MessageEvent) => {
+    const data = e.data as { type?: string; doc?: string; landed?: boolean }
+    if (data.type === 'write-state' && data.doc !== undefined && data.landed !== undefined)
+      writeStates.push({ doc: data.doc, landed: data.landed })
+  })
   port.postMessage({ type: 'init', baseUrl: BASE })
 })
+
+const until = (predicate: () => boolean) =>
+  vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 15_000, interval: 25 })
 
 function requestSnapshot(doc: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
@@ -231,5 +245,39 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     const after = new LoroDoc()
     after.import(await requestSnapshot(doc))
     expect(after.getMap('m').get('survives')).toBe('the-outage')
+  })
+
+  it('still writes an edit that was outstanding when a late seed landed', async () => {
+    // The seed may acknowledge only what it imported, never what the replica
+    // already held: an edit a tab pushed while the daemon could take neither
+    // the seed nor the write is in the replica BEFORE the seed lands, and
+    // moving the acknowledged baseline past it would make the retry find
+    // nothing outstanding — the edit stored nowhere, and reported landed.
+    const doc = nextDoc()
+    const content = new LoroDoc()
+    content.getMap('m').set('seeded', 'yes')
+    content.commit()
+    snapshotByDoc.set(doc, content.export({ mode: 'snapshot' }))
+    failingSnapshots.add(doc)
+    failingWrites.add(doc)
+
+    port.postMessage({ type: 'subscribe', doc })
+    await requestSnapshot(doc)
+    const tab = new LoroDoc()
+    tab.getMap('m').set('edit', 'before-seed')
+    tab.commit()
+    port.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
+    await until(() => writeStates.some((s) => s.doc === doc && !s.landed))
+
+    failingSnapshots.delete(doc)
+    const seeded = new LoroDoc()
+    seeded.import(await requestSnapshot(doc))
+    expect(seeded.getMap('m').get('seeded')).toBe('yes')
+
+    failingWrites.delete(doc)
+    await until(() => writeStates.some((s) => s.doc === doc && s.landed))
+    const written = new LoroDoc()
+    for (const write of updateWrites.filter((w) => w.doc === doc)) written.import(write.body)
+    expect(written.getMap('m').get('edit')).toBe('before-seed')
   })
 })
