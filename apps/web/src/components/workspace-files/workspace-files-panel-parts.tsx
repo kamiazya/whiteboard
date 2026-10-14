@@ -275,13 +275,17 @@ export function PanelToolbar({
  * Preview is the exception and depends on the POINTER rather than on a
  * handler: where a tap opens, the object pane cannot be filled by selecting,
  * so this menu is the only way to look at a document without leaving.
+ *
+ * Open takes the panel's `openEntry` rather than the host's handler, so an
+ * open from here lands in the Recent lane and the seen baseline like every
+ * other; it is absent when the host offers no open.
  */
 export function cardMenuItemsFor(
   entry: WorkspaceDocumentEntry,
   {
     tapOpens,
     source,
-    onOpenDocument,
+    openEntry,
     onDuplicateDocument,
     onRequestDelete,
     onRequestDeleteMany,
@@ -293,7 +297,7 @@ export function cardMenuItemsFor(
   }: {
     tapOpens: boolean
     source: WorkspaceFilesSource
-    onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument']
+    openEntry: ((entry: WorkspaceDocumentEntry) => void) | undefined
     onDuplicateDocument: WorkspaceFilesPanelProps['onDuplicateDocument']
     onRequestDelete: WorkspaceFilesPanelProps['onRequestDelete']
     onRequestDeleteMany: WorkspaceFilesPanelProps['onRequestDeleteMany']
@@ -305,13 +309,13 @@ export function cardMenuItemsFor(
   },
 ): ComponentProps<typeof ContextMenu>['items'] {
   return [
-    ...(onOpenDocument === undefined
+    ...(openEntry === undefined
       ? []
       : [
           {
             label: 'Open',
             icon: <ExternalLink />,
-            onSelect: () => onOpenDocument(entry.path),
+            onSelect: () => openEntry(entry),
           },
         ]),
     ...(tapOpens

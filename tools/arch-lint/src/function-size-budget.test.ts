@@ -277,7 +277,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // there are those — every one a block of JSX or a table of menu rows, which
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 779,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 774,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 91,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 93,
@@ -306,7 +306,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/use-workspace-address-sync.ts#useWorkspaceAddressSync': 193,
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   // Raised by two: the session's refused-write report and its teardown.
-  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 356,
+  'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 336,
   'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
@@ -488,7 +488,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/CanvasViewer.tsx#CanvasViewer': 136,
   'packages/canvas-viewer/src/font-loading.ts#loadViewerFont': 61,
   'packages/canvas-viewer/src/widget-entry.ts#applyToolResult': 58,
-  'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 170,
+  'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 172,
   'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 76,
   'packages/codec/src/markdown/from-remark.ts#toFlow': 55,
   'packages/codec/src/markdown/from-remark.ts#toPhrasing': 55,

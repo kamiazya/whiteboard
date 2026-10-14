@@ -32,7 +32,7 @@ afterEach(() => {
   localStorage.removeItem(STORAGE_KEY)
 })
 
-it('records an open under the page own memory scope, and shows it on return', async () => {
+it('records an open under the browser workspace id scope, and shows it on return', async () => {
   const settled = getBrowserWorkspaceId()
   const store = new BrowserStoreDouble()
   await store.save({
@@ -61,10 +61,15 @@ it('records an open under the page own memory scope, and shows it on return', as
   if (card === null) throw new Error('no card')
   await userEvent.dblClick(card)
 
-  // The record is what the page's scope produced. Asserted before the
-  // remount, so a lane that never appears is told apart from an open that
-  // was never recorded.
-  await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull())
+  // The record is what the page's scope produced, keyed by keeper and
+  // workspace id: a key built from the address segment would reset the lane
+  // on every rename. Asserted before the remount, so a lane that never
+  // appears is told apart from an open that was never recorded.
+  await waitFor(() =>
+    expect(Object.keys(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'))).toEqual([
+      `browser:${settled}`,
+    ]),
+  )
 
   // cleanup() rather than unmount(): rendering into `document.body` twice
   // reuses testing-library's cached root, and React refuses to update an

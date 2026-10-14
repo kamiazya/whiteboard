@@ -326,7 +326,7 @@ pnpm build:mcp       # the server alone: canvas-viewer's widget first, then `@ka
 pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke
-pnpm smoke:e2e       # version / route / no_client wiring smoke
+pnpm smoke:e2e       # stdio MCP subprocess: every tool in COVERED_TOOLS, wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 pnpm smoke:claude    # Claude subprocess smoke (uses API quota)
 pnpm smoke:codex     # Codex subprocess smoke (uses API quota)
 pnpm eval:tool-surface # LLM-driven tool-surface eval on a seeded fixture (uses API quota; ADR-0031)

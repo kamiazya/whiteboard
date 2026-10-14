@@ -18,6 +18,7 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { SpatialSyntaxPalette } from './spatial-palette.js'
+import type { SpatialThemeMode } from './spatial-theme-mode.js'
 
 /** What a resolver decided for one spatial node's chrome. */
 export interface SpatialNodeAppearance {
@@ -33,7 +34,7 @@ export interface SpatialAppearanceResolver {
    * theme reads it to pick the theme's matching palette, treating absence
    * as light. Set by `createSpatialTheme` on every resolver it builds.
    */
-  readonly mode?: 'light' | 'dark'
+  readonly mode?: SpatialThemeMode
   resolveNode(node: SpatialNode): SpatialNodeAppearance
   resolveEdge(edge: RoutableElement): Appearance | undefined
   /** Appearance for a `file`/`link`/`group` label run or a degraded body fallback run. */

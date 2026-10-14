@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { safeGetItem, safeSetItem } from '../lib/safe-local-storage.js'
-import type { ResolvedTheme, ThemeMode } from '../lib/theme.js'
+import { isThemeMode, type ResolvedTheme, type ThemeMode } from '../lib/theme.js'
 
 export const THEME_STORAGE_KEY = 'whiteboard:theme'
 
@@ -16,8 +16,7 @@ const SYSTEM_QUERY = '(prefers-color-scheme: dark)'
 export function readPersistedTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'system'
   const stored = safeGetItem(THEME_STORAGE_KEY)
-  if (stored === 'dark' || stored === 'light' || stored === 'system') return stored
-  return 'system'
+  return isThemeMode(stored) ? stored : 'system'
 }
 
 function getSystemTheme(): ResolvedTheme {

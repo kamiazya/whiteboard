@@ -18,6 +18,7 @@ import { readCanvasViewResult } from './widget/canvas-view-result.js'
 import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
+import { guardSceneLinks, type SceneLinkGuard } from './widget/scene-links.js'
 import { loadThemeFont } from './widget/theme-font.js'
 import { toolErrorText } from './widget/tool-error-text.js'
 import { canvasViewCall, commentAddCall } from './widget/widget-tool-calls.js'
@@ -282,6 +283,7 @@ function pickAnchor(
 async function mountFromHost(
   container: HTMLElement,
   remount: (mount: () => CanvasViewerHandle) => void,
+  links: SceneLinkGuard,
 ): Promise<boolean> {
   // No parent frame — this document cannot be an embedded MCP Apps view.
   if (window.parent === window) return false
@@ -334,6 +336,7 @@ async function mountFromHost(
   // without this check would show a control whose every click silently
   // fails on hosts that never advertised the capability.
   const canUseServerTools = app.getHostCapabilities()?.serverTools !== undefined
+  if (connected) links.openThrough(app)
 
   // Only ever reveal Refresh when THIS race decided "connected" AND the host
   // advertised serverTools — a tool-result can legitimately arrive (and
@@ -458,6 +461,7 @@ async function bootstrap(): Promise<void> {
     throw new Error('widget-entry: expected a #root element in the widget HTML shell')
   }
 
+  const links = guardSceneLinks(container)
   let handle: CanvasViewerHandle | undefined
   // Order matters: dispose the live root and clear its DOM BEFORE the
   // factory creates the next root — see mountFromHost's doc comment.
@@ -477,7 +481,7 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  const connectedToHost = await mountFromHost(container, remount)
+  const connectedToHost = await mountFromHost(container, remount, links)
   if (!connectedToHost && handle === undefined) {
     // The embedded-scene fallback goes through the same remount path: a
     // slow host can deliver a tool-result mount in the gap between the

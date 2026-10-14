@@ -95,6 +95,7 @@ import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
+import { openSceneLink } from '../../lib/scene-link.js'
 import { parseClipboardText } from '../../lib/spatial/clipboard-fragment.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
@@ -132,7 +133,7 @@ import { isFollowableUrl } from './followable-url.js'
 import { GestureOverlays } from './gesture-overlays.js'
 import { gestureTrace } from './gesture-trace.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
-import { ImageIntake } from './ImageIntake.js'
+import { ImageIntake, openImagePicker, useImagePicker } from './ImageIntake.js'
 import { InPlaceEditors } from './in-place-editors.js'
 import { LegendOverlay } from './LegendOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
@@ -269,7 +270,10 @@ export interface SpatialEditorProps {
    * daemon alias path). Absent → the Document affordance hides.
    */
   readonly fileRefOptions?: readonly FileRefOption[]
-  /** Follows a file node's reference (navigation). Absent → follow hides. */
+  /**
+   * Opens the document a reference names: a file node's, and a document link
+   * drawn in a text node. Absent → follow hides, and such a link is inert.
+   */
   readonly onOpenFileRef?: (file: string, subpath?: string) => void
   /**
    * Opens a text node's body on a surface the HOST owns — the composition
@@ -1196,11 +1200,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       createImageNodeAt,
     })
 
-    const imageInputRef = useRef<HTMLInputElement | null>(null)
-    /** When set, the next picked image becomes this group's background instead of a new node. */
-    const pendingBackgroundGroupIdRef = useRef<string | null>(null)
-    /** Where the pending picker-created image should land; null = viewport center. */
-    const pendingImagePointRef = useRef<Point | null>(null)
+    const imagePicker = useImagePicker()
 
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
@@ -1461,9 +1461,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             gestureState={gestureState}
             isEdgeLocked={isEdgeLocked}
             fileRefOptions={fileRefOptions}
-            pendingImagePointRef={pendingImagePointRef}
-            imageInputRef={imageInputRef}
-            pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
+            imagePicker={imagePicker}
             isLocked={isLocked}
             extraIds={extraIds}
             selectedId={selectedId}
@@ -1522,10 +1520,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateImage={
             onAddImage === undefined
               ? undefined
-              : () => {
-                  pendingImagePointRef.current = null
-                  imageInputRef.current?.click()
-                }
+              : () => openImagePicker(imagePicker, { backgroundGroupId: null, point: null })
           }
           tool={tool}
           onToolChange={(next) => {
@@ -1566,15 +1561,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           <CanvasNotice testId="image-notice" notice={imageNotice} onDismiss={dismissImageNotice} />
         ) : (
           <ImageIntake
-            inputRef={imageInputRef}
+            picker={imagePicker}
             notice={imageNotice}
             onDismissNotice={dismissImageNotice}
-            onFile={(file) => {
-              const backgroundGroupId = pendingBackgroundGroupIdRef.current
-              pendingBackgroundGroupIdRef.current = null
+            onFile={(file, { backgroundGroupId, point }) => {
               if (backgroundGroupId === null) {
-                addImageFile(file, pendingImagePointRef.current ?? undefined)
-                pendingImagePointRef.current = null
+                addImageFile(file, point ?? undefined)
                 return
               }
               storeImageFile(file, (ref) =>
@@ -1810,6 +1802,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             cursor: tool === 'hand' ? 'grab' : undefined,
           }}
           onPointerDown={handlePointerDown}
+          onClickCapture={(e) => openSceneLink(e, onOpenFileRef)}
           onContextMenu={handleContextMenu}
           // Image intake: drop anywhere on the canvas, or paste — both route
           // through the same host storage seam as the picker.

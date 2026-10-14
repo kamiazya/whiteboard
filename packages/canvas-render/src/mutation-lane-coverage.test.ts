@@ -306,9 +306,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // 105 with `hit-test.ts`, the one rule for which node a click lands on,
     // shared by the editor and the MCP Apps widget. Outside the lane: its own
     // example suite pins each branch and a surviving mutant would show there.
+    //
+    // 107 with `svg/document-href.ts`, the one decoder of a scene's document
+    // link beside its encoder, and `theme/spatial-theme-mode.ts`, the mode
+    // schema on its own so a type-only reader does not pull the theme layer.
+    // Outside the lane: the decoder's table test pins every branch, and the
+    // schema is a two-member enum.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 22,
-      production: 105,
+      production: 107,
     })
   })
 

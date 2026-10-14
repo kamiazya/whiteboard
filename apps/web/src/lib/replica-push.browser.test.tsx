@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { pushReplicaEdits } from './replica-push.js'
@@ -44,11 +45,7 @@ function daemonStub(record: LoroDoc): { fetch: typeof globalThis.fetch; posts: (
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/replica-key') && init?.method === 'POST') {
-      return Response.json({
-        workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
-        workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
-        tier: 'offline',
-      })
+      return Response.json(replicaKeyBody())
     }
     if (url.endsWith('/workspace-document/snapshot')) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })

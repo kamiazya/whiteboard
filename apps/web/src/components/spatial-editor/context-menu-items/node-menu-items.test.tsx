@@ -73,8 +73,10 @@ function baseInput(
     fileRefOptions: undefined,
     facetRegistry: emptyRegistry,
     selectedAlignableBoxes: () => [],
-    pendingBackgroundGroupIdRef: { current: null },
-    imageInputRef: { current: null },
+    imagePicker: {
+      input: { current: null },
+      request: { current: { backgroundGroupId: null, point: null } },
+    },
     applyResult: vi.fn(),
     applyBoxMoves: vi.fn(),
     copySelection: vi.fn(),

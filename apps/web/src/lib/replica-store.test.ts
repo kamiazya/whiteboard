@@ -7,30 +7,18 @@
 import 'fake-indexeddb/auto'
 import { replicaKeyApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { connectReplicaKeeper, markReplica, openDocumentStore } from './replica-store.js'
 
 const DB_NAME = 'whiteboard-replica-store-routing-test'
 const DAEMON = 'http://127.0.0.1:3098'
 const MARKER = 'a-plaintext-marker-nobody-should-see-sealed'
-const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
-
-const offlineKeyFetch = (async (input: Request | string | URL) => {
-  const url = input instanceof Request ? input.url : String(input)
-  if (!url.endsWith('/replica-key')) throw new Error(`unexpected fetch ${url}`)
-  return jsonResponse({
-    workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-    workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-    tier: 'offline',
-  })
-}) as typeof fetch
 
 let counter = 0
 // `markReplica`'s mark is module state with no reset, so each test mints its own id.
@@ -78,7 +66,7 @@ async function save(docRef: DocRef): Promise<void> {
 describe('openDocumentStore routing', () => {
   beforeEach(async () => {
     await clearNamedDb(DB_NAME)
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
   })
 
   afterEach(async () => {

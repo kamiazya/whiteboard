@@ -33,7 +33,7 @@ import { connectReplicaKeeper } from '../lib/replica-store.js'
 import { rememberReplicaKey } from '../lib/replica-unlock.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyBody, replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { rootOf } from '../test-utils/spatial-editor-root.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
@@ -47,12 +47,6 @@ const OFFLINE_PASSKEYS = 'whiteboard:replica-offline-passkeys'
 const IMAGES_KEY = 'whiteboard:replica-images'
 const PRF = new Uint8Array(32).fill(11)
 const RAW_ID = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])
-
-const KEY_RESPONSE = {
-  workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-  workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-  tier: 'offline',
-} as const
 
 /** A 1x1 PNG: real image bytes, so the page has something an <image> can show. */
 const PNG = Uint8Array.from(
@@ -77,9 +71,7 @@ function boardNaming(...fileIds: string[]): LoroDoc {
 
 /** The daemon while it was there: key, snapshot, and the file route for `serves` alone. */
 function daemon(record: LoroDoc, serves: readonly string[]): typeof globalThis.fetch {
-  return (async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/replica-key')) return jsonResponse(KEY_RESPONSE)
+  return replicaKeyFetch({}, (url) => {
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
@@ -88,7 +80,7 @@ function daemon(record: LoroDoc, serves: readonly string[]): typeof globalThis.f
       return new Response(PNG as BodyInit, { headers: { 'Content-Type': 'image/png' } })
     }
     return new Response('not found', { status: 404 })
-  }) as typeof globalThis.fetch
+  })
 }
 
 /** Pulls the replica, then leaves what closing the tab with the daemon stopped leaves. */
@@ -105,7 +97,7 @@ async function pullThenGoOffline(record: LoroDoc, serves: readonly string[]): Pr
   await rememberReplicaKey({
     daemonBaseUrl: DAEMON,
     workspaceId: DAEMON_WS,
-    response: KEY_RESPONSE,
+    response: replicaKeyBody(),
     prfOutput: PRF,
   })
   saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: bytesToBase64Url(RAW_ID), prfSalt: 'AAAA' })

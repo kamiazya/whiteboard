@@ -23,6 +23,7 @@ import { fc, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { connectReplicaKeeper } from './replica-store.js'
@@ -69,12 +70,8 @@ function daemonAt(
   return (async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(current().key),
-        workspaceKeySalt: bytesToBase64Url(current().salt),
-        tier: 'offline',
-        ...(namesKey ? { keyId: current().keyId } : {}),
-      })
+      const { key, salt, keyId } = current()
+      return jsonResponse(replicaKeyBody({ key, salt, ...(namesKey ? { keyId } : {}) }))
     }
     if (url.endsWith(`/api/w/${workspaceId}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })

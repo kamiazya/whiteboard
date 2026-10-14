@@ -29,8 +29,10 @@ function baseInput(canvas: SpatialCanvas) {
     isLocked: () => false,
     fileRefOptions: undefined,
     onAddImage: undefined,
-    pendingImagePointRef: { current: null },
-    imageInputRef: { current: null },
+    imagePicker: {
+      input: { current: null },
+      request: { current: { backgroundGroupId: null, point: null } },
+    },
     pasteClipboard: vi.fn(),
     createNodeAt: vi.fn(),
     setLinkDialog: vi.fn(),

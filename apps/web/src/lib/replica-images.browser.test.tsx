@@ -12,13 +12,13 @@ import {
   reconcileSpatialCanvas,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
+import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { sweepUnreferencedFiles } from './browser-file-sweep.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore } from './document-file-store.js'
@@ -36,9 +36,6 @@ const BASE = 'http://127.0.0.1:3099'
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FC0'
 const BOARD = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 const IMAGES_KEY = 'whiteboard:replica-images'
-
-const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
 
 /** Distinct, readable bytes per image, so a plaintext copy anywhere is findable. */
 function pictureOf(fileId: string): Uint8Array<ArrayBuffer> {
@@ -60,15 +57,7 @@ function boardNaming(...fileIds: string[]): LoroDoc {
 
 /** The daemon as its key, snapshot and file routes; `served` records each file read. */
 function daemon(record: LoroDoc, served: string[] = []): typeof globalThis.fetch {
-  return (async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-        tier: 'offline',
-      })
-    }
+  return replicaKeyFetch({}, (url) => {
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
@@ -81,7 +70,7 @@ function daemon(record: LoroDoc, served: string[] = []): typeof globalThis.fetch
       })
     }
     return new Response('not found', { status: 404 })
-  }) as typeof globalThis.fetch
+  })
 }
 
 async function pull(record: LoroDoc, served?: string[]): Promise<void> {

@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-// End-to-end smoke test that runs through an MCP stdio subprocess.
+// The stdio MCP tool tour: spawns the server and runs PHASES (end of file) in
+// order — tools/list against mcp-smoke-coverage.ts, every COVERED_TOOLS tool
+// on its success path (so the SDK checks structuredContent against its
+// outputSchema), each tool's refusals, the no-browser cases (wb_viewport_set
+// answers delivered:false as a success, wb_scene_render draws headlessly),
+// versions, an import round-trip and the automatic checkpoint.
 //
-// Purpose:
-// Start the MCP server outside the parent client's context and verify that each
-// document tool behaves according to spec using JSON-RPC stdio.
-//
-// Coverage:
-//   1. tools/list matches the authoritative set in mcp-smoke-coverage.ts
-//   2. wb_workspace_edit → wb_facet_set → wb_version_save → wb_version_list → wb_version_restore
-//
-// This does not consume API quota, so it is safe in CI.
+// No Vitest project spawns it, so `pnpm test` does not run it; CI runs it as
+// its own step. `mcp-smoke` runs mcp-e2e-checkpoint.smoke-impl.ts, a much
+// narrower flow. It consumes no API quota.
 
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'

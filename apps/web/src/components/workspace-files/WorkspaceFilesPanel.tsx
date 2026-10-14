@@ -39,6 +39,39 @@ import {
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 
 /**
+ * Every open from the panel, so each one lands in this device's Recent lane
+ * and seen baseline. Nothing is remembered where the host offers no open:
+ * selecting a document is looking at it, not opening it. `openPath` takes a
+ * null entry when the listing does not hold the path yet, which still opens.
+ * `offered` is `openEntry` only where the host offers an open, for the
+ * surfaces that hide the verb otherwise.
+ */
+function usePanelOpener(
+  onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument'],
+  remember: (entry: WorkspaceDocumentEntry) => void,
+) {
+  // Through a ref so neither opener changes identity with the host's handler:
+  // a host that passes an inline arrow would otherwise re-create both, and
+  // the create callback that calls one, on every render of the page above.
+  const openRef = useRef(onOpenDocument)
+  openRef.current = onOpenDocument
+  const openPath = useCallback(
+    (path: string, entry: WorkspaceDocumentEntry | null) => {
+      const open = openRef.current
+      if (open === undefined) return
+      if (entry !== null) remember(entry)
+      open(path)
+    },
+    [remember],
+  )
+  const openEntry = useCallback(
+    (entry: WorkspaceDocumentEntry) => openPath(entry.path, entry),
+    [openPath],
+  )
+  return { openEntry, openPath, offered: onOpenDocument === undefined ? undefined : openEntry }
+}
+
+/**
  * The workspace document browser (`/api/v1`), in three panes: the folder
  * sidebar, the contents of the selected folder, and the selected document
  * drawn.
@@ -180,8 +213,11 @@ export function WorkspaceFilesPanel({
   const refreshAndSelect = useCallback(
     async (path: string) => {
       const entries = await readList()
+      if (lastReadListRef.current !== readList) return null // switched away meanwhile
       setDocuments(entries)
-      setSelected(entries.find((row) => row.path === path) ?? null)
+      const found = entries.find((row) => row.path === path) ?? null
+      setSelected(found)
+      return found
     },
     [readList],
   )
@@ -191,14 +227,6 @@ export function WorkspaceFilesPanel({
   // on every render of the page above.
   const onFolderChangeRef = useRef(onFolderChange)
   onFolderChangeRef.current = onFolderChange
-  // Same reason as the folder callback: kept out of createHere's dependency
-  // list so an inline arrow from the page above cannot re-create it.
-  const onOpenDocumentRef = useRef(onOpenDocument)
-  onOpenDocumentRef.current = onOpenDocument
-  // Read through a ref for the same reason `onOpenDocument` is: `openEntry`
-  // is handed to four children and its identity has to stay stable.
-  const workspaceRef = useRef(workspace)
-  workspaceRef.current = workspace
   const lastReadListRef = useRef(readList)
 
   /**
@@ -214,10 +242,7 @@ export function WorkspaceFilesPanel({
    * is to do.
    */
   const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
-  const openEntry = useCallback((entry: WorkspaceDocumentEntry) => {
-    rememberOpen(entry)
-    onOpenDocumentRef.current?.(entry.path)
-  }, [])
+  const { openEntry, openPath, offered: offeredOpen } = usePanelOpener(onOpenDocument, rememberOpen)
 
   const toggleSelected = useCallback((entry: WorkspaceDocumentEntry) => {
     setSelection((current) => {
@@ -414,18 +439,15 @@ export function WorkspaceFilesPanel({
           throw err
         }
         try {
-          await refreshAndSelect(path)
-          // Creating exists to produce content, and an empty document is
-          // worth nothing until it is open — so the create ends where the
-          // next thing happens, as every other creation path in the app
-          // already did.
-          //
-          // Only affordable because the open folder is in the address now:
-          // the way back returns to the folder this was made in, rather than
-          // to the workspace root. The selection above still lands, so a
-          // host that offers no way to open leaves someone looking at the
-          // new document rather than at nothing.
-          onOpenDocumentRef.current?.(path)
+          const created = await refreshAndSelect(path)
+          // Switched away mid-create: this path and id are the other workspace's.
+          if (lastReadListRef.current !== readList) return
+          // An empty document is worth nothing until it is open, so a create
+          // ends in an open, as every other creation path does. Affordable
+          // because the open folder is in the address: the way back returns
+          // to the folder this was made in. The selection still lands, so a
+          // host with no open leaves the new document on screen.
+          openPath(path, created)
         } catch {
           // Swallowed as a REJECTION, reported as its own message. The
           // document exists; letting this propagate would hold the dialog
@@ -523,8 +545,12 @@ export function WorkspaceFilesPanel({
   )
   // The rename flow owns its own three states (see use-rename-document.ts)
   // and takes `moveDocument` directly — it is declared above, so no ref
-  // bridges the two.
-  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect })
+  // bridges the two. It has no use for the row the re-read selected.
+  const refreshForRename = useCallback(
+    (path: string) => refreshAndSelect(path).then(() => undefined),
+    [refreshAndSelect],
+  )
+  const rename = useRenameDocument({ source, moveDocument, refreshAndSelect: refreshForRename })
   // The scope reset runs ABOVE this (it clears everything a document names
   // the moment the workspace changes), so it reaches the flow through a ref
   // rather than by moving one of the two — both are hooks, and their order
@@ -577,7 +603,7 @@ export function WorkspaceFilesPanel({
       : cardMenuItemsFor(cardMenu.entry, {
           tapOpens,
           source,
-          onOpenDocument,
+          openEntry: offeredOpen,
           onDuplicateDocument,
           onRequestDelete,
           onRequestDeleteMany,
@@ -771,7 +797,7 @@ export function WorkspaceFilesPanel({
               selected={selected}
               loadRender={loadRender}
               findDocument={findListed}
-              onOpen={onOpenDocument === undefined ? undefined : openEntry}
+              onOpen={offeredOpen}
               onRename={rename.open}
               onDuplicateDocument={onDuplicateDocument}
               onRequestDelete={onRequestDelete}

@@ -11,7 +11,6 @@
  */
 
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
@@ -21,6 +20,7 @@ import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../../test-utils/json-response.js'
+import { replicaKeyBody } from '../../test-utils/replica-key-fetch.js'
 import { LocalCopiesCard } from './LocalCopiesCard.js'
 
 claimIsolatedWhiteboardDb('localcopiescard-offline')
@@ -29,12 +29,7 @@ const DAEMON = 'https://daemon.whiteboard.invalid'
 const WORKSPACE = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 const RAW_ID = Uint8Array.from([9, 8, 7, 6])
 
-const daemonFetch = (async () =>
-  jsonResponse({
-    workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-    workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-    tier: 'offline',
-  })) as typeof fetch
+const daemonFetch = (async () => jsonResponse(replicaKeyBody())) as typeof fetch
 
 function saltOf(options: CredentialCreationOptions | CredentialRequestOptions | undefined) {
   const first = (options?.publicKey?.extensions as { prf?: { eval?: { first?: BufferSource } } })

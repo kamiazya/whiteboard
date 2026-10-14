@@ -11,13 +11,12 @@
  */
 
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, onTestFinished } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { connectReplicaKeeper, isReplicaCopy, openDocumentStore } from './replica-store.js'
@@ -29,18 +28,6 @@ const DB_NAME = 'whiteboard-replica-append-race'
 const DAEMON = 'http://127.0.0.1:3099'
 const WORKSPACE_ID = '01JD0REPLICAAPPENDRACE0001'
 const MARKER = 'typed-while-the-copy-was-deleted'
-
-function offlineKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (!url.endsWith('/replica-key')) throw new Error(`unexpected fetch ${url}`)
-    return jsonResponse({
-      workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-      workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-      tier: 'offline',
-    })
-  }) as typeof fetch
-}
 
 /** Every string IndexedDB holds for the test database, bytes decoded as text. */
 async function storedText(): Promise<string> {
@@ -119,7 +106,7 @@ it('a save across Delete copy writes nothing, and the next pull opens', async ()
   onTestFinished(() => createUserSettingsStore().reset())
   const docRef: DocRef = { kind: 'workspace-tree', workspaceId: WORKSPACE_ID }
   claim()
-  connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+  connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
   const docs = new BrowserWorkspaceDocs(DB_NAME)
   const seed = new LoroDoc()
   seed.getText('t').insert(0, 'seed ')

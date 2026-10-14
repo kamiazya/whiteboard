@@ -11,6 +11,12 @@ import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboa
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import {
+  REPLICA_TEST_KEY,
+  replicaKeyBody,
+  replicaKeyFetch,
+  replicaKeyRefusalFetch,
+} from '../test-utils/replica-key-fetch.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
 import {
   connectReplicaKeeper,
@@ -35,28 +41,6 @@ let workspaceCounter = 0
 function freshWorkspaceId(): string {
   workspaceCounter += 1
   return `01JD0REPLICASTORE${String(workspaceCounter).padStart(8, '0')}`
-}
-
-const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
-
-/** A daemon fetch double answering /replica-key with a fixed offline key. */
-function offlineKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-        tier: 'offline',
-      })
-    }
-    throw new Error(`unexpected fetch ${url}`)
-  }) as typeof fetch
-}
-
-function refusalFetch(reason: string): typeof fetch {
-  return (async () => jsonResponse({ error: reason, message: reason }, 403)) as typeof fetch
 }
 
 async function getAllRaw(dbName: string): Promise<{ store: string; records: unknown[] }[]> {
@@ -119,7 +103,7 @@ describe('replica-store', () => {
   it('markReplica seals the FIRST pull even before the registry entry exists', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     markReplica(workspaceId, DAEMON)
 
     const store = openDocumentStore(DB_NAME)
@@ -138,13 +122,13 @@ describe('replica-store', () => {
   it('store-dump guard: no raw key bytes or their base64url text land in storage', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
     await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) })
 
-    const rawKeyText = bytesToBase64Url(WORKSPACE_KEY)
+    const rawKeyText = bytesToBase64Url(REPLICA_TEST_KEY)
     const dump = await getAllRaw(DB_NAME)
     const idbStrings = dump.flatMap((s) => collectStrings(s.records))
     for (const s of idbStrings) {
@@ -162,7 +146,7 @@ describe('replica-store', () => {
   it('withholds (not_a_member): save rejects and nothing is written', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: refusalFetch('not_a_member') })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyRefusalFetch('not_a_member') })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -177,7 +161,7 @@ describe('replica-store', () => {
   it('a disconnect withholds a previously-held key instead of continuing to answer it', async () => {
     const workspaceId = freshWorkspaceId()
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
@@ -206,7 +190,7 @@ describe('replica-store', () => {
         syncedAt: new Date().toISOString(),
       }),
     )
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     const store = openDocumentStore(DB_NAME)
     const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
     await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array(4) })
@@ -226,7 +210,7 @@ describe('replica-store', () => {
     let keyCalls = 0
     const countingFetch: typeof fetch = (async (input: Request | string | URL) => {
       keyCalls += 1
-      return offlineKeyFetch()(input)
+      return replicaKeyFetch()(input)
     }) as typeof fetch
     connectReplicaKeeper({ baseUrl: DAEMON, fetch: countingFetch })
     markReplica(workspaceId, DAEMON)
@@ -256,11 +240,9 @@ describe('replica-store', () => {
       if (url.endsWith('/replica-key')) {
         keyCalls += 1
         const seed = keyCalls === 1 ? 1 : 200
-        return jsonResponse({
-          workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => seed + i)),
-          workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-          tier: 'offline',
-        })
+        return jsonResponse(
+          replicaKeyBody({ key: Uint8Array.from({ length: 32 }, (_, i) => seed + i) }),
+        )
       }
       throw new Error(`unexpected fetch ${url}`)
     }) as typeof fetch
@@ -291,7 +273,7 @@ describe('replica-store', () => {
     const workspaceId = freshWorkspaceId()
     expect(replicaKeyStatus(DAEMON, workspaceId)).toBeUndefined()
 
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: refusalFetch('not_a_member') })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyRefusalFetch('not_a_member') })
     markReplica(workspaceId, DAEMON)
     const store = openDocumentStore(DB_NAME)
     const docRef: DocRef = { kind: 'workspace-tree', workspaceId }

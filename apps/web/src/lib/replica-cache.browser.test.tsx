@@ -13,7 +13,7 @@ import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { base64ToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, VersionVector } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -21,6 +21,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { connectReplicaKeeper, markReplica, openDocumentStore } from './replica-store.js'
@@ -34,9 +35,6 @@ const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FA0'
 const DOC_A = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
 const DOC_B = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 
-const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
-
 /**
  * The daemon standing in as its snapshot route AND its `/replica-key`
  * route — production runs `cacheDaemonWorkspace` only once a keeper is
@@ -44,15 +42,7 @@ const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
  * double has to answer both requests the same way production's daemon does.
  */
 function snapshotStub(record: LoroDoc, status = 200): typeof globalThis.fetch {
-  return (async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-        tier: 'offline',
-      })
-    }
+  return replicaKeyFetch({}, (url) => {
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       if (status !== 200) return new Response('nope', { status })
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, {
@@ -61,7 +51,7 @@ function snapshotStub(record: LoroDoc, status = 200): typeof globalThis.fetch {
       })
     }
     throw new Error(`unexpected fetch: ${url}`)
-  }) as typeof globalThis.fetch
+  })
 }
 
 /** Every string (and UTF-8-decoded byte array) held anywhere in `dbName`'s object stores. */

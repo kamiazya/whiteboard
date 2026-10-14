@@ -21,6 +21,7 @@ import { edgeMenuItems } from './context-menu-items/edge-menu-items.js'
 import { inkMenuItems } from './context-menu-items/ink-menu-items.js'
 import { nodeMenuItems } from './context-menu-items/node-menu-items.js'
 import type { GestureState } from './gestures.js'
+import type { ImagePicker } from './ImageIntake.js'
 
 /** Open right-click menu: screen position (root-relative) + hit target. */
 export interface ContextMenuTarget {
@@ -58,9 +59,7 @@ export interface CanvasContextMenuProps {
   readonly gestureState: GestureState
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly fileRefOptions?: readonly FileRefOption[]
-  readonly pendingImagePointRef: MutableRefObject<Point | null>
-  readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
-  readonly pendingBackgroundGroupIdRef: MutableRefObject<string | null>
+  readonly imagePicker: ImagePicker
   readonly isLocked: (nodeId: string) => boolean
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
@@ -117,9 +116,7 @@ export function CanvasContextMenu({
   gestureState,
   isEdgeLocked,
   fileRefOptions,
-  pendingImagePointRef,
-  imageInputRef,
-  pendingBackgroundGroupIdRef,
+  imagePicker,
   isLocked,
   extraIds,
   selectedId,
@@ -255,8 +252,7 @@ export function CanvasContextMenu({
         isLocked,
         fileRefOptions,
         onAddImage,
-        pendingImagePointRef,
-        imageInputRef,
+        imagePicker,
         pasteClipboard,
         createNodeAt,
         setLinkDialog,
@@ -284,8 +280,7 @@ export function CanvasContextMenu({
       fileRefOptions,
       facetRegistry,
       selectedAlignableBoxes,
-      pendingBackgroundGroupIdRef,
-      imageInputRef,
+      imagePicker,
       applyResult,
       applyBoxMoves,
       copySelection,

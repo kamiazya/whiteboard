@@ -144,6 +144,18 @@ const RETIRED: readonly RetiredClaim[] = [
     example: 'out of the twenty-eight configured in root `vitest.config.ts`',
     devProse: true,
   },
+  {
+    pattern: /covered\s+by\s+`?pnpm\s+test`?\s+via\s+`?mcp-smoke/i,
+    why: '`pnpm smoke:e2e` is a standalone script that no Vitest project spawns; `mcp-smoke` runs the checkpoint smoke, so a reader trusting the claim skips the tool tour and learns of a broken tool from CI',
+    example: 'pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)',
+    devProse: true,
+  },
+  {
+    pattern: /\bno_client\b/,
+    why: 'no source emits it: `wb_viewport_set` with no browser attached answers `delivered: false` as a success, so a reader told to expect `no_client` reads the real answer as a regression',
+    example: 'a viewport set answering `no_client`',
+    devProse: true,
+  },
 ]
 
 describe('docs carry no retired claim', () => {

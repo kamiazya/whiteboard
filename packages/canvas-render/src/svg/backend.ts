@@ -15,8 +15,9 @@ import { isFiniteBox } from '../finite-box.js'
 import type { ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
 import { collectDefs } from './defs.js'
+import { documentHref, embedHref } from './document-href.js'
 import type { SvgElements, TextEmphasisAttrs } from './elements.js'
-import { formatCoord, sanitizeHref, trustedHref } from './format.js'
+import { formatCoord, sanitizeHref } from './format.js'
 import { type IconTable, renderIconUse } from './icon.js'
 import { renderLegend } from './legend.js'
 import {
@@ -226,7 +227,7 @@ function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
   const content: SvgChild = [renderBackdrop(run), underlay, text]
   if (!run.link) return content
   const href =
-    run.link.kind === 'link' ? sanitizeHref(run.link.href) : trustedHref(run.link.documentId)
+    run.link.kind === 'link' ? sanitizeHref(run.link.href) : documentHref(run.link.documentId)
   return el('a', { href }, [content])
 }
 
@@ -436,7 +437,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
       // preceding block. The node carries no measured ascent (it is not a
       // text run), so the baseline is derived from the box: 0.8 matches the
       // ascent ratio the measurer contract documents for body text.
-      return el('a', { href: trustedHref(`#${node.documentId}`) }, [
+      return el('a', { href: embedHref(node.documentId) }, [
         el('text', { x: node.bbox.x, y: node.bbox.y + node.bbox.h * 0.8 }, [node.title]),
       ])
     case 'embedResolved':

@@ -58,6 +58,7 @@ import { alignBoxes, distributeBoxes } from '../align.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 import { nodePropertyItems } from '../facet-widgets/index.js'
 import { type GestureState, reduceGesture } from '../gestures.js'
+import { type ImagePicker, openImagePicker } from '../ImageIntake.js'
 import { commentOnNodeItem } from './annotation-verbs.js'
 import { colorRow } from './color-row.js'
 
@@ -78,8 +79,7 @@ export interface NodeMenuItemsInput {
   readonly fileRefOptions?: readonly FileRefOption[]
   readonly facetRegistry: FacetRegistry
   readonly selectedAlignableBoxes: () => readonly AlignableBox[]
-  readonly pendingBackgroundGroupIdRef: MutableRefObject<string | null>
-  readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
+  readonly imagePicker: ImagePicker
   readonly applyResult: CanvasCommands['applyResult']
   readonly applyBoxMoves: CanvasCommands['applyBoxMoves']
   readonly copySelection: CanvasCommands['copySelection']
@@ -110,14 +110,7 @@ function pushFrameBands(
   verbs: ContextMenuItem[],
   input: NodeMenuItemsInput,
 ): void {
-  const {
-    node,
-    pendingBackgroundGroupIdRef,
-    imageInputRef,
-    applyResult,
-    onAddImage,
-    setGroupLabelEditId,
-  } = input
+  const { node, imagePicker, applyResult, onAddImage, setGroupLabelEditId } = input
   verbs.push({
     label: 'Edit label',
     icon: <Tag />,
@@ -127,10 +120,7 @@ function pushFrameBands(
     verbs.push({
       label: 'Set background image',
       icon: <ImageIcon />,
-      onSelect: () => {
-        pendingBackgroundGroupIdRef.current = node.id
-        imageInputRef.current?.click()
-      },
+      onSelect: () => openImagePicker(imagePicker, { backgroundGroupId: node.id, point: null }),
     })
   }
   const ownBackground = frameBackground(node)

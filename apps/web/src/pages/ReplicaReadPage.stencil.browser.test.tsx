@@ -15,17 +15,15 @@ import {
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { STENCIL_LIBRARY_PATH, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
-import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
+import { connectReplicaKeeper } from '../lib/replica-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { seedReplicaRecord } from '../test-utils/replica-key-fetch.js'
 import { rootOf } from '../test-utils/spatial-editor-root.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
@@ -36,62 +34,49 @@ const DOC_SP = '01ARZ3NDEKTSV4RRFFQ69G5FD1'
 const DOC_STENCILS = '01ARZ3NDEKTSV4RRFFQ69G5FD2'
 const DAEMON = 'http://127.0.0.1:3097'
 
-function offlineKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 11)),
-        workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xc0 + i)),
-        tier: 'offline',
-      })
-    }
-    throw new Error(`unexpected fetch ${url}`)
-  }) as typeof fetch
-}
-
 /** A sealed replica whose library declares a coloured stencil, and a node wearing it. */
 async function seedDressedNode(): Promise<void> {
-  connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
-  markReplica(DAEMON_WS, DAEMON)
-  const record = new LoroDoc()
-  createWorkspaceDocumentAtPath(record, {
-    path: STENCIL_LIBRARY_PATH,
-    documentId: DOC_STENCILS,
-    kind: 'markdown',
-  })
-  writeFacets(documentContainers(record, DOC_STENCILS), {
-    [VISUAL_STENCILS_KEY]: {
-      stencils: {
-        lakehouse: {
-          displayName: 'Lakehouse',
-          color: '3',
-          facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+  await seedReplicaRecord({
+    daemonBaseUrl: DAEMON,
+    workspaceId: DAEMON_WS,
+    build: (record) => {
+      createWorkspaceDocumentAtPath(record, {
+        path: STENCIL_LIBRARY_PATH,
+        documentId: DOC_STENCILS,
+        kind: 'markdown',
+      })
+      writeFacets(documentContainers(record, DOC_STENCILS), {
+        [VISUAL_STENCILS_KEY]: {
+          stencils: {
+            lakehouse: {
+              displayName: 'Lakehouse',
+              color: '3',
+              facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+            },
+          },
         },
-      },
+      })
+      createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
+      writeSpatialCanvas(documentContainers(record, DOC_SP), {
+        nodes: [
+          textNode({
+            id: 'lake',
+            x: 40,
+            y: 40,
+            width: 200,
+            height: 100,
+            text: 'lake node',
+            color: '3',
+            facets: {
+              'visual.shape/v0': { kind: 'hexagon' },
+              'visual.stencil/v0': { stencil: 'workspace.lakehouse' },
+            },
+          }),
+        ],
+        edges: [],
+      })
     },
   })
-  createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
-  writeSpatialCanvas(documentContainers(record, DOC_SP), {
-    nodes: [
-      textNode({
-        id: 'lake',
-        x: 40,
-        y: 40,
-        width: 200,
-        height: 100,
-        text: 'lake node',
-        color: '3',
-        facets: {
-          'visual.shape/v0': { kind: 'hexagon' },
-          'visual.stencil/v0': { stencil: 'workspace.lakehouse' },
-        },
-      }),
-    ],
-    edges: [],
-  })
-  record.commit()
-  await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 }
 
 async function savedLake() {

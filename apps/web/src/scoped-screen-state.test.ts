@@ -168,6 +168,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // The panel's own handle on the rename flow, so the reset (which runs
   // above the hook) can close a dialog left open across a switch.
   renameRef: 'no subject: mirrors the current flow, reassigned every render',
+  openRef: 'no subject: mirrors the host’s open handler, reassigned every render',
   hits: 'cleared on switch',
   searchDegraded: 'cleared on switch',
   staleList: 'cleared on switch',
@@ -188,8 +189,6 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   columns: 'no subject: how you look, not what at; deliberately persisted across everything',
   rootRef: 'no subject: the panel’s own DOM node',
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
-  onOpenDocumentRef: 'no subject: mirrors the callback prop, reassigned every render',
-  workspaceRef: 'no subject: mirrors the workspace prop, reassigned every render',
   scopeRef: 'no subject: mirrors the device-memory scope argument, reassigned every render',
   // Mirrors `documents`, which the reset clears, and is reassigned every
   // render, so a switch empties it on the render that follows.
