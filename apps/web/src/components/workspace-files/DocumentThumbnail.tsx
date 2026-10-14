@@ -13,7 +13,7 @@
 
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { FileText, LayoutGrid } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -30,6 +30,16 @@ export interface DocumentThumbnailProps {
    */
   readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
   readonly className?: string
+}
+
+/**
+ * A link drawn in the picture must not navigate: the card around it is the
+ * click target, and the renderer's bare document-id href, followed by the
+ * browser, reloads the tab onto a route naming no document. The click still
+ * bubbles, so the card opens.
+ */
+function keepLinksInert(event: MouseEvent): void {
+  if (event.target instanceof Element && event.target.closest('a') !== null) event.preventDefault()
 }
 
 export function DocumentThumbnail({ document, loadRender, className }: DocumentThumbnailProps) {
@@ -57,7 +67,6 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
   }, [onScreen, document, loadRender, fontsGeneration])
 
   const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
-
   return (
     <span
       ref={ref}
@@ -101,6 +110,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
           <SceneSvg
             as="span"
             svg={fitSvgToBox(drawn.svg)}
+            onClickCapture={keepLinksInert}
             className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app

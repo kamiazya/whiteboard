@@ -13,7 +13,7 @@
 
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useState } from 'react'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
@@ -27,6 +27,11 @@ export interface DocumentPreviewProps {
   readonly document: WorkspaceDocumentEntry | null
   readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
   readonly onOpen?: (document: WorkspaceDocumentEntry) => void
+  /**
+   * Resolves a document id drawn as a link target to its listed entry, so a
+   * wiki link in the picture opens through `onOpen` like the button does.
+   */
+  readonly findDocument?: (documentId: string) => WorkspaceDocumentEntry | undefined
   /** Opens the shared Rename dialog (name + path together). */
   readonly onRename?: (document: WorkspaceDocumentEntry) => void
   /** Copy it. Absent means the pane offers no copy. */
@@ -50,6 +55,7 @@ export function DocumentPreview({
   document,
   loadRender,
   onOpen,
+  findDocument,
   onRename,
   onDuplicate,
   onDelete,
@@ -108,6 +114,7 @@ export function DocumentPreview({
         {state.kind === 'drawn' ? (
           <SceneSvg
             svg={fitSvgToBox(state.svg)}
+            onClickCapture={(event) => followSceneLink(event, findDocument, onOpen)}
             data-testid="preview-render"
             className="size-full [&>svg]:size-full"
           />
@@ -207,4 +214,27 @@ export function DocumentPreview({
       </div>
     </div>
   )
+}
+
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+
+/**
+ * The renderer draws a reference as `<a href="<documentId>">` (a canvas
+ * embed as `#<documentId>`): an address only this app can resolve. Left to
+ * the browser, the bare id resolves against the page URL and reloads the tab
+ * onto a route that names no document, so every scheme-less link is answered
+ * here — opened when the id is listed, inert when it is not. A link with a
+ * scheme is a real URL from the markdown and keeps the browser's default.
+ */
+function followSceneLink(
+  event: MouseEvent,
+  findDocument: DocumentPreviewProps['findDocument'],
+  onOpen: DocumentPreviewProps['onOpen'],
+): void {
+  const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null
+  const href = anchor?.getAttribute('href')
+  if (href == null || URL_SCHEME.test(href)) return
+  event.preventDefault()
+  const target = findDocument?.(href.replace(/^#/, ''))
+  if (target !== undefined) onOpen?.(target)
 }

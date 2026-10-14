@@ -122,6 +122,7 @@ export function PanelRefusals({ outcome }: { outcome: ReturnType<typeof useWrite
 export function PanelPreview({
   selected,
   loadRender,
+  findDocument,
   onOpenDocument,
   onRename,
   onDuplicateDocument,
@@ -129,6 +130,7 @@ export function PanelPreview({
 }: {
   selected: WorkspaceDocumentEntry | null
   loadRender: ComponentProps<typeof DocumentPreview>['loadRender']
+  findDocument: NonNullable<ComponentProps<typeof DocumentPreview>['findDocument']>
   onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument']
   onRename: (entry: WorkspaceDocumentEntry) => void
   onDuplicateDocument: WorkspaceFilesPanelProps['onDuplicateDocument']
@@ -138,6 +140,7 @@ export function PanelPreview({
     <DocumentPreview
       document={selected}
       loadRender={loadRender}
+      findDocument={findDocument}
       {...(onOpenDocument === undefined
         ? {}
         : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}

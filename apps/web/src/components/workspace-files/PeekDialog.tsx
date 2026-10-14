@@ -20,12 +20,14 @@ export function PeekDialog({
   document,
   loadRender,
   onOpen,
+  findDocument,
   onClose,
 }: {
   /** The document being peeked at, or null when closed. */
   readonly document: WorkspaceDocumentEntry | null
   readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
   readonly onOpen: (document: WorkspaceDocumentEntry) => void
+  readonly findDocument: (documentId: string) => WorkspaceDocumentEntry | undefined
   readonly onClose: () => void
 }) {
   return (
@@ -38,6 +40,7 @@ export function PeekDialog({
           <DocumentPreview
             document={document}
             loadRender={loadRender}
+            findDocument={findDocument}
             onOpen={(entry) => {
               onClose()
               onOpen(entry)

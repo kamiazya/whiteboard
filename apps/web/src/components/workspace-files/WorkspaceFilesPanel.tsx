@@ -137,6 +137,7 @@ export function WorkspaceFilesPanel({
   // entry, which is what asks it to draw again by the versions just listed.
   const listedRef = useRef<readonly WorkspaceDocumentEntry[]>([])
   listedRef.current = documents ?? []
+  const findListed = (id: string) => listedRef.current.find((each) => each.documentId === id)
 
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
@@ -769,6 +770,7 @@ export function WorkspaceFilesPanel({
             <PanelPreview
               selected={selected}
               loadRender={loadRender}
+              findDocument={findListed}
               onOpenDocument={onOpenDocument}
               onRename={rename.open}
               onDuplicateDocument={onDuplicateDocument}
@@ -798,6 +800,7 @@ export function WorkspaceFilesPanel({
         document={peek}
         loadRender={loadRender}
         onOpen={openEntry}
+        findDocument={findListed}
         onClose={() => setPeek(null)}
       />
       <RenameDocumentDialog
