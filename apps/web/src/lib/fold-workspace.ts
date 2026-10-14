@@ -121,7 +121,7 @@ function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
  */
 export async function startupFoldsSettled(): Promise<void> {
   while (running.size > 0) {
-    await Promise.allSettled([...running.values()])
+    await Promise.allSettled(running.values())
   }
 }
 
