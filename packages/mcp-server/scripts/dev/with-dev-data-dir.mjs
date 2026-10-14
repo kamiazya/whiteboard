@@ -1,9 +1,23 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { assessRecordedDaemon, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
+import {
+  assessRecordedDaemon,
+  isPidAlive,
+  readDaemonRecord,
+  recordedProcess,
+} from './dev-daemon-socket-lib.mjs'
+import {
+  acquireSpawnLock,
+  claimPidFile,
+  releasePidFile,
+  releaseSpawnLock,
+  resolveSpawnLockStaleMs,
+} from './dev-spawn-lock-lib.mjs'
+import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
 import {
   devWrapperPidPath,
   ensureDevDataDirSecured,
@@ -21,6 +35,7 @@ const repoRoot = resolveRepoRootFromGit(process.cwd())
 const packageRoot = resolve(repoRoot, 'packages/mcp-server')
 const hadExplicitDataDirOverride = Boolean(process.env.WHITEBOARD_DATA_DIR)
 const env = resolveDevDataDirEnv(process.env, repoRoot)
+const LOCK_POLL_MS = 100
 
 // resolveDataDir() (shared/data-dir-secure.ts) only hardens permissions on
 // its own home-directory default; an explicit WHITEBOARD_DATA_DIR — which is
@@ -38,15 +53,94 @@ if (!hadExplicitDataDirOverride) {
 // nothing. A running daemon is handed over to rather than refused, so `pnpm dev`
 // and `pnpm mcp:debug:http` keep their other half beside the SessionStart
 // hook's daemon. "Running" is the one predicate the hook and the stop share.
-const running = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
-const daemon = running === null ? null : await assessRecordedDaemon(running)
-if (running !== null && daemon?.running) {
+async function handOverIfRunning() {
+  const running = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
+  const daemon = running === null ? null : await assessRecordedDaemon(running)
+  if (running === null || !daemon?.running) return
   const answering = daemon.answering ? '' : ' (busy: it did not answer its socket just now)'
   console.error(
     `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid})${answering} — ` +
       'to run one in this terminal instead, `pnpm mcp:http:stop` first.',
   )
-  process.exit(0)
+  exitReleasingLock(0)
+}
+
+// A daemon writes its record only once it listens, so the check above cannot
+// see one that is still booting: two starts inside that window would each run
+// a watcher, and the loser's `tsx watch` would outlive its refused daemon. The
+// SessionStart hook's spawn lock is therefore held from the check until the
+// record appears or the child exits. The hook starts this wrapper as its direct
+// child while holding that lock, so a lock held by the parent is this start's
+// own.
+const lockPath = join(env.WHITEBOARD_DATA_DIR, 'dev-daemon-spawn.lock')
+let ownsLock = false
+function releaseLock() {
+  if (ownsLock) releaseSpawnLock({ lockPath, ownerPid: process.pid })
+  ownsLock = false
+}
+function exitReleasingLock(code) {
+  releaseLock()
+  process.exit(code)
+}
+function tryLock() {
+  const verdict = acquireSpawnLock({
+    lockPath,
+    meta: { pid: process.pid, startedAt: new Date().toISOString(), repoRoot },
+    staleAfterMs: resolveSpawnLockStaleMs(process.env),
+    isPidAlive,
+  })
+  if (verdict === 'acquired') ownsLock = true
+  return verdict === 'acquired' || lockHolderPid() === process.ppid
+}
+function lockHolderPid() {
+  try {
+    return JSON.parse(readFileSync(lockPath, 'utf8'))?.pid ?? null
+  } catch {
+    return null
+  }
+}
+
+await handOverIfRunning()
+if (!tryLock()) {
+  console.error(
+    `[with-dev-data-dir] another dev daemon is starting for ${env.WHITEBOARD_DATA_DIR} (pid ${lockHolderPid()} holds ${lockPath}); waiting for it to come up.`,
+  )
+  const waitMs = resolveReadyTimeoutMs(process.env)
+  const startedAt = Date.now()
+  for (;;) {
+    await handOverIfRunning()
+    if (tryLock()) break
+    if (Date.now() - startedAt >= waitMs) {
+      console.error(
+        `[with-dev-data-dir] another dev daemon was still starting for ${env.WHITEBOARD_DATA_DIR} after ${waitMs}ms; ` +
+          'not starting a second one. `pnpm mcp:http:stop`, then start it again.',
+      )
+      process.exit(1)
+    }
+    await sleep(LOCK_POLL_MS)
+  }
+}
+// Decisive pass, under the lock: whoever held it may have brought one up.
+await handOverIfRunning()
+
+// `pnpm mcp:http:stop` signals the pid in this file, so it is created
+// exclusively: a wrapper still running beside a daemon that is not (one whose
+// daemon crashed and is waiting under `tsx watch` for the next edit, say)
+// keeps it, and this start refuses rather than run a second watcher.
+const pidPath = devWrapperPidPath(env.WHITEBOARD_DATA_DIR)
+mkdirSync(dirname(pidPath), { recursive: true })
+const pidFile = claimPidFile({
+  pidPath,
+  pid: process.pid,
+  isWriterAlive: (pid, writtenAtMs) =>
+    recordedProcess(pid, new Date(writtenAtMs).toISOString()) === 'daemon',
+})
+if (pidFile.kind === 'held') {
+  console.error(
+    `[with-dev-data-dir] a dev wrapper (pid ${pidFile.pid}) is already running for ${env.WHITEBOARD_DATA_DIR}; ` +
+      'not starting a second watcher. `pnpm mcp:http:stop` to stop it first.',
+  )
+  exitReleasingLock(1)
 }
 
 // Shell out to the real tsx CLI (not node's --watch + --import loader) so
@@ -65,10 +159,26 @@ const child = spawn(command, args, {
   stdio: 'inherit',
 })
 
-// `pnpm mcp:http:stop` signals this pid. Removed on every way out of the
-// wrapper, so a stale file cannot name a pid something else has since taken.
-const pidPath = devWrapperPidPath(env.WHITEBOARD_DATA_DIR)
-mkdirSync(dirname(pidPath), { recursive: true })
-writeFileSync(pidPath, String(process.pid), { mode: 0o600 })
+// Removed on every way out of the wrapper, so a stale file cannot name a pid
+// something else has since taken — but only while it still names this wrapper.
+superviseChild(child, {
+  cleanup: () => {
+    releaseLock()
+    releasePidFile({ pidPath, pid: process.pid })
+  },
+})
 
-superviseChild(child, { cleanup: () => rmSync(pidPath, { force: true }) })
+// The boot window ends when the daemon's record says it is running; a daemon
+// that never gets there (a syntax error waiting on the next edit) frees the
+// lock after the hook's ready budget, and the pid file still keeps a second
+// watcher out.
+if (ownsLock) {
+  const bootStartedAt = Date.now()
+  const bootBudgetMs = resolveReadyTimeoutMs(process.env)
+  while (ownsLock && Date.now() - bootStartedAt < bootBudgetMs) {
+    const record = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
+    if (record !== null && (await assessRecordedDaemon(record)).running) break
+    await sleep(LOCK_POLL_MS)
+  }
+  releaseLock()
+}

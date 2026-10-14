@@ -3,7 +3,9 @@
 // (a new editor session plus a `new-worktree.mjs` run, say) both observe the
 // derived port free and both spawn `pnpm mcp:http:dev`, producing an
 // EADDRINUSE bind race whose loser's session gets zero MCP tools. The lock
-// here makes that sequence atomic across processes.
+// here makes that sequence atomic across processes. with-dev-data-dir.mjs
+// takes the same lock for its own check-and-start, so a manual `pnpm dev`
+// beside the hook's boot cannot start a second watcher either.
 //
 // All fs access is injectable so unit tests can exercise error paths and
 // the "no existence-check before create" structural guarantee without
@@ -182,5 +184,85 @@ export function releaseSpawnLock({
     fsUnlink(lockPath)
   } catch {
     /* Absent, unparsable, or unremovable lock is fine — nothing to do. */
+  }
+}
+
+/**
+ * Claims the wrapper's pid file (`dev-wrapper.pid`, the pid `pnpm
+ * mcp:http:stop` signals) with an exclusive create, so a second wrapper can
+ * never overwrite the first one's. A file whose writer is gone — a wrapper
+ * killed outright leaves one behind — is replaced through the same rename
+ * claim `acquireSpawnLock` uses. `isWriterAlive` decides with the file's
+ * mtime, so a caller can tell the wrapper that wrote it from an unrelated
+ * process that has since taken its pid.
+ *
+ * @param {{ pidPath: string, pid: number, isWriterAlive: (pid: number, writtenAtMs: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
+ * @returns {{ kind: 'claimed' } | { kind: 'held', pid: number | null }}
+ */
+export function claimPidFile({
+  pidPath,
+  pid,
+  isWriterAlive,
+  fsOpen = openSync,
+  fsWrite = writeSync,
+  fsClose = closeSync,
+  fsReadFile = readFileSync,
+  fsStat = statSync,
+  fsUnlink = unlinkSync,
+  fsRename = renameSync,
+}) {
+  const writers = { fsOpen, fsWrite, fsClose }
+  const create = () => createLockFileExclusive(pidPath, String(pid), writers)
+  try {
+    create()
+    return { kind: 'claimed' }
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err)?.code !== 'EEXIST')
+      return { kind: 'held', pid: null }
+  }
+
+  let holder = null
+  let writtenAtMs = 0
+  try {
+    const parsed = Number(fsReadFile(pidPath, 'utf8'))
+    holder = Number.isInteger(parsed) && parsed > 0 ? parsed : null
+    writtenAtMs = fsStat(pidPath).mtimeMs
+  } catch {
+    return { kind: 'held', pid: holder }
+  }
+  if (holder !== null && isWriterAlive(holder, writtenAtMs)) return { kind: 'held', pid: holder }
+
+  const claimPath = `${pidPath}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  try {
+    fsRename(pidPath, claimPath)
+  } catch {
+    return { kind: 'held', pid: holder }
+  }
+  try {
+    create()
+    return { kind: 'claimed' }
+  } catch {
+    return { kind: 'held', pid: null }
+  } finally {
+    try {
+      fsUnlink(claimPath)
+    } catch {
+      /* Best-effort cleanup of the claimed stale file's private copy. */
+    }
+  }
+}
+
+/**
+ * Removes the pid file only while it still names `pid`, so a wrapper never
+ * deletes the file another wrapper has since claimed. Never throws.
+ *
+ * @param {{ pidPath: string, pid: number, fsReadFile?: typeof readFileSync, fsUnlink?: typeof unlinkSync }} args
+ */
+export function releasePidFile({ pidPath, pid, fsReadFile = readFileSync, fsUnlink = unlinkSync }) {
+  try {
+    if (Number(fsReadFile(pidPath, 'utf8')) !== pid) return
+    fsUnlink(pidPath)
+  } catch {
+    /* Absent or unremovable pid file is fine — nothing to do. */
   }
 }

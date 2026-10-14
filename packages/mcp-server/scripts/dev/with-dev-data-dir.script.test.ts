@@ -6,7 +6,15 @@
 // so this runs the real script in a throwaway checkout whose `tsx` is a
 // long-running stand-in.
 import { type ChildProcess, execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -29,21 +37,42 @@ function killRecordedChild(pidFile: string) {
   if (alive(pid)) process.kill(pid, 'SIGKILL')
 }
 
-/** A checkout whose `tsx` writes its pid, then runs until signalled — and exits with `exitCode` if told to. */
-function fakeCheckout(): { cwd: string; pidFile: string } {
+/**
+ * A checkout whose `tsx` writes its pid, then runs until signalled — and exits
+ * with `FAKE_TSX_EXIT_CODE` if told to. Every child also leaves its pid under
+ * `children/`, so a test can count how many watchers a start produced. A
+ * `gated` checkout's child writes its daemon record only once `release`
+ * exists, holding the daemon's boot window open for as long as a test needs.
+ */
+function fakeCheckout({ gated = false }: { gated?: boolean } = {}): {
+  cwd: string
+  pidFile: string
+} {
   const cwd = mkdtempSync(join(tmpdir(), 'wb-with-dev-data-dir-'))
   cleanups.push(() => rmSync(cwd, { recursive: true, force: true }))
   execFileSync('git', ['init', '-q', cwd])
   mkdirSync(join(cwd, 'data'), { recursive: true })
+  mkdirSync(join(cwd, 'children'), { recursive: true })
   const tsxDir = join(cwd, 'packages/mcp-server/node_modules/tsx/dist')
   mkdirSync(tsxDir, { recursive: true })
   const pidFile = join(cwd, 'child.pid')
+  const record = JSON.stringify(join(cwd, 'data', 'daemon.json'))
+  const release = JSON.stringify(join(cwd, 'release'))
   writeFileSync(
     join(tsxDir, 'cli.mjs'),
-    `import { writeFileSync } from 'node:fs'
-writeFileSync(${JSON.stringify(pidFile)}, String(process.pid))
-writeFileSync(${JSON.stringify(join(cwd, 'data', 'daemon.json'))}, JSON.stringify({ pid: process.pid, socketPath: '/x.sock', token: 't' }))
+    `import { existsSync, writeFileSync } from 'node:fs'
 if (process.env.FAKE_TSX_EXIT_CODE) process.on('SIGTERM', () => process.exit(Number(process.env.FAKE_TSX_EXIT_CODE)))
+writeFileSync(${JSON.stringify(join(cwd, 'children'))} + '/' + process.pid, '')
+writeFileSync(${JSON.stringify(pidFile)}, String(process.pid))
+const writeRecord = () => writeFileSync(${record}, JSON.stringify({ pid: process.pid, socketPath: '/x.sock', token: 't' }))
+if (${gated}) {
+  const gate = setInterval(() => {
+    if (existsSync(${release})) {
+      clearInterval(gate)
+      writeRecord()
+    }
+  }, 20)
+} else writeRecord()
 setInterval(() => {}, 1000)
 `,
   )
@@ -315,3 +344,110 @@ describe.skipIf(!existsSync('/proc/self/stat'))(
     })
   },
 )
+
+/** The pids of every child a wrapper in this checkout has started. */
+function children(cwd: string): number[] {
+  return readdirSync(join(cwd, 'children')).map(Number)
+}
+
+/** A wrapper whose stderr and exit are collected, killed with its children afterwards. */
+function launchWrapper(cwd: string) {
+  const process_ = spawn(process.execPath, [WRAPPER], {
+    cwd,
+    env: { ...process.env, WHITEBOARD_DATA_DIR: join(cwd, 'data') },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  })
+  const state = { stderr: '', exit: null as number | null | 'signal', process: process_ }
+  process_.stderr?.on('data', (chunk) => {
+    state.stderr += chunk
+  })
+  process_.once('exit', (code) => {
+    state.exit = code ?? 'signal'
+  })
+  cleanups.push(() => {
+    for (const pid of children(cwd)) if (alive(pid)) process.kill(pid, 'SIGKILL')
+    process_.kill('SIGKILL')
+  })
+  return state
+}
+
+// Until a daemon has written its record, nothing on disk says one is coming:
+// two starts inside that boot window would each start a watcher, the loser's
+// daemon dies on the socket, and its `tsx watch` stays behind — out of reach
+// of `pnpm mcp:http:stop` and bringing a daemon back on every source edit.
+describe('two with-dev-data-dir.mjs started together on one data dir', () => {
+  it('start one watcher, and the other hands over once its daemon is up', async () => {
+    const { cwd } = fakeCheckout({ gated: true })
+    const pidPath = join(cwd, 'data', 'dev-wrapper.pid')
+    const a = launchWrapper(cwd)
+    const b = launchWrapper(cwd)
+
+    await until(
+      () =>
+        children(cwd).length > 1 ||
+        (children(cwd).length === 1 && /another dev daemon is starting/.test(a.stderr + b.stderr)),
+      'one wrapper to start a watcher and the other to wait for it',
+      30_000,
+    )
+    expect(children(cwd)).toHaveLength(1)
+    writeFileSync(join(cwd, 'release'), '')
+    await until(
+      () => a.exit !== null || b.exit !== null,
+      'the waiting wrapper to hand over',
+      30_000,
+    )
+
+    const [loser, winner] = a.exit !== null ? [a, b] : [b, a]
+    expect(loser.exit, loser.stderr).toBe(0)
+    expect(loser.stderr).toMatch(/reusing the dev daemon/)
+    expect(winner.exit).toBeNull()
+    expect(readFileSync(pidPath, 'utf8')).toBe(String(winner.process.pid))
+    expect(children(cwd)).toHaveLength(1)
+  })
+})
+
+// `pnpm mcp:http:stop` signals whatever `dev-wrapper.pid` names, so the file
+// belongs to the wrapper that created it and to no other.
+describe("with-dev-data-dir.mjs and another wrapper's pid file", () => {
+  it('refuses to start a second watcher beside a wrapper that is still running', async () => {
+    const { cwd } = fakeCheckout()
+    const pidPath = join(cwd, 'data', 'dev-wrapper.pid')
+    writeFileSync(pidPath, String(process.pid))
+
+    const second = launchWrapper(cwd)
+    await until(() => second.exit !== null, 'the second wrapper to exit', 30_000)
+
+    expect(second.exit).toBe(1)
+    expect(second.stderr).toMatch(new RegExp(`dev wrapper .*pid ${process.pid}.* already running`))
+    expect(children(cwd)).toHaveLength(0)
+    expect(readFileSync(pidPath, 'utf8')).toBe(String(process.pid))
+  })
+
+  it('leaves the file in place on the way out once it names some other wrapper', async () => {
+    const { wrapper, exited, cwd } = await startWrapper()
+    const pidPath = join(cwd, 'data', 'dev-wrapper.pid')
+    await until(() => existsSync(pidPath), 'the wrapper to record its pid')
+    writeFileSync(pidPath, String(process.pid))
+
+    wrapper.kill('SIGTERM')
+    await exited
+
+    expect(readFileSync(pidPath, 'utf8')).toBe(String(process.pid))
+  })
+})
+
+// The SessionStart hook takes the spawn lock and then starts this wrapper as
+// its direct child; the wrapper boots under its parent's lock rather than
+// waiting on it.
+describe('with-dev-data-dir.mjs started by the holder of the spawn lock', () => {
+  it('starts its watcher under the lock its parent holds', async () => {
+    const { cwd } = fakeCheckout()
+    const lockPath = join(cwd, 'data', 'dev-daemon-spawn.lock')
+    writeFileSync(lockPath, JSON.stringify({ pid: process.pid }))
+
+    launchWrapper(cwd)
+    await until(() => children(cwd).length === 1, 'the wrapper to start its watcher', 30_000)
+
+    expect(JSON.parse(readFileSync(lockPath, 'utf8')).pid).toBe(process.pid)
+  })
+})
