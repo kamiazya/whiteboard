@@ -6,15 +6,36 @@ import { onTestFinished } from 'vitest'
 
 /**
  * A fresh owner-only socket path for one test: its own temp directory, so a
- * parallel run never shares a path, and short enough for the 104/108-byte
- * limit a Unix socket path has. The directory is removed when the calling
- * test finishes, so this must be called from inside a test; a daemon a whole
- * suite shares puts its socket in a directory its `afterAll` removes.
+ * parallel run never shares a path. A long TMPDIR can still push it past the
+ * limit a Unix socket path has, which the kernel answers by binding a
+ * truncated name — so that is refused here, naming the limit, rather than
+ * surfacing as EADDRINUSE or a connect that never lands. The directory is
+ * removed when the calling test finishes, so this must be called from inside
+ * a test; a daemon a whole suite shares puts its socket in a directory its
+ * `afterAll` removes.
  */
 export function testSocketPath(): string {
   const dir = mkdtempSync(join(tmpdir(), 'wb-sock-'))
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }))
-  return join(dir, 'd.sock')
+  const path = join(dir, 'd.sock')
+  assertTestSocketPathFits(path)
+  return path
+}
+
+/**
+ * The daemon's own limit (`daemon-socket.ts`), restated so a test fixture can
+ * refuse what `listenOnSocket` would; socket-fetch.test.ts holds the two equal
+ * by binding through the daemon at it and one byte over it.
+ */
+export const TEST_SOCKET_PATH_MAX_BYTES = process.platform === 'darwin' ? 103 : 107
+
+/** Throws, naming the limit and the remedy, for a path the kernel would truncate. */
+function assertTestSocketPathFits(path: string): void {
+  const bytes = Buffer.byteLength(path)
+  if (bytes <= TEST_SOCKET_PATH_MAX_BYTES) return
+  throw new Error(
+    `the test socket path is ${bytes} bytes, over the ${TEST_SOCKET_PATH_MAX_BYTES}-byte limit for a unix socket: ${path}. Use a shorter TMPDIR for this test run.`,
+  )
 }
 
 /**

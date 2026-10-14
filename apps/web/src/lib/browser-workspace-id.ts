@@ -32,7 +32,8 @@ import {
   type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
-import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
+import { WORKSPACES_STORE } from './browser-idb.js'
+import { inTransaction, request } from './idb-tx.js'
 import { createSubscribers } from './subscribers.js'
 
 type ResolutionState =
@@ -140,25 +141,12 @@ export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
  * A row whose id the schema refuses is skipped and said aloud, for the reason
  * a listing that cannot name a row cannot address it either.
  */
-async function readRegistryEntries(
-  dbName: string | undefined,
-): Promise<BrowserWorkspaceIdentity[]> {
-  const db = await openWhiteboardDb(dbName)
-  try {
-    return await new Promise<BrowserWorkspaceIdentity[]>((resolve, reject) => {
-      const tx = db.transaction(WORKSPACES_STORE, 'readonly')
-      const store = tx.objectStore(WORKSPACES_STORE)
-      const keysReq = store.getAllKeys()
-      const rowsReq = store.getAll()
-      tx.onerror = () => reject(tx.error)
-      tx.oncomplete = () => {
-        const rows: unknown[] = rowsReq.result
-        resolve(keysReq.result.map(String).flatMap((key, i) => identityOf(key, rows[i])))
-      }
-    })
-  } finally {
-    db.close()
-  }
+function readRegistryEntries(dbName: string | undefined): Promise<BrowserWorkspaceIdentity[]> {
+  return inTransaction(dbName, [WORKSPACES_STORE], 'readonly', async (tx) => {
+    const store = tx.objectStore(WORKSPACES_STORE)
+    const [keys, rows] = await Promise.all([request(store.getAllKeys()), request(store.getAll())])
+    return keys.map(String).flatMap((key, i) => identityOf(key, rows[i]))
+  })
 }
 
 /** One registry row as an identity under its KEY, or nothing when it will not read. */

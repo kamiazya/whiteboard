@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { closeSync, fsyncSync, openSync } from 'node:fs'
-import { chmod, open, rename, rm } from 'node:fs/promises'
+import { chmod, open, readdir, rename, rm } from 'node:fs/promises'
 import { platform } from 'node:os'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { errnoCode } from './errno.js'
 
 /**
@@ -78,12 +78,12 @@ export async function commitStagedWrite(
 }
 
 /**
- * Errors that say a directory cannot be synced here at all — Windows cannot
- * open one, and some filesystems refuse fsync on it — rather than that the
- * sync failed. Anything else (EIO, ENOSPC) means the rename may not be
+ * Errors that say a handle cannot be synced here at all — Windows cannot open
+ * a directory or fsync a read-only file, and some filesystems refuse fsync on
+ * a directory — rather than that the sync failed. Anything else (EIO, ENOSPC) means the rename may not be
  * durable, and the write must not report success.
  */
-const DIRECTORY_SYNC_UNSUPPORTED: ReadonlySet<string | undefined> = new Set([
+const SYNC_UNSUPPORTED: ReadonlySet<string | undefined> = new Set([
   'EISDIR',
   'EPERM',
   'EACCES',
@@ -92,24 +92,56 @@ const DIRECTORY_SYNC_UNSUPPORTED: ReadonlySet<string | undefined> = new Set([
   'EBADF',
 ])
 
-const cannotSyncDirectory = (err: unknown): boolean =>
-  DIRECTORY_SYNC_UNSUPPORTED.has(errnoCode(err))
+const cannotSyncHere = (err: unknown): boolean => SYNC_UNSUPPORTED.has(errnoCode(err))
 
-async function syncDirectory(path: string): Promise<void> {
-  let dir: Awaited<ReturnType<typeof open>>
+/**
+ * Sync a directory, so a rename into or out of it survives a crash. Forgives
+ * only a platform that cannot sync a directory at all, never a storage error.
+ */
+export async function syncDirectory(path: string): Promise<void> {
+  await syncPath(path)
+}
+
+async function syncPath(path: string): Promise<void> {
+  let handle: Awaited<ReturnType<typeof open>>
   try {
-    dir = await open(path, 'r')
+    handle = await open(path, 'r')
   } catch (err) {
-    if (cannotSyncDirectory(err)) return
+    if (cannotSyncHere(err)) return
     throw err
   }
   try {
-    await dir.sync()
+    await handle.sync()
   } catch (err) {
-    if (!cannotSyncDirectory(err)) throw err
+    if (!cannotSyncHere(err)) throw err
   } finally {
-    await dir.close()
+    await handle.close()
   }
+}
+
+/**
+ * Sync every regular file and directory beneath `root`, and `root` itself,
+ * for a caller about to rename the whole tree into place: renaming a
+ * directory orders none of the data inside it, so without this a crash can
+ * leave the final name over files that are zero-length.
+ *
+ * Files are opened read-only, which is enough for fsync on POSIX; where the
+ * platform refuses that (Windows wants a writable handle) it is forgiven
+ * under the same tolerance as a directory, and a storage error still throws.
+ * Directories are synced deepest first so each one's entries are durable
+ * before its parent's are. Symbolic links are not followed.
+ */
+export async function syncTree(root: string): Promise<void> {
+  const entries = await readdir(root, { withFileTypes: true, recursive: true })
+  const dirs: string[] = []
+  for (const entry of entries) {
+    const path = join(entry.parentPath, entry.name)
+    if (entry.isFile()) await syncPath(path)
+    else if (entry.isDirectory()) dirs.push(path)
+  }
+  dirs.sort((a, b) => b.length - a.length)
+  for (const dir of dirs) await syncPath(dir)
+  await syncPath(root)
 }
 
 /**
@@ -122,13 +154,13 @@ export function syncDirectorySync(path: string): void {
   try {
     fd = openSync(path, 'r')
   } catch (err) {
-    if (cannotSyncDirectory(err)) return
+    if (cannotSyncHere(err)) return
     throw err
   }
   try {
     fsyncSync(fd)
   } catch (err) {
-    if (!cannotSyncDirectory(err)) throw err
+    if (!cannotSyncHere(err)) throw err
   } finally {
     closeSync(fd)
   }

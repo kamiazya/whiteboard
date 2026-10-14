@@ -91,7 +91,7 @@ describe('wb_document_search', () => {
     }
   })
 
-  it('filters by kind and by tags', async () => {
+  it('filters by kind and by tags, and a kind stands alone without a query', async () => {
     const deps = makeDeps()
     const { create, writeBody, edit } = await seed(deps)
     const tagged = await create('tagged', 'markdown')
@@ -115,6 +115,8 @@ describe('wb_document_search', () => {
     )
     const taggedOnly = await tool.execute({ workspaceId: WS, query: '検索語', tags: ['release'] })
     expect(taggedOnly.results.map((r) => r.documentId)).toEqual([tagged.documentId])
+    const kindAlone = await tool.execute({ workspaceId: WS, kind: 'markdown' })
+    expect(kindAlone.results.map((r) => r.path)).toEqual(['tagged', 'untagged'])
   })
 
   // "Which documents carry this tag" is a question a tag is FOR, and a tag

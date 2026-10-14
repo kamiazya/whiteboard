@@ -2,6 +2,7 @@ import { readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { errnoCode } from '../../shared/errno.js'
+import { syncDirectory, syncTree } from '../../shared/write-file-atomic.js'
 import { inspectOutputPath, isSafeSourcePath } from '../backup-restore.js'
 import { getLogger } from '../log.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
@@ -119,6 +120,24 @@ async function stagedStep(
 }
 
 /**
+ * Rename a finished staging directory into place, durably.
+ *
+ * A directory rename orders none of the data inside it, so without the tree
+ * sync a crash shortly after can leave a backup's name over a zero-length
+ * manifest or settings file: restore refuses the newest backup, the mirror's
+ * collector stands down while it is retained, and retention counts it against
+ * a usable one. The tree is synced whole rather than file by file because the
+ * copy carries whatever the data directory holds, and restore puts all of it
+ * back. A failure of the parent sync still fails the pass: the contents are
+ * durable, but whether the NAME survives a crash is not known.
+ */
+async function sealBackup(staging: string, outputDir: string): Promise<void> {
+  await syncTree(staging)
+  await rename(staging, outputDir)
+  await syncDirectory(dirname(outputDir))
+}
+
+/**
  * One backup, from an already-resolved pair of directories.
  *
  * Shared rather than duplicated, because ADR-0021 decision 4 makes the
@@ -226,9 +245,9 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // "taken before the mirror" and restore a data directory with no rows and no blobs in it,
     // reporting success.
     //
-    // Same move the mirror already makes for one blob, for the same reason:
+    // Same move the mirror makes for one blob, and as durable (`sealBackup`):
     // the rename is what makes appearing and being complete one event, so no
-    // reader has to ask whether what it found is finished.
+    // reader has to ask whether what it found is finished, across a crash too.
     const staging = `${outputDir}${STAGING_SUFFIX}`
     // A staging directory on disk is always one an abandoned pass left: the
     // leader lease admits one pass at a time, and `backupDataDir` refuses a
@@ -290,7 +309,7 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // The seal. Every store has answered, so this is a backup now.
     const sealed = await stagedStep(
       staging,
-      () => rename(staging, outputDir),
+      () => sealBackup(staging, outputDir),
       // The code, never the error: `rename` puts BOTH paths in its message,
       // and this package does not write filesystem paths to its log — the
       // packaged smoke asserts stderr carries none.

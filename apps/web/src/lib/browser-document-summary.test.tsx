@@ -15,7 +15,7 @@
 import 'fake-indexeddb/auto'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Loro } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import {
   IdbDefaultDocumentPointer,
@@ -27,6 +27,23 @@ import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = 'whiteboard-summary-test'
+
+/**
+ * Aborts the transaction of every `meta` request `method` makes, from that
+ * request's own success event — the request has answered, the write has not
+ * committed. The window a promise settled on the request reports as success.
+ */
+function abortMetaAfter(method: 'put' | 'delete'): void {
+  const original = IDBObjectStore.prototype[method] as (...args: unknown[]) => IDBRequest
+  vi.spyOn(IDBObjectStore.prototype, method).mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: unknown[]
+  ) {
+    const req = original.apply(this, args)
+    if (this.name === 'meta') req.addEventListener('success', () => this.transaction.abort())
+    return req
+  } as IDBObjectStore[typeof method])
+}
 
 /**
  * The index answers placement only; what this layer adds is read from the
@@ -47,7 +64,10 @@ async function writeContent(documentId: string): Promise<void> {
 
 describe('browser document summary', () => {
   beforeEach(() => clearNamedDb(DB_NAME))
-  afterEach(() => clearNamedDb(DB_NAME))
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await clearNamedDb(DB_NAME)
+  })
 
   it('carries the index entry plus the time its content was last written', async () => {
     const index = await seedWorkspace()
@@ -110,6 +130,23 @@ describe('browser document summary', () => {
 
     await pointer.clear()
     expect(await pointer.get()).toBeNull()
+  })
+
+  it('a pointer write that aborts after its request answered is a failed write', async () => {
+    const pointer = new IdbDefaultDocumentPointer(DB_NAME)
+    abortMetaAfter('put')
+    await expect(pointer.set('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow()
+    vi.restoreAllMocks()
+    expect(await pointer.get()).toBeNull()
+  })
+
+  it('a pointer clear that aborts after its request answered is a failed clear', async () => {
+    const pointer = new IdbDefaultDocumentPointer(DB_NAME)
+    await pointer.set('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    abortMetaAfter('delete')
+    await expect(pointer.clear()).rejects.toThrow()
+    vi.restoreAllMocks()
+    expect(await pointer.get()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
   })
 
   it('reads a stored pointer that is not a document id as no pointer at all', async () => {

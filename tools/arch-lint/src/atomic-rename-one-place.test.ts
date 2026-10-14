@@ -11,8 +11,8 @@
  * how a fourth sibling would start.
  *
  * It reads the syntax tree for a call through a binding imported from
- * `node:fs` / `node:fs/promises` (named, aliased, or off a namespace or default
- * import), so a method that happens to be called `rename` is not a hit. Every
+ * `node:fs` / `node:fs/promises` (named, aliased, or off a namespace, default
+ * or `promises` import, including `fs.promises.rename`), so a method that happens to be called `rename` is not a hit. Every
  * other site is allowlisted with its reason and its exact call count, so a
  * second rename in an allowlisted file fails like one anywhere else.
  */
@@ -53,7 +53,7 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
   },
   'packages/mcp-server/src/server/store/backup-pass.ts': {
     calls: 1,
-    why: 'seals a finished backup by renaming its staging DIRECTORY; every file in it was written by its own store',
+    why: 'seals a finished backup by renaming its staging DIRECTORY; syncTree fsyncs every file and directory in it before, and the parent is synced after',
   },
   'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts': {
     calls: 2,
@@ -91,7 +91,10 @@ function fsRenames(fileName: string, source: string): string[] {
       continue
     }
     for (const element of bindings.elements) {
-      if (RENAMES.has((element.propertyName ?? element.name).text)) named.add(element.name.text)
+      const imported = (element.propertyName ?? element.name).text
+      if (RENAMES.has(imported)) named.add(element.name.text)
+      // `node:fs`'s `promises` is the promise API under another name.
+      if (imported === 'promises') namespaces.add(element.name.text)
     }
   }
   const found: string[] = []
@@ -101,15 +104,25 @@ function fsRenames(fileName: string, source: string): string[] {
       const hit =
         (ts.isIdentifier(callee) && named.has(callee.text)) ||
         (ts.isPropertyAccessExpression(callee) &&
-          ts.isIdentifier(callee.expression) &&
-          namespaces.has(callee.expression.text) &&
-          RENAMES.has(callee.name.text))
+          RENAMES.has(callee.name.text) &&
+          isFsObject(callee.expression, namespaces))
       if (hit) found.push(node.getText(file))
     }
     ts.forEachChild(node, visit)
   }
   visit(file)
   return found
+}
+
+/** `fs`, or `fs.promises`, where `fs` is a namespace, default or `promises` binding. */
+function isFsObject(node: ts.Expression, namespaces: ReadonlySet<string>): boolean {
+  if (ts.isIdentifier(node)) return namespaces.has(node.text)
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    node.name.text === 'promises' &&
+    ts.isIdentifier(node.expression) &&
+    namespaces.has(node.expression.text)
+  )
 }
 
 const files = walkSourceFiles(join(REPO_ROOT, SCANNED)).filter((path) => !isTestPath(path))
@@ -143,6 +156,13 @@ describe('a file is renamed into place in one place', () => {
       'a default import beside named ones',
       "import fsp, { rm } from 'fs/promises'\nawait fsp.rename(a, b)",
     ],
+    ['a named promises import', "import { promises } from 'node:fs'\nawait promises.rename(a, b)"],
+    [
+      'an aliased promises import',
+      "import { promises as fsp } from 'node:fs'\nawait fsp.rename(a, b)",
+    ],
+    ['promises off a default import', "import fs from 'node:fs'\nawait fs.promises.rename(a, b)"],
+    ['promises off a namespace import', "import * as fs from 'fs'\nawait fs.promises.rename(a, b)"],
   ])('recognises %s', (_label, source) => {
     expect(fsRenames('fixture.ts', source)).toHaveLength(1)
   })

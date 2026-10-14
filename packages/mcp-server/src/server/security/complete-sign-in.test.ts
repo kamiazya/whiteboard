@@ -79,6 +79,17 @@ describe('completeSignIn — a person already here', () => {
     expect(await accountCount()).toBe(1)
   })
 
+  // The session store's lifetime is the deps' own, so the cookie lifetime a
+  // route sets from the same value cannot outlive the session behind it.
+  it('opens a session that lasts the configured lifetime and no longer', async () => {
+    const binding = { authenticator: providerAuthenticator(provider()), subject: 'ada-1' }
+    await deps.members.ensureProfile({ binding, displayName: 'Ada' })
+    const done = await completeSignIn(deps, { provider: provider(), claims: ada, now: T0 })
+    if (!done.ok) throw new Error('sign-in refused')
+    expect(await deps.sessions.resolve(done.sessionToken, T0 + HOUR - 1)).toEqual(binding)
+    expect(await deps.sessions.resolve(done.sessionToken, T0 + HOUR + 1)).toBeNull()
+  })
+
   // ADR-0051 decision 5: administration asks how recently the provider
   // authenticated the person, which the ID token's `auth_time` (seconds) says.
   it('records when the provider authenticated the person, and nothing when it did not say', async () => {
@@ -167,6 +178,24 @@ describe('completeSignIn — somebody new', () => {
     })
     expect(done.ok).toBe(true)
     expect(await accountCount()).toBe(1)
+  })
+
+  // A blank claim is no name at all, so the next claim in line names them.
+  it('names a new user from the first non-blank display claim, trimmed', async () => {
+    const open = provider({ createAccounts: true })
+    const blank = await completeSignIn(deps, {
+      provider: open,
+      claims: { sub: 's-1', name: '   ', preferred_username: 'ada' },
+      now: T0,
+    })
+    const padded = await completeSignIn(deps, {
+      provider: open,
+      claims: { sub: 's-2', name: '  Bob  ' },
+      now: T0,
+    })
+    if (!blank.ok || !padded.ok) throw new Error('sign-in refused')
+    expect(blank.profile.displayName).toBe('ada')
+    expect(padded.profile.displayName).toBe('Bob')
   })
 
   it('creates the user through a valid link and spends the link', async () => {
@@ -359,6 +388,21 @@ describe('completeSignIn — an invitation into a workspace', () => {
     })
     expect((await deps.invitations.openLink(token, T0 + 2)).ok).toBe(true)
   })
+
+  // A link that no longer opens is refused only to a NEWCOMER, who needs it to
+  // get in; a person already here signs in as themselves, joining nothing.
+  it('signs in an existing user who arrives with an expired link', async () => {
+    const user = await deps.members.ensureProfile({ binding: binding(), displayName: 'Ada' })
+    const { token } = await workspaceLink()
+    const done = await completeSignIn(deps, {
+      provider: provider(),
+      claims: ada,
+      invitationToken: token,
+      now: T0 + HOUR,
+    })
+    expect(done.ok).toBe(true)
+    expect(await deps.members.isWorkspaceMember('ws-1', user.id)).not.toBe('member')
+  })
 })
 
 describe('completeSignIn — rules supplied in code', () => {
@@ -425,5 +469,17 @@ describe('completeSignIn — what a provider must hand over', () => {
       now: T0,
     })
     expect(done).toEqual({ ok: false, reason: 'no_subject' })
+  })
+
+  // An empty subject is one every provider could send, so binding it would
+  // hand one user to everybody whose token carries it.
+  it('refuses an empty subject', async () => {
+    const done = await completeSignIn(deps, {
+      provider: provider({ createAccounts: true }),
+      claims: { sub: '' },
+      now: T0,
+    })
+    expect(done).toEqual({ ok: false, reason: 'no_subject' })
+    expect(await accountCount()).toBe(0)
   })
 })

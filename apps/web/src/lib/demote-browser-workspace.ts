@@ -48,11 +48,12 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
-import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
+import { BROWSER_DEFAULT_SEGMENT, WORKSPACES_STORE } from './browser-idb.js'
 import { deleteVersionRowsOfWorkspace } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { switchBrowserWorkspace } from './browser-workspace-id.js'
 import { IdbBlobStore } from './idb-blob-store.js'
+import { inTransaction, request } from './idb-tx.js'
 import { forgetContentTimestamp } from './loro-store.js'
 import { openDocumentStore } from './replica-store.js'
 import { announceWorkspaceRemoved } from './workspace-broadcast.js'
@@ -123,40 +124,22 @@ async function bestEffort(
  * was the last, and answers the handle to re-point at plus the rows that
  * remain — the browser-kept workspaces whose trash may still name a blob.
  */
-async function dropRegistryRow(
+function dropRegistryRow(
   sourceWorkspaceId: string,
   dbName?: string,
 ): Promise<{ nextHandle: string; remaining: readonly string[] }> {
-  const db = await openWhiteboardDb(dbName)
-  let remaining: readonly string[] = []
-  try {
-    const nextHandle = await new Promise<string>((resolve, reject) => {
-      const tx = db.transaction([WORKSPACES_STORE, TOMBSTONE_STORE], 'readwrite')
-      const workspaces = tx.objectStore(WORKSPACES_STORE)
-      workspaces.delete(sourceWorkspaceId)
-      writeTombstone(tx, sourceWorkspaceId)
-      const keysReq = workspaces.getAllKeys()
-      let chosen: string | undefined
-      keysReq.onsuccess = () => {
-        remaining = keysReq.result.map(String)
-        chosen = remaining[0]
-        if (chosen === undefined) {
-          const fresh = generateDocumentId()
-          workspaces.put({ workspaceId: fresh, segment: BROWSER_DEFAULT_SEGMENT }, fresh)
-          chosen = fresh
-        }
-      }
-      tx.oncomplete = () => {
-        if (chosen === undefined) reject(new Error('workspace registry read never settled'))
-        else resolve(chosen)
-      }
-      tx.onerror = () => reject(tx.error ?? new Error('workspace registry update failed'))
-      tx.onabort = () => reject(tx.error ?? new Error('workspace registry update aborted'))
-    })
-    return { nextHandle, remaining }
-  } finally {
-    db.close()
-  }
+  const stores = [WORKSPACES_STORE, TOMBSTONE_STORE]
+  return inTransaction(dbName, stores, 'readwrite', async (tx) => {
+    const workspaces = tx.objectStore(WORKSPACES_STORE)
+    workspaces.delete(sourceWorkspaceId)
+    writeTombstone(tx, sourceWorkspaceId)
+    const remaining = (await request(workspaces.getAllKeys())).map(String)
+    const kept = remaining[0]
+    if (kept !== undefined) return { nextHandle: kept, remaining }
+    const fresh = generateDocumentId()
+    workspaces.put({ workspaceId: fresh, segment: BROWSER_DEFAULT_SEGMENT }, fresh)
+    return { nextHandle: fresh, remaining }
+  })
 }
 
 /** What only the source record names, read before the record goes. */

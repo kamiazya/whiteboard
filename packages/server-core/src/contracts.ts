@@ -23,6 +23,11 @@
  * below is re-exported from a schemas-only module beside the tool that
  * serves it, so a tool and the contract it publishes cannot drift.
  *
+ * An INPUT schema is here when a `/api/v1` route parses its body with it, so
+ * the client that builds that body types it from the same declaration: a
+ * renamed key then fails the client's compile instead of the route's
+ * `.strict()` parse.
+ *
  * Deliberately narrow, for the reason `daemon-client`'s own barrel is: what
  * is here is what a client parses. `./api-errors` and
  * `./versions/version-entry` are the two older subpaths and stay separate —
@@ -30,8 +35,14 @@
  * either.
  */
 export { backlinksOutputSchema } from './tools/backlinks.schemas.js'
-export { wbDocumentCreateOutputSchema } from './tools/document-crud.schemas.js'
+export {
+  wbDocumentCreateInputSchema,
+  wbDocumentCreateOutputSchema,
+} from './tools/document-crud.schemas.js'
 export { documentSearchOutputSchema } from './tools/document-search.schemas.js'
 export { documentTagsOutputSchema } from './tools/document-tags.schemas.js'
 export { exportOkfOutputSchema } from './tools/export-okf.schemas.js'
-export { linkifyMentionsOutputSchema } from './tools/linkify-mentions.schemas.js'
+export {
+  linkifyMentionsInputSchema,
+  linkifyMentionsOutputSchema,
+} from './tools/linkify-mentions.schemas.js'

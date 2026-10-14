@@ -1,3 +1,10 @@
+// biome-ignore-all assist/source/organizeImports: the import order is read by the text guards described below
+// Double-quoted and FIRST on purpose: the guards that read this file as text
+// take a single-quoted span naming a config as a registered project, so a
+// single-quoted specifier would be counted twice, and one placed after the
+// next import would join the span its closing quote opens.
+// biome-ignore format: so is the quote style
+import webJsdom from "./apps/web/vitest.config.ts"
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -8,6 +15,11 @@ export default defineConfig({
     // not reach the guard that does. Same no-apostrophe, no-quoted-glob rule as
     // the comment below, since this file is read as text.
     globalSetup: ['./.claude/scripts/node-version-banner.mjs'],
+    // Read from the ROOT config only, so the web jsdom project filter is
+    // carried up here or a run of that project through this config (a
+    // project filter, the coverage lane) drops it. Narrow by construction:
+    // it matches one post-teardown React scheduler error and nothing else.
+    onUnhandledError: webJsdom.test?.onUnhandledError,
     // Coverage is configured ONLY here: with `projects` the runner reads it
     // from the root config, and a per-project coverage block is ignored. The
     // consumer is the SonarQube lane (.github/workflows/sonarqube.yml), which

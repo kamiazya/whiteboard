@@ -31,12 +31,11 @@ import type {
 } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
-import { blobsRoot } from '../tenant/data-layout.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
+import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad, settleSavedDoc } from './doc-cache.js'
-import { FsBlobStore } from './fs/fs-blob-store.js'
 import { moveEvictingCache } from './moved-paths.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -157,7 +156,7 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
 export async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspaceDocumentIndex> {
   return new CacheCoherentDocumentIndex(
     cacheBackedWorkspaceDocs(scope),
-    new FsBlobStore(blobsRoot(scope.dataDir, scope.layout.tenantId), scope.dataDir),
+    daemonBlobStore(scope.dataDir, scope.layout.tenantId),
     workspaceRegistry(scope),
     scope,
   )

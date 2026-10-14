@@ -23,7 +23,8 @@
 // that is killed before it closes leaves `<tmpdir>/<21-char id>/{ssr,client}`
 // copies of every transformed module (3-80 MB each), and nothing else ever
 // removes them. Only directories untouched for a day are taken, so a run in
-// progress keeps its own.
+// progress keeps its own. The same bound sweeps the temp dirs this repo's own
+// tests make, by the prefixes the tracked test source hands mkdtemp.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -185,8 +186,99 @@ function sweepVitestScratch() {
   }
 }
 
+/**
+ * A test's temp dir: what this repo's tests and fixtures hand `mkdtemp` under
+ * `tmpdir()`, read from the tracked source on every run so the sweep never
+ * holds a list of its own to fall behind. A run killed before its cleanup
+ * leaves one behind per test, and nothing else removes them.
+ *
+ * Test source only: a tool may leave a temp dir behind ON PURPOSE (mutate's
+ * backup is the restore of a SIGKILLed run). A prefix built from a template
+ * keeps its interpolations as a name segment, and one with no literal stem of
+ * three characters says nothing about who made the directory, so it is
+ * dropped rather than matched. `mkdtemp` appends six of `A-Za-z0-9`.
+ */
+const MKDTEMP_UNDER_TMPDIR =
+  /mkdtemp(?:Sync)?\(\s*(?:join\(\s*(?:os\.)?tmpdir\(\)\s*,\s*(['`])([^'`]*)\1\s*\)|`\$\{(?:os\.)?tmpdir\(\)\}\/([^`]*)`)/g
+const TEST_SOURCE_PATH =
+  /\.test\.[cm]?[jt]sx?$|(^|\/)test-utils\/|test-helpers|(^|\/)_test-|\.smoke(-impl)?\.|(^|\/)smoke\/|-smoke\.|(^|\/)e2e\//
+const MIN_PREFIX_STEM = 3
+/**
+ * Test source whose `mkdtemp` calls are QUOTED fixture text rather than calls:
+ * this script's own test writes them into a throwaway repo, and a prefix read
+ * from there would sweep a directory nothing in this repo creates.
+ */
+const FIXTURE_ONLY_SOURCES = [':(exclude).claude/scripts/cleanup-worktrees.test.mjs']
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+function repoTempDirPatterns() {
+  let listing
+  try {
+    listing = git(['grep', '-E', '-e', 'mkdtemp(Sync)?\\(', '--', '.', ...FIXTURE_ONLY_SOURCES], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    if (error.status === 1) return [] // git grep exits 1 when nothing matches
+    throw new Error(`git grep for temp dir prefixes failed: ${error.stderr || error.message}`)
+  }
+  const patterns = new Map()
+  for (const line of listing.split('\n')) {
+    const at = line.indexOf(':')
+    if (at < 0 || !TEST_SOURCE_PATH.test(line.slice(0, at))) continue
+    for (const match of line.slice(at + 1).matchAll(MKDTEMP_UNDER_TMPDIR)) {
+      const prefix = match[2] ?? match[3]
+      const pieces = prefix.split(/\$\{[^}]*\}/)
+      if (pieces[0].length < MIN_PREFIX_STEM || prefix.includes('/')) continue
+      const body = pieces.map(escapeRegExp).join('[A-Za-z0-9._-]+')
+      patterns.set(prefix, new RegExp(`^${body}[A-Za-z0-9]{6}$`))
+    }
+  }
+  return [...patterns.values()]
+}
+
+function staleRepoTempDirs(root, now) {
+  const patterns = repoTempDirPatterns()
+  if (patterns.length === 0) return []
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && patterns.some((p) => p.test(entry.name)))
+      .map((entry) => join(root, entry.name))
+      .filter((dir) => {
+        try {
+          return !touchedSince(dir, now - VITEST_SCRATCH_MIN_AGE_MS)
+        } catch {
+          return false
+        }
+      })
+  } catch {
+    return []
+  }
+}
+
+function sweepRepoTempDirs() {
+  const root = tmpdir()
+  let swept = 0
+  for (const dir of staleRepoTempDirs(root, Date.now())) {
+    if (dryRun) {
+      console.log(`would sweep repo temp dir ${dir}`)
+    } else {
+      try {
+        rmSync(dir, { recursive: true, force: true })
+      } catch (error) {
+        console.warn(`warning: could not sweep repo temp dir ${dir}: ${error.message}`)
+        continue
+      }
+    }
+    swept++
+  }
+  if (swept > 0) {
+    console.log(`${dryRun ? 'would sweep' : 'swept'} ${swept} stale repo temp dir(s) in ${root}`)
+  }
+}
+
 // Before the worktree pass, which can exit early with nothing to clean.
 sweepVitestScratch()
+sweepRepoTempDirs()
 
 if (!existsSync(worktreesDir)) {
   console.log('no .claude/worktrees directory — nothing to clean')

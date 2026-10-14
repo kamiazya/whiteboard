@@ -1,7 +1,7 @@
 import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { CONTENT_TIMESTAMPS_STORE, openWhiteboardDb } from './browser-idb.js'
+import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import type { Answered } from './idb-tx.js'
+import { type Answered, inTransaction, request } from './idb-tx.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 
 // What `DocumentIndex` deliberately does not own, for browser mode.
@@ -19,34 +19,29 @@ import type { DocumentSnapshot } from './whiteboard-client.js'
 // bending the contract around them.
 
 /** Read only the envelope's timestamp field for each id, in one transaction. */
-async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<string, string>> {
-  if (ids.length === 0) return new Map()
-  return new Promise((resolve, reject) => {
-    // Its own store, not the content record's envelope.
-    //
-    // A field on the Loro envelope would mean the listing parses a whole
-    // snapshot record to read one string — and pulls the envelope schema's
-    // module along with it. Content lives behind the `DocumentStore` port,
-    // which has no notion of wall-clock time at all, so the timestamp has its
-    // own store and this read touches nothing else.
-    //
-    // The consequence, stated rather than hidden: a document whose content
-    // will not load still contributes the timestamp its last writer stamped,
-    // so it can read as recently edited. That is a last-WRITE time, which is
-    // what this field claims to be; whether the bytes are readable is a
-    // question for whoever loads them.
-    const tx = db.transaction(CONTENT_TIMESTAMPS_STORE, 'readonly')
+function contentUpdatedAt(dbName: string | undefined, ids: string[]): Promise<Map<string, string>> {
+  // Its own store, not the content record's envelope.
+  //
+  // A field on the Loro envelope would mean the listing parses a whole
+  // snapshot record to read one string — and pulls the envelope schema's
+  // module along with it. Content lives behind the `DocumentStore` port,
+  // which has no notion of wall-clock time at all, so the timestamp has its
+  // own store and this read touches nothing else.
+  //
+  // The consequence, stated rather than hidden: a document whose content
+  // will not load still contributes the timestamp its last writer stamped,
+  // so it can read as recently edited. That is a last-WRITE time, which is
+  // what this field claims to be; whether the bytes are readable is a
+  // question for whoever loads them.
+  return inTransaction(dbName, [CONTENT_TIMESTAMPS_STORE], 'readonly', async (tx) => {
     const store = tx.objectStore(CONTENT_TIMESTAMPS_STORE)
+    const values = await Promise.all(ids.map((id) => request(store.get(id))))
     const stamps = new Map<string, string>()
-    for (const id of ids) {
-      const req = store.get(id)
-      req.onsuccess = () => {
-        if (typeof req.result === 'string') stamps.set(id, req.result)
-      }
-    }
-    tx.oncomplete = () => resolve(stamps)
-    tx.onerror = () => reject(tx.error)
-    tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
+    ids.forEach((id, i) => {
+      const value = values[i]
+      if (typeof value === 'string') stamps.set(id, value)
+    })
+    return stamps
   })
 }
 
@@ -84,15 +79,7 @@ function toSnapshot(entry: DocumentEntry, updatedAt: string | undefined): Docume
 export type ContentClock = (ids: string[]) => Promise<Map<string, string>>
 
 export function idbContentClock(dbName?: string): ContentClock {
-  return async (ids) => {
-    if (ids.length === 0) return new Map()
-    const db = await openWhiteboardDb(dbName)
-    try {
-      return await contentUpdatedAt(db, ids)
-    } finally {
-      db.close()
-    }
-  }
+  return async (ids) => (ids.length === 0 ? new Map() : contentUpdatedAt(dbName, ids))
 }
 
 /**
@@ -151,36 +138,15 @@ export interface DefaultDocumentPointer {
   clear(): Promise<void>
 }
 
-function metaTransaction<T>(
-  db: IDBDatabase,
-  mode: IDBTransactionMode,
-  body: (store: IDBObjectStore) => IDBRequest<T>,
-): Promise<Answered<T>> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('meta', mode)
-    const req = body(tx.objectStore('meta'))
-    req.onsuccess = () => resolve(req.result as Answered<T>)
-    req.onerror = () => reject(req.error)
-    tx.onerror = () => reject(tx.error)
-    // An abort with no handler leaves this promise pending forever, which
-    // reads as a hang in whatever awaited it rather than as a failed write.
-    tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
-  })
-}
-
 export class IdbDefaultDocumentPointer implements DefaultDocumentPointer {
   constructor(private readonly dbName?: string) {}
 
-  private async withDb<T>(
+  /** Settles on COMMIT: a pointer write the browser later aborts is reported as failed. */
+  private withDb<T>(
     mode: IDBTransactionMode,
     body: (store: IDBObjectStore) => IDBRequest<T>,
   ): Promise<Answered<T>> {
-    const db = await openWhiteboardDb(this.dbName)
-    try {
-      return await metaTransaction(db, mode, body)
-    } finally {
-      db.close()
-    }
+    return inTransaction(this.dbName, ['meta'], mode, (tx) => request(body(tx.objectStore('meta'))))
   }
 
   async get(): Promise<string | null> {

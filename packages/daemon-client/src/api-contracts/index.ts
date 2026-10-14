@@ -39,3 +39,5 @@ export { promoteWorkspaceResponseSchema } from './promotion.js'
 // The six /api/v1 answers, derived from the tool outputs the routes serve and
 // tolerant of a newer daemon's added fields (see v1-answers.ts).
 export * from './v1-answers.js'
+// The bodies the two /api/v1 writes send, derived from the inputs the routes parse.
+export type { CreateDocumentV1Request, LinkifyMentionsV1Request } from './v1-requests.js'

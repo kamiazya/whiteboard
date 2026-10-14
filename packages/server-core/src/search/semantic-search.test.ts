@@ -267,6 +267,55 @@ describe('semantic fusion', () => {
     expect(out.results.map((r) => r.semanticRank)).toEqual([undefined, undefined])
   })
 
+  // A filter answers membership, so it bounds the vector half too: meaning
+  // alone must not admit a document the tag excluded.
+  it('a tag filter bounds what the semantic half may find', async () => {
+    const deps = makeDeps()
+    const { reconnect } = await seed(deps)
+    const kept = await wbDocumentCreate(deps, {
+      workspaceId: WS,
+      path: 'untitled-3',
+      kind: 'markdown',
+      name: 'kept',
+    })
+    await createDocumentSetOperation(deps).execute({
+      workspaceId: WS,
+      documentId: kept.documentId,
+      markdown: '---\ntype: note\ntags:\n  - keep\n---\nquota note',
+    })
+    const unfiltered = await createDocumentSearchTool({
+      ...deps,
+      embedder: fakeEmbedder(),
+    }).execute({ workspaceId: WS, query: '復旧' })
+    expect(unfiltered.results.map((r) => r.documentId)).toContain(reconnect)
+
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: '復旧',
+      tags: ['keep'],
+    })
+    expect(out.results.map((r) => r.documentId)).toContain(kept.documentId)
+    for (const hit of out.results) expect(hit.documentId).toBe(kept.documentId)
+  })
+
+  it('an embedder that throws still cuts the lexical answer at the limit', async () => {
+    const deps = makeDeps()
+    const { write } = await seed(deps)
+    await write('untitled-3', '容量メモ', 'quota quota quota')
+    const broken: Embedder = {
+      id: 'broken@v1',
+      dimensions: 3,
+      embed: () => Promise.reject(new Error('model unavailable')),
+    }
+    const out = await createDocumentSearchTool({ ...deps, embedder: broken }).execute({
+      workspaceId: WS,
+      query: 'quota',
+      limit: 1,
+    })
+    expect(out.results).toHaveLength(1)
+    expect(out.results[0]?.lexicalRank).toBe(1)
+  })
+
   it('embeds each document once and re-embeds only what changed', async () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)

@@ -36,8 +36,9 @@ const bareOriginSchema = z
     },
   )
 
-// The server injects this shape into `window.__WHITEBOARD_RUNTIME_CONFIG__`
-// via a same-origin inline <script> (see server/app.ts). It crosses a
+// A server-mode keeper injects this shape into `window.__WHITEBOARD_RUNTIME_CONFIG__`
+// via a same-origin inline <script> (mcp-server's server/server-mode-web-app.ts,
+// the only producer; the hosted app serves no config). It crosses a
 // process boundary (server -> browser), so it is validated on read rather
 // than trusted as a cast — a malformed or tampered global falls back to the
 // unauthenticated default instead of propagating a bad value into apiFetch.

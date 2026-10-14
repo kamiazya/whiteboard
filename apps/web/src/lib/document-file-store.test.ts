@@ -10,6 +10,11 @@ vi.mock('./browser-idb.js', async (importOriginal) => ({
   openWhiteboardDb: openWhiteboardDbMock,
 }))
 
+// The setup file has already loaded `idb-tx.js` (through the workspace-id
+// accessor it seeds), bound to the REAL opener; a mock registered afterwards
+// reaches only modules evaluated afterwards. Resetting the registry makes the
+// store's graph — `idb-tx.js` included — evaluate again against the mock.
+vi.resetModules()
 const { DocumentFileStore, documentFileRecordSchema } = await import('./document-file-store.js')
 
 afterEach(() => openWhiteboardDbMock.mockReset())

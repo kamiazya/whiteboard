@@ -8,15 +8,14 @@ import {
 import {
   compareCodeUnit,
   type ExtensionFacets,
-  messageOf,
   type SpatialCanvas,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
-import { getLogger } from '../log.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
+import { announceAgentActivity, notificationFailed } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { CanvasEditError, describeIssues, fail } from './canvas-edit-error.js'
 import { applyCanvasOp, type CanvasEditContext } from './canvas-edit-handlers.js'
@@ -33,8 +32,6 @@ import { DocumentKindMismatchError } from './errors.js'
 import { registryForFacetWrites } from './facet-write.js'
 import { workspaceFacetRegistry } from './stencil-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
-
-const log = getLogger('canvas-edit')
 
 export { canvasEditInputSchema } from './canvas-edit-ops.js'
 export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.js'
@@ -231,11 +228,8 @@ async function commitAsProposal({
  * Tell a watching human what landed — only now, with the write committed.
  *
  * A human must never be shown an edit that was refused, so nothing before the
- * save calls this. Both calls are wrapped because the batch is already on disk
- * by the time anyone is told: letting a broken socket surface as a tool error
- * would report a failure for an edit that SUCCEEDED. The implementation is
- * expected to handle its own transport errors — this is the belt, so what
- * reaches it is logged as a warning rather than lost.
+ * save calls this. The viewport request is wrapped for the same reason
+ * `announceAgentActivity` is: the batch is already on disk.
  *
  * Awaited, as it was inline: the viewport request is part of what the caller
  * asked for when it left `follow` on, and returning before it is sent would
@@ -251,47 +245,23 @@ async function announceEdit(
     readonly comments: string[]
   },
 ): Promise<void> {
+  const { workspaceId, documentId } = input
+  announceAgentActivity(deps, { workspaceId, documentId, ...touched }, summarizeOps(input.ops))
   const notifier = deps.clientNotifier
-  if (notifier !== undefined) {
-    try {
-      notifier.agentActivity({
-        workspaceId: input.workspaceId,
-        documentId: input.documentId,
-        touched,
-        summary: summarizeOps(input.ops),
-      })
-    } catch (err) {
-      notificationFailed(input, 'agentActivity', err)
-    }
-    // An empty `elementIds` with `mode: 'fit'` fits the WHOLE board,
-    // which is a jarring jump for an edit that only touched an edge —
-    // so a batch that moved no node moves no viewport either.
-    if (input.follow !== false && touched.nodes.length > 0) {
-      try {
-        await notifier.requestViewport({
-          workspaceId: input.workspaceId,
-          documentId: input.documentId,
-          mode: 'fit',
-          elementIds: touched.nodes,
-        })
-      } catch (err) {
-        notificationFailed(input, 'requestViewport', err)
-      }
-    }
+  // An empty `elementIds` with `mode: 'fit'` fits the WHOLE board,
+  // which is a jarring jump for an edit that only touched an edge —
+  // so a batch that moved no node moves no viewport either.
+  if (notifier === undefined || input.follow === false || touched.nodes.length === 0) return
+  try {
+    await notifier.requestViewport({
+      workspaceId,
+      documentId,
+      mode: 'fit',
+      elementIds: touched.nodes,
+    })
+  } catch (err) {
+    notificationFailed(input, 'requestViewport', err)
   }
-}
-
-function notificationFailed(
-  input: CanvasEditInput,
-  notification: 'agentActivity' | 'requestViewport',
-  err: unknown,
-): void {
-  log.warning('a client notification failed after the edit landed', {
-    workspaceId: input.workspaceId,
-    documentId: input.documentId,
-    notification,
-    err: messageOf(err),
-  })
 }
 
 type SummaryBucket = 'added' | 'changed' | 'removed' | 'commented' | 'resolved' | 'tidied'

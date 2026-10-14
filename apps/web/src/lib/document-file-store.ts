@@ -18,15 +18,15 @@ import { inTransaction, request } from './idb-tx.js'
  *   `BlobStore`, so two ids naming the same image share one copy, and a
  *   reference can be dropped.
  *
- * v1 is still READ, and a v1 record read through `get` is rewritten as v2 on
+ * v1 is still READ, and a v1 record read through `read` is rewritten as v2 on
  * the spot — the bytes are already in hand, and `BlobStore.put` is idempotent,
  * so the migration costs one write the first time an old image is displayed.
  *
  * A v1 record nobody ever reads is never converted, and need not be: the
  * reference sweep (`browser-file-sweep.ts`) drops it once nothing names it.
  *
- * An unknown/newer version is a cache miss (`get` resolves null) rather than a
- * crash.
+ * An unknown/newer version is a cache miss (`read` answers `{ kind: 'absent' }`)
+ * rather than a crash.
  */
 export const documentFileRecordSchema = z.union([
   z.object({

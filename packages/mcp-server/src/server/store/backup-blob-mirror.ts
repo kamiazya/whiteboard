@@ -14,7 +14,7 @@
 // is the whole point of decision 5 — file-GC must never delete from the
 // backup, and the backup must never delete on GC's behalf.
 
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { dirname, join, posix, relative, sep } from 'node:path'
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { blobRefSchema } from '@kamiazya/whiteboard-ports'
@@ -219,6 +219,10 @@ async function mirrorOneTenant(
  * source is kept: there the source is the damaged side, and the mirror may
  * hold the only good copy. That is what keeps a nightly pass from re-reading
  * a store that has not changed, at one extra `stat` per blob.
+ *
+ * One blob at a time on purpose: each copy holds the whole blob in memory, so
+ * copying N at once would multiply the pass's peak memory by N, and the pass
+ * runs off-hours in its own process, where wall time is not what it lacks.
  */
 async function mirrorShard(
   sourceRoot: string,
@@ -423,7 +427,10 @@ function byKey([a]: [string, unknown], [b]: [string, unknown]): number {
 async function writeManifest(backupDir: string, references: BackupBlobReferences): Promise<void> {
   const manifest = recordableManifest(references)
   await mkdir(backupDir, { recursive: true })
-  await writeFile(join(backupDir, BLOB_MANIFEST_FILENAME), `${JSON.stringify(manifest, null, 2)}\n`)
+  await writeFileAtomic(
+    join(backupDir, BLOB_MANIFEST_FILENAME),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
 }
 
 /**

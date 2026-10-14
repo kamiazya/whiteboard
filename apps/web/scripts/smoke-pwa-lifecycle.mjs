@@ -180,19 +180,70 @@ function tailConsole(page) {
   })
 }
 
-const controllerVersion = (page) =>
+// One question to the controller, answered with which of the three outcomes it
+// was — no controller at all, a controller that did not reply in time, or the
+// version it named — since a bare null cannot tell the first two apart.
+const askController = (page) =>
   page.evaluate(
     () =>
-      new Promise((resolveVersion) => {
-        // A worker being replaced never answers.
-        setTimeout(() => resolveVersion(null), 1000)
+      new Promise((answer) => {
         const controller = navigator.serviceWorker.controller
-        if (!controller) return resolveVersion(null)
+        if (!controller) return answer({ controller: null })
+        const started = performance.now()
+        // A worker being replaced never answers.
+        const timer = setTimeout(
+          () => answer({ controller: controller.state, timedOut: true }),
+          1000,
+        )
         const channel = new MessageChannel()
-        channel.port1.onmessage = (e) => resolveVersion(e.data)
+        channel.port1.onmessage = (e) => {
+          clearTimeout(timer)
+          answer({
+            controller: controller.state,
+            version: e.data,
+            replyMs: Math.round(performance.now() - started),
+          })
+        }
         controller.postMessage('smoke:version', [channel.port2])
       }),
   )
+
+// Polled rather than read once: a controller busy serving the page's own load
+// can miss a one-second reply window and still be the right worker. Every
+// answer that was not the expected one is printed, so a slow pass and a
+// failure both say which outcome the page saw.
+async function checkController(page, label, version) {
+  const misses = []
+  const ok = await until(
+    `${label} (${version})`,
+    async () => {
+      const answer = await askController(page)
+      if (answer.version === version) return true
+      misses.push(answer)
+      return false
+    },
+    async () => ({
+      firstMisses: misses.slice(0, 5),
+      lastMiss: misses.at(-1),
+      misses: misses.length,
+      ...(await workerSummary(page)),
+      versions: versionsSeen(),
+      console: consoleTail,
+    }),
+  ).then(
+    () => true,
+    (err) => {
+      console.error(err.message)
+      return false
+    },
+  )
+  if (ok && misses.length > 0) {
+    console.log(
+      `  note  ${label}: answered after ${misses.length} miss(es), first ${JSON.stringify(misses[0])}`,
+    )
+  }
+  check(label, ok)
+}
 
 const hasWaitingWorker = (page) =>
   page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.waiting != null)
@@ -203,11 +254,10 @@ async function installAndControl(page, origin, version) {
   await page.goto(origin, { waitUntil: 'networkidle' })
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true))
   await page.reload({ waitUntil: 'networkidle' })
-  check(
-    `the ${version} worker controls the page after a reload`,
-    (await controllerVersion(page)) === version,
-  )
+  // Asked once the page has settled: the controller is fixed for the
+  // document's lifetime, while its reply competes with the load it serves.
   await waitUntilSettled(page)
+  await checkController(page, `the ${version} worker controls the page after a reload`, version)
 }
 
 // Until the app has drawn its first screen and stopped asking for chunks.
@@ -238,10 +288,7 @@ async function waitForUpdate(page, current, next) {
   })
   await until('a waiting worker', () => hasWaitingWorker(page))
   check('a deploy leaves the new worker waiting', true)
-  check(
-    'the page is still controlled by the old worker',
-    (await controllerVersion(page)) === current,
-  )
+  await checkController(page, 'the page is still controlled by the old worker', current)
   const toast = page.getByRole('status').filter({ hasText: 'Update available' })
   await toast.waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS })
   check('the update toast is offered', true)
@@ -313,10 +360,7 @@ async function acceptUpdate(page, toast, version) {
       ),
     () => describeReloadStall(page),
   )
-  check(
-    "the toast's Reload moves the page onto the new worker",
-    (await controllerVersion(page)) === version,
-  )
+  await checkController(page, "the toast's Reload moves the page onto the new worker", version)
   check('nothing is left waiting afterwards', !(await hasWaitingWorker(page)))
 }
 

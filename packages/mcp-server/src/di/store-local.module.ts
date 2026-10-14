@@ -1,16 +1,15 @@
 import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { ContainerModule } from 'inversify'
+import { daemonBlobStore } from '../server/store/backup-guarded-blob-store.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
 import {
   CacheCoherentDocumentIndex,
   cacheBackedWorkspaceDocs,
   workspaceRegistry,
 } from '../server/store/document-store.js'
-import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
 import { storeScope } from '../server/store/store-scope.js'
 import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
-import { blobsRoot } from '../server/tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
 import { STORE_SCOPE } from './store-scope-token.js'
 
@@ -19,10 +18,6 @@ export interface StoreLocalModuleOptions {
   /** The data directory; where inside it this tenant's bytes go is `data-layout.ts`'s. */
   dataDir: string
   tenantId: string
-}
-
-function tenantBlobStore(opts: StoreLocalModuleOptions): FsBlobStore {
-  return new FsBlobStore(blobsRoot(opts.dataDir, opts.tenantId), opts.dataDir)
 }
 
 /**
@@ -56,14 +51,14 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
       )
       .inSingletonScope()
     bind(TOKENS.BlobStore)
-      .toDynamicValue(() => tenantBlobStore(opts))
+      .toDynamicValue(() => daemonBlobStore(opts.dataDir, opts.tenantId))
       .inSingletonScope()
     bind(TOKENS.DocumentIndex)
       .toDynamicValue(
         () =>
           new CacheCoherentDocumentIndex(
             cacheBackedWorkspaceDocs(scope),
-            tenantBlobStore(opts),
+            daemonBlobStore(opts.dataDir, opts.tenantId),
             workspaceRegistry(scope),
             scope,
           ),

@@ -219,46 +219,24 @@ describe('ci.yml dry-run jobs exist (consolidated from publish-dry-run.yml)', ()
 // ── ci.yml dry-run artifact uploads ──────────────────────────────────────────
 
 describe('ci.yml dry-run jobs upload artifacts', () => {
-  it('verify job uploads the npm dry-run artifacts via actions/upload-artifact', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
-    expect(section).toContain('actions/upload-artifact')
-  })
-
-  it('verify npm dry-run artifact name contains npm-tarball-dry-run', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
-    expect(section).toContain('name: npm-tarball-dry-run-')
-  })
-
-  it('verify npm dry-run artifact path is the publish-dry-run directory', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
-    expect(section).toContain('path: packages/mcp-server/tmp/publish-dry-run/')
-  })
-
-  it('verify npm dry-run artifact upload fails the job if no files are found', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'verify', 'extension-smokes')
-    expect(section).toContain('if-no-files-found: error')
-  })
-
-  it('dry-run-docker job uploads metadata via actions/upload-artifact', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-docker')
-    expect(section).toContain('actions/upload-artifact')
-  })
-
-  it('dry-run-docker artifact name contains docker-image-dry-run', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-docker')
-    expect(section).toContain('name: docker-image-dry-run-')
-  })
-
-  it('dry-run-docker artifact path is the docker metadata JSON', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-docker')
-    expect(section).toContain(
+  it.each([
+    ['verify', 'actions/upload-artifact', 'extension-smokes'],
+    ['verify', 'name: npm-tarball-dry-run-', 'extension-smokes'],
+    ['verify', 'path: packages/mcp-server/tmp/publish-dry-run/', 'extension-smokes'],
+    // The npm artifact must exist: an empty upload fails the job.
+    ['verify', 'if-no-files-found: error', 'extension-smokes'],
+    ['dry-run-docker', 'actions/upload-artifact', undefined],
+    ['dry-run-docker', 'name: docker-image-dry-run-', undefined],
+    [
+      'dry-run-docker',
       'path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json',
-    )
-  })
-
-  it('dry-run-docker artifact upload warns if no files are found (metadata may be absent for unchanged images)', () => {
-    const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-docker')
-    expect(section).toContain('if-no-files-found: warn')
+      undefined,
+    ],
+    // Metadata may be absent for an unchanged image, so only a warning.
+    ['dry-run-docker', 'if-no-files-found: warn', undefined],
+  ] as const)('the %s job uploads with %s', (job, needle, nextJob) => {
+    const section = jobSection(readWorkflow(CI_WORKFLOW), job, nextJob)
+    expect(section).toContain(needle)
   })
 })
 
