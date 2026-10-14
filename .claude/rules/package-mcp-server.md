@@ -219,6 +219,10 @@ reads `createApp`'s source and requires the stdio root to call it.
 `writeFileAtomic` (beside the target) and `writeFileAtomicStaged` (under
 `.pending-writes/`) share one commit tail, and `writeSecretFileAtomicSync`
 fsyncs too. Choose by where the write may stage, never by durability.
+A DIRECTORY renamed into place (the backup seal) goes through `syncTree`
+before the rename and `syncDirectory` of its parent after. The daemon's blob
+store is `daemonBlobStore`, which defers a delete while the backup marker is
+live, so no deleter has to ask the marker itself.
 
 ## A store follows the directory it is handed
 

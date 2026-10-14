@@ -112,6 +112,12 @@ const CONFORMANCE_LEDGER: readonly LedgerEntry[] = [
     test: 'packages/mcp-server/src/server/store/fs/fs-blob-store.test.ts',
   },
   {
+    cls: 'BackupGuardedBlobStore',
+    port: 'BlobStore',
+    source: 'packages/mcp-server/src/server/store/backup-guarded-blob-store.ts',
+    test: 'packages/mcp-server/src/server/store/backup-guarded-blob-store.test.ts',
+  },
+  {
     cls: 'InMemoryBlobStore',
     port: 'BlobStore',
     source: 'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts',

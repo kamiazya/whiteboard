@@ -240,6 +240,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/mcp-server/src/server/store/backup-guarded-blob-store.ts#BackupGuardedBlobStore':
+    'production reaches it through daemonBlobStore; exported so the conformance suite and the store module test can name the class the port ledger holds them to',
   'packages/ports/src/document-path-tree.ts#planSubtreeMove':
     'the subtree-move plan the in-memory DocumentIndex double executes; no production keeper moves rows by path any more (the browser tree index moves nodes), so the port double is its one reader',
   'apps/web/src/lib/fold-workspace.ts#startupFoldsSettled':
