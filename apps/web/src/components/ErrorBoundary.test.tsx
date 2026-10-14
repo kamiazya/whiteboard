@@ -57,6 +57,23 @@ describe('ErrorBoundary', () => {
     expect(screen.queryByText(/boom/)).toBeNull()
   })
 
+  it('clears a caught error when its resetKey changes, as navigation away does', () => {
+    console.error = vi.fn()
+    const { rerender } = render(
+      <ErrorBoundary resetKey="/w/a">
+        <Bomb trigger />
+      </ErrorBoundary>,
+    )
+    expect(screen.getByRole('alert')).toBeTruthy()
+    rerender(
+      <ErrorBoundary resetKey="/w/b">
+        <Bomb trigger={false} />
+      </ErrorBoundary>,
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByTestId('bomb-ok')).toBeTruthy()
+  })
+
   it('resets on "Try again" and re-renders the child once the error is gone', () => {
     console.error = vi.fn()
     function Holder({ trigger }: { trigger: boolean }) {

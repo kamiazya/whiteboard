@@ -32,6 +32,10 @@ interface ErrorBoundaryProps {
   children: ReactNode
   // Optional custom fallback for callers that want a different recovery UI.
   fallback?: (args: { error: Error; reset: () => void }) => ReactNode
+  // A caught error is cleared when this changes, so a frame that stays
+  // mounted across navigation (a route-driven view) leaves its fallback once
+  // the person goes somewhere else. A healthy subtree is not remounted by it.
+  resetKey?: unknown
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -46,6 +50,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     errorBoundaryLog.report('ErrorBoundary caught:', { error, componentStack: info.componentStack })
+  }
+
+  componentDidUpdate(prev: ErrorBoundaryProps): void {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.reset()
   }
 
   reset = (): void => {

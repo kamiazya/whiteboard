@@ -10,9 +10,11 @@ import type { DocumentSearchInput } from './tools/document-search.schemas.js'
 
 /**
  * The names the query string carries, keyed by the input field each one is.
- * Keyed by the input type, so a field the tool gains owes a wire name here —
- * and an arm in both codecs below — before it compiles, rather than being
- * honoured over MCP and refused as an unknown parameter over HTTP.
+ * Keyed by the input type, so a field the tool gains owes a wire name here
+ * before it compiles, rather than being honoured over MCP and refused as an
+ * unknown parameter over HTTP. The two codecs below are written per field;
+ * `search-query.test.ts` round-trips an input typed `Required<SearchQueryInput>`,
+ * so the same new field fails that test until both codecs carry it.
  */
 const SEARCH_QUERY_PARAMS = {
   query: 'q',

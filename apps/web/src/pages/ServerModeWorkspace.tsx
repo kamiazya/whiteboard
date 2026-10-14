@@ -24,7 +24,8 @@ const DaemonDocumentPage = lazy(() =>
 
 export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
   const navigate = useNavigate()
-  const view = parseWorkspaceRoute(useLocation().pathname)
+  const { pathname } = useLocation()
+  const view = parseWorkspaceRoute(pathname)
   const onView = (next: WorkspaceRoute) => navigate(workspaceRoutePath(next))
   const origin = window.location.origin
   if (view === null) return null
@@ -35,7 +36,7 @@ export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
       <main className="min-h-0 flex-1 overflow-hidden">
         {/* Outside Suspense, so a rejected page chunk lands here rather than
             unmounting the root; inside the frame, so the header survives. */}
-        <ErrorBoundary>
+        <ErrorBoundary resetKey={pathname}>
           <Suspense
             fallback={<LazyPageFallback heightClass="h-full" message="Opening workspace…" />}
           >

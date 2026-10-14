@@ -28,7 +28,7 @@ const log = getLogger('trash-blob-named-elsewhere')
 export function trashBlobNamedElsewhere(scope: StoreScope): TrashBlobNamedElsewhere {
   return async ({ workspaceId, ref }) => {
     const db = await scope.db()
-    const rows = await db.selectFrom('workspaces').select('id').execute()
+    const rows = await db.selectFrom('workspaces').select('id').orderBy('id').execute()
     const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
     const key = blobRefKey(ref)
     // Sequential: one decoded record resident at a time, and the first hit ends the walk.

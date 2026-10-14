@@ -45,12 +45,20 @@ function holdsPage(code: string): boolean {
   return new RegExp(String.raw`<(?:${names.join('|')})[\s/>]`).test(code)
 }
 
-/** Components this file defines whose own body renders a boundary. */
+/** Whether `body` renders `{children}` between a boundary's opening and closing tags. */
+function boundaryEnclosesChildren(body: string): boolean {
+  const open = body.indexOf(`<${BOUNDARY}`)
+  if (open < 0) return false
+  const close = body.indexOf(`</${BOUNDARY}>`, open)
+  return close >= 0 && /\{\s*(?:props\.)?children\s*\}/.test(body.slice(open, close))
+}
+
+/** Components this file defines whose own body wraps its children in a boundary. */
 function boundaryWrappers(code: string): string[] {
   const declarations = [...code.matchAll(FUNCTION_DECLARATION)]
   return declarations
     .filter((m, i) =>
-      code.slice(m.index, declarations[i + 1]?.index ?? code.length).includes(`<${BOUNDARY}`),
+      boundaryEnclosesChildren(code.slice(m.index, declarations[i + 1]?.index ?? code.length)),
     )
     .map((m) => m[1] as string)
 }
@@ -122,6 +130,13 @@ describe('frames that hold a document page', () => {
           'function Screen() { return <Frame><Suspense><Page /></Suspense></Frame> }',
       ),
     ).toEqual([])
+    // A wrapper whose boundary guards only a sibling of its children guards nothing.
+    expect(
+      unguardedSuspenses(
+        'function Frame({ children }) { return <><ErrorBoundary><Header /></ErrorBoundary>{children}</> }\n' +
+          'function Screen() { return <Frame><Suspense><Page /></Suspense></Frame> }',
+      ),
+    ).toEqual([2])
     // A stray closing tag does not bank an enclosure for what follows.
     expect(unguardedSuspenses('</ErrorBoundary>\n<Suspense><Page /></Suspense>')).toEqual([2])
     // A commented-out boundary is not a boundary.
