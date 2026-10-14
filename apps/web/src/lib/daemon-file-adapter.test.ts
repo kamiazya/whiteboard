@@ -15,7 +15,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
-import { createDaemonFileAdapter } from './daemon-file-adapter.js'
+import { createDaemonFileAdapter, putDaemonImage } from './daemon-file-adapter.js'
 
 const BASE = 'http://127.0.0.1:3099'
 const WS = 'ws-1'
@@ -424,5 +424,47 @@ describe('createDaemonFileAdapter — id references', () => {
     expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
       '/api/w/ws-1/document/old-path-ref/snapshot',
     )
+  })
+})
+
+describe('putDaemonImage, the one writer of the file route', () => {
+  const url = `${BASE}/api/w/${WS}/document/${path}/file/f1`
+
+  it("sends the caller's Content-Type, not the blob's, so an untyped stored blob can travel", async () => {
+    const daemonFetch = vi.fn(async () => new Response(null, { status: 204 }))
+    const put = await putDaemonImage(daemonFetch, url, new Blob(['x']), 'image/png')
+    expect(put).toEqual({ ok: true })
+    const [sent, init] = daemonFetch.mock.calls[0] as unknown as [string, RequestInit]
+    expect(sent).toBe(url)
+    expect(init.method).toBe('PUT')
+    expect(new Headers(init.headers).get('Content-Type')).toBe('image/png')
+  })
+
+  // No log on either refusal: the jsdom setup fails a test whose logged
+  // failure is unclaimed, so a writer that started logging fails here.
+  it('answers a refusal with its status and an unreachable daemon with its error, never throwing', async () => {
+    const refused = await putDaemonImage(
+      vi.fn(async () => new Response(null, { status: 413 })),
+      url,
+      new Blob(['x']),
+      'image/png',
+    )
+    expect(refused).toMatchObject({ ok: false, status: 413 })
+    expect(refused.ok ? '' : refused.reason).toContain('16 MiB')
+
+    const down = new TypeError('fetch failed')
+    const unreachable = await putDaemonImage(
+      vi.fn(async () => {
+        throw down
+      }),
+      url,
+      new Blob(['x']),
+      'image/png',
+    )
+    expect(unreachable).toEqual({
+      ok: false,
+      reason: 'Could not reach the daemon to store that image.',
+      error: down,
+    })
   })
 })
