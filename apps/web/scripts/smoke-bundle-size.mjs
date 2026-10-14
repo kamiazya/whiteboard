@@ -125,6 +125,22 @@ export function extractCriticalPathFiles(html) {
   return [...new Set([...extractEntryScripts(html), ...modulepreloads])]
 }
 
+/** `source` with every comment that follows its last statement removed. */
+function withoutTrailingComments(source) {
+  let rest = source.trimEnd()
+  for (;;) {
+    if (rest.endsWith('*/')) {
+      const open = rest.lastIndexOf('/*')
+      if (open < 0) return rest
+      rest = rest.slice(0, open).trimEnd()
+      continue
+    }
+    const lastLine = rest.slice(rest.lastIndexOf('\n') + 1)
+    if (!lastLine.trimStart().startsWith('//')) return rest
+    rest = rest.slice(0, rest.length - lastLine.length).trimEnd()
+  }
+}
+
 /**
  * Every entry script awaits the `__tla` promise of each chunk it imports
  * that exports one.
@@ -153,11 +169,10 @@ export function entryAwaitFailures(dist) {
     return existsSync(path) ? readFileSync(path, 'utf8') : undefined
   }
   // The export clause ends the module, but a comment (a source map pointer,
-  // a licence banner) may follow it.
+  // a licence banner) may follow it. Comments are peeled off the tail by hand
+  // rather than matched by one pattern, which would backtrack exponentially.
   const deferred = (source) =>
-    /export\s*\{[^}]*\b__tla\b[^}]*\}\s*;?(?:\s*(?:\/\/[^\r\n]*|\/\*[\s\S]*?\*\/))*\s*$/.test(
-      source,
-    )
+    /export\s*\{[^}]*\b__tla\b[^}]*\}\s*;?$/.test(withoutTrailingComments(source))
   for (const src of extractEntryScripts(readFileSync(indexHtmlPath, 'utf8'))) {
     const entry = src.replace(/^\/assets\//, '')
     const entrySource = readAsset(entry)
