@@ -42,6 +42,7 @@ export function useReplicaSaveQueue(workspaceId: string) {
     [workspaceId, markCopyRemoved],
   )
   useEffect(() => () => queue.flush(), [queue])
+  useFlushOnPageLeaving(queue)
   useCopyRemovedLock(workspaceId, queue, copyRemoved, markCopyRemoved)
   return {
     scheduleSave: queue.schedule,
@@ -49,6 +50,28 @@ export function useReplicaSaveQueue(workspaceId: string) {
     saveFailed: health === 'failed',
     copyRemoved,
   }
+}
+
+/**
+ * The debounce window holds edits already on screen, and a tab that goes away
+ * inside it runs no React cleanup. `pagehide` and `visibilitychange` → hidden
+ * are the last signals a page reliably gets (Page Lifecycle API), so the
+ * pending save goes out on them — the same moment the live document session
+ * flushes. Turning visible again is the same event name and must not flush.
+ */
+function useFlushOnPageLeaving(queue: ReplicaSaveQueue<ReplicaRecord>): void {
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') queue.flush()
+    }
+    const onPageHide = () => queue.flush()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [queue])
 }
 
 /**
