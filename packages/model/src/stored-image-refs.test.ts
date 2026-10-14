@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import type { SpatialCanvas } from './spatial.js'
 import { storedImageRefs } from './stored-image-refs.js'
@@ -35,6 +36,24 @@ describe('storedImageRefs', () => {
     expect(
       storedImageRefs({ body: '![a](asset:one) ![b](<asset:two>) ![c](asset:one) ![d](http://x)' }),
     ).toEqual(['asset:one', 'asset:two'])
+  })
+
+  it('ends a destination at the space before its title', () => {
+    // The title is not part of the URL: a scan that kept it would name the id
+    // `abc "A title"`, and blob `abc` would read as unreferenced to the GC.
+    expect(storedImageRefs({ body: '![a](asset:abc "A title") and ![b](asset:def)' })).toEqual([
+      'asset:abc',
+      'asset:def',
+    ])
+  })
+
+  it('stops at an unclosed angle-bracket destination', () => {
+    // Run under a vm timeout: a scan that skipped the unclosed `<` without
+    // advancing would spin synchronously, which a vitest timeout cannot
+    // interrupt. The vm watchdog terminates it, so a regression fails here
+    // instead of hanging the run.
+    const scan = () => storedImageRefs({ body: '![a](<asset:abc ![b](asset:def)' })
+    expect(runInNewContext('scan()', { scan }, { timeout: 2000 })).toEqual([])
   })
 
   it('answers nothing for no content', () => {
