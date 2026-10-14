@@ -357,6 +357,13 @@ export function inviteTokenOf(hash: string): string | undefined {
   return params.get(INVITE_TOKEN_KEY) ?? undefined
 }
 
+/**
+ * The page a cross-origin transfer opens as a popup on the keeper. The keeper
+ * keys a header on it: its handshake rides `window.opener`, so this is the
+ * one shell served without the `same-origin` opener policy.
+ */
+export const RECEIVE_TRANSFER_PAGE_PATH = '/receive-transfer'
+
 /** The sign-in page, which also explains a refused sign-in. */
 export const SIGN_IN_PAGE_PATH = '/sign-in'
 const SIGN_IN_REFUSAL_KEY = 'error'

@@ -6,6 +6,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { RECEIVE_TRANSFER_PAGE_PATH } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setBaselineSecurityHeaders } from './app-helpers.js'
@@ -59,7 +60,7 @@ describe('mountServerModeWebApp', () => {
   // `same-origin` COOP the browser severs the opener and the sender waits
   // forever. Only that page gives it up.
   it.for([
-    ['/receive-transfer', 'unsafe-none'],
+    [RECEIVE_TRANSFER_PAGE_PATH, 'unsafe-none'],
     ['/', 'same-origin'],
   ])('answers %s with Cross-Origin-Opener-Policy %s', async ([path, coop]) => {
     await withBuild()
