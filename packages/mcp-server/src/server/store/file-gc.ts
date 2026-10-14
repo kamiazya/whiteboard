@@ -11,11 +11,10 @@ import {
 import type { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
-import { blobsRoot } from '../tenant/data-layout.js'
 import { validateWorkspaceId } from '../validators.js'
+import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { backupIsInProgress } from './backup-in-progress.js'
 import { catchUpWorkspaceDoc, openWorkspaceDocIfStored } from './document-store.js'
-import { FsBlobStore } from './fs/fs-blob-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -117,7 +116,7 @@ async function collectReferencedFileIds(
 ): Promise<Set<string>> {
   const record = await openWorkspaceDocIfStored(workspaceId, scope)
   if (record === null) return new Set()
-  const blobs = new FsBlobStore(blobsRoot(scope.dataDir, scope.layout.tenantId), scope.dataDir)
+  const blobs = daemonBlobStore(scope.dataDir, scope.layout.tenantId)
   const scan = await scanFileReferences(record, {
     between: () => yieldToLoop(),
     trashBytes: async (entry) => {

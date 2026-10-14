@@ -514,6 +514,30 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     expect(await remainingFiles('ws_trash')).toEqual(['asset-t.png'])
   })
 
+  // A trash row can outlive its bytes' delete — a purge that unlinked them,
+  // deferred by a backup, then failed to save the row. GC reads the bytes
+  // through the daemon's store, so its verdict is the one a pass would reach
+  // had no backup been running: the bytes are gone.
+  it('reads a trash entry whose delete a backup deferred as already gone', async () => {
+    const { deleteDocument, openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { globalStoreScope } = await import('./store-scope.js')
+    const { readTrashEntries } = await import('@kamiazya/whiteboard-loro-adapter')
+    const { daemonBlobStore } = await import('./backup-guarded-blob-store.js')
+    await saveDocument('ws_deferred', 'page', makeSpatialDocWithImage('asset-d'))
+    await seedFile('ws_deferred', 'asset-d', '.png', 500)
+    await deleteDocument('ws_deferred', 'page')
+    const record = await openWorkspaceDocIfStored('ws_deferred', globalStoreScope)
+    const [entry] = readTrashEntries(record ?? new LoroDoc())
+    if (entry === undefined) throw new Error('the delete left no trash entry')
+    const blobs = daemonBlobStore(tempDir, SELF_HOST_TENANT_ID)
+    await withBackupMarker(tempDir, () => blobs.delete({ ref: entry.blob }))
+
+    const result = await purgeDanglingFiles('ws_deferred', withVersions())
+
+    expect(result.purgedCount).toBe(1)
+    expect(await remainingFiles('ws_deferred')).toEqual([])
+  })
+
   it('collects an image only a permanently deleted document referenced', async () => {
     const { deleteDocument, workspaceTreeIndex, resolveDocumentIdAtPath } = await import(
       './document-store.js'
