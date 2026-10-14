@@ -43,6 +43,38 @@ describe('windowHello', () => {
   it('answers no when nothing replies', async () => {
     expect(await windowHello(50)).toBeNull()
   })
+
+  // The origin check is the only filter on this window's messages: without
+  // it any page that frames or opens the app could claim an extension, or a
+  // protocol skew, that is not there.
+  it('ignores a hello posted from another origin', async () => {
+    const spoof = JSON.stringify({
+      channel: WINDOW_BRIDGE_CHANNEL,
+      from: 'extension',
+      kind: 'hello',
+      version: '9.9.9',
+      protocol: 1,
+    })
+    const frame = document.createElement('iframe')
+    frame.src = `data:text/html,<script>setInterval(() => parent.postMessage(${encodeURIComponent(spoof)}, '*'), 20)</script>`
+    let spoofsHeard = 0
+    const count = (event: MessageEvent) => {
+      if (event.source === frame.contentWindow) spoofsHeard += 1
+    }
+    window.addEventListener('message', count)
+    stop = () => {
+      window.removeEventListener('message', count)
+      frame.remove()
+    }
+    document.body.append(frame)
+
+    const controller = new AbortController()
+    const answer = windowHello(30_000, controller.signal)
+    // The spoof must have reached this window, or a null proves nothing.
+    await expect.poll(() => spoofsHeard, { timeout: 10_000 }).toBeGreaterThanOrEqual(3)
+    controller.abort()
+    expect(await answer).toBeNull()
+  })
 })
 
 describe('connectThroughWindow', () => {

@@ -361,6 +361,54 @@ describe('createBridgeFetch', () => {
     expect(ext.ports).toHaveLength(2)
   })
 
+  // A reader blocked on the SSE body is the only thing that would notice the
+  // host going away mid-stream; a body left open waits for ever and live sync
+  // stops instead of reconnecting.
+  it('errors a body already being read when the extension loses its host', async () => {
+    const ext = new FakeExtension()
+    const pending = createBridgeFetch(ext.connect)(at('/api/sync/stream'))
+    await sentFrom(ext)
+    const id = ext.port.lastId
+    ext.port.reply({ type: 'head', id, status: 200, headers: {} })
+    ext.port.reply({ type: 'chunk', id, data: bytes('event: ready\n\n') })
+    const reader = (await pending).body?.getReader()
+    if (reader === undefined) throw new Error('the response has no body')
+    await reader.read()
+
+    ext.port.drop()
+    await expect(reader.read()).rejects.toThrow(/closed the connection/)
+  })
+
+  // A finished request stays on the port only as a leak: any later message
+  // naming its id would still reach it, and an unreadable one would send the
+  // host an abort for a request it has already answered.
+  describe('a request the host has finished', () => {
+    it('is forgotten once it ends', async () => {
+      const ext = new FakeExtension()
+      const pending = createBridgeFetch(ext.connect)(at('/api/a'))
+      await sentFrom(ext)
+      const id = ext.port.lastId
+      ext.port.reply({ type: 'head', id, status: 200, headers: {} })
+      ext.port.reply({ type: 'end', id })
+      await (await pending).text()
+
+      ext.port.reply({ type: 'chunk', id, data: 42 })
+      expect(ext.port.sent.filter((m) => m.type === 'abort')).toEqual([])
+    })
+
+    it('is forgotten once it fails', async () => {
+      const ext = new FakeExtension()
+      const pending = createBridgeFetch(ext.connect)(at('/api/a'))
+      await sentFrom(ext)
+      const id = ext.port.lastId
+      ext.port.reply({ type: 'error', id, reason: 'daemon-unreachable', message: 'gone' })
+      await expect(pending).rejects.toThrow(TypeError)
+
+      ext.port.reply({ type: 'chunk', id, data: 42 })
+      expect(ext.port.sent.filter((m) => m.type === 'abort')).toEqual([])
+    })
+  })
+
   it('answers a status that carries no body without one', async () => {
     const ext = new FakeExtension()
     const pending = createBridgeFetch(ext.connect)(at('/api/x'), { method: 'DELETE' })
