@@ -95,19 +95,17 @@ describe('stress-changed-tests cannot pass by collecting nothing', () => {
 // `vitest.browser-window-state.config.ts` is a browser project whose file does
 // not end `vitest.browser.config.ts`, and it ran in the node leg unnoticed.
 
-const { readBrowserProjectNames } = (await import(
+const { readBrowserProjectNames, readVitestProjects } = (await import(
   pathToFileURL(join(ROOT, 'tools/checks/src/vitest-projects.mjs')).href
-)) as { readBrowserProjectNames: (repoRoot: string) => string[] }
+)) as {
+  readBrowserProjectNames: (repoRoot: string) => string[]
+  readVitestProjects: (repoRoot: string) => { configPath: string; name: string | undefined }[]
+}
 const browserProjects = new Set(readBrowserProjectNames(ROOT))
 
-const projectConfigs = [
-  ...readFileSync(join(ROOT, 'vitest.config.ts'), 'utf-8').matchAll(/'([^']+vitest[^']+)'/g),
-].map((m) => m[1] as string)
-
-const projects = projectConfigs.map((config) => {
-  const name = /name: '([^']+)'/.exec(readFileSync(join(ROOT, config), 'utf-8'))?.[1]
-  if (name === undefined) throw new Error(`no test.name in ${config}`)
-  return { config, name }
+const projects = readVitestProjects(ROOT).map(({ configPath, name }) => {
+  if (name === undefined) throw new Error(`no test.name in ${configPath}`)
+  return { config: configPath, name }
 })
 
 /** vitest's own rule: run if it matches no negated pattern, and — when plain patterns are given — at least one of them. */

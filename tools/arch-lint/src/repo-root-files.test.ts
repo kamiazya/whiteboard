@@ -66,6 +66,10 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   // config — two configs with no common package to hold it.
   'vitest.browser.launch-options.ts',
   'vitest.config.ts',
+  // The root project list as data, imported by vitest.config.ts and parsed by
+  // tools/checks/src/vitest-projects.mjs, so no reader has to recover it from
+  // the config's text.
+  'vitest.projects.json',
 ])
 
 function trackedRootFiles(): string[] {
