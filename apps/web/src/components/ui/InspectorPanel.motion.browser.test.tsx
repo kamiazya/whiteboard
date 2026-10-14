@@ -12,7 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { InspectorPresenceContext } from '../../contexts/inspector-presence.js'
 import { setViewport } from '../../test-utils/viewport.js'
-import { DocumentPageShell } from './DocumentPageShell.js'
+import { DocumentPageShell } from '../document-editor/DocumentPageShell.js'
 import { InspectorPanel } from './InspectorPanel.js'
 
 afterEach(cleanup)

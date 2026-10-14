@@ -33,7 +33,7 @@ import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
-import type { ContextMenuItem } from '../ContextMenu.js'
+import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */
 export interface NodePropertiesContext {

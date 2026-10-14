@@ -1,5 +1,5 @@
 import type { TrashRow } from '../../lib/files-source.js'
-import { formatRelative } from './format-relative.js'
+import { formatRelative } from '../../lib/format-relative.js'
 import { PurgeTrashEntryControl } from './PurgeTrashEntryControl.js'
 
 export interface TrashRowItemProps {

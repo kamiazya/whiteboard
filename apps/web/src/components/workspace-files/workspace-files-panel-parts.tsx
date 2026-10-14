@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/too
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
-import type { ContextMenu } from '../spatial-editor/ContextMenu.js'
+import type { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'

@@ -10,6 +10,7 @@ import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { settingsPath } from '../lib/app-routes.js'
 import { browserWorkspaceIdOrNull } from '../lib/browser-workspace-id.js'
 import { isSyncOff } from '../lib/connection-state.js'
+import { formatRelative } from '../lib/format-relative.js'
 import { getShellConnection, subscribeShellStatus } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -18,7 +19,6 @@ import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus
 import { DaemonAddress } from './connection/DaemonAddress.js'
 import { ExtensionConnectEntry } from './connection/ExtensionConnectEntry.js'
 import { WorkspaceMenu } from './shell/WorkspaceMenu.js'
-import { formatRelative } from './workspace-files/format-relative.js'
 
 /**
  * The honest-detach floor for a moved workspace: a cold load whose silent

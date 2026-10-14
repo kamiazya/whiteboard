@@ -2,9 +2,9 @@ import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin }
 import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
 import { folderContents } from './folder-contents.js'
-import { formatRelative } from './format-relative.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 /**

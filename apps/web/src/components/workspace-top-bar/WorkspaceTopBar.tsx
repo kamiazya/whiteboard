@@ -1,11 +1,11 @@
 import { ChevronLeft, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
-import { useDaemonApi } from '../contexts/DaemonApiContext.js'
-import { documentLabel } from '../lib/document-label.js'
-import { cn } from '../lib/utils.js'
-import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
+import { useDaemonApi } from '../../contexts/DaemonApiContext.js'
+import { documentLabel } from '../../lib/document-label.js'
+import { cn } from '../../lib/utils.js'
+import { HEADER_BUTTON_CLASS } from '../ui/header-button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
+import { useDocumentNames } from './useDocumentNames.js'
 
 /** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
 export interface DocumentIdentity {

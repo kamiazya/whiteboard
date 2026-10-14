@@ -12,7 +12,7 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import type { JSX } from 'react'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
-import { InspectorPanel } from '../document-editor/InspectorPanel.js'
+import { InspectorPanel } from '../ui/InspectorPanel.js'
 import { CommentsPanel } from './CommentsPanel.js'
 
 export function CommentsRailAside({

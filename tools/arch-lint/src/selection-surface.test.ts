@@ -73,7 +73,7 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'CARD GRIDS (an icon over a label, full-width cells) for theme and tab-icon, not property rows: the chip is a 28px inline control beside a label, and collapsing a settings card into one would lose the icon that carries the meaning',
   'apps/web/src/components/workspace-files/NewDocumentDialog.tsx':
     'a dialog form with native radios and their labels VISIBLE, which is right for a form somebody fills in once — the chip hides its radio because a property row is adjusted repeatedly and reads as a value, not as a question',
-  'apps/web/src/components/spatial-editor/ContextMenu.tsx':
+  'apps/web/src/components/ui/ContextMenu.tsx':
     'ONE control: the colour rows custom-hex swatch, which is a radio that also DISCLOSES a panel (it carries aria-expanded beside aria-checked) and paints a gradient rather than a glyph — the primitive draws neither. Its option rows themselves go through the primitive, and are pinned structurally by canvas-settings.browser.test.tsx',
 }
 

@@ -44,7 +44,6 @@ import { type CSSProperties, useEffect, useLayoutEffect, useRef } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
-import { EditorExitHint } from '../EditorExitHint.js'
 import {
   type ActiveMarkdownEditor,
   clearActiveMarkdownEditor,
@@ -65,6 +64,7 @@ import {
   shortcodeCompletionSource,
   shortcodeOptionRenderers,
 } from '../markdown-editor/shortcode-completion.js'
+import { EditorExitHint } from '../ui/EditorExitHint.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null

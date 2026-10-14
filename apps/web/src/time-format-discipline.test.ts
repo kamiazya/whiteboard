@@ -1,5 +1,5 @@
 // Every human-readable timestamp in this app goes through ONE formatter,
-// `workspace-files/format-relative.ts`: "5m ago" while fresh, the reader's
+// `lib/format-relative.ts`: "5m ago" while fresh, the reader's
 // local M/D HH:MM once age stops being the fact. It says so in its own
 // comment — "one formatter with a parameter, because the fork this replaces
 // diverged silently" — and was forked anyway: the annotation layer's stamp
@@ -21,7 +21,7 @@ const sources = import.meta.glob(
 ) as Record<string, string>
 
 /** The formatter itself is where these calls belong. */
-const FORMATTER = './components/workspace-files/format-relative.ts'
+const FORMATTER = './lib/format-relative.ts'
 
 /** Opt out on the line above, naming why this stamp is not one a reader reads. */
 const ESCAPE = 'time-format-is-deliberate:'

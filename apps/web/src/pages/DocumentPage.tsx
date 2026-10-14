@@ -58,7 +58,7 @@ import { useVersionSaveFlow } from './use-version-save-flow.js'
 // behind a lazy route), so it is a parallel prefetch, not a render-time
 // chunk fetch — the merged row carries the title field and canvas
 // operations, which must not wait for one.
-const workspaceTopBarImport = import('../components/WorkspaceTopBar.js')
+const workspaceTopBarImport = import('../components/workspace-top-bar/WorkspaceTopBar.js')
 const WorkspaceTopBar = lazy(() => workspaceTopBarImport)
 
 // Fixed height so the lazy WorkspaceTopBar chunk resolving after first paint

@@ -1,9 +1,9 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import '../index.css'
-import { jsonResponse } from '../test-utils/json-response.js'
-import { setViewport } from '../test-utils/viewport.js'
+import '../../index.css'
+import { jsonResponse } from '../../test-utils/json-response.js'
+import { setViewport } from '../../test-utils/viewport.js'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]

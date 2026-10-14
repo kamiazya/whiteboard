@@ -2,7 +2,7 @@
 import type { SpatialPalette, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor } from '@kamiazya/whiteboard-model'
 import { SquareDashed } from 'lucide-react'
-import type { ContextMenuOptionsItem } from '../ContextMenu.js'
+import type { ContextMenuOptionsItem } from '../../ui/ContextMenu.js'
 
 export const presetEntries: readonly {
   readonly key: SpatialPresetKey

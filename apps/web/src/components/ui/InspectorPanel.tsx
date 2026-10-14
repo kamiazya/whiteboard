@@ -37,7 +37,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useInspectorPresence } from '../../contexts/inspector-presence.js'
 import { INSPECTOR_CHROME, type InspectorKind } from '../../lib/inspector.js'
 import { cn } from '../../lib/utils.js'
-import { HEADER_BUTTON_CLASS } from '../ui/header-button.js'
+import { HEADER_BUTTON_CLASS } from './header-button.js'
 
 export function InspectorPanel({
   kind,

@@ -31,7 +31,7 @@ afterEach(cleanup)
  * pinned here — a second copy would be the thing that goes stale.
  */
 function topBarRowHeightPx(): number {
-  const sources = import.meta.glob('../WorkspaceTopBar.tsx', {
+  const sources = import.meta.glob('../workspace-top-bar/WorkspaceTopBar.tsx', {
     query: '?raw',
     eager: true,
     import: 'default',

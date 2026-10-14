@@ -4,9 +4,9 @@ import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { nodeTextEditNotice } from '../../lib/limit-notice.js'
 import { textLengthLimit } from '../../lib/text-length-limit.js'
-import { EditorExitHint } from '../EditorExitHint.js'
 import type { MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
 import { MarkdownEditor } from '../markdown-editor/MarkdownEditor.js'
+import { EditorExitHint } from '../ui/EditorExitHint.js'
 
 export interface NodeTextEditorOverlayProps
   extends Pick<

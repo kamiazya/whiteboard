@@ -100,7 +100,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: 'src/lib/persistent-storage.ts',
     note: "the storage card's daemon half — its sweeps: the daemon offers optimize-all over its own disk; the browser answers the same question through navigator.storage",
   },
-  'src/components/WorkspaceTopBar.tsx': {
+  'src/components/workspace-top-bar/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',
     browser: BROWSER_PAGE,
     note: 'passes a daemon fetch to useDocumentNames; the browser page hands the same bar the name from its own store',

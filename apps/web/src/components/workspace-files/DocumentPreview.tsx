@@ -17,9 +17,9 @@ import { useEffect, useState } from 'react'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import { formatRelative } from '../../lib/format-relative.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
-import { formatRelative } from './format-relative.js'
 import type { DocumentRender } from './load-row-render.js'
 
 export interface DocumentPreviewProps {

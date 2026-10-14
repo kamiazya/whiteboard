@@ -41,7 +41,7 @@ import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 // The lazy WorkspaceTopBar chunk, transformed in the collection phase so a
 // findBy* on its kebab never pays the load (flake-shapes.md's
 // `lazy-import-race`).
-import '../components/WorkspaceTopBar.js'
+import '../components/workspace-top-bar/WorkspaceTopBar.js'
 import { navigateTo, renderPage } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-dialog-outlives-document')

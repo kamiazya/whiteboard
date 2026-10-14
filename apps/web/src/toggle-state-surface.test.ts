@@ -94,7 +94,7 @@ function derivesState(tag: string): boolean {
 const EXEMPT: Record<string, string> = {
   './components/workspace-files/TreeItemShell.tsx':
     'the disclosure triangle both trees share: the chevron ROTATES, which is the state expression a tree row wants',
-  './components/spatial-editor/ContextMenu.tsx':
+  './components/ui/ContextMenu.tsx':
     'its aria-expanded is the colour SUBMENU while its bg-accent is the SELECTED colour — two different subjects, so deriving one from the other would be wrong',
 }
 

@@ -610,7 +610,7 @@ comment card, and shipped that way to a phone:
   The root is `overflow: clip`, never `hidden`: a hidden-overflow box is a
   scroll container the browser scrolls to reveal a focused control, and it
   did — 38px under a viewport state that knew nothing about it.
-- **Timestamps.** One formatter, `workspace-files/format-relative.ts`:
+- **Timestamps.** One formatter, `lib/format-relative.ts`:
   "5m ago" while fresh, the reader's local M/D HH:MM once age stops being the
   fact. `time-format-discipline.test.ts` reads every source file for a
   hand-rolled stamp, because the formatter's own comment said "one

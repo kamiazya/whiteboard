@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // runs while every apps/web-only run passed (flake-shapes.md's `lazy-import-race`;
 // same fix as App.test.tsx's precedent). The import is
 // unused by name on purpose — being in the module graph is the fix.
-import '../components/WorkspaceTopBar.js'
+import '../components/workspace-top-bar/WorkspaceTopBar.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'

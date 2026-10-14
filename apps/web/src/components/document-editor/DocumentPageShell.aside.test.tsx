@@ -10,8 +10,8 @@
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { InspectorPanel } from '../ui/InspectorPanel.js'
 import { DocumentPageShell } from './DocumentPageShell.js'
-import { InspectorPanel } from './InspectorPanel.js'
 
 afterEach(() => cleanup())
 

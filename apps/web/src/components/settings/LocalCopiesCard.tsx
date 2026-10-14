@@ -27,13 +27,13 @@ import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } 
 import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
 import { getAppLogger } from '../../lib/app-logger.js'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
+import { formatRelative } from '../../lib/format-relative.js'
 import { listReplicas, type ReplicaMatch } from '../../lib/replicas.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { workspaceLabel } from '../../lib/workspace-handle.js'
 import { DaemonAddress } from '../connection/DaemonAddress.js'
 import { Button } from '../ui/button.js'
 import { PinnedConfirmDialog } from '../ui/pinned-confirm-dialog.js'
-import { formatRelative } from '../workspace-files/format-relative.js'
 import { ReplicaOfflineControl } from './ReplicaOfflineControl.js'
 
 const log = getAppLogger('local-copies')
