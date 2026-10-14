@@ -519,6 +519,7 @@ function seedScratch(root, name, { children = ['ssr'], file = false, ageMs }) {
 test('sweeps vitest scratch untouched for a day, and only that', () => {
   const { repoDir } = setupRepos(makeScratch())
   const root = mkdtempSync(join(privateTmp, 'sweep-'))
+  scratchDirs.push(root)
   const day = 24 * 60 * 60 * 1000
   const stale = seedScratch(root, 'dnvID6_lgziDyDWR38k8K', { ageMs: 2 * day })
   const staleBoth = seedScratch(root, 'K7FVEw3oddD2BEmS3CAtm', {
