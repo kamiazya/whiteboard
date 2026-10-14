@@ -3,7 +3,7 @@
  * id — the canonical ULID a v14+ database keys its `workspaces` row under.
  */
 import 'fake-indexeddb/auto'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearNamedDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
@@ -60,6 +60,24 @@ async function clearRows(): Promise<void> {
   }
 }
 
+/**
+ * Aborts the transaction of the registry's `getAll` from that request's own
+ * success event, so the read's transaction never completes.
+ */
+function abortRegistryReadAfterAnswer(): void {
+  const original = IDBObjectStore.prototype.getAll
+  vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: Parameters<IDBObjectStore['getAll']>
+  ) {
+    const req = original.apply(this, args)
+    if (this.name === WORKSPACES_STORE) {
+      req.addEventListener('success', () => this.transaction.abort())
+    }
+    return req
+  })
+}
+
 describe('browser workspace id accessor', () => {
   beforeEach(async () => {
     resetBrowserWorkspaceIdForTests()
@@ -67,6 +85,7 @@ describe('browser workspace id accessor', () => {
     await clearNamedDb(DB_NAME)
   })
   afterEach(async () => {
+    vi.restoreAllMocks()
     resetBrowserWorkspaceIdForTests()
     await clearNamedDb(DB_NAME)
   })
@@ -102,6 +121,15 @@ describe('browser workspace id accessor', () => {
     expect(getBrowserWorkspaceId()).toBe(LATER_ULID)
     expect(getBrowserWorkspaceId()).not.toBe(first)
     expect(getBrowserWorkspaceIdentity().segment).toBe('second')
+  })
+
+  it('a registry read whose transaction aborts fails rather than hanging', async () => {
+    const first = await resolveBrowserWorkspaceId(DB_NAME)
+    await new IdbDocumentIndex(DB_NAME).createWorkspace({ workspaceId: LATER_ULID, segment: 'x' })
+    abortRegistryReadAfterAnswer()
+
+    await expect(switchBrowserWorkspace('x', DB_NAME)).rejects.toThrow()
+    expect(getBrowserWorkspaceId()).toBe(first)
   })
 
   it('leaves a removed workspace for one this registry still keeps', async () => {
