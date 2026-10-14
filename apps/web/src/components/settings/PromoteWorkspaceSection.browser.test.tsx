@@ -33,6 +33,7 @@ import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-st
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
+import { replicaKeyBody } from '../../test-utils/replica-key-fetch.js'
 import { seedLegacyRow } from '../../test-utils/seed-legacy-row.js'
 import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
@@ -69,11 +70,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/replica-key') && init?.method === 'POST') {
-      return Response.json({
-        workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
-        workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
-        tier: 'offline',
-      })
+      return Response.json(replicaKeyBody())
     }
     if (url.endsWith('/api/workspaces') && (init?.method ?? 'GET') === 'GET') {
       return Response.json({

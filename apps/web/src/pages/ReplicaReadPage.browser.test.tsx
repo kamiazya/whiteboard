@@ -18,7 +18,7 @@ import {
 import { bytesToBase64Url, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import {
@@ -38,7 +38,13 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import {
+  REPLICA_TEST_KEY,
+  replicaKeyBody,
+  replicaKeyFetch,
+  replicaKeyRefusalFetch,
+  seedReplicaRecord,
+} from '../test-utils/replica-key-fetch.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 claimIsolatedWhiteboardDb('replica-read-page')
@@ -51,63 +57,26 @@ const DOC_EMBEDDER = '01ARZ3NDEKTSV4RRFFQ69G5FB4'
 const SYNCED = '2026-09-01T12:00:00.000Z'
 const DAEMON = 'http://127.0.0.1:3099'
 
-const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
-
-/** A daemon fetch double answering /replica-key with a fixed offline key. */
-function offlineKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-        tier: 'offline',
-      })
-    }
-    throw new Error(`unexpected fetch ${url}`)
-  }) as typeof fetch
-}
-
 const SEALED_UNDER_KEY_ID = bytesToBase64Url(new Uint8Array(16).fill(1))
 const CURRENT_KEY_ID = bytesToBase64Url(new Uint8Array(16).fill(2))
 
 /** A daemon that has rotated: a different key, and the id that names it. */
 function rotatedKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(WORKSPACE_KEY.map((byte) => byte ^ 0xff)),
-        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-        tier: 'offline',
-        keyId: CURRENT_KEY_ID,
-      })
-    }
-    throw new Error(`unexpected fetch ${url}`)
-  }) as typeof fetch
-}
-
-/** A daemon fetch double refusing /replica-key with a membership reason. */
-function refusalKeyFetch(reason: string): typeof fetch {
-  return (async () => jsonResponse({ error: reason, message: reason }, 403)) as typeof fetch
+  return replicaKeyFetch({
+    key: REPLICA_TEST_KEY.map((byte) => byte ^ 0xff),
+    keyId: CURRENT_KEY_ID,
+  })
 }
 
 function noopReconnect(): Promise<void> {
   return Promise.resolve()
 }
 
-/**
- * The fixture routes every seed through the SEALED path (`connectReplicaKeeper`
- * + `markReplica`), not a bare `BrowserWorkspaceDocs().save` — a page that
- * reads a replica reads SEALED bytes in production, and a plaintext fixture
- * would pass the page's key-withheld branches over content that was never
- * actually withheld from anything.
- */
 async function seedReplica(): Promise<void> {
-  connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
-  markReplica(DAEMON_WS, DAEMON)
-  const record = new LoroDoc()
+  await seedReplicaRecord({ daemonBaseUrl: DAEMON, workspaceId: DAEMON_WS, build: buildReplica })
+}
+
+function buildReplica(record: LoroDoc): void {
   createWorkspaceDocumentAtPath(record, {
     path: 'notes/plan',
     documentId: DOC_MD,
@@ -139,8 +108,6 @@ async function seedReplica(): Promise<void> {
     ],
     edges: [],
   })
-  record.commit()
-  await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 }
 
 const PRF = new Uint8Array(32).fill(11)
@@ -159,11 +126,7 @@ async function forgetEverythingButTheBlob(): Promise<void> {
   await rememberReplicaKey({
     daemonBaseUrl: DAEMON,
     workspaceId: DAEMON_WS,
-    response: {
-      workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-      workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-      tier: 'offline',
-    },
+    response: replicaKeyBody(),
     prfOutput: PRF,
   })
   saveOfflinePasskey(DAEMON, DAEMON_WS, { credentialId: bytesToBase64Url(RAW_ID), prfSalt: 'AAAA' })
@@ -500,7 +463,7 @@ describe('ReplicaReadPage states', () => {
     forgetAllForTests()
 
     const onReconnect = vi.fn(async () => {
-      connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+      connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     })
     render(
       <ReplicaReadPage
@@ -526,31 +489,19 @@ describe('ReplicaReadPage states', () => {
     try {
       const now = Date.now()
       const leaseExpiresAt = new Date(now + 60_000).toISOString()
-      connectReplicaKeeper({
-        baseUrl: DAEMON,
-        fetch: (async (input: Request | string | URL) => {
-          const url = input instanceof Request ? input.url : String(input)
-          if (url.endsWith('/replica-key')) {
-            return jsonResponse({
-              workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-              workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-              tier: 'bounded',
-              leaseExpiresAt,
-            })
-          }
-          throw new Error(`unexpected fetch ${url}`)
-        }) as typeof fetch,
+      await seedReplicaRecord({
+        daemonBaseUrl: DAEMON,
+        workspaceId: DAEMON_WS,
+        fetch: replicaKeyFetch({ tier: 'bounded', leaseExpiresAt }),
+        build: (record) => {
+          createWorkspaceDocumentAtPath(record, {
+            path: 'notes/plan',
+            documentId: DOC_MD,
+            kind: 'markdown',
+          })
+          writeMarkdownBody(documentContainers(record, DOC_MD), '# Hello from the cache')
+        },
       })
-      markReplica(DAEMON_WS, DAEMON)
-      const record = new LoroDoc()
-      createWorkspaceDocumentAtPath(record, {
-        path: 'notes/plan',
-        documentId: DOC_MD,
-        kind: 'markdown',
-      })
-      writeMarkdownBody(documentContainers(record, DOC_MD), '# Hello from the cache')
-      record.commit()
-      await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 
       // Past the lease. Deliberately still "connected" — `sessionKey`'s own
       // lapse check answers `withheld:'lapsed'` unconditionally on a cached
@@ -579,7 +530,7 @@ describe('ReplicaReadPage states', () => {
     await seedReplica()
     connectReplicaKeeper(null)
     forgetAllForTests()
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: refusalKeyFetch('not_a_member') })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyRefusalFetch('not_a_member') })
 
     render(
       <ReplicaReadPage
@@ -624,7 +575,7 @@ describe('ReplicaReadPage states', () => {
     forgetAllForTests()
     connectReplicaKeeper({
       baseUrl: DAEMON,
-      fetch: refusalKeyFetch('requires_person_session'),
+      fetch: replicaKeyRefusalFetch('requires_person_session'),
     })
 
     render(
@@ -639,7 +590,7 @@ describe('ReplicaReadPage states', () => {
   })
 
   it('needs-connection: Retry connection calls onReconnect', async () => {
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     markReplica(DAEMON_WS, DAEMON)
     const onReconnect = vi.fn(async () => {})
 
@@ -696,7 +647,7 @@ describe('ReplicaReadPage states', () => {
   })
 
   it('locked and needs-connection are announced in the live region, not left silent', async () => {
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
     markReplica(DAEMON_WS, DAEMON)
     render(
       <ReplicaReadPage

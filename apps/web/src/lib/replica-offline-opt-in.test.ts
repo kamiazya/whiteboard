@@ -14,6 +14,7 @@ import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-se
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import {
   assertOfflinePasskey,
   loadOfflinePasskey,
@@ -30,11 +31,7 @@ import { loadWrappedKey } from './replica-wrapped-key-store.js'
 const DAEMON = 'https://daemon.whiteboard.invalid'
 const WORKSPACE = 'ws-1'
 
-const RESPONSE = {
-  workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-  workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-  tier: 'offline' as const,
-}
+const RESPONSE = replicaKeyBody()
 
 function daemonAnswering(body: unknown = RESPONSE): typeof globalThis.fetch {
   return vi.fn(async () => jsonResponse(body))

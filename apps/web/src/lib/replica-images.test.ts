@@ -16,15 +16,15 @@ import {
   reconcileSpatialCanvas,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
+import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
@@ -49,9 +49,6 @@ const BASE = 'http://127.0.0.1:3099'
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FD0'
 const BOARD = '01ARZ3NDEKTSV4RRFFQ69G5FD1'
 const IMAGES_KEY = 'whiteboard:replica-images'
-
-const WORKSPACE_KEY = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const WORKSPACE_SALT = Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)
 
 /** Distinct, readable bytes per image, so a plaintext copy anywhere is findable. */
 function pictureOf(fileId: string): Uint8Array<ArrayBuffer> {
@@ -83,15 +80,7 @@ interface DaemonOptions {
 
 /** The daemon as its key, snapshot and file routes; `served` records each file read. */
 function daemon(record: LoroDoc, options: DaemonOptions = {}): typeof globalThis.fetch {
-  return (async (input: RequestInfo | URL) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(WORKSPACE_KEY),
-        workspaceKeySalt: bytesToBase64Url(WORKSPACE_SALT),
-        tier: 'offline',
-      })
-    }
+  return replicaKeyFetch({}, (url) => {
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
@@ -111,7 +100,7 @@ function daemon(record: LoroDoc, options: DaemonOptions = {}): typeof globalThis
       })
     }
     return new Response('not found', { status: 404 })
-  }) as typeof globalThis.fetch
+  })
 }
 
 /** Connects the keeper so the record key is derivable, then caches `record`'s images. */

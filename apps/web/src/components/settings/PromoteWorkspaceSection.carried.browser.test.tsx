@@ -26,6 +26,7 @@ import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
+import { replicaKeyBody } from '../../test-utils/replica-key-fetch.js'
 import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
@@ -45,11 +46,7 @@ function daemonStub(target: LoroDoc, confirms: boolean) {
     const url = typeof input === 'string' ? input : input.toString()
     const method = init?.method ?? 'GET'
     if (url.endsWith('/replica-key') && method === 'POST') {
-      return Response.json({
-        workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
-        workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
-        tier: 'offline',
-      })
+      return Response.json(replicaKeyBody())
     }
     if (url.endsWith('/api/workspaces') && method === 'GET') {
       return Response.json({ workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }] })

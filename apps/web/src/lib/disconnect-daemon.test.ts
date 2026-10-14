@@ -5,6 +5,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
 import { markReplica } from './replica-store.js'
 import { withReplicaEntry } from './replicas.js'
@@ -14,11 +15,7 @@ const A = 'http://127.0.0.1:3099'
 const B = 'http://127.0.0.1:4000'
 
 function keyResponse(): Response {
-  return jsonResponse({
-    workspaceKey: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
-    workspaceKeySalt: 'oKGio6SlpqeoqaqrrK2urw',
-    tier: 'offline',
-  })
+  return jsonResponse(replicaKeyBody())
 }
 
 beforeEach(() => {

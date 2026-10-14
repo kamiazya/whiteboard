@@ -15,16 +15,14 @@ import {
   setNodeLock,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
-import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
+import { connectReplicaKeeper } from '../lib/replica-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { seedReplicaRecord } from '../test-utils/replica-key-fetch.js'
 import { rootOf } from '../test-utils/spatial-editor-root.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
@@ -34,37 +32,24 @@ const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FC0'
 const DOC_SP = '01ARZ3NDEKTSV4RRFFQ69G5FC1'
 const DAEMON = 'http://127.0.0.1:3098'
 
-function offlineKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 7)),
-        workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xb0 + i)),
-        tier: 'offline',
-      })
-    }
-    throw new Error(`unexpected fetch ${url}`)
-  }) as typeof fetch
-}
-
 /** A sealed replica holding one canvas: a locked node and a free one. */
 async function seedLockedCanvas(): Promise<void> {
-  connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
-  markReplica(DAEMON_WS, DAEMON)
-  const record = new LoroDoc()
-  createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
-  const containers = documentContainers(record, DOC_SP)
-  writeSpatialCanvas(containers, {
-    nodes: [
-      textNode({ id: 'held', x: 40, y: 40, width: 160, height: 80, text: 'held node' }),
-      textNode({ id: 'free', x: 320, y: 40, width: 160, height: 80, text: 'free node' }),
-    ],
-    edges: [],
+  await seedReplicaRecord({
+    daemonBaseUrl: DAEMON,
+    workspaceId: DAEMON_WS,
+    build: (record) => {
+      createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
+      const containers = documentContainers(record, DOC_SP)
+      writeSpatialCanvas(containers, {
+        nodes: [
+          textNode({ id: 'held', x: 40, y: 40, width: 160, height: 80, text: 'held node' }),
+          textNode({ id: 'free', x: 320, y: 40, width: 160, height: 80, text: 'free node' }),
+        ],
+        edges: [],
+      })
+      setNodeLock(containers, 'held', true)
+    },
   })
-  setNodeLock(containers, 'held', true)
-  record.commit()
-  await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 }
 
 async function savedRecord() {

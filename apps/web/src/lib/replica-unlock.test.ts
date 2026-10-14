@@ -13,9 +13,9 @@ import {
   adoptSessionKey,
   forgetAllForTests,
 } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import {
   dropOfflinePasskey,
   type OfflinePasskeyCredentials,
@@ -34,11 +34,7 @@ const WORKSPACE = 'ws-1'
 const PRF = new Uint8Array(32).fill(7)
 const OTHER_PRF = new Uint8Array(32).fill(9)
 
-const RESPONSE = {
-  workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-  workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-  tier: 'offline' as const,
-}
+const RESPONSE = replicaKeyBody()
 
 /** The passkey this browser keeps for the copy, as Settings' opt-in leaves it. */
 const OFFLINE_PASSKEY = { credentialId: 'AQIDBA', prfSalt: 'BQYHCA' }

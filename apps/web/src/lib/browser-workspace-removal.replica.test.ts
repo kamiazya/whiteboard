@@ -8,12 +8,11 @@
 // jsdom + fake-indexeddb: this is IndexedDB persistence logic, not browser layout.
 import 'fake-indexeddb/auto'
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { whiteboardDbName } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { forgetReplicaCopy } from './browser-workspace-removal.js'
@@ -27,16 +26,6 @@ claimIsolatedWhiteboardDb('browserworkspaceremovalreplica')
 
 const DAEMON = 'http://127.0.0.1:3098'
 const MARKER = 'a-forgotten-replica-marker-nobody-should-see'
-
-const offlineKeyFetch = (async (input: Request | string | URL) => {
-  const url = input instanceof Request ? input.url : String(input)
-  if (!url.endsWith('/replica-key')) throw new Error(`unexpected fetch ${url}`)
-  return jsonResponse({
-    workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 1)),
-    workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xa0 + i)),
-    tier: 'offline',
-  })
-}) as typeof fetch
 
 let counter = 0
 // `markReplica`'s mark is module state, so each test mints its own id.
@@ -93,7 +82,7 @@ describe('forgetReplicaCopy against a page still holding the copy', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
     localStorage.clear()
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
   })
   afterEach(() => {
     connectReplicaKeeper(null)
@@ -142,7 +131,7 @@ describe('which ids may mint a workspace record', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
     localStorage.clear()
-    connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch })
+    connectReplicaKeeper({ baseUrl: DAEMON, fetch: replicaKeyFetch() })
   })
   afterEach(() => {
     connectReplicaKeeper(null)

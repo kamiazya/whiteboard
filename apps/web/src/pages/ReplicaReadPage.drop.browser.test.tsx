@@ -11,17 +11,14 @@ import {
   documentContainers,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
-import { connectReplicaKeeper, markReplica } from '../lib/replica-store.js'
+import { connectReplicaKeeper } from '../lib/replica-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { seedReplicaRecord } from '../test-utils/replica-key-fetch.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 claimIsolatedWhiteboardDb('replica-read-page-drop')
@@ -30,31 +27,18 @@ const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FE0'
 const DOC_SP = '01ARZ3NDEKTSV4RRFFQ69G5FE1'
 const DAEMON = 'http://127.0.0.1:3096'
 
-function offlineKeyFetch(): typeof fetch {
-  return (async (input: Request | string | URL) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (url.endsWith('/replica-key')) {
-      return jsonResponse({
-        workspaceKey: bytesToBase64Url(Uint8Array.from({ length: 32 }, (_, i) => i + 21)),
-        workspaceKeySalt: bytesToBase64Url(Uint8Array.from({ length: 16 }, (_, i) => 0xd0 + i)),
-        tier: 'offline',
-      })
-    }
-    throw new Error(`unexpected fetch ${url}`)
-  }) as typeof fetch
-}
-
 async function seedSketch(): Promise<void> {
-  connectReplicaKeeper({ baseUrl: DAEMON, fetch: offlineKeyFetch() })
-  markReplica(DAEMON_WS, DAEMON)
-  const record = new LoroDoc()
-  createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
-  writeSpatialCanvas(documentContainers(record, DOC_SP), {
-    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: 'cached node' })],
-    edges: [],
+  await seedReplicaRecord({
+    daemonBaseUrl: DAEMON,
+    workspaceId: DAEMON_WS,
+    build: (record) => {
+      createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
+      writeSpatialCanvas(documentContainers(record, DOC_SP), {
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: 'cached node' })],
+        edges: [],
+      })
+    },
   })
-  record.commit()
-  await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 }
 
 beforeEach(clearWhiteboardDb)
