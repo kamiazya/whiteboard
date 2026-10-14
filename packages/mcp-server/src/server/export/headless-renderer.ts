@@ -29,6 +29,7 @@ import type {
   Scene,
   SpatialLayoutDegradation,
   SpatialRenderStyle,
+  SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
@@ -70,7 +71,7 @@ export interface HeadlessExportOptions {
   // theme: forces light/dark on the rendered scene; the background is the
   // surface of the palette this render draws in — the theme's when `style`
   // names one, else the bundled light/dark surface for `theme`.
-  theme?: 'light' | 'dark'
+  theme?: SpatialThemeMode
   /**
    * Which look to draw (ADR-0030 decision 6): `'clean'` — the default, so
    * an export never picks up a theme unasked — `'document'` for the theme

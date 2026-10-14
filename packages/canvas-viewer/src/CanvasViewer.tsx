@@ -3,6 +3,7 @@ import type {
   ReferenceSeams,
   SpatialLayoutOptions,
   SpatialRenderStyle,
+  SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
@@ -19,7 +20,7 @@ import { SceneSvg } from './SceneSvg.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
 
 /** Which of canvas-render's two shared spatial palettes a viewer draws in. */
-export type ViewerTheme = 'light' | 'dark'
+export type ViewerTheme = SpatialThemeMode
 
 /**
  * The viewer has no theme switch of its own — it draws in whichever mode its

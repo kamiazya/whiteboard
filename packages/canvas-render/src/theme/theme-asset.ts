@@ -1,10 +1,13 @@
 // A registered theme asset (the engine's token contract, ADR-0030 decision
 // 3) turned into the ONE thing a layout consumes: a `SpatialAppearanceResolver`
-// for a mode. The mapping is explicit field by field rather than a cast, so a
-// field added to either side is a type error here and a failing round-trip
-// test in theme-asset.test.ts — the two shapes are meant to be one, and the
-// contract lives in the engine only so that ADR-0013 decision 8 can build on
-// it without moving anything.
+// for a mode. The two shapes are meant to be one, and the contract lives in
+// the engine only so that ADR-0013 decision 8 can build on it without moving
+// anything. The mapping is explicit field by field rather than a cast, which
+// makes a REQUIRED field missing here a type error — and only that: a key
+// optional on either side is absent from the literal without complaint. What
+// ties the whole key set, optional keys and nested objects included, is the
+// key-set type assertion in theme-asset.test.ts, which fails `tsc`; the
+// round-trips there catch a bundled value the contract would strip.
 
 import type { PaletteTokens, ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
@@ -13,7 +16,8 @@ import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from './markdown-theme.js'
 import type { SpatialAppearanceResolver, SpatialNodeAppearance } from './spatial-appearance.js'
 import type { SpatialPalette } from './spatial-palette.js'
-import { createSpatialTheme, type SpatialThemeMode } from './spatial-theme.js'
+import { createSpatialTheme } from './spatial-theme.js'
+import type { SpatialThemeMode } from './spatial-theme-mode.js'
 
 export function paletteFromTokens(tokens: PaletteTokens): SpatialPalette {
   return {

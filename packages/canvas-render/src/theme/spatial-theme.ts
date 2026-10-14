@@ -23,7 +23,6 @@
 import type { CanvasColor, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
-import { z } from 'zod'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
@@ -32,11 +31,9 @@ import {
   type SpatialPalette,
   type SpatialPresetAccent,
 } from './spatial-palette.js'
+import type { SpatialThemeMode } from './spatial-theme-mode.js'
 
-// A request or a cache key that names a mode parses against this rather than
-// re-spelling the enum, so a mode added here is one a caller can ask for.
-export const spatialThemeModeSchema = z.enum(['light', 'dark'])
-export type SpatialThemeMode = z.infer<typeof spatialThemeModeSchema>
+export { type SpatialThemeMode, spatialThemeModeSchema } from './spatial-theme-mode.js'
 
 export interface SpatialThemeOptions {
   readonly mode: SpatialThemeMode
