@@ -176,6 +176,7 @@ export function daemonEmptyState({
 export function daemonDocumentLabels(
   canvas: { workspaceId: string; path: string } | null,
   names: { recorded: string | null | undefined; listed: string | undefined },
+  documentId: string | undefined,
 ): {
   documentKey: string
   scopeKey: string | null
@@ -211,8 +212,12 @@ export function daemonDocumentLabels(
     registryKey: documentSyncKey(canvas.workspaceId, canvas.path),
     workspaceId: canvas.workspaceId,
     path: canvas.path,
-    // The daemon's command surface addresses a document by path.
-    commandCanvas: { workspaceId: canvas.workspaceId, documentId: canvas.path },
+    // The id is the listing's, so the command surface names no document
+    // until the listing has named this one.
+    commandCanvas:
+      documentId === undefined
+        ? null
+        : { workspaceId: canvas.workspaceId, documentId, path: canvas.path },
   }
 }
 

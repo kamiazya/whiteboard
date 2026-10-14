@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { createWhiteboardCommands } from './create-commands.js'
 import { CommandError, type WhiteboardCommandDeps } from './types.js'
 
+const IDENTITY = { workspaceId: 'ws1', documentId: 'c1', path: 'notes/plan.md' }
+
 function baseDeps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
     provider: { kind: 'browser' },
-    canvas: { documentId: 'c1' },
+    canvas: IDENTITY,
     ...overrides,
   }
 }
@@ -24,7 +26,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
 
     expect(result).toEqual({
       provider: { mode: 'browser' },
-      canvas: { kind: 'browser', documentId: 'c1' },
+      canvas: { workspaceId: 'ws1', documentId: 'c1', path: 'notes/plan.md' },
     })
   })
 
@@ -35,7 +37,6 @@ describe('createWhiteboardCommands.getAppContext', () => {
           kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
         },
-        canvas: { workspaceId: 'ws1', documentId: 'my-canvas' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)
@@ -44,7 +45,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
 
     expect(result).toEqual({
       provider: { mode: 'daemon' },
-      canvas: { kind: 'daemon', workspaceId: 'ws1', path: 'my-canvas' },
+      canvas: { workspaceId: 'ws1', documentId: 'c1', path: 'notes/plan.md' },
     })
     const serialized = JSON.stringify(result).toLowerCase()
     expect(serialized).not.toContain('daemonbaseurl')
@@ -74,27 +75,15 @@ describe('createWhiteboardCommands.getAppContext', () => {
     await expect(commands.getAppContext()).rejects.toBeInstanceOf(CommandError)
   })
 
-  it('throws an invalid-provider-state CommandError when canvas.kind would disagree with provider.mode', async () => {
-    // canvas.kind is derived from the presence of workspaceId on the
-    // identity, independently of provider.kind — a daemon-mode provider
-    // paired with a browser-shaped identity (no workspaceId) hits the
-    // getAppContextResultSchema cross-field refine instead of silently
-    // returning an internally inconsistent result.
-    const depsRef = refOf(
-      baseDeps({
-        provider: {
-          kind: 'daemon',
-          daemonBaseUrl: 'http://127.0.0.1:9999',
-        },
-        canvas: { documentId: 'c1' },
-      }),
-    )
-    const commands = createWhiteboardCommands(depsRef)
+  it('takes the keeper from the provider alone, answering one identity shape for both', async () => {
+    const browser = await createWhiteboardCommands(refOf(baseDeps())).getAppContext()
+    const daemon = await createWhiteboardCommands(
+      refOf(baseDeps({ provider: { kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:9999' } })),
+    ).getAppContext()
 
-    await expect(commands.getAppContext()).rejects.toMatchObject({
-      code: 'invalid-provider-state',
-    })
-    await expect(commands.getAppContext()).rejects.toBeInstanceOf(CommandError)
+    expect(browser.provider.mode).toBe('browser')
+    expect(daemon.provider.mode).toBe('daemon')
+    expect(daemon.canvas).toEqual(browser.canvas)
   })
 
   it('excludes secret-bearing fields even given a poisoned ProviderState (simulated future drift)', async () => {
@@ -111,7 +100,6 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const depsRef = refOf(
       baseDeps({
         provider: poisoned,
-        canvas: { workspaceId: 'ws1', documentId: 'c1' },
       }),
     )
     const commands = createWhiteboardCommands(depsRef)

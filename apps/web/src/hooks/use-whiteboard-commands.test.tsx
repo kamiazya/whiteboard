@@ -6,7 +6,7 @@ import { useWhiteboardCommands } from './use-whiteboard-commands.js'
 function deps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
     provider: { kind: 'browser' },
-    canvas: { documentId: 'c1' },
+    canvas: { workspaceId: 'w1', documentId: 'c1', path: 'p.md' },
     ...overrides,
   }
 }
@@ -21,7 +21,7 @@ describe('useWhiteboardCommands', () => {
     )
     const first = result.current
 
-    rerender(deps({ canvas: { documentId: 'c2' } }))
+    rerender(deps({ canvas: { workspaceId: 'w1', documentId: 'c2', path: 'q.md' } }))
     rerender(
       deps({
         provider: {

@@ -73,7 +73,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
   },
   'apps/web/src/lib/browser-idb-upgrades.ts': { count: 1, why: 'ordinary English' },
   'apps/web/src/lib/browser-idb.ts': { count: 2, why: 'ordinary English' },
-  'apps/web/src/lib/commands/create-commands.test.ts': { count: 1, why: 'ordinary English' },
   'apps/web/src/lib/document-outline.ts': { count: 2, why: 'ordinary English' },
   'apps/web/src/lib/document-sync-session.test.ts': { count: 1, why: 'ordinary English' },
   'apps/web/src/lib/document-sync-session.ts': { count: 1, why: 'ordinary English' },

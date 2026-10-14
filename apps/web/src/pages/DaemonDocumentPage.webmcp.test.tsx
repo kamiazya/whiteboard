@@ -1,5 +1,6 @@
-import { act, cleanup } from '@testing-library/react'
+import { act, cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WebMcpToolDescriptor } from '../hooks/use-browser-tool-registry.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { createFakeModelContext } from '../test-utils/document-page.contract.js'
@@ -55,5 +56,40 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
     })
 
     expect(fake.liveNames()).toEqual([])
+  })
+
+  it('reports the open document by the id the listing gives it', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { path: 'notes/plan.md', documentId: '01JDOC', updatedAt: '2026-01-01', kind: 'spatial' },
+      ],
+    })
+    const fake = createFakeModelContext()
+    let tool: WebMcpToolDescriptor | undefined
+    document.modelContext = {
+      ...fake,
+      registerTool: async (descriptor, options) => {
+        tool = descriptor
+        await fake.registerTool(descriptor, options)
+      },
+    }
+
+    await act(async () => {
+      renderInRouter(
+        <DaemonDocumentPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="notes/plan.md"
+          createBackend={makeCreateBackend()}
+        />,
+        { container: document.body },
+      )
+    })
+
+    await waitFor(async () =>
+      expect(await tool?.execute({})).toMatchObject({
+        canvas: { workspaceId: 'w1', documentId: '01JDOC', path: 'notes/plan.md' },
+      }),
+    )
   })
 })

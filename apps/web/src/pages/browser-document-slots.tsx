@@ -180,16 +180,17 @@ export function conversationReads(
  * id — so it answers `null` rather than inventing one.
  */
 export function documentLabels(
-  documentId: string | null,
+  document: { workspaceId: string; documentId: string | null; path: string },
   documentName: string | null,
 ): Pick<DocumentPageModel, 'documentKey' | 'overlayTitle' | 'exportFilenameBase'> & {
   commandCanvas: DocumentPageModel['commands']['canvas']
 } {
+  const { workspaceId, documentId, path } = document
   return {
     documentKey: documentId ?? 'no-canvas',
     overlayTitle: documentName ?? 'Untitled',
     exportFilenameBase: documentName ?? 'canvas',
-    commandCanvas: documentId === null ? null : { documentId },
+    commandCanvas: documentId === null ? null : { workspaceId, documentId, path },
   }
 }
 
