@@ -3,7 +3,6 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { onTestFinished } from 'vitest'
-import { assertSocketPathFits } from '../../daemon/daemon-socket.js'
 
 /**
  * A fresh owner-only socket path for one test: its own temp directory, so a
@@ -19,8 +18,24 @@ export function testSocketPath(): string {
   const dir = mkdtempSync(join(tmpdir(), 'wb-sock-'))
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }))
   const path = join(dir, 'd.sock')
-  assertSocketPathFits(path, 'Use a shorter TMPDIR for this test run.')
+  assertTestSocketPathFits(path)
   return path
+}
+
+/**
+ * The daemon's own limit (`daemon-socket.ts`), restated so a test fixture can
+ * refuse what `listenOnSocket` would; socket-fetch.test.ts holds the two equal
+ * by binding through the daemon at it and one byte over it.
+ */
+export const TEST_SOCKET_PATH_MAX_BYTES = process.platform === 'darwin' ? 103 : 107
+
+/** Throws, naming the limit and the remedy, for a path the kernel would truncate. */
+export function assertTestSocketPathFits(path: string): void {
+  const bytes = Buffer.byteLength(path)
+  if (bytes <= TEST_SOCKET_PATH_MAX_BYTES) return
+  throw new Error(
+    `the test socket path is ${bytes} bytes, over the ${TEST_SOCKET_PATH_MAX_BYTES}-byte limit for a unix socket: ${path}. Use a shorter TMPDIR for this test run.`,
+  )
 }
 
 /**

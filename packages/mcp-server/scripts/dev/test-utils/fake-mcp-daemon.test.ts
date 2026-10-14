@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { SOCKET_PATH_MAX_BYTES as DAEMON_SOCKET_PATH_MAX_BYTES } from '../../../src/daemon/daemon-socket.js'
+import { TEST_SOCKET_PATH_MAX_BYTES } from '../../../src/shared/test-utils/socket-fetch.js'
 import { requestDaemon } from '../dev-daemon-socket-lib.mjs'
 import { SOCKET_PATH_MAX_BYTES, startFakeMcpResponder } from './fake-mcp-daemon.mjs'
 
@@ -39,7 +39,7 @@ describe('startFakeMcpResponder', () => {
     )
   })
 
-  it("holds the daemon's own socket-path limit", () => {
-    expect(SOCKET_PATH_MAX_BYTES).toBe(DAEMON_SOCKET_PATH_MAX_BYTES)
+  it("holds the daemon's own socket-path limit, which socket-fetch.test.ts pins", () => {
+    expect(SOCKET_PATH_MAX_BYTES).toBe(TEST_SOCKET_PATH_MAX_BYTES)
   })
 })

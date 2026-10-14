@@ -8,7 +8,8 @@ import { createServer } from 'node:http'
 
 // src/daemon/daemon-socket.ts's limit, restated because this file is copied
 // into scratch checkouts that hold scripts/dev and nothing of src/;
-// fake-mcp-daemon.test.ts holds the two equal.
+// fake-mcp-daemon.test.ts holds it to socket-fetch.ts's copy, which its own
+// test binds through the daemon at.
 export const SOCKET_PATH_MAX_BYTES = process.platform === 'darwin' ? 103 : 107
 
 /**
