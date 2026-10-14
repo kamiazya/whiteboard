@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHMOD_IS_OBSERVABLE } from './test-utils/chmod-is-observable.js'
-import { writeFileAtomic } from './write-file-atomic.js'
+import { syncTree, writeFileAtomic } from './write-file-atomic.js'
 
 // The chmod after the write is best-effort, so a test can refuse it to see
 // what the write carried on its own.
@@ -217,5 +217,46 @@ describe('writeFileAtomic', () => {
       UMASK_NARROWS: true,
       UMASK_LEAVES_GROUP_OR_OTHER: true,
     })
+  })
+})
+
+describe('syncTree', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'sync-tree-'))
+    mkdirSync(join(dir, 'a', 'b'), { recursive: true })
+    writeFileSync(join(dir, 'top.json'), '{}')
+    writeFileSync(join(dir, 'a', 'b', 'deep.bin'), 'x')
+  })
+  afterEach(() => {
+    fsEvents.log = []
+    fsEvents.failSync = undefined
+    fsEvents.failOpen = undefined
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('syncs every file and every directory, the root last', async () => {
+    await syncTree(dir)
+
+    expect(fsEvents.log).toEqual(
+      expect.arrayContaining([
+        `sync ${join(dir, 'top.json')}`,
+        `sync ${join(dir, 'a', 'b', 'deep.bin')}`,
+      ]),
+    )
+    const dirs = fsEvents.log.filter((e) => !e.endsWith('.json') && !e.endsWith('.bin'))
+    expect(dirs).toEqual([`sync ${join(dir, 'a', 'b')}`, `sync ${join(dir, 'a')}`, `sync ${dir}`])
+    expect(fsEvents.log.at(-1)).toBe(`sync ${dir}`)
+  })
+
+  it('fails when a file inside reports a storage error', async () => {
+    fsEvents.failSync = { path: join(dir, 'a', 'b', 'deep.bin'), code: 'EIO' }
+    await expect(syncTree(dir)).rejects.toMatchObject({ code: 'EIO' })
+  })
+
+  it('forgives a file the platform cannot sync through a read-only handle', async () => {
+    fsEvents.failSync = { path: join(dir, 'top.json'), code: 'EPERM' }
+    await syncTree(dir)
+    expect(fsEvents.log.at(-1)).toBe(`sync ${dir}`)
   })
 })
