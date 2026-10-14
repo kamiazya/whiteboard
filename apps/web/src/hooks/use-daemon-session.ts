@@ -13,8 +13,7 @@ import type { ConnectedDaemon } from '../lib/daemon-fetch.js'
  * The store is imported DYNAMICALLY, like every other lib this session only
  * needs once a daemon resolves: a static import pulled the session-key
  * holder's whole chain into App's own critical-path chunk and tripped
- * `smoke:bundle-size`'s modulepreload budget (154.9 KB against a 152 KB
- * budget, measured before this became dynamic).
+ * `smoke:bundle-size`'s modulepreload budget.
  */
 export function useReplicaKeeper(daemon: ConnectedDaemon | undefined): void {
   useEffect(() => {
