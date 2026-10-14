@@ -12,7 +12,10 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { startFakeMcpResponder } from '../../packages/mcp-server/scripts/dev/test-utils/fake-mcp-daemon.mjs'
+import {
+  assertTestSocketPathFits,
+  startFakeMcpResponder,
+} from '../../packages/mcp-server/scripts/dev/test-utils/fake-mcp-daemon.mjs'
 
 const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), 'stale-issues.mjs')
 
@@ -96,13 +99,15 @@ test('asks the daemon on its recorded socket, and never connects to the dev port
 
 test('a daemon that accepts the connection and never answers ends the check inside its own bound', async (t) => {
   const dataDir = mkdtempSync(join(tmpdir(), 'stale-issues-hung-'))
-  const socketPath = join(dataDir, 'daemon.sock')
   const hung = createServer(() => {})
-  await new Promise((listening) => hung.listen(socketPath, listening))
+  // Registered before the listen, so a listen that throws still leaves nothing behind.
   t.after(() => {
     hung.close()
     rmSync(dataDir, { recursive: true, force: true })
   })
+  const socketPath = join(dataDir, 'daemon.sock')
+  assertTestSocketPathFits(socketPath)
+  await new Promise((listening) => hung.listen(socketPath, listening))
   writeFileSync(join(dataDir, 'daemon.json'), JSON.stringify({ pid: process.pid, socketPath }))
 
   const child = spawn(process.execPath, [SCRIPT, '--quiet'], {

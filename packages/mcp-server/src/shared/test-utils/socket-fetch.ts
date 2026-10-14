@@ -3,18 +3,24 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { onTestFinished } from 'vitest'
+import { assertSocketPathFits } from '../../daemon/daemon-socket.js'
 
 /**
  * A fresh owner-only socket path for one test: its own temp directory, so a
- * parallel run never shares a path, and short enough for the 104/108-byte
- * limit a Unix socket path has. The directory is removed when the calling
- * test finishes, so this must be called from inside a test; a daemon a whole
- * suite shares puts its socket in a directory its `afterAll` removes.
+ * parallel run never shares a path. A long TMPDIR can still push it past the
+ * limit a Unix socket path has, which the kernel answers by binding a
+ * truncated name — so that is refused here, naming the limit, rather than
+ * surfacing as EADDRINUSE or a connect that never lands. The directory is
+ * removed when the calling test finishes, so this must be called from inside
+ * a test; a daemon a whole suite shares puts its socket in a directory its
+ * `afterAll` removes.
  */
 export function testSocketPath(): string {
   const dir = mkdtempSync(join(tmpdir(), 'wb-sock-'))
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }))
-  return join(dir, 'd.sock')
+  const path = join(dir, 'd.sock')
+  assertSocketPathFits(path, 'Use a shorter TMPDIR for this test run.')
+  return path
 }
 
 /**

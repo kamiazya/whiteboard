@@ -2,8 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { SOCKET_PATH_MAX_BYTES as DAEMON_SOCKET_PATH_MAX_BYTES } from '../../../src/daemon/daemon-socket.js'
 import { requestDaemon } from '../dev-daemon-socket-lib.mjs'
-import { startFakeMcpResponder } from './fake-mcp-daemon.mjs'
+import { SOCKET_PATH_MAX_BYTES, startFakeMcpResponder } from './fake-mcp-daemon.mjs'
 
 const dirs: string[] = []
 const closers: Array<() => Promise<void>> = []
@@ -27,5 +28,18 @@ describe('startFakeMcpResponder', () => {
     expect((await post('Bearer tok')).status).toBe(200)
     expect((await post('Bearer x')).status).toBe(401)
     expect((await post('Bearer tok', '/nope')).status).toBe(404)
+  })
+
+  it('refuses a socket path the kernel would truncate, naming the limit and the remedy', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fake-mcp-daemon-'))
+    dirs.push(dir)
+    const socketPath = join(dir, `${'a'.repeat(120)}.sock`)
+    await expect(startFakeMcpResponder({ socketPath, token: 'tok' })).rejects.toThrow(
+      new RegExp(`${SOCKET_PATH_MAX_BYTES}-byte limit.*shorter TMPDIR`),
+    )
+  })
+
+  it("holds the daemon's own socket-path limit", () => {
+    expect(SOCKET_PATH_MAX_BYTES).toBe(DAEMON_SOCKET_PATH_MAX_BYTES)
   })
 })

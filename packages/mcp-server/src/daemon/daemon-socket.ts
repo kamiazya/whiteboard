@@ -96,21 +96,25 @@ export async function clearStaleSocket(path: string): Promise<void> {
 // What a `sun_path` holds, less the NUL a C reader expects after the name:
 // macOS 104, Linux 108. Linux binds one byte more; a name that fills the
 // field leaves nothing for a reader that stops at the terminator.
-const SOCKET_PATH_MAX_BYTES = process.platform === 'darwin' ? 103 : 107
+export const SOCKET_PATH_MAX_BYTES = process.platform === 'darwin' ? 103 : 107
 
 /**
  * The kernel truncates a longer name at bind instead of refusing it, so the
  * daemon would listen on a path nobody asked for and then fail on the first
  * thing that uses the real one (the chmod, a client's connect), naming
- * neither the cause nor the limit.
+ * neither the cause nor the limit. A test fixture binding under `tmpdir()`
+ * has the same failure, read as EADDRINUSE or a hang, so it passes its own
+ * remedy.
  */
-function assertSocketPathFits(path: string): void {
+export function assertSocketPathFits(
+  path: string,
+  remedy = 'Set XDG_RUNTIME_DIR to a shorter directory (the socket lives in its whiteboard/ subdirectory), ' +
+    'or TMPDIR when XDG_RUNTIME_DIR is unset.',
+): void {
   const bytes = Buffer.byteLength(path)
   if (bytes <= SOCKET_PATH_MAX_BYTES) return
   throw new Error(
-    `the daemon socket path is ${bytes} bytes, over the ${SOCKET_PATH_MAX_BYTES}-byte limit for a unix socket: ${path}. ` +
-      'Set XDG_RUNTIME_DIR to a shorter directory (the socket lives in its whiteboard/ subdirectory), ' +
-      'or TMPDIR when XDG_RUNTIME_DIR is unset.',
+    `the daemon socket path is ${bytes} bytes, over the ${SOCKET_PATH_MAX_BYTES}-byte limit for a unix socket: ${path}. ${remedy}`,
   )
 }
 
