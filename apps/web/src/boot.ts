@@ -88,7 +88,11 @@ function renderApp(root: HTMLElement): void {
         // the active-editor registry and renders nothing until a phone's
         // keyboard is up. Its own boundary renders nothing on failure, so a
         // failed panel costs only the bar, never the editor beside it.
-        createElement(ErrorBoundary, { fallback: renderNothing }, createElement(TouchFormattingBar)),
+        createElement(
+          ErrorBoundary,
+          { fallback: renderNothing },
+          createElement(TouchFormattingBar),
+        ),
       ),
     ),
   )
