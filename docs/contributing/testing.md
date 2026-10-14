@@ -45,6 +45,16 @@ changed since `origin/main` (`--base=<ref>` to change the base, `--only=node` or
 for one leg, `--dry-run` to print the plan); a test in `tools/arch-lint` keeps it in step with the
 job.
 
+vitest writes transformed-module copies to `<tmpdir>/<21-char id>/ssr` (and `client/`). Each
+project's directory is removed when the run closes, but a run through a single config with no
+`projects` array leaves its directory behind even when it passes — 3 to 80 MB a run. So every
+package's `test` script is a bare `vitest run` over an aggregate `vitest.config.ts`, and
+`apps/web`'s wrapper runs each half through `vitest.suite.config.ts`;
+`tools/arch-lint/src/package-test-script.test.ts` holds both. `vitest run --config
+vitest.node.config.ts` by hand still leaks, and so does any run killed before it closes, the root
+config's included. `node .claude/scripts/cleanup-worktrees.mjs` sweeps the ones nothing has written
+to for a day (`--dry-run` lists them).
+
 ---
 
 ## Test Layer Selection

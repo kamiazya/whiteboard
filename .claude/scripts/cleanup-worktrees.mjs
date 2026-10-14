@@ -18,9 +18,16 @@
 // A worktree's dev daemon is stopped before the worktree is removed: it runs
 // with no idle timeout, and its record lives in the worktree's own data dir,
 // so once the directory is gone nothing can find it to stop it.
+//
+// It also sweeps vitest's scratch directories out of the OS temp dir: a run
+// that is killed before it closes leaves `<tmpdir>/<21-char id>/{ssr,client}`
+// copies of every transformed module (3-80 MB each), and nothing else ever
+// removes them. Only directories untouched for a day are taken, so a run in
+// progress keeps its own.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseScriptArgs } from './script-flags.mjs'
@@ -107,6 +114,69 @@ function stopWorktreeDevDaemon(wt) {
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf-8', ...opts }).trim()
 }
+
+/** vitest names its scratch directory with a default nanoid: 21 of `A-Za-z0-9_-`. */
+const VITEST_SCRATCH_NAME = /^[A-Za-z0-9_-]{21}$/
+const VITEST_SCRATCH_CHILDREN = new Set(['ssr', 'client'])
+const VITEST_SCRATCH_MIN_AGE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Whether `dir` is a vitest scratch directory no run has written to for a day:
+ * only `ssr`/`client` subdirectories, and the newest of them and the directory
+ * itself older than the bound. Anything else in the temp dir is not ours.
+ */
+function isStaleVitestScratch(dir, now) {
+  let children
+  try {
+    children = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return false
+  }
+  if (children.length === 0) return false
+  if (!children.every((c) => c.isDirectory() && VITEST_SCRATCH_CHILDREN.has(c.name))) return false
+  const newest = Math.max(
+    statSync(dir).mtimeMs,
+    ...children.map((c) => statSync(join(dir, c.name)).mtimeMs),
+  )
+  return now - newest > VITEST_SCRATCH_MIN_AGE_MS
+}
+
+function staleVitestScratch(root, now) {
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && VITEST_SCRATCH_NAME.test(entry.name))
+      .map((entry) => join(root, entry.name))
+      .filter((dir) => isStaleVitestScratch(dir, now))
+  } catch {
+    return []
+  }
+}
+
+function sweepVitestScratch() {
+  const root = tmpdir()
+  let swept = 0
+  for (const dir of staleVitestScratch(root, Date.now())) {
+    if (dryRun) {
+      console.log(`would sweep vitest scratch ${dir}`)
+    } else {
+      try {
+        rmSync(dir, { recursive: true, force: true })
+      } catch (error) {
+        console.warn(`warning: could not sweep vitest scratch ${dir}: ${error.message}`)
+        continue
+      }
+    }
+    swept++
+  }
+  if (swept > 0) {
+    console.log(
+      `${dryRun ? 'would sweep' : 'swept'} ${swept} stale vitest scratch dir(s) in ${root}`,
+    )
+  }
+}
+
+// Before the worktree pass, which can exit early with nothing to clean.
+sweepVitestScratch()
 
 if (!existsSync(worktreesDir)) {
   console.log('no .claude/worktrees directory — nothing to clean')
