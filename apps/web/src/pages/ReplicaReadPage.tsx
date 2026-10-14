@@ -32,8 +32,9 @@
 import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { type FacetRegistry, withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import { imageRefId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
@@ -58,6 +59,7 @@ import {
   replicaEntries,
   replicaReferenceGraph,
   replicaReferenceWire,
+  replicaStencilLibrary,
   replicaTagLibrary,
 } from '../lib/replica-record.js'
 import {
@@ -308,7 +310,37 @@ function useReplicaLinkTables(state: LoadState) {
   return { resolveAlias, resolveTitle }
 }
 
-/** The link table, reference seams, tag library and picture seams the editors use on this replica. */
+/**
+ * The workspace's tag and stencil libraries, read out of the replica record —
+ * the keeper that would answer them is the one that is away.
+ */
+function useReplicaLibraries(state: LoadState) {
+  // Read once per record, as the keeper pages read theirs once per source: a
+  // library changes when someone edits the `tags` or `stencils` document,
+  // which is rare.
+  const tagLibrary = useMemo(
+    () => (state.kind === 'ready' ? replicaTagLibrary(state.record, state.entries) : undefined),
+    [state],
+  )
+  // The keeper pages' registry, from the same record: an inspector that does
+  // not know a workspace stencil cannot take its appearance back off a node.
+  const facetRegistry = useMemo(
+    () =>
+      state.kind === 'ready'
+        ? withWorkspaceStencils(
+            bundledFacetRegistry,
+            replicaStencilLibrary(state.record, state.entries),
+          )
+        : bundledFacetRegistry,
+    [state],
+  )
+  return { tagLibrary, facetRegistry }
+}
+
+/**
+ * The link table, reference seams, tag and stencil libraries and picture
+ * seams the editors use on this replica.
+ */
 function useReplicaSeams(
   daemonBaseUrl: string,
   workspaceId: string,
@@ -341,17 +373,12 @@ function useReplicaSeams(
     () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
     [references],
   )
-  // Read once per record, as the keeper pages read theirs once per source:
-  // the library changes when someone edits the `tags` document, which is rare.
-  const tagLibrary = useMemo(
-    () => (state.kind === 'ready' ? replicaTagLibrary(state.record, state.entries) : undefined),
-    [state],
-  )
+  const { tagLibrary, facetRegistry } = useReplicaLibraries(state)
   const clipboardImages = useMemo(
     () => replicaClipboardImages(daemonBaseUrl, workspaceId),
     [daemonBaseUrl, workspaceId],
   )
-  return { seams, references, tagLibrary, clipboardImages }
+  return { seams, references, tagLibrary, facetRegistry, clipboardImages }
 }
 
 interface ReplicaReaderProps {
@@ -370,6 +397,7 @@ interface ReplicaReaderProps {
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
   tagLibrary: TagLibrary | undefined
+  facetRegistry: FacetRegistry
   clipboardImages: ClipboardImageSeams
   saveFailed: boolean
   onRetrySave: () => void
@@ -469,6 +497,7 @@ function ReplicaReader({
   seams,
   references,
   tagLibrary,
+  facetRegistry,
   clipboardImages,
   saveFailed,
   onRetrySave,
@@ -513,6 +542,7 @@ function ReplicaReader({
               className="h-full"
               references={references}
               tagLibrary={tagLibrary}
+              facetRegistry={facetRegistry}
               clipboardImages={clipboardImages}
               theme={resolvedTheme}
               {...spatialLocks}

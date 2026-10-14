@@ -7,9 +7,11 @@ import {
   readNodeLocks,
   readSpatialCanvas,
   setNodeLock,
+  writeFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { STENCIL_LIBRARY_PATH, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { linkEntries, linkTitles } from './link-entries.js'
@@ -20,6 +22,7 @@ import {
   replicaEntries,
   replicaReferenceGraph,
   replicaReferenceWire,
+  replicaStencilLibrary,
   writeReplicaLock,
   writeReplicaMarkdown,
   writeReplicaSpatial,
@@ -163,5 +166,43 @@ describe('replica record', () => {
       resolveTitle: linkTitles([]),
     })
     expect(wire.extras).toEqual([])
+  })
+})
+
+describe("the replica's stencil library", () => {
+  const STENCILS = '01ARZ3NDEKTSV4RRFFQ69G5FB9'
+  const lakehouse = {
+    displayName: 'Lakehouse',
+    color: '3',
+    facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+  }
+
+  function withLibrary(facets: Record<string, unknown>): LoroDoc {
+    const doc = record()
+    createWorkspaceDocumentAtPath(doc, {
+      path: STENCIL_LIBRARY_PATH,
+      documentId: STENCILS,
+      kind: 'markdown',
+    })
+    writeFacets(documentContainers(doc, STENCILS), facets)
+    doc.commit()
+    return doc
+  }
+
+  it('reads the stencils the document at the library path declares', () => {
+    const doc = withLibrary({ [VISUAL_STENCILS_KEY]: { stencils: { lakehouse } } })
+    expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({ lakehouse })
+  })
+
+  it('is empty for a replica without a library document', () => {
+    const doc = record()
+    expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({})
+  })
+
+  it('leaves out a stencil the schema refuses and keeps the rest', () => {
+    const doc = withLibrary({
+      [VISUAL_STENCILS_KEY]: { stencils: { lakehouse, broken: { color: 42 } } },
+    })
+    expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({ lakehouse })
   })
 })
