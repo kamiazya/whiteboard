@@ -266,6 +266,15 @@ describe('a link drawn in the picture', () => {
     expect(prevented).toBe(false)
     expect(onOpen).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['root-relative', '/guide'],
+    ['protocol-relative', '//example.com/x'],
+  ])('leaves a %s URL to the browser', async (_shape, href) => {
+    const { prevented, onOpen } = await clickLink(href)
+    expect(prevented).toBe(false)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
 })
 
 describe('kind row and action icons', () => {
