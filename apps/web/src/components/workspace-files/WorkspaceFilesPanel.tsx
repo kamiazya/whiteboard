@@ -133,9 +133,8 @@ export function WorkspaceFilesPanel({
   // throw both away — which is the measured "dark mode re-renders every row".
   const broker = useMemo(() => createInTabRenderBroker(), [source])
 
-  // What an embedded target resolves against, read through a ref so the
-  // loader below outlives a list re-read: the re-read hands every row a new
-  // entry, which is what asks it to draw again by the versions just listed.
+  // What an embedded target or a clicked link resolves against, read through a
+  // ref so the loader below outlives a list re-read (which redraws every row).
   const listedRef = useRef<readonly WorkspaceDocumentEntry[]>([])
   listedRef.current = documents ?? []
   const findListed = (id: string) => listedRef.current.find((each) => each.documentId === id)
