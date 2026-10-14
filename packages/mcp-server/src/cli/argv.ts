@@ -4,6 +4,10 @@
 // rule; what stays here is the part that is this subcommand's own — which
 // flags are required, and what the ok result is shaped like.
 
+import {
+  type ReplicaTier,
+  replicaTierSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { type FlagTable, redactFlagValue, scanFlags } from './flag-table.js'
 import { parseSupportBundleArgs, type SupportBundleArgs } from './support-bundle-args.js'
 
@@ -97,8 +101,8 @@ export function parseDaemonReplicaKeyArgs(args: readonly string[]): DaemonReplic
   }
 }
 
-const REPLICA_TIERS = ['no-offline', 'offline', 'bounded'] as const
-type ReplicaTierFlag = (typeof REPLICA_TIERS)[number]
+/** `--tier`'s choices: the contract's tiers, plus `default` to clear an override. */
+export const REPLICA_TIER_CHOICES = [...replicaTierSchema.options, 'default'].join('|')
 
 export type DaemonReplicaTierArgs =
   | {
@@ -106,7 +110,7 @@ export type DaemonReplicaTierArgs =
       json: true
       workspaceId: string
       /** `null` is the explicit clear (`--tier=default`). */
-      tier: ReplicaTierFlag | null
+      tier: ReplicaTier | null
       dataDir: string | undefined
     }
   | { kind: 'usage-error'; message: string }
@@ -122,8 +126,7 @@ export function parseDaemonReplicaTierArgs(args: readonly string[]): DaemonRepli
   if (!scan.seen.has('--json')) {
     return {
       kind: 'usage-error',
-      message:
-        'Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id|segment> --tier=<no-offline|offline|bounded|default>',
+      message: `Only --json is supported. Re-run with: whiteboard daemon set-replica-tier --json --workspace=<id|segment> --tier=<${REPLICA_TIER_CHOICES}>`,
     }
   }
   if (scan.values.workspaceId === undefined) {
@@ -133,20 +136,21 @@ export function parseDaemonReplicaTierArgs(args: readonly string[]): DaemonRepli
   if (tier === undefined) {
     return {
       kind: 'usage-error',
-      message: '--tier=<no-offline|offline|bounded|default> is required',
+      message: `--tier=<${REPLICA_TIER_CHOICES}> is required`,
     }
   }
-  if (tier !== 'default' && !REPLICA_TIERS.includes(tier as ReplicaTierFlag)) {
+  const known = replicaTierSchema.safeParse(tier)
+  if (tier !== 'default' && !known.success) {
     return {
       kind: 'usage-error',
-      message: `--tier must be one of ${REPLICA_TIERS.join(', ')}, or default (clears the override)`,
+      message: `--tier must be one of ${replicaTierSchema.options.join(', ')}, or default (clears the override)`,
     }
   }
   return {
     kind: 'ok',
     json: true,
     workspaceId: scan.values.workspaceId,
-    tier: tier === 'default' ? null : (tier as ReplicaTierFlag),
+    tier: known.success ? known.data : null,
     dataDir: scan.values.dataDir,
   }
 }

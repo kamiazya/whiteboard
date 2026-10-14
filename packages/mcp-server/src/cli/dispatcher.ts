@@ -39,6 +39,7 @@ import {
   parseDaemonRunArgs,
   parseDaemonSubcommandArgs,
   parseDaemonSupportBundleArgs,
+  REPLICA_TIER_CHOICES,
 } from './argv.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
@@ -64,7 +65,7 @@ whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]
 whiteboard daemon support-bundle --json --output-dir=<path> [--data-dir=<path>]
 whiteboard daemon rotate-replica-key --json --workspace=<id|segment> [--data-dir=<path>]
-whiteboard daemon set-replica-tier   --json --workspace=<id|segment> --tier=<no-offline|offline|bounded|default> [--data-dir=<path>]
+whiteboard daemon set-replica-tier   --json --workspace=<id|segment> --tier=<${REPLICA_TIER_CHOICES}> [--data-dir=<path>]
 whiteboard daemon run            [--json] [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
 whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [--allowed-origins=<csv>] [--jwt-clock-skew=<seconds>] [--jwt-scope-claim=<scope|scp>] [--host=<addr>] [--port=<1-65535>] [--data-dir=<path>]

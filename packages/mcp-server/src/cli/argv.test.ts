@@ -1,3 +1,4 @@
+import { replicaTierSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { describe, expect, it } from 'vitest'
 import {
   parseDaemonReplicaKeyArgs,
@@ -7,6 +8,7 @@ import {
   parseDaemonSupportBundleArgs,
   redactFlagValue,
 } from './argv.js'
+import { USAGE } from './dispatcher.js'
 
 // ---------------------------------------------------------------------------
 // redactFlagValue
@@ -252,8 +254,11 @@ describe('parseDaemonReplicaKeyArgs', () => {
 })
 
 describe('parseDaemonReplicaTierArgs', () => {
+  // The tiers are the contract's, not a copy: a tier the route and the env
+  // var accept must not be one the operator's CLI refuses or leaves unnamed.
   it('accepts each tier, and `default` as the explicit clear', () => {
-    for (const tier of ['no-offline', 'offline', 'bounded'] as const) {
+    expect(replicaTierSchema.options.length).toBeGreaterThan(1)
+    for (const tier of replicaTierSchema.options) {
       expect(parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1', `--tier=${tier}`])).toEqual({
         kind: 'ok',
         json: true,
@@ -277,6 +282,17 @@ describe('parseDaemonReplicaTierArgs', () => {
       kind: 'usage-error',
       message: '--tier=<no-offline|offline|bounded|default> is required',
     })
+  })
+
+  it('names every tier the contract holds in its refusals and help line', () => {
+    const refused = parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1', '--tier=sometimes'])
+    const missing = parseDaemonReplicaTierArgs(['--json', '--workspace=ws-1'])
+    const helpLine = USAGE.split('\n').find((line) => line.includes('set-replica-tier')) ?? ''
+    for (const tier of replicaTierSchema.options) {
+      expect(refused).toMatchObject({ message: expect.stringContaining(` ${tier},`) })
+      expect(missing).toMatchObject({ message: expect.stringContaining(`${tier}|`) })
+      expect(helpLine).toContain(`${tier}|`)
+    }
   })
 })
 
