@@ -547,7 +547,7 @@ export function WorkspaceFilesPanel({
   // and takes `moveDocument` directly — it is declared above, so no ref
   // bridges the two. It has no use for the row the re-read selected.
   const refreshForRename = useCallback(
-    async (path: string) => void (await refreshAndSelect(path)),
+    (path: string) => refreshAndSelect(path).then(() => undefined),
     [refreshAndSelect],
   )
   const rename = useRenameDocument({ source, moveDocument, refreshAndSelect: refreshForRename })

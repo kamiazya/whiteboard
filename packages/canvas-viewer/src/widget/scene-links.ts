@@ -34,7 +34,7 @@ export function guardSceneLinks(container: HTMLElement): SceneLinkGuard {
       const href = anchor.getAttribute('href') ?? ''
       // A document link is a bare id or `#id`, so it never has a scheme.
       if (!URL_SCHEME.test(href)) return
-      if (host === undefined || host.getHostCapabilities()?.openLinks === undefined) return
+      if (host?.getHostCapabilities()?.openLinks === undefined) return
       host.openLink({ url: href }).catch((err: unknown) => {
         console.error('[whiteboard-widget] openLink via host failed:', err)
       })

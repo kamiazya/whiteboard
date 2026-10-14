@@ -7,7 +7,7 @@
  * refusal of anything else — or of an upload the daemon turned away anyway —
  * is said, so no pick, drop or paste ends with nothing happening.
  */
-import { type MutableRefObject, useMemo, useRef } from 'react'
+import { type RefObject, useMemo, useRef } from 'react'
 import { IMAGE_FILE_ACCEPT } from '../../lib/image-upload-policy.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import { CanvasNotice } from './CanvasNotice.js'
@@ -22,8 +22,8 @@ export interface ImageRequest {
 
 /** The hidden input and the one request its next pick answers. */
 export interface ImagePicker {
-  readonly input: MutableRefObject<HTMLInputElement | null>
-  readonly request: MutableRefObject<ImageRequest>
+  readonly input: RefObject<HTMLInputElement | null>
+  readonly request: RefObject<ImageRequest>
 }
 
 export function useImagePicker(): ImagePicker {

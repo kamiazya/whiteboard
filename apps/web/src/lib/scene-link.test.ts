@@ -26,9 +26,9 @@ describe('sceneLinkTarget', () => {
   })
 
   it('a click on no link', () => {
-    expect(sceneLinkTarget(document.createElementNS('http://www.w3.org/2000/svg', 'text'))).toBe(
-      undefined,
-    )
-    expect(sceneLinkTarget(null)).toBe(undefined)
+    expect(
+      sceneLinkTarget(document.createElementNS('http://www.w3.org/2000/svg', 'text')),
+    ).toBeUndefined()
+    expect(sceneLinkTarget(null)).toBeUndefined()
   })
 })

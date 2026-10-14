@@ -71,7 +71,8 @@ export function replicaKeyFetch(
 
 /** A daemon refusing every request with a membership reason, as `/replica-key` refuses one. */
 export function replicaKeyRefusalFetch(reason: string): typeof fetch {
-  return (async () => jsonResponse({ error: reason, message: reason }, 403)) as typeof fetch
+  return (() =>
+    Promise.resolve(jsonResponse({ error: reason, message: reason }, 403))) as typeof fetch
 }
 
 /**
