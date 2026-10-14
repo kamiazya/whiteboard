@@ -100,14 +100,14 @@ describe('createCodeSplittingGroups', () => {
 
   it('leaves out a first-paint module that holds a dynamic import', () => {
     const app = `${SRC}/App.tsx`
-    expect(chunkOf(app, true, { [app]: { dynamicallyImportedIds: [`${SRC}/pages/X.tsx`] } })).toBe(
-      undefined,
-    )
+    expect(
+      chunkOf(app, true, { [app]: { dynamicallyImportedIds: [`${SRC}/pages/X.tsx`] } }),
+    ).toBeUndefined()
     // A computed specifier never reaches dynamicallyImportedIds — react-router
     // loads route modules that way — so the call itself is what is matched.
-    expect(chunkOf(ROUTER, true, { [ROUTER]: { code: 'await import(route.module)' } })).toBe(
-      undefined,
-    )
+    expect(
+      chunkOf(ROUTER, true, { [ROUTER]: { code: 'await import(route.module)' } }),
+    ).toBeUndefined()
   })
 
   it('leaves out a module whose static imports reach a dynamic import', () => {
