@@ -11,11 +11,11 @@ import type {
   ReferenceSeams,
   ResolvedReference,
   SpatialRenderStyle,
+  SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
 import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import {
   type RenderCanvasCoreOptions,
@@ -29,7 +29,7 @@ export type { RenderedCanvas } from './scene-render-core.js'
 export interface RenderCanvasOptions {
   readonly measure: MeasureText
   /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
-  readonly theme?: ResolvedTheme
+  readonly theme?: SpatialThemeMode
   /** See RenderCanvasCoreOptions: `'document'` unless a session overrides it. */
   readonly style?: SpatialRenderStyle
   /** Passed through to layout: the reference bundle text-node bodies read. */

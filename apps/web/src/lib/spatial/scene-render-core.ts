@@ -23,6 +23,7 @@ import type {
   SpatialContentCache,
   SpatialLayoutOptions,
   SpatialRenderStyle,
+  SpatialThemeMode,
   SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -40,12 +41,11 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
 export interface RenderCanvasCoreOptions {
   readonly measure: MeasureText
-  readonly theme?: ResolvedTheme
+  readonly theme?: SpatialThemeMode
   /**
    * Which look to draw (ADR-0030 decision 6). This app's default is
    * `'document'` — a person editing a board sees the theme it names, and
@@ -145,7 +145,7 @@ export interface RenderedCanvas {
  */
 export function editorLayoutBase(options: {
   readonly measure: MeasureText
-  readonly theme?: ResolvedTheme
+  readonly theme?: SpatialThemeMode
   readonly style?: SpatialRenderStyle
 }): Pick<SpatialLayoutOptions, 'measure' | 'appearance' | 'style' | 'fontAvailable'> {
   return {

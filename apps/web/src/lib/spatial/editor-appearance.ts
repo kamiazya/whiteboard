@@ -1,8 +1,8 @@
 /**
- * A thin adapter from this app's `ResolvedTheme` to canvas-render's shared
+ * A thin adapter from this app's editor to canvas-render's shared
  * `createSpatialTheme` (package-canvas-render.md decision #8). Every
  * appearance/geometry decision now lives in canvas-render's theme layer —
- * this file exists only to translate this app's theme-mode type and to
+ * this file exists only to project its palettes for the contrast test and to
  * expose the one caller that needs a single value rather than a whole
  * resolver (`SpatialEditor`'s host-element text fill).
  *
@@ -18,8 +18,8 @@ import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   type SpatialAppearanceResolver,
+  type SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { ResolvedTheme } from '../theme.js'
 // Backward-compatible view of the shared palettes in the shape this
 // package's own tests already assert (`chromeStroke`/`textFill`). The
 // shared palette differentiates node FILL per type, but stroke and label
@@ -36,12 +36,12 @@ export const EDITOR_DARK_PALETTE = {
   textFill: SPATIAL_DARK_PALETTE.labelFill,
 }
 
-const PALETTES: Readonly<Record<ResolvedTheme, { chromeStroke: string; textFill: string }>> = {
+const PALETTES: Readonly<Record<SpatialThemeMode, { chromeStroke: string; textFill: string }>> = {
   light: EDITOR_LIGHT_PALETTE,
   dark: EDITOR_DARK_PALETTE,
 }
 
-export function createEditorAppearance(theme: ResolvedTheme): SpatialAppearanceResolver {
+export function createEditorAppearance(theme: SpatialThemeMode): SpatialAppearanceResolver {
   return createSpatialTheme({ mode: theme })
 }
 
@@ -50,6 +50,6 @@ export function createEditorAppearance(theme: ResolvedTheme): SpatialAppearanceR
  * than a whole resolver: `SpatialEditor`'s host element sets it as the SVG
  * `fill` markdown body runs inherit (canvas-render assigns them none).
  */
-export function editorTextFill(theme: ResolvedTheme): string {
+export function editorTextFill(theme: SpatialThemeMode): string {
   return PALETTES[theme].textFill
 }

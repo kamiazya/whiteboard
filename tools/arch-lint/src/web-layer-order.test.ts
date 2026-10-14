@@ -171,9 +171,7 @@ const UPWARD_EDGES_CEILING = 0
  * by moving what one side wants down to a module the other already imports,
  * then lower the count (or delete the entry when the loop is gone).
  */
-const DIRECTORY_LOOPS: Readonly<Record<string, number>> = {
-  'lib,lib/spatial': 12,
-}
+const DIRECTORY_LOOPS: Readonly<Record<string, number>> = {}
 
 describe('apps/web layer order', () => {
   const sources = readWebSources()
@@ -241,9 +239,14 @@ describe('apps/web directory loops', () => {
         ({ from, to }) => directoryOf(from) !== directoryOf(to),
       ).length,
     ).toBeGreaterThan(500)
-    expect(Object.keys(actual).length, 'the loops the ledger names were not found').toBeGreaterThan(
-      0,
-    )
+    // With the ledger empty, nothing on the real tree shows the scan can still
+    // find a loop there, so plant one back-edge against the real lib -> lib/spatial
+    // imports and expect it to be reported.
+    const planted = new Map(sources).set('lib/spatial/zz-probe.ts', "import '../theme.js'\n")
+    expect(
+      webDirectoryLoops(planted).map(spellLoop),
+      'a planted back-edge closed no loop on the real tree',
+    ).toContain('lib,lib/spatial')
   })
 
   it('has no loop outside the ledger', () => {

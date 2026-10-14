@@ -86,7 +86,6 @@ import {
   useThemeFaceFor,
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
-import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
@@ -96,6 +95,7 @@ import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
+import { parseClipboardText } from '../../lib/spatial/clipboard-fragment.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
