@@ -5,24 +5,27 @@ artifacts — npm tarball and Docker image — against real process boundaries.
 
 ## test:e2e:distribution
 
-The `test:e2e:distribution` root script runs the full distribution verification chain.
-The chain has fifteen steps after the initial build prerequisite:
+The `test:e2e:distribution` root script runs the full distribution verification chain:
+`pnpm build`, then the distribution vitest suite (`pnpm --filter @kamiazya/whiteboard-mcp
+test:distribution:only` — the packed tarball, plain and under `WHITEBOARD_DEV=1`, the Codex
+config and the packaged checkpoint flow), then `pnpm --filter @kamiazya/whiteboard-mcp
+check:release-artifacts`, then `test:e2e:distribution:only`.
+`check:release-candidate` runs those first two itself and then `test:e2e:distribution:only`, so
+the `:only` chain holds only what nothing else in the release candidate runs.
+The chain has twelve steps:
 
 1. `pnpm smoke:e2e` — full stdio MCP round-trip against the source entry point (canvas create → checkpoint → restore → export)
-2. `pnpm smoke:tarball` — validates the packed `.tgz` is installable and functional
-3. `pnpm smoke:packaged` — full e2e round-trip against `dist/server/mcp/stdio.js`
-4. `pnpm smoke:codex-config` — validates the Codex plugin manifest and published MCP config
-5. `pnpm smoke:claude` — end-to-end Claude CLI integration smoke
-6. `pnpm smoke:codex` — end-to-end Codex CLI integration smoke
-7. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042) through the extension: a sealed replica in real IndexedDB, the locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect
-8. `pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts` — artifact content checks
-9. packaged daemon backup/restore smoke
-10. packaged daemon replica-key smoke — `daemon rotate-replica-key` / `set-replica-tier` against a running daemon
-11. packaged daemon support-bundle smoke
-12. packaged daemon token smoke
-13. packaged server-mode app smoke
-14. packaged server-mode CLI smoke
-15. packaged server-mode entrypoint smoke
+2. `pnpm smoke:packaged` — full e2e round-trip against `dist/server/mcp/stdio.js`
+3. `pnpm smoke:claude` — end-to-end Claude CLI integration smoke
+4. `pnpm smoke:codex` — end-to-end Codex CLI integration smoke
+5. `pnpm smoke:read-plane` — real-browser proof of the read plane (ADR-0042) through the extension: a sealed replica in real IndexedDB, the locked page a cold start lands on with the daemon gone, and the daemon page back on Reconnect
+6. packaged daemon backup/restore smoke
+7. packaged daemon replica-key smoke — `daemon rotate-replica-key` / `set-replica-tier` against a running daemon
+8. packaged daemon support-bundle smoke
+9. packaged daemon token smoke
+10. packaged server-mode app smoke
+11. packaged server-mode CLI smoke
+12. packaged server-mode entrypoint smoke
 
 ## Vitest-backed vs Node-script smokes
 
@@ -101,8 +104,14 @@ Each `.mjs` script in this directory targets a specific packaged deployment scen
 ## Release gate matrix
 
 The gates in `release-gate-matrix.json` reference commands from the root `package.json`.
-Three gates — `smoke:tarball`, `smoke:packaged` and `smoke:codex-config` — are covered transitively through
-`test:e2e:distribution` rather than appearing directly in `check:release-candidate`.
+A tier runs each gate once. `smoke:packaged` runs inside `test:e2e:distribution:only`.
+`smoke:tarball` and `smoke:codex-config` do not appear in `check:release-candidate`'s chain at
+all: they drive the same `*.distribution-impl.ts` flows as `tarball.distribution.test.ts` and
+`codex-config.distribution.test.ts`, which the `test:distribution` gate's vitest suite already
+runs (the tarball under `WHITEBOARD_DEV=1` too), so the suite is the one invocation. The standalone
+scripts remain for running one smoke by hand and for CI's `verify` steps.
+`release-gate-matrix.test.ts` expands each tier's chain through every script it names and fails
+when a command, or a smoke implementation, is reached twice.
 
 A gate's `requiredFor` tiers name the aggregate **script** that must invoke it, not
 where it happens to run. Each tier has exactly one runner:
