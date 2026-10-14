@@ -69,7 +69,7 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
     document.modelContext = {
       ...fake,
       registerTool: async (descriptor, options) => {
-        tool = descriptor
+        if (descriptor.name === 'whiteboard_get_app_context') tool = descriptor
         await fake.registerTool(descriptor, options)
       },
     }
@@ -86,10 +86,12 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
       )
     })
 
-    await waitFor(async () =>
-      expect(await tool?.execute({})).toMatchObject({
-        canvas: { workspaceId: 'w1', documentId: '01JDOC', path: 'notes/plan.md' },
-      }),
-    )
+    const registered = await waitFor(() => {
+      if (tool === undefined) throw new Error('whiteboard_get_app_context not registered yet')
+      return tool
+    })
+    expect(await registered.execute({})).toMatchObject({
+      canvas: { workspaceId: 'w1', documentId: '01JDOC', path: 'notes/plan.md' },
+    })
   })
 })
