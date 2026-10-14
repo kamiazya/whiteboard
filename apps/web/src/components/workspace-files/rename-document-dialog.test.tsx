@@ -28,6 +28,13 @@ function renderPanel(overrides: Parameters<typeof fakeFilesSource>[0] = {}) {
 
 // The fixture lives one folder down, which is the interesting case: the
 // dialog's Path field must show the FULL path, not the segment.
+const renderRefusingMove = () =>
+  renderPanel({
+    renameDocumentPath: async () => {
+      throw new Error('Path "archive/login/notes" already exists')
+    },
+  })
+
 async function selectCard() {
   fireEvent.click((await screen.findAllByRole('button', { name: 'Open folder design' }))[0]!)
   await waitFor(() => {
@@ -110,11 +117,7 @@ describe('rename dialog', () => {
   // The server names the PRODUCED path that collided, which on a subtree
   // move is often not the one typed here.
   it("shows the server's own refusal and stays open", async () => {
-    renderPanel({
-      renameDocumentPath: async () => {
-        throw new Error('Path "archive/login/notes" already exists')
-      },
-    })
+    renderRefusingMove()
     const dialog = await openDialog()
     fireEvent.change(within(dialog).getByLabelText(/^Path/), { target: { value: 'archive/login' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
@@ -143,6 +146,40 @@ describe('rename dialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const alert = await within(dialog).findByRole('alert')
     expect(alert.textContent).toBe('a display name is at most 200 characters')
+  })
+
+  it('leaves Save pressable after a refusal, so the person can try again', async () => {
+    renderRefusingMove()
+    const dialog = await openDialog()
+    fireEvent.change(within(dialog).getByLabelText(/^Path/), { target: { value: 'archive/login' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await within(dialog).findByRole('alert')
+    await waitFor(() =>
+      expect(
+        (within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    )
+  })
+
+  it('does not carry a refusal into the next opening', async () => {
+    renderRefusingMove()
+    const first = await openDialog()
+    fireEvent.change(within(first).getByLabelText(/^Path/), { target: { value: 'archive/login' } })
+    fireEvent.click(within(first).getByRole('button', { name: 'Save' }))
+    await within(first).findByRole('alert')
+    fireEvent.click(within(first).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(await screen.findByRole('button', { name: /Rename/ }))
+    const second = await screen.findByRole('dialog')
+    expect(within(second).queryByRole('alert')).toBeNull()
+  })
+
+  it('closes once a save lands', async () => {
+    renderPanel()
+    const dialog = await openDialog()
+    fireEvent.change(within(dialog).getByLabelText(/^Name/), { target: { value: 'Sign-in flow' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   // A name that reached the store but not the screen is the worst of both:
