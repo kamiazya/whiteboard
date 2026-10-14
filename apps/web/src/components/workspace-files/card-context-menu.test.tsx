@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { readRecentIds } from '../../lib/recent-documents.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { pickNewDocumentKind } from '../../test-utils/new-document-menu.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
@@ -24,6 +25,7 @@ function renderPanel(
     onRequestDelete?: (path: string, displayName: string, kind?: 'spatial' | 'markdown') => void
     setPinned?: (entry: { readonly path: string }, pinned: boolean) => Promise<void>
     rows?: readonly WorkspaceDocumentEntry[]
+    memoryScope?: string
   } = {},
 ) {
   const { setPinned, rows, ...panelProps } = overrides
@@ -57,6 +59,16 @@ describe('document card context menu', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open' }))
     expect(onOpenDocument).toHaveBeenCalledWith('meeting-notes')
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull())
+  })
+
+  it('Open from the menu is remembered like every other open', async () => {
+    // The menu is the long-press path on a phone: an open from it that skipped
+    // the Recent lane and the seen baseline would leave the card's changed dot
+    // standing after the person has read the document.
+    renderPanel({ onOpenDocument: () => {}, memoryScope: 'browser:W' })
+    const menu = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open' }))
+    expect(readRecentIds('browser:W')).toEqual(['d1'])
   })
 
   it('Delete carries the kind the dialog copy needs', async () => {
