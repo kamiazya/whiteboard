@@ -16,6 +16,7 @@ import type { DocumentBackend, DocumentBackendHandlers } from './document-backen
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { documentSyncKey, SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
 import { parseServerTextMessage } from './sync-frame-text.js'
+import { QueuedWriter } from './write-chain.js'
 
 export interface SseTransport {
   fetch: typeof globalThis.fetch
@@ -38,6 +39,11 @@ export class SseBackend implements DocumentBackend {
    * applied: they would land on the copy the fetched state replaces.
    */
   private heldFrames: Uint8Array[] | null = null
+  /** The writes this backend sends itself, when no worker sends them for it. */
+  private writer: QueuedWriter | null = null
+  /** Whether the injected source has said a write failed and not yet that it landed. */
+  private sourceWritesFailing = false
+  private readonly sourceLandings: { landed: () => void; dropped: (reason: Error) => void }[] = []
   /**
    * The key binary frames travel on: always the WORKSPACE document's — the
    * seed snapshot and every update are the workspace record's, and local
@@ -132,8 +138,11 @@ export class SseBackend implements DocumentBackend {
       // the worker retries on its own, that the failure is over.
       onWriteState: (landed) => {
         if (this.cancelled) return
-        if (landed) handlers.onWritesLanded?.()
-        else handlers.onError?.('storage-failure')
+        this.sourceWritesFailing = !landed
+        if (landed) {
+          this.settleSourceLandings(null)
+          handlers.onWritesLanded?.()
+        } else handlers.onError?.('storage-failure')
       },
       // A refused credential is the caller's to surface, not this backend's
       // to retry: the source has already stopped reconnecting.
@@ -152,6 +161,10 @@ export class SseBackend implements DocumentBackend {
    */
   private writeRefused(refusal: SyncWriteRefusal, handlers: DocumentBackendHandlers): void {
     if (this.cancelled) return
+    // What was outstanding is dropped with the copy that held it, and the
+    // caller answers the refusal by taking the keeper's state.
+    this.sourceWritesFailing = false
+    this.settleSourceLandings(null)
     handlers.onWriteRefused?.(refusal)
     void this.resync(handlers)
   }
@@ -217,6 +230,10 @@ export class SseBackend implements DocumentBackend {
     this.unsubscribe = null
     this.unsubscribeText?.()
     this.unsubscribeText = null
+    this.writer?.close()
+    this.writer = null
+    this.sourceWritesFailing = false
+    this.settleSourceLandings(new Error('backend disconnected'))
     // Only a hub this backend created is closed here — a shared one outlives
     // any single canvas and is owned by whoever injected it.
     this.ownedHub?.close()
@@ -225,24 +242,64 @@ export class SseBackend implements DocumentBackend {
 
   pushLocalUpdate(bytes: Uint8Array): void | Promise<void> {
     // Through the source, not straight to the daemon, because the source is
-    // what knows where this document's authority lives. With no SharedWorker
-    // that is the daemon and this is the same POST it always was; with one, the
-    // worker's replica merges the bytes against everything else it has seen
-    // and writes onward itself. Posting here regardless would write around
-    // that replica and re-send state the daemon had just delivered.
-    // Returned, not swallowed: `DocumentBackendHandlers` already treats a
-    // rejected push as the session's `error` status, and with no worker in
-    // front there is nothing else that will ever retry this write.
-    //
-    // A refusal of the bytes themselves is the exception: retrying cannot
-    // land it, so it is answered here by taking the keeper's state.
-    const pushed = this.resolveSource().push(this.binaryKey, bytes)
-    if (pushed === undefined) return
+    // what knows where this document's authority lives. With a SharedWorker,
+    // the worker's replica merges the bytes against everything else it has
+    // seen and writes onward itself — retrying as it goes — so posting here
+    // would write around that replica and re-send state the daemon had just
+    // delivered.
+    if (this.streamSource) {
+      const pushed = this.streamSource.push(this.binaryKey, bytes)
+      if (pushed === undefined) return this.landingOfSourceWrites()
+      const handlers = this.handlers
+      // A refusal of the bytes themselves cannot be retried into landing, so
+      // it is answered here by taking the keeper's state.
+      return pushed.catch((err: unknown) => {
+        if (!(err instanceof SyncWriteRefusedError) || handlers === null) throw err
+        this.writeRefused(err.refusal, handlers)
+      })
+    }
+    // With no worker in front, this backend is the only thing that will ever
+    // send this write again, so it keeps it until the daemon has taken it —
+    // the same guarantee the worker gives, from the same `WriteChain`.
     const handlers = this.handlers
-    return pushed.catch((err: unknown) => {
-      if (!(err instanceof SyncWriteRefusedError) || handlers === null) throw err
-      this.writeRefused(err.refusal, handlers)
+    if (handlers === null) return
+    this.writer ??= this.ownWriter(handlers)
+    return this.writer.write(bytes)
+  }
+
+  /**
+   * A source that writes onward itself reports only the first failure of a
+   * run, so a write handed over while one is failing has landed nothing: it
+   * settles when the source says everything landed. Settling at hand-over
+   * would read as saved over a retry that is still failing.
+   */
+  private landingOfSourceWrites(): Promise<void> | undefined {
+    if (!this.sourceWritesFailing) return undefined
+    return new Promise<void>((landed, dropped) => {
+      this.sourceLandings.push({ landed, dropped })
     })
+  }
+
+  private settleSourceLandings(dropped: Error | null): void {
+    for (const waiter of this.sourceLandings.splice(0)) {
+      if (dropped === null) waiter.landed()
+      else waiter.dropped(dropped)
+    }
+  }
+
+  private ownWriter(handlers: DocumentBackendHandlers): QueuedWriter {
+    return new QueuedWriter(
+      (bytes) => this.resolveSource().push(this.binaryKey, bytes) ?? Promise.resolve(),
+      {
+        onFailing: () => {
+          if (!this.cancelled) handlers.onError?.('storage-failure')
+        },
+        onLanded: () => {
+          if (!this.cancelled) handlers.onWritesLanded?.()
+        },
+        onRefused: (refusal) => this.writeRefused(refusal, handlers),
+      },
+    )
   }
 
   sendClientReady(): void {

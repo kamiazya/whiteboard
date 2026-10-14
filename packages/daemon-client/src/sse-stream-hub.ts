@@ -36,6 +36,7 @@ import {
   syncReadyEventSchema,
   syncUpdateEventSchema,
 } from './sync-sse-contract.js'
+import { retryAfterMsOf, SyncWriteFailedError } from './write-chain.js'
 
 interface SseEvent {
   event: string
@@ -401,7 +402,9 @@ export class SseStreamHub implements SseStreamSource {
       const { body } = await refusalReasonOf(res, '')
       throw new SyncWriteRefusedError(res.status, syncWriteRefusalOf(body))
     }
-    if (!res.ok) throw new Error(`update refused: ${res.status}`)
+    if (!res.ok) {
+      throw new SyncWriteFailedError(res.status, retryAfterMsOf(res.headers.get('Retry-After')))
+    }
   }
 
   /**

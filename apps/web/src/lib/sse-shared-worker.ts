@@ -10,11 +10,9 @@
  * This file must be a real same-origin module: the app's CSP declares
  * `worker-src 'self'`, which rejects a blob: worker.
  */
-import {
-  type SyncWriteRefusal,
-  SyncWriteRefusedError,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
+import type { SyncWriteRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
 import { SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { retryDelayMs, WriteChain } from '@kamiazya/whiteboard-daemon-client/write-chain'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-fetch.js'
 import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
@@ -98,6 +96,7 @@ const replicaKey = (baseUrl: string, doc: string) => `${baseUrl}\n${doc}`
  * workspace and stays as light as the stream multiplexer it grew from.
  */
 const replicas = new Map<string, InstanceType<LoroModule['LoroDoc']>>()
+type ReplicaVersion = ReturnType<InstanceType<LoroModule['LoroDoc']>['version']>
 
 function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['LoroDoc']> | undefined {
   if (loro === undefined) return undefined
@@ -250,87 +249,57 @@ const ports = new Map<MessagePort, PortState>()
  * daemon has of its OWN, and cannot speak for a tab's unpushed work sitting in
  * the same replica.
  */
-const ackedVersions = new Map<string, ReturnType<InstanceType<LoroModule['LoroDoc']>['version']>>()
+const ackedVersions = new Map<string, ReplicaVersion>()
 
 /**
- * One write at a time per document, so two in flight cannot land out of order
- * and let the later one's acknowledgement cover ops the earlier one never
- * delivered. Each link recomputes what is outstanding when it runs, which is
- * also what makes a failure self-healing: the bytes a refused write held are
- * still unacknowledged, so the next write picks them up without anything
- * having to buffer them.
+ * Each document's writes to the daemon, through the one `WriteChain` a page
+ * that owns its stream writes through too. What is outstanding is recomputed
+ * from the acknowledged version on every write, which is what makes a
+ * failure self-healing: the bytes a failed write held are still
+ * unacknowledged, so whatever writes next — a later edit, the reconnect
+ * flush, or the chain's own retry — picks them up without anything having to
+ * buffer them.
  */
-const writeChains = new Map<string, Promise<unknown>>()
+const writers = new Map<string, WriteChain<ReplicaVersion>>()
+
+function writerFor(baseUrl: string, doc: string): WriteChain<ReplicaVersion> {
+  const key = replicaKey(baseUrl, doc)
+  const existing = writers.get(key)
+  if (existing !== undefined) return existing
+  const created = new WriteChain<ReplicaVersion>({
+    outstanding: () => {
+      const replica = replicaFor(baseUrl, doc)
+      const acked = ackedVersions.get(key)
+      if (replica === undefined || acked === undefined) return null
+      // Read BEFORE the export and the push: ops that land while the request
+      // is in flight are not covered by it and must not be acknowledged.
+      // Compared by VERSION, not by byte length — an update export is 22
+      // bytes of header even when it carries no ops, so a length check would
+      // POST an empty body on every reconnect. `0` is "the same state";
+      // anything else, including the `undefined` Loro returns for versions it
+      // cannot order, means send.
+      const at = replica.version()
+      if (at.compare(acked) === 0) return null
+      return { mark: at, bytes: replica.export({ mode: 'update', from: acked }) }
+    },
+    acknowledge: (at) => {
+      ackedVersions.set(key, at)
+    },
+    push: (bytes) => hubFor(baseUrl).push(doc, bytes),
+    onFailing: () => tellWriteState(baseUrl, doc, false),
+    onLanded: () => tellWriteState(baseUrl, doc, true),
+    onRefused: (refusal, wasFailing) => writeRefused(baseUrl, doc, refusal, wasFailing),
+  })
+  writers.set(key, created)
+  return created
+}
 
 function scheduleWrite(baseUrl: string, doc: string): void {
-  const key = replicaKey(baseUrl, doc)
-  const previous = writeChains.get(key) ?? Promise.resolve()
-  const next = previous
-    .then(async () => {
-      const replica = replicaFor(baseUrl, doc)
-      if (replica === undefined) return
-      const acked = ackedVersions.get(key)
-      if (acked === undefined) return
-      // Read BEFORE the export and the await, for two different reasons: ops
-      // that land while this request is in flight are not covered by it and
-      // must not be marked acknowledged, and this is also the comparison that
-      // decides whether there is anything to send at all.
-      const at = replica.version()
-      // Compared by VERSION, not by byte length. An update export is 22 bytes
-      // of header even when it carries no ops, so a length check calls that a
-      // write worth making and POSTs an empty body on every reconnect. `0` is
-      // "the same state"; anything else, including the `undefined` Loro
-      // returns for versions it cannot order, means send.
-      if (at.compare(acked) !== 0) {
-        const pending = replica.export({ mode: 'update', from: acked })
-        await hubFor(baseUrl).push(doc, pending)
-        ackedVersions.set(key, at)
-      }
-      // Only what the replica held at `at` has landed. An edit that arrived
-      // during the request is the next write's, and until that one lands the
-      // failure is not over.
-      if (replica.version().compare(at) === 0) writeLanded(baseUrl, doc)
-    })
-    // A failed write leaves `ackedVersions` where it was, so whatever writes
-    // next — a later edit, the reconnect flush, or the retry scheduled here —
-    // recomputes the same outstanding bytes. A refusal of the bytes
-    // themselves is the exception: those would be refused every time.
-    .catch((err: unknown) =>
-      err instanceof SyncWriteRefusedError
-        ? writeRefused(baseUrl, doc, err.refusal)
-        : writeFailed(baseUrl, doc),
-    )
-  writeChains.set(key, next)
+  writerFor(baseUrl, doc).schedule()
 }
 
-/**
- * Consecutive failed writes per document, and the retry waiting on each.
- *
- * The retry is what covers the person who stops typing on a stream that stays
- * up: neither a later edit nor a reconnect comes to carry the outstanding
- * bytes, and they would wait until the last tab closed and took the worker —
- * and the edit — with it.
- */
-const failedWrites = new Map<string, number>()
-const writeRetries = new Map<string, ReturnType<typeof setTimeout>>()
-const WRITE_RETRY_BASE_MS = 1000
-const WRITE_RETRY_MAX_MS = 30_000
-
-function writeFailed(baseUrl: string, doc: string): void {
-  const key = replicaKey(baseUrl, doc)
-  const failures = (failedWrites.get(key) ?? 0) + 1
-  failedWrites.set(key, failures)
-  if (failures === 1) tellWriteState(baseUrl, doc, false)
-  if (writeRetries.has(key)) return
-  const delay = Math.min(WRITE_RETRY_BASE_MS * 2 ** (failures - 1), WRITE_RETRY_MAX_MS)
-  writeRetries.set(
-    key,
-    setTimeout(() => {
-      writeRetries.delete(key)
-      scheduleWrite(baseUrl, doc)
-    }, delay),
-  )
-}
+/** The wait before the snapshot a refused write's replica is rebuilt from is asked for again. */
+const snapshotRetries = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
  * The daemon refused the outstanding bytes for what they would do, so they
@@ -341,15 +310,13 @@ function writeFailed(baseUrl: string, doc: string): void {
  * replaced — any of them may hold the refused ops by then, and each forks
  * again from the replacement.
  */
-function writeRefused(baseUrl: string, doc: string, refusal: SyncWriteRefusal): void {
-  const key = replicaKey(baseUrl, doc)
-  clearTimeout(writeRetries.get(key))
-  writeRetries.delete(key)
-  // `scheduleWrite` writes nothing for a document with no acknowledged
-  // version, so a write already chained behind this one stops here too.
-  ackedVersions.delete(key)
-  if (!failedWrites.has(key)) tellWriteState(baseUrl, doc, false)
-  failedWrites.set(key, (failedWrites.get(key) ?? 0) + 1)
+function writeRefused(
+  baseUrl: string,
+  doc: string,
+  refusal: SyncWriteRefusal,
+  wasFailing: boolean,
+): void {
+  if (!wasFailing) tellWriteState(baseUrl, doc, false)
   replaceReplica(baseUrl, doc, refusal, 0)
 }
 
@@ -372,13 +339,15 @@ function replaceReplica(
     try {
       bytes = await hubFor(baseUrl).snapshot(doc)
     } catch {
-      const delay = Math.min(WRITE_RETRY_BASE_MS * 2 ** attempt, WRITE_RETRY_MAX_MS)
-      writeRetries.set(
+      snapshotRetries.set(
         key,
-        setTimeout(() => {
-          writeRetries.delete(key)
-          replaceReplica(baseUrl, doc, refusal, attempt + 1)
-        }, delay),
+        setTimeout(
+          () => {
+            snapshotRetries.delete(key)
+            replaceReplica(baseUrl, doc, refusal, attempt + 1)
+          },
+          retryDelayMs(attempt + 1),
+        ),
       )
       return
     }
@@ -388,20 +357,12 @@ function replaceReplica(
     replicas.set(key, replica)
     ackedVersions.set(key, replica.version())
     seededDocs.add(key)
-    failedWrites.delete(key)
+    writers.get(key)?.resume()
     for (const [target, state] of ports) {
       if (state.baseUrl !== baseUrl || !state.subscriptions.has(doc)) continue
       postWorkerEvent(target, { type: 'write-refused', doc, refusal })
     }
   })
-}
-
-function writeLanded(baseUrl: string, doc: string): void {
-  const key = replicaKey(baseUrl, doc)
-  if (!failedWrites.delete(key)) return
-  clearTimeout(writeRetries.get(key))
-  writeRetries.delete(key)
-  tellWriteState(baseUrl, doc, true)
 }
 
 function tellWriteState(baseUrl: string, doc: string, landed: boolean): void {
@@ -558,7 +519,7 @@ function handleSubscribe(
   state.subscriptions.set(msg.doc, off)
   // A tab arriving while a write is still being retried was not there when
   // the failure was announced, so it is told now.
-  if (failedWrites.has(replicaKey(state.baseUrl, msg.doc))) {
+  if (writers.get(replicaKey(state.baseUrl, msg.doc))?.failing) {
     postWorkerEvent(port, { type: 'write-state', doc: msg.doc, landed: false })
   }
 }
