@@ -9,6 +9,7 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  writeCoreFacets,
   writeFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -30,6 +31,7 @@ const DAEMON = 'http://127.0.0.1:3099'
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
   handed: { markdown: undefined as unknown, spatial: undefined as unknown },
+  suggestions: undefined as unknown,
   theme: { markdown: undefined as unknown, spatial: undefined as unknown },
 }))
 
@@ -49,8 +51,9 @@ vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
 }))
 
 vi.mock('../components/spatial-editor/SpatialEditor.js', () => ({
-  SpatialEditor: (props: { tagLibrary?: unknown; theme?: unknown }) => {
+  SpatialEditor: (props: { tagLibrary?: unknown; tagSuggestions?: unknown; theme?: unknown }) => {
     store.handed.spatial = props.tagLibrary
+    store.suggestions = props.tagSuggestions
     store.theme.spatial = props.theme
     return <div data-testid="spatial-editor" />
   },
@@ -104,6 +107,7 @@ describe('ReplicaReadPage and the workspace tag library', () => {
   beforeEach(() => {
     store.handed = { markdown: undefined, spatial: undefined }
     store.theme = { markdown: undefined, spatial: undefined }
+    store.suggestions = undefined
   })
   afterEach(() => {
     cleanup()
@@ -129,6 +133,18 @@ describe('ReplicaReadPage and the workspace tag library', () => {
     await open('board')
     await screen.findByTestId('spatial-editor')
     expect(store.handed.spatial).toEqual({})
+  })
+
+  // Completion offers what the rest of the workspace uses, as the keeper
+  // pages do — not only what the open board already carries.
+  it("offers a board's tag input a tag only another document carries", async () => {
+    const record = seedRecord(false)
+    writeCoreFacets(documentContainers(record, DOC_MD), { type: 'note', tags: ['drafted'] })
+    record.commit()
+    store.record = record
+    await open('board')
+    await screen.findByTestId('spatial-editor')
+    expect(store.suggestions).toEqual(['drafted', 'health:failing'])
   })
 
   // A dark page with a light-themed editor draws the preview's #404040 text

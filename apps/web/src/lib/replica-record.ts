@@ -20,6 +20,7 @@ import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client
 import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import {
   documentContainers,
+  projectWorkspaceDocument,
   readDocumentContent,
   readEdgeLocks,
   readFacets,
@@ -30,7 +31,7 @@ import {
   setNodeLock,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { ExtensionFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { type ExtensionFacets, type SpatialCanvas, tagsInUse } from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
   readTagLibrary,
@@ -38,6 +39,7 @@ import {
   TAG_LIBRARY_PATH,
   type TagLibrary,
 } from '@kamiazya/whiteboard-plugin-visual'
+import { tagBearersOf } from '@kamiazya/whiteboard-reference-graph'
 import type { LoroDoc } from 'loro-crdt'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { linkTitles } from './link-entries.js'
@@ -152,6 +154,24 @@ export function replicaTagLibrary(
   entries: readonly WorkspaceDocumentEntry[],
 ): TagLibrary {
   return replicaLibrary(record, entries, TAG_LIBRARY_PATH, readTagLibrary)
+}
+
+/**
+ * Every tag the workspace uses, for completions — what both keepers answer as
+ * their in-use list, counted the way they count it: each document projected
+ * out of the record the way the daemon loads one, its bearers read by
+ * `tagBearersOf` and reduced by `tagsInUse`, so the replica cannot offer a
+ * different vocabulary than the keeper it stands in for.
+ */
+export function replicaTagsInUse(
+  record: ReplicaRecord,
+  entries: readonly WorkspaceDocumentEntry[],
+): string[] {
+  const bearers = entries.flatMap((entry) => {
+    const doc = projectWorkspaceDocument(record, entry.documentId)
+    return doc === null ? [] : tagBearersOf(doc, readDocumentContent(doc, entry.kind))
+  })
+  return tagsInUse(bearers).map((row) => row.tag)
 }
 
 /**
