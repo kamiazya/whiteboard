@@ -11,7 +11,7 @@
  * rounding, so the no-op filter compares the value that will actually be
  * stored.
  */
-import { boundsOf } from '@kamiazya/whiteboard-model'
+import { boundsOf, isFiniteRect } from '@kamiazya/whiteboard-model'
 import type { EditorLeafCommand } from '../../lib/spatial/commands.js'
 
 export interface AlignableBox {
@@ -76,13 +76,7 @@ export type DistributeAxis = 'horizontal' | 'vertical'
 /** Drops anything the canvas schema would never produce, so the maths below
  *  can assume finite numbers without guarding at every step. */
 function usable(boxes: readonly AlignableBox[]): AlignableBox[] {
-  return boxes.filter(
-    (box) =>
-      Number.isFinite(box.x) &&
-      Number.isFinite(box.y) &&
-      Number.isFinite(box.width) &&
-      Number.isFinite(box.height),
-  )
+  return boxes.filter(isFiniteRect)
 }
 
 function moved(box: AlignableBox, x: number, y: number): BoxMove | null {

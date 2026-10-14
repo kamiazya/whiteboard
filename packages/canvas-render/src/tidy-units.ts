@@ -1,4 +1,9 @@
-import { type CanvasEdge, isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type CanvasEdge,
+  isFiniteRect,
+  isFrame,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 // `fullyContains` is ONE predicate, and it was two byte-identical copies —
 // this file's and `edge-rules`' — until the mutation lane reported eight
 // survivors in this one. The copy there is exercised by name; the copy here
@@ -156,13 +161,7 @@ export function overlapsWithMargin(a: Rect, b: Rect): boolean {
 export const rectOf = (n: TidyNode): Rect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
 
 export function usable(nodes: readonly TidyNode[]): TidyNode[] {
-  return nodes.filter(
-    (n) =>
-      Number.isFinite(n.x) &&
-      Number.isFinite(n.y) &&
-      Number.isFinite(n.width) &&
-      Number.isFinite(n.height),
-  )
+  return nodes.filter(isFiniteRect)
 }
 
 /**

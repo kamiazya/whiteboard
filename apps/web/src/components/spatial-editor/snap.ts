@@ -18,6 +18,8 @@
  * accepting only a STRICTLY closer replacement — see `best`.
  */
 
+import { isFiniteRect } from '@kamiazya/whiteboard-model'
+
 export interface SnapBox {
   readonly x: number
   readonly y: number
@@ -51,15 +53,6 @@ interface Candidate {
   readonly guide: number | undefined
 }
 
-function finiteBox(box: SnapBox): boolean {
-  return (
-    Number.isFinite(box.x) &&
-    Number.isFinite(box.y) &&
-    Number.isFinite(box.width) &&
-    Number.isFinite(box.height)
-  )
-}
-
 /**
  * Builds every candidate for ONE axis. `start`/`extent` project the axis, so
  * the same logic serves x/width and y/height without a second copy that
@@ -75,7 +68,7 @@ function candidatesForAxis(
   const candidates: Candidate[] = []
 
   for (const other of others) {
-    if (!finiteBox(other)) continue
+    if (!isFiniteRect(other)) continue
     const projected = pick(other)
     const otherLines = [
       projected.start,
@@ -139,7 +132,7 @@ export function snapBox(
   options: SnapOptions,
 ): SnapResult {
   const noSnap: SnapResult = { x: moving.x, y: moving.y, guidesX: [], guidesY: [] }
-  if (!finiteBox(moving)) return noSnap
+  if (!isFiniteRect(moving)) return noSnap
   if (!Number.isFinite(options.thresholdCanvasPx) || options.thresholdCanvasPx < 0) return noSnap
 
   // A moving box offers three lines of its own — leading edge, centre and

@@ -66,7 +66,7 @@
  * follow); out-of-scope units likewise.
  */
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
-import { endNode } from '@kamiazya/whiteboard-model'
+import { endNode, isFiniteRect } from '@kamiazya/whiteboard-model'
 import {
   AXES,
   AXIS_X,
@@ -570,7 +570,7 @@ function settleOnce(nodes: readonly TidyNode[], options: TidyOptions): TidyNode[
       width: Math.round(rect.w),
       height: Math.round(rect.h),
     }
-    return [next.x, next.y, next.width, next.height].every(Number.isFinite) ? next : node
+    return isFiniteRect(next) ? next : node
   })
 }
 

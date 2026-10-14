@@ -7,6 +7,20 @@ interface Rect {
 }
 
 /**
+ * Whether all four of `rect`'s coordinates are finite — the one test of a box
+ * that layout, alignment, snapping and the minimap accept before doing
+ * arithmetic on it, so a NaN or infinite box never becomes a NaN transform.
+ */
+export function isFiniteRect(rect: Rect): boolean {
+  return (
+    Number.isFinite(rect.x) &&
+    Number.isFinite(rect.y) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height)
+  )
+}
+
+/**
  * The smallest axis-aligned box covering every one of `rects`, or
  * `undefined` for an empty list — nothing has no bounds, and an infinite or
  * zero box would read as a real place.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundsOf } from './bounds.js'
+import { boundsOf, isFiniteRect } from './bounds.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const box = (x: number, y: number, width: number, height: number) => ({ x, y, width, height })
@@ -54,4 +54,19 @@ describe('boundsOf', () => {
       expect(rects.some((r) => r.y + r.height === bottom)).toBe(true)
     },
   )
+})
+
+describe('isFiniteRect', () => {
+  it('accepts a box whose four coordinates are all finite, negatives and zero included', () => {
+    expect(isFiniteRect(box(-5, 0, 0, 12.5))).toBe(true)
+  })
+
+  it.each([
+    ['x', box(Number.NaN, 0, 1, 1)],
+    ['y', box(0, Number.POSITIVE_INFINITY, 1, 1)],
+    ['width', box(0, 0, Number.NEGATIVE_INFINITY, 1)],
+    ['height', box(0, 0, 1, Number.NaN)],
+  ])('refuses a box whose %s is not finite', (_field, rect) => {
+    expect(isFiniteRect(rect)).toBe(false)
+  })
 })
