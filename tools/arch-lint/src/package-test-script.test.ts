@@ -188,9 +188,9 @@ describe('package test scripts run every registered project', () => {
       `${dir}'s "test" script names a single config; a non-aggregate run leaves its scratch directory in TMPDIR — make it a bare \`vitest run\``,
     ).toBe('vitest run')
     expect(
-      aggregateProjects(dir, 'vitest.config.ts'),
-      `${dir}/vitest.config.ts is not a projects aggregate`,
-    ).toBeDefined()
+      aggregateProjects(dir, 'vitest.config.ts')?.length ?? 0,
+      `${dir}/vitest.config.ts is not a projects aggregate naming at least one project`,
+    ).toBeGreaterThan(0)
   })
 
   it.each(Object.entries(SCRIPT_OMITS))('ledgered omission in %s is still real', (dir, entry) => {
