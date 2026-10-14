@@ -11,9 +11,10 @@
  * how a fourth sibling would start.
  *
  * It reads the syntax tree for a call through a binding imported from
- * `node:fs` / `node:fs/promises` (named, aliased, or off a namespace import),
- * so a method that happens to be called `rename` is not a hit. Every other
- * site is allowlisted with its reason, both-sided.
+ * `node:fs` / `node:fs/promises` (named, aliased, or off a namespace or default
+ * import), so a method that happens to be called `rename` is not a hit. Every
+ * other site is allowlisted with its reason and its exact call count, so a
+ * second rename in an allowlisted file fails like one anywhere else.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -36,21 +37,36 @@ const RENAMES: ReadonlySet<string> = new Set(['rename', 'renameSync'])
 
 const MIGRATION_HISTORY =
   "a migration's text is what it ran with, and a step already recorded as applied is not edited after the fact"
-/** Relative path -> why this file may still rename. Both-sided. */
-const ALLOWLIST: Readonly<Record<string, string>> = {
-  [HELPER]: 'the one durable commit tail: fsync before the rename, directory fsync after',
-  'packages/mcp-server/src/server/security/secret-file-mode.ts':
-    "the synchronous secret writer; it fsyncs before the rename and syncs the directory through the helper module's syncDirectorySync",
-  'packages/mcp-server/src/server/tenant/data-layout.ts':
-    'moves a whole legacy directory into the tenant layout; no file data is staged',
-  'packages/mcp-server/src/server/store/backup-pass.ts':
-    'seals a finished backup by renaming its staging DIRECTORY; every file in it was written by its own store',
-  'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts':
-    MIGRATION_HISTORY,
-  'packages/mcp-server/src/server/store/db/migrations/0012-ulid-remaining-document-ids.ts':
-    MIGRATION_HISTORY,
-  'packages/mcp-server/src/server/store/db/migrations/0019-workspace-canonical-id.ts':
-    MIGRATION_HISTORY,
+/** Relative path -> how many fs renames the file holds, and why. Both-sided. */
+const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
+  [HELPER]: {
+    calls: 1,
+    why: 'the one durable commit tail: fsync before the rename, directory fsync after',
+  },
+  'packages/mcp-server/src/server/security/secret-file-mode.ts': {
+    calls: 1,
+    why: "the synchronous secret writer; it fsyncs before the rename and syncs the directory through the helper module's syncDirectorySync",
+  },
+  'packages/mcp-server/src/server/tenant/data-layout.ts': {
+    calls: 1,
+    why: 'moves a whole legacy directory into the tenant layout; no file data is staged',
+  },
+  'packages/mcp-server/src/server/store/backup-pass.ts': {
+    calls: 1,
+    why: 'seals a finished backup by renaming its staging DIRECTORY; every file in it was written by its own store',
+  },
+  'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts': {
+    calls: 2,
+    why: MIGRATION_HISTORY,
+  },
+  'packages/mcp-server/src/server/store/db/migrations/0012-ulid-remaining-document-ids.ts': {
+    calls: 2,
+    why: MIGRATION_HISTORY,
+  },
+  'packages/mcp-server/src/server/store/db/migrations/0019-workspace-canonical-id.ts': {
+    calls: 2,
+    why: MIGRATION_HISTORY,
+  },
 }
 
 /** Every call to an fs `rename`/`renameSync` the file imports, as its source text. */
@@ -66,6 +82,8 @@ function fsRenames(fileName: string, source: string): string[] {
     ) {
       continue
     }
+    const defaultName = statement.importClause?.name
+    if (defaultName !== undefined) namespaces.add(defaultName.text)
     const bindings = statement.importClause?.namedBindings
     if (bindings === undefined) continue
     if (ts.isNamespaceImport(bindings)) {
@@ -120,6 +138,11 @@ describe('a file is renamed into place in one place', () => {
     ['an aliased import', "import { rename as mv } from 'node:fs/promises'\nawait mv(a, b)"],
     ['the sync form', "import { renameSync } from 'node:fs'\nrenameSync(a, b)"],
     ['a namespace import', "import * as fs from 'node:fs/promises'\nawait fs.rename(a, b)"],
+    ['a default import', "import fs from 'node:fs'\nfs.renameSync(a, b)"],
+    [
+      'a default import beside named ones',
+      "import fsp, { rm } from 'fs/promises'\nawait fsp.rename(a, b)",
+    ],
   ])('recognises %s', (_label, source) => {
     expect(fsRenames('fixture.ts', source)).toHaveLength(1)
   })
@@ -129,6 +152,14 @@ describe('a file is renamed into place in one place', () => {
     expect(
       fsRenames('fixture.ts', "import { rename } from './documents.js'\nawait rename(a, b)"),
     ).toEqual([])
+  })
+
+  it('an allowlisted file renames exactly as often as its entry records', () => {
+    const drift = Object.entries(ALLOWLIST).flatMap(([rel, { calls }]) => {
+      const found = fsRenames(rel, sourceOf(rel))
+      return found.length === calls ? [] : [`${rel}: ${calls} recorded, ${found.length} found`]
+    })
+    expect(drift, 'an allowlist entry covers the sites it names, not the whole file').toEqual([])
   })
 
   it('every allowlist entry still renames', () => {
