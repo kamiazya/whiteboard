@@ -345,6 +345,7 @@ describe('ReplicaReadPage', () => {
     // brackets, which is what the reader sees on the one page that exists
     // BECAUSE the keeper is unreachable.
     await seedReplica()
+    const save = vi.spyOn(BrowserWorkspaceDocs.prototype, 'save')
     render(
       <ReplicaReadPage
         workspaceId={DAEMON_WS}
@@ -355,11 +356,31 @@ describe('ReplicaReadPage', () => {
     )
     await userEvent.click(await screen.findByText('linker'))
 
-    await vi.waitFor(() => {
-      const anchor = document.querySelector(`a[href="${DOC_MD}"]`)
-      if (anchor === null) throw new Error('the wiki link did not resolve to the document')
-      return anchor
+    const anchor = await vi.waitFor(() => {
+      const found = document.querySelector(`a[href="${DOC_MD}"]`)
+      if (found === null) throw new Error('the wiki link did not resolve to the document')
+      return found
     })
+    // The anchor's href is a bare document id, so an unhandled click would
+    // navigate the tab off the offline copy. The listener sits on the
+    // document, after the page's own handler, and cancels any navigation the
+    // page let through so a failure cannot unload the test.
+    const prevented: boolean[] = []
+    const record = (event: MouseEvent) => {
+      prevented.push(event.defaultPrevented)
+      event.preventDefault()
+    }
+    document.addEventListener('click', record)
+    anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    document.removeEventListener('click', record)
+    expect(prevented).toEqual([true])
+    await screen.findAllByText(/Hello from the cache/)
+    // Switching documents can leave a save pending, which the unmount flushes;
+    // it must land while the key is held, before teardown forgets it.
+    cleanup()
+    await Promise.resolve()
+    await Promise.all(save.mock.results.map((result) => result.value))
+    save.mockRestore()
   })
 
   it("draws an embedded note inside a canvas text node, from the replica's own copy", async () => {
