@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { closeSync, fsyncSync, openSync } from 'node:fs'
 import { chmod, open, rename, rm } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { dirname } from 'node:path'
@@ -108,5 +109,27 @@ async function syncDirectory(path: string): Promise<void> {
     if (!cannotSyncDirectory(err)) throw err
   } finally {
     await dir.close()
+  }
+}
+
+/**
+ * `syncDirectory` for a caller that must stay synchronous (a secret written
+ * during boot), under the same tolerance: only "cannot sync a directory
+ * here" is forgiven, never a storage error.
+ */
+export function syncDirectorySync(path: string): void {
+  let fd: number
+  try {
+    fd = openSync(path, 'r')
+  } catch (err) {
+    if (cannotSyncDirectory(err)) return
+    throw err
+  }
+  try {
+    fsyncSync(fd)
+  } catch (err) {
+    if (!cannotSyncDirectory(err)) throw err
+  } finally {
+    closeSync(fd)
   }
 }
