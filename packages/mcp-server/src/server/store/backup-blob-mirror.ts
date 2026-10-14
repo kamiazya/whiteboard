@@ -2,8 +2,8 @@
 // decision 5).
 //
 // Blobs are content-addressed and immutable, so the same bytes never need
-// copying twice: a blob's path IS its identity, and a blob already in the
-// mirror is already the right blob. What the previous shape did instead was
+// copying twice: a blob's path IS its identity, and a complete blob already
+// in the mirror is already the right blob. What the previous shape did instead was
 // copy the whole store on every pass, which costs one full copy per retained
 // backup — measured at 403MB of backups over a 65MB store with the default
 // retention of seven, and a pass that lengthened as the store grew because it
@@ -211,9 +211,14 @@ async function mirrorOneTenant(
 /**
  * One shard of the content-addressed store.
  *
- * No file is read: the path already is the content address, so a blob already
- * at that path in the mirror is already the right blob. That is what keeps a
- * nightly pass from re-reading a store that has not changed.
+ * No file is read: the path already is the content address, so a blob at that
+ * path in the mirror is the right blob unless it is SHORTER than the source —
+ * the shape a crash leaves behind a rename whose data never reached the disk.
+ * Only then is it copied again, so the next pass repairs a torn entry rather
+ * than referencing it from every later backup. A mirror entry longer than its
+ * source is kept: there the source is the damaged side, and the mirror may
+ * hold the only good copy. That is what keeps a nightly pass from re-reading
+ * a store that has not changed, at one extra `stat` per blob.
  */
 async function mirrorShard(
   sourceRoot: string,
@@ -232,10 +237,12 @@ async function mirrorShard(
     const digest = parseBlobShard(shard, rest)
     if (digest === null) continue
     into.add(digest)
+    const source = blobShardPath(sourceRoot, digest)
     const destination = blobShardPath(join(backupRoot, BLOBS_DIRNAME), digest)
-    if (await exists(destination)) continue
+    const held = await sizeOf(destination)
+    if (held !== undefined && held >= ((await sizeOf(source)) ?? 0)) continue
     await mkdir(blobShardDir(join(backupRoot, BLOBS_DIRNAME), digest), { recursive: true })
-    await copyAtomically(blobShardPath(sourceRoot, digest), destination)
+    await copyAtomically(source, destination)
   }
 }
 
@@ -252,7 +259,9 @@ async function mirrorShard(
  *
  * Reading each file to hash it is the cost of that safety. It is paid against
  * the alternative of COPYING each file every night, which is what happens
- * without this.
+ * without this. Having the bytes in hand also settles a torn mirror entry:
+ * they ARE the digest's content, so an entry of any other size is copied
+ * again rather than skipped as occupied.
  */
 async function mirrorNamedTree(
   sourceRoot: string,
@@ -278,9 +287,9 @@ async function mirrorNamedTree(
     const digest = sha256Hex(bytes)
     into[file.relative] = digest
     const destination = blobShardPath(join(backupRoot, FILES_DIRNAME), digest)
-    if (await exists(destination)) continue
+    if ((await sizeOf(destination)) === bytes.length) continue
     await mkdir(blobShardDir(join(backupRoot, FILES_DIRNAME), digest), { recursive: true })
-    await copyAtomically(file.absolute, destination)
+    await writeFileAtomic(destination, bytes)
   }
 }
 
@@ -423,19 +432,19 @@ async function writeManifest(backupDir: string, references: BackupBlobReferences
  * The mirror is append-only and read by restore, so a blob that appears must
  * be complete. A plain copy leaves it short for its duration, and a pass
  * killed in the middle would leave a truncated file at the address of real
- * content — which the next pass would then SKIP, because the address is
- * occupied. The rename is what makes appearing and being complete the same
- * event.
+ * content. `writeFileAtomic` syncs the bytes before the rename, which is what
+ * makes appearing and being complete the same event across a power loss too;
+ * the size check at each skip is what repairs an entry torn before that held.
  */
 async function copyAtomically(from: string, to: string): Promise<void> {
   await writeFileAtomic(to, await readFile(from))
 }
 
-async function exists(path: string): Promise<boolean> {
+/** A file's size, or `undefined` when there is none to stat. */
+async function sizeOf(path: string): Promise<number | undefined> {
   try {
-    await stat(path)
-    return true
+    return (await stat(path)).size
   } catch {
-    return false
+    return undefined
   }
 }
