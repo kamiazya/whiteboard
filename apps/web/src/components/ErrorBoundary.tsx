@@ -29,7 +29,7 @@ interface ErrorBoundaryState {
 }
 
 interface ErrorBoundaryProps {
-  children: ReactNode
+  children?: ReactNode
   // Optional custom fallback for callers that want a different recovery UI.
   fallback?: (args: { error: Error; reset: () => void }) => ReactNode
   // A caught error is cleared when this changes, so a frame that stays
