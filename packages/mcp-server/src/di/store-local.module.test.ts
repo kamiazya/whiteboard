@@ -2,7 +2,7 @@ import type { BlobStore, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container } from 'inversify'
 import { describe, expect, it } from 'vitest'
-import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
+import { BackupGuardedBlobStore } from '../server/store/backup-guarded-blob-store.js'
 import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
 import { createStoreLocalModule } from './store-local.module.js'
 
@@ -18,7 +18,7 @@ describe('createStoreLocalModule', () => {
     const blobStore = container.get<BlobStore>(TOKENS.BlobStore)
 
     expect(docStore).toBeInstanceOf(WorkspaceRoutedDocumentStore)
-    expect(blobStore).toBeInstanceOf(FsBlobStore)
+    expect(blobStore).toBeInstanceOf(BackupGuardedBlobStore)
   })
 
   it('returns singletons for repeated gets', () => {
