@@ -294,6 +294,7 @@ describe('semantic fusion', () => {
       query: '復旧',
       tags: ['keep'],
     })
+    expect(out.results.map((r) => r.documentId)).toContain(kept.documentId)
     for (const hit of out.results) expect(hit.documentId).toBe(kept.documentId)
   })
 
