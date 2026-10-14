@@ -23,6 +23,7 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
@@ -120,14 +121,21 @@ export function writeSecretFileAtomicSync(filepath: string, contents: string): v
   mkdirSync(dir, { recursive: true, mode: OWNER_ONLY_DIR })
   chmodBestEffort(dir, OWNER_ONLY_DIR)
   const tmpPath = `${filepath}.tmp`
-  const fd = openSync(tmpPath, 'w', OWNER_ONLY_FILE)
   try {
-    writeFileSync(fd, contents)
-    chmodBestEffort(tmpPath, OWNER_ONLY_FILE)
-    fsyncSync(fd)
-  } finally {
-    closeSync(fd)
+    const fd = openSync(tmpPath, 'w', OWNER_ONLY_FILE)
+    try {
+      writeFileSync(fd, contents)
+      chmodBestEffort(tmpPath, OWNER_ONLY_FILE)
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    renameSync(tmpPath, filepath)
+  } catch (err) {
+    // The staging name is fixed, so a leftover would hold a secret that never
+    // went live until the next write happened to reuse it.
+    rmSync(tmpPath, { force: true })
+    throw err
   }
-  renameSync(tmpPath, filepath)
   syncDirectorySync(dir)
 }

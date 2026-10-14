@@ -229,6 +229,28 @@ describe('writeSecretFileAtomicSync', () => {
     expect(existsSync(`${file}.tmp`)).toBe(false)
   })
 
+  // A fixed staging name means a leftover is reused by the next write, and it
+  // holds a secret that never became the live one.
+  it('removes the staged secret when syncing it fails, and rethrows', () => {
+    const file = join(dir, 'key.json')
+    writeFileSync(file, 'old')
+    fsEvents.failSync = { path: `${file}.tmp`, code: 'EIO' }
+
+    expect(() => writeSecretFileAtomicSync(file, 'new')).toThrow(
+      expect.objectContaining({ code: 'EIO' }),
+    )
+    expect(existsSync(`${file}.tmp`)).toBe(false)
+    expect(readFileSync(file, 'utf8')).toBe('old')
+  })
+
+  it('removes the staged secret when the rename fails, and rethrows', () => {
+    const file = join(dir, 'key.json')
+    mkdirSync(join(file, 'occupied'), { recursive: true })
+
+    expect(() => writeSecretFileAtomicSync(file, 'new')).toThrow()
+    expect(existsSync(`${file}.tmp`)).toBe(false)
+  })
+
   it.skipIf(!CHMOD_IS_OBSERVABLE)('replaces an existing secret and leaves it owner-only', () => {
     const file = join(dir, 'key.json')
     writeFileSync(file, 'old')
