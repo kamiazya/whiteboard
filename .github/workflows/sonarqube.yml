@@ -48,12 +48,13 @@ jobs:
     # run. Skip the job outright rather than spend ~10 minutes to fail.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    # Measured on main: 1059-1781s, recently 1652-1682s, so 30 minutes left one
-    # to two minutes of headroom on a suite that grows every wave. A run that
-    # hits the limit is cancelled, not failed — no check goes red and the
-    # dashboard keeps answering from the last analysis that finished. Keep this
-    # at 1.5x the newest measured duration or more.
-    timeout-minutes: 45
+    # Measured on main: 1059-2093s, recently 1739-2093s (2026-10, the growth
+    # being "Collect coverage": 1222s to 1470s between two main runs), so 45
+    # minutes had fallen to 1.29x of the newest run. A run that hits the limit
+    # is cancelled, not failed — no check goes red and the dashboard keeps
+    # answering from the last analysis that finished. Keep this at 1.5x the
+    # newest measured duration or more.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
