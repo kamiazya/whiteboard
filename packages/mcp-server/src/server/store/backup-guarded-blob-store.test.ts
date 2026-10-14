@@ -74,4 +74,39 @@ describe('the daemon blob store', () => {
     expect(await store.get({ ref })).not.toBeNull()
     expect(await disk.has({ ref })).toEqual({ exists: true })
   })
+
+  it('puts the bytes back and defers when a backup starts during the unlink', async () => {
+    const { ref } = await store.put({ bytes: BYTES })
+    let endBackup = (): void => {}
+    let backup: Promise<void> = Promise.resolve()
+    // The marker lands after the guard's first check and before the unlink:
+    // the window a check-then-delete leaves open.
+    const racing: BlobStore = {
+      put: (input) => disk.put(input),
+      get: (input) => disk.get(input),
+      has: (input) => disk.has(input),
+      delete: async (input) => {
+        await new Promise<void>((started) => {
+          backup = withBackupMarker(dataDir, async () => {
+            started()
+            await new Promise<void>((end) => {
+              endBackup = end
+            })
+          })
+        })
+        await disk.delete(input)
+      },
+    }
+    const blobsDir = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
+    const guarded = new BackupGuardedBlobStore(racing, dataDir, blobsDir)
+
+    await guarded.delete({ ref })
+
+    expect(await disk.has({ ref })).toEqual({ exists: true })
+    expect(await guarded.has({ ref })).toEqual({ exists: false })
+    endBackup()
+    await backup
+    expect(await guarded.has({ ref })).toEqual({ exists: false })
+    expect(await disk.has({ ref })).toEqual({ exists: false })
+  })
 })

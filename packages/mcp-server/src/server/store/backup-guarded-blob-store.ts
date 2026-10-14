@@ -40,6 +40,12 @@ const deferredByDir = new Map<string, Map<string, BlobDeleteInput>>()
  * ponytail: in-memory queue, so a restart drops it and the bytes stay on disk
  * with no row naming them. Nothing collects orphan blobs today; that is the
  * same cost a crash between a restore's save and its delete already has.
+ *
+ * ponytail: a delete reads the blob before unlinking it so it can put the
+ * bytes back if a backup began during the unlink — one extra read per delete,
+ * paid only by trash purge and restore. What stays open is a mirror that
+ * copies the blobs directory between the unlink and the put-back; a lock the
+ * backup process could take is what would close it.
  */
 export class BackupGuardedBlobStore implements BlobStore {
   readonly #deferred: Map<string, BlobDeleteInput>
@@ -82,7 +88,15 @@ export class BackupGuardedBlobStore implements BlobStore {
       return
     }
     await this.#drain()
+    // A backup can write its marker between the check above and the unlink,
+    // so the bytes are held across it and the marker asked again: if one
+    // started meanwhile, the blob goes back and the delete joins the queue.
+    const held = await this.inner.get(input)
     await this.inner.delete(input)
+    if (held !== null && (await backupIsInProgress(this.dataDir))) {
+      await this.inner.put(held)
+      this.#deferred.set(blobRefKey(input.ref), input)
+    }
   }
 
   async #drain(): Promise<void> {
