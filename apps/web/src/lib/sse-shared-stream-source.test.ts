@@ -130,3 +130,81 @@ describe('a daemon reached through the extension', () => {
     expect(FakeSharedWorker.instances).toHaveLength(0)
   })
 })
+
+const postedOfType = (type: string) =>
+  (FakeSharedWorker.instances[0]?.port.postMessage.mock.calls ?? []).filter(
+    ([request]) => (request as { type: string }).type === type,
+  )
+
+// The worker refcounts subscriptions per port, so a document this tab stopped
+// announcing is no longer routed here until the tab announces it again.
+describe('a document closed and reopened in the same tab', () => {
+  it('is announced to the worker again, so its updates are routed back here', () => {
+    const source = createSharedSseStreamSource('http://reopen.test')
+    const unsubscribe = source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    unsubscribe?.()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+
+    expect(postedOfType('subscribe')).toEqual([
+      [{ type: 'subscribe', doc: 'w/doc' }],
+      [{ type: 'subscribe', doc: 'w/doc' }],
+    ])
+    expect(postedOfType('unsubscribe')).toHaveLength(1)
+  })
+})
+
+describe('a tab navigating away', () => {
+  it('hands each claimed document back to the worker once', () => {
+    const source = createSharedSseStreamSource('http://pagehide.test')
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+
+    globalThis.dispatchEvent(new Event('pagehide'))
+    expect(postedOfType('unsubscribe')).toEqual([[{ type: 'unsubscribe', doc: 'w/doc' }]])
+
+    // A page restored from the back/forward cache can hide again; claims
+    // already handed back must not be released a second time.
+    globalThis.dispatchEvent(new Event('pagehide'))
+    expect(postedOfType('unsubscribe')).toHaveLength(1)
+  })
+})
+
+describe('a snapshot reply that is not base64', () => {
+  it('leaves the waiter for the next reply instead of answering it with nothing', async () => {
+    const source = createSharedSseStreamSource('http://bad-snapshot.test')
+    const pending = source?.snapshot('w/doc')
+    const reply = (snapshot: string) =>
+      FakeSharedWorker.instances[0]?.port.onmessage?.({
+        data: { type: 'snapshot', doc: 'w/doc', snapshot },
+      } as MessageEvent)
+
+    reply('%%% not base64 %%%')
+    reply('AQID')
+
+    await expect(pending).resolves.toEqual(new Uint8Array([1, 2, 3]))
+  })
+})
+
+describe('an event the worker protocol does not describe', () => {
+  it('is dropped without reaching a listener or throwing', () => {
+    const source = createSharedSseStreamSource('http://malformed.test')
+    const onMessage = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage })
+
+    expect(() =>
+      FakeSharedWorker.instances[0]?.port.onmessage?.({ data: { nope: 1 } } as MessageEvent),
+    ).not.toThrow()
+    expect(onMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('a SharedWorker the browser refuses to construct', () => {
+  it('answers null, so the caller opens its own stream', () => {
+    globalThis.SharedWorker = class {
+      constructor() {
+        throw new Error('blocked by policy')
+      }
+    } as unknown as typeof SharedWorker
+
+    expect(createSharedSseStreamSource('http://refused.test')).toBeNull()
+  })
+})
