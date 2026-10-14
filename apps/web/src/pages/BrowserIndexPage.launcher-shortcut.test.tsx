@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, type NavigateFunction, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NEW_CANVAS_SHORTCUT } from '../lib/new-canvas-shortcut.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
@@ -20,9 +20,14 @@ const SHORTCUT = `${key}=${value}`
 describe('the New canvas launcher shortcut on the list', () => {
   function renderAt(store: BrowserStoreDouble, entry: string) {
     const onOpenDocument = vi.fn()
-    const at: { search: string; go: (to: string) => void } = { search: '', go: () => {} }
+    const at: { search: string; seen: string[]; go: NavigateFunction } = {
+      search: '',
+      seen: [],
+      go: () => {},
+    }
     function LocationProbe() {
       at.search = useLocation().search
+      at.seen.push(at.search)
       at.go = useNavigate()
       return null
     }
@@ -53,6 +58,22 @@ describe('the New canvas launcher shortcut on the list', () => {
     expect(onOpenDocument).toHaveBeenCalledWith(all[0]?.path)
     // Only its own parameter goes: the open folder rides the same search.
     expect(at.search).toBe('?folder=plans')
+  })
+
+  it('Back after the shortcut does not return to the parameter and create again', async () => {
+    const store = new BrowserStoreDouble()
+    const { onOpenDocument, at } = renderAt(store, `/w/default?${SHORTCUT}&folder=plans`)
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(at.search).toBe('?folder=plans'))
+    at.seen.length = 0
+
+    // The parameter's entry was replaced, so there is no entry behind this one to go back to.
+    act(() => at.go(-1))
+
+    expect(at.seen.length).toBeGreaterThan(0)
+    expect(at.seen.every((search) => search === '?folder=plans')).toBe(true)
+    expect(onOpenDocument).toHaveBeenCalledTimes(1)
+    expect(await store.listDocuments()).toHaveLength(1)
   })
 
   it('a refused create says so in place and still drops the parameter', async () => {
