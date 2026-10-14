@@ -1562,7 +1562,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           notice={clipboardNotice.text}
           onDismiss={clipboardNotice.dismiss}
         />
-        {onAddImage !== undefined && (
+        {onAddImage === undefined ? (
+          <CanvasNotice testId="image-notice" notice={imageNotice} onDismiss={dismissImageNotice} />
+        ) : (
           <ImageIntake
             inputRef={imageInputRef}
             notice={imageNotice}
@@ -1817,9 +1819,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               e.dataTransfer.dropEffect = 'copy'
               return
             }
-            if (onAddImage !== undefined && e.dataTransfer.types.includes('Files')) {
-              e.preventDefault()
-            }
+            // Cancelled with or without an image seam: an uncancelled file
+            // dragover lets the browser open the dropped file in the tab.
+            if (e.dataTransfer.types.includes('Files')) e.preventDefault()
           }}
           onDrop={(e) => {
             const dragged = draggedCreation(e.dataTransfer.types)
@@ -1831,7 +1833,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               createAt(dragged, screenToCanvas(local, viewport))
               return
             }
-            if (onAddImage === undefined) return
             if (e.dataTransfer.files.length === 0) return
             // Cancel the browser's default file-drop handling (navigation to
             // the file) for EVERY file drop, then only act on images.
@@ -1868,7 +1869,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // clipboard falls through untouched.
             const file = firstImageFile(e.clipboardData?.files ?? [])
             if (file !== undefined) {
-              if (onAddImage === undefined) return
               e.preventDefault()
               addImageFile(file)
               return
