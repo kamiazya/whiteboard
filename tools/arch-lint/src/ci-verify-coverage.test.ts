@@ -160,7 +160,7 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
 // derivation and ci.yml invokes the derivation script in a test-unit step, or
 // (b) exempted with mechanism 'flag' and ci.yml contains that literal flag, or
 // (c) exempted with mechanism 'filter-script' and ci.yml contains that marker.
-describe('ci.yml runs every node vitest project registered in root vitest.config.ts', () => {
+describe('ci.yml runs every node vitest project vitest.projects.json lists', () => {
   const projectConfigs = readVitestProjects(ROOT)
 
   it('derives a non-empty project list containing known anchors (not a vacuous scan)', () => {

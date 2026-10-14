@@ -1,7 +1,7 @@
 /**
  * How the production build is cut into chunks (rolldown's `codeSplitting`).
  *
- * Extracted from `vite.config.ts` so `vite-manual-chunks.test.ts` can assert
+ * Extracted from `vite.config.ts` so `vite-code-splitting.test.ts` can assert
  * on the rule directly: every hazard below is invisible in every test that
  * runs against source, and only appears in a minified production bundle.
  */
@@ -86,6 +86,11 @@ export function createCodeSplittingGroups(): Rolldown.CodeSplittingGroup[] {
     NODE_MODULES.test(id) === vendor && !STAYS_WITH_ENTRY.test(id) && isSync(id, graph)
       ? name
       : null
+  // loro-crdt deliberately gets no group: only lazy pages import it, so it
+  // already lands in a chunk they share. A named loro group once pulled
+  // vite-plugin-top-level-await's shared dynamic-import helper in beside the
+  // WASM bindings, and since the entry imports that helper for its own
+  // `lazy()` calls, first paint loaded all of loro with it.
   return [
     // React separated from app code so a deploy that touches only the app
     // leaves the (much larger) vendor chunk cached.

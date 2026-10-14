@@ -22,9 +22,9 @@
 // wall at a load average of 15-25 on four cores — against a one-file trace
 // run that took 29s inside vitest on top of its own config load.
 //
-// The project list is read from the root vitest.config.ts inventory, the
-// same one `test:browser` is checked against, so a browser project added
-// there is traced here without an edit.
+// The project list is read from vitest.projects.json, the same inventory
+// `test:browser` is checked against, so a browser project added there is
+// traced here without an edit.
 
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'

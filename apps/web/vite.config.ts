@@ -6,8 +6,8 @@ import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { rendererBuildDefine } from './renderer-build-id.js'
+import { createCodeSplittingGroups } from './vite-code-splitting.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
-import { createCodeSplittingGroups } from './vite-manual-chunks.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
@@ -39,42 +39,19 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         // The bundle-size gate (scripts/smoke-bundle-size.mjs) matches this
         // lazy chunk by a fixed `daemon-document-*.js` prefix. Without an
-        // explicit name here, Rollup names it after the source file
+        // explicit name here, rolldown names it after the source file
         // (`DaemonDocumentPage-<hash>.js`), which the gate's pattern never
         // matches — silently skipping the budget instead of enforcing it.
         chunkFileNames: (chunkInfo) =>
           chunkInfo.name === 'DaemonDocumentPage'
             ? 'assets/daemon-document-[hash].js'
             : 'assets/[name]-[hash].js',
-        // Isolate React into its own named vendor chunk instead of letting
-        // Rollup's automatic chunking scatter it across shared chunks. This
-        // does not shrink total transfer on its own — it separates what
-        // changes (app code) from what doesn't (vendor code), so a deploy
-        // that only touches app code doesn't invalidate the (much larger)
-        // vendor cache.
-        //
-        // Deliberately NOT doing the same for loro-crdt (dropped after
-        // apps/web/scripts/smoke-bundle-size.mjs caught it regressing the
-        // critical path back to ~120KB): loro-crdt is only ever imported from
-        // lazy-reachable modules (the document pages, browser-backend, the
-        // browser workspace stores), so Rollup's automatic chunking already
-        // isolates it into a chunk those lazy consumers share — no manual
-        // rule needed. Forcing it into one named `vendor-loro-crdt` chunk
-        // made vite-plugin-top-level-await's own shared dynamic-import
-        // helper (used to sequence every React.lazy() call against any
-        // in-flight top-level await) land in the SAME physical chunk as
-        // loro's WASM bindings, because that helper has no manual-chunk
-        // assignment of its own and Rollup co-locates unassigned shared
-        // modules with whichever named chunk also needs them. Since the
-        // entry imports that helper synchronously for its own React.lazy()
-        // calls, and the top-level-await plugin requires every importer of
-        // a TLA-bearing chunk to also import (and await) its `__tla` export,
-        // the entry ended up eagerly loading the whole vendor-loro-crdt
-        // chunk through a dependency that had nothing to do with loro.
+        // Which modules share a chunk, and the hazards behind each group:
+        // see vite-code-splitting.ts.
         codeSplitting: { groups: createCodeSplittingGroups() },
       },
     },

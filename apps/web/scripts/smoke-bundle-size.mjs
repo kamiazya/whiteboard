@@ -8,12 +8,12 @@
 // budget is `required: true` because the chunk exists as of this gate.
 //
 // The per-file entry-JS budget checks ONLY the literal index-*.js file, which
-// is misleading on its own: Vite/Rollup splits shared dependencies (React,
-// loro-crdt...) into separate chunk files, and index.html
+// is misleading on its own: the build splits first paint into the entry plus
+// the shell and vendor groups vite-code-splitting.ts names, and index.html
 // <link rel="modulepreload"> forces the browser to fetch every one of them
 // alongside the entry script before first paint — so they are part of the
 // same critical-path payload even though they live in different files. The
-// CRITICAL_PATH_BUDGET below sums entry + every modulepreloaded JS chunk
+// CRITICAL_PATH_BUDGET_KB below sums entry + every modulepreloaded JS chunk
 // referenced from dist/index.html, which is the number that actually
 // reflects what a fresh visitor downloads before the app can render.
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -31,7 +31,7 @@ const BUDGETS = [
   // The entry file holds the first-paint modules that reach a dynamic import
   // (main, boot, App and the screens that `lazy()` pages), about 6 KB gz;
   // everything else first paint loads is in `shell-*` and `vendor-*` (see
-  // vite-manual-chunks.ts). 30 KB leaves headroom for App.tsx growth without
+  // vite-code-splitting.ts). 30 KB leaves headroom for App.tsx growth without
   // going back to the old 560 KB ceiling, which stopped meaning anything once
   // the entry stopped containing loro-crdt (and, later, the editor's own
   // diagramming library).
@@ -56,7 +56,7 @@ const BUDGETS = [
 //
 // How first paint is cut into chunks, and the two minified-build-only
 // defects that decide it (lucide's icons beside loro's top-level await, and a
-// shared chunk rewritten for a dynamic import), are vite-manual-chunks.ts.
+// shared chunk rewritten for a dynamic import), are vite-code-splitting.ts.
 //
 // Whether this much critical path is the right size is a product call about
 // first paint, and this gate is the wrong place to make it. `measure-critical-path.mjs`
@@ -78,7 +78,7 @@ const CRITICAL_PATH_BUDGET_KB = 150
 // number of modulepreload requests far more closely than their bytes — see
 // `measure-critical-path.mjs` — and the byte budget cannot see a request.
 // Deterministic for a given build, unlike a timing. Nine today (the entry,
-// the rolldown runtime, the four groups vite-manual-chunks.ts names, and the
+// the rolldown runtime, the four groups vite-code-splitting.ts names, and the
 // first-paint chunks that reach a dynamic import), so one file of headroom.
 // A new file here usually means a first-paint module started reaching an
 // `import()` and fell out of those groups, which is worth reading before it
@@ -321,12 +321,6 @@ function main() {
 
   failures += perChunkFailures()
 
-  // Critical-path total: entry script + every modulepreloaded JS chunk, as
-  // listed in dist/index.html. This is what actually determines first-paint
-  // transfer size — see the module comment above for why the per-file
-  // entry-JS budget above cannot catch a regression here (e.g. a statically
-  // imported loro-crdt page would inflate this total without ever growing
-  // index-*.js itself).
   const critical = criticalPathReport(DIST, {
     byteBudgetKb: CRITICAL_PATH_BUDGET_KB,
     fileBudget: CRITICAL_PATH_FILE_BUDGET,

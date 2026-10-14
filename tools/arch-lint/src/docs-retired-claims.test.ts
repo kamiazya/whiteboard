@@ -132,6 +132,12 @@ const RETIRED: readonly RetiredClaim[] = [
     example: 'fails on 22 with a message about\n`Blob`, and',
     devProse: true,
   },
+  {
+    pattern: /vitest\.config\.ts`?\s+owns\s+the\s+list/i,
+    why: 'the project list is `vitest.projects.json`; the root `vitest.config.ts` only imports it, so an editor sent to the config edits the wrong file',
+    example: 'The root `vitest.config.ts` owns the list;',
+    devProse: true,
+  },
 ]
 
 describe('docs carry no retired claim', () => {

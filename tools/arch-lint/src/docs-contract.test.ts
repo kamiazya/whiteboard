@@ -43,7 +43,7 @@ describe('docs/ contract', () => {
   })
 
   it('describes `pnpm test` as covering every package with a root vitest project', () => {
-    // The root vitest.config.ts is the source of truth for which packages
+    // vitest.projects.json is the source of truth for which packages
     // `pnpm test` actually exercises. A doc line that omits a package (e.g.
     // canvas-viewer) misleads contributors into skipping its failures.
     const projectPackageDirs = [
@@ -394,7 +394,7 @@ describe('docs/ contract', () => {
   })
 
   it('describes `pnpm test --project mcp-node` as a narrow, not a broad non-browser, pass', () => {
-    // mcp-node is one of thirteen root vitest.config.ts projects. A doc that
+    // mcp-node is one of the projects vitest.projects.json lists. A doc that
     // frames it as merely "skipping the Playwright browser project" implies
     // it still covers canvas-viewer and apps/web node/jsdom, which it does not.
     const developmentDocPath = join(DOCS_ROOT, 'contributing/development.md')

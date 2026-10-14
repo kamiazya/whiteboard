@@ -7,7 +7,7 @@
  * deployed preview and took the document page to the error screen.
  */
 import { describe, expect, it } from 'vitest'
-import { createCodeSplittingGroups } from './vite-manual-chunks.js'
+import { createCodeSplittingGroups } from './vite-code-splitting.js'
 
 const STORE = '/repo/node_modules/.pnpm'
 const LUCIDE = `${STORE}/lucide-react@1.28.0/node_modules/lucide-react/dist/esm/icons/copy.js`

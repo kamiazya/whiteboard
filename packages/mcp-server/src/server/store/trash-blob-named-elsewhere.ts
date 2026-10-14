@@ -31,6 +31,7 @@ export function trashBlobNamedElsewhere(scope: StoreScope): TrashBlobNamedElsewh
     const rows = await db.selectFrom('workspaces').select('id').execute()
     const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
     const key = blobRefKey(ref)
+    // Sequential: one decoded record resident at a time, and the first hit ends the walk.
     for (const { id } of rows) {
       if (id === workspaceId) continue
       let record: Awaited<ReturnType<DocumentStoreWorkspaceDocs['open']>>

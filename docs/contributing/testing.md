@@ -179,7 +179,7 @@ The target list is not copied here, because a copy goes stale silently: the file
 
 ## Browser Testing
 
-The real-browser Vitest projects are below. The root `vitest.config.ts` owns the list; `docs-contract.test.ts` fails if this table stops naming one:
+The real-browser Vitest projects are below. `vitest.projects.json` holds the list the root `vitest.config.ts` registers; `docs-contract.test.ts` fails if this table stops naming one:
 
 | Project | Package | Purpose |
 |---|---|---|
