@@ -159,9 +159,15 @@ describe('what a tenant-bound handle scopes beyond a plain statement', () => {
     const [a, b] = [SELF_HOST_TENANT_ID, 'tenant-two'].map((t) => tenantDatabase(handle.rawDb, t))
     await a.insertInto('memberProfiles').values(profileRow('pa', 'A')).execute()
     await b.insertInto('memberProfiles').values(profileRow('pb', 'B')).execute()
+    // Each tenant's membership names the OTHER tenant's profile id, so any
+    // statement that reaches across tenants finds a row to match.
     await a
       .insertInto('workspaceMemberships')
       .values({ workspaceId: 'ws-a', profileId: 'pb', createdAt: 1, role: 'member' })
+      .execute()
+    await b
+      .insertInto('workspaceMemberships')
+      .values({ workspaceId: 'ws-b', profileId: 'pa', createdAt: 1, role: 'member' })
       .execute()
   }
 
@@ -187,6 +193,64 @@ describe('what a tenant-bound handle scopes beyond a plain statement', () => {
       .where('profileId', 'in', (eb) => eb.selectFrom('memberProfiles').select('id'))
       .execute()
     expect(rows).toEqual([])
+  })
+
+  it('scopes a table read under an alias', async () => {
+    await seedTwoTenants()
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    const rows = await a.selectFrom('memberProfiles as p').select('p.id').execute()
+    expect(rows).toEqual([{ id: 'pa' }])
+  })
+
+  // The shape the last-owner and sole-owner guards use: an aliased table in
+  // a correlated EXISTS. Only tenant B's membership names pa.
+  it('scopes an aliased table in a correlated subquery', async () => {
+    await seedTwoTenants()
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    const rows = await a
+      .selectFrom('memberProfiles')
+      .select('memberProfiles.id')
+      .where(({ exists, selectFrom }) =>
+        exists(
+          selectFrom('workspaceMemberships as other')
+            .select('other.profileId')
+            .whereRef('other.profileId', '=', 'memberProfiles.id'),
+        ),
+      )
+      .execute()
+    expect(rows).toEqual([])
+  })
+
+  it('scopes the FROM of an UPDATE, not only its target', async () => {
+    await seedTwoTenants()
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    // Only tenant B's membership names pa, so a scoped FROM matches nothing.
+    await a
+      .updateTable('memberProfiles')
+      .set({ displayName: 'X' })
+      .from('workspaceMemberships')
+      .whereRef('memberProfiles.id', '=', 'workspaceMemberships.profileId')
+      .execute()
+    const rows = await handle.rawDb
+      .selectFrom('memberProfiles')
+      .select(['id', 'displayName'])
+      .orderBy('id')
+      .execute()
+    expect(rows).toEqual([
+      { id: 'pa', displayName: 'A' },
+      { id: 'pb', displayName: 'B' },
+    ])
+  })
+
+  it('scopes a joined table that has no ON clause', async () => {
+    await seedTwoTenants()
+    const a = tenantDatabase(handle.rawDb, SELF_HOST_TENANT_ID)
+    const rows = await a
+      .selectFrom('memberProfiles')
+      .crossJoin('workspaceMemberships')
+      .select(['memberProfiles.id', 'workspaceMemberships.workspaceId'])
+      .execute()
+    expect(rows).toEqual([{ id: 'pa', workspaceId: 'ws-a' }])
   })
 
   it('an upsert does not overwrite a row another tenant holds under the same key', async () => {
