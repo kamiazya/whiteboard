@@ -118,6 +118,22 @@ describe('package test scripts run every registered project', () => {
     expect(missing, `${dir}'s "test" script does not run: ${missing.join(', ')}`).toEqual([])
   })
 
+  // `pnpm test <file>` appends the file to the LAST command of a chained
+  // script only, so every earlier `vitest run` runs its whole config and the
+  // last one exits 1 with "No test files found" whenever the file lives
+  // elsewhere — a red exit after minutes of unrelated tests, with the named
+  // test passing. One `vitest run` over an aggregate config (`projects: [...]`)
+  // applies the filter to every project and fails only when nothing matches.
+  it.each(
+    [...registered.keys()].filter((dir) => !(dir in LEDGER)),
+  )('%s runs its test script as one vitest process', (dir) => {
+    const runs = (testScript(dir) ?? '').match(/\bvitest\s+run\b/g) ?? []
+    expect(
+      runs.length,
+      `${dir}'s "test" script chains ${runs.length} vitest runs; use one over an aggregate vitest.config.ts`,
+    ).toBeLessThanOrEqual(1)
+  })
+
   it.each(Object.entries(SCRIPT_OMITS))('ledgered omission in %s is still real', (dir, entry) => {
     const ran = configsRunByScript(dir, testScript(dir) ?? '')
     for (const config of entry.configs) {

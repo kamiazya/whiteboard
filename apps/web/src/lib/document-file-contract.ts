@@ -55,11 +55,18 @@ export interface DocumentFileAdapter {
    * into `undefined` leaves the embed blank for the life of the page.
    */
   loadDocument(ref: string): Promise<LoadedFileDocument | undefined>
-  /** Resolves an image reference to a displayable URL, or undefined. */
+  /**
+   * Resolves an image reference to a displayable URL. The two non-answers
+   * mean what they do for `loadDocument`: `undefined` asserts the picture is
+   * ABSENT and is terminal, while a REJECTION is a failed read and is asked
+   * again. Folding a failure into `undefined` leaves the picture on its card
+   * for the life of the page.
+   */
   loadImageUrl(ref: string): Promise<string | undefined>
   /**
-   * A stored image's bytes, or undefined. A copy reads these rather than
-   * fetching the URL above: the app's policy refuses `connect-src blob:`.
+   * A stored image's bytes, on `loadImageUrl`'s terms for its non-answers. A
+   * copy reads these rather than fetching the URL above: the app's policy
+   * refuses `connect-src blob:`.
    */
   loadImageBlob(ref: string): Promise<Blob | undefined>
   /** Stores a picked/dropped/pasted image, answering its new reference or why not. */

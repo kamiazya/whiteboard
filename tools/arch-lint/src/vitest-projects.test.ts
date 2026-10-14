@@ -46,12 +46,13 @@ interface VitestProjectsModule {
   readBrowserProjectNames: (repoRoot: string) => string[]
   PROJECTS_RUN_ELSEWHERE: Record<string, { job: string; mechanism: string; marker: string }>
   deriveSharedLayerProjectNames: (repoRoot: string) => string[]
-  buildVitestArgv: (names: string[]) => string[]
+  buildVitestArgv: (names: string[], forwarded?: string[]) => string[]
 }
 
 interface RunSharedLayerTestsModule {
   main: (options?: {
     repoRoot?: string
+    argv?: string[]
     stdout?: { write: (chunk: string) => boolean }
     stderr?: { write: (chunk: string) => boolean }
     spawn?: (
@@ -294,6 +295,32 @@ describe('run-shared-layer-tests.mjs (CLI)', () => {
       '--project=zeta-node',
     ])
     expect(exitCode).toBe(3) // exit-code fidelity: forwards vitest's own status
+  })
+
+  it('forwards its own argv to vitest after the derived --project flags', async () => {
+    // CI shards this job, and a --shard that never reaches vitest runs the
+    // whole set on every leg while each one stays green.
+    const { main } = await importRunSharedLayerTests()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+    ])
+    const spawned: string[][] = []
+    for (const shard of ['1/2', '2/2']) {
+      main({
+        repoRoot: fixtureRoot,
+        argv: ['--', `--shard=${shard}`],
+        stdout: makeSink(),
+        stderr: makeSink(),
+        spawn: (_cmd, args) => {
+          spawned.push(args)
+          return { status: 0 }
+        },
+      })
+    }
+    expect(spawned).toEqual([
+      ['exec', 'vitest', 'run', '--project=alpha-node', '--shard=1/2'],
+      ['exec', 'vitest', 'run', '--project=alpha-node', '--shard=2/2'],
+    ])
   })
 
   it('exits zero and writes an OK summary to stdout when the spawned vitest run passes', async () => {

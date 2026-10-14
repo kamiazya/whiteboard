@@ -19,7 +19,7 @@ function pageHolding(streamId: string, docs: Record<string, { ready: boolean }>)
   const frames: string[] = []
   const stream: SyncStream = {
     docs: new Map(Object.entries(docs).map(([as, { ready }]) => [as, { ready, key: as }] as const)),
-    send: (_event, data) => frames.push(data),
+    send: ({ data }) => frames.push(JSON.stringify(data)),
     userId: null,
     end: () => {},
   }

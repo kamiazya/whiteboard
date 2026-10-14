@@ -18,7 +18,6 @@
  * under another id fails to open; the index is sealed too, so not even which
  * ids are cached is readable without the key.
  */
-import { documentFileApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { openBytes, sealBytes } from '@kamiazya/whiteboard-daemon-client/read-plane'
 import {
   collectImageRefIds,
@@ -30,6 +29,8 @@ import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { blobRefSchema, docRefKey } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { getAppLogger } from './app-logger.js'
+import { readDaemonImage } from './daemon-image-read.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import {
   deleteReplicaImageBlobs,
@@ -39,6 +40,8 @@ import {
 } from './replica-image-store.js'
 import { replicaRecordKey } from './replica-store.js'
 import { decodeEnvelope, encodeEnvelope } from './sealed-document-store.js'
+
+const log = getAppLogger('replica-images')
 
 /** Four images at the daemon's per-file ceiling (`MAX_FILE_UPLOAD_BYTES`). */
 const REPLICA_IMAGE_BUDGET_BYTES = 64 * 1024 * 1024
@@ -111,17 +114,25 @@ export interface CacheReplicaImagesOptions {
   blobs?: BlobStore
 }
 
-/** One image off the daemon's file route, or null for anything but a served file. */
+/**
+ * One image off the daemon's file route, or null for anything but a served
+ * file. Best-effort by design: a picture this pass could not fetch is simply
+ * not cached yet, and the next pull's pass asks again.
+ */
 async function fetchImage(
   options: CacheReplicaImagesOptions,
   fileId: string,
   path: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
-  const url = `${options.daemonBaseUrl}${documentFileApiUrl(options.workspaceId, path, fileId)}`
   try {
-    const res = await options.fetch(url)
-    if (!res.ok) return null
-    const blob = await res.blob()
+    const blob = await readDaemonImage(
+      options.fetch,
+      options.daemonBaseUrl,
+      options.workspaceId,
+      path,
+      fileId,
+    )
+    if (blob === undefined) return null
     return { bytes: new Uint8Array(await blob.arrayBuffer()), mimeType: blob.type }
   } catch {
     return null
@@ -193,31 +204,85 @@ export function cacheReplicaImages(options: CacheReplicaImagesOptions): Promise<
   })
 }
 
+/** What a lookup found among the ids it was asked for. */
+export interface ReplicaImageLoad {
+  /** The pictures that opened. */
+  readonly images: ReadonlyMap<string, Blob>
+  /**
+   * Ids whose stored bytes could not be READ — the store threw, which a
+   * busy or briefly refused IndexedDB does and may not do the next time.
+   * Every other non-answer is permanent and in neither set: an id the cache
+   * does not hold, a blob that is gone, or an envelope that will not open
+   * under this id, which no number of asks will change.
+   */
+  readonly failed: ReadonlySet<string>
+}
+
 /**
- * The cached images among `fileIds`, opened. An id the cache does not hold,
- * or whose bytes will not open, is absent from the answer; so is everything
- * while the record's key is not held.
+ * The cached images among `fileIds`, opened, and the ids whose read failed.
+ * Everything is absent while the record's key is not held. Rejects only when
+ * the lookup itself fails (the key cannot be derived), never for one picture.
  */
 export async function loadReplicaImages(
   workspaceId: string,
   fileIds: readonly string[],
   blobs: BlobStore = new IdbBlobStore(),
-): Promise<Map<string, Blob>> {
-  const out = new Map<string, Blob>()
+): Promise<ReplicaImageLoad> {
+  const images = new Map<string, Blob>()
+  const failed = new Set<string>()
   const key = await replicaRecordKey(workspaceId)
-  if (key === null) return out
+  if (key === null) return { images, failed }
   const index = await readIndex(workspaceId, key)
   for (const fileId of fileIds) {
     const entry = index[fileId]
     if (entry === undefined) continue
+    let stored: Awaited<ReturnType<BlobStore['get']>>
     try {
-      const stored = await blobs.get({ ref: entry.ref })
-      if (stored === null) continue
+      stored = await blobs.get({ ref: entry.ref })
+    } catch {
+      failed.add(fileId)
+      continue
+    }
+    if (stored === null) continue
+    try {
       const bytes = await open(key, stored.bytes, imageContext(workspaceId, fileId))
-      out.set(fileId, new Blob([bytes as BlobPart], { type: entry.mimeType }))
+      images.set(fileId, new Blob([bytes as BlobPart], { type: entry.mimeType }))
     } catch {
       // A damaged envelope costs that one picture, never the page.
     }
   }
-  return out
+  return { images, failed }
+}
+
+/**
+ * `loadReplicaImages`, asking again for what failed up to `attempts` times in
+ * all, and never rejecting: a lookup that still fails after its last attempt
+ * is reported and answers what it found, so the page labels the rest
+ * unavailable instead of waiting on an answer that never comes. A permanent
+ * non-answer is never asked again.
+ */
+export async function loadReplicaImagesRetrying(
+  workspaceId: string,
+  fileIds: readonly string[],
+  options: { attempts: number; blobs?: BlobStore },
+): Promise<ReadonlyMap<string, Blob>> {
+  const found = new Map<string, Blob>()
+  let wanted = fileIds
+  let lookupError: { error: unknown } | undefined
+  for (let attempt = 0; attempt < options.attempts && wanted.length > 0; attempt++) {
+    try {
+      const load = await loadReplicaImages(workspaceId, wanted, options.blobs)
+      for (const [fileId, blob] of load.images) found.set(fileId, blob)
+      wanted = wanted.filter((fileId) => load.failed.has(fileId))
+      lookupError = undefined
+    } catch (error) {
+      lookupError = { error }
+    }
+  }
+  if (lookupError !== undefined) {
+    log.error('replica pictures could not be looked up', { workspaceId, ...lookupError })
+  } else if (wanted.length > 0) {
+    log.warn('replica pictures could not be read', { workspaceId, fileIds: wanted })
+  }
+  return found
 }

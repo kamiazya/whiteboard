@@ -249,11 +249,12 @@ describe('the backup-in-progress marker', () => {
         }
         const before = await deadlineOf()
         // At least READS reads, and past them until a rewrite has landed
-        // among them, up to twice as many: a runner can finish the first 300
-        // before a 1ms timer gets a turn, which reads as "no rewrite
+        // among them, up to twenty times as many: a runner can finish the first
+        // 300 before a 1ms timer gets a turn — and a refresh that fsyncs its
+        // staged write lands later still — which reads as "no rewrite
         // overlapped" when it only says the reader was quicker.
         let rewritten = false
-        for (let i = 0; i < READS || (!rewritten && i < 2 * READS); i += 1) {
+        for (let i = 0; i < READS || (!rewritten && i < 20 * READS); i += 1) {
           if (!(await backupIsInProgress(dir, Date.now()))) absent += 1
           if (i >= READS - 1 && i % 10 === 9) rewritten = (await deadlineOf()) > before
         }

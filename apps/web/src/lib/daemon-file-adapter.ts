@@ -4,10 +4,11 @@
  *
  * A missing file resolves to `undefined` so the editor keeps the card, and a
  * rejected upload or an unreachable daemon answers a refusal with its reason.
- * `loadDocument` alone REJECTS a failed read, per its contract, so the seam
- * that caches it can tell a transient failure from an absence. A broken reference must never take the page down,
- * and it must never be reported as success either — an upload that failed
- * carries no reference to bytes the daemon never stored.
+ * A failed READ — of a document or a picture — rejects, per the contract, so
+ * the seam that caches it can tell a transient failure from an absence. A
+ * broken reference must never take the page down, and it must never be
+ * reported as success either — an upload that failed carries no reference to
+ * bytes the daemon never stored.
  */
 
 import {
@@ -17,6 +18,7 @@ import {
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
+import { readDaemonImage } from './daemon-image-read.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from './document-file-contract.js'
 import { uploadRefusalReason } from './image-upload-policy.js'
 import { readLoadedFileDocument } from './read-loaded-file-document.js'
@@ -77,14 +79,10 @@ export function createDaemonFileAdapter({
 
   async function loadImageBlob(ref: string): Promise<Blob | undefined> {
     try {
-      // This canvas's own path, not the reference: the file route scopes
-      // reads by the canvas that owns the workspace's file directory.
-      const res = await daemonFetch(fileUrl(imageRefId(ref)))
-      if (!res.ok) return undefined
-      return await res.blob()
+      return await readDaemonImage(daemonFetch, daemonBaseUrl, workspaceId, path, imageRefId(ref))
     } catch (err) {
       log.warn('image load failed', { ref, err })
-      return undefined
+      throw err
     }
   }
 

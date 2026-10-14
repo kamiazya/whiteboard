@@ -41,10 +41,19 @@ export interface SyncStreamDoc {
   key: string
 }
 
+/**
+ * One frame down a stream, as the contract the page parses it with names it.
+ * The payload stays an object until the transport serialises it, so a writer
+ * cannot hand the page an envelope the schema would drop.
+ */
+type SyncFrame =
+  | { event: 'update'; data: SyncUpdateEvent }
+  | { event: 'message'; data: SyncMessageEvent }
+
 export interface SyncStream {
   /** Keyed by the doc key exactly as the client subscribed with it. */
   docs: Map<string, SyncStreamDoc>
-  send: (event: string, data: string) => void
+  send: (frame: SyncFrame) => void
   /** The user who opened it, where the keeper knows people; null otherwise. */
   userId: string | null
   end: () => void
@@ -119,8 +128,7 @@ export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Ar
   for (const stream of streams.values()) {
     for (const [as, entry] of stream.docs) {
       if (entry.key !== key) continue
-      const payload: SyncUpdateEvent = { doc: as, update: encoded }
-      stream.send('update', JSON.stringify(payload))
+      stream.send({ event: 'update', data: { doc: as, update: encoded } })
     }
   }
 }
@@ -140,8 +148,7 @@ function sendText(key: string, raw: string, admits: (entry: SyncStreamDoc) => bo
   for (const stream of streams.values()) {
     for (const [as, entry] of stream.docs) {
       if (entry.key !== key || !admits(entry)) continue
-      const payload: SyncMessageEvent = { doc: as, raw }
-      stream.send('message', JSON.stringify(payload))
+      stream.send({ event: 'message', data: { doc: as, raw } })
     }
   }
 }

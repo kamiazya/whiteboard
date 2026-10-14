@@ -145,11 +145,22 @@ async function storeImageAsset(file: File): Promise<ImageStoreResult> {
   }
 }
 
-/** Loads a stored image asset as an object URL, or undefined when missing. */
+/**
+ * A stored image asset's bytes, or undefined when the store holds none. A
+ * store that could not be READ rejects instead — reported here, where the
+ * reference is known — because the seam caching this keeps `undefined` as
+ * terminal and asks again only on a rejection.
+ */
 async function loadImageAssetBlob(ref: string): Promise<Blob | undefined> {
-  return (await new DocumentFileStore().get(ref)) ?? undefined
+  const read = await new DocumentFileStore().read(ref)
+  if (read.kind === 'unreadable') {
+    log.warn('image asset load failed', { ref, err: read.error })
+    throw read.error
+  }
+  return read.kind === 'blob' ? read.blob : undefined
 }
 
+/** Loads a stored image asset as an object URL the caller revokes, on `loadImageAssetBlob`'s terms. */
 async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
   const blob = await loadImageAssetBlob(ref)
   return blob === undefined ? undefined : URL.createObjectURL(blob)

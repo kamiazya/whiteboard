@@ -86,19 +86,23 @@ export interface FilesRouterOptions {
 async function storedFileFor(
   dir: string,
   fileId: string,
-): Promise<{ data: Uint8Array; contentType: string } | null> {
+): Promise<{ data: Uint8Array<ArrayBuffer>; contentType: string } | null> {
   const files = await readStoredFileNames(dir)
   if (!files) return null
   const match = files.find((f) => basename(f, extname(f)) === fileId)
   if (!match) return null
 
   const filePath = join(dir, match)
-  let data: Uint8Array
+  let data: Uint8Array<ArrayBuffer>
   try {
     data = await readFile(filePath)
   } catch (error) {
     throw corruptStoredData(filePath, `failed to read stored file (${messageOf(error)})`)
   }
+  // The upload refuses an empty body, so an empty stored file is one this
+  // route never wrote whole: a torn write or a damaged restore. Served as a
+  // 200 it would be an image that draws nothing, and pages cache it as one.
+  if (data.length === 0) throw corruptStoredData(filePath, 'stored file is empty')
   return { data, contentType: EXT_TO_MIME[extname(match)] ?? 'application/octet-stream' }
 }
 
@@ -173,7 +177,9 @@ export function createFilesRouter(options: FilesRouterOptions) {
       if (found === null) {
         return c.json({ error: 'not_found', message: `No file ${fileId} on this document.` }, 404)
       }
-      return c.body(found.data.buffer as ArrayBuffer, 200, fileHeaders(found.contentType, fileId))
+      // The view, never its `.buffer`: a Buffer's backing store can outrun
+      // the file (a pooled allocation), and the rest is process memory.
+      return c.body(found.data, 200, fileHeaders(found.contentType, fileId))
     } catch (error) {
       const body = corruptStoredDataBody(error)
       if (body) return c.json(body, 500)

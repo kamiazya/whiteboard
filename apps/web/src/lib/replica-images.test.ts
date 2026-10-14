@@ -28,6 +28,7 @@ import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
+import { replicaClipboardImages } from './replica-clipboard-images.js'
 import {
   deleteReplicaImageBlobs,
   dropReplicaImages,
@@ -35,7 +36,11 @@ import {
   withReplicaImagesLock,
   writeReplicaImagePointer,
 } from './replica-image-store.js'
-import { cacheReplicaImages, loadReplicaImages } from './replica-images.js'
+import {
+  cacheReplicaImages,
+  loadReplicaImages,
+  loadReplicaImagesRetrying,
+} from './replica-images.js'
 import { connectReplicaKeeper, markReplica } from './replica-store.js'
 
 claimIsolatedWhiteboardDb('replica-images-jsdom')
@@ -190,7 +195,7 @@ describe('replica images over fake-indexeddb', () => {
     const stored = await new IdbBlobStore().get({ ref: pointer!.blobs[0]! })
     expect(new TextDecoder().decode(stored!.bytes)).not.toContain('picture-plaintext')
 
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-unknown'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-unknown'])).images
     expect([...loaded.keys()]).toEqual(['img-cat'])
     expect(loaded.get('img-cat')?.type).toBe('image/png')
     expect(await textOf(loaded.get('img-cat'))).toBe('picture-plaintext:img-cat')
@@ -209,7 +214,7 @@ describe('replica images over fake-indexeddb', () => {
     })
 
     expect(result.kind).toBe('ok')
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat'])).images
     expect(await textOf(loaded.get('img-cat'))).toBe('picture-plaintext:img-cat')
   })
 
@@ -231,7 +236,7 @@ describe('replica images over fake-indexeddb', () => {
     expect(after).toHaveLength(1)
     expect(before.map((ref) => ref.digestHex)).toContain(after[0]!.digestHex)
     expect(blobs.deleted[0]!.digestHex).not.toBe(after[0]!.digestHex)
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])).images
     expect([...loaded.keys()]).toEqual(['img-cat'])
   })
 
@@ -246,7 +251,7 @@ describe('replica images over fake-indexeddb', () => {
 
     expect(cached).toBe(1)
     expect(served).toEqual(['img-cat'])
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat'])).images
     expect(await textOf(loaded.get('img-cat'))).toBe('picture-plaintext:img-cat')
   })
 
@@ -256,7 +261,7 @@ describe('replica images over fake-indexeddb', () => {
     })
 
     expect(cached).toBe(1)
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])).images
     expect([...loaded.keys()]).toEqual(['img-cat'])
   })
 
@@ -278,7 +283,7 @@ describe('replica images over fake-indexeddb', () => {
 
     expect(cached).toBe(0)
     expect(readReplicaImagePointer(DAEMON_WS)?.blobs).toEqual([])
-    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).size).toBe(0)
+    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).images.size).toBe(0)
   })
 
   it('skips a picture the daemon did not serve or could not be reached for', async () => {
@@ -287,7 +292,7 @@ describe('replica images over fake-indexeddb', () => {
     })
 
     expect(cached).toBe(1)
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog', 'img-owl'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog', 'img-owl'])).images
     expect([...loaded.keys()]).toEqual(['img-cat'])
   })
 
@@ -314,7 +319,7 @@ describe('replica images over fake-indexeddb', () => {
 
     expect(cached).toBe(0)
     expect(served).toEqual([])
-    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).size).toBe(0)
+    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).images.size).toBe(0)
   })
 
   it('an index that will not open reads as empty, so the next pull fetches afresh', async () => {
@@ -322,7 +327,7 @@ describe('replica images over fake-indexeddb', () => {
     await cacheFor(record)
     const pointer = readReplicaImagePointer(DAEMON_WS)!
     writeReplicaImagePointer(DAEMON_WS, { ...pointer, index: 'AAAAAAAAAAAA' })
-    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).size).toBe(0)
+    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).images.size).toBe(0)
 
     const served: string[] = []
     const cached = await cacheFor(record, { daemon: { served } })
@@ -337,7 +342,7 @@ describe('replica images over fake-indexeddb', () => {
     const pointer = readReplicaImagePointer(DAEMON_WS)!
     writeReplicaImagePointer(DAEMON_WS, { ...pointer, index: '%%% not base64 %%%' })
 
-    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).size).toBe(0)
+    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'])).images.size).toBe(0)
   })
 
   it('a picture whose envelope will not open is absent while the others still load', async () => {
@@ -354,7 +359,7 @@ describe('replica images over fake-indexeddb', () => {
       },
     })
 
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], blobs)
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], blobs)).images
 
     expect(loaded.size).toBe(1)
   })
@@ -370,7 +375,7 @@ describe('replica images over fake-indexeddb', () => {
       get: (input) => real.get({ ref: input.ref.digestHex === catRef.digestHex ? dogRef : catRef }),
     })
 
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], blobs)
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], blobs)).images
 
     expect(loaded.size).toBe(0)
   })
@@ -379,7 +384,7 @@ describe('replica images over fake-indexeddb', () => {
     await cacheFor(boardNaming('img-cat'))
     const blobs = blobStoreWith({ get: async () => null })
 
-    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'], blobs)).size).toBe(0)
+    expect((await loadReplicaImages(DAEMON_WS, ['img-cat'], blobs)).images.size).toBe(0)
   })
 
   it('a refused pointer write deletes the blobs it just stored and keeps the standing ones', async () => {
@@ -404,6 +409,154 @@ describe('replica images over fake-indexeddb', () => {
     expect(blobs.deleted).toHaveLength(1)
     expect(blobs.deleted[0]!.digestHex).not.toBe(standing[0]!.digestHex)
     expect((await new IdbBlobStore().has({ ref: standing[0]! })).exists).toBe(true)
+  })
+})
+
+/** Answers the real store, but rejects each `ref` read the first `failures` times. */
+function blobsFailingFirst(
+  failures: number,
+  match: (ref: BlobRef) => boolean,
+): BlobStore & { reads: () => number } {
+  const real = new IdbBlobStore()
+  let reads = 0
+  return {
+    ...blobStoreWith({
+      get: async (input) => {
+        if (!match(input.ref)) return real.get(input)
+        reads += 1
+        if (reads <= failures) throw new DOMException('busy', 'UnknownError')
+        return real.get(input)
+      },
+    }),
+    reads: () => reads,
+  }
+}
+
+/** Every call `crypto.subtle` makes to derive the record key rejects, so the lookup itself does. */
+function failKeyDerivation(): void {
+  forgetAllForTests()
+  const refused = new Error('key derivation refused')
+  vi.spyOn(crypto.subtle, 'importKey').mockRejectedValue(refused)
+  vi.spyOn(crypto.subtle, 'deriveKey').mockRejectedValue(refused)
+  vi.spyOn(crypto.subtle, 'deriveBits').mockRejectedValue(refused)
+}
+
+describe('a replica picture read that fails, told apart from one that is absent', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    localStorage.removeItem(IMAGES_KEY)
+    markReplica(DAEMON_WS, BASE)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    connectReplicaKeeper(null)
+    forgetAllForTests()
+    localStorage.removeItem(IMAGES_KEY)
+  })
+
+  it('a throwing blob read is failed, while a gone blob and a damaged envelope are absent', async () => {
+    await cacheFor(boardNaming('img-cat', 'img-dog'))
+    const [catRef] = readReplicaImagePointer(DAEMON_WS)!.blobs
+    const throwing = blobStoreWith({
+      get: async () => {
+        throw new DOMException('busy', 'UnknownError')
+      },
+    })
+
+    const failed = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], throwing)
+    expect([...failed.failed].sort()).toEqual(['img-cat', 'img-dog'])
+    expect(failed.images.size).toBe(0)
+
+    const real = new IdbBlobStore()
+    const damaged = blobStoreWith({
+      get: async (input) => {
+        if (input.ref.digestHex !== catRef!.digestHex) return null
+        const stored = await real.get(input)
+        const bytes = new Uint8Array(stored!.bytes)
+        bytes[bytes.length - 1] = (bytes[bytes.length - 1] ?? 0) ^ 0xff
+        return { ...stored!, bytes }
+      },
+    })
+    const absent = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'], damaged)
+    expect(absent.failed.size).toBe(0)
+    expect(absent.images.size).toBe(0)
+  })
+
+  it('installs a picture whose read throws once and then answers', async () => {
+    await cacheFor(boardNaming('img-cat', 'img-dog'))
+    const [catRef] = readReplicaImagePointer(DAEMON_WS)!.blobs
+    const blobs = blobsFailingFirst(1, (ref) => ref.digestHex === catRef!.digestHex)
+
+    const loaded = await loadReplicaImagesRetrying(DAEMON_WS, ['img-cat', 'img-dog'], {
+      attempts: 3,
+      blobs,
+    })
+
+    expect([...loaded.keys()].sort()).toEqual(['img-cat', 'img-dog'])
+    expect(blobs.reads()).toBe(2)
+  })
+
+  it('stops asking for a read that always throws after its last attempt', async () => {
+    await cacheFor(boardNaming('img-cat'))
+    const blobs = blobsFailingFirst(Number.POSITIVE_INFINITY, () => true)
+
+    const loaded = await loadReplicaImagesRetrying(DAEMON_WS, ['img-cat'], { attempts: 3, blobs })
+
+    expect(loaded.size).toBe(0)
+    expect(blobs.reads()).toBe(3)
+    await expectLoggedFailure('replica pictures could not be read')
+  })
+
+  it('does not ask again for a picture whose envelope will not open', async () => {
+    await cacheFor(boardNaming('img-cat'))
+    const real = new IdbBlobStore()
+    let reads = 0
+    const blobs = blobStoreWith({
+      get: async (input) => {
+        reads += 1
+        const stored = await real.get(input)
+        const bytes = new Uint8Array(stored!.bytes)
+        bytes[bytes.length - 1] = (bytes[bytes.length - 1] ?? 0) ^ 0xff
+        return { ...stored!, bytes }
+      },
+    })
+
+    const loaded = await loadReplicaImagesRetrying(DAEMON_WS, ['img-cat'], { attempts: 3, blobs })
+
+    expect(loaded.size).toBe(0)
+    expect(reads).toBe(1)
+  })
+
+  it('a lookup that rejects answers nothing found and reports it, rather than rejecting', async () => {
+    await cacheFor(boardNaming('img-cat'))
+    failKeyDerivation()
+
+    const loaded = await loadReplicaImagesRetrying(DAEMON_WS, ['img-cat'], { attempts: 3 })
+
+    expect(loaded.size).toBe(0)
+    await expectLoggedFailure('replica pictures could not be looked up')
+  })
+
+  it('a lookup that rejects once and then answers still installs', async () => {
+    await cacheFor(boardNaming('img-cat'))
+    forgetAllForTests()
+    vi.spyOn(crypto.subtle, 'importKey').mockRejectedValueOnce(new Error('key derivation refused'))
+
+    const loaded = await loadReplicaImagesRetrying(DAEMON_WS, ['img-cat'], { attempts: 3 })
+
+    expect([...loaded.keys()]).toEqual(['img-cat'])
+  })
+
+  it('the clipboard seam rejects a failed read and answers undefined for an absent one', async () => {
+    await cacheFor(boardNaming('img-cat'))
+    const seams = replicaClipboardImages(BASE, DAEMON_WS)
+    vi.spyOn(IdbBlobStore.prototype, 'get').mockRejectedValueOnce(new Error('busy'))
+
+    await expect(seams.readImage(newImageRef('img-cat'))).rejects.toThrow()
+    expect(await seams.readImage(newImageRef('img-unknown'))).toBeUndefined()
+    expect(await textOf(await seams.readImage(newImageRef('img-cat')))).toBe(
+      'picture-plaintext:img-cat',
+    )
   })
 })
 

@@ -341,7 +341,29 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     const dir = pkg?.dir ?? cwd
     if (namesBrowserConfig(line, dir, browser)) return true
     const script = pkg?.script ?? ''
-    return /\btest:browser\b/.test(script) || namesBrowserConfig(script, dir, browser)
+    return (
+      /\btest:browser\b/.test(script) ||
+      namesBrowserConfig(script, dir, browser) ||
+      aggregateRunsBrowser(script, dir, browser)
+    )
+  }
+
+  /** A bare `vitest run` loads `<dir>/vitest.config.ts`; an aggregate runs each config it lists. */
+  function aggregateRunsBrowser(script: string, dir: string, browser: Browser): boolean {
+    const bare = script
+      .split(/&&|;|\|\|/)
+      .some((command) => /\bvitest\s+run\b/.test(command) && !/(?:--config|-c)[= ]/.test(command))
+    if (!bare) return false
+    let text: string
+    try {
+      text = readFileSync(join(REPO_ROOT, dir, 'vitest.config.ts'), 'utf-8')
+    } catch {
+      return false
+    }
+    const body = text.match(/projects:\s*\[([^\]]*)\]/)?.[1] ?? ''
+    return [...body.matchAll(/'([^']+)'/g)].some((m) =>
+      browser.configs.includes(relative(REPO_ROOT, join(REPO_ROOT, dir, m[1] ?? ''))),
+    )
   }
 
   function runsBrowserProject(job: Job, browser: Browser): boolean {
@@ -393,7 +415,7 @@ describe('workflows — a job that runs a browser project uploads its traces whe
   it('reads a browser run through a --config and through a package script', async () => {
     const browser = { names: await browserProjectNames(), configs: await browserConfigPaths() }
     const runs = (run: string): boolean => runsBrowserProject({ steps: [{ run }] }, browser)
-    // The canvas-viewer `test` script ends in its browser config.
+    // The canvas-viewer `test` script is a bare run over an aggregate listing its browser config.
     expect(runs('pnpm --filter @kamiazya/whiteboard-canvas-viewer test')).toBe(true)
     expect(runs('pnpm exec vitest run --config apps/web/vitest.browser.config.ts')).toBe(true)
     expect(runs('pnpm --filter @kamiazya/whiteboard-web run test:browser')).toBe(true)

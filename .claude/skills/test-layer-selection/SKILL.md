@@ -22,7 +22,7 @@ skill (`resources/*.md`, one per situation).
 | E2E | real routes, server composition, websocket timing, persistence order, multi-step page flows | promote only when needed |
 
 Notes:
-- Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser` + `canvas-render-browser` + `web-browser-window-state`); traces land under `<package>/tmp/vitest-traces` and are kept for FAILING tests only. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 23GB over a whole run). `pnpm run test:browser:trace <one failing file>` turns it on, and traces every test including passing ones, so it asks `vitest list --filesOnly` what the arguments select and refuses more than ten files.
+- Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser` + `canvas-render-browser` + `web-browser-window-state`); traces land under `<package>/tmp/vitest-traces`, cleared when the next run of that project starts. Only a FAILING test gets a `<project>--chromium--<title>.trace.zip` — open that one, and it is all CI uploads; Playwright leaves raw `.trace`/`.network` chunks and `screencast/` frames for passing tests beside it. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 23GB over a whole run). `pnpm run test:browser:trace <one failing file>` turns it on, and traces every test including passing ones, so it asks `vitest list --filesOnly` what the arguments select and refuses more than ten files.
 - **A PACKAGE is not one project, and nothing warns you.** `plugin-visual` and `canvas-viewer`
   split `*.test.ts` (node) from `*.test.tsx` (jsdom) into two projects, so
   `--project plugin-visual-node` runs, reports a plausible count, and never loads a `.tsx` file.
@@ -31,9 +31,12 @@ Notes:
   <pkg> test` is the command that means "this package"** — the same lesson `dev-flow.md` records
   for `--project web-jsdom` against `pnpm --filter @kamiazya/whiteboard-web test`, one level down.
   `tools/arch-lint`'s `package-test-script.test.ts` holds every package's `test` script to every
-  config the root `vitest.config.ts` registers for it, browser halves included. Its ledger names
+  config the root `vitest.config.ts` registers for it, browser halves included, and to ONE
+  `vitest run` over an aggregate `vitest.config.ts` — pnpm appends `pnpm test <file>` to the last
+  command of an `a && b` chain only, so every earlier config ran in full and the last exited 1 on
+  "No test files found" (2m42s and red for one passing canvas-render file). Its ledger names
   the exception: `apps/web`, whose script is CI's `test-jsdom` job and leaves its browser
-  projects to `pnpm test:browser`.
+  projects to `pnpm test:browser`; its wrapper forwards a file filter to both runs itself.
 - **A budget or size guard is a property of the MERGE, not of your branch.** `dev-rules-budget`
   reads the always-on rule files, and CI reads them from the PR's merge ref: an edit that fits
   locally fails there when `main` grew the same file meanwhile. Measured at 119 chars of someone

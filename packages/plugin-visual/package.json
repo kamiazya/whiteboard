@@ -48,7 +48,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.node.config.ts && vitest run --config vitest.jsdom.config.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@kamiazya/whiteboard-facet-engine": "workspace:*",

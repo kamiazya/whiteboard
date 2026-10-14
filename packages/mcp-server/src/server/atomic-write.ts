@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, open, rename, rm } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 /**
  * Where bytes sit between being written and being renamed into place.
@@ -30,6 +30,13 @@ export const PENDING_WRITES_DIRNAME = '.pending-writes'
  * previous complete file or the new one. The staging directory is under the
  * same data dir as every target, which is what makes that hold.
  *
+ * The staged bytes are fsynced before the rename: a filesystem need not order
+ * a new file's data before a rename of it, so without the sync a crash can
+ * leave the final name on a zero-length file — a complete-looking upload that
+ * holds nothing. The target directory is then synced so the rename itself
+ * survives; that half is best-effort, since not every platform can open a
+ * directory to sync it.
+ *
  * Distinct from `shared/write-file-atomic.ts`'s `writeFileAtomic`, which
  * stages beside the target (so the target need not live under a data dir) and
  * can set a file mode. Use this one for content inside the data dir that a
@@ -44,7 +51,13 @@ export async function writeFileAtomicStaged(
   await mkdir(stagingDir, { recursive: true })
   const tempPath = join(stagingDir, randomUUID())
   try {
-    await writeFile(tempPath, bytes)
+    const staged = await open(tempPath, 'w')
+    try {
+      await staged.writeFile(bytes)
+      await staged.sync()
+    } finally {
+      await staged.close()
+    }
     await rename(tempPath, targetPath)
   } catch (err) {
     // Never leave a staged file behind: the directory is excluded from
@@ -52,4 +65,42 @@ export async function writeFileAtomicStaged(
     await rm(tempPath, { force: true }).catch(() => {})
     throw err
   }
+  await syncDirectory(dirname(targetPath))
+}
+
+/**
+ * Errors that say a directory cannot be synced here at all — Windows cannot
+ * open one, and some filesystems refuse fsync on it — rather than that the
+ * sync failed. Anything else (EIO, ENOSPC) means the rename may not be
+ * durable, and the write must not report success.
+ */
+const DIRECTORY_SYNC_UNSUPPORTED = new Set([
+  'EISDIR',
+  'EPERM',
+  'EACCES',
+  'EINVAL',
+  'ENOTSUP',
+  'EBADF',
+])
+
+async function syncDirectory(path: string): Promise<void> {
+  let dir: Awaited<ReturnType<typeof open>>
+  try {
+    dir = await open(path, 'r')
+  } catch (err) {
+    if (isUnsupported(err)) return
+    throw err
+  }
+  try {
+    await dir.sync()
+  } catch (err) {
+    if (!isUnsupported(err)) throw err
+  } finally {
+    await dir.close()
+  }
+}
+
+function isUnsupported(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code
+  return typeof code === 'string' && DIRECTORY_SYNC_UNSUPPORTED.has(code)
 }

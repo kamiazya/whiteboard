@@ -81,6 +81,19 @@ describe('imageTargets', () => {
     ).toEqual(['asset:deep'])
   })
 
+  it("follows what has loaded, so an embedded board's picture loads too", () => {
+    const pictured: SpatialCanvas = {
+      nodes: [fileNode({ id: 'p', x: 0, y: 0, width: 100, height: 100, file: 'asset:on-board' })],
+      edges: [],
+    }
+    expect(
+      imageTargets({
+        bodies: ['![[boards/b]]'],
+        loaded: graphOf({ 'boards/b': { documentId: BOARD_ID, canvas: pictured } }),
+      }),
+    ).toEqual(['asset:on-board'])
+  })
+
   it('reads an angle-bracket destination, which is what the parser sees', () => {
     // Measured against `parseMarkdownBody`: `![a](<asset:abc>)` yields the mdast
     // url `asset:abc`, so the layout asks for it — a scan that kept the

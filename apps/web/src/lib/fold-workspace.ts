@@ -113,6 +113,19 @@ function foldWorkspaceDocuments(dbName?: string): Promise<FoldReport> {
 }
 
 /**
+ * Settles every fold running in this tab. A fold outlives the page that
+ * asked for it — nothing cancels a migration halfway — so whatever deletes
+ * the database under it has to wait for this first, or the fold's next open
+ * meets an empty database and reports the workspace as removed. Loops for a
+ * run started while the previous one was settling.
+ */
+export async function startupFoldsSettled(): Promise<void> {
+  while (running.size > 0) {
+    await Promise.allSettled([...running.values()])
+  }
+}
+
+/**
  * The fold as every surface runs it. It is migration, so a failure is logged
  * under the caller's name and the caller goes on with what the tree holds — a
  * briefly incomplete or undercounted view, never a surface that refuses to

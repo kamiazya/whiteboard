@@ -21,6 +21,7 @@ import {
 } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { startupFoldsSettled } from '../lib/fold-workspace.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { inTransaction, request } from '../lib/idb-tx.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -74,6 +75,8 @@ export async function clearWhiteboardDb(): Promise<void> {
   // A page torn down a moment ago may still be taking its pending checkpoint,
   // or finishing a queued rename (its save loop outlives the unmount);
   // deleting the database under either makes that save warn in the NEXT test.
+  // Its startup fold likewise runs on past the unmount.
+  await startupFoldsSettled()
   await settleAutoCheckpoints()
   await indexWritesSettled()
   return deleteAndKeepDeleted(whiteboardDbName())

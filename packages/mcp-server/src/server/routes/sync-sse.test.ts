@@ -10,7 +10,11 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { syncSubscribeResponseSchema } from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
+import {
+  type SyncMessageEvent,
+  syncMessageEventSchema,
+  syncSubscribeResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
@@ -111,6 +115,25 @@ async function openStream(
     .find((l) => l.startsWith('data:'))
     ?.slice(5)
   return { res, streamId: JSON.parse(data ?? '{}').streamId }
+}
+
+/**
+ * Every `message` frame's data, parsed by the contract the page parses it
+ * with. A frame that schema rejects throws here, where the page would drop it.
+ */
+function messageEvents(frames: readonly string[]): SyncMessageEvent[] {
+  return frames
+    .filter((f) => f.split('\n').includes('event: message'))
+    .map((f) =>
+      syncMessageEventSchema.parse(
+        JSON.parse(
+          f
+            .split('\n')
+            .find((l) => l.startsWith('data:'))
+            ?.slice(5) ?? '',
+        ),
+      ),
+    )
 }
 
 describe('SSE sync transport', () => {
@@ -236,30 +259,42 @@ describe('SSE sync transport', () => {
     expect(frames.filter((f) => f.includes('viewport_request'))).toEqual([])
   })
 
-  it('replays the cached viewport request when the stream signals client_ready', async () => {
+  // The replay is read the way the page reads it — through the contract's
+  // schema, where a frame that does not parse is dropped — and under a segment
+  // subscription, where the key the page routes on is not the canonical one
+  // the cache is keyed by.
+  it('replays the cached viewport request under the key the stream subscribed with', async () => {
     const app = createApp(createRuntimeOptions())
+    const created = await app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: 'Viewport Replay' }),
+    })
+    const { workspaceId, segment } = (await created.json()) as {
+      workspaceId: string
+      segment: string
+    }
+    expect(segment).not.toBe(workspaceId)
+    const subscribed = `${segment}/vp-late`
     const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, subscribe: ['ws-1/vp-late'] }),
+      body: JSON.stringify({ streamId, subscribe: [subscribed] }),
     })
 
-    sendViewportRequest('ws-1', 'vp-late', 'req-2', { mode: 'fit' })
+    sendViewportRequest(workspaceId, 'vp-late', 'req-2', { mode: 'fit' })
 
     const ready = await app.request('/api/sync/message', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        streamId,
-        doc: 'ws-1/vp-late',
-        message: { type: 'client_ready' },
-      }),
+      body: JSON.stringify({ streamId, doc: subscribed, message: { type: 'client_ready' } }),
     })
     expect(ready.status).toBe(200)
 
-    const frames = await readEvents(res, 1)
-    expect(frames.some((f) => f.includes('viewport_request') && f.includes('req-2'))).toBe(true)
+    const replayed = messageEvents(await readEvents(res, 1)).filter((m) => m.raw.includes('req-2'))
+    expect(replayed.map((m) => m.doc)).toEqual([subscribed])
+    expect(JSON.parse(replayed[0]?.raw ?? '{}').type).toBe('viewport_request')
   })
 
   it('stops treating a stream as ready for a document it unsubscribed', async () => {

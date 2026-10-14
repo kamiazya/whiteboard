@@ -37,8 +37,12 @@ export function replicaClipboardImages(
   return {
     fileScope,
     readImage: async (ref) => {
+      // A failed read rejects, as every keeper's seam does; the copy leaves
+      // that picture out either way, but only an absent one is "none".
       const id = imageRefId(ref)
-      return (await loadReplicaImages(workspaceId, [id])).get(id)
+      const { images, failed } = await loadReplicaImages(workspaceId, [id])
+      if (failed.has(id)) throw new Error(`picture ${id} could not be read from the replica cache`)
+      return images.get(id)
     },
     storeImage: async () => ({ ok: false, reason: REPLICA_STORE_REFUSAL }),
   }

@@ -4,12 +4,12 @@
  * the worker's internals: the production construction path is what is worth
  * covering, and a test-only export would be a seam the app does not need.
  *
- * What this cannot cover: sharing BETWEEN tabs. The polyfill builds a fresh
- * worker context per `new SharedWorker`, so two ports here are two workers, not
- * two tabs of one — asserting cross-port refcounting would pass or fail for
- * reasons that say nothing about a browser. That stays a real-browser concern.
- * What it does cover is everything decided inside one worker: how many streams
- * it opens and how it routes frames per document.
+ * The polyfill builds a fresh worker context per `new SharedWorker`, so two
+ * constructions here are two workers, not two tabs of one. A second TAB is
+ * modelled the one way that means the same thing as in a browser: a second
+ * `connect` delivered to the same worker context (`attachTab`), so the module
+ * state both ports reach is one. Everything else is decided inside one worker:
+ * how many streams it opens and how it routes frames per document.
  *
  * Deliberately NOT covered: that a subscribe arriving before init is dropped.
  * That is an absence, and a SharedWorker cannot be terminated, so earlier
@@ -145,12 +145,32 @@ const reconstruct = (frames: unknown[], key: string): unknown => {
   return doc.getMap('m').get(key)
 }
 
-function connect(): MessagePort {
+function construct(): SharedWorker {
   const worker = new SharedWorker(new URL('./sse-shared-worker.ts', import.meta.url), {
     type: 'module',
   })
   worker.port.start()
-  return worker.port
+  return worker
+}
+
+const connect = (): MessagePort => construct().port
+
+/**
+ * Another tab connecting to an EXISTING worker: a `connect` event carrying a
+ * fresh port, delivered to the worker context `@vitest/web-worker` built for
+ * `worker` — the event a browser fires on a shared worker's scope for each
+ * new `SharedWorker` naming it. Reaches the polyfill's own event target
+ * because it exposes no public way to connect twice; a rename there fails
+ * here with a TypeError rather than passing quietly.
+ */
+function attachTab(worker: SharedWorker): MessagePort {
+  const target = (worker as unknown as { _vw_workerTarget: EventTarget })._vw_workerTarget
+  const channel = new MessageChannel()
+  const connectEvent = new Event('connect')
+  Object.defineProperty(connectEvent, 'ports', { value: [channel.port2] })
+  target.dispatchEvent(connectEvent)
+  channel.port1.start()
+  return channel.port1
 }
 
 /**
@@ -169,9 +189,11 @@ function connect(): MessagePort {
  * Listeners on this shared port must scope to the doc keys their own test
  * minted — another case's authority traffic is not a mis-forwarded frame.
  */
+let replicaWorker: SharedWorker
 let replicaPort: MessagePort
 beforeAll(async () => {
-  replicaPort = connect()
+  replicaWorker = construct()
+  replicaPort = replicaWorker.port
   replicaPort.postMessage({ type: 'init', baseUrl: BASE })
   // Awaited until the replica ANSWERS, not merely created: what poisons a
   // worker's loro is another worker's loro-crdt evaluation racing this one's
@@ -235,6 +257,24 @@ const pushTo = (doc: string, frame: string) => {
   if (push === undefined) throw new Error(`stream ${id} is not open`)
   push(frame)
 }
+/**
+ * Resolves once everything `port` sent before it has been handled: a
+ * snapshot-request is answered on the replica queue, after all of that port's
+ * earlier messages. Two ports' messages are not ordered against each other,
+ * so a case driving two tabs waits on this between them.
+ */
+const answered = (port: MessagePort, doc: string) =>
+  new Promise<void>((resolve) => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; doc?: string }
+      if (data.type !== 'snapshot' || data.doc !== doc) return
+      port.removeEventListener('message', onMessage)
+      resolve()
+    }
+    port.addEventListener('message', onMessage)
+    port.postMessage({ type: 'snapshot-request', doc })
+  })
+
 /**
  * A real window in which a wrongly-forwarded message could arrive, for
  * asserting that none does. `vi.waitFor` cannot express this: it passes on its
@@ -349,6 +389,21 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
 
     port.postMessage({ type: 'init', baseUrl: BASE })
     port.postMessage({ type: 'unsubscribe', doc })
+
+    await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
+  })
+
+  it('releases a port’s subscriptions when it is re-pointed at another origin', async () => {
+    // The handles live in the record a re-init replaces, so whatever it still
+    // holds must be released first — or the old daemon keeps routing the
+    // document, and the replica keeps being fed, for a port that has moved on.
+    const port = connect()
+    const doc = nextDoc()
+    port.postMessage({ type: 'init', baseUrl: BASE })
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => subscribeIndexFor(doc) !== -1)
+
+    port.postMessage({ type: 'init', baseUrl: REFUSING_BASE })
 
     await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
   })
@@ -510,14 +565,40 @@ describe('authority replica', () => {
     // it is a coin flip under a loaded suite.
   }, 25_000)
 
+  it('keeps feeding a document until the last of its tabs lets go', async () => {
+    // The replica's own hub subscription is shared by every tab watching the
+    // document and counted, not re-taken per tab: a second tab replacing the
+    // first one's entry would strand that subscription where no release can
+    // reach it, and the daemon would route the document for the worker's whole
+    // life after every tab had closed it.
+    const first = replicaPort
+    const second = attachTab(replicaWorker)
+    second.postMessage({ type: 'init', baseUrl: BASE })
+    const doc = nextDoc()
+    first.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+    second.postMessage({ type: 'subscribe', doc })
+    await answered(second, doc)
+
+    first.postMessage({ type: 'unsubscribe', doc })
+    await answered(first, doc)
+    const reached: unknown[] = []
+    second.addEventListener('message', (e: MessageEvent) => {
+      if ((e.data as { doc?: string }).doc === doc) reached.push(e.data)
+    })
+    pushTo(
+      doc,
+      `event: update\ndata: ${JSON.stringify({ doc, update: bytesToBase64(loroUpdate('still', 'fed')) })}\n\n`,
+    )
+    await until(() => reconstruct(reached, 'still') === 'fed')
+
+    second.postMessage({ type: 'unsubscribe', doc })
+    await until(() => subscribeBodies.some((x) => x.includes(`"unsubscribe":["${doc}"]`)))
+    second.close()
+  }, 25_000)
+
   // Still NOT covered, and worth saying so: that N tabs watching one document
   // cost ONE replica import per daemon frame rather than N. The replica takes
-  // its own hub subscription per document precisely so they do, but the count
-  // is internal, and the two ports needed to observe it are two tabs of one
-  // worker only in the browser file — which has no daemon to feed. That one
-  // meets in an E2E.
-  //
-  // What IS pinned above, in the sibling describe: that the feed is released.
-  // Dropping the release turns the `unsubscribe` cases red, because the hub
-  // keeps a document subscribed on the daemon while any listener remains.
+  // its own hub subscription per document precisely so they do, but the
+  // import count is internal and no port observes it. That one meets in an E2E.
 })

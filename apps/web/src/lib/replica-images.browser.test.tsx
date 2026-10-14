@@ -142,7 +142,7 @@ describe('replica images', () => {
     await pull(boardNaming('img-cat'), served)
 
     expect(served).toEqual(['img-cat'])
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat'])).images
     expect(await textOf(loaded.get('img-cat'))).toBe('picture-plaintext:img-cat')
     expect(loaded.get('img-cat')?.type).toBe('image/png')
 
@@ -167,7 +167,7 @@ describe('replica images', () => {
     await pull(record, served)
 
     expect(served).toEqual([])
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])).images
     expect([...loaded.keys()]).toEqual(['img-cat'])
     const after = readReplicaImagePointer(DAEMON_WS)?.blobs ?? []
     const blobs = new IdbBlobStore()
@@ -192,7 +192,7 @@ describe('replica images', () => {
     })
 
     expect(cached).toBe(1)
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])).images
     expect([...loaded.keys()]).toEqual(['img-cat'])
   })
 
@@ -226,7 +226,7 @@ describe('replica images', () => {
     const swept = await sweepUnreferencedFiles({ graceMs: 0 })
 
     expect(swept.kind).toBe('swept')
-    const loaded = await loadReplicaImages(DAEMON_WS, ['img-cat'])
+    const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat'])).images
     expect(await textOf(loaded.get('img-cat'))).toBe('picture-plaintext:img-cat')
   })
 })
