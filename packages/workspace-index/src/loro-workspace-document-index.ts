@@ -44,6 +44,7 @@ import {
   rebasePath,
 } from '@kamiazya/whiteboard-model'
 import type {
+  BlobRef,
   BlobStore,
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -103,6 +104,28 @@ export interface WorkspaceRegistry {
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 }
 
+/**
+ * Whether a trash row in some workspace OTHER than `workspaceId` names `ref`.
+ *
+ * A trash blob is content-addressed, so the blob store holds one copy however
+ * many rows name it — and a store serving several workspaces' records can be
+ * named from more than one of them. Only the composition root knows which
+ * workspaces share its store, so it answers; this package stays ignorant of
+ * how a keeper groups them.
+ */
+export type TrashBlobNamedElsewhere = (input: {
+  workspaceId: string
+  ref: BlobRef
+}) => Promise<boolean>
+
+export interface LoroWorkspaceDocumentIndexOptions {
+  /**
+   * Absent, a blob is kept only for another row of the same workspace —
+   * right for a store that serves one workspace's record, and nothing more.
+   */
+  readonly trashBlobNamedElsewhere?: TrashBlobNamedElsewhere
+}
+
 export class LoroWorkspaceDocumentIndex
   implements DocumentIndex, DocumentPins, DocumentTrash, DocumentDuplicates
 {
@@ -119,6 +142,7 @@ export class LoroWorkspaceDocumentIndex
     private readonly docs: WorkspaceDocs,
     private readonly blobs: BlobStore,
     private readonly registry: WorkspaceRegistry,
+    private readonly options: LoroWorkspaceDocumentIndexOptions = {},
   ) {}
 
   /**
@@ -210,9 +234,7 @@ export class LoroWorkspaceDocumentIndex
       // blob a later purge cannot reach, which costs space and not the document.
       // A restored document is a new tree node, so its next evacuation is
       // different bytes — this one is never reused.
-      if (!isNamedByAnotherRow(readTrashEntries(doc), entry)) {
-        await this.blobs.delete({ ref: entry.blob })
-      }
+      await this.#dropTrashBlobUnlessNamed(input.workspaceId, readTrashEntries(doc), entry)
       return restored
     })
   }
@@ -228,9 +250,9 @@ export class LoroWorkspaceDocumentIndex
    * The bytes stay when another trash row names the same blob. Content
    * addressing makes that possible in principle (the export carries the
    * documentId, so only a replica's copy of the same document could share
-   * one); a purge must not break that other row's restore.
-   * ponytail: the check is per workspace, blobs are global — widen it if one
-   * blob store ever serves rows of several workspaces' records.
+   * one); a purge must not break that other row's restore. The same record
+   * moved into two workspaces of one keeper names the blob from both, which
+   * is why the keeper is asked as well as this workspace's own rows.
    */
   async purgeTrashEntry(input: TrashEntryInput): Promise<boolean> {
     return this.#serialise(input.workspaceId, async () => {
@@ -238,7 +260,7 @@ export class LoroWorkspaceDocumentIndex
       const rows = readTrashEntries(doc)
       const entry = rows.find((row) => row.documentId === input.documentId)
       if (entry === undefined) return false
-      if (!isNamedByAnotherRow(rows, entry)) await this.blobs.delete({ ref: entry.blob })
+      await this.#dropTrashBlobUnlessNamed(input.workspaceId, rows, entry)
       forgetTrashEntry(doc, entry.documentId)
       await this.docs.save(input.workspaceId, doc)
       return true
@@ -257,6 +279,17 @@ export class LoroWorkspaceDocumentIndex
 
   #serialise<T>(workspaceId: string, body: () => Promise<T>): Promise<T> {
     return this.#writes.run(workspaceId, body)
+  }
+
+  async #dropTrashBlobUnlessNamed(
+    workspaceId: string,
+    rows: readonly TrashEntry[],
+    entry: TrashEntry,
+  ): Promise<void> {
+    if (isNamedByAnotherRow(rows, entry)) return
+    const elsewhere = this.options.trashBlobNamedElsewhere
+    if (elsewhere !== undefined && (await elsewhere({ workspaceId, ref: entry.blob }))) return
+    await this.blobs.delete({ ref: entry.blob })
   }
 
   async #open(workspaceId: string): Promise<LoroDoc> {

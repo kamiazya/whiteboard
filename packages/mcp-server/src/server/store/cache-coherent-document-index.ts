@@ -16,6 +16,7 @@ import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc } from './doc-cache.js'
 import { moveEvictingCache } from './moved-paths.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
+import { trashBlobNamedElsewhere } from './trash-blob-named-elsewhere.js'
 import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -44,7 +45,7 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     registry: WorkspaceRegistry,
     private readonly scope: StoreScope = globalStoreScope,
   ) {
-    super(docs, blobs, registry)
+    super(docs, blobs, registry, { trashBlobNamedElsewhere: trashBlobNamedElsewhere(scope) })
   }
 
   // Every mutator holds the workspace write lock, not only the two that

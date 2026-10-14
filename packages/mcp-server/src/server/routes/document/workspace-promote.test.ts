@@ -257,6 +257,37 @@ it('carries a trashed document so the daemon restores it with its content', asyn
   )
 })
 
+// The daemon keeps ONE blob store per tenant, keyed by digest alone, so the
+// same record moved into two workspaces leaves two trash rows naming one blob.
+it.each([
+  ['purged', 'DELETE', ''],
+  ['restored', 'POST', '/restore'],
+])("keeps another workspace's trashed copy restorable when it is %s in one", async (_, method, suffix) => {
+  await seedWorkspaceRow(tempDir, 'session2')
+  const { app } = harness()
+  const record = browserRecordWithTrashAndVersion()
+  for (const workspaceId of ['session1', 'session2']) {
+    const res = await app.request(`/api/w/${workspaceId}/workspace-document/promote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
+    })
+    expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
+  }
+
+  const first = await app.request(`/api/workspaces/session1/trash/${GONE_ID}${suffix}`, { method })
+  expect(first.status).toBe(200)
+
+  const other = await app.request(`/api/workspaces/session2/trash/${GONE_ID}/restore`, {
+    method: 'POST',
+  })
+  expect(other.status).toBe(200)
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('session2')
+  expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
+    '# trashed in the browser',
+  )
+})
+
 it('refuses trash bytes that are not what the entry names, and merges nothing', async () => {
   const { promote, documents } = harness()
   const record = browserRecordWithTrashAndVersion()
