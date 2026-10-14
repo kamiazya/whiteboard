@@ -174,14 +174,24 @@ describe('loadConfigFile', () => {
     }
   })
 
-  it('never executes JS reached via a config $import, even though $import can point anywhere', () => {
+  // A config file is read from the working directory an MCP client launched
+  // us in, which can be an untrusted checkout, so every code-bearing
+  // extension must be refused by our loader — not by whatever cosmiconfig's
+  // defaults happen to do with it.
+  it.each([
+    'js',
+    'cjs',
+    'mjs',
+    'ts',
+  ])('never executes .%s code reached via a config $import, even though $import can point anywhere', (ext) => {
     const sentinel = join(dir, 'sentinel.txt')
-    writeFileSync(
-      join(dir, 'evil.js'),
-      `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed'); module.exports = { token: 'pwned' }`,
-    )
-    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ $import: './evil.js' }))
-    expect(() => loadConfigFile(dir)).toThrow()
+    const body =
+      ext === 'mjs'
+        ? `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(sentinel)}, 'executed'); export default { token: 'pwned' }`
+        : `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed'); module.exports = { token: 'pwned' }`
+    writeFileSync(join(dir, `evil.${ext}`), body)
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ $import: `./evil.${ext}` }))
+    expect(() => loadConfigFile(dir)).toThrow(/must never execute code/)
     expect(existsSync(sentinel)).toBe(false)
   })
 

@@ -215,23 +215,27 @@ describe('runServerStop', () => {
     expect(result.action).toBe('not-running')
   })
 
-  it('signal failure (non-ESRCH) → refused, exit 1', async () => {
+  // The server outlived the failed signal, so its record must outlive it too:
+  // without one, the next `server stop` answers "not running" for a live server.
+  it('signal failure (non-ESRCH) → refused, exit 1, record kept', async () => {
     mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
     const killFn = vi.fn().mockImplementationOnce(() => {
       const err = Object.assign(new Error('EPERM'), { code: 'EPERM' })
       throw err
     })
     const isPidAlive = vi.fn().mockReturnValueOnce(true)
+    const removeRecord = vi.fn(async () => {})
     const { result, exitCode } = await runServerStop({
       dataDir: '/tmp/test',
       isPidAlive,
       verifyIdentity: identityOk,
       killFn,
-      removeRecord: noOp,
+      removeRecord,
     })
     expect(exitCode).toBe(1)
     expect(result.action).toBe('refused')
     expect(result.reason).toBe('server-stop-signal-failed')
+    expect(removeRecord).not.toHaveBeenCalled()
   })
 
   it('non-leak: result does not contain dataDir path or secret fields', async () => {
