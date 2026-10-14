@@ -17,6 +17,7 @@ function emptyWorkspace(serverMode: boolean) {
       trashCount={0}
       creating={false}
       selectedWorkspace="ws-a"
+      memoryScope={undefined}
       filesSource={null}
       routedFolder=""
       setRoutedFolder={vi.fn()}

@@ -143,7 +143,7 @@ describe('DaemonDocumentPage labels', () => {
 describe('daemonDocumentLabels names', () => {
   const canvas = { workspaceId: 'w1', path: PATH }
   const nameOf = (names: Parameters<typeof daemonDocumentLabels>[1]) => {
-    const labels = daemonDocumentLabels(canvas, names)
+    const labels = daemonDocumentLabels(canvas, names, DOCUMENT_ID)
     expect(labels.exportFilenameBase).toBe(labels.overlayTitle)
     return labels.overlayTitle
   }

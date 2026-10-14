@@ -1,3 +1,4 @@
+import { replicaTierSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/replica-key'
 import { describe, expect, it } from 'vitest'
 import {
   collectReplicaEnvIssues,
@@ -28,8 +29,17 @@ describe('parseReplicaTier', () => {
   })
 
   it('accepts every declared tier', () => {
-    for (const tier of ['no-offline', 'offline', 'bounded'] as const) {
+    expect(replicaTierSchema.options.length).toBeGreaterThan(1)
+    for (const tier of replicaTierSchema.options) {
       expect(parseReplicaTier({ WHITEBOARD_REPLICA_TIER: tier })).toEqual({ ok: true, value: tier })
+    }
+  })
+
+  it('names every declared tier when it refuses one', () => {
+    const parsed = parseReplicaTier({ WHITEBOARD_REPLICA_TIER: 'nope' })
+    expect(parsed.ok).toBe(false)
+    for (const tier of replicaTierSchema.options) {
+      expect(parsed).toMatchObject({ reason: expect.stringContaining(`'${tier}'`) })
     }
   })
 

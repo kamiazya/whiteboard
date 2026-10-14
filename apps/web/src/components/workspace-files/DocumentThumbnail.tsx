@@ -13,7 +13,7 @@
 
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { FileText, LayoutGrid } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
@@ -30,6 +30,24 @@ export interface DocumentThumbnailProps {
    */
   readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
   readonly className?: string
+}
+
+/**
+ * The row's title names the document, so the picture is decoration: hidden
+ * from assistive technology, and `inert` so nothing drawn in it — a link in
+ * a note, say — is reachable by Tab inside a span the tree is told to skip.
+ */
+const PICTURE_HOST = { 'data-testid': 'document-thumbnail', 'aria-hidden': true, inert: true }
+
+/**
+ * A link drawn in the picture must not navigate: the card around it is the
+ * click target, and the renderer's bare document-id href, followed by the
+ * browser, reloads the tab onto a route naming no document. The click still
+ * bubbles, so the card opens. `inert` already keeps a real pointer off the
+ * link; this capture is what holds for a click that is not hit-tested.
+ */
+function keepLinksInert(event: MouseEvent): void {
+  if (event.target instanceof Element && event.target.closest('a') !== null) event.preventDefault()
 }
 
 export function DocumentThumbnail({ document, loadRender, className }: DocumentThumbnailProps) {
@@ -57,12 +75,10 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
   }, [onScreen, document, loadRender, fontsGeneration])
 
   const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
-
   return (
     <span
       ref={ref}
-      data-testid="document-thumbnail"
-      aria-hidden="true"
+      {...PICTURE_HOST}
       className={cn(
         'relative inline-flex shrink-0 items-center justify-center overflow-hidden',
         className,
@@ -101,6 +117,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
           <SceneSvg
             as="span"
             svg={fitSvgToBox(drawn.svg)}
+            onClickCapture={keepLinksInert}
             className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app

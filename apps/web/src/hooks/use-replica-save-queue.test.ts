@@ -39,8 +39,37 @@ function scheduledSave() {
   const hook = renderHook(() => useReplicaSaveQueue(WORKSPACE_ID))
   const record = new LoroDoc()
   act(() => hook.result.current.scheduleSave(record))
-  return { save, record }
+  return { save, record, unmount: hook.unmount }
 }
+
+it('saves a pending edit when the page unmounts', async () => {
+  const { save, record, unmount } = scheduledSave()
+
+  unmount()
+
+  await vi.advanceTimersByTimeAsync(0)
+  expect(save).toHaveBeenCalledWith(WORKSPACE_ID, record)
+})
+
+it('stops listening for page-leaving signals once unmounted', () => {
+  const spies = [window, document].map((target) => ({
+    add: vi.spyOn(target, 'addEventListener'),
+    remove: vi.spyOn(target, 'removeEventListener'),
+  }))
+  const { unmount } = renderHook(() => useReplicaSaveQueue(WORKSPACE_ID))
+  unmount()
+
+  const handlers = (spy: (typeof spies)[number]['add'], type: string) =>
+    spy.mock.calls.filter(([name]) => name === type).map(([, handler]) => handler)
+  const [onWindow, onDocument] = spies
+  for (const [spy, type] of [
+    [onWindow, 'pagehide'],
+    [onDocument, 'visibilitychange'],
+  ] as const) {
+    expect(handlers(spy.add, type)).toHaveLength(1)
+    expect(handlers(spy.remove, type)).toEqual(handlers(spy.add, type))
+  }
+})
 
 it('saves a pending edit when the page is hidden away', async () => {
   const { save, record } = scheduledSave()

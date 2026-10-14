@@ -450,7 +450,7 @@ function useBrowserDocument(
   // address; every other surface that names it needs a word, so takes the path.
   const title = editing.snapshot.name ?? ''
   const label = documentLabel(editing.snapshot, 'path')
-  const labels = documentLabels(documentId, label)
+  const labels = documentLabels({ workspaceId, documentId, path: loadedPath }, label)
 
   const model: DocumentPageModel = {
     scopeKey: documentId,

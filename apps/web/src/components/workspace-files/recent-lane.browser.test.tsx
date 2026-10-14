@@ -22,10 +22,12 @@ afterEach(() => {
 
 // No default parameter: a default fires on an EXPLICIT undefined too, so
 // `renderPanel(undefined)` would have rendered the 'space' workspace and the
-// no-handle case would have tested nothing.
-function renderPanel(workspace: string | undefined) {
+// no-scope case would have tested nothing.
+function renderPanel(memoryScope: string | undefined) {
   const source = fakeFilesSource({ listDocuments: async () => entries })
-  render(<WorkspaceFilesPanel source={source} workspace={workspace} onOpenDocument={() => {}} />)
+  render(
+    <WorkspaceFilesPanel source={source} memoryScope={memoryScope} onOpenDocument={() => {}} />,
+  )
 }
 
 async function openCard(name: string) {
@@ -100,7 +102,7 @@ describe('recently opened lane', () => {
     expect(lane()).toBeNull()
   })
 
-  it('stays absent for a host that passes no workspace handle', async () => {
+  it('stays absent for a host that passes no memory scope', async () => {
     renderPanel(undefined)
     await openCard('Roadmap')
     cleanup()

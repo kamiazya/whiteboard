@@ -18,6 +18,13 @@ export interface WorkspaceFilesPanelProps {
    * rather than something the panel refuses to render without.
    */
   workspace?: string | undefined
+  /**
+   * What this device's memory of the workspace — the recently-opened lane
+   * and the changed-since-seen dots — is kept under: `browserMemoryScope` /
+   * `daemonMemoryScope`. Deliberately not `workspace`, which is a rename-able
+   * address two keepers can share. Absent, the panel remembers nothing.
+   */
+  memoryScope?: string | undefined
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
   /**

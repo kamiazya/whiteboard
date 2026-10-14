@@ -190,6 +190,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
   onOpenDocumentRef: 'no subject: mirrors the callback prop, reassigned every render',
   workspaceRef: 'no subject: mirrors the workspace prop, reassigned every render',
+  scopeRef: 'no subject: mirrors the device-memory scope argument, reassigned every render',
   // Mirrors `documents`, which the reset clears, and is reassigned every
   // render, so a switch empties it on the render that follows.
   listedRef: 'no subject: mirrors the listed documents, reassigned every render',

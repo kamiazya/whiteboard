@@ -419,10 +419,11 @@ function useDaemonDocument(
   const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 
-  const labels = daemonDocumentLabels(canvas, {
-    recorded: sync.documentName,
-    listed: currentSummary?.name,
-  })
+  const labels = daemonDocumentLabels(
+    canvas,
+    { recorded: sync.documentName, listed: currentSummary?.name },
+    currentDocumentId,
+  )
   const { documentKey } = labels
   const openDocument = (id: string) => controller.switchDocument(resolveRefPath(id) ?? id)
 

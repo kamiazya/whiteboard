@@ -66,7 +66,6 @@ import {
   textNode,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
   clearClipboardFragmentForTests,
   readClipboardFragment,
@@ -75,6 +74,7 @@ import {
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import { extractClipboardFragment } from '../../lib/spatial/clipboard-fragment.js'
 import { applyCommand, type EditorCommand } from '../../lib/spatial/commands.js'
 import {
   buildFragmentInsertCommand,

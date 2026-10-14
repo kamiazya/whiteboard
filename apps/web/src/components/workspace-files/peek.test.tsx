@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
+import { PeekDialog } from './PeekDialog.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 // The peek (slice 3 of the 2026-09-05 picker redesign): with a tap opening
@@ -56,6 +57,29 @@ beforeEach(() => {
 })
 afterEach(() => {
   window.matchMedia = realMatchMedia
+})
+
+describe('a link drawn in the peek', () => {
+  it('opens the linked document and closes the peek', async () => {
+    const plan = { documentId: 'd2', path: 'plan', kind: 'markdown' as const }
+    const onOpen = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <PeekDialog
+        document={entries[0] ?? null}
+        loadRender={async () => ({
+          svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><a href="d2"><text>plan</text></a></svg>',
+          bounds: { x: 0, y: 0, w: 10, h: 10 },
+        })}
+        onOpen={onOpen}
+        findDocument={(id) => (id === plan.documentId ? plan : undefined)}
+        onClose={onClose}
+      />,
+    )
+    fireEvent.click(await screen.findByText('plan'))
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(plan)
+    expect(onClose).toHaveBeenCalledOnce()
+  })
 })
 
 function renderPanel(onOpenDocument = vi.fn()) {

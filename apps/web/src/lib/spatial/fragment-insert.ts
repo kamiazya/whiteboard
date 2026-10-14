@@ -1,5 +1,5 @@
 import { type ClipboardFragment, endNode, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { remintClipboardFragment } from '../clipboard-fragment.js'
+import { remintClipboardFragment } from './clipboard-fragment.js'
 import { type EditorCommand, ownedLinePoints, shiftLine } from './commands.js'
 import type { Point } from './viewport.js'
 

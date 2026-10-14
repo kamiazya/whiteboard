@@ -2,6 +2,30 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { readRecentIds, recordRecentDocument } from '../../lib/recent-documents.js'
 import { readSeenDigest, recordSeenDocument } from '../../lib/seen-documents.js'
+import type { WorkspaceIdentity } from '../../lib/workspace-handle.js'
+
+/**
+ * The scope both stores are kept under: WHO keeps the workspace, then its
+ * canonical id.
+ *
+ * Never the address handle. Both keepers mint their first workspace under
+ * the segment `default`, so a handle scope gave a browser workspace and a
+ * daemon's one lane between them, and a segment is the layer a rename moves
+ * (ADR-0019), so a renamed workspace started from an empty lane with every
+ * "changed" baseline gone. The id is what survives a rename; the keeper
+ * prefix is what keeps two keepers apart, and a daemon's base URL keeps two
+ * daemons apart.
+ */
+export function browserMemoryScope(workspace: Pick<WorkspaceIdentity, 'workspaceId'>): string {
+  return `browser:${workspace.workspaceId}`
+}
+
+export function daemonMemoryScope(
+  daemonBaseUrl: string,
+  workspace: Pick<WorkspaceIdentity, 'workspaceId'>,
+): string {
+  return `daemon:${daemonBaseUrl}:${workspace.workspaceId}`
+}
 
 /**
  * What THIS DEVICE remembers about a workspace, and what the picker draws
@@ -21,14 +45,14 @@ import { readSeenDigest, recordSeenDocument } from '../../lib/seen-documents.js'
  * document model entirely.
  */
 export interface DeviceMemory {
-  /** Most recent first, for the lane. Empty until a workspace handle exists. */
+  /** Most recent first, for the lane. Empty until a scope exists. */
   recentIds: readonly string[]
   /**
    * The documents whose content differs from what this device last opened.
    *
    * `undefined` while there is nothing to compare against — no listing yet,
-   * or no workspace handle — which the grid renders as no dots at all rather
-   * than as "nothing changed".
+   * or no scope — which the grid renders as no dots at all rather than as
+   * "nothing changed".
    */
   changed: ReadonlySet<string> | undefined
   /** Record an open. Stable identity: the panel hands it to four children. */
@@ -37,8 +61,9 @@ export interface DeviceMemory {
   reset: () => void
 }
 
+/** `scope` is `browserMemoryScope` / `daemonMemoryScope`; absent records nothing. */
 export function useDeviceMemory(
-  workspace: string | undefined,
+  scope: string | undefined,
   documents: readonly WorkspaceDocumentEntry[] | null,
 ): DeviceMemory {
   const [recentIds, setRecentIds] = useState<readonly string[]>([])
@@ -49,19 +74,19 @@ export function useDeviceMemory(
    */
   const [seenRevision, setSeenRevision] = useState(0)
   // Read at CALL time, so `remember` and `reset` keep a stable identity.
-  const workspaceRef = useRef(workspace)
-  workspaceRef.current = workspace
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
 
   const remember = useCallback((entry: WorkspaceDocumentEntry) => {
-    const scope = workspaceRef.current
-    if (scope === undefined) return
-    recordRecentDocument(scope, entry.documentId)
-    setRecentIds(readRecentIds(scope))
+    const current = scopeRef.current
+    if (current === undefined) return
+    recordRecentDocument(current, entry.documentId)
+    setRecentIds(readRecentIds(current))
     // Only when the keeper derived a digest: a row without one has nothing
     // to compare later, and a missing baseline must read as "no dot" rather
     // than as "changed".
     if (entry.contentDigest !== undefined) {
-      recordSeenDocument(scope, entry.documentId, entry.contentDigest)
+      recordSeenDocument(current, entry.documentId, entry.contentDigest)
       setSeenRevision((revision) => revision + 1)
     }
   }, [])
@@ -73,28 +98,28 @@ export function useDeviceMemory(
    * dot exists for — something rewriting it while the person was elsewhere.
    */
   const changed = useMemo(() => {
-    if (documents === null || workspace === undefined) return undefined
+    if (documents === null || scope === undefined) return undefined
     const marked = new Set<string>()
     for (const entry of documents) {
       if (entry.contentDigest === undefined) continue
-      const seen = readSeenDigest(workspace, entry.documentId)
+      const seen = readSeenDigest(scope, entry.documentId)
       if (seen !== undefined && seen !== entry.contentDigest) marked.add(entry.documentId)
     }
     return marked
     // `seenRevision` is not read by the body — it is the signal that this
     // hook wrote a baseline, which is the only way the answer changes
     // without `documents` changing too.
-  }, [documents, workspace, seenRevision])
+  }, [documents, scope, seenRevision])
 
   const reset = useCallback(() => {
     // SCOPE RESET — see scoped-screen-state.test.ts
-    // Emptied and refilled together, from the CURRENT handle. Two effects
+    // Emptied and refilled together, from the CURRENT scope. Two effects
     // doing one half each made the ORDER load-bearing, and it was wrong: the
     // load ran first and the reset blanked it, so the lane never survived a
     // remount.
     setRecentIds([])
-    const scope = workspaceRef.current
-    if (scope !== undefined) setRecentIds(readRecentIds(scope))
+    const current = scopeRef.current
+    if (current !== undefined) setRecentIds(readRecentIds(current))
   }, [])
 
   return { recentIds, changed, remember, reset }

@@ -1,10 +1,11 @@
 import { withDeclaredColours } from '@kamiazya/whiteboard-canvas-render'
 import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { Focus } from 'lucide-react'
-import { type ComponentProps, type JSX, useMemo } from 'react'
+import { type ComponentProps, type JSX, type MouseEvent, useMemo } from 'react'
 import { useMarkdownFragments } from '../hooks/use-markdown-fragments.js'
 import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import type { FragmentLoaders } from '../lib/fragment-requests.js'
+import { sceneLinkTarget } from '../lib/scene-link.js'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
@@ -73,7 +74,7 @@ export function VersionPreview({
   )
   if (past.kind === 'markdown') {
     return (
-      <div data-testid="document-preview" className="h-full min-h-0 overflow-auto">
+      <div {...NOTE_HOST}>
         <PreviewPane
           value={past.body}
           maxWidth={maxWidth}
@@ -107,6 +108,7 @@ function PastCanvasPreview({
       // browser also scroll the page under it makes both unusable on a phone
       // — which is the screen this surface is most often read on.
       className="relative h-full min-h-0 touch-none overflow-hidden"
+      onClickCapture={keepSceneLinksInert}
       {...surfaceHandlers}
     >
       <div
@@ -150,4 +152,20 @@ function PastCanvasPreview({
       )}
     </div>
   )
+}
+
+const NOTE_HOST = {
+  'data-testid': 'document-preview',
+  className: 'h-full min-h-0 overflow-auto',
+  onClickCapture: keepSceneLinksInert,
+}
+
+/**
+ * A link a version draws never navigates the tab. Opening the linked
+ * document from here is not offered: what it names is the CURRENT document,
+ * not the one as it stood at this version, so following it from a look back
+ * would answer a different question than the one being asked.
+ */
+function keepSceneLinksInert(event: MouseEvent): void {
+  if (sceneLinkTarget(event.target) !== undefined) event.preventDefault()
 }

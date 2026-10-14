@@ -2,15 +2,13 @@
 // Drift guard: matrix ↔ package.json scripts ↔ README step count.
 // PBT: validateGate() helper catches structural violations before they ship.
 
-import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { repoRoot } from '../../shared/test-utils/repo-root.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = repoRoot()
 
 function readJson(relPath: string): unknown {
@@ -43,14 +41,14 @@ interface GateMatrix {
 const SCHEMA_MODULE_PATH = join(ROOT, 'tools/checks/src/release-gate-matrix-schema.mjs')
 const {
   validateGate,
+  validateMatrix,
   KNOWN_CATEGORIES,
   KNOWN_RUNTIME_BUCKETS: KNOWN_BUCKETS,
-  KNOWN_REQUIRED_FOR_TIERS: KNOWN_TIERS,
 } = (await import(pathToFileURL(SCHEMA_MODULE_PATH).href)) as {
   validateGate: (gate: unknown) => { ok: boolean; reason?: string }
+  validateMatrix: (matrix: unknown) => { ok: boolean; reason?: string }
   KNOWN_CATEGORIES: Set<string>
   KNOWN_RUNTIME_BUCKETS: Set<string>
-  KNOWN_REQUIRED_FOR_TIERS: Set<string>
 }
 
 // Count distribution test steps from the test:e2e:distribution:only script.
@@ -86,52 +84,11 @@ const readmeText = readText('tests/e2e/distribution/README.md')
 const EXPECTED_DISTRIBUTION_STEPS = 12
 
 describe('release-gate-matrix.json structure', () => {
-  it('has schemaVersion 1', () => {
-    expect(matrix.schemaVersion).toBe(1)
-  })
-
-  it('has non-empty gates array', () => {
-    expect(Array.isArray(matrix.gates)).toBe(true)
-    expect(matrix.gates.length).toBeGreaterThan(0)
-  })
-
-  it('each gate passes validateGate', () => {
-    for (const gate of matrix.gates) {
-      const result = validateGate(gate)
-      const reason = !result.ok ? ` (${result.reason})` : ''
-      expect(result.ok, `gate "${gate.id}" failed validation${reason}`).toBe(true)
-    }
-  })
-
-  it('all categories are from the known set', () => {
-    for (const gate of matrix.gates) {
-      expect(
-        KNOWN_CATEGORIES.has(gate.category),
-        `unknown category "${gate.category}" on gate "${gate.id}"`,
-      ).toBe(true)
-    }
-  })
-
-  it('all expectedRuntimeBucket values are from the known set', () => {
-    for (const gate of matrix.gates) {
-      expect(
-        KNOWN_BUCKETS.has(gate.expectedRuntimeBucket),
-        `unknown bucket "${gate.expectedRuntimeBucket}" on gate "${gate.id}"`,
-      ).toBe(true)
-    }
-  })
-
-  it('all requiredFor tiers are from the known set', () => {
-    for (const gate of matrix.gates) {
-      for (const tier of gate.requiredFor) {
-        expect(KNOWN_TIERS.has(tier), `unknown tier "${tier}" on gate "${gate.id}"`).toBe(true)
-      }
-    }
-  })
-
-  it('gate ids are unique', () => {
-    const ids = matrix.gates.map((g) => g.id)
-    expect(new Set(ids).size).toBe(ids.length)
+  // validateMatrix holds the schema version, the closed vocabularies, every
+  // gate's rules and id uniqueness; release-gate-matrix-schema.test.ts holds
+  // each rule on its own.
+  it('passes the shared validator', () => {
+    expect(validateMatrix(matrix)).toEqual({ ok: true })
   })
 })
 
@@ -439,7 +396,9 @@ describe('publish-dry-run tier wiring drift', () => {
 // pages-release gates (matrix = policy, tools/checks = executor). They are kept off
 // the ci / local-release / docker-release aggregates on purpose: smoke:preview-origin
 // needs Playwright and a local 127.0.0.1 HTTP bind, so it stays a release-candidate
-// adjacent gate rather than a normal PR/verify gate.
+// adjacent gate rather than a normal PR/verify gate. What the runner DOES with the
+// matrix (reads and validates it, runs the prerequisites, fails fast) is held over
+// both tier entries by tools/arch-lint's publish-gate-runner.test.ts.
 describe('pages-release tier wiring drift', () => {
   const pagesGates = matrix.gates.filter((g) => g.requiredFor.includes('pages-release'))
 
@@ -475,206 +434,9 @@ describe('pages-release tier wiring drift', () => {
     expect(pkg.scripts?.['pages-release'], 'a pages-release script must exist').toBeTruthy()
   })
 
-  it('the pages-release runner is matrix-driven (the matrix stays the single policy source)', () => {
-    const runner = readText('tools/checks/src/pages-release.mjs')
-    expect(
-      runner,
-      'runner must read release-gate-matrix.json instead of hardcoding gate commands',
-    ).toContain('release-gate-matrix.json')
-    expect(runner, 'runner must select the pages-release tier').toContain('pages-release')
-  })
-
-  it("the pages-release runner runs 'pnpm build' before the matrix gates", () => {
-    const runner = readText('tools/checks/src/pages-release.mjs')
-    expect(runner, "runner must run 'pnpm build' as a prerequisite step").toContain("'pnpm build'")
-  })
-
   it('pnpm-workspace.yaml includes tools/* so @whiteboard/checks resolves', () => {
     const workspace = readText('pnpm-workspace.yaml')
     expect(workspace, 'pnpm-workspace.yaml must declare tools/*').toMatch(/tools\/\*/)
-  })
-
-  // A release gate runner must not run its gates on a typo'd flag.
-  describe('runner argument handling', () => {
-    const RUNNER = join(ROOT, 'tools/checks/src/pages-release.mjs')
-
-    it('prints usage and exits 0 on --help (without running the gates)', () => {
-      const r = spawnSync('node', [RUNNER, '--help'], { encoding: 'utf-8' })
-      expect(r.status, '--help must exit 0').toBe(0)
-      expect(r.stdout, '--help must print usage').toMatch(/Usage:/)
-      expect(r.stdout, '--help must not start running build/smoke steps').not.toMatch(
-        /\[pages-release] step/,
-      )
-    })
-
-    it('exits 1 and prints usage on an unknown argument', () => {
-      const r = spawnSync('node', [RUNNER, '--bogus'], { encoding: 'utf-8' })
-      expect(r.status, 'unknown argument must exit 1').toBe(1)
-      expect(`${r.stdout}${r.stderr}`, 'unknown argument must surface usage').toMatch(/Usage:/)
-    })
-  })
-
-  // The runner builds spawnSync argv via splitCommand (no shell), so a matrix
-  // command with shell metacharacters or env assignment is rejected, not executed.
-  describe('splitCommand gate-command parser', () => {
-    const importSplitCommand = async () => {
-      const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/split-command.mjs')).href)
-      return mod.splitCommand as (command: string) => string[]
-    }
-
-    it('splits plain commands and collapses surrounding/repeated whitespace', async () => {
-      const splitCommand = await importSplitCommand()
-      expect(splitCommand('pnpm build')).toEqual(['pnpm', 'build'])
-      expect(splitCommand('  pnpm   --filter  @kamiazya/whiteboard-web   smoke:artifact ')).toEqual(
-        ['pnpm', '--filter', '@kamiazya/whiteboard-web', 'smoke:artifact'],
-      )
-    })
-
-    it('rejects empty, shell-metachar, and env-assignment commands', async () => {
-      const splitCommand = await importSplitCommand()
-      expect(() => splitCommand('')).toThrow()
-      expect(() => splitCommand('   ')).toThrow()
-      expect(() => splitCommand('pnpm build && rm -rf /')).toThrow() // & metachar
-      expect(() => splitCommand('echo $HOME')).toThrow() // $ substitution
-      expect(() => splitCommand('cat "a b"')).toThrow() // quote
-      expect(() => splitCommand('FOO=bar pnpm build')).toThrow() // env assignment
-    })
-
-    it('accepts every pages-release gate command in the matrix', async () => {
-      const splitCommand = await importSplitCommand()
-      for (const gate of pagesGates) {
-        expect(
-          () => splitCommand(gate.command),
-          `gate "${gate.id}" must be shell-safe`,
-        ).not.toThrow()
-      }
-    })
-  })
-
-  // Direct unit tests over the runner's core loop, using a fake spawn so ordering /
-  // fail-fast logic is covered without a real build (the string `toContain` guards
-  // above can't catch a mutation that reorders steps or keeps going after a failure).
-  describe('runner core loop (planSteps / runSteps)', () => {
-    type Step = { label: string; command: string }
-    type FakeStatus = { status: number | null; error?: Error }
-    const sink = { write: (_: string) => true }
-
-    const importRunner = async () => {
-      const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/pages-release.mjs')).href)
-      return mod as {
-        planSteps: (gates: { id: string; command: string; requiredFor: string[] }[]) => Step[]
-        runSteps: (
-          steps: Step[],
-          opts: {
-            cwd?: string
-            spawn: (cmd: string, args: string[], o: unknown) => FakeStatus
-            stdout?: { write: (s: string) => boolean }
-            stderr?: { write: (s: string) => boolean }
-          },
-        ) => { ok: boolean; exitCode: number; ranLabels: string[] }
-      }
-    }
-
-    it('planSteps puts pnpm build first, then only the pages-release gates in matrix order', async () => {
-      const { planSteps } = await importRunner()
-      const steps = planSteps([
-        { id: 'a', command: 'pnpm a', requiredFor: ['pages-release'] },
-        { id: 'b', command: 'pnpm b', requiredFor: ['ci'] },
-        { id: 'c', command: 'pnpm c', requiredFor: ['pages-release'] },
-      ])
-      expect(steps).toEqual([
-        { label: 'build', command: 'pnpm build' },
-        { label: 'a', command: 'pnpm a' },
-        { label: 'c', command: 'pnpm c' },
-      ])
-    })
-
-    it('runSteps spawns every step in order when all succeed', async () => {
-      const { runSteps } = await importRunner()
-      const calls: string[] = []
-      const spawn = (cmd: string, args: string[]): FakeStatus => {
-        calls.push(`${cmd} ${args.join(' ')}`.trim())
-        return { status: 0 }
-      }
-      const r = runSteps(
-        [
-          { label: 'build', command: 'pnpm build' },
-          { label: 'x', command: 'pnpm --filter @kamiazya/whiteboard-web smoke:artifact' },
-        ],
-        { cwd: '/repo', spawn, stdout: sink, stderr: sink },
-      )
-      expect(r.ok).toBe(true)
-      expect(r.exitCode).toBe(0)
-      expect(calls).toEqual(['pnpm build', 'pnpm --filter @kamiazya/whiteboard-web smoke:artifact'])
-    })
-
-    it('runSteps stops at the first non-zero exit (fail-fast) and returns that code', async () => {
-      const { runSteps } = await importRunner()
-      const calls: string[] = []
-      const spawn = (cmd: string, args: string[]): FakeStatus => {
-        calls.push(`${cmd} ${args.join(' ')}`.trim())
-        return { status: args[0] === 'boom' ? 2 : 0 }
-      }
-      const r = runSteps(
-        [
-          { label: 'build', command: 'pnpm build' },
-          { label: 'fails', command: 'pnpm boom' },
-          { label: 'after', command: 'pnpm after' },
-        ],
-        { cwd: '/repo', spawn, stdout: sink, stderr: sink },
-      )
-      expect(r.ok).toBe(false)
-      expect(r.exitCode).toBe(2)
-      // 'pnpm after' must never be spawned after the failure.
-      expect(calls).toEqual(['pnpm build', 'pnpm boom'])
-      expect(r.ranLabels).toEqual(['build', 'fails'])
-    })
-
-    it('runSteps rejects a shell-unsafe gate command without spawning it', async () => {
-      const { runSteps } = await importRunner()
-      const calls: string[] = []
-      const spawn = (cmd: string): FakeStatus => {
-        calls.push(cmd)
-        return { status: 0 }
-      }
-      const r = runSteps([{ label: 'evil', command: 'pnpm build && rm -rf /' }], {
-        cwd: '/repo',
-        spawn,
-        stdout: sink,
-        stderr: sink,
-      })
-      expect(r.ok).toBe(false)
-      expect(calls).toEqual([])
-    })
-
-    it('runSteps stops when a step fails to spawn (spawn error)', async () => {
-      const { runSteps } = await importRunner()
-      const calls: string[] = []
-      const spawn = (cmd: string, args: string[]): FakeStatus => {
-        calls.push(`${cmd} ${args.join(' ')}`.trim())
-        return { status: null, error: new Error('spawn ENOENT') }
-      }
-      const r = runSteps(
-        [
-          { label: 'build', command: 'pnpm build' },
-          { label: 'after', command: 'pnpm after' },
-        ],
-        { cwd: '/repo', spawn, stdout: sink, stderr: sink },
-      )
-      expect(r.ok).toBe(false)
-      expect(r.exitCode).toBe(1)
-      // a spawn error aborts before the next step.
-      expect(calls).toEqual(['pnpm build'])
-    })
-
-    it('planSteps returns only the build step when there are no pages-release gates', async () => {
-      const { planSteps } = await importRunner()
-      // main()'s `steps.length <= 1` no-gates guard relies on this shape.
-      expect(planSteps([])).toEqual([{ label: 'build', command: 'pnpm build' }])
-      expect(planSteps([{ id: 'x', command: 'pnpm x', requiredFor: ['ci'] }])).toEqual([
-        { label: 'build', command: 'pnpm build' },
-      ])
-    })
   })
 })
 

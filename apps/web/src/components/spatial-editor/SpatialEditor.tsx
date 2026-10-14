@@ -86,7 +86,6 @@ import {
   useThemeFaceFor,
   useThemeFontsGeneration,
 } from '../../hooks/useThemeFonts.js'
-import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { ClipboardImageSeams } from '../../lib/clipboard-images.js'
 import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
@@ -96,6 +95,7 @@ import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { trySetPointerCapture } from '../../lib/pointer-capture.js'
+import { parseClipboardText } from '../../lib/spatial/clipboard-fragment.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
@@ -1562,7 +1562,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           notice={clipboardNotice.text}
           onDismiss={clipboardNotice.dismiss}
         />
-        {onAddImage !== undefined && (
+        {onAddImage === undefined ? (
+          <CanvasNotice testId="image-notice" notice={imageNotice} onDismiss={dismissImageNotice} />
+        ) : (
           <ImageIntake
             inputRef={imageInputRef}
             notice={imageNotice}
@@ -1817,9 +1819,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               e.dataTransfer.dropEffect = 'copy'
               return
             }
-            if (onAddImage !== undefined && e.dataTransfer.types.includes('Files')) {
-              e.preventDefault()
-            }
+            // Cancelled with or without an image seam: an uncancelled file
+            // dragover lets the browser open the dropped file in the tab.
+            if (e.dataTransfer.types.includes('Files')) e.preventDefault()
           }}
           onDrop={(e) => {
             const dragged = draggedCreation(e.dataTransfer.types)
@@ -1831,7 +1833,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               createAt(dragged, screenToCanvas(local, viewport))
               return
             }
-            if (onAddImage === undefined) return
             if (e.dataTransfer.files.length === 0) return
             // Cancel the browser's default file-drop handling (navigation to
             // the file) for EVERY file drop, then only act on images.
@@ -1868,7 +1869,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // clipboard falls through untouched.
             const file = firstImageFile(e.clipboardData?.files ?? [])
             if (file !== undefined) {
-              if (onAddImage === undefined) return
               e.preventDefault()
               addImageFile(file)
               return

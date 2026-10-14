@@ -2,10 +2,10 @@
  * The lane on the REAL page, over real IndexedDB and the page's own handle.
  *
  * The panel's own suite proves the lane renders and that opening records;
- * what only this layer proves is that `BrowserIndexPage` passes a workspace
- * handle at all. Without one the panel records nothing and the lane is
+ * what only this layer proves is that `BrowserIndexPage` passes a memory
+ * scope at all. Without one the panel records nothing and the lane is
  * permanently absent — a wiring gap every component-level test passes
- * through, because they supply the handle themselves.
+ * through, because they supply the scope themselves.
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -32,7 +32,7 @@ afterEach(() => {
   localStorage.removeItem(STORAGE_KEY)
 })
 
-it('records an open under the page own handle, and shows it on return', async () => {
+it('records an open under the page own memory scope, and shows it on return', async () => {
   const settled = getBrowserWorkspaceId()
   const store = new BrowserStoreDouble()
   await store.save({
@@ -61,7 +61,7 @@ it('records an open under the page own handle, and shows it on return', async ()
   if (card === null) throw new Error('no card')
   await userEvent.dblClick(card)
 
-  // The record is what the page's handle produced. Asserted before the
+  // The record is what the page's scope produced. Asserted before the
   // remount, so a lane that never appears is told apart from an open that
   // was never recorded.
   await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull())

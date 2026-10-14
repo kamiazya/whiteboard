@@ -223,6 +223,60 @@ describe('DocumentPreview', () => {
   })
 })
 
+describe('a link drawn in the picture', () => {
+  const target: WorkspaceDocumentEntry = { documentId: 'd2', path: 'design/plan', kind: 'markdown' }
+  const linked = (href: string) => ({
+    ...drawn,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><a href="${href}"><text>plan</text></a></svg>`,
+  })
+  async function clickLink(href: string, onOpen = vi.fn()) {
+    render(
+      <DocumentPreview
+        document={doc}
+        loadRender={vi.fn(async () => linked(href))}
+        onOpen={onOpen}
+        findDocument={(id) => (id === target.documentId ? target : undefined)}
+      />,
+    )
+    const link = await screen.findByText('plan')
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    link.dispatchEvent(event)
+    return { prevented: event.defaultPrevented, onOpen }
+  }
+
+  it('opens the listed document a bare-id link names, instead of navigating', async () => {
+    const { prevented, onOpen } = await clickLink('d2')
+    expect(prevented).toBe(true)
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(target)
+  })
+
+  it('opens the document a canvas embed names by fragment', async () => {
+    const { onOpen } = await clickLink('#d2')
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(target)
+  })
+
+  it('stays put on an id the list does not hold', async () => {
+    const { prevented, onOpen } = await clickLink('gone')
+    expect(prevented).toBe(true)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('leaves a URL with a scheme to the browser', async () => {
+    const { prevented, onOpen } = await clickLink('https://example.com/')
+    expect(prevented).toBe(false)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['root-relative', '/guide'],
+    ['protocol-relative', '//example.com/x'],
+  ])('leaves a %s URL to the browser', async (_shape, href) => {
+    const { prevented, onOpen } = await clickLink(href)
+    expect(prevented).toBe(false)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+})
+
 describe('kind row and action icons', () => {
   const entry = (kind: 'markdown' | 'spatial') => ({
     documentId: 'd1',

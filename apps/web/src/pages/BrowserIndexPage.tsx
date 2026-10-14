@@ -7,6 +7,7 @@ import { ExtensionConnectEntry } from '../components/connection/ExtensionConnect
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
 import { DocumentsSkeleton } from '../components/document-list/DocumentsSkeleton.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
+import { browserMemoryScope } from '../components/workspace-files/use-device-memory.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
@@ -452,6 +453,9 @@ function BrowserFilesPanel(props: BrowserIndexBodyProps) {
       // identity is what moves with it.
       workspace={
         props.activeWorkspace === null ? undefined : workspaceHandle(props.activeWorkspace)
+      }
+      memoryScope={
+        props.activeWorkspace === null ? undefined : browserMemoryScope(props.activeWorkspace)
       }
       initialFolder={props.routedFolder}
       onFolderChange={props.setRoutedFolder}

@@ -8,6 +8,7 @@
  * the wrong picture rather than failing.
  */
 
+import { spatialThemeModeSchema } from '@kamiazya/whiteboard-canvas-render'
 import { compareCodeUnit, type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
@@ -67,7 +68,7 @@ export const renderKeySchema = z.object({
    * NULL for markdown, whose ink comes from CSS. That asymmetry is the whole
    * reason a markdown row survives a theme toggle: one entry serves both.
    */
-  theme: z.enum(['light', 'dark']).nullable(),
+  theme: spatialThemeModeSchema.nullable(),
   /**
    * Which theme faces this realm could MEASURE when the picture was drawn
    * (`themeFacesKey`), and NULL for markdown — whose body is measured in

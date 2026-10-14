@@ -22,18 +22,13 @@ function assertValidInput(schema: z.ZodTypeAny, input: unknown, commandName: str
   }
 }
 
-// Projects the open-canvas identity into the tool-facing shape field-by-field
-// (never a spread) so a daemon canvas exposes only workspaceId/path and a
-// canvas kept in this browser only documentId — no other ProviderState/canvas field
-// can leak through.
+// Field-by-field, never a spread, so no other field a page's identity object
+// grows can leak into the tool result.
 function projectCanvasContext(
   canvas: WhiteboardCommandDeps['canvas'],
 ): GetAppContextResult['canvas'] {
   if (!canvas) return null
-  if (canvas.workspaceId !== undefined) {
-    return { kind: 'daemon', workspaceId: canvas.workspaceId, path: canvas.documentId }
-  }
-  return { kind: 'browser', documentId: canvas.documentId }
+  return { workspaceId: canvas.workspaceId, documentId: canvas.documentId, path: canvas.path }
 }
 
 // Exhaustive over every ProviderState.kind rather than a two-way ternary: an
@@ -106,18 +101,6 @@ export function createWhiteboardCommands(depsRef: {
     // typecheck here instead of silently falling through to the wrong mode.
     const provider: GetAppContextResult['provider'] = { mode: projectProviderMode(deps.provider) }
     const canvas = projectCanvasContext(deps.canvas)
-    // canvas.kind (from projectCanvasContext, keyed on identity.workspaceId)
-    // and provider.mode (from projectProviderMode, keyed on ProviderState.kind)
-    // are derived from two independent inputs — assert they agree rather
-    // than let a future call site construct a result where they silently
-    // disagree. Not part of getAppContextResultSchema itself: see that
-    // schema's module comment for why.
-    if (canvas !== null && canvas.kind !== provider.mode) {
-      throw new CommandError(
-        'invalid-provider-state',
-        'Cannot report app context: the derived canvas kind does not match the provider mode.',
-      )
-    }
 
     return getAppContextResultSchema.parse({ provider, canvas })
   }

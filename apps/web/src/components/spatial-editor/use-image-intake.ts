@@ -3,6 +3,9 @@ import type { ImageStoreResult } from '../../lib/document-file-contract.js'
 import { imageRefusal } from '../../lib/image-upload-policy.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 
+/** What a drop or paste is told on a canvas whose host stores no images. */
+const NO_IMAGE_SEAM_NOTICE = "Images can't be added to this canvas."
+
 export interface ImageIntakeInputs {
   readonly onAddImage: ((file: File) => Promise<ImageStoreResult>) | undefined
   readonly createImageNodeAt: (ref: string, at?: Point) => void
@@ -12,14 +15,17 @@ export interface ImageIntakeInputs {
  * Image intake: checks a picked, dropped or pasted file against what the
  * daemon stores, hands it to the host seam, and runs the caller's step with
  * the new reference. Every way it can come to nothing — an unsupported file,
- * an upload the host reports refused — lands in `imageNotice`, so no intake
- * ends silently.
+ * an upload the host reports refused, a host with no seam at all — lands in
+ * `imageNotice`, so no intake ends silently.
  */
 export function useImageIntake({ onAddImage, createImageNodeAt }: ImageIntakeInputs) {
   const [imageNotice, setImageNotice] = useState<string | null>(null)
 
   const storeImageFile = (file: File, onStored: (ref: string) => void) => {
-    if (onAddImage === undefined) return
+    if (onAddImage === undefined) {
+      setImageNotice(NO_IMAGE_SEAM_NOTICE)
+      return
+    }
     const refusal = imageRefusal(file)
     if (refusal !== null) {
       setImageNotice(refusal)

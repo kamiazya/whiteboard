@@ -13,11 +13,12 @@
 
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type MouseEvent, useEffect, useState } from 'react'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
 import { formatRelative } from '../../lib/format-relative.js'
+import { sceneLinkTarget } from '../../lib/scene-link.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
 import type { DocumentRender } from './load-row-render.js'
@@ -27,6 +28,11 @@ export interface DocumentPreviewProps {
   readonly document: WorkspaceDocumentEntry | null
   readonly loadRender: (document: WorkspaceDocumentEntry) => Promise<DocumentRender | null>
   readonly onOpen?: (document: WorkspaceDocumentEntry) => void
+  /**
+   * Resolves a document id drawn as a link target to its listed entry, so a
+   * wiki link in the picture opens through `onOpen` like the button does.
+   */
+  readonly findDocument?: (documentId: string) => WorkspaceDocumentEntry | undefined
   /** Opens the shared Rename dialog (name + path together). */
   readonly onRename?: (document: WorkspaceDocumentEntry) => void
   /** Copy it. Absent means the pane offers no copy. */
@@ -50,6 +56,7 @@ export function DocumentPreview({
   document,
   loadRender,
   onOpen,
+  findDocument,
   onRename,
   onDuplicate,
   onDelete,
@@ -108,6 +115,7 @@ export function DocumentPreview({
         {state.kind === 'drawn' ? (
           <SceneSvg
             svg={fitSvgToBox(state.svg)}
+            onClickCapture={(event) => followSceneLink(event, findDocument, onOpen)}
             data-testid="preview-render"
             className="size-full [&>svg]:size-full"
           />
@@ -207,4 +215,20 @@ export function DocumentPreview({
       </div>
     </div>
   )
+}
+
+/**
+ * A drawn link that names a document opens it when the list holds it, and
+ * is inert when it does not; either way the browser never follows it.
+ */
+function followSceneLink(
+  event: MouseEvent,
+  findDocument: DocumentPreviewProps['findDocument'],
+  onOpen: DocumentPreviewProps['onOpen'],
+): void {
+  const documentId = sceneLinkTarget(event.target)
+  if (documentId === undefined) return
+  event.preventDefault()
+  const target = findDocument?.(documentId)
+  if (target !== undefined) onOpen?.(target)
 }

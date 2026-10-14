@@ -1,13 +1,13 @@
 // @vitest-environment node
-// Pure clipboard-fragment helpers (editor-completeness slice 2): extract a
-// self-contained fragment from a selection, and remint ids on paste so a
-// fragment can land any number of times in any canvas without colliding.
+// Pure clipboard-fragment helpers: extract a self-contained fragment from a
+// selection, and remint ids on paste so a fragment can land any number of
+// times in any canvas without colliding.
 
 import type { CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { clipboardFragmentSchema, endIn, endNode, nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'
 
 // A CEILING sized on a measurement, not a delay. The property below takes

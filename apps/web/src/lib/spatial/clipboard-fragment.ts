@@ -1,5 +1,5 @@
 /**
- * Pure clipboard-fragment helpers (editor-completeness slice 2). The
+ * Pure clipboard-fragment helpers. The
  * fragment format itself is model's `clipboardFragmentSchema`;
  * these two functions are the only bridge between a live canvas and that
  * envelope:

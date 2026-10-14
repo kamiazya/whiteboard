@@ -51,6 +51,7 @@ import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 export function WorkspaceFilesPanel({
   source,
   workspace,
+  memoryScope,
   onOpenDocument,
   initialFolder,
   onFolderChange,
@@ -99,7 +100,7 @@ export function WorkspaceFilesPanel({
     changed,
     remember: rememberOpen,
     reset: resetDeviceMemory,
-  } = useDeviceMemory(workspace, documents)
+  } = useDeviceMemory(memoryScope, documents)
   // What the panel has to SAY about its last write — a refused create, a
   // refused pin, or a write that landed while its list re-read did not.
   // Each one's reasoning lives with it in use-write-outcome.ts; `beginWrite`
@@ -132,11 +133,11 @@ export function WorkspaceFilesPanel({
   // throw both away — which is the measured "dark mode re-renders every row".
   const broker = useMemo(() => createInTabRenderBroker(), [source])
 
-  // What an embedded target resolves against, read through a ref so the
-  // loader below outlives a list re-read: the re-read hands every row a new
-  // entry, which is what asks it to draw again by the versions just listed.
+  // What an embedded target or a clicked link resolves against, read through a
+  // ref so the loader below outlives a list re-read (which redraws every row).
   const listedRef = useRef<readonly WorkspaceDocumentEntry[]>([])
   listedRef.current = documents ?? []
+  const findListed = (id: string) => listedRef.current.find((each) => each.documentId === id)
 
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
@@ -769,7 +770,8 @@ export function WorkspaceFilesPanel({
             <PanelPreview
               selected={selected}
               loadRender={loadRender}
-              onOpenDocument={onOpenDocument}
+              findDocument={findListed}
+              onOpen={onOpenDocument === undefined ? undefined : openEntry}
               onRename={rename.open}
               onDuplicateDocument={onDuplicateDocument}
               onRequestDelete={onRequestDelete}
@@ -798,6 +800,7 @@ export function WorkspaceFilesPanel({
         document={peek}
         loadRender={loadRender}
         onOpen={openEntry}
+        findDocument={findListed}
         onClose={() => setPeek(null)}
       />
       <RenameDocumentDialog

@@ -92,3 +92,44 @@ describe('VersionPreview typesets what the editor typesets', () => {
     expect(l.math).toHaveBeenCalledWith('x^2')
   })
 })
+
+describe('a link drawn in a version', () => {
+  const BODY =
+    '[plan](plan) and [site](https://example.com/) and [guide](/guide) and [mirror](//example.com/x)'
+  const board: PastDocument = {
+    kind: 'spatial',
+    canvas: {
+      nodes: [textNode({ id: 'l', x: 0, y: 0, width: 400, height: 120, text: BODY })],
+      edges: [],
+    },
+  }
+  async function click(pastDocument: PastDocument, href: string): Promise<boolean> {
+    const { container } = render(<VersionPreview past={pastDocument} />)
+    const anchor = await vi.waitFor(() => {
+      const found = container.querySelector(`a[href="${href}"]`)
+      if (found === null) throw new Error(`no <a href="${href}"> yet`)
+      return found
+    })
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    anchor.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+
+  it.each([
+    ['note', { kind: 'markdown', body: BODY } as PastDocument],
+    ['board', board],
+  ])('a bare-id link in a past %s never navigates the tab', async (_kind, pastDocument) => {
+    expect(await click(pastDocument, 'plan')).toBe(true)
+  })
+
+  it('a URL with a scheme keeps the browser default', async () => {
+    expect(await click({ kind: 'markdown', body: BODY }, 'https://example.com/')).toBe(false)
+  })
+
+  it.each([
+    ['root-relative', '/guide'],
+    ['protocol-relative', '//example.com/x'],
+  ])('a %s URL keeps the browser default', async (_shape, href) => {
+    expect(await click({ kind: 'markdown', body: BODY }, href)).toBe(false)
+  })
+})

@@ -68,7 +68,7 @@ Do not stop at manual verification without preserving the scenario in automation
 Use:
 
 ```bash
-pnpm run test:browser        # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state
+pnpm run test:browser        # all four browser projects
 pnpm run test:browser:trace <file>  # one file: a trace for EVERY test, DOM snapshots
 ```
 
@@ -202,7 +202,8 @@ Before closing a change:
 ```bash
 pnpm --filter @kamiazya/whiteboard-mcp typecheck
 pnpm build
-pnpm smoke:distribution:packaged:node   # CI's packaged-smoke job minus the CLI smokes (they spend API quota)
+pnpm smoke:packaged                    # verify's dist tool tour
+pnpm smoke:distribution:packaged:node  # CI packaged-smoke minus the CLI smokes (API quota)
 ```
 
 ## PR Title Rule

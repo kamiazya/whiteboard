@@ -1,11 +1,6 @@
 import { z } from 'zod'
 import type { ProviderState } from '../provider.js'
 
-interface WhiteboardCommandDocumentIdentity {
-  workspaceId?: string
-  documentId: string
-}
-
 // Runtime dependencies a command needs at call time. Never captured by
 // closure — see create-commands.ts's module doc for why this travels as a
 // ref instead.
@@ -45,9 +40,19 @@ export type GetAppContextInput = z.infer<typeof getAppContextInputSchema>
 // spelled out here rather than re-exported from ProviderState.kind: this is
 // a tool-facing vocabulary that agents read, so it changes on its own terms.
 //
-// Deliberately structural-only: the invariant "canvas.kind must equal
-// provider.mode" is enforced in create-commands.ts's getAppContext,
-// immediately after projecting the result and before this schema parses it.
+// The open document is named the same way whichever keeper holds it: since
+// workspace identity is keeper-independent (ADR-0019), its id, document id
+// and path mean the same on both, and the keeper is `provider.mode` alone.
+// The document id is the one a daemon tool addresses a document by.
+const documentIdentitySchema = z
+  .object({
+    workspaceId: z.string(),
+    documentId: z.string(),
+    path: z.string(),
+  })
+  .strict()
+type WhiteboardCommandDocumentIdentity = z.infer<typeof documentIdentitySchema>
+
 export const getAppContextResultSchema = z
   .object({
     provider: z
@@ -55,23 +60,7 @@ export const getAppContextResultSchema = z
         mode: z.enum(['daemon', 'browser']),
       })
       .strict(),
-    canvas: z
-      .union([
-        z
-          .object({
-            kind: z.literal('daemon'),
-            workspaceId: z.string(),
-            path: z.string(),
-          })
-          .strict(),
-        z
-          .object({
-            kind: z.literal('browser'),
-            documentId: z.string(),
-          })
-          .strict(),
-      ])
-      .nullable(),
+    canvas: documentIdentitySchema.nullable(),
   })
   .strict()
 export type GetAppContextResult = z.infer<typeof getAppContextResultSchema>

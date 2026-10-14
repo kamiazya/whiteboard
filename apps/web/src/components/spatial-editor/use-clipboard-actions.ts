@@ -6,7 +6,6 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, type RefObject, useEffect, useRef, useState } from 'react'
-import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import {
   type ClipboardImageSeams,
   needsImageTransfer,
@@ -19,6 +18,7 @@ import {
   recordedReconnection,
   recordReconnection,
 } from '../../lib/clipboard-store.js'
+import { extractClipboardFragment } from '../../lib/spatial/clipboard-fragment.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand, ownedLinePoints } from '../../lib/spatial/commands.js'
 import {

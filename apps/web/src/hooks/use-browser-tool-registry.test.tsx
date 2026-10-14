@@ -11,7 +11,7 @@ function fakeCommands(): WhiteboardCommands {
   return {
     getAppContext: async () => ({
       provider: { mode: 'browser' },
-      canvas: { kind: 'browser', documentId: 'c1' },
+      canvas: { workspaceId: 'w1', documentId: 'c1', path: 'p.md' },
     }),
   }
 }
@@ -119,7 +119,7 @@ describe('useBrowserToolRegistry', () => {
     expect(serialized).not.toContain('daemonbaseurl')
     expect(result).toEqual({
       provider: { mode: 'browser' },
-      canvas: { kind: 'browser', documentId: 'c1' },
+      canvas: { workspaceId: 'w1', documentId: 'c1', path: 'p.md' },
     })
   })
 
@@ -262,7 +262,7 @@ describe('useBrowserToolRegistry', () => {
     const realCommands = createWhiteboardCommands({
       current: {
         provider: { kind: 'browser' },
-        canvas: { documentId: 'c1' },
+        canvas: { workspaceId: 'w1', documentId: 'c1', path: 'p.md' },
       },
     })
 

@@ -24,7 +24,8 @@ export function parseReplicaTier(env: NodeJS.ProcessEnv = process.env): ParsedSe
   if (trimmed === undefined || trimmed === '') return { ok: true, value: DEFAULT_REPLICA_TIER }
   const parsed = replicaTierSchema.safeParse(trimmed)
   if (!parsed.success) {
-    return { ok: false, reason: "must be one of: 'no-offline', 'offline', 'bounded'" }
+    const choices = replicaTierSchema.options.map((tier) => `'${tier}'`).join(', ')
+    return { ok: false, reason: `must be one of: ${choices}` }
   }
   return { ok: true, value: parsed.data }
 }
