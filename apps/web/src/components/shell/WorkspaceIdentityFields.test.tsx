@@ -36,25 +36,34 @@ function renderFields({
   current = 'design',
   onSwitch = vi.fn(),
   onRenamed = vi.fn(),
+  notice,
+  sessionLabel,
 }: {
   active?: WorkspaceRow
   rename?: Rename
   current?: string | null
   onSwitch?: (handle: string) => void
   onRenamed?: (entry: WorkspaceEntry) => void
+  notice?: string | null
+  sessionLabel?: string | null
 } = {}) {
-  render(
+  const fields = (row: WorkspaceRow) => (
     <WorkspaceIdentityFields
-      active={active}
+      active={row}
       current={current}
       rename={rename}
       onRenamed={onRenamed}
       onSwitch={onSwitch}
-    />,
+      notice={notice}
+      sessionLabel={sessionLabel}
+    />
   )
+  const view = render(fields(active))
   return {
-    name: screen.getByLabelText(/^workspace name$/i),
-    url: screen.getByLabelText(/workspace url/i),
+    name: screen.getByLabelText(/^workspace name$/i) as HTMLInputElement,
+    url: screen.getByLabelText(/workspace url/i) as HTMLInputElement,
+    /** What the host does once a rename has answered: restate the row. */
+    rerender: (row: WorkspaceRow) => view.rerender(fields(row)),
   }
 }
 
@@ -136,6 +145,112 @@ describe('WorkspaceIdentityFields — Escape', () => {
   })
 })
 
+describe('WorkspaceIdentityFields — Escape after an edit', () => {
+  it('puts back the name the edit started from, and leaves the field', async () => {
+    const rename = applyingRename()
+    const { name } = renderFields({ rename })
+    name.focus()
+    fireEvent.change(name, { target: { value: 'Oops' } })
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Oops' }))
+    fireEvent.keyDown(name, { key: 'Escape' })
+    await waitFor(() =>
+      expect(rename).toHaveBeenLastCalledWith(DESIGN, { displayName: 'Design team' }),
+    )
+    expect(document.activeElement).not.toBe(name)
+  })
+
+  // Every keystroke is already committed, so the first session's rename is
+  // the stored name by the time the second begins; reverting to the name the
+  // field MOUNTED with would undo it.
+  it('in a later editing session reverts to the name that session began from', async () => {
+    const rename = applyingRename()
+    const { name, rerender } = renderFields({ rename })
+    fireEvent.focus(name)
+    fireEvent.change(name, { target: { value: 'Marketing' } })
+    fireEvent.blur(name)
+    rerender({ ...DESIGN_ROW, displayName: 'Marketing' })
+    fireEvent.focus(name)
+    fireEvent.change(name, { target: { value: 'Mx' } })
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Mx' }))
+    rename.mockClear()
+    fireEvent.keyDown(name, { key: 'Escape' })
+    await waitFor(() =>
+      expect(rename).toHaveBeenCalledExactlyOnceWith(DESIGN, { displayName: 'Marketing' }),
+    )
+  })
+})
+
+describe('WorkspaceIdentityFields — the URL field', () => {
+  it('discards a draft on Escape, and writes nothing when the field is then left', async () => {
+    const rename = applyingRename()
+    const { url } = renderFields({ rename })
+    fireEvent.change(url, { target: { value: 'gone' } })
+    fireEvent.keyDown(url, { key: 'Escape' })
+    expect(url.value).toBe('design')
+    fireEvent.blur(url)
+    await Promise.resolve()
+    expect(rename).not.toHaveBeenCalled()
+  })
+
+  it('writes the trimmed URL when the field is left', async () => {
+    const rename = applyingRename()
+    const { url } = renderFields({ rename })
+    fireEvent.change(url, { target: { value: ' marketing ' } })
+    fireEvent.blur(url)
+    await waitFor(() =>
+      expect(rename).toHaveBeenCalledExactlyOnceWith(DESIGN, { segment: 'marketing' }),
+    )
+  })
+
+  it('does not commit on the Enter that confirms an IME conversion', async () => {
+    const rename = applyingRename()
+    const { url } = renderFields({ rename })
+    fireEvent.change(url, { target: { value: 'marketing' } })
+    fireEvent.keyDown(url, { key: 'Enter', isComposing: true, keyCode: 229 })
+    await Promise.resolve()
+    expect(rename).not.toHaveBeenCalled()
+  })
+
+  it('warns that old links stop working only while the draft differs from the URL', () => {
+    const { url } = renderFields({ rename: applyingRename() })
+    expect(screen.queryByText(/old URL stop working/)).toBeNull()
+    fireEvent.change(url, { target: { value: 'design ' } })
+    expect(url.value).toBe('design ')
+    expect(screen.queryByText(/old URL stop working/)).toBeNull()
+    fireEvent.change(url, { target: { value: 'marketing' } })
+    expect(screen.getByText(/old URL stop working/)).toBeTruthy()
+  })
+})
+
+// The fields sit inside a popover and a shell that bind single-key shortcuts;
+// a letter typed into a name must stay a letter.
+describe('WorkspaceIdentityFields — keystrokes stay in the field', () => {
+  it('lets no keydown in either field reach a listener above it', () => {
+    const { name, url } = renderFields({ rename: applyingRename() })
+    const above = vi.fn()
+    document.addEventListener('keydown', above)
+    try {
+      fireEvent.keyDown(name, { key: 'a' })
+      fireEvent.keyDown(url, { key: 'a' })
+    } finally {
+      document.removeEventListener('keydown', above)
+    }
+    expect(above).not.toHaveBeenCalled()
+  })
+})
+
+describe('WorkspaceIdentityFields — what the host passes in', () => {
+  it("shows the host's notice where a refusal is shown, and the session word", () => {
+    renderFields({
+      rename: applyingRename(),
+      notice: 'Could not switch.',
+      sessionLabel: 'Signed in',
+    })
+    expect(screen.getByRole('alert').textContent).toBe('Could not switch.')
+    expect(screen.getByText('Signed in')).toBeTruthy()
+  })
+})
+
 describe('WorkspaceIdentityFields — where the keeper cannot rename', () => {
   it('takes no typing and no Escape write, and shows the stored values', () => {
     const onRenamed = vi.fn()
@@ -162,10 +277,19 @@ describe('WorkspaceIdentityFields — a value the model refuses', () => {
     expect(rename).not.toHaveBeenCalled()
   })
 
+  it('clears a refusal once a later write is accepted', async () => {
+    const { name, url } = renderFields({ rename: applyingRename() })
+    fireEvent.change(url, { target: { value: 'my team' } })
+    fireEvent.keyDown(url, { key: 'Enter' })
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    fireEvent.change(name, { target: { value: 'Marketing' } })
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
   it('caps both fields at the length the model accepts', () => {
     const { name, url } = renderFields({ rename: applyingRename() })
-    expect((name as HTMLInputElement).maxLength).toBe(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
-    expect((url as HTMLInputElement).maxLength).toBe(WORKSPACE_SEGMENT_MAX_LENGTH)
+    expect(name.maxLength).toBe(WORKSPACE_DISPLAY_NAME_MAX_LENGTH)
+    expect(url.maxLength).toBe(WORKSPACE_SEGMENT_MAX_LENGTH)
   })
 
   it('reads a long name pasted past the cap as refused rather than writing it', async () => {
