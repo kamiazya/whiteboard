@@ -72,11 +72,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // stand alone (the mark's frame, the alpha badge, fullscreen, settings) did.
   'apps/web/src/components/AppShell.tsx#ShellBar': 105,
   'apps/web/src/components/VersionPreview.tsx#PastCanvasPreview': 67,
-  'apps/web/src/components/EditorExitHint.tsx#EditorExitHint': 109,
+  'apps/web/src/components/ui/EditorExitHint.tsx#EditorExitHint': 109,
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 278,
-  'apps/web/src/components/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
+  'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 102,
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
@@ -95,7 +95,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
   'apps/web/src/components/connection/ConnectionStatus.tsx#ConnectionStatus': 61,
   'apps/web/src/components/document-editor/DocumentPageShell.tsx#DocumentPageShell': 92,
-  'apps/web/src/components/document-editor/InspectorPanel.tsx#InspectorPanel': 139,
+  'apps/web/src/components/ui/InspectorPanel.tsx#InspectorPanel': 139,
   'apps/web/src/components/document-editor/InspectorSegment.tsx#InspectorSegment': 56,
   'apps/web/src/components/document-editor/NodeTextEditorOverlay.tsx#NodeTextEditorOverlay': 103,
   'apps/web/src/components/document-editor/SpatialEditorPane.tsx#SpatialEditorPane': 88,
@@ -159,14 +159,14 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // calls or JSX props, which is what splitting a nested conditional into named
   // arms costs in LINES.
   'apps/web/src/components/spatial-editor/CanvasContextMenu.tsx#CanvasContextMenu.contentItems': 90,
-  'apps/web/src/components/spatial-editor/ContextMenu.tsx#ContextMenu.renderOptionsRow': 68,
+  'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu.renderOptionsRow': 68,
   'apps/web/src/components/spatial-editor/context-menu-items/node-menu-items.tsx#pushFrameBands': 66,
   'apps/web/src/components/spatial-editor/navigation.ts#reduceTouchPress': 65,
   'apps/web/src/components/spatial-editor/CanvasContextMenu.tsx#CanvasContextMenu': 218,
   'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 97,
   'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 151,
   // One branch per item kind instead of a nested JSX ternary.
-  'apps/web/src/components/spatial-editor/ContextMenu.tsx#ContextMenu': 259,
+  'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 259,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
   'apps/web/src/components/spatial-editor/DragPreviewLayer.tsx#DragPreviewLayer': 80,
   'apps/web/src/components/spatial-editor/EdgeBendHandles.tsx#EdgeBendHandles': 102,

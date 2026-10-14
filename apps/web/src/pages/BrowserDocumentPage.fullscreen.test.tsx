@@ -19,7 +19,7 @@ import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // The top bar is React.lazy in the page; loading it in the collection phase
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (flake-shapes.md's
 // `lazy-import-race`).
-import '../components/WorkspaceTopBar.js'
+import '../components/workspace-top-bar/WorkspaceTopBar.js'
 import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-fullscreen')

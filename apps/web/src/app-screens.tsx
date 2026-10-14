@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { useLocation } from 'react-router-dom'
 import type { AppShellProps } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
 import { KeeperNotices } from './components/connection/KeeperNotices.js'
@@ -7,30 +8,17 @@ import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-fetch.js'
 import type { ReplicaMatch } from './lib/replicas.js'
+import { DaemonWorkspacePages } from './pages/DaemonWorkspacePages.js'
 
 // Every page below is lazy for the reason its own comment gives, and they are
 // declared HERE rather than in App.tsx because this module is the one that
 // mounts them. `App.lazy-coverage.test.ts` reads both files, so a page moving
 // between them does not fall out of its coverage.
 
-// Lazy so the daemon stack (DaemonBackend, api client) stays out of the entry
-// chunk — only a session with a daemon pays for it; pure browser sessions
-// never import it, keeping that entry under the bundle-size budget.
-const DaemonDocumentPage = lazy(() =>
-  import('./pages/DaemonDocumentPage.js').then((m) => ({ default: m.DaemonDocumentPage })),
-)
-
-// Same lazy-chunk rationale as DaemonDocumentPage above — the gallery only
-// matters once a daemon connection exists.
-const DaemonIndexPage = lazy(() =>
-  import('./pages/DaemonIndexPage.js').then((m) => ({ default: m.DaemonIndexPage })),
-)
-
-// Lazy for the same reason: BrowserDocumentPage statically imports
+// Lazy: BrowserDocumentPage statically imports
 // useDocumentSync (which imports loro-crdt), and it is the default render
 // path (no daemon) — so it was the one making
-// loro-crdt part of every session's initial paint even though
-// DaemonDocumentPage above was already lazy.
+// loro-crdt part of every session's initial paint.
 const BrowserDocumentPage = lazy(() =>
   import('./pages/BrowserDocumentPage.js').then((m) => ({
     default: m.BrowserDocumentPage,
@@ -65,9 +53,13 @@ const SettingsPage = lazy(() =>
  * The frame every full-window screen below shares: the shell chrome over a
  * flex column that owns the viewport.
  *
- * ErrorBoundary sits OUTSIDE Suspense on purpose: a lazy-chunk load failure
- * propagates through Suspense's own error path to the nearest boundary, and
- * without one here a rejected import unmounts the root.
+ * ErrorBoundary sits OUTSIDE the screen's Suspense on purpose: a lazy-chunk
+ * load failure propagates through Suspense's own error path to the nearest
+ * boundary. It sits INSIDE the frame, around the page alone, so the shell and
+ * the keeper's notices survive a page failure; a failure in the shell itself
+ * falls to boot's root boundary. `resetKey` is the route, because this frame
+ * stays mounted across navigation and would otherwise hold a failed page's
+ * error screen over the next one.
  */
 function ShellFrame({
   daemon,
@@ -83,18 +75,17 @@ function ShellFrame({
   onWorkInBrowser?: () => void
   children: React.ReactNode
 }) {
+  const { pathname } = useLocation()
   return (
-    <ErrorBoundary>
-      <div className="flex h-dvh flex-col">
-        <AppShellLazy
-          daemon={daemon}
-          {...(workspaces === undefined ? {} : { workspaces })}
-          {...(onWorkInBrowser === undefined ? {} : { onWorkInBrowser })}
-        />
-        <KeeperNotices />
-        {children}
-      </div>
-    </ErrorBoundary>
+    <div className="flex h-dvh flex-col">
+      <AppShellLazy
+        daemon={daemon}
+        {...(workspaces === undefined ? {} : { workspaces })}
+        {...(onWorkInBrowser === undefined ? {} : { onWorkInBrowser })}
+      />
+      <KeeperNotices />
+      <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+    </div>
   )
 }
 
@@ -104,10 +95,6 @@ function ShellFrame({
  * ONE component for both arrivals — a reconnection through the extension, and
  * a runtime-config daemon provider state. They differ in where the address
  * comes from and in nothing else.
- *
- * `key` on the document mount forces a clean remount (fresh
- * controller/backend) on every index -> document transition instead of
- * reusing a previous document's identity.
  */
 export function DaemonWorkspaceScreen({
   daemonBaseUrl,
@@ -125,26 +112,12 @@ export function DaemonWorkspaceScreen({
   return (
     <ShellFrame daemon={true} workspaces={workspaces} onWorkInBrowser={onWorkInBrowser}>
       <div className="min-h-0 flex-1 overflow-hidden">
-        <Suspense
-          fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
-        >
-          {view.kind === 'index' ? (
-            <DaemonIndexPage
-              daemonBaseUrl={daemonBaseUrl}
-              workspace={view.workspace}
-              onWorkspaceResolved={(workspace) => onView({ kind: 'index', workspace })}
-              onOpenDocument={(workspace, path) => onView({ kind: 'document', workspace, path })}
-            />
-          ) : (
-            <DaemonDocumentPage
-              key={`${view.workspace}:${view.path}`}
-              daemonBaseUrl={daemonBaseUrl}
-              workspaceId={view.workspace}
-              path={view.path}
-              onNavigateBack={() => onView({ kind: 'index', workspace: view.workspace })}
-            />
-          )}
-        </Suspense>
+        <DaemonWorkspacePages
+          daemonBaseUrl={daemonBaseUrl}
+          view={view}
+          onView={onView}
+          waitingMessage="Connecting to daemon…"
+        />
       </div>
     </ShellFrame>
   )

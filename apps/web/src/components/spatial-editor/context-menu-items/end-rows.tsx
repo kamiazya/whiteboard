@@ -11,7 +11,7 @@
 import type { CanvasEdge, CanvasLine, EdgeSide } from '@kamiazya/whiteboard-model'
 import { endSide } from '@kamiazya/whiteboard-model'
 import { PanelBottom, PanelLeft, PanelRight, PanelTop, SquareDashed } from 'lucide-react'
-import type { ContextMenuOptionsItem } from '../ContextMenu.js'
+import type { ContextMenuOptionsItem } from '../../ui/ContextMenu.js'
 
 /** Arrow direction reads the JSON Canvas defaults (fromEnd none, toEnd arrow). */
 const ARROW_STATES = [

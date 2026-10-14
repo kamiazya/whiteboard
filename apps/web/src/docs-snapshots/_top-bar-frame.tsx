@@ -4,7 +4,7 @@
 // and the scene differ.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
+import WorkspaceTopBar from '../components/workspace-top-bar/WorkspaceTopBar.js'
 import { LegendlessCanvas } from './_legendless-canvas.js'
 
 const TOP_BAR_HEIGHT_PX = 48

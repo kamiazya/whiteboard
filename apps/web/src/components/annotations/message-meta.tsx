@@ -4,8 +4,8 @@
  * conversation and a second copy of this would drift from the first.
  */
 import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
+import { formatRelative } from '../../lib/format-relative.js'
 import { threadLastActivityAt } from '../../lib/thread-activity.js'
-import { formatRelative } from '../workspace-files/format-relative.js'
 
 /**
  * The app's one stamp: "5m ago" while it is fresh, and a local M/D HH:MM

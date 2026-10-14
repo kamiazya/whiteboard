@@ -1,6 +1,8 @@
 /**
- * The installed app's "New canvas" launcher shortcut (`/?new=canvas`, declared
- * in `vite-pwa-options.ts`), driven through App's real routing.
+ * The installed app's "New canvas" launcher shortcut, driven through App's
+ * real routing from the URL the manifest itself declares — so a manifest and
+ * a page that disagree on the parameter fail here, rather than each side's
+ * test passing on its own copy.
  *
  * Through App rather than by mounting a page directly: what decides whether
  * the parameter is honoured is which page the router mounts for `/`, and what
@@ -15,6 +17,7 @@ import 'fake-indexeddb/auto'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { pwaOptions } from '../vite-pwa-options.js'
 import { App } from './App.js'
 import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 import { sharedFoldingBrowserIndex } from './lib/folding-browser-index.js'
@@ -52,6 +55,21 @@ async function documentCount(): Promise<number> {
   return (await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).length
 }
 
+function manifestShortcutUrl(): string {
+  const manifest = pwaOptions.manifest
+  if (!manifest) throw new Error('the PWA options declare no manifest')
+  const url = manifest.shortcuts?.find((s) => s.name === 'New canvas')?.url
+  if (url === undefined) throw new Error('the manifest declares no "New canvas" shortcut')
+  return url
+}
+
+/** Whether the address still carries any parameter the shortcut put there. */
+function carriesShortcutParam(search: string): boolean {
+  const shortcut = new URL(manifestShortcutUrl(), 'https://app.invalid').searchParams
+  const now = new URLSearchParams(search)
+  return [...shortcut.keys()].some((key) => now.has(key))
+}
+
 function renderAt(entry: string) {
   const router = createMemoryRouter(
     [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
@@ -63,17 +81,17 @@ function renderAt(entry: string) {
 
 describe('the New canvas launcher shortcut', () => {
   it('creates one document, opens it, and leaves no parameter behind', async () => {
-    const router = renderAt('/?new=canvas')
+    const router = renderAt(manifestShortcutUrl())
     await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
     expect(await documentCount()).toBe(1)
     expect(openedPath).toBeDefined()
-    expect(router.state.location.search).not.toContain('new=canvas')
+    expect(carriesShortcutParam(router.state.location.search)).toBe(false)
     // No entry still carrying the parameter is left to come back to: a Back
     // into one would create a second document.
     await act(async () => {
       await router.navigate(-1)
     })
-    expect(router.state.location.search).not.toContain('new=canvas')
+    expect(carriesShortcutParam(router.state.location.search)).toBe(false)
     await waitFor(async () => expect(await documentCount()).toBe(1))
   })
 
@@ -85,7 +103,7 @@ describe('the New canvas launcher shortcut', () => {
   })
 
   it('a reload of where the shortcut landed does not create a second document', async () => {
-    const first = renderAt('/?new=canvas')
+    const first = renderAt(manifestShortcutUrl())
     await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
     const landed = first.state.location.pathname + first.state.location.search
     cleanup()

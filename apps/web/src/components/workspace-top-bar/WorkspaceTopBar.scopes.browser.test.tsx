@@ -10,10 +10,10 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { jsonResponse } from '../test-utils/json-response.js'
+import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
+import { jsonResponse } from '../../test-utils/json-response.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
-import '../index.css'
+import '../../index.css'
 
 afterEach(cleanup)
 

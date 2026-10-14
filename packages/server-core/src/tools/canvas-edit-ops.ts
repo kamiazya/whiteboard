@@ -34,6 +34,7 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import type { AgentActivityTouched } from '../agent-activity-touched.js'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
 import { proposalAuthorSchema } from './proposal-author.js'
 
@@ -628,6 +629,19 @@ export const geometryEntrySchema = z
   })
   .strict()
 
+/**
+ * Keyed by the notifier port's kinds, so a kind this answer reports is one
+ * the watching browser's outline is told about too: a kind added here and
+ * not there (or the reverse) fails to compile instead of reaching the model
+ * and vanishing on its way to the browser.
+ */
+const canvasEditTouchedShape = {
+  nodes: z.array(nodeIdSchema),
+  edges: z.array(nodeIdSchema),
+  lines: z.array(nodeIdSchema),
+  comments: z.array(nodeIdSchema),
+} satisfies Record<keyof AgentActivityTouched, z.ZodType<string[]>>
+
 export const canvasEditOutputSchema = z
   .object({
     documentId: documentIdSchema,
@@ -637,14 +651,7 @@ export const canvasEditOutputSchema = z
      * Sorted, so the payload is reproducible across runs rather than
      * carrying Set iteration order.
      */
-    touched: z
-      .object({
-        nodes: z.array(nodeIdSchema),
-        edges: z.array(nodeIdSchema),
-        lines: z.array(nodeIdSchema),
-        comments: z.array(nodeIdSchema),
-      })
-      .strict(),
+    touched: z.object(canvasEditTouchedShape).strict(),
     /**
      * Final geometry of every node this batch positioned WITHOUT being told
      * the numbers — an auto-placed add, or a node `tidy` moved. A node whose

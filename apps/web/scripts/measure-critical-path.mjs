@@ -20,8 +20,10 @@ import { existsSync } from 'node:fs'
 // - `lcp`     Largest Contentful Paint, from the browser's own entry.
 // - `fcp`     First Contentful Paint, likewise.
 // - `cls`     Cumulative Layout Shift, summed over non-input-driven shifts.
-// - `longTasksMs`  Total time in tasks over 50ms after FCP. NOT Total Blocking
-//   Time: TBT subtracts 50ms per task and bounds at TTI. Called what it is
+// - `longTasks`  Total milliseconds in tasks over 50ms, counted from
+//   navigation start (a buffered `longtask` observer, so work before first
+//   paint is included) until the run is read. NOT Total Blocking Time: TBT
+//   starts at FCP, subtracts 50ms per task and bounds at TTI. Called what it is
 //   rather than borrowed, because a number labelled TBT would be compared
 //   against Lighthouse's and they are not the same quantity.
 //

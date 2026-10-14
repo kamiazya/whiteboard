@@ -38,7 +38,7 @@ const sources = import.meta.glob('./**/*.tsx', {
  */
 const HEADER_SURFACES: Record<string, number> = {
   './components/AppShell.tsx': 3,
-  './components/WorkspaceTopBar.tsx': 1,
+  './components/workspace-top-bar/WorkspaceTopBar.tsx': 1,
   './components/workspace-top-bar/DocumentMenu.tsx': 1,
   // The four inspect openers wear ONE class from ONE file now — see
   // `InspectorSegment`. Before it they were four buttons in three other
@@ -46,7 +46,7 @@ const HEADER_SURFACES: Record<string, number> = {
   // a canvas and `properties, comments, kebab` on a note: each opener drawn
   // wherever its own component already was.
   './components/document-editor/InspectorSegment.tsx': 1,
-  './components/document-editor/InspectorPanel.tsx': 1,
+  './components/ui/InspectorPanel.tsx': 1,
 }
 
 const HEADER_CLASS = /\bHEADER_(?:WIDE_)?(?:BUTTON|TOGGLE)_CLASS\b/g

@@ -33,7 +33,7 @@ const sources = import.meta.glob(['./**/*.tsx', '!./**/*.test.tsx'], {
 /** `file expression` → why that interpolation carries no content. */
 const CONTENT_FREE: Record<string, string> = {
   './components/workspace-files/NewDocumentMenu.tsx kind': 'a document kind, a closed enum',
-  './components/document-editor/InspectorPanel.tsx kind': 'the inspector section kind, an enum',
+  './components/ui/InspectorPanel.tsx kind': 'the inspector section kind, an enum',
   './components/settings/LocalCopiesCard.tsx row.workspaceId': 'a generated workspace id',
   './components/settings/ReplicaOfflineControl.tsx target.workspaceId': 'a generated workspace id',
   './components/annotations/message-meta.tsx thread.id': 'a generated thread id',

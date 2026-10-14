@@ -3,7 +3,7 @@
 // what a person watching the board reads in the agent toast, so a verb that
 // drops out of it changes what they are told while every op still applies.
 
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { AgentActivity, CanvasClientNotifier } from '../server-deps.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
@@ -35,6 +35,7 @@ async function summaryOf(ops: CanvasEditInput['ops']): Promise<readonly string[]
   const store = new FakeDocumentStore()
   await seedCanvas(store, {
     nodes: [
+      groupNode({ id: 'g', x: -20, y: -20, width: 600, height: 400, label: 'Phase 1' }),
       textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'one\ntwo' }),
       textNode({ id: 'b', x: 300, y: 0, width: 100, height: 60, text: 'b' }),
     ],
@@ -67,10 +68,22 @@ describe('wb_canvas_edit summary — edge and line verbs', () => {
     expect(summaries).toEqual(['added 2, changed 2, removed 2'])
   })
 
+  test('unlocking an edge is tallied as unlocked', async () => {
+    const summaries = await summaryOf([{ op: 'edge.lock', id: 'e1', locked: false }])
+
+    expect(summaries).toEqual(['unlocked 1'])
+  })
+
   test('a batch of only node.splice reads as an unspecific edit', async () => {
     const summaries = await summaryOf([
       { op: 'node.splice', id: 'a', startLine: 0, endLine: 0, replacement: 'first' },
     ])
+
+    expect(summaries).toEqual(['edited the canvas'])
+  })
+
+  test('a batch of only region.set reads as an unspecific edit', async () => {
+    const summaries = await summaryOf([{ op: 'region.set', within: 'g', nodes: ['a'] }])
 
     expect(summaries).toEqual(['edited the canvas'])
   })

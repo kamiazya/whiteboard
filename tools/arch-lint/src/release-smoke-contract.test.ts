@@ -34,20 +34,24 @@ describe('release smoke contract', () => {
     )
   })
 
-  it('runs the packaged and tarball smokes as publish-tier gates, before npm publish', () => {
+  it('runs the packaged smoke and the distribution suite as publish-tier gates, before npm publish', () => {
     // The packaged/tarball smokes are no longer standalone release.yml steps —
     // they are `publish`-tier gates in release-gate-matrix.json, executed in
     // matrix order by the single `pnpm publish-gate` step. That step must
-    // still run after build and before `npm publish`.
+    // still run after build and before `npm publish`. The tarball flow runs
+    // inside `test:distribution` (tarball.distribution.test.ts), which drives
+    // the same implementation `pnpm smoke:tarball` does.
     const matrix = readJson(resolve(REPO_ROOT, 'tests/e2e/distribution/release-gate-matrix.json'))
     const publishGateIds: string[] = matrix.gates
       .filter((g: { requiredFor: string[] }) => g.requiredFor.includes('publish'))
       .map((g: { id: string }) => g.id)
     expect(publishGateIds).toContain('build')
     expect(publishGateIds).toContain('smoke:packaged')
-    expect(publishGateIds).toContain('smoke:tarball')
+    expect(publishGateIds).toContain('test:distribution')
     expect(publishGateIds.indexOf('build')).toBeLessThan(publishGateIds.indexOf('smoke:packaged'))
-    expect(publishGateIds.indexOf('build')).toBeLessThan(publishGateIds.indexOf('smoke:tarball'))
+    expect(publishGateIds.indexOf('build')).toBeLessThan(
+      publishGateIds.indexOf('test:distribution'),
+    )
 
     const publishGateStepIndex = releaseWorkflow.indexOf('run: pnpm publish-gate')
     const publishIndex = releaseWorkflow.indexOf('- name: Publish to npm')

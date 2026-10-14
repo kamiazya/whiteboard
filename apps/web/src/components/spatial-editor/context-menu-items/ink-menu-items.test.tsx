@@ -8,7 +8,7 @@ import { VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import { deleteInkCommand } from '../../../lib/spatial/ink-commands.js'
-import type { ContextMenuItem } from '../ContextMenu.js'
+import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { type InkMenuItemsInput, inkMenuItems } from './ink-menu-items.js'
 
 const stroke = (id: string, group?: string): CanvasLine => ({

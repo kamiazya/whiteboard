@@ -75,4 +75,20 @@ describe('the sync route applying a subscribe batch', () => {
     },
     SETTLE,
   )
+
+  it(
+    'lets a full stream subscribe again to a document it already holds',
+    async () => {
+      const { post, close } = await openedRouter()
+      expect((await post('subscribe', { subscribe: docs(MAX_DOCS_PER_STREAM) })).status).toBe(200)
+
+      const held = await post('subscribe', { subscribe: ['ws-cap/doc-0'] })
+      const fresh = await post('subscribe', { subscribe: ['ws-cap/beyond'] })
+
+      expect(held.status).toBe(200)
+      expect(fresh.status).toBe(400)
+      await close()
+    },
+    SETTLE,
+  )
 })

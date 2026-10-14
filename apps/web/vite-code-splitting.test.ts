@@ -6,7 +6,9 @@
  * production build is cut by these groups.
  */
 import { describe, expect, it } from 'vitest'
+import viteConfig from './vite.config.js'
 import { createCodeSplittingGroups } from './vite-code-splitting.js'
+import { pwaOptions } from './vite-pwa-options.js'
 
 const STORE = '/repo/node_modules/.pnpm'
 const LUCIDE = `${STORE}/lucide-react@1.28.0/node_modules/lucide-react/dist/esm/icons/copy.js`
@@ -98,14 +100,14 @@ describe('createCodeSplittingGroups', () => {
 
   it('leaves out a first-paint module that holds a dynamic import', () => {
     const app = `${SRC}/App.tsx`
-    expect(chunkOf(app, true, { [app]: { dynamicallyImportedIds: [`${SRC}/pages/X.tsx`] } })).toBe(
-      undefined,
-    )
+    expect(
+      chunkOf(app, true, { [app]: { dynamicallyImportedIds: [`${SRC}/pages/X.tsx`] } }),
+    ).toBeUndefined()
     // A computed specifier never reaches dynamicallyImportedIds — react-router
     // loads route modules that way — so the call itself is what is matched.
-    expect(chunkOf(ROUTER, true, { [ROUTER]: { code: 'await import(route.module)' } })).toBe(
-      undefined,
-    )
+    expect(
+      chunkOf(ROUTER, true, { [ROUTER]: { code: 'await import(route.module)' } }),
+    ).toBeUndefined()
   })
 
   it('leaves out a module whose static imports reach a dynamic import', () => {
@@ -148,5 +150,23 @@ describe('createCodeSplittingGroups', () => {
     // bundle-size gate's CSS budget reads `index-*.css`.
     expect(chunkOf(`${SRC}/index.css`, true)).toBeUndefined()
     expect(chunkOf('/repo/apps/web/index.html', true)).toBeUndefined()
+  })
+})
+
+// Vite's own default (500 kB) warns on every build, because the svg
+// renderer, the editor and mermaid are large LAZY chunks by design. A
+// warning that always prints is one everybody skips, so a new one would
+// land unread in the same tail.
+const VITE_DEFAULT_LIMIT_KB = 500
+
+describe('vite build chunkSizeWarningLimit', () => {
+  it('is raised above the default so a healthy build prints no warning', () => {
+    expect(viteConfig.build?.chunkSizeWarningLimit).toBeGreaterThan(VITE_DEFAULT_LIMIT_KB)
+  })
+
+  it('stays below the precache ceiling, so a chunk too big to precache still warns', () => {
+    const precacheCeilingKb = (pwaOptions.workbox?.maximumFileSizeToCacheInBytes ?? 0) / 1000
+    expect(precacheCeilingKb).toBeGreaterThan(0)
+    expect(viteConfig.build?.chunkSizeWarningLimit).toBeLessThan(precacheCeilingKb)
   })
 })

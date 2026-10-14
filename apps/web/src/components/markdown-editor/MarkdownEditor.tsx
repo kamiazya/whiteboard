@@ -28,7 +28,7 @@ import { safeGetItem, safeSetItem } from '../../lib/safe-local-storage.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
-import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
+import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu.js'
 import { documentYForLine } from './anchor-mapping.js'
 import {
   annotationDecorations,

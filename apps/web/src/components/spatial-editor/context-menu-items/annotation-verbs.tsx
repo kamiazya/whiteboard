@@ -15,7 +15,7 @@ import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { commentCornerOf } from '@kamiazya/whiteboard-model'
 import { Eye, EyeOff, MessageSquare, MessageSquarePlus } from 'lucide-react'
 import type { Point } from '../../../lib/spatial/viewport.js'
-import type { ContextMenuItem } from '../ContextMenu.js'
+import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 
 type SetCommentCompose = CanvasCommands['setCommentCompose']

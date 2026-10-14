@@ -274,7 +274,7 @@ const BANNED = [
     dirs: ['apps/web/src'],
     exempt: [],
     reaches: [
-      'apps/web/src/components/WorkspaceTopBar.tsx',
+      'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx',
       'apps/web/src/lib/browser-versions-backend.ts',
       'apps/web/src/pages/BrowserDocumentPage.tsx',
       'apps/web/src/pages/DocumentPage.tsx',

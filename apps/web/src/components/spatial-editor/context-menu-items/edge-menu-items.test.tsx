@@ -6,7 +6,7 @@ import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it, vi } from 'vitest'
-import type { ContextMenuItem } from '../ContextMenu.js'
+import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { edgeMenuItems } from './edge-menu-items.js'
 
 const baseEdge: CanvasEdge = {

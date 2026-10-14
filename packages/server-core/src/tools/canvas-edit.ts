@@ -12,6 +12,7 @@ import {
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
+import type { AgentActivityTouched } from '../agent-activity-touched.js'
 import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -217,15 +218,24 @@ async function commitAsProposal({
   return {
     documentId: input.documentId,
     applied: 0,
-    touched: {
-      nodes: [...s.touchedNodes].sort(),
-      edges: [...s.touchedEdges].sort(),
-      lines: [...s.touchedLines].sort(),
-      comments: [...s.touchedComments].sort(),
-    },
+    touched: sortedTouched(s),
     geometry: [...s.geometry.values()].sort((a, b) => compareCodeUnit(a.id, b.id)),
     snapshot: projectCanvasSnapshot(input.documentId, canvas, s.nodeLocks, s.edgeLocks),
     proposed: proposal,
+  }
+}
+
+/**
+ * What the batch touched, sorted so the payload is reproducible rather than
+ * carrying Set iteration order. Typed as the notifier port's shape so the
+ * tool's answer and the browser's outline are built from one object.
+ */
+function sortedTouched(s: CanvasEditSession): AgentActivityTouched {
+  return {
+    nodes: [...s.touchedNodes].sort(),
+    edges: [...s.touchedEdges].sort(),
+    lines: [...s.touchedLines].sort(),
+    comments: [...s.touchedComments].sort(),
   }
 }
 
@@ -243,12 +253,7 @@ async function commitAsProposal({
 async function announceEdit(
   deps: ServerDeps,
   input: CanvasEditInput,
-  touched: {
-    readonly nodes: string[]
-    readonly edges: string[]
-    readonly lines: string[]
-    readonly comments: string[]
-  },
+  touched: AgentActivityTouched,
 ): Promise<void> {
   const { workspaceId, documentId } = input
   announceAgentActivity(deps, { workspaceId, documentId, ...touched }, summarizeOps(input.ops))
@@ -434,12 +439,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     parsed.data,
   )
 
-  const touched = {
-    nodes: [...s.touchedNodes].sort(),
-    edges: [...s.touchedEdges].sort(),
-    lines: [...s.touchedLines].sort(),
-    comments: [...s.touchedComments].sort(),
-  }
+  const touched = sortedTouched(s)
 
   await announceEdit(deps, input, touched)
 

@@ -1,7 +1,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ReactNode, Ref } from 'react'
 import VersionTimeline, { type VersionPreviewSession } from '../../components/VersionTimeline.js'
-import { InspectorPanel } from '../document-editor/InspectorPanel.js'
+import { InspectorPanel } from '../ui/InspectorPanel.js'
 
 interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>

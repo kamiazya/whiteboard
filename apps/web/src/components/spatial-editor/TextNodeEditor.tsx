@@ -20,7 +20,7 @@
 import { growsPast } from '@kamiazya/whiteboard-model'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
-import { EditorExitHint } from '../EditorExitHint.js'
+import { EditorExitHint } from '../ui/EditorExitHint.js'
 
 export interface TextNodeEditorProps {
   readonly box: Box

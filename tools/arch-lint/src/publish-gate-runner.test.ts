@@ -79,12 +79,12 @@ describe('publish tier wiring', () => {
     expect(script).not.toMatch(/mcp-jsdom|mcp-browser|web-browser/)
   })
 
-  it('includes build, check:release-artifacts, smoke:tarball, smoke:packaged, generate:sbom:npm, smoke:distribution:packaged:node', () => {
+  it('includes build, check:release-artifacts, test:distribution, smoke:packaged, generate:sbom:npm, smoke:distribution:packaged:node', () => {
     const ids = publishGates.map((g) => g.id)
     for (const expected of [
       'build',
       'check:release-artifacts',
-      'smoke:tarball',
+      'test:distribution',
       'smoke:packaged',
       'generate:sbom:npm',
       'smoke:distribution:packaged:node',

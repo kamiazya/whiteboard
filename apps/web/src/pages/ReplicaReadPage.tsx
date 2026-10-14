@@ -39,7 +39,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import { Button } from '../components/ui/button.js'
-import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from '../hooks/use-prefetched-cache.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
@@ -48,7 +47,8 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
-import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
+import { formatRelative } from '../lib/format-relative.js'
+import { type LinkableDocument, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { replicaClipboardImages } from '../lib/replica-clipboard-images.js'
 import { loadReplicaImagesRetrying } from '../lib/replica-images.js'
 import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
@@ -292,8 +292,20 @@ function useReplicaImageUrls(
   return loaded !== undefined && loaded.refs === refs ? loaded.urls : undefined
 }
 
-/** The replica's own link tables — the two both keeper pages build, over this record's entries. */
-function useReplicaLinkTables(state: LoadState) {
+/**
+ * The replica's own link tables — the ones both keeper pages build, over this
+ * record's entries — and how a followed link opens its target here.
+ *
+ * A resolved wiki link's anchor carries a bare document id as its href, so a
+ * click nobody answers navigates the tab off the offline copy, onto a route
+ * that names no document, and drops a key held only in memory. Following it
+ * selects the target in place; an id the record does not hold opens nothing.
+ */
+function useReplicaLinkTables(
+  state: LoadState,
+  selected: WorkspaceDocumentEntry | undefined,
+  setSelectedPath: (path: string) => void,
+) {
   const linkable = useMemo(
     (): readonly LinkableDocument[] =>
       state.kind === 'ready'
@@ -308,7 +320,18 @@ function useReplicaLinkTables(state: LoadState) {
   )
   const resolveAlias = useMemo(() => createUniqueNameResolver(linkEntries(linkable)), [linkable])
   const resolveTitle = useMemo(() => linkTitles(linkable), [linkable])
-  return { resolveAlias, resolveTitle }
+  const excludeDocumentId = selected?.documentId
+  const markdownLinks = useMemo(
+    () => ({
+      linkTargets: linkTargets(linkable, { excludeDocumentId }),
+      onOpenDocument: (documentId: string) => {
+        const target = linkable.find((entry) => entry.documentId === documentId)
+        if (target !== undefined) setSelectedPath(target.path)
+      },
+    }),
+    [linkable, excludeDocumentId, setSelectedPath],
+  )
+  return { resolveAlias, resolveTitle, markdownLinks }
 }
 
 /**
@@ -352,8 +375,13 @@ function useReplicaSeams(
   workspaceId: string,
   state: LoadState,
   selected: WorkspaceDocumentEntry | undefined,
+  setSelectedPath: (path: string) => void,
 ) {
-  const { resolveAlias, resolveTitle } = useReplicaLinkTables(state)
+  const { resolveAlias, resolveTitle, markdownLinks } = useReplicaLinkTables(
+    state,
+    selected,
+    setSelectedPath,
+  )
   const graph = useMemo(
     () =>
       state.kind !== 'ready' || selected === undefined
@@ -384,7 +412,7 @@ function useReplicaSeams(
     () => replicaClipboardImages(daemonBaseUrl, workspaceId),
     [daemonBaseUrl, workspaceId],
   )
-  return { seams, references, tagLibrary, tagsInUse, facetRegistry, clipboardImages }
+  return { seams, references, markdownLinks, tagLibrary, tagsInUse, facetRegistry, clipboardImages }
 }
 
 interface ReplicaReaderProps {
@@ -402,6 +430,7 @@ interface ReplicaReaderProps {
   spatialLocks: ReturnType<typeof useReplicaEditing>['spatialLocks']
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
+  markdownLinks: ReturnType<typeof useReplicaLinkTables>['markdownLinks']
   tagLibrary: TagLibrary | undefined
   tagsInUse: readonly string[] | undefined
   facetRegistry: FacetRegistry
@@ -503,6 +532,7 @@ function ReplicaReader({
   spatialLocks,
   seams,
   references,
+  markdownLinks,
   tagLibrary,
   tagsInUse,
   facetRegistry,
@@ -534,6 +564,7 @@ function ReplicaReader({
               value={draft}
               onChange={onDraftChange}
               references={seams}
+              {...markdownLinks}
               tagLibrary={tagLibrary}
               theme={resolvedTheme}
             />
@@ -684,7 +715,7 @@ export function ReplicaReadPage({
   // entries — so a `[[...]]` written here resolves by the rules the rest of
   // the app already applies (path or id; a display name is a label, never a
   // target) rather than by a lookup this page invented for itself.
-  const drawnWith = useReplicaSeams(daemonBaseUrl, workspaceId, state, selected)
+  const drawnWith = useReplicaSeams(daemonBaseUrl, workspaceId, state, selected, setSelectedPath)
   const editing = useReplicaEditing({
     record: state.kind === 'ready' ? state.record : undefined,
     selected,

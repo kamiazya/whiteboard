@@ -10,9 +10,9 @@ import { ScrollArea } from '../components/ui/scroll-area.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { DaemonContractError } from '../lib/daemon-contract-error.js'
+import { formatRelative } from '../lib/format-relative.js'
 import { type PastDocument, VersionsRequestError } from '../lib/versions-backend.js'
 import { SquiggleLoader } from './SquiggleLoader.js'
-import { formatRelative } from './workspace-files/format-relative.js'
 
 const log = getAppLogger('VersionTimeline')
 

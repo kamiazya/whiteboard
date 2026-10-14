@@ -8,6 +8,7 @@ import {
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
 import type { WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { useAutoCheckpoint } from './use-auto-checkpoint.js'
 
 const WORKSPACE = 'ws-checkpoint'
@@ -201,5 +202,34 @@ describe('useAutoCheckpoint when the page unmounts inside the quiet window', () 
     await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS * 2)
 
     expect(save).not.toHaveBeenCalled()
+  })
+})
+
+describe('useAutoCheckpoint when the record cannot be read', () => {
+  beforeEach(() => setBrowserWorkspaceIdForTests(WORKSPACE))
+  afterEach(() => resetBrowserWorkspaceIdForTests())
+
+  // `signal` runs inside Loro's local-update subscriber and `flush` on
+  // teardown, so a throw from either would surface in an edit or an unload.
+  it('costs the checkpoint, never the edit or the teardown', async () => {
+    const save = vi.fn<(workspaceId: string, path: string) => Promise<VersionEntry>>()
+    const { result } = renderHook(() =>
+      useAutoCheckpoint(
+        {
+          readRecord: () => {
+            throw new Error('record unavailable')
+          },
+          applyRestore: async () => {},
+        },
+        { save, isUnchangedSinceLastVersion: async () => false },
+        'a',
+        () => ({ post() {}, close() {} }),
+      ),
+    )
+
+    expect(() => result.current.signal()).not.toThrow()
+    expect(() => result.current.flush()).not.toThrow()
+    expect(save).not.toHaveBeenCalled()
+    await expectLoggedFailure('could not arm an automatic checkpoint')
   })
 })

@@ -14,7 +14,7 @@
  */
 import type { StateCommand } from '@codemirror/state'
 import { MessageSquarePlus } from 'lucide-react'
-import type { ContextMenuItem } from '../spatial-editor/ContextMenu.js'
+import type { ContextMenuItem } from '../ui/ContextMenu.js'
 import {
   levelCommand,
   MARKDOWN_EDITOR_VERBS,

@@ -1,14 +1,27 @@
 // @vitest-environment node
 /**
  * Every frame that mounts a document page holds an `ErrorBoundary` OUTSIDE
- * each of its `Suspense`s.
+ * each of its `Suspense`s, and the one around a Suspense that switches pages
+ * carries a `resetKey`.
  *
  * A rejected lazy chunk propagates through Suspense to the nearest boundary.
- * A frame with none above its Suspense hands the failure to the root, which
- * either unmounts to a blank window or — under boot's root boundary — replaces
- * the frame's header and notices with the error screen. Every test of a page
- * stays green either way, so the duty is the frame's and is checked here,
- * beside `keeper-notices-frames.test.ts`, which checks the frame's other one.
+ * A frame with none above its Suspense hands the failure to boot's root
+ * boundary, which replaces the frame's header and notices with the error
+ * screen. So each frame's boundary sits inside the frame, around the page
+ * alone — `ShellFrame`'s around its children, `DaemonWorkspacePages`' inside
+ * the server-mode and daemon frames — and boot's root boundary stays the
+ * floor for a failure in the shell itself; no frame keeps a second boundary
+ * outside its chrome.
+ *
+ * A frame stays mounted while the route changes which page it shows, so a
+ * boundary with no `resetKey` holds a failed page's error screen over the
+ * next page the person opens. The switch is recognised by a conditional
+ * expression inside the Suspense, and the boundary that must reset is the
+ * innermost one around it.
+ *
+ * Every test of a page stays green either way, so the duty is the frame's and
+ * is checked here, beside `keeper-notices-frames.test.ts`, which checks the
+ * frame's other one.
  *
  * Checked per file, over the JSX text with comments stripped: an opening
  * `<Suspense` must sit inside an open `<ErrorBoundary>`, or inside a component
@@ -45,24 +58,6 @@ function holdsPage(code: string): boolean {
   return new RegExp(String.raw`<(?:${names.join('|')})[\s/>]`).test(code)
 }
 
-/** Whether `body` renders `{children}` between a boundary's opening and closing tags. */
-function boundaryEnclosesChildren(body: string): boolean {
-  const open = body.indexOf(`<${BOUNDARY}`)
-  if (open < 0) return false
-  const close = body.indexOf(`</${BOUNDARY}>`, open)
-  return close >= 0 && /\{\s*(?:props\.)?children\s*\}/.test(body.slice(open, close))
-}
-
-/** Components this file defines whose own body wraps its children in a boundary. */
-function boundaryWrappers(code: string): string[] {
-  const declarations = [...code.matchAll(FUNCTION_DECLARATION)]
-  return declarations
-    .filter((m, i) =>
-      boundaryEnclosesChildren(code.slice(m.index, declarations[i + 1]?.index ?? code.length)),
-    )
-    .map((m) => m[1] as string)
-}
-
 /** Where the JSX tag opened at `start` ends, skipping `>` inside `{…}` attributes. */
 function tagEnd(code: string, start: number): { end: number; selfClosing: boolean } {
   let depth = 0
@@ -75,24 +70,89 @@ function tagEnd(code: string, start: number): { end: number; selfClosing: boolea
   return { end: code.length, selfClosing: true }
 }
 
-/** Each `<Suspense` opening that no boundary encloses, by line number. */
-function unguardedSuspenses(source: string): number[] {
+const RESET_KEY = /\bresetKey\s*=/
+
+/**
+ * Whether `body` renders `{children}` between a boundary's opening and
+ * closing tags — and if so, whether that boundary resets.
+ */
+function boundaryAroundChildren(body: string): { resets: boolean } | null {
+  const open = body.indexOf(`<${BOUNDARY}`)
+  if (open < 0) return null
+  const close = body.indexOf(`</${BOUNDARY}>`, open)
+  if (close < 0 || !/\{\s*(?:props\.)?children\s*\}/.test(body.slice(open, close))) return null
+  return { resets: RESET_KEY.test(body.slice(open, tagEnd(body, open).end)) }
+}
+
+/** Components this file defines whose own body wraps its children in a boundary. */
+function boundaryWrappers(code: string): Map<string, { resets: boolean }> {
+  const declarations = [...code.matchAll(FUNCTION_DECLARATION)]
+  const wrappers = new Map<string, { resets: boolean }>()
+  declarations.forEach((m, i) => {
+    const wrapper = boundaryAroundChildren(
+      code.slice(m.index, declarations[i + 1]?.index ?? code.length),
+    )
+    if (wrapper !== null) wrappers.set(m[1] as string, wrapper)
+  })
+  return wrappers
+}
+
+interface SuspenseSite {
+  readonly line: number
+  /** Whether a boundary encloses it, and whether the innermost one resets. */
+  readonly guard: 'none' | 'resets' | 'holds'
+  /** Whether its children choose between pages, so the route changes what it shows. */
+  readonly switches: boolean
+}
+
+/** Every `<Suspense` opening, with the boundary that encloses it. */
+function suspenseSites(source: string): SuspenseSite[] {
   const code = stripComments(source)
-  const guards = [BOUNDARY, ...boundaryWrappers(code)]
+  const wrappers = boundaryWrappers(code)
+  const guards = [BOUNDARY, ...wrappers.keys()]
   const tag = new RegExp(String.raw`<(/?)(${[...guards, 'Suspense'].join('|')})\b`, 'g')
-  let open = 0
-  const unguarded: number[] = []
+  // Innermost last: whether each open boundary carries a resetKey.
+  const open: boolean[] = []
+  const sites: SuspenseSite[] = []
   for (const m of code.matchAll(tag)) {
     const [, closing, name] = m
+    const end = tagEnd(code, m.index)
     if (name === 'Suspense') {
-      if (closing === '' && open === 0) unguarded.push(code.slice(0, m.index).split('\n').length)
+      if (closing === '/') continue
+      const close = code.indexOf('</Suspense>', end.end)
+      const innermost = open.at(-1)
+      sites.push({
+        line: code.slice(0, m.index).split('\n').length,
+        guard: innermost === undefined ? 'none' : innermost ? 'resets' : 'holds',
+        switches: /\s\?\s/.test(code.slice(end.end, close < 0 ? code.length : close)),
+      })
       continue
     }
-    // Clamped: a stray closing tag must not leave a later Suspense counted as enclosed.
-    if (closing === '/') open = Math.max(0, open - 1)
-    else if (!tagEnd(code, m.index).selfClosing) open++
+    // A stray closing tag pops nothing, so it cannot bank an enclosure for what follows.
+    if (closing === '/') open.pop()
+    else if (!end.selfClosing) {
+      open.push(
+        name === BOUNDARY
+          ? RESET_KEY.test(code.slice(m.index, end.end))
+          : (wrappers.get(name as string)?.resets ?? false),
+      )
+    }
   }
-  return unguarded
+  return sites
+}
+
+/** Each `<Suspense` opening that no boundary encloses, by line number. */
+function unguardedSuspenses(source: string): number[] {
+  return suspenseSites(source)
+    .filter((site) => site.guard === 'none')
+    .map((site) => site.line)
+}
+
+/** Each page-switching `<Suspense` whose enclosing boundary never resets, by line number. */
+function unresetSwitches(source: string): number[] {
+  return suspenseSites(source)
+    .filter((site) => site.switches && site.guard === 'holds')
+    .map((site) => site.line)
 }
 
 const frames = Object.entries(sourceModules)
@@ -147,7 +207,7 @@ describe('frames that hold a document page', () => {
 
   it('are found, so a broken scan cannot pass over nothing', () => {
     expect(frames.map(([path]) => path)).toEqual(
-      expect.arrayContaining(['./app-screens.tsx', './pages/ServerModeWorkspace.tsx']),
+      expect.arrayContaining(['./app-screens.tsx', './pages/DaemonWorkspacePages.tsx']),
     )
   })
 
@@ -157,5 +217,41 @@ describe('frames that hold a document page', () => {
       .filter(([, lines]) => lines.length > 0)
       .map(([path, lines]) => `${path}:${lines.join(',')}`)
     expect(missing, `a Suspense with no ErrorBoundary above it: ${missing.join('; ')}`).toEqual([])
+  })
+
+  it('see a page switch whose boundary never resets, through a wrapper too (self-test)', () => {
+    const page = '<Suspense>{a ? <Index /> : <Doc />}</Suspense>'
+    expect(unresetSwitches(`<ErrorBoundary>\n${page}\n</ErrorBoundary>`)).toEqual([2])
+    expect(unresetSwitches(`<ErrorBoundary resetKey={path}>\n${page}\n</ErrorBoundary>`)).toEqual(
+      [],
+    )
+    // The innermost boundary is the one that catches, so it is the one that must reset.
+    expect(
+      unresetSwitches(
+        `<ErrorBoundary resetKey={path}><ErrorBoundary>\n${page}\n</ErrorBoundary></ErrorBoundary>`,
+      ),
+    ).toEqual([2])
+    // A Suspense over one page switches nothing.
+    expect(
+      unresetSwitches('<ErrorBoundary>\n<Suspense><Page /></Suspense>\n</ErrorBoundary>'),
+    ).toEqual([])
+    const frame = (attrs: string) =>
+      `function Frame({ children }) { return <ErrorBoundary${attrs}>{children}</ErrorBoundary> }\n` +
+      `function Screen() { return <Frame>${page}</Frame> }`
+    expect(unresetSwitches(frame(''))).toEqual([2])
+    expect(unresetSwitches(frame(' resetKey={pathname}'))).toEqual([])
+  })
+
+  it('reset the boundary around every Suspense that switches pages', () => {
+    const switches = frames.flatMap(([, source]) =>
+      suspenseSites(source).filter((site) => site.switches),
+    )
+    // A switch detector that matched nothing would make the check below vacuous.
+    expect(switches.length).toBeGreaterThanOrEqual(2)
+    const held = frames
+      .map(([path, source]) => [path, unresetSwitches(source)] as const)
+      .filter(([, lines]) => lines.length > 0)
+      .map(([path, lines]) => `${path}:${lines.join(',')}`)
+    expect(held, `a page switch whose boundary has no resetKey: ${held.join('; ')}`).toEqual([])
   })
 })

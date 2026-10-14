@@ -5,13 +5,13 @@ import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub heavy/irrelevant dependencies so the component mounts without network or browser-only requirements.
-vi.mock('./VersionTimeline', () => ({ default: () => null }))
+vi.mock('../VersionTimeline', () => ({ default: () => null }))
 vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
-import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { jsonResponse } from '../test-utils/json-response.js'
-import { DocumentProperties } from './document-properties/DocumentProperties.js'
+import { DaemonApiContext } from '../../contexts/DaemonApiContext.js'
+import { jsonResponse } from '../../test-utils/json-response.js'
+import { DocumentProperties } from '../document-properties/DocumentProperties.js'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {

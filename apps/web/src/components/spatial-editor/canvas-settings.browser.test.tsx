@@ -19,7 +19,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { InspectorPanel } from '../document-editor/InspectorPanel.js'
+import { InspectorPanel } from '../ui/InspectorPanel.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { CANVAS_SETTINGS_WIDGETS } from './facet-widgets/index.js'
 

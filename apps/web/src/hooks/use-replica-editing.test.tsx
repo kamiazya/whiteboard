@@ -21,12 +21,15 @@ import { useReplicaEditing } from './use-replica-editing.js'
 
 const MD = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const SP = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
+const MD2 = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
 
 function record(): ReplicaRecord {
   const doc = new LoroDoc()
   createWorkspaceDocumentAtPath(doc, { path: 'notes/plan', documentId: MD, kind: 'markdown' })
   writeMarkdownBody(documentContainers(doc, MD), '# Plan')
   createWorkspaceDocumentAtPath(doc, { path: 'sketch', documentId: SP, kind: 'spatial' })
+  createWorkspaceDocumentAtPath(doc, { path: 'notes/log', documentId: MD2, kind: 'markdown' })
+  writeMarkdownBody(documentContainers(doc, MD2), '# Log')
   doc.commit()
   return doc
 }
@@ -49,6 +52,30 @@ function editing(doc: ReplicaRecord | undefined, selected: WorkspaceDocumentEntr
 }
 
 describe('useReplicaEditing', () => {
+  it("never offers one note's draft to another note when the selection switches", () => {
+    // The editor is keyed by document: one handed the previous note's body
+    // mounts with it, then reconciles to its own, and that reconcile reads as
+    // an edit — a save of a record nobody changed.
+    const doc = record()
+    const scheduleSave = vi.fn<(record: ReplicaRecord) => void>()
+    const offered: [string | undefined, string | null][] = []
+    const hook = renderHook(
+      ({ selected }: { selected: WorkspaceDocumentEntry }) => {
+        const result = useReplicaEditing({ record: doc, selected, scheduleSave })
+        offered.push([selected.documentId, result.draft])
+        return result
+      },
+      { initialProps: { selected: entry(doc, MD) } },
+    )
+    expect(hook.result.current.draft).toBe('# Plan')
+
+    hook.rerender({ selected: entry(doc, MD2) })
+
+    expect(hook.result.current.draft).toBe('# Log')
+    expect(offered.filter(([id, draft]) => id === MD2 && draft === '# Plan')).toEqual([])
+    expect(scheduleSave).not.toHaveBeenCalled()
+  })
+
   it('writes a canvas change into the record and queues its save', () => {
     const doc = record()
     const { scheduleSave, result } = editing(doc, entry(doc, SP))

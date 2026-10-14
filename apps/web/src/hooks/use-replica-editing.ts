@@ -2,6 +2,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import {
+  type ReplicaContent,
   type ReplicaRecord,
   readReplicaContent,
   readReplicaLocks,
@@ -27,19 +28,18 @@ export function useReplicaEditing({
   selected: WorkspaceDocumentEntry | undefined
   scheduleSave: (record: ReplicaRecord) => void
 }) {
-  const [draft, setDraft] = useState<string | null>(null)
   const content = useMemo(
     () =>
       record === undefined || selected === undefined ? null : readReplicaContent(record, selected),
     [record, selected],
   )
+  const { draft, onDraftChange } = useReplicaMarkdownDraft(record, selected, content, scheduleSave)
 
   // The spatial draft mirrors the markdown one; `spatialPrev` is what the
   // visible-diff reconcile compares against, advanced on every commit.
   const [spatialDraft, setSpatialDraft] = useState<SpatialCanvas | null>(null)
   const spatialPrev = useRef<SpatialCanvas | null>(null)
   useEffect(() => {
-    setDraft(content?.kind === 'markdown' ? content.body : null)
     spatialPrev.current = content?.kind === 'spatial' ? content.canvas : null
     setSpatialDraft(content?.kind === 'spatial' ? content.canvas : null)
   }, [content])
@@ -55,17 +55,44 @@ export function useReplicaEditing({
     },
     [record, selected, scheduleSave],
   )
+  const spatialLocks = useReplicaLocks(record, selected, scheduleSave)
+  return { content, draft, spatialDraft, spatialLocks, onDraftChange, onSpatialChange }
+}
+
+/**
+ * The selected note's draft, and what typing in it does.
+ *
+ * A draft carries the document it was read from. The selection changes a
+ * render before the effect below re-reads the record, and a keyed editor
+ * handed the previous note's body on that render reconciles to its own — an
+ * edit nobody made, saved. Offered only to its own document, the draft is
+ * absent on that render instead.
+ */
+function useReplicaMarkdownDraft(
+  record: ReplicaRecord | undefined,
+  selected: WorkspaceDocumentEntry | undefined,
+  content: ReplicaContent | null,
+  scheduleSave: (record: ReplicaRecord) => void,
+) {
+  const [held, setHeld] = useState<{ documentId: string; body: string } | null>(null)
+  useEffect(() => {
+    setHeld(
+      content?.kind === 'markdown' && selected !== undefined
+        ? { documentId: selected.documentId, body: content.body }
+        : null,
+    )
+  }, [content, selected])
   const onDraftChange = useCallback(
     (next: string) => {
       if (record === undefined || selected === undefined || selected.kind === 'spatial') return
-      setDraft(next)
+      setHeld({ documentId: selected.documentId, body: next })
       writeReplicaMarkdown(record, selected.documentId, next)
       scheduleSave(record)
     },
     [record, selected, scheduleSave],
   )
-  const spatialLocks = useReplicaLocks(record, selected, scheduleSave)
-  return { content, draft, spatialDraft, spatialLocks, onDraftChange, onSpatialChange }
+  const draft = held !== null && held.documentId === selected?.documentId ? held.body : null
+  return { draft, onDraftChange }
 }
 
 /**

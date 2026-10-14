@@ -3,7 +3,7 @@
 // PBT: validateGate() helper catches structural violations before they ship.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -83,7 +83,7 @@ const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
 // when a node smoke is added to or removed from test:e2e:distribution.
-const EXPECTED_DISTRIBUTION_STEPS = 15
+const EXPECTED_DISTRIBUTION_STEPS = 12
 
 describe('release-gate-matrix.json structure', () => {
   it('has schemaVersion 1', () => {
@@ -182,31 +182,109 @@ describe('package.json script drift', () => {
   })
 })
 
-// These gates are invoked inside test:e2e:distribution; they do not need to
-// appear directly in check:release-candidate, where a second copy would run
-// the same smoke twice.
-const COVERED_VIA_DISTRIBUTION = new Set(['smoke:tarball', 'smoke:packaged', 'smoke:codex-config'])
+const MCP_PACKAGE = 'packages/mcp-server'
+const MCP_FILTER = 'pnpm --filter @kamiazya/whiteboard-mcp '
+const mcpScripts = (readJson(`${MCP_PACKAGE}/package.json`) as { scripts: Record<string, string> })
+  .scripts
 
-describe('tier aggregate completeness drift', () => {
-  it('COVERED_VIA_DISTRIBUTION gates actually appear in test:e2e:distribution:only as command segments', () => {
-    const distScript = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
-    for (const id of COVERED_VIA_DISTRIBUTION) {
-      const gate = matrix.gates.find((g) => g.id === id)
-      expect(gate, `gate "${id}" must be in the matrix`).toBeDefined()
-      expect(
-        isGatePresentAsSegment(distScript, gate!),
-        `COVERED_VIA_DISTRIBUTION gate "${id}" not found as a command segment in test:e2e:distribution:only`,
-      ).toBe(true)
+/** A command a chain finally runs, and the directory it runs in. */
+interface Leaf {
+  command: string
+  cwd: string
+}
+
+// A chain expanded through every script it names, root or mcp-server, down to
+// the commands that actually run. A bare `pnpm <name>` names a script of the
+// package the chain belongs to, so mcp-server's own chains resolve there.
+function expandChain(command: string, cwd = '.'): Leaf[] {
+  const scripts = cwd === '.' ? rootPkg.scripts : mcpScripts
+  const own = /^pnpm ([\w:-]+)$/.exec(command)?.[1]
+  if (own !== undefined && scripts[own] !== undefined) {
+    return scriptSegments(scripts[own]).flatMap((segment) => expandChain(segment, cwd))
+  }
+  const mcp = command.startsWith(MCP_FILTER) ? command.slice(MCP_FILTER.length) : undefined
+  if (mcp !== undefined && mcpScripts[mcp] !== undefined) {
+    return scriptSegments(mcpScripts[mcp]).flatMap((segment) => expandChain(segment, MCP_PACKAGE))
+  }
+  return [{ command, cwd }]
+}
+
+const DISTRIBUTION_TESTS = readdirSync(join(ROOT, MCP_PACKAGE, 'src'), { recursive: true })
+  .map(String)
+  .filter((file) => file.endsWith('.distribution.test.ts'))
+  .map((file) => join('src', file))
+
+// The smoke implementations a leaf drives: a node script and a distribution
+// test reach the same flow through the same `*.distribution-impl` module, so
+// two leaves with different names can still be one smoke run twice.
+function implementations(leaf: Leaf): string[] {
+  const files = /--config vitest\.distribution\.config\.ts\b/.test(leaf.command)
+    ? DISTRIBUTION_TESTS
+    : (leaf.command.match(/\S+\.mjs\b/g) ?? [])
+  const names = files.flatMap((file) => {
+    const path = join(ROOT, leaf.cwd, file)
+    if (!existsSync(path)) return []
+    return [...readFileSync(path, 'utf-8').matchAll(/([\w-]+\.distribution-impl)\.[jt]s/g)].map(
+      (m) => m[1] as string,
+    )
+  })
+  return [...new Set(names)]
+}
+
+const repeated = (items: string[]): string[] => [
+  ...new Set(items.filter((item, index) => items.indexOf(item) !== index)),
+]
+
+const TIER_RUNNERS = [
+  'check:release-candidate',
+  'check:release-candidate:local',
+  'check:release-candidate:docker',
+  'test:e2e:distribution',
+]
+
+// What each tier finally runs. The script tiers expand their runner script;
+// the publish tier has no script — publish-gate.mjs runs its matrix gates in
+// order — so it expands those gates' commands. CI's verify job is held to the
+// same rule over its single-line `run:` steps.
+const ciYml = readText('.github/workflows/ci.yml')
+const verifyJob = /\n {2}verify:\n([\s\S]*?)\n {2}[a-z][\w-]*:\n/.exec(ciYml)?.[1] ?? ''
+const TIER_CHAINS: Record<string, Leaf[]> = {
+  'ci.yml verify job': [...verifyJob.matchAll(/^ +run: (pnpm [^|\n]+)$/gm)].flatMap((m) =>
+    expandChain((m[1] as string).trim()),
+  ),
+  ...Object.fromEntries(TIER_RUNNERS.map((runner) => [runner, expandChain(`pnpm ${runner}`)])),
+  'publish (publish-gate.mjs)': matrix.gates
+    .filter((g) => g.requiredFor.includes('publish'))
+    .flatMap((g) => expandChain(g.command)),
+}
+const leafKey = (leaf: Leaf): string => `${leaf.cwd}: ${leaf.command}`
+
+describe('a tier runs each gate once', () => {
+  it('expands every tier through its scripts into the smokes it drives', () => {
+    for (const runner of TIER_RUNNERS) expect(rootPkg.scripts).toHaveProperty(runner)
+    for (const leaves of Object.values(TIER_CHAINS)) {
+      expect(leaves.length).toBeGreaterThan(8)
+      expect(leaves.flatMap(implementations).length).toBeGreaterThanOrEqual(2)
     }
   })
 
-  it('check:release-candidate covers all ci-required gates not delegated to test:e2e:distribution', () => {
-    const script = rootPkg.scripts['check:release-candidate'] ?? ''
+  it.each(Object.keys(TIER_CHAINS))('%s runs no command twice', (tier) => {
+    expect(repeated((TIER_CHAINS[tier] ?? []).map(leafKey))).toEqual([])
+  })
+
+  it.each(Object.keys(TIER_CHAINS))('%s drives no smoke implementation twice', (tier) => {
+    expect(repeated((TIER_CHAINS[tier] ?? []).flatMap(implementations))).toEqual([])
+  })
+})
+
+describe('tier aggregate completeness drift', () => {
+  it('check:release-candidate covers every ci-required gate', () => {
+    const commands = new Set((TIER_CHAINS['check:release-candidate'] ?? []).map(leafKey))
     const ciGates = matrix.gates.filter((g) => g.requiredFor.includes('ci'))
+    expect(ciGates.length).toBeGreaterThan(5)
     for (const gate of ciGates) {
-      if (COVERED_VIA_DISTRIBUTION.has(gate.id)) continue
       expect(
-        isGatePresentAsSegment(script, gate),
+        expandChain(gate.command).every((leaf) => commands.has(leafKey(leaf))),
         `check:release-candidate is missing ci-required gate "${gate.id}"`,
       ).toBe(true)
     }
@@ -279,11 +357,11 @@ describe('test:e2e:distribution step-count drift', () => {
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
-  it('README says "fifteen steps" matching the current chain, and lists that many', () => {
-    expect(readmeText).toMatch(/The chain has fifteen steps/)
-    // The sentence alone was pinned while the list beneath it ended at
-    // fifteen: a count and a list drift apart unless one is read off the
-    // other.
+  it('README says "twelve steps" matching the current chain, and lists that many', () => {
+    expect(readmeText).toMatch(/The chain has twelve steps/)
+    // The sentence alone was once pinned while the list beneath it had a
+    // different length: a count and a list drift apart unless one is read
+    // off the other.
     const listed = readmeText.match(/^\d+\. /gm) ?? []
     expect(listed.length).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
