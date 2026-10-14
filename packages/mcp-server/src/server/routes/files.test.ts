@@ -393,19 +393,26 @@ describe('a document file addressed by workspace segment', () => {
 
   it('stores an upload by segment under the canonical id, readable by either handle', async () => {
     const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    withWorkspaceWriteLockMock.mockClear()
     const put = await app.request(`/api/w/${SEGMENT}/document/canvas-a/file/file-seg`, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
     })
     expect(put.status).toBe(204)
+    expect(withWorkspaceWriteLockMock).toHaveBeenCalledExactlyOnceWith(
+      CANONICAL,
+      expect.any(Function),
+    )
+    expect(await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, CANONICAL))).toContain(
+      'file-seg.png',
+    )
 
     const byId = await app.request(`/api/w/${CANONICAL}/document/canvas-a/file/file-seg`)
     expect(byId.status).toBe(200)
     expect(new Uint8Array(await byId.arrayBuffer())[0]).toBe(0x89)
     const bySegment = await app.request(`/api/w/${SEGMENT}/document/canvas-a/file/file-seg`)
     expect(bySegment.status).toBe(200)
-    expect(withWorkspaceWriteLockMock).toHaveBeenLastCalledWith(CANONICAL, expect.any(Function))
   })
 })
 

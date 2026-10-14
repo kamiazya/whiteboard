@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
 type ConfigModule = { default: { test?: { onUnhandledError?: unknown } } }
+// lazy-import: loaded by path, since a relative import of the root configs
+// leaves this workspace and `relative-import-escape` refuses it.
 const load = async (path: string) =>
   ((await import(pathToFileURL(join(REPO_ROOT, path)).href)) as ConfigModule).default
 
