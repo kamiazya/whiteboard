@@ -121,24 +121,34 @@ const VITEST_SCRATCH_CHILDREN = new Set(['ssr', 'client'])
 const VITEST_SCRATCH_MIN_AGE_MS = 24 * 60 * 60 * 1000
 
 /**
+ * Whether `path` or anything beneath it was modified at or after `cutoff`.
+ * Every entry counts, files included: rewriting an existing module file bumps
+ * no directory's mtime, so a live run can show up only in a nested file. Stops
+ * at the first fresh entry, since a scratch dir holds hundreds of files.
+ */
+function touchedSince(path, cutoff) {
+  if (statSync(path).mtimeMs >= cutoff) return true
+  const entries = readdirSync(path, { withFileTypes: true })
+  return entries.some((e) => {
+    const child = join(path, e.name)
+    return e.isDirectory() ? touchedSince(child, cutoff) : statSync(child).mtimeMs >= cutoff
+  })
+}
+
+/**
  * Whether `dir` is a vitest scratch directory no run has written to for a day:
- * only `ssr`/`client` subdirectories, and the newest of them and the directory
- * itself older than the bound. Anything else in the temp dir is not ours.
+ * only `ssr`/`client` subdirectories, and nothing anywhere beneath it newer
+ * than the bound. Anything else in the temp dir is not ours.
  */
 function isStaleVitestScratch(dir, now) {
-  let children
   try {
-    children = readdirSync(dir, { withFileTypes: true })
+    const children = readdirSync(dir, { withFileTypes: true })
+    if (children.length === 0) return false
+    if (!children.every((c) => c.isDirectory() && VITEST_SCRATCH_CHILDREN.has(c.name))) return false
+    return !touchedSince(dir, now - VITEST_SCRATCH_MIN_AGE_MS)
   } catch {
     return false
   }
-  if (children.length === 0) return false
-  if (!children.every((c) => c.isDirectory() && VITEST_SCRATCH_CHILDREN.has(c.name))) return false
-  const newest = Math.max(
-    statSync(dir).mtimeMs,
-    ...children.map((c) => statSync(join(dir, c.name)).mtimeMs),
-  )
-  return now - newest > VITEST_SCRATCH_MIN_AGE_MS
 }
 
 function staleVitestScratch(root, now) {

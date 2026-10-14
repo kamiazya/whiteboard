@@ -502,15 +502,21 @@ test('a real run signals no process that took over a stale record’s pid', {
   assert.equal(existsSync(laneDir), false)
 })
 
-/** A vitest-shaped scratch directory under `root`, its mtimes set `ageMs` into the past. */
-function seedScratch(root, name, { children = ['ssr'], file = false, ageMs }) {
+/**
+ * A vitest-shaped scratch directory under `root`, its mtimes set `ageMs` into
+ * the past. `freshModule` leaves one nested module file at the current time:
+ * rewriting an existing file bumps no directory's mtime, so only the file says
+ * a run is still using the directory.
+ */
+function seedScratch(root, name, { children = ['ssr'], file = false, freshModule = false, ageMs }) {
   const dir = join(root, name)
+  const at = new Date(Date.now() - ageMs)
   for (const child of children) {
     mkdirSync(join(dir, child), { recursive: true })
     writeFileSync(join(dir, child, 'a1b2c3'), 'transformed module')
+    if (!freshModule) utimesSync(join(dir, child, 'a1b2c3'), at, at)
   }
   if (file) writeFileSync(join(dir, 'notes.txt'), 'not vitest')
-  const at = new Date(Date.now() - ageMs)
   for (const child of children) utimesSync(join(dir, child), at, at)
   utimesSync(dir, at, at)
   return dir
@@ -527,6 +533,11 @@ test('sweeps vitest scratch untouched for a day, and only that', () => {
     ageMs: 2 * day,
   })
   const fresh = seedScratch(root, 'f-BPkosa6ZVYdaJahmAq2', { ageMs: 60_000 })
+  const freshModule = seedScratch(root, 'Hq3x9_ZpLmN0aBcDeFgHi', {
+    children: ['ssr', 'client'],
+    freshModule: true,
+    ageMs: 2 * day,
+  })
   const withFile = seedScratch(root, 'QT6U47naGXXVnueMtHqNo', { file: true, ageMs: 2 * day })
   const otherName = seedScratch(root, 'not-a-vitest-dir', { ageMs: 2 * day })
   const otherChild = seedScratch(root, 'URao62CTUjYtKU-MLRWeh', {
@@ -547,7 +558,7 @@ test('sweeps vitest scratch untouched for a day, and only that', () => {
   assert.match(real, /swept 2 stale vitest scratch/)
   assert.equal(existsSync(stale), false)
   assert.equal(existsSync(staleBoth), false)
-  for (const kept of [fresh, withFile, otherName, otherChild]) {
+  for (const kept of [fresh, freshModule, withFile, otherName, otherChild]) {
     assert.equal(existsSync(kept), true, `${kept} is not stale vitest scratch`)
   }
 })
