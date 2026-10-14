@@ -121,6 +121,22 @@ it('stores a render that cost more than storing it does', async () => {
 // browser can answer: that a COSTLY render survives the round trip into OPFS,
 // and that a keyless request is never remembered.
 
+// The write-time sweep is the persistent tier's only eviction (ADR-0027
+// decision 5), so it is pinned against the store directly: an entry the old
+// build left must be gone once a new build stores its first one, or every
+// deploy keeps its whole cache in the origin's quota.
+it('a new build storing its first entry removes the previous build’s entries', async () => {
+  const oldKey = '~build-old/svg/markdown/~doc/~v1.json'
+  const newKey = '~build-new/svg/markdown/~doc/~v1.json'
+  await writeRenderEntry(oldKey, { from: 'old' })
+  expect(await readRenderEntry(oldKey)).toEqual({ from: 'old' })
+
+  await writeRenderEntry(newKey, { from: 'new' })
+
+  expect(await readRenderEntry(newKey)).toEqual({ from: 'new' })
+  expect(await readRenderEntry(oldKey)).toBeNull()
+})
+
 // A request with no cache key is the honest state of a document whose keeper
 // reports no version: nothing may be remembered for it, in memory or on disk.
 it('stores nothing for a request that carries no key', async () => {
