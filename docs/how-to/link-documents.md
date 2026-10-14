@@ -60,6 +60,24 @@ or groups share a name, the first one on the page wins. A part that does
 not exist shows the address as a link and nothing else. The same `#` works
 on a plain `[[path#Launch]]` link, which then reads as `Plan › Launch`.
 
+## Follow a link
+
+Click a `[[...]]` link — or the link an `![[...]]` embed shows — to open that
+document in place. This works in the markdown editor's preview and on a
+canvas, for a link drawn inside a text node.
+
+In the workspace index, a link in the selected document's preview, or in
+Peek, opens that document the same way. Links inside a file card's picture
+and in a version preview do nothing when clicked.
+
+A document link never makes the browser navigate away. Where nothing can
+open it — the cached copy you read while the daemon is unreachable, for
+example — clicking it does nothing. Ordinary links (a web address, or a
+relative path such as `guide.md`) keep the browser's usual behaviour.
+
+In the inline chat view (`canvas_view`), document links do nothing; see
+[View a canvas inline in your AI chat](view-canvas-in-chat.md#links-in-the-view).
+
 ## See what links back
 
 Every document's header carries a Connections chip (the waypoints icon)

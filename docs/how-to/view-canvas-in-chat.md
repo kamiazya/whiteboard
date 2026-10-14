@@ -50,6 +50,15 @@ to leave the chat or call the tool again by hand. On clients that do not adverti
 `serverTools`, or when the widget cannot confirm a host connection at all, the button
 never appears; call `canvas_view` again to see a fresh snapshot instead.
 
+## Links in the view
+
+Clicking a link drawn on the canvas never navigates the widget itself away.
+A web link (one with a scheme, such as `https:`) is handed to your client to
+open, on hosts that advertise the MCP Apps `openLinks` capability; elsewhere
+it does nothing. A `[[...]]` document link or a relative link has nowhere to
+go in the chat, so it does nothing. A click on a link never picks a comment
+spot — click beside it for that.
+
 ## Commenting on the canvas from the widget
 
 Behind the same gate as Refresh, the widget shows a comment field. **Click the
