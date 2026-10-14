@@ -74,6 +74,48 @@ describe('reorder-nodes', () => {
     expect(reorderNodes(canvas, ['a'], 'forward')).toBe(canvas)
   })
 
+  it('a node sharing the column but not the rows is not overlap', () => {
+    // b spans a's x-range but sits far below it; c overlaps a. Forward from a
+    // must step over c — an x-only test would stop at b.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'a', x: 0, y: 0, width: 80, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 0, y: 500, width: 80, height: 40, text: 'b' }),
+        textNode({ id: 'c', x: 10, y: 10, width: 80, height: 40, text: 'c' }),
+      ],
+      edges: [],
+    }
+    expect(orderOf(reorderNodes(canvas, ['a'], 'forward'))).toEqual(['b', 'c', 'a'])
+  })
+
+  it('a node flush against the top edge is not overlap', () => {
+    // b's bottom edge is exactly a's top edge (y + height === 0).
+    const canvas: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'a', x: 0, y: 0, width: 80, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 0, y: -40, width: 80, height: 40, text: 'b' }),
+        textNode({ id: 'c', x: 10, y: 10, width: 80, height: 40, text: 'c' }),
+      ],
+      edges: [],
+    }
+    expect(orderOf(reorderNodes(canvas, ['a'], 'forward'))).toEqual(['b', 'c', 'a'])
+  })
+
+  it('forward on a multi-selection searches above its topmost member', () => {
+    // a and c are selected; b overlaps only a, d overlaps only c. The block
+    // already sits above b through c, so the step is over d.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'a', x: 0, y: 0, width: 80, height: 40, text: 'a' }),
+        textNode({ id: 'b', x: 10, y: 10, width: 80, height: 40, text: 'b' }),
+        textNode({ id: 'c', x: 300, y: 0, width: 80, height: 40, text: 'c' }),
+        textNode({ id: 'd', x: 310, y: 10, width: 80, height: 40, text: 'd' }),
+      ],
+      edges: [],
+    }
+    expect(orderOf(reorderNodes(canvas, ['a', 'c'], 'forward'))).toEqual(['b', 'd', 'a', 'c'])
+  })
+
   it('front moves to the end of the array; back to the start (position-independent)', () => {
     const canvas = stackedCanvas()
     expect(orderOf(reorderNodes(canvas, ['b'], 'front'))).toEqual(['a', 'c', 'd', 'b'])
