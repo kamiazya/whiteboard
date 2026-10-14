@@ -652,36 +652,64 @@ describe('StorageReportCard', () => {
     expect(storageReads.count).toBe(1)
   })
 
-  it('says an optimize that freed nothing found the documents already optimal', async () => {
+  /** A daemon whose every workspace answers an optimize that compacted nothing, for `reasons` in order. */
+  function decliningDaemon(reasons: readonly string[]) {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url === '/api/runtime/storage') return Promise.resolve(jsonResponse(PAYLOAD))
       if (url === '/api/workspaces') {
-        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }] }))
+        return Promise.resolve(
+          jsonResponse({ workspaces: reasons.map((_, i) => ({ workspaceId: `ws_${i}` })) }),
+        )
       }
       if (init?.method === 'POST' && url.endsWith('/documents/optimize-all')) {
+        const index = Number(url.match(/ws_(\d+)/)?.[1])
         return Promise.resolve(
           jsonResponse({
             compacted: false,
             beforeBytes: 2048,
             afterBytes: 2048,
-            reason: 'no-gain',
+            reason: reasons[index],
           }),
         )
       }
       return Promise.reject(new Error(`unexpected fetch: ${url}`))
     })
+  }
+
+  async function optimizeStatusFor(reasons: readonly string[]): Promise<Element> {
+    decliningDaemon(reasons)
     vi.useRealTimers()
     const { container } = render(<StorageReportCard />)
     await waitFor(() => expect(container.textContent).toContain('Total 2.0 KiB'))
-
     const dbActions = container.querySelector('[data-storage-actions="db"]')!
     fireEvent.click(dbActions.querySelector(OPTIMIZE_BUTTON)!)
+    await waitFor(() => expect(dbActions.textContent).not.toContain('Optimizing'))
+    return dbActions
+  }
 
-    await waitFor(() => expect(dbActions.textContent).toContain('Already optimal'))
+  it.each([
+    ['no-gain', ['no-gain']],
+    ['no-file', ['no-file']],
+    ['an unknown reason', ['some-future-reason']],
+  ])('says an optimize declined for %s found the documents already optimal', async (_, reasons) => {
+    const dbActions = await optimizeStatusFor(reasons)
+    expect(dbActions.textContent).toContain('Already optimal')
     expect(dbActions.textContent).not.toContain('Saved')
+  })
+
+  it('says to save a version first when a workspace had none to compact at', async () => {
+    const dbActions = await optimizeStatusFor(['no-gain', 'no-versions'])
+    expect(dbActions.textContent).toContain('save a version first')
+    expect(dbActions.textContent).not.toContain('Already optimal')
+  })
+
+  it('says to try again when another write raced the compaction', async () => {
+    const dbActions = await optimizeStatusFor(['no-versions', 'raced'])
+    expect(dbActions.textContent).toContain('try again')
+    expect(dbActions.textContent).not.toContain('Already optimal')
   })
 
   it('says how long ago the daemon last auto-optimised', async () => {
