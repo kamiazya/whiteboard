@@ -17,7 +17,9 @@ import { ownValue, readScopedStorage, writeScopedStorage } from './scoped-storag
 // Namespaced + version-suffixed, like `user-settings-store.ts`. This payload
 // is disposable — losing it costs a lane, not a setting — so a breaking change
 // here may bump the key without a migration, which is the one way it differs.
-export const STORAGE_KEY = 'whiteboard:recent-documents:v1'
+// v1 was keyed by the address handle and is abandoned unread: the handle
+// cannot be mapped back to the keeper and id a v2 scope names.
+export const STORAGE_KEY = 'whiteboard:recent-documents:v2'
 
 /**
  * How many the lane remembers.
@@ -28,10 +30,11 @@ export const STORAGE_KEY = 'whiteboard:recent-documents:v1'
  */
 export const RECENT_CAP = 8
 
-// Per workspace handle, most recent first. A workspace whose entry fails to
-// parse degrades to empty ON ITS OWN rather than discarding every other
-// workspace's lane with it — the whole-payload discard is the trap
-// `user-settings-store.ts` records paying for.
+// Per scope (keeper and workspace id, `use-device-memory.ts`), most recent
+// first. A scope whose entry fails to parse degrades to empty ON ITS OWN
+// rather than discarding every other workspace's lane with it — the
+// whole-payload discard is the trap `user-settings-store.ts` records paying
+// for.
 const storedSchema = z.record(z.string(), z.array(z.string()).catch([]))
 
 /**

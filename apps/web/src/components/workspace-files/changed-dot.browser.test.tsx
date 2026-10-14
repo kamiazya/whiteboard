@@ -33,7 +33,7 @@ function renderPanel() {
   render(
     <WorkspaceFilesPanel
       source={fakeFilesSource({ listDocuments: async () => rows })}
-      workspace="space"
+      memoryScope="space"
       onOpenDocument={() => {}}
     />,
   )

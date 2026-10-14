@@ -23,8 +23,9 @@ import { ownValue, readScopedStorage, writeScopedStorage } from './scoped-storag
 // Namespaced + version-suffixed, like `recent-documents.ts` and
 // `user-settings-store.ts`. Disposable in the same way: losing it costs one
 // round of dots, so a breaking change here may bump the key with no
-// migration.
-export const STORAGE_KEY = 'whiteboard:seen-documents:v1'
+// migration. v1 was keyed by the address handle and is abandoned unread, as
+// `recent-documents.ts`'s is.
+export const STORAGE_KEY = 'whiteboard:seen-documents:v2'
 
 /**
  * How many documents per workspace keep a baseline.

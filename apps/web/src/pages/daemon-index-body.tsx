@@ -117,6 +117,7 @@ function NoWorkspacesYet({ onRetryWorkspaces }: { onRetryWorkspaces: () => void 
 /** The panel itself, once a workspace is selected and its source exists. */
 interface DaemonFilesSectionProps {
   selectedWorkspace: string
+  memoryScope: string | undefined
   filesSource: NonNullable<ReturnType<typeof createDaemonFilesSource>>
   rows: DocumentRow[]
   routedFolder: ReturnType<typeof useRoutedFolder>['folder']
@@ -136,6 +137,7 @@ function DaemonFilesSection(props: DaemonFilesSectionProps) {
         // The handle the address carries, which is exactly what a
         // document's URL under this workspace is built from.
         workspace={props.selectedWorkspace}
+        memoryScope={props.memoryScope}
         initialFolder={props.routedFolder}
         onFolderChange={props.setRoutedFolder}
         onOpenDocument={(path) => props.onOpenDocument(props.selectedWorkspace, path)}
@@ -158,6 +160,8 @@ interface DaemonIndexBodyProps {
   trashCount: number
   creating: boolean
   selectedWorkspace: string | null
+  /** `daemonMemoryScope` of the selected workspace, once the list resolves it. */
+  memoryScope: string | undefined
   filesSource: ReturnType<typeof createDaemonFilesSource> | null
   routedFolder: ReturnType<typeof useRoutedFolder>['folder']
   setRoutedFolder: ReturnType<typeof useRoutedFolder>['setFolder']
@@ -206,6 +210,7 @@ export function DaemonIndexBody(props: DaemonIndexBodyProps) {
     return (
       <DaemonFilesSection
         selectedWorkspace={props.selectedWorkspace}
+        memoryScope={props.memoryScope}
         filesSource={props.filesSource}
         rows={props.rows}
         routedFolder={props.routedFolder}

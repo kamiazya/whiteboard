@@ -51,6 +51,7 @@ import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 export function WorkspaceFilesPanel({
   source,
   workspace,
+  memoryScope,
   onOpenDocument,
   initialFolder,
   onFolderChange,
@@ -99,7 +100,7 @@ export function WorkspaceFilesPanel({
     changed,
     remember: rememberOpen,
     reset: resetDeviceMemory,
-  } = useDeviceMemory(workspace, documents)
+  } = useDeviceMemory(memoryScope, documents)
   // What the panel has to SAY about its last write — a refused create, a
   // refused pin, or a write that landed while its list re-read did not.
   // Each one's reasoning lives with it in use-write-outcome.ts; `beginWrite`

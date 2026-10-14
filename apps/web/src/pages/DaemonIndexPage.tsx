@@ -7,6 +7,7 @@ import { messageOf } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentsDialog } from '../components/document-list/DeleteDocumentsDialog.js'
+import { daemonMemoryScope } from '../components/workspace-files/use-device-memory.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
@@ -594,6 +595,9 @@ export function DaemonIndexPage({
           trashCount={trashCount}
           creating={creating}
           selectedWorkspace={selectedWorkspace}
+          memoryScope={
+            activeWorkspace ? daemonMemoryScope(daemonBaseUrl, activeWorkspace) : undefined
+          }
           filesSource={filesSource}
           routedFolder={routedFolder}
           setRoutedFolder={setRoutedFolder}
