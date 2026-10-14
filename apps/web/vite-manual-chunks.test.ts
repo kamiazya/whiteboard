@@ -30,6 +30,28 @@ describe('manualChunks', () => {
     ).toBe('vendor-react')
   })
 
+  it('leaves a package whose path merely contains react-dom out of vendor-react', () => {
+    // radix's popper reaches `@floating-ui/react-dom`. Matched as a substring,
+    // it took all of floating-ui into vendor-react, which every first paint
+    // modulepreloads, though no first-paint screen positions a popover.
+    expect(
+      manualChunks(
+        '/repo/node_modules/.pnpm/@floating-ui+react-dom@2.1.9/node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs',
+      ),
+    ).toBeUndefined()
+    expect(
+      manualChunks(
+        '/repo/node_modules/.pnpm/@floating-ui+dom@1.8.0/node_modules/@floating-ui/dom/dist/floating-ui.dom.mjs',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('keeps the scheduler with react', () => {
+    expect(
+      manualChunks('/repo/node_modules/.pnpm/scheduler@0.27.0/node_modules/scheduler/index.js'),
+    ).toBe('vendor-react')
+  })
+
   it('leaves first-party source unassigned, so only vendors are pinned here', () => {
     expect(manualChunks('/repo/apps/web/src/pages/BrowserDocumentPage.tsx')).toBeUndefined()
   })

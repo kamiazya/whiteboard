@@ -5,11 +5,15 @@
  * on the rule directly: the hazard below is invisible in every test that
  * runs against source, and only appears in a minified production bundle.
  */
+// A package by its own directory: `@floating-ui/react-dom` ends in
+// `/react-dom/` too, and a substring match took it — and, with it, every
+// floating-ui module it imports — into vendor-react, which every first paint
+// modulepreloads though no first-paint screen positions a popover.
+const REACT = /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/
+
 export function manualChunks(id: string): string | undefined {
   if (!id.includes('node_modules')) return undefined
-  if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('scheduler')) {
-    return 'vendor-react'
-  }
+  if (REACT.test(id)) return 'vendor-react'
   // Icons get a chunk of their own, and it is not cosmetic. Left
   // unassigned they are merged into whichever chunk imports them —
   // which for this app is one carrying the Loro WASM's TOP-LEVEL
