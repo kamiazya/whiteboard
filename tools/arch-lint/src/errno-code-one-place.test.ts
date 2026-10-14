@@ -104,6 +104,7 @@ describe('an error code is read in one place', () => {
     ['a typed local', 'const e: NodeJS.ErrnoException = err\nreturn e.code'],
     ['a cast to an inline code type', 'const c = (err as { code?: unknown } | null)?.code'],
     ['an angle-bracket inline code type', 'const c = (<{ code: string }>err).code'],
+    ['a parenthesised inline code type', 'const c = (err as ({ code: string }) | null)?.code'],
     [
       'a Set of errno literals asked about a code read',
       "const TOLERATED = new Set(['EISDIR', 'EPERM'])\nif (TOLERATED.has(code)) x()",
@@ -137,8 +138,28 @@ describe('an error code is read in one place', () => {
     // An inline type is the reader only when it has a `code` member.
     expect(errnoSpellings('const m = (err as { message?: unknown }).message')).toEqual([])
     expect(errnoSpellings("const m = { code: 'ENOENT' }")).toEqual([])
+    // ...a member of the asserted type itself, not of a type nested inside it.
+    expect(errnoSpellings('const m = (x as { metadata: { code: string } }).metadata')).toEqual([])
     expect(
       errnoSpellings('const t = (err: unknown): err is NodeJS.ErrnoException => !!err'),
+    ).toEqual([])
+  })
+
+  it('asks the binding a query sees, not any collection of that name', () => {
+    const source = [
+      "function tolerated(code: string) {\n  const CODES = ['EPERM']\n  return CODES.includes(code)\n}",
+      "function ready(code: string) {\n  const CODES = ['READY']\n  return CODES.includes(code)\n}",
+    ].join('\n')
+    expect(errnoSpellings(source)).toEqual(['CODES.includes(code)'])
+    expect(
+      errnoSpellings(
+        "const CODES = new Set(['ENOENT'])\nfunction f(code: string) {\n  const CODES = new Set(['READY'])\n  return CODES.has(code)\n}",
+      ),
+    ).toEqual([])
+    expect(
+      errnoSpellings(
+        "const CODES = ['ENOENT']\nconst f = (CODES: string[], code: string) => CODES.includes(code)",
+      ),
     ).toEqual([])
   })
 
