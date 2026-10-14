@@ -1,5 +1,7 @@
+import type { AgentActivityMessage } from '@kamiazya/whiteboard-daemon-client/sync-frames'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AgentActivity } from '@kamiazya/whiteboard-server-core'
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 // Declared with a rest signature so the lazy wrappers below can forward whatever
 // the notifier passes; the factory is hoisted above these bindings.
@@ -54,6 +56,14 @@ describe('createCanvasClientNotifier', () => {
       touched: { nodes: ['a'], edges: [], lines: ['l1'], comments: ['c1'] },
       summary: 'added 1',
     })
+  })
+
+  it('carries every touched kind the port does, the frame declaring none of its own', () => {
+    // A kind the server adds must reach the browser's outline without a
+    // second edit on the wire; a frame whose keys differ is that edit missed.
+    expectTypeOf<keyof AgentActivityMessage['touched']>().toEqualTypeOf<
+      keyof AgentActivity['touched']
+    >()
   })
 
   it('says nothing when the workspace does not own the document', async () => {
