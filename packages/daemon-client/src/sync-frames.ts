@@ -1,3 +1,4 @@
+import { agentActivityTouchedSchema } from '@kamiazya/whiteboard-server-core/agent-activity-touched'
 import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-server-core/viewport-request'
 import { z } from 'zod'
 import { operatorInfoAnswerSchema, versionEntryAnswerSchema } from './api-contracts/document.js'
@@ -43,17 +44,13 @@ export const agentActivityMessageSchema = z.object({
   // agent that called the tool, so nothing a person reads is named from it.
   operator: operatorInfoAnswerSchema,
   /**
-   * What to highlight. Ids only — the change itself arrives as a Loro update.
-   * `lines` and `comments` are optional: a daemon that predates them still
-   * parses on a newer page (which reads them as none), and a page that
-   * predates them drops them as unknown keys.
+   * What to highlight, by its one declaration in server-core, so a kind the
+   * server adds reaches the frame without a second edit here. `lines` and
+   * `comments` are optional: a daemon that predates them still parses on a
+   * newer page (which reads them as none), and a page that predates them
+   * drops them as unknown keys.
    */
-  touched: z.object({
-    nodes: z.array(z.string()),
-    edges: z.array(z.string()),
-    lines: z.array(z.string()).optional(),
-    comments: z.array(z.string()).optional(),
-  }),
+  touched: agentActivityTouchedSchema.partial({ lines: true, comments: true }),
   /** One short line for a toast, e.g. "added 5, tidied the layout". */
   summary: z.string(),
 })

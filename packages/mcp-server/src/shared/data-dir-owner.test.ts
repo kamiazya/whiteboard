@@ -1,12 +1,17 @@
 import { statSync } from 'node:fs'
 import { chmod, link, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import { parseDaemonRecord } from '../daemon/daemon-record.js'
 import { loadDaemonRecord } from '../daemon/daemon-registry.js'
-import { assertDataDirOwnedByUser, refuseForeignRecordFile } from './data-dir-secure.js'
+import {
+  assertDataDirOwnedByUser,
+  readFileOwnedByUser,
+  refuseForeignRecordFile,
+  resolveDataDir,
+} from './data-dir-secure.js'
 import { ROOT_IS_SOMEONE_ELSES } from './test-utils/root-is-someone-elses.js'
 
 describe('assertDataDirOwnedByUser', () => {
@@ -105,6 +110,25 @@ describe('the record file itself', () => {
     expect(() => assertDataDirOwnedByUser(dir, statSync(dir).uid)).toThrow(
       /writable by other users/,
     )
+  })
+  // Callers judge the directory before opening the file; this second look
+  // covers a directory created or loosened between that check and the open.
+  // It is mode-based, so unlike the uid arms it holds when the suite runs as root.
+  it('is refused once open when its directory is writable by anyone', async () => {
+    const path = join(dir, 'daemon.json')
+    await writeFile(path, '{}')
+    await chmod(dir, 0o777)
+    expect(statSync(dir).mode & 0o002).not.toBe(0)
+    expect(await readFileOwnedByUser(path, statSync(dir).uid)).toEqual({
+      kind: 'not-owned',
+      message: expect.stringMatching(/writable by other users/),
+    })
+  })
+})
+
+describe('resolveDataDir', () => {
+  it('resolves a relative WHITEBOARD_DATA_DIR against the working directory', () => {
+    expect(resolveDataDir({ WHITEBOARD_DATA_DIR: 'rel/dir' })).toBe(resolve('rel/dir'))
   })
 })
 

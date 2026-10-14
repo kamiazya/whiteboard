@@ -122,6 +122,36 @@ describe('wb_thread_edit — telling a watching browser', () => {
     expect(activities[1]?.summary).toBe('replied 1, resolved 1')
   })
 
+  test('a reopen reads as one, listed in the same order wb_canvas_edit uses', async () => {
+    const { activities, notifier } = recordingNotifier()
+    const tool = createThreadEditTool(await seededDeps('spatial', notifier))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'thread.add', threadId: 'q', anchor: SPOT, body: 'one' },
+        { op: 'thread.add', threadId: 'r', anchor: SPOT, body: 'two' },
+        { op: 'thread.resolve', threadId: 'q' },
+      ],
+    })
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'thread.resolve', threadId: 'q', resolved: false },
+        { op: 'thread.resolve', threadId: 'r' },
+        { op: 'message.add', threadId: 'r', body: 'closing' },
+        { op: 'thread.add', anchor: SPOT, body: 'three' },
+      ],
+    })
+
+    expect(activities.map((activity) => activity.summary)).toEqual([
+      'commented 2, resolved 1',
+      'commented 1, replied 1, resolved 1, reopened 1',
+    ])
+  })
+
   test('a markdown note announces nothing, having no presence surface', async () => {
     const { activities, notifier } = recordingNotifier()
     const tool = createThreadEditTool(await seededDeps('markdown', notifier))

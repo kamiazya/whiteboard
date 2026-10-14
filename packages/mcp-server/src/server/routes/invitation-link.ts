@@ -1,8 +1,8 @@
 /**
- * ADR-0049 decision 3: the link an invitation travels as. It opens this
- * keeper's `/invite` page with the token in the fragment, which a browser
- * never sends to a server or puts in a Referer.
+ * ADR-0049 decision 3: the link an invitation travels as, which
+ * `invitePageUrl` spells for the web app's invite page to read back.
  */
+import { invitePageUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { invitationLinkResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { InvitationStore } from '../security/invitation-store.js'
 
@@ -19,10 +19,8 @@ export async function issueInvitationLink(
     now: Date.now(),
     ttlMs: INVITATION_TTL_MS,
   })
-  const url = new URL('/invite', origin)
-  url.hash = new URLSearchParams({ token }).toString()
   return invitationLinkResponseSchema.parse({
-    url: url.toString(),
+    url: invitePageUrl(origin, token),
     expiresAt: new Date(invitation.expiresAt).toISOString(),
   })
 }

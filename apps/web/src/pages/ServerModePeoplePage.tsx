@@ -136,7 +136,7 @@ function InvitationControl({ create }: { create: () => Promise<Outcome<Invitatio
 
 function Refusal({ refusal }: { refusal: Refused | null }) {
   const { pathname, search } = useLocation()
-  const back = `${authReauthenticateUrl()}?return=${encodeURIComponent(pathname + search)}`
+  const back = authReauthenticateUrl({ returnTo: pathname + search })
   // Mounted even when empty: a live region inserted with its text already
   // in it is not announced. The sign-in is a full navigation to the keeper,
   // which returns here; the change is then made again by the person.

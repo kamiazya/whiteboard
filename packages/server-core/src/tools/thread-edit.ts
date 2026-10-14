@@ -27,7 +27,11 @@ import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
-import { announceAgentActivity } from './agent-activity.js'
+import {
+  announceAgentActivity,
+  COMMENT_SUMMARY_WORDS,
+  resolveSummaryWord,
+} from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -292,24 +296,29 @@ const THREAD_EDIT_HANDLERS: {
 }
 
 /**
- * The word a watching person reads for each op, in the voice of
- * `wb_canvas_edit`'s summary ("commented 1, resolved 1"). Keyed by the op
- * union, so a fourth op owes a word; a reopen is told apart below.
+ * The word a watching person reads for each op, from the vocabulary
+ * `wb_canvas_edit`'s summary shares. Keyed by the op union, so a fourth op
+ * owes a word; a resolve's word depends on its own `resolved`.
  */
 const THREAD_OP_WORD = {
-  'thread.add': 'commented',
-  'message.add': 'replied',
-  'thread.resolve': 'resolved',
-} as const satisfies Record<ThreadOp['op'], string>
+  'thread.add': () => 'commented',
+  'message.add': () => 'replied',
+  'thread.resolve': (op) => resolveSummaryWord(op.resolved),
+} as const satisfies {
+  [K in ThreadOp['op']]: (
+    op: Extract<ThreadOp, { op: K }>,
+  ) => (typeof COMMENT_SUMMARY_WORDS)[number]
+}
 
 function summarizeThreadOps(ops: readonly ThreadOp[]): string {
   const counts = new Map<string, number>()
   for (const op of ops) {
-    const word =
-      op.op === 'thread.resolve' && op.resolved === false ? 'reopened' : THREAD_OP_WORD[op.op]
+    const word = (THREAD_OP_WORD[op.op] as (op: ThreadOp) => string)(op)
     counts.set(word, (counts.get(word) ?? 0) + 1)
   }
-  return [...counts].map(([word, count]) => `${word} ${count}`).join(', ')
+  return COMMENT_SUMMARY_WORDS.filter((word) => counts.has(word))
+    .map((word) => `${word} ${counts.get(word)}`)
+    .join(', ')
 }
 
 function applyThreadOp(ctx: ThreadEditContext, op: ThreadOp): void {

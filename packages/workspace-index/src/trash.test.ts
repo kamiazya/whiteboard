@@ -11,6 +11,7 @@
 
 import {
   readSpatialCanvas,
+  readTrashEntries,
   recordTrashEntry,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -364,6 +365,78 @@ describe('purging a trashed document', () => {
 
     failing.mockRestore()
     expect(await index.purgeTrashEntry({ workspaceId: WS, documentId })).toBe(true)
+    expect(blobs.size()).toBe(0)
+  })
+})
+
+describe('a trash blob another workspace still names', () => {
+  const OTHER = 'ws-other'
+  let blobs: ReturnType<typeof inMemoryBlobStore>
+  let docs: ReturnType<typeof inMemoryWorkspaceDocs>
+  let index: LoroWorkspaceDocumentIndex
+  let asked: { workspaceId: string; digestHex: string }[]
+
+  beforeEach(async () => {
+    blobs = inMemoryBlobStore()
+    docs = inMemoryWorkspaceDocs()
+    asked = []
+    // One blob store under two workspaces' records, as a keeper whose store is
+    // shared across workspaces has; the predicate is that keeper's answer.
+    index = new LoroWorkspaceDocumentIndex(
+      docs,
+      blobs,
+      { listWorkspaces: async () => [], renameWorkspace: notRenamed },
+      {
+        trashBlobNamedElsewhere: async ({ workspaceId, ref }) => {
+          asked.push({ workspaceId, digestHex: ref.digestHex })
+          const others = [WS, OTHER].filter((id) => id !== workspaceId)
+          return others.some((id) =>
+            readTrashEntries(docs.peek(id)).some((row) => blobRefKey(row.blob) === blobRefKey(ref)),
+          )
+        },
+      },
+    )
+    await index.createWorkspace({ workspaceId: WS })
+    await index.createWorkspace({ workspaceId: OTHER })
+  })
+
+  /** The same trashed document recorded in both workspaces, over one blob. */
+  async function trashedInBoth(): Promise<string> {
+    const { documentId } = await index.createDocument({
+      workspaceId: WS,
+      path: 'design',
+      kind: 'markdown',
+    })
+    await index.deleteDocument({ workspaceId: WS, path: 'design' })
+    const [row] = await index.listTrash({ workspaceId: WS })
+    if (row === undefined) throw new Error('expected a trash row')
+    recordTrashEntry(docs.peek(OTHER), row)
+    return documentId
+  }
+
+  it('keeps the bytes when the entry is purged in one workspace', async () => {
+    const documentId = await trashedInBoth()
+
+    await index.purgeTrashEntry({ workspaceId: WS, documentId })
+
+    expect(await index.restoreDocument({ workspaceId: OTHER, documentId })).not.toBeNull()
+    expect(asked.map((call) => call.workspaceId)).toContain(WS)
+  })
+
+  it('keeps the bytes when the entry is restored in one workspace', async () => {
+    const documentId = await trashedInBoth()
+
+    await index.restoreDocument({ workspaceId: WS, documentId })
+
+    expect(await index.restoreDocument({ workspaceId: OTHER, documentId })).not.toBeNull()
+  })
+
+  it('destroys the bytes once no workspace names them', async () => {
+    const documentId = await trashedInBoth()
+    await index.purgeTrashEntry({ workspaceId: WS, documentId })
+
+    await index.purgeTrashEntry({ workspaceId: OTHER, documentId })
+
     expect(blobs.size()).toBe(0)
   })
 })

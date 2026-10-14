@@ -3,6 +3,7 @@ import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
+import type { AgentActivityTouched } from './agent-activity-touched.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
 import type { OperatorInfo, PromotedVersion, VersionEntry } from './versions/version-entry.js'
@@ -31,12 +32,7 @@ export interface SceneTextMeasurer {
 export interface AgentActivity {
   readonly workspaceId: string
   readonly documentId: string
-  readonly touched: {
-    readonly nodes: readonly string[]
-    readonly edges: readonly string[]
-    readonly lines: readonly string[]
-    readonly comments: readonly string[]
-  }
+  readonly touched: AgentActivityTouched
   /** One short human-readable line, e.g. "added 5 nodes". */
   readonly summary: string
 }
@@ -46,7 +42,11 @@ export interface AgentActivity {
  * imported from the tool so the port file does not depend on the tool that
  * uses it.
  */
-export type CanvasOpSummaryInput = { readonly op: string; readonly locked?: boolean }
+export type CanvasOpSummaryInput = {
+  readonly op: string
+  readonly locked?: boolean
+  readonly resolved?: boolean
+}
 
 /**
  * The seam through which a tool reaches a browser watching the same

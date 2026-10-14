@@ -103,6 +103,10 @@ export class BackupGuardedBlobStore implements BlobStore {
     if (this.#deferred.size === 0 || (await backupIsInProgress(this.dataDir))) return
     // Taken off the queue before the delete, so a concurrent drain cannot
     // apply one twice; a delete that throws goes back for the next drain.
+    // Iterated over a snapshot: a delete queued mid-drain was accepted under
+    // a backup that may have started since the marker check, so it waits for
+    // the next drain instead of being unlinked here. Sequential so each
+    // failure is put back and the first one rethrown.
     for (const [key, input] of [...this.#deferred]) {
       if (!this.#deferred.delete(key)) continue
       try {

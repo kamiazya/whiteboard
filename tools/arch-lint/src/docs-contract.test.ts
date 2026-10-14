@@ -22,7 +22,7 @@ const { readBrowserProjectNames, readVitestProjects } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
 )) as {
   readBrowserProjectNames: (repoRoot: string) => string[]
-  readVitestProjects: (repoRoot: string) => { name: string | undefined }[]
+  readVitestProjects: (repoRoot: string) => { configPath: string; name: string | undefined }[]
 }
 
 function collectMarkdownFiles(dir: string): string[] {
@@ -46,10 +46,11 @@ describe('docs/ contract', () => {
     // The root vitest.config.ts is the source of truth for which packages
     // `pnpm test` actually exercises. A doc line that omits a package (e.g.
     // canvas-viewer) misleads contributors into skipping its failures.
-    const rootVitestConfig = readFileSync(join(REPO_ROOT, 'vitest.config.ts'), 'utf8')
     const projectPackageDirs = [
       ...new Set(
-        [...rootVitestConfig.matchAll(/'((?:packages|apps)\/[^/]+)\//g)].map((match) => match[1]),
+        readVitestProjects(REPO_ROOT).flatMap(
+          ({ configPath }) => /^(?:packages|apps)\/[^/]+/.exec(configPath)?.[0] ?? [],
+        ),
       ),
     ]
     // The doc shorthand for each package's project(s) doesn't match its

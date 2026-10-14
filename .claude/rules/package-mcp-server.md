@@ -222,7 +222,13 @@ fsyncs too. Choose by where the write may stage, never by durability.
 A DIRECTORY renamed into place (the backup seal) goes through `syncTree`
 before the rename and `syncDirectory` of its parent after. The daemon's blob
 store is `daemonBlobStore`, which defers a delete while the backup marker is
-live, so no deleter has to ask the marker itself.
+live, so no deleter has to ask the marker itself
+(`fs-blob-store-one-place.test.ts` fails a raw `new FsBlobStore(` elsewhere).
+It is one store per TENANT keyed by digest, so before restore or purge
+deletes a trash blob, `CacheCoherentDocumentIndex` asks
+`trashBlobNamedElsewhere(scope)` whether another workspace's STORED record
+still names it — not the cache, whose catch-up would take that workspace's
+write lock.
 
 ## A store follows the directory it is handed
 

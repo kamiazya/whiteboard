@@ -109,4 +109,77 @@ describe('the daemon blob store', () => {
     expect(await guarded.has({ ref })).toEqual({ exists: false })
     expect(await disk.has({ ref })).toEqual({ exists: false })
   })
+
+  /** The disk store, wrapped so a test can count or fail its unlinks. */
+  function unlinking(onDelete: () => void): BlobStore {
+    return {
+      put: (input) => disk.put(input),
+      get: (input) => disk.get(input),
+      has: (input) => disk.has(input),
+      delete: async (input) => {
+        onDelete()
+        await disk.delete(input)
+      },
+    }
+  }
+
+  it('never unlinks a blob while a backup is already running', async () => {
+    const { ref } = await disk.put({ bytes: BYTES })
+    let unlinks = 0
+    const blobsDir = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
+    const guarded = new BackupGuardedBlobStore(
+      unlinking(() => {
+        unlinks++
+      }),
+      dataDir,
+      blobsDir,
+    )
+
+    // The end state alone cannot tell a deferral from an unlink the
+    // post-delete re-check put back; only the unlink count can.
+    await withBackupMarker(dataDir, () => guarded.delete({ ref }))
+
+    expect(unlinks).toBe(0)
+  })
+
+  it('retries a deferred delete whose unlink failed on the next call', async () => {
+    const { ref } = await disk.put({ bytes: BYTES })
+    let failNext = true
+    const blobsDir = blobsRoot(dataDir, SELF_HOST_TENANT_ID)
+    const guarded = new BackupGuardedBlobStore(
+      unlinking(() => {
+        if (failNext) {
+          failNext = false
+          throw new Error('EIO')
+        }
+      }),
+      dataDir,
+      blobsDir,
+    )
+    await withBackupMarker(dataDir, () => guarded.delete({ ref }))
+
+    await expect(guarded.has({ ref })).rejects.toThrow('EIO')
+    expect(await disk.has({ ref })).toEqual({ exists: true })
+
+    expect(await guarded.has({ ref })).toEqual({ exists: false })
+    expect(await disk.has({ ref })).toEqual({ exists: false })
+  })
+
+  it('applies a deferred delete on the first get after the backup', async () => {
+    const { ref } = await store.put({ bytes: BYTES })
+    await withBackupMarker(dataDir, () => store.delete({ ref }))
+
+    expect(await store.get({ ref })).toBeNull()
+
+    expect(await disk.has({ ref })).toEqual({ exists: false })
+  })
+
+  it('applies a deferred delete on the first put of other bytes after the backup', async () => {
+    const { ref } = await store.put({ bytes: BYTES })
+    await withBackupMarker(dataDir, () => store.delete({ ref }))
+
+    await store.put({ bytes: new TextEncoder().encode('other bytes') })
+
+    expect(await disk.has({ ref })).toEqual({ exists: false })
+  })
 })

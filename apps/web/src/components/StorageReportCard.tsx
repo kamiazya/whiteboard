@@ -1,4 +1,5 @@
 import {
+  type CompactWorkspaceResult,
   compactWorkspaceResultSchema,
   optimizeAllApiUrl,
   pruneSandwichedApiUrl,
@@ -72,6 +73,30 @@ const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat('en', { numeric: 'auto'
 function appendPartialFailureNote(status: string, failedWorkspaces: number): string {
   if (failedWorkspaces <= 0) return status
   return `${status} (${failedWorkspaces} workspace${failedWorkspaces === 1 ? '' : 's'} failed)`
+}
+
+interface OptimizeTally {
+  savedBytes: number
+  declined: ReadonlySet<CompactWorkspaceResult['reason']>
+}
+
+const NOTHING_OPTIMIZED: OptimizeTally = { savedBytes: 0, declined: new Set() }
+
+function tallyOptimize(tally: OptimizeTally, answer: CompactWorkspaceResult): OptimizeTally {
+  return {
+    savedBytes: tally.savedBytes + (answer.beforeBytes - answer.afterBytes),
+    declined: answer.compacted ? tally.declined : new Set([...tally.declined, answer.reason]),
+  }
+}
+
+// A pass that saved nothing says why when the why is something the user can
+// act on: a lost race succeeds on retry, and a workspace with no saved version
+// has no point to fold history at, however large its record is.
+function optimizeSummary({ savedBytes, declined }: OptimizeTally): string {
+  if (savedBytes > 0) return `Saved ${formatBytes(savedBytes)}`
+  if (declined.has('raced')) return 'Interrupted by another write; try again'
+  if (declined.has('no-versions')) return 'Nothing to compact yet; save a version first'
+  return 'Already optimal'
 }
 
 function humanizeAge(seconds: number): string {
@@ -192,14 +217,11 @@ export function StorageReportCard() {
             fetchApi,
             optimizeAllApiUrl,
             compactWorkspaceResultSchema,
-            (saved, answer) => saved + (answer.beforeBytes - answer.afterBytes),
-            0,
+            tallyOptimize,
+            NOTHING_OPTIMIZED,
           )
           if (swept === null) return null
-          return appendPartialFailureNote(
-            swept.total > 0 ? `Saved ${formatBytes(swept.total)}` : 'Already optimal',
-            swept.failedWorkspaces,
-          )
+          return appendPartialFailureNote(optimizeSummary(swept.total), swept.failedWorkspaces)
         },
       }),
     [runMaintenance, fetchApi],

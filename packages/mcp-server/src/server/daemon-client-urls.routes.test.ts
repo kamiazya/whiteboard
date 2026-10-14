@@ -21,6 +21,7 @@ import {
   serverModeSignIn,
 } from './_test-server-mode-harness.js'
 import { testDataLayout, withTempDataDir } from './routes/_test-helpers.js'
+import type { SignInRoutesDeps } from './routes/sign-in.js'
 import { DENY_ALL_STRATEGY } from './security/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
@@ -436,10 +437,12 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
   const block = blockDir('whiteboard-client-urls-auth-', { holdsDataDir: true })
   let db: IsolatedDbHandle
   let app: ReturnType<typeof createApp>
+  let signIn: SignInRoutesDeps
 
   beforeAll(async () => {
     db = await createIsolatedDb({ dataDir: join(block.dir, 'auth-db') })
     const idp = await fakeOidcProvider(IDP, 'wb')
+    signIn = serverModeSignIn(db.db, createRelyingParty({ fetch: idp.fetch }))
     app = createApp({
       authMode: 'server-mode',
       publicBaseUrl: PUBLIC_URL,
@@ -450,7 +453,7 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
       people: serverModePeople(db.db, block.dir).people,
       touch: () => {},
       getStatus: () => ({}) as never,
-      signIn: serverModeSignIn(db.db, createRelyingParty({ fetch: idp.fetch })),
+      signIn,
     })
   })
   afterAll(async () => {
@@ -482,5 +485,18 @@ describe('daemon client /auth URLs reach a server-mode route', () => {
       [204, 302].includes(res.status) ||
       (contentType.startsWith('application/json') && !(await unmatched(res)))
     expect(served, `${method} ${url} -> ${res.status} ${contentType}`).toBe(true)
+  })
+
+  // The web app builds this link and the keeper reads it, so the query keys
+  // are checked by driving the one into the other: the attempt the keeper
+  // stores is what its callback later admits and redirects with.
+  it('a sign-in link keeps both its invitation and where to return to', async () => {
+    const url = daemonUrls.authSignInUrl('corp', { returnTo: '/w/x', invitation: 'inv-123' })
+    const res = await app.request(`${PUBLIC_URL}${url}`)
+    expect(res.status, res.headers.get('location') ?? '').toBe(302)
+    const state = new URL(res.headers.get('location') ?? '').searchParams.get('state') ?? ''
+    const binding = /__Host-wb_signin=([^;]+)/.exec(res.headers.get('set-cookie') ?? '')?.[1] ?? ''
+    const attempt = await signIn.attempts.take(state, binding, Date.now())
+    expect(attempt).toMatchObject({ returnTo: '/w/x', invitationToken: 'inv-123' })
   })
 })

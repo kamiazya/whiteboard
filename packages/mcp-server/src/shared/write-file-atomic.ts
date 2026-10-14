@@ -128,18 +128,22 @@ async function syncPath(path: string): Promise<void> {
  * Files are opened read-only, which is enough for fsync on POSIX; where the
  * platform refuses that (Windows wants a writable handle) it is forgiven
  * under the same tolerance as a directory, and a storage error still throws.
- * Directories are synced deepest first so each one's entries are durable
- * before its parent's are. Symbolic links are not followed.
+ * Directories are synced longest path first — a child's path is always
+ * longer than its parent's — so each one's entries are durable before its
+ * parent's are. Symbolic links are not followed.
  */
 export async function syncTree(root: string): Promise<void> {
   const entries = await readdir(root, { withFileTypes: true, recursive: true })
   const dirs: string[] = []
+  // One fsync at a time: the caller is a backup, which runs in its own
+  // process where wall time is not what it lacks.
   for (const entry of entries) {
     const path = join(entry.parentPath, entry.name)
     if (entry.isFile()) await syncPath(path)
     else if (entry.isDirectory()) dirs.push(path)
   }
   dirs.sort((a, b) => b.length - a.length)
+  // Sequential, not parallel: the child-before-parent order is the point.
   for (const dir of dirs) await syncPath(dir)
   await syncPath(root)
 }

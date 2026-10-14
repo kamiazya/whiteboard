@@ -163,16 +163,16 @@ export class IdbDocumentIndex {
       // write cannot be split by a concurrent create.
       const existing = await request(store.get(workspaceId))
       if (existing !== undefined) return
-      await request(
-        store.put(
-          {
-            workspaceId,
-            ...(segment === undefined ? {} : { segment }),
-            ...(displayName === undefined ? {} : { displayName }),
-          },
-          workspaceId,
-        ),
-      )
+      // `put` takes anything and the reader drops a key it does not know, so
+      // the row is checked here. Each layer carries its own `satisfies`: a
+      // conditional spread escapes the excess-property check the outer
+      // annotation would otherwise make.
+      const entry: WorkspaceEntry = {
+        workspaceId,
+        ...(segment === undefined ? {} : ({ segment } satisfies Partial<WorkspaceEntry>)),
+        ...(displayName === undefined ? {} : ({ displayName } satisfies Partial<WorkspaceEntry>)),
+      }
+      await request(store.put(entry, workspaceId))
     })
   }
 
@@ -223,10 +223,11 @@ export class IdbDocumentIndex {
       ) {
         throw new WorkspaceSegmentTakenError(segment)
       }
+      // Per-layer `satisfies` for the reason `createWorkspace` gives.
       const renamed: WorkspaceEntry = {
         ...current,
-        ...(segment === undefined ? {} : { segment }),
-        ...(displayName === undefined ? {} : { displayName }),
+        ...(segment === undefined ? {} : ({ segment } satisfies Partial<WorkspaceEntry>)),
+        ...(displayName === undefined ? {} : ({ displayName } satisfies Partial<WorkspaceEntry>)),
       }
       await request(store.put(renamed, workspaceId))
       return renamed

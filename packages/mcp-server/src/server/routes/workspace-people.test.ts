@@ -7,6 +7,10 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  INVITE_PAGE_PATH,
+  inviteTokenOf,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { serverModePeople } from '../_test-server-mode-harness.js'
@@ -182,8 +186,8 @@ describe('workspace people', () => {
     const made = await call('ada', 'POST', '/invitations', {})
     expect(made.status).toBe(201)
     const url = new URL(String(made.body.url))
-    expect(`${url.origin}${url.pathname}`).toBe('https://wb.test/invite')
-    const token = new URLSearchParams(url.hash.slice(1)).get('token') ?? ''
+    expect(`${url.origin}${url.pathname}`).toBe(`https://wb.test${INVITE_PAGE_PATH}`)
+    const token = inviteTokenOf(url.hash) ?? ''
     expect(await invitations.openLink(token, Date.now())).toMatchObject({
       ok: true,
       invitation: { workspaceId: 'ws-1', invitedBy: ids.ada },

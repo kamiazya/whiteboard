@@ -28,11 +28,13 @@ const ASSETS = resolve(DIST, 'assets')
 
 const KB = 1024
 const BUDGETS = [
-  // The entry file itself is now a thin bootstrap (~5 KB gz) now that both
-  // canvas pages are React.lazy — 30 KB leaves headroom for App.tsx growth
-  // without going back to the old 560 KB ceiling, which stopped meaning
-  // anything once the entry stopped containing loro-crdt (and, later, the
-  // editor's own diagramming library).
+  // The entry file holds the first-paint modules that reach a dynamic import
+  // (main, boot, App and the screens that `lazy()` pages), about 6 KB gz;
+  // everything else first paint loads is in `shell-*` and `vendor-*` (see
+  // vite-manual-chunks.ts). 30 KB leaves headroom for App.tsx growth without
+  // going back to the old 560 KB ceiling, which stopped meaning anything once
+  // the entry stopped containing loro-crdt (and, later, the editor's own
+  // diagramming library).
   { label: 'entry JS (index-*.js)', pattern: /^index-.*\.js$/, limit: 30 * KB, required: true },
   { label: 'CSS (index-*.css)', pattern: /^index-.*\.css$/, limit: 30 * KB, required: true },
   {
@@ -47,17 +49,14 @@ const BUDGETS = [
 // set ~10% above the measured size rather than at the aspirational floor: a
 // budget with no headroom is a tripwire on whoever commits next, not a
 // regression stop, so a raise restores that headroom instead of adding one byte.
-// The entry is not thin by choice — react-router, the workspace-address parser
-// and the identity resolver have to be in it, because boot decides which page
-// to lazy-load and which workspace it means before first paint.
+// Measured at 136.1 KB in 9 files (local build, 2026-10-14). The critical path
+// is not thin by choice — react-router, zod, the workspace-address parser and
+// the identity resolver have to be on it, because boot decides which page to
+// lazy-load and which workspace it means before first paint.
 //
-// `manualChunks` gives lucide-react a chunk of its own, and that is
-// not a size decision: left unassigned, the icons merge into a chunk carrying
-// loro's WASM top-level await, where rolldown emits them as `let Copy, …`
-// assigned inside the TLA body, so the exports read `undefined` forever.
-// Rendering the document kebab then calls createElement(undefined) and React
-// #130 takes the whole page to the error screen. Invisible to every
-// source-level test and to an unminified build alike.
+// How first paint is cut into chunks, and the two minified-build-only
+// defects that decide it (lucide's icons beside loro's top-level await, and a
+// shared chunk rewritten for a dynamic import), are vite-manual-chunks.ts.
 //
 // Whether this much critical path is the right size is a product call about
 // first paint, and this gate is the wrong place to make it. `measure-critical-path.mjs`
@@ -73,7 +72,18 @@ const BUDGETS = [
 //   the critical path" — fine, deterministic. LCP answers "is first paint
 //   still good" — coarse, absolute, and the only one of the two that can go
 //   red for a change that reorders work without adding any.
-const CRITICAL_PATH_BUDGET_KB = 152
+const CRITICAL_PATH_BUDGET_KB = 150
+
+// The same path counted in FILES, because first paint on CI tracked the
+// number of modulepreload requests far more closely than their bytes — see
+// `measure-critical-path.mjs` — and the byte budget cannot see a request.
+// Deterministic for a given build, unlike a timing. Nine today (the entry,
+// the rolldown runtime, the four groups vite-manual-chunks.ts names, and the
+// first-paint chunks that reach a dynamic import), so one file of headroom.
+// A new file here usually means a first-paint module started reaching an
+// `import()` and fell out of those groups, which is worth reading before it
+// is worth a raise.
+const CRITICAL_PATH_FILE_BUDGET = 10
 
 // Attribute-order-, quote-style-, and case-insensitive: extract each tag
 // first, then match attributes independently, so a Vite/minifier formatting
@@ -85,16 +95,21 @@ export function attr(tag, name) {
   return m ? (m[2] ?? m[3] ?? m[4]) : undefined
 }
 
-// Extracts every entry <script src> and modulepreload <link href> JS file
-// referenced from a built index.html — the critical-path payload a fresh
-// visitor downloads before first paint. Tag names, attribute names, and the
-// `rel` attribute value are all matched case-insensitively per the HTML spec.
-export function extractCriticalPathFiles(html) {
+/** Every `<script src>` JS file under /assets/ in a built index.html. */
+function extractEntryScripts(html) {
   const entryScripts = []
   for (const [tag] of html.matchAll(/<script\b[^>]*>/gi)) {
     const src = attr(tag, 'src')
     if (src?.startsWith('/assets/') && src.endsWith('.js')) entryScripts.push(src)
   }
+  return entryScripts
+}
+
+// Extracts every entry <script src> and modulepreload <link href> JS file
+// referenced from a built index.html — the critical-path payload a fresh
+// visitor downloads before first paint. Tag names, attribute names, and the
+// `rel` attribute value are all matched case-insensitively per the HTML spec.
+export function extractCriticalPathFiles(html) {
   const modulepreloads = []
   for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
     const href = attr(tag, 'href')
@@ -107,7 +122,80 @@ export function extractCriticalPathFiles(html) {
       modulepreloads.push(href)
     }
   }
-  return [...new Set([...entryScripts, ...modulepreloads])]
+  return [...new Set([...extractEntryScripts(html), ...modulepreloads])]
+}
+
+/** `source` with every comment that follows its last statement removed. */
+function withoutTrailingComments(source) {
+  let rest = source.trimEnd()
+  for (;;) {
+    if (rest.endsWith('*/')) {
+      const open = rest.lastIndexOf('/*')
+      if (open < 0) return rest
+      rest = rest.slice(0, open).trimEnd()
+      continue
+    }
+    const lastLine = rest.slice(rest.lastIndexOf('\n') + 1)
+    if (!lastLine.trimStart().startsWith('//')) return rest
+    rest = rest.slice(0, rest.length - lastLine.length).trimEnd()
+  }
+}
+
+/**
+ * Every entry script awaits the `__tla` promise of each chunk it imports
+ * that exports one.
+ *
+ * vite-plugin-top-level-await turns a chunk holding a top-level await OR a
+ * dynamic import into an async body whose exports are assigned only when that
+ * body runs, and exports `__tla` for it. An importer it did not rewrite the
+ * same way reads those exports before they are assigned. A lazy page gets
+ * away with it, since it loads long after the body ran; the entry runs in
+ * the same tick, so its first call into such a chunk throws and the page
+ * never mounts — in a minified build only, which no source-level test runs.
+ */
+export function entryAwaitFailures(dist) {
+  const lines = []
+  let failures = 0
+  const indexHtmlPath = join(dist, 'index.html')
+  if (!existsSync(indexHtmlPath)) return { failures, lines }
+  const fail = (text) => {
+    lines.push({ stream: 'error', text })
+    failures++
+  }
+  // A missing asset is a broken build, said as a failure rather than an
+  // ENOENT that ends the gate before it reports anything.
+  const readAsset = (file) => {
+    const path = join(dist, 'assets', file)
+    return existsSync(path) ? readFileSync(path, 'utf8') : undefined
+  }
+  // The export clause ends the module, but a comment (a source map pointer,
+  // a licence banner) may follow it. Comments are peeled off the tail by hand
+  // rather than matched by one pattern, which would backtrack exponentially.
+  const deferred = (source) =>
+    /export\s*\{[^}]*\b__tla\b[^}]*\}\s*;?$/.test(withoutTrailingComments(source))
+  for (const src of extractEntryScripts(readFileSync(indexHtmlPath, 'utf8'))) {
+    const entry = src.replace(/^\/assets\//, '')
+    const entrySource = readAsset(entry)
+    if (entrySource === undefined) {
+      fail(`  FAIL  entry ${entry} is named by index.html but missing from dist/assets`)
+      continue
+    }
+    for (const [, names, file] of entrySource.matchAll(
+      /import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+)["']/g,
+    )) {
+      if (/\b__tla\b/.test(names)) continue
+      const imported = readAsset(file)
+      if (imported === undefined) {
+        fail(`  FAIL  entry ${entry} imports ${file}, which is missing from dist/assets`)
+        continue
+      }
+      if (!deferred(imported)) continue
+      fail(
+        `  FAIL  entry ${entry} reads ${file} without awaiting its __tla — the page will not mount`,
+      )
+    }
+  }
+  return { failures, lines }
 }
 
 function gzipSize(path) {
@@ -144,46 +232,80 @@ function perChunkFailures() {
   return failures
 }
 
+/** How close to the byte budget a pass still lists every file. */
+const NEAR_BUDGET = 0.97
+
+/** One budget's line: FAIL over it, pass otherwise. */
+function judge(what, measured, budget) {
+  const over = measured > budget
+  const text = `  ${over ? 'FAIL' : 'pass'}  ${what}`
+  return { over, line: { stream: over ? 'error' : 'log', text } }
+}
+
+/** Each file with its gzipped size, in the order given. */
+function fileBreakdown(files, stream) {
+  return files.map(({ href, bytes }) => ({
+    stream,
+    text: `        ${(bytes / KB).toFixed(1).padStart(6)} KB  ${href}`,
+  }))
+}
+
 /**
  * The entry script plus every modulepreloaded JS chunk, as listed in
- * `dist/index.html`.
+ * `<dist>/index.html`, judged against both critical-path budgets.
  *
- * This is what actually determines first-paint transfer size, and the
- * per-file entry-JS budget cannot catch a regression here — a statically
- * imported loro-crdt page would inflate this total without ever growing
- * `index-*.js` itself.
+ * This is what actually determines first-paint transfer, and the per-file
+ * entry-JS budget cannot catch a regression here — a statically imported
+ * loro-crdt page would inflate this total without ever growing `index-*.js`
+ * itself.
+ *
+ * A failure, or a pass within 3% of the byte budget, lists every file with
+ * its gzipped size, largest first. The PR that tips the total over is often
+ * not the one that grew a chunk, and without the list its author has to
+ * rebuild main and diff `index.html` by hand to find out which one did.
+ *
+ * Returns the lines rather than printing them so the judgement is testable
+ * against a fixture `dist/`.
  */
-function criticalPathFailures() {
-  const indexHtmlPath = join(DIST, 'index.html')
+export function criticalPathReport(dist, { byteBudgetKb, fileBudget }) {
+  const lines = []
+  const fail = (text) => lines.push({ stream: 'error', text })
+  const indexHtmlPath = join(dist, 'index.html')
   if (!existsSync(indexHtmlPath)) {
-    console.error(
-      `  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`,
-    )
-    return 1
+    fail(`  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`)
+    return { failures: 1, lines }
   }
 
   let failures = 0
-  const criticalPathFiles = extractCriticalPathFiles(readFileSync(indexHtmlPath, 'utf8'))
-  if (criticalPathFiles.length === 0) {
-    console.error(
+  const hrefs = extractCriticalPathFiles(readFileSync(indexHtmlPath, 'utf8'))
+  if (hrefs.length === 0) {
+    fail(
       '  FAIL  no entry <script src> or <link rel="modulepreload"> JS found in dist/index.html — the parser is broken or the build output changed shape; refusing to pass a vacuous budget',
     )
     failures++
   }
 
-  let bytes = 0
-  for (const href of criticalPathFiles) {
-    bytes += gzipSize(join(DIST, href.replace(/^\//, '')))
-  }
-  const kb = (bytes / KB).toFixed(1)
-  const what = `critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files)`
-  if (bytes > CRITICAL_PATH_BUDGET_KB * KB) {
-    console.error(`  FAIL  ${what}: ${kb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`)
-    failures++
-  } else {
-    console.log(`  pass  ${what}: ${kb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`)
-  }
-  return failures
+  const files = hrefs
+    .map((href) => ({ href, bytes: gzipSize(join(dist, href.replace(/^\//, ''))) }))
+    .sort((a, b) => b.bytes - a.bytes)
+  const bytes = files.reduce((sum, file) => sum + file.bytes, 0)
+  const byBytes = judge(
+    `critical-path JS (entry + modulepreload, ${files.length} files): ${(bytes / KB).toFixed(1)} KB gzip (budget ${byteBudgetKb} KB)`,
+    bytes,
+    byteBudgetKb * KB,
+  )
+  const byCount = judge(
+    `critical-path files: ${files.length} (budget ${fileBudget})`,
+    files.length,
+    fileBudget,
+  )
+  // Near is for bytes only: a count of ten has no 3% to be within.
+  const near = !byBytes.over && bytes >= byteBudgetKb * KB * NEAR_BUDGET
+  if (near) byBytes.line.text += ' — within 3% of the budget'
+  lines.push(byBytes.line, byCount.line)
+  failures += [byBytes, byCount].filter((verdict) => verdict.over).length
+  if (failures > 0 || near) lines.push(...fileBreakdown(files, failures > 0 ? 'error' : 'log'))
+  return { failures, lines }
 }
 
 // Guarded behind the import.meta.url check below so importing this module
@@ -205,7 +327,13 @@ function main() {
   // entry-JS budget above cannot catch a regression here (e.g. a statically
   // imported loro-crdt page would inflate this total without ever growing
   // index-*.js itself).
-  failures += criticalPathFailures()
+  const critical = criticalPathReport(DIST, {
+    byteBudgetKb: CRITICAL_PATH_BUDGET_KB,
+    fileBudget: CRITICAL_PATH_FILE_BUDGET,
+  })
+  const awaited = entryAwaitFailures(DIST)
+  for (const { stream, text } of [...critical.lines, ...awaited.lines]) console[stream](text)
+  failures += critical.failures + awaited.failures
 
   if (failures > 0) {
     console.error(`\nbundle-size gate: ${failures} failure(s)`)

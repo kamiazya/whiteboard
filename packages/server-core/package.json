@@ -52,6 +52,10 @@
       "types": "./src/viewport-request.ts",
       "import": "./src/viewport-request.ts"
     },
+    "./agent-activity-touched": {
+      "types": "./src/agent-activity-touched.ts",
+      "import": "./src/agent-activity-touched.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

@@ -1,13 +1,17 @@
-// @whiteboard/checks — root vitest.config.ts project inventory + the
-// shared-layer step's derivation.
+// @whiteboard/checks — root vitest project inventory + the shared-layer
+// step's derivation.
 //
-// tools/checks stays dependency-free (see release-gate-matrix-schema.mjs), so
-// this is a regex scan over the config text rather than a real module
-// evaluation of vitest.config.ts.
+// The list of registered projects is vitest.projects.json at the repo root,
+// the same file the root vitest.config.ts imports, so it is parsed as JSON
+// rather than recovered from the config's text. Each project's own config is
+// still read textually for its name and browser flag: tools/checks stays
+// dependency-free (see release-gate-matrix-schema.mjs) and runs in CI with no
+// TypeScript loader, so it cannot evaluate a .ts config.
 //
-// This is the single parser: ci-verify-coverage.test.ts, docs-contract.test.ts,
-// and run-shared-layer-tests.mjs (the CI-invoked derivation) all read the same
-// inventory instead of each holding a copy that can drift apart.
+// This is the single reader: ci-verify-coverage.test.ts, docs-contract.test.ts,
+// ci-stress-job.test.ts and run-shared-layer-tests.mjs (the CI-invoked
+// derivation) all read the same inventory instead of each holding a copy
+// that can drift apart.
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -17,19 +21,36 @@ import { join } from 'node:path'
  * @typedef {{ job: string, mechanism: 'flag' | 'filter-script', marker: string }} ElsewhereEntry
  */
 
-// Every vitest project root vitest.config.ts wires up. The path regex matches
-// any quoted `*.config.ts` rather than a `packages|apps` prefix, so tools/
-// projects (tools/arch-lint) are included too.
+/** Repo-relative path of the data file listing every root vitest project config. */
+const VITEST_PROJECTS_FILE = 'vitest.projects.json'
+
 /**
+ * The config paths the root vitest.config.ts registers as projects, in order.
+ * Throws on anything but a list of `*.config.ts` paths, so a malformed file
+ * fails here by name rather than as an ENOENT in whichever reader is next.
+ *
+ * @param {string} repoRoot
+ * @returns {string[]}
+ */
+export function readVitestProjectConfigPaths(repoRoot) {
+  const parsed = JSON.parse(readFileSync(join(repoRoot, VITEST_PROJECTS_FILE), 'utf8'))
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every((entry) => typeof entry === 'string' && entry.endsWith('.config.ts'))
+  ) {
+    throw new Error(`${VITEST_PROJECTS_FILE} must be a JSON array of vitest *.config.ts paths`)
+  }
+  return parsed
+}
+
+/**
+ * Every registered project, with the name and browser flag its own config declares.
+ *
  * @param {string} repoRoot
  * @returns {VitestProject[]}
  */
 export function readVitestProjects(repoRoot) {
-  const rootVitestConfig = readFileSync(join(repoRoot, 'vitest.config.ts'), 'utf8')
-  const configPaths = [...rootVitestConfig.matchAll(/'([^']+\.config\.ts)'/g)].map(
-    (match) => match[1],
-  )
-  return configPaths.map((configPath) => {
+  return readVitestProjectConfigPaths(repoRoot).map((configPath) => {
     const configContent = readFileSync(join(repoRoot, configPath), 'utf8')
     return {
       configPath,
@@ -195,11 +216,7 @@ export function buildVitestArgv(names, forwarded = []) {
  * @returns {VitestProjectGlobs[]}
  */
 export function readProjectTestGlobs(repoRoot) {
-  const rootVitestConfig = readFileSync(join(repoRoot, 'vitest.config.ts'), 'utf8')
-  const configPaths = [...rootVitestConfig.matchAll(/'([^']+\.config\.ts)'/g)].map(
-    (match) => match[1],
-  )
-  return configPaths.map((configPath) => {
+  return readVitestProjectConfigPaths(repoRoot).map((configPath) => {
     const content = readFileSync(join(repoRoot, configPath), 'utf8')
     const arrays = (key) =>
       [...content.matchAll(new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`, 'g'))]

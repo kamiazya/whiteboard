@@ -1,19 +1,16 @@
-// biome-ignore-all assist/source/organizeImports: the import order is read by the text guards described below
-// Double-quoted and FIRST on purpose: the guards that read this file as text
-// take a single-quoted span naming a config as a registered project, so a
-// single-quoted specifier would be counted twice, and one placed after the
-// next import would join the span its closing quote opens.
-// biome-ignore format: so is the quote style
-import webJsdom from "./apps/web/vitest.config.ts"
 import { defineConfig } from 'vitest/config'
+import webJsdom from './apps/web/vitest.config.ts'
+// The project list is data in its own file so every guard and CI script that
+// needs it parses the same JSON this config imports, instead of reading this
+// file as text.
+import projects from './vitest.projects.json' with { type: 'json' }
 
 export default defineConfig({
   test: {
     // Runs once per invocation, for every project, and prints a banner when the
     // Node major is not the one in .node-version. It never fails the run: the
     // wrong-major symptoms name neither Node nor the pin, and a scoped run does
-    // not reach the guard that does. Same no-apostrophe, no-quoted-glob rule as
-    // the comment below, since this file is read as text.
+    // not reach the guard that does.
     globalSetup: ['./.claude/scripts/node-version-banner.mjs'],
     // Read from the ROOT config only, so the web jsdom project filter is
     // carried up here or a run of that project through this config (a
@@ -25,13 +22,10 @@ export default defineConfig({
     // consumer is the SonarQube lane (.github/workflows/sonarqube.yml), which
     // reads tmp/coverage/lcov.info.
     //
-    // Two traps, both measured, both written up in docs/contributing/testing.md:
-    // the include globs below are resolved against each project OWN root (a
+    // A trap, measured and written up in docs/contributing/testing.md: the
+    // include globs below are resolved against each project's own root (a
     // repo-prefixed glob matches nothing and writes an empty lcov with no
-    // error), and this file is read as TEXT by three guards whose regexes stop
-    // at the next quote — so a comment here carries NO apostrophe, no quoted
-    // glob, and no runner name, or the project list below is swallowed whole
-    // and an unrelated test reports ENOENT on a path made of this paragraph.
+    // error).
     coverage: {
       provider: 'v8',
       // Default is false, which means a run with ONE failing test writes no
@@ -59,35 +53,6 @@ export default defineConfig({
         '**/src/vendor/**',
       ],
     },
-    projects: [
-      'packages/mcp-server/vitest.node.config.ts',
-      'packages/mcp-server/vitest.smoke.config.ts',
-      'packages/model/vitest.node.config.ts',
-      'packages/ports/vitest.node.config.ts',
-      'packages/daemon-client/vitest.node.config.ts',
-      'packages/facet-engine/vitest.node.config.ts',
-      'packages/facet-ui/vitest.jsdom.config.ts',
-      'packages/plugin-visual/vitest.node.config.ts',
-      'packages/plugin-visual/vitest.jsdom.config.ts',
-      'packages/codec/vitest.node.config.ts',
-      'tools/arch-lint/vitest.node.config.ts',
-      'packages/loro-adapter/vitest.node.config.ts',
-      'packages/search/vitest.node.config.ts',
-      'packages/reference-graph/vitest.node.config.ts',
-      'packages/server-core/vitest.node.config.ts',
-      'packages/workspace-index/vitest.node.config.ts',
-      'packages/history/vitest.node.config.ts',
-      'packages/scene/vitest.node.config.ts',
-      'packages/canvas-render/vitest.node.config.ts',
-      'packages/canvas-render/vitest.browser.config.ts',
-      'packages/canvas-viewer/vitest.node.config.ts',
-      'packages/canvas-viewer/vitest.jsdom.config.ts',
-      'packages/canvas-viewer/vitest.browser.config.ts',
-      'apps/extension/vitest.node.config.ts',
-      'apps/web/vitest.config.ts',
-      'apps/web/vitest.node.config.ts',
-      'apps/web/vitest.browser.config.ts',
-      'apps/web/vitest.browser-window-state.config.ts',
-    ],
+    projects,
   },
 })

@@ -14,6 +14,10 @@
  */
 
 import { getConnInfo } from '@hono/node-server/conninfo'
+import {
+  signInPageUrl,
+  signInQueryOf,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import type {
   SignInProvidersResponse,
   SignInRefusal,
@@ -77,10 +81,10 @@ interface Routing {
 
 async function begin(c: Context, routing: Routing, provider: SignInRouteProvider, fresh = false) {
   const { deps, now, callbackUrl } = routing
-  const invitation = c.req.query('invitation')
+  const { returnTo, invitation } = signInQueryOf((name) => c.req.query(name))
   const attempt = await deps.attempts.begin({
     providerId: provider.id,
-    returnTo: safeReturnPath(c.req.query('return')),
+    returnTo: safeReturnPath(returnTo),
     ...(invitation === undefined ? {} : { invitationToken: invitation }),
     now: now(),
     ttlMs: ATTEMPT_TTL_MS,
@@ -206,7 +210,7 @@ async function reauthenticate(c: Context, routing: Routing) {
 // Sign-in and its callback are browser navigations, so a refusal goes back to the web app's
 // sign-in screen, which explains the reason rather than showing raw JSON.
 function refusedTo(c: Context, reason: SignInRefusal): Response {
-  return c.redirect(`/sign-in?error=${reason}`, 302)
+  return c.redirect(signInPageUrl(reason), 302)
 }
 
 async function session(c: Context, deps: SignInRoutesDeps, now: () => number) {

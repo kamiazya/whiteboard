@@ -44,6 +44,7 @@ interface VitestProjectsModule {
     isBrowser: boolean
   }>
   readBrowserProjectNames: (repoRoot: string) => string[]
+  readProjectTestGlobs: (repoRoot: string) => Array<{ configPath: string }>
   PROJECTS_RUN_ELSEWHERE: Record<string, { job: string; mechanism: string; marker: string }>
   deriveSharedLayerProjectNames: (repoRoot: string) => string[]
   buildVitestArgv: (names: string[], forwarded?: string[]) => string[]
@@ -105,14 +106,23 @@ function makeSink() {
   }
 }
 
-// Writes a synthetic repo root: a top-level vitest.config.ts registering each
-// fixture project by config path, plus each project's own config file with
-// the `name:` / `browser: { enabled: true }` shape the real parser scans for.
+// Writes a synthetic repo root: the vitest.projects.json data file the root
+// config imports, a root vitest.config.ts whose comments quote a config path
+// and carry an apostrophe (prose a text scan of it would misread as a
+// registration), plus each project's own config file with the `name:` /
+// `browser: { enabled: true }` shape the per-project read scans for.
 async function writeFixtureRepo(root: string, projects: FixtureProject[]): Promise<void> {
-  const projectList = projects.map((p) => `      '${p.configPath}',`).join('\n')
+  await writeFile(
+    join(root, 'vitest.projects.json'),
+    `${JSON.stringify(
+      projects.map((p) => p.configPath),
+      null,
+      2,
+    )}\n`,
+  )
   await writeFile(
     join(root, 'vitest.config.ts'),
-    `import { defineConfig } from 'vitest/config'\nexport default defineConfig({\n  test: {\n    projects: [\n${projectList}\n    ],\n  },\n})\n`,
+    `import { defineConfig } from 'vitest/config'\nimport projects from './vitest.projects.json' with { type: 'json' }\n// this project's list is data; see 'packages/stray/vitest.node.config.ts' too\nexport default defineConfig({ test: { projects } })\n`,
   )
   for (const project of projects) {
     await mkdir(join(root, dirname(project.configPath)), { recursive: true })
@@ -208,6 +218,24 @@ describe('vitest-projects.mjs', () => {
     ])
 
     expect(() => deriveSharedLayerProjectNames(fixtureRoot)).toThrow(/looks browser-mode/)
+  })
+
+  it('registers exactly the data file, whatever the root config prose says', async () => {
+    const { readVitestProjects, readProjectTestGlobs } = await importVitestProjects()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+    ])
+
+    const expected = ['packages/alpha/vitest.node.config.ts']
+    expect(readVitestProjects(fixtureRoot).map((p) => p.configPath)).toEqual(expected)
+    expect(readProjectTestGlobs(fixtureRoot).map((p) => p.configPath)).toEqual(expected)
+  })
+
+  it('refuses a data file that is not a list of config paths', async () => {
+    const { readVitestProjects } = await importVitestProjects()
+    await writeFile(join(fixtureRoot, 'vitest.projects.json'), '{"projects": []}\n')
+
+    expect(() => readVitestProjects(fixtureRoot)).toThrow(/vitest\.projects\.json/)
   })
 
   it('buildVitestArgv builds flags, not a shell string', async () => {

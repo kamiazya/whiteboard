@@ -457,7 +457,9 @@ export const compactWorkspaceResultSchema = z.object({
   beforeBytes: z.number().int().nonnegative(),
   afterBytes: z.number().int().nonnegative(),
   // A reason this build does not know reads as `no-gain`, the one that claims
-  // least: nothing reads it to decide, and the pass itself already happened.
+  // least: the storage card reads it only to explain a pass that saved nothing,
+  // and `no-gain` explains it as "already optimal" rather than asking the user
+  // to act on a cause this build cannot name.
   reason: z.enum(['no-versions', 'no-file', 'no-gain', 'raced', 'ok']).catch('no-gain'),
 })
 

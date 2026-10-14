@@ -73,6 +73,7 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'api-errors.ts': 'shared',
   'theme-font.ts': 'shared',
   'viewport-request.ts': 'shared',
+  'agent-activity-touched.ts': 'shared',
   // Read by `createServer` alone, and each reaches into `tools/` for what it
   // translates.
   'workspace-handle.ts': 'composition',

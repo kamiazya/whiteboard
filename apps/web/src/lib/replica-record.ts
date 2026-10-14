@@ -17,6 +17,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import {
   documentContainers,
   readDocumentContent,
@@ -29,9 +30,11 @@ import {
   setNodeLock,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ExtensionFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
+  readStencilLibrary,
   readTagLibrary,
+  STENCIL_LIBRARY_PATH,
   TAG_LIBRARY_PATH,
   type TagLibrary,
 } from '@kamiazya/whiteboard-plugin-visual'
@@ -123,22 +126,45 @@ export function writeReplicaLock(
 }
 
 /**
- * The workspace's tag library as the replica holds it: what the document at
- * `tags` declares, read from the record at the same well-known path both
- * keepers read it from. Empty for a replica without one, and for one that
- * does not read — a board stays drawable when a document elsewhere is wrong.
+ * A workspace library document as the replica holds it, read from the record
+ * at the same well-known path both keepers read it from. Read as absent for a
+ * replica without one, and for one that does not read — a board stays
+ * drawable when a document elsewhere is wrong.
  */
+function replicaLibrary<T>(
+  record: ReplicaRecord,
+  entries: readonly WorkspaceDocumentEntry[],
+  path: string,
+  read: (facets: ExtensionFacets | undefined) => T,
+): T {
+  const library = entries.find((entry) => entry.path === path)
+  if (library === undefined) return read(undefined)
+  try {
+    return read(readFacets(documentContainers(record, library.documentId)))
+  } catch {
+    return read(undefined)
+  }
+}
+
+/** The workspace's tag library: what the document at `tags` declares. */
 export function replicaTagLibrary(
   record: ReplicaRecord,
   entries: readonly WorkspaceDocumentEntry[],
 ): TagLibrary {
-  const library = entries.find((entry) => entry.path === TAG_LIBRARY_PATH)
-  if (library === undefined) return readTagLibrary(undefined)
-  try {
-    return readTagLibrary(readFacets(documentContainers(record, library.documentId)))
-  } catch {
-    return readTagLibrary(undefined)
-  }
+  return replicaLibrary(record, entries, TAG_LIBRARY_PATH, readTagLibrary)
+}
+
+/**
+ * The workspace's stencil library: what the document at `stencils` declares.
+ * The editor's registry must know a stencil to take it back off a node — one
+ * it does not know is undressed down to its record alone, leaving the
+ * stencil's colour and facets on the box, and that edit ships to the keeper.
+ */
+export function replicaStencilLibrary(
+  record: ReplicaRecord,
+  entries: readonly WorkspaceDocumentEntry[],
+): WorkspaceStencils {
+  return replicaLibrary(record, entries, STENCIL_LIBRARY_PATH, readStencilLibrary)
 }
 
 /**

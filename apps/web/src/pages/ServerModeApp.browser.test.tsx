@@ -3,6 +3,12 @@
  * own origin — the sign-in screen, an invitation, a refusal explained, and
  * the signed-in person's workspaces.
  */
+import {
+  authSignInUrl,
+  invitePageUrl,
+  SIGN_IN_PAGE_PATH,
+  signInPageUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -95,21 +101,25 @@ const corp = { id: 'corp', displayName: 'Corp SSO' }
 
 describe('server mode sign-in', () => {
   it('offers each browser provider, returning to the workspaces after', async () => {
-    renderAt('/sign-in', { providers: [corp] })
+    renderAt(SIGN_IN_PAGE_PATH, { providers: [corp] })
     const link = await screen.findByRole('link', { name: /continue with corp sso/i })
-    expect(link.getAttribute('href')).toBe('/auth/sign-in/corp?return=%2F')
+    expect(link.getAttribute('href')).toBe(authSignInUrl('corp', { returnTo: '/' }))
   })
 
   it('explains a refusal by its reason', async () => {
-    renderAt('/sign-in?error=not_invited', { providers: [corp] })
+    renderAt(signInPageUrl('not_invited'), { providers: [corp] })
     expect((await screen.findByRole('alert')).textContent).toMatch(/invit/i)
   })
 
   it('carries an invitation from the link into the sign-in', async () => {
-    renderAt('/invite#token=inv-123', { providers: [corp] })
+    // The link as the keeper mints it, so the page reads the keeper's spelling.
+    const invite = new URL(invitePageUrl('https://keeper.test', 'inv-123'))
+    renderAt(`${invite.pathname}${invite.hash}`, { providers: [corp] })
     expect(await screen.findByRole('heading', { name: /invited/i })).toBeTruthy()
     const link = await screen.findByRole('link', { name: /continue with corp sso/i })
-    expect(link.getAttribute('href')).toBe('/auth/sign-in/corp?return=%2F&invitation=inv-123')
+    expect(link.getAttribute('href')).toBe(
+      authSignInUrl('corp', { returnTo: '/', invitation: 'inv-123' }),
+    )
   })
 
   it('says so when the server has no provider to sign in with', async () => {

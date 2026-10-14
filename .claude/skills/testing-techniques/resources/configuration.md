@@ -8,7 +8,7 @@ version before relying on one.
 
 ## Projects and filters
 
-- The root `vitest.config.ts` lists every project config file; each declares a `name:`
+- The root `vitest.config.ts` registers every project config file listed in `vitest.projects.json` (data, so every guard parses it rather than reading the config as text); each declares a `name:`
   (`tools/checks/src/vitest-projects.mjs` throws on one without, since CI derives the
   shared-layer step from the list). `vitest run --project <name>` runs one;
   `pnpm test:browser` runs every browser project.
@@ -27,8 +27,9 @@ all of them:
 export default defineConfig({ test: { projects: ['./unit.config.ts', './e2e.config.ts'] } })
 ```
 
-Do NOT nest here yet: `vitest-projects.mjs` regex-scans the ROOT config for quoted
-`*.config.ts` paths, and a nested list would silently leave CI's shared-layer step.
+Do NOT nest here yet: `vitest-projects.mjs` reads the root list from `vitest.projects.json`
+only and does not follow a nested `projects` list, so a nested project would silently leave
+CI's shared-layer step.
 
 ### Inline projects inherit the root config and share one Vite server
 

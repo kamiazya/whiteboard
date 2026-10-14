@@ -297,3 +297,14 @@ something only the harness does. `clearWhiteboardDb` awaits
 settle seam the checkpoint and index-write tails already had; pinned by
 `clear-whiteboard-db.browser.test.tsx`. Seen twice before the fix, in two
 waves' full browser runs.
+
+### lcp-floor-median-noise
+
+**`smoke:lcp-floor` (`verify`) fails with a median over the 1000 ms floor
+while its own fastest run sits far under it** — seen at a 1116 ms median with
+a 724 ms minimum, on a branch whose diff could not reach the web app. The
+gate is the median of five runs, and on CI their spread is 10–130%, so one
+slow runner tips it. Rerun once. A MINIMUM over the floor is a real
+regression: read `smoke:bundle-size`'s critical-path FILE count first,
+because request count, not bytes, is what moved LCP
+(`apps/web/scripts/measure-critical-path.mjs`).
