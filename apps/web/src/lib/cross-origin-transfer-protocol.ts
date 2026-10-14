@@ -39,6 +39,7 @@
  * the realm-independent test, and a `z.instanceof(Uint8Array)` here would
  * refuse every real message while passing every test that builds one in-realm.
  */
+import { RECEIVE_TRANSFER_PAGE_PATH } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { promoteWorkspaceRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import { uint8ArrayAnyRealmSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -194,7 +195,7 @@ export function transferWindowUrl(
   let base = keeperBaseUrl
   while (base.endsWith('/')) base = base.slice(0, -1)
   const params = new URLSearchParams({ from: senderOrigin, nonce })
-  return `${base}/receive-transfer#${params.toString()}`
+  return `${base}${RECEIVE_TRANSFER_PAGE_PATH}#${params.toString()}`
 }
 
 /** The other half of `transferWindowUrl`, for the receiver reading its own URL. */

@@ -1,5 +1,5 @@
 import ts from '@typescript/typescript6'
-import { parseSource } from './ast-helpers.js'
+import { importBindingsOf, parseSource } from './ast-helpers.js'
 
 /** The name an identifier DECLARES or labels, as opposed to a use of a binding. */
 function isNameSlot(node: ts.Identifier): boolean {
@@ -22,9 +22,13 @@ function isNameSlot(node: ts.Identifier): boolean {
 
 /** Local names the file binds a wanted name to, by an aliased import or an aliased destructure. */
 export function aliasesOf(file: ts.SourceFile, wanted: ReadonlySet<string>): Set<string> {
-  const aliases = new Set<string>()
+  const aliases = new Set(
+    importBindingsOf(file)
+      .filter((binding) => binding.kind === 'named' && wanted.has(binding.imported))
+      .map((binding) => binding.local),
+  )
   const visit = (node: ts.Node): void => {
-    if (ts.isImportSpecifier(node) || ts.isBindingElement(node)) {
+    if (ts.isBindingElement(node)) {
       const key = node.propertyName
       if (
         key !== undefined &&

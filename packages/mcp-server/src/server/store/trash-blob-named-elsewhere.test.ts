@@ -52,6 +52,20 @@ it("answers yes for a blob another workspace's trash names", async () => {
   )
 })
 
+it('looks past a registered workspace with no stored record', async () => {
+  await storeRecordNaming('ws-a', REF)
+  const now = Date.now()
+  await handle.db
+    .insertInto('workspaces')
+    .values({ id: 'ws-0', createdAt: now, updatedAt: now })
+    .execute()
+  await storeRecordNaming('ws-b', REF)
+
+  expect(await trashBlobNamedElsewhere(storeScope(dir))({ workspaceId: 'ws-a', ref: REF })).toBe(
+    true,
+  )
+})
+
 it("does not count the asking workspace's own rows, nor another blob", async () => {
   await storeRecordNaming('ws-a', REF)
   await storeRecordNaming('ws-b', OTHER_REF)

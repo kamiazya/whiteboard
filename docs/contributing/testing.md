@@ -179,7 +179,7 @@ The target list is not copied here, because a copy goes stale silently: the file
 
 ## Browser Testing
 
-The real-browser Vitest projects are below. The root `vitest.config.ts` owns the list; `docs-contract.test.ts` fails if this table stops naming one:
+The real-browser Vitest projects are below. `vitest.projects.json` holds the list the root `vitest.config.ts` registers; `docs-contract.test.ts` fails if this table stops naming one:
 
 | Project | Package | Purpose |
 |---|---|---|
@@ -428,7 +428,7 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#p
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # optional: every project at once, CI runs the matrix; full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state
+pnpm test           # optional: every project at once, CI runs the matrix; full suite (see vitest.projects.json): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 pnpm coverage       # every non-browser project with v8 coverage -> tmp/coverage/lcov.info

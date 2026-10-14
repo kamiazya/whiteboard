@@ -14,7 +14,7 @@ import {
 import type { LoroDoc } from 'loro-crdt'
 import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
-import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
+import type { ServerDeps } from '../server-deps.js'
 import {
   announceAgentActivity,
   COMMENT_SUMMARY_WORDS,
@@ -269,43 +269,50 @@ async function announceEdit(
   }
 }
 
-type SummaryBucket = 'added' | 'changed' | 'removed' | 'commented' | 'tidied'
+type CanvasOp = CanvasEditInput['ops'][number]
+
+type SummaryBucket =
+  | 'added'
+  | 'changed'
+  | 'removed'
+  | 'locked'
+  | 'unlocked'
+  | 'tidied'
+  | (typeof COMMENT_SUMMARY_WORDS)[number]
 
 /**
- * Which tally an op contributes to, as a table.
- *
- * A chain of `else if`s said the same thing and hid the one fact a reader
- * wants: which verbs are summarised and which are silent. `node.splice` and
- * `region.set` are ABSENT here, which is the behaviour the chain had — they
- * fall through it — and absence now reads as a decision rather than as the
- * end of a list.
- *
- * `node.lock` / `edge.lock` and `comment.resolve` are absent for a different
- * reason: which tally they land in depends on the op's own `locked` /
- * `resolved`, so they are resolved below.
- * The table cannot be `satisfies Record<op, …>`: `CanvasOpSummaryInput` is
- * deliberately structural (`{ op: string }`) so the notifier contract does not
- * depend on the op union.
+ * Which tally each op contributes to. Keyed by the op union, so a new op owes
+ * an answer here before it compiles. `null` is a deliberate silence:
+ * `node.splice` rewrites part of a body and `region.set` restates a group's
+ * membership, and neither reads as one of the tallies a person counts. A
+ * lock's and a resolve's tally depend on the op's own `locked` / `resolved`.
  */
-const OP_SUMMARY_BUCKET: Readonly<Record<string, SummaryBucket>> = {
-  'node.add': 'added',
-  'edge.add': 'added',
-  'line.add': 'added',
-  'node.patch': 'changed',
-  'edge.patch': 'changed',
-  'line.patch': 'changed',
-  'node.remove': 'removed',
-  'edge.remove': 'removed',
-  'line.remove': 'removed',
-  'comment.add': 'commented',
-  tidy: 'tidied',
+const OP_SUMMARY_BUCKET = {
+  'node.add': () => 'added',
+  'edge.add': () => 'added',
+  'line.add': () => 'added',
+  'node.patch': () => 'changed',
+  'edge.patch': () => 'changed',
+  'line.patch': () => 'changed',
+  'node.remove': () => 'removed',
+  'edge.remove': () => 'removed',
+  'line.remove': () => 'removed',
+  'node.lock': (op) => (op.locked ? 'locked' : 'unlocked'),
+  'edge.lock': (op) => (op.locked ? 'locked' : 'unlocked'),
+  'comment.add': () => 'commented',
+  'comment.resolve': (op) => resolveSummaryWord(op.resolved),
+  tidy: () => 'tidied',
+  'node.splice': null,
+  'region.set': null,
+} as const satisfies {
+  [K in CanvasOp['op']]: ((op: Extract<CanvasOp, { op: K }>) => SummaryBucket) | null
 }
 
 /**
  * The order a summary reads in; each tally is reported under its own name.
  * The comment words are the thread plane's shared ones.
  */
-const SUMMARY_ORDER: readonly string[] = [
+const SUMMARY_ORDER: readonly SummaryBucket[] = [
   'added',
   'changed',
   'removed',
@@ -314,10 +321,9 @@ const SUMMARY_ORDER: readonly string[] = [
   ...COMMENT_SUMMARY_WORDS,
 ]
 
-function summaryBucketOf(op: CanvasOpSummaryInput): string | undefined {
-  if (op.op === 'node.lock' || op.op === 'edge.lock') return op.locked ? 'locked' : 'unlocked'
-  if (op.op === 'comment.resolve') return resolveSummaryWord(op.resolved)
-  return OP_SUMMARY_BUCKET[op.op]
+function summaryBucketOf(op: CanvasOp): SummaryBucket | undefined {
+  const bucketOf = OP_SUMMARY_BUCKET[op.op] as ((op: CanvasOp) => SummaryBucket) | null
+  return bucketOf === null ? undefined : bucketOf(op)
 }
 
 /**
@@ -325,8 +331,8 @@ function summaryBucketOf(op: CanvasOpSummaryInput): string | undefined {
  * OPS rather than from `touched`, because "added 3 nodes" and "moved 3
  * nodes" are the same set of ids and a human needs to know which happened.
  */
-function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
-  const counts = new Map<string, number>()
+function summarizeOps(ops: readonly CanvasOp[]): string {
+  const counts = new Map<SummaryBucket, number>()
   for (const op of ops) {
     const bucket = summaryBucketOf(op)
     if (bucket !== undefined) counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
@@ -335,8 +341,7 @@ function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
     (word) => `${word} ${counts.get(word)}`,
   )
   if ((counts.get('tidied') ?? 0) > 0) parts.push('tidied the layout')
-  // `ops` is `.min(1)`, and every op kind above contributes, so this is
-  // unreachable rather than a fallback anyone should see.
+  // Reached by a batch made only of the ops the table leaves silent.
   return parts.length === 0 ? 'edited the canvas' : parts.join(', ')
 }
 

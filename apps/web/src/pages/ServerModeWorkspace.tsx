@@ -11,6 +11,7 @@
 import { lazy, type ReactNode, Suspense } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { KeeperNotices } from '../components/connection/KeeperNotices.js'
+import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { LazyPageFallback } from '../components/LazyPageFallback.js'
 import { parseWorkspaceRoute, type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
 
@@ -23,7 +24,8 @@ const DaemonDocumentPage = lazy(() =>
 
 export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
   const navigate = useNavigate()
-  const view = parseWorkspaceRoute(useLocation().pathname)
+  const { pathname } = useLocation()
+  const view = parseWorkspaceRoute(pathname)
   const onView = (next: WorkspaceRoute) => navigate(workspaceRoutePath(next))
   const origin = window.location.origin
   if (view === null) return null
@@ -32,26 +34,32 @@ export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
       {shell}
       <KeeperNotices />
       <main className="min-h-0 flex-1 overflow-hidden">
-        <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Opening workspace…" />}>
-          {view.kind === 'index' ? (
-            <DaemonIndexPage
-              daemonBaseUrl={origin}
-              workspace={view.workspace}
-              serverMode
-              onWorkspaceResolved={(workspace) => onView({ kind: 'index', workspace })}
-              onOpenDocument={(workspace, path) => onView({ kind: 'document', workspace, path })}
-            />
-          ) : (
-            <DaemonDocumentPage
-              key={`${view.workspace}:${view.path}`}
-              daemonBaseUrl={origin}
-              workspaceId={view.workspace}
-              path={view.path}
-              serverMode
-              onNavigateBack={() => onView({ kind: 'index', workspace: view.workspace })}
-            />
-          )}
-        </Suspense>
+        {/* Outside Suspense, so a rejected page chunk lands here rather than
+            unmounting the root; inside the frame, so the header survives. */}
+        <ErrorBoundary resetKey={pathname}>
+          <Suspense
+            fallback={<LazyPageFallback heightClass="h-full" message="Opening workspace…" />}
+          >
+            {view.kind === 'index' ? (
+              <DaemonIndexPage
+                daemonBaseUrl={origin}
+                workspace={view.workspace}
+                serverMode
+                onWorkspaceResolved={(workspace) => onView({ kind: 'index', workspace })}
+                onOpenDocument={(workspace, path) => onView({ kind: 'document', workspace, path })}
+              />
+            ) : (
+              <DaemonDocumentPage
+                key={`${view.workspace}:${view.path}`}
+                daemonBaseUrl={origin}
+                workspaceId={view.workspace}
+                path={view.path}
+                serverMode
+                onNavigateBack={() => onView({ kind: 'index', workspace: view.workspace })}
+              />
+            )}
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   )

@@ -149,6 +149,19 @@ describe('fixed-duration sleeps in test files and the helpers they call', () => 
     expect(countFixedSleeps(`${timers}await Promise.race([p, delay(5000, 'timeout')])`)).toBe(0)
   })
 
+  it('counts a timers/promises sleep reached through a namespace or default import', () => {
+    for (const binding of ['* as timers', 'timers']) {
+      const timers = `import ${binding} from 'node:timers/promises'\n`
+      expect(countFixedSleeps(`${timers}await timers.setTimeout(100)`), binding).toBe(1)
+      expect(countFixedSleeps(`${timers}await timers.setTimeout(0)`), binding).toBe(0)
+      expect(countFixedSleeps(`${timers}await timers.setImmediate(100)`), binding).toBe(0)
+      expect(
+        countFixedSleeps(`${timers}function f(timers: T) { timers.setTimeout(100) }`),
+        binding,
+      ).toBe(0)
+    }
+  })
+
   it('counts a call by what the name resolves to, not by the name', () => {
     const timers = "import { setTimeout as delay } from 'node:timers/promises'\n"
     // A parameter named like the import is whatever was passed in.

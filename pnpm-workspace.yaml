@@ -209,7 +209,8 @@ enableGlobalVirtualStore: true
 packageExtensions:
   # transformers.node.mjs imports onnxruntime-common directly while declaring
   # only onnxruntime-node, which owns it — the same undeclared-dependency gap
-  # GVS exposes for @secretlint/resolver below.
+  # GVS exposes for @secretlint/resolver below. tools/arch-lint's
+  # undeclared-runtime-deps.test.ts pins it.
   "@huggingface/transformers":
     dependencies:
       onnxruntime-common: "*"
@@ -217,13 +218,6 @@ packageExtensions:
     dependencies:
       "@secretlint/secretlint-rule-pattern": "*"
       "@secretlint/secretlint-rule-preset-recommend": "*"
-  # dist/index.js requires rollup at load time while declaring only
-  # @rollup/plugin-virtual, the same gap; apps/web's vitest configs load the
-  # plugin, so without it every vitest project fails to start outside a pnpm
-  # shim. tools/arch-lint's undeclared-runtime-deps.test.ts pins it.
-  "vite-plugin-top-level-await":
-    dependencies:
-      rollup: "*"
 
 # pnpm v11 blocks all build scripts by default (security-by-default);
 # allowBuilds is the v11 replacement for the removed onlyBuiltDependencies /
@@ -238,7 +232,6 @@ packageExtensions:
 # existing behavior rather than newly enabling native builds pnpm was already
 # skipping.
 allowBuilds:
-  '@swc/core': false
   canvas: false
   esbuild: true
   lefthook: false

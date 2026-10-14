@@ -7,7 +7,7 @@
 // merged lcov at tmp/coverage/lcov.info — Sonar accepts several report paths,
 // but one run is also one install and one module graph.
 //
-// The project list is DERIVED from root vitest.config.ts (vitest-projects.mjs)
+// The project list is DERIVED from vitest.projects.json (vitest-projects.mjs)
 // for the same reason the shared-layer step derives its own: a new package is
 // measured the moment it registers a project, with no edit here. Two classes
 // are held out:

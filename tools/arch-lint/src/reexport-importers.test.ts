@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, normalize } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { importBindingsOf, parseSource } from './ast-helpers.js'
 import { REPO_ROOT, type RepoSource, readRepoSources, readWorkspaceEntries } from './scan-roots.js'
 import { isShippedPath, isTestPath } from './source-scan.js'
 
@@ -55,17 +55,7 @@ const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
 /** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
 function forwardedNames(path: string, text: string): string[] {
   const source = parseSource(path, text, false)
-  const imported = new Set<string>()
-  for (const statement of source.statements) {
-    const clause = ts.isImportDeclaration(statement) ? statement.importClause : undefined
-    if (clause?.name !== undefined) imported.add(clause.name.text)
-    const bindings = clause?.namedBindings
-    if (bindings !== undefined && ts.isNamedImports(bindings)) {
-      for (const element of bindings.elements) imported.add(element.name.text)
-    } else if (bindings !== undefined) {
-      imported.add(bindings.name.text)
-    }
-  }
+  const imported = new Set(importBindingsOf(source).map((binding) => binding.local))
   return source.statements.flatMap((statement) => {
     if (!ts.isExportDeclaration(statement)) return []
     const clause = statement.exportClause

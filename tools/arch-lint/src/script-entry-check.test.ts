@@ -30,7 +30,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource, unwrapExpression } from './ast-helpers.js'
+import {
+  type ImportedBindings,
+  importedBindings,
+  parseSource,
+  unwrapExpression,
+} from './ast-helpers.js'
 import { REPO_ROOT, scriptFiles } from './scan-roots.js'
 
 const HOME = 'tools/checks/src/is-run-as-script.mjs'
@@ -38,22 +43,14 @@ const HOME = 'tools/checks/src/is-run-as-script.mjs'
 const scripts = scriptFiles().filter((path) => !/\.test\.[mc]?js$/.test(path))
 
 /**
- * The local names `process` itself is reachable under: the global, and a
- * namespace or default import of `node:process` / `process`.
+ * What `node:process` / `process` binds in a file: `argv` under its own name
+ * or an alias, and `process` itself under a namespace or default import (the
+ * module is CommonJS-shaped, so its default IS the object). Type-only imports
+ * are left out, being erased. The global is added by the caller.
  */
-function processNames(file: ts.SourceFile): Set<string> {
-  const names = new Set(['process'])
-  for (const statement of file.statements) {
-    if (!ts.isImportDeclaration(statement)) continue
-    const from = (statement.moduleSpecifier as ts.StringLiteral).text
-    const clause = statement.importClause
-    if ((from !== 'node:process' && from !== 'process') || !clause) continue
-    if (clause.name) names.add(clause.name.text)
-    if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
-      names.add(clause.namedBindings.name.text)
-    }
-  }
-  return names
+function processImports(file: ts.SourceFile): ImportedBindings {
+  const isProcess = (spec: string) => spec === 'node:process' || spec === 'process'
+  return importedBindings(file, isProcess, 'argv', { defaultIsNamespace: true })
 }
 
 /** What a file calls `process` and what it calls `argv`. */
@@ -89,22 +86,6 @@ function isArgv(node: ts.Expression, scope: ArgvScope): boolean {
   )
 }
 
-/** The local names `argv` is imported under from `node:process` / `process`. */
-function importedArgvNames(file: ts.SourceFile): Set<string> {
-  const names = new Set<string>()
-  for (const statement of file.statements) {
-    if (!ts.isImportDeclaration(statement)) continue
-    const from = (statement.moduleSpecifier as ts.StringLiteral).text
-    const bindings = statement.importClause?.namedBindings
-    if ((from !== 'node:process' && from !== 'process') || !bindings) continue
-    if (!ts.isNamedImports(bindings)) continue
-    for (const element of bindings.elements) {
-      if ((element.propertyName ?? element.name).text === 'argv') names.add(element.name.text)
-    }
-  }
-  return names
-}
-
 /** The `argv` element of `const { argv… } = process`, if `declaration` is one. */
 function argvElementFromProcess(
   declaration: ts.VariableDeclaration,
@@ -136,8 +117,12 @@ function argvScopeOf(
   file: ts.SourceFile,
   declarations: readonly ts.VariableDeclaration[],
 ): ArgvScope {
-  const names = importedArgvNames(file)
-  const scope: ArgvScope = { processes: processNames(file), argv: names }
+  const imported = processImports(file)
+  const names = new Set(imported.locals.keys())
+  const scope: ArgvScope = {
+    processes: new Set(['process', ...imported.namespaces.keys()]),
+    argv: names,
+  }
   for (let grew = true; grew; ) {
     grew = false
     for (const declaration of declarations) {

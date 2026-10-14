@@ -1,5 +1,5 @@
 import ts from '@typescript/typescript6'
-import { parseSource } from './ast-helpers.js'
+import { bindingsOfImport, parseSource } from './ast-helpers.js'
 
 /**
  * The types a credential-gating surface holds, and the modules that export
@@ -31,11 +31,8 @@ function moduleBase(specifier: string): string {
 function isGateImport(node: ts.Node): boolean {
   if (!ts.isImportDeclaration(node) || !ts.isStringLiteralLike(node.moduleSpecifier)) return false
   if (GATE_MODULES.has(moduleBase(node.moduleSpecifier.text))) return true
-  const bindings = node.importClause?.namedBindings
-  return (
-    bindings !== undefined &&
-    ts.isNamedImports(bindings) &&
-    bindings.elements.some((el) => GATE_TYPES.has((el.propertyName ?? el.name).text))
+  return bindingsOfImport(node).some(
+    (binding) => binding.kind === 'named' && GATE_TYPES.has(binding.imported),
   )
 }
 

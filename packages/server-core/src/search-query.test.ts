@@ -21,7 +21,14 @@ describe('search query string', () => {
   })
 
   it('reads back what it wrote', () => {
-    const input: SearchQueryInput = { query: 'plan', tags: ['a', 'b'], kind: 'spatial', limit: 3 }
+    // Every field, so a field the input gains fails to compile here until it
+    // is given a value, and then fails the round-trip until both codecs carry it.
+    const input = {
+      query: 'plan',
+      tags: ['a', 'b'],
+      kind: 'spatial',
+      limit: 3,
+    } satisfies Required<SearchQueryInput>
     expect(searchInputFromQuery(readerOf(searchQueryString(input)))).toEqual(input)
   })
 

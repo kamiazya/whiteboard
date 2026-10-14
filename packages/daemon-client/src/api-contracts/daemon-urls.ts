@@ -265,11 +265,17 @@ export function fontFileApiUrl(fontId: string): string {
 // and read here, by the web app and the keeper alike, so a key cannot be
 // spelled differently on the two sides.
 
-/** The names a sign-in's query string carries, keyed by the field each one is. */
+/**
+ * The names a sign-in's query string carries, keyed by the field each one is.
+ * Keyed by `SignInQuery`, and both codecs walk this table's keys, so a field
+ * added there travels without a second list to remember.
+ */
 const SIGN_IN_QUERY_PARAMS = {
   returnTo: 'return',
   invitation: 'invitation',
-} as const
+} as const satisfies Record<keyof SignInQuery, string>
+
+const SIGN_IN_QUERY_FIELDS = Object.keys(SIGN_IN_QUERY_PARAMS) as readonly (keyof SignInQuery)[]
 
 /**
  * Where to land once signed in, and the invitation the sign-in accepts.
@@ -283,7 +289,7 @@ export interface SignInQuery {
 
 function withSignInQuery(path: string, query: SignInQuery): string {
   const params = new URLSearchParams()
-  for (const field of ['returnTo', 'invitation'] as const) {
+  for (const field of SIGN_IN_QUERY_FIELDS) {
     const value = query[field]
     if (value !== undefined) params.set(SIGN_IN_QUERY_PARAMS[field], value)
   }
@@ -297,12 +303,12 @@ function withSignInQuery(path: string, query: SignInQuery): string {
  * own decoding of the string.
  */
 export function signInQueryOf(read: (name: string) => string | undefined): SignInQuery {
-  const returnTo = read(SIGN_IN_QUERY_PARAMS.returnTo)
-  const invitation = read(SIGN_IN_QUERY_PARAMS.invitation)
-  return {
-    ...(returnTo === undefined ? {} : { returnTo }),
-    ...(invitation === undefined ? {} : { invitation }),
-  }
+  return Object.fromEntries(
+    SIGN_IN_QUERY_FIELDS.flatMap((field) => {
+      const value = read(SIGN_IN_QUERY_PARAMS[field])
+      return value === undefined ? [] : [[field, value]]
+    }),
+  ) as SignInQuery
 }
 
 export function authProvidersUrl(): string {
@@ -350,6 +356,13 @@ export function inviteTokenOf(hash: string): string | undefined {
   const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
   return params.get(INVITE_TOKEN_KEY) ?? undefined
 }
+
+/**
+ * The page a cross-origin transfer opens as a popup on the keeper. The keeper
+ * keys a header on it: its handshake rides `window.opener`, so this is the
+ * one shell served without the `same-origin` opener policy.
+ */
+export const RECEIVE_TRANSFER_PAGE_PATH = '/receive-transfer'
 
 /** The sign-in page, which also explains a refused sign-in. */
 export const SIGN_IN_PAGE_PATH = '/sign-in'

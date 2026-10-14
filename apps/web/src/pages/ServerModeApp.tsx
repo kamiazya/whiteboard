@@ -12,6 +12,7 @@ import {
   authSignInUrl,
   INVITE_PAGE_PATH,
   inviteTokenOf,
+  RECEIVE_TRANSFER_PAGE_PATH,
   SIGN_IN_PAGE_PATH,
   signInPageUrl,
   signInRefusalOf,
@@ -367,7 +368,10 @@ export function ServerModeApp({ fetchFn = sameOriginFetch }: ServerModeAppProps)
       {/* Outside SignedInOnly: sending a signed-out popup to /sign-in would
           drop the fragment that carries the handshake, so the page says what
           to do instead. */}
-      <Route path="/receive-transfer" element={<ReceiveTransferPage fetchFn={fetchFn} />} />
+      <Route
+        path={RECEIVE_TRANSFER_PAGE_PATH}
+        element={<ReceiveTransferPage fetchFn={fetchFn} />}
+      />
       <Route
         path="/w/*"
         element={

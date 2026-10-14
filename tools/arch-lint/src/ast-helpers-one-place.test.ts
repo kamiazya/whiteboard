@@ -8,6 +8,17 @@
  * the parser mode from the extension alone and drifts from the guards that
  * ask `parseSource`, whose mode and parent-pointer choice are written once.
  *
+ * Resolving an import is the fourth: which local name binds an export of a
+ * module, through a rename, a namespace or a default import. It was written
+ * out in thirteen guards, each accepting a different subset of those
+ * spellings, so whether a guard saw `timers.setTimeout(100)` or a subclass of
+ * the store it fences depended on which file it was copied from. Any read of
+ * an import clause's parts (`importClause`, `namedBindings`, the
+ * `NamedImports` / `NamespaceImport` / `ImportClause` / `ImportSpecifier`
+ * predicates and kinds) is that walk; asking whether an identifier's PARENT
+ * is an import specifier is a question about a name slot, and is left alone.
+ * Export specifiers are not import bindings and are not read.
+ *
  * Both were spelled at half a dozen guards each, and the copies had already
  * diverged — one skipped `as` and `satisfies`, so `(save as Fn)(doc)` was not
  * the call it is. A guard that cannot see a call reports clean, which reads
@@ -42,6 +53,32 @@ const mentionsWrapperPredicate = (node: ts.Node): boolean => {
   return mentioned
 }
 
+const IMPORT_PART = /^(importClause|namedBindings)$/
+const IMPORT_PREDICATE = /^is(NamedImports|NamespaceImport|ImportClause|ImportSpecifier)$/
+const IMPORT_KIND = /^(NamedImports|NamespaceImport|ImportClause|ImportSpecifier)$/
+
+/** `x.parent` or a bare `parent`: what an identifier sits in, not a walk down an import. */
+const isParentRead = (node: ts.Expression | undefined): boolean =>
+  node !== undefined &&
+  ((ts.isIdentifier(node) && node.text === 'parent') ||
+    (ts.isPropertyAccessExpression(node) && node.name.text === 'parent'))
+
+/** What reads an import declaration's parts by hand, or undefined. */
+function importWalk(node: ts.Node): string | undefined {
+  if (!ts.isPropertyAccessExpression(node)) return undefined
+  const name = node.name.text
+  if (IMPORT_PART.test(name)) return 'walks an import by hand'
+  if (IMPORT_KIND.test(name) && node.expression.getText().endsWith('SyntaxKind')) {
+    return 'walks an import by hand'
+  }
+  const call = node.parent
+  const asked = IMPORT_PREDICATE.test(name) && ts.isCallExpression(call) && call.expression === node
+  if (!asked) return undefined
+  return name === 'isImportSpecifier' && isParentRead(call.arguments[0])
+    ? undefined
+    : 'walks an import by hand'
+}
+
 function loopCondition(node: ts.Node): ts.Node | undefined {
   if (ts.isWhileStatement(node) || ts.isDoStatement(node)) return node.expression
   return ts.isForStatement(node) ? node.condition : undefined
@@ -73,6 +110,8 @@ function respellings(fileName: string, source: string): string[] {
     if (isPredicateRead(node) && node.name.text === 'isParenthesizedExpression') {
       found.push('looks through parentheses by hand')
     }
+    const walk = importWalk(node)
+    if (walk !== undefined) found.push(walk)
     const condition = loopCondition(node)
     if (condition !== undefined && mentionsWrapperPredicate(condition)) {
       found.push('loops over the wrappers by hand')
@@ -98,7 +137,10 @@ describe('the AST helpers are written once in tools/arch-lint', () => {
       .flatMap((name) =>
         respellings(name, readFileSync(join(dir, name), 'utf8')).map((what) => `${name} ${what}`),
       )
-    expect(respelled, `use ${OWNER}: scriptKindOf / unwrapExpression / parseSource`).toEqual([])
+    expect(
+      respelled,
+      `use ${OWNER}: scriptKindOf / unwrapExpression / parseSource / importedBindings / importBindingsOf`,
+    ).toEqual([])
   })
 
   describe('the scan itself, on planted source', () => {
@@ -152,6 +194,31 @@ describe('the AST helpers are written once in tools/arch-lint', () => {
       expect(respellings('p.ts', 'while (ts.isAwaitExpression(i)) i = i.expression')).toEqual([])
       expect(respellings('p.ts', 'for (const a of list) { ts.isAsExpression(a) }')).toEqual([])
       expect(respellings('p.ts', 'while (isTypeOnlyWrapper(c.parent)) c = c.parent')).toEqual([])
+    })
+
+    it('sees a hand-written import walk, however it reaches the bindings', () => {
+      const walks = [
+        'const b = statement.importClause?.namedBindings',
+        'if (ts.isNamedImports(b)) use(b)',
+        'if (ts.isNamespaceImport(b)) use(b.name)',
+        'if (ts.isImportClause(n)) use(n.name)',
+        'if (ts.isImportSpecifier(node)) use(node.propertyName ?? node.name)',
+        'if (n.kind === ts.SyntaxKind.ImportSpecifier) use(n)',
+      ]
+      for (const walk of walks) {
+        expect(new Set(respellings('p.ts', walk)), walk).toEqual(
+          new Set(['walks an import by hand']),
+        )
+      }
+    })
+
+    it('leaves a name-slot question, an export walk and a call of the helper alone', () => {
+      expect(respellings('p.ts', 'const slot = ts.isImportSpecifier(parent)')).toEqual([])
+      expect(respellings('p.ts', 'const slot = ts.isImportSpecifier(node.parent)')).toEqual([])
+      expect(
+        respellings('p.ts', 'for (const e of clause.elements) use(e.propertyName ?? e.name)'),
+      ).toEqual([])
+      expect(respellings('p.ts', "const b = importedBindings(file, isFs, 'rename')")).toEqual([])
     })
 
     it('leaves a differently named helper and a call alone', () => {

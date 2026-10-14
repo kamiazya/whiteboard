@@ -61,6 +61,7 @@ import {
   replicaReferenceWire,
   replicaStencilLibrary,
   replicaTagLibrary,
+  replicaTagsInUse,
 } from '../lib/replica-record.js'
 import {
   lockedDetail,
@@ -311,15 +312,20 @@ function useReplicaLinkTables(state: LoadState) {
 }
 
 /**
- * The workspace's tag and stencil libraries, read out of the replica record —
- * the keeper that would answer them is the one that is away.
+ * The workspace's tag and stencil libraries and its tags in use, read out of
+ * the replica record — the keeper that would answer them is the one that is
+ * away.
  */
 function useReplicaLibraries(state: LoadState) {
   // Read once per record, as the keeper pages read theirs once per source: a
   // library changes when someone edits the `tags` or `stencils` document,
-  // which is rare.
+  // which is rare, and the in-use list may run one tag behind a session.
   const tagLibrary = useMemo(
     () => (state.kind === 'ready' ? replicaTagLibrary(state.record, state.entries) : undefined),
+    [state],
+  )
+  const tagsInUse = useMemo(
+    () => (state.kind === 'ready' ? replicaTagsInUse(state.record, state.entries) : undefined),
     [state],
   )
   // The keeper pages' registry, from the same record: an inspector that does
@@ -334,7 +340,7 @@ function useReplicaLibraries(state: LoadState) {
         : bundledFacetRegistry,
     [state],
   )
-  return { tagLibrary, facetRegistry }
+  return { tagLibrary, tagsInUse, facetRegistry }
 }
 
 /**
@@ -373,12 +379,12 @@ function useReplicaSeams(
     () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
     [references],
   )
-  const { tagLibrary, facetRegistry } = useReplicaLibraries(state)
+  const { tagLibrary, tagsInUse, facetRegistry } = useReplicaLibraries(state)
   const clipboardImages = useMemo(
     () => replicaClipboardImages(daemonBaseUrl, workspaceId),
     [daemonBaseUrl, workspaceId],
   )
-  return { seams, references, tagLibrary, facetRegistry, clipboardImages }
+  return { seams, references, tagLibrary, tagsInUse, facetRegistry, clipboardImages }
 }
 
 interface ReplicaReaderProps {
@@ -397,6 +403,7 @@ interface ReplicaReaderProps {
   seams: ReturnType<typeof referenceSeamsFromWire> | undefined
   references: ReferenceWire | undefined
   tagLibrary: TagLibrary | undefined
+  tagsInUse: readonly string[] | undefined
   facetRegistry: FacetRegistry
   clipboardImages: ClipboardImageSeams
   saveFailed: boolean
@@ -497,6 +504,7 @@ function ReplicaReader({
   seams,
   references,
   tagLibrary,
+  tagsInUse,
   facetRegistry,
   clipboardImages,
   saveFailed,
@@ -542,6 +550,7 @@ function ReplicaReader({
               className="h-full"
               references={references}
               tagLibrary={tagLibrary}
+              tagSuggestions={tagsInUse}
               facetRegistry={facetRegistry}
               clipboardImages={clipboardImages}
               theme={resolvedTheme}

@@ -16,6 +16,7 @@ import { readFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
 import type { RuntimeConfig } from '@kamiazya/whiteboard-daemon-client/api-client'
+import { RECEIVE_TRANSFER_PAGE_PATH } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import type { Hono } from 'hono'
 import {
   isReservedUiPath,
@@ -80,7 +81,7 @@ export function mountServerModeWebApp(app: Hono, webAppDir: string): void {
       // The transfer receiver is a popup another origin opens, and its whole
       // handshake is `window.opener.postMessage` — which `same-origin` severs.
       // It checks every message's origin and nonce itself (receive-transfer.ts).
-      ...(c.req.path === '/receive-transfer'
+      ...(c.req.path === RECEIVE_TRANSFER_PAGE_PATH
         ? { 'Cross-Origin-Opener-Policy': 'unsafe-none' }
         : {}),
     })

@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import svgr from 'vite-plugin-svgr'
-import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { browserTracesSetup, sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
@@ -47,7 +46,7 @@ export default defineConfig({
   },
   // tailwindcss: layout browser tests import src/index.css to assert real
   // computed geometry (e.g. the canvas viewer container filling the viewport).
-  plugins: [tailwindcss(), react(), svgr(), wasm(), topLevelAwait()],
+  plugins: [tailwindcss(), react(), svgr(), wasm()],
   // Vitest browser mode serves test dependencies from the Vite dev server on
   // demand instead of bundling them ahead of time. Under CI load, the lazy
   // dependency-optimization scan can race with the browser's first fetch of

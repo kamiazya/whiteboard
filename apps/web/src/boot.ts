@@ -25,6 +25,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
 import { dismissBootSplash } from './boot-splash.js'
+import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { TouchFormattingBar } from './components/markdown-editor/TouchFormattingBar.js'
 import { getAppLogger } from './lib/app-logger.js'
 import { parseWorkspaceRoute } from './lib/app-routes.js'
@@ -63,6 +64,10 @@ function servedByServerKeeper(): boolean {
   )
 }
 
+function renderNothing(): null {
+  return null
+}
+
 function renderApp(root: HTMLElement): void {
   const app = servedByServerKeeper()
     ? createElement(Suspense, { fallback: null }, createElement(ServerModeApp))
@@ -71,11 +76,23 @@ function renderApp(root: HTMLElement): void {
     createElement(
       StrictMode,
       null,
-      createElement(BrowserRouter, null, app),
-      // Once, beside the app: it follows the focused markdown editor through
-      // the active-editor registry and renders nothing until a phone's
-      // keyboard is up.
-      createElement(TouchFormattingBar),
+      // The floor under every frame's own boundary, outside every Suspense: a
+      // rejected lazy chunk propagates to the nearest boundary, and anything
+      // mounted outside a frame (the server-mode entrance, the touch bar)
+      // would otherwise unmount the root to a blank window.
+      createElement(
+        ErrorBoundary,
+        null,
+        createElement(BrowserRouter, null, app),
+        // Once, beside the app: it follows the focused markdown editor through
+        // the active-editor registry and renders nothing until a phone's
+        // keyboard is up. Its own boundary renders nothing on failure, so a
+        // failed panel costs only the bar, never the editor beside it.
+        createElement(ErrorBoundary, {
+          fallback: renderNothing,
+          children: createElement(TouchFormattingBar),
+        }),
+      ),
     ),
   )
 }

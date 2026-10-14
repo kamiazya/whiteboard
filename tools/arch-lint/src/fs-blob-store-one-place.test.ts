@@ -12,15 +12,17 @@
  * that kept the last raw constructor.
  *
  * It reads the syntax tree for `new` of a binding imported from the
- * `fs-blob-store` module (named, aliased, or off a namespace), so a class that
- * happens to share the name elsewhere is not a hit. Tests construct the raw
+ * `fs-blob-store` module (named, aliased, or off a namespace), for a subclass
+ * of it and a local name bound to it, and for a re-export that would carry it
+ * past this scan under another name — so a class that happens to share the
+ * name elsewhere is not a hit. Tests construct the raw
  * store on purpose — it is how they read past the guard — and are not scanned.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { importedBindings, parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -40,40 +42,54 @@ function isBlobStoreModule(specifier: string): boolean {
   return /(^|\/)fs-blob-store(\.js|\.ts)?$/.test(specifier)
 }
 
-/** Every `new` of the raw blob store the file imports, as its source text. */
+/** The class a class node extends, if it has an `extends` clause. */
+function extendedBy(node: ts.ClassLikeDeclaration): ts.Expression | undefined {
+  const clause = node.heritageClauses?.find((h) => h.token === ts.SyntaxKind.ExtendsKeyword)
+  return clause?.types[0]?.expression
+}
+
+/**
+ * Every way the file reaches the raw blob store it imports, as source text: a
+ * `new` of it, a subclass of it, and a re-export of it. A local name bound to
+ * it — `const R = FsBlobStore`, or a subclass's own name — is followed, since
+ * "a raw store with one extra method" is the natural next deleter.
+ */
 function rawConstructions(fileName: string, source: string): string[] {
   const file = parseSource(fileName, source)
-  const named = new Set<string>()
-  const namespaces = new Set<string>()
-  for (const statement of file.statements) {
-    if (
-      !ts.isImportDeclaration(statement) ||
-      !ts.isStringLiteral(statement.moduleSpecifier) ||
-      !isBlobStoreModule(statement.moduleSpecifier.text)
-    ) {
-      continue
-    }
-    const bindings = statement.importClause?.namedBindings
-    if (bindings === undefined) continue
-    if (ts.isNamespaceImport(bindings)) {
-      namespaces.add(bindings.name.text)
-      continue
-    }
-    for (const element of bindings.elements) {
-      if ((element.propertyName ?? element.name).text === CLASS_NAME) named.add(element.name.text)
-    }
+  const { locals, namespaces, reexports } = importedBindings(file, isBlobStoreModule, CLASS_NAME)
+  const raw = new Set(locals.keys())
+  const isRaw = (expression: ts.Expression | undefined): boolean => {
+    const inner = expression === undefined ? undefined : unwrapExpression(expression)
+    if (inner !== undefined && ts.isIdentifier(inner)) return raw.has(inner.text)
+    return (
+      inner !== undefined &&
+      ts.isPropertyAccessExpression(inner) &&
+      inner.name.text === CLASS_NAME &&
+      ts.isIdentifier(inner.expression) &&
+      namespaces.has(inner.expression.text)
+    )
   }
-  const found: string[] = []
+  const isRawClass = (node: ts.Node): node is ts.ClassLikeDeclaration =>
+    ts.isClassLike(node) && isRaw(extendedBy(node))
+  const bindsRaw = (node: ts.Node): string | undefined => {
+    if (isRawClass(node)) return node.name?.text
+    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return undefined
+    const value = node.initializer && unwrapExpression(node.initializer)
+    return value !== undefined && (isRaw(value) || isRawClass(value)) ? node.name.text : undefined
+  }
+  for (let before = -1; before !== raw.size; ) {
+    before = raw.size
+    const grow = (node: ts.Node): void => {
+      const name = bindsRaw(node)
+      if (name !== undefined) raw.add(name)
+      ts.forEachChild(node, grow)
+    }
+    grow(file)
+  }
+  const found = [...reexports].map((name) => `re-exports ${CLASS_NAME} as ${name}`)
   const visit = (node: ts.Node): void => {
-    if (ts.isNewExpression(node)) {
-      const callee = node.expression
-      const hit =
-        (ts.isIdentifier(callee) && named.has(callee.text)) ||
-        (ts.isPropertyAccessExpression(callee) &&
-          callee.name.text === CLASS_NAME &&
-          ts.isIdentifier(callee.expression) &&
-          namespaces.has(callee.expression.text))
-      if (hit) found.push(node.getText(file))
+    if ((ts.isNewExpression(node) && isRaw(node.expression)) || isRawClass(node)) {
+      found.push(node.getText(file))
     }
     ts.forEachChild(node, visit)
   }
@@ -117,6 +133,31 @@ describe('the daemon builds its blob store in one place', () => {
     ],
   ])('recognises %s', (_label, source) => {
     expect(rawConstructions('fixture.ts', source)).toHaveLength(1)
+  })
+
+  it.each([
+    [
+      'a subclass, and a construction of it',
+      "import { FsBlobStore } from './fs/fs-blob-store.js'\nclass Raw extends FsBlobStore {}\nnew Raw(dir, dataDir)",
+      ['class Raw extends FsBlobStore {}', 'new Raw(dir, dataDir)'],
+    ],
+    [
+      'a subclass off a namespace',
+      "import * as blobs from './fs/fs-blob-store.js'\nconst Raw = class extends blobs.FsBlobStore {}",
+      ['class extends blobs.FsBlobStore {}'],
+    ],
+    [
+      'a construction through a local alias',
+      "import { FsBlobStore } from './fs/fs-blob-store.js'\nconst R = FsBlobStore\nconst S = R\nnew S(dir, dataDir)",
+      ['new S(dir, dataDir)'],
+    ],
+    [
+      'a re-export under another name',
+      "export { FsBlobStore as Raw } from './fs/fs-blob-store.js'",
+      ['re-exports FsBlobStore as Raw'],
+    ],
+  ])('recognises %s', (_label, source, expected) => {
+    expect(rawConstructions('fixture.ts', source)).toEqual(expected)
   })
 
   it('does not read a same-named class from another module', () => {

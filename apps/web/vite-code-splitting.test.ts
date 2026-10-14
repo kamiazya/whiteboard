@@ -1,13 +1,12 @@
 /**
  * The chunk-splitting rule, asserted directly.
  *
- * This guard exists because the defects it pins are invisible to every other
- * test in this repo: the whole `web-browser` suite runs against source, and
- * an unminified production build does not reproduce them either. One reached a
- * deployed preview and took the document page to the error screen.
+ * This guard exists because what it pins is invisible to every other test in
+ * this repo: the whole `web-browser` suite runs against source, and only a
+ * production build is cut by these groups.
  */
 import { describe, expect, it } from 'vitest'
-import { createCodeSplittingGroups } from './vite-manual-chunks.js'
+import { createCodeSplittingGroups } from './vite-code-splitting.js'
 
 const STORE = '/repo/node_modules/.pnpm'
 const LUCIDE = `${STORE}/lucide-react@1.28.0/node_modules/lucide-react/dist/esm/icons/copy.js`
@@ -68,10 +67,7 @@ function chunkOf(
 
 describe('createCodeSplittingGroups', () => {
   it('gives lucide-react a chunk of its own, away from the WASM top-level await', () => {
-    // Unassigned, the icons merge into whichever chunk imports them — here
-    // one carrying loro's TLA. Rolldown then emits `let Copy, …` at module
-    // scope, assigned inside the TLA body, so the export reads `undefined`
-    // and the component rendering it calls createElement(undefined).
+    // Why the group exists, and why it may go, is beside it in the module.
     expect(chunkOf(LUCIDE, true)).toBe('vendor-icons')
     expect(chunkOf(LUCIDE, false)).toBe('vendor-icons')
   })
@@ -106,7 +102,7 @@ describe('createCodeSplittingGroups', () => {
       undefined,
     )
     // A computed specifier never reaches dynamicallyImportedIds — react-router
-    // loads route modules that way — and the rewrite keys on the call itself.
+    // loads route modules that way — so the call itself is what is matched.
     expect(chunkOf(ROUTER, true, { [ROUTER]: { code: 'await import(route.module)' } })).toBe(
       undefined,
     )

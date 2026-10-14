@@ -3,8 +3,9 @@
  * daemon's owner-only socket. It is where the daemon's credential is attached,
  * so what the page sends is not trusted to carry or choose one.
  */
+import diagnosticsChannel from 'node:diagnostics_channel'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { createServer, type IncomingMessage, type Server } from 'node:http'
+import { type ClientRequest, createServer, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -192,6 +193,63 @@ describe('runNativeHost', () => {
     expect(bodyOf(page.received, 'big').equals(big)).toBe(true)
     expect(page.received.filter((m) => m.type === 'chunk').length).toBeGreaterThan(3)
     for (const frame of page.frames) expect(frame.length).toBeLessThan(1024 * 1024)
+  })
+
+  // A browser that stops draining stdout (a background tab, a busy extension)
+  // must stop the host reading the daemon too, or an endless sync stream grows
+  // the host's memory without bound in a process the user never sees.
+  it('stops reading the daemon while the browser is not reading the host', async () => {
+    const total = 8 * 1024 * 1024
+    const path = '/api/backpressure'
+    let written = 0
+    let finished = false
+    await startDaemon((_req, res) => {
+      const piece = Buffer.alloc(256 * 1024, 1)
+      const pump = () => {
+        while (written < total) {
+          written += piece.length
+          if (!res.write(piece)) return void res.once('drain', pump)
+        }
+        res.end(() => {
+          finished = true
+        })
+      }
+      pump()
+    })
+    let response: IncomingMessage | undefined
+    const onResponse = (message: unknown) => {
+      const { request, response: res } = message as {
+        request: ClientRequest
+        response: IncomingMessage
+      }
+      if (request.path === path) response = res
+    }
+    diagnosticsChannel.subscribe('http.client.response.finish', onResponse)
+    try {
+      const input = new PassThrough()
+      const output = new PassThrough({ highWaterMark: 64 * 1024 })
+      const done = runNativeHost({
+        input,
+        output,
+        resolveDaemon: async () => ({ socketPath, token: 't' }),
+      })
+      input.write(
+        encodeNativeMessage({ type: 'request', id: 'r', method: 'GET', path, headers: {} }),
+      )
+
+      // Nobody reads `output`, so the host's daemon response must come to a stop.
+      await vi.waitFor(() => expect(response?.isPaused()).toBe(true), { timeout: 5_000 })
+      expect(finished).toBe(false)
+      expect(output.writableLength + output.readableLength).toBeLessThan(total / 4)
+
+      // Draining it again lets the rest of the response through.
+      output.resume()
+      await vi.waitFor(() => expect(finished).toBe(true), { timeout: 10_000 })
+      input.end()
+      await done
+    } finally {
+      diagnosticsChannel.unsubscribe('http.client.response.finish', onResponse)
+    }
   })
 
   it('cuts a piece larger than the cap into slices at most the cap', () => {

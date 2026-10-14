@@ -1,6 +1,6 @@
 import { builtinModules } from 'node:module'
 import ts from '@typescript/typescript6'
-import { parseSource, unwrapExpression } from './ast-helpers.js'
+import { bindingsOfImport, parseSource, unwrapExpression } from './ast-helpers.js'
 
 export type BoundaryViolationKind =
   | 'node-builtin-import'
@@ -104,16 +104,15 @@ function staticStringText(node: ts.Node | undefined): string | undefined {
     : undefined
 }
 
-function isImportClauseTypeOnly(clause: ts.ImportClause): boolean {
-  if (clause.isTypeOnly) return true
-  // A default import (`import Foo, { type X } from`) is always a value,
-  // regardless of the named bindings beside it.
-  if (clause.name !== undefined) return false
-  const bindings = clause.namedBindings
-  if (bindings === undefined) return false
-  // `import * as ns from` is a value edge.
-  if (ts.isNamespaceImport(bindings)) return false
-  return bindings.elements.length > 0 && bindings.elements.every((el) => el.isTypeOnly)
+/**
+ * Whether an import is erased: it binds something, and every binding is
+ * type-only. `import Foo, { type X } from` and `import * as ns from` are value
+ * edges; a bare `import './x'` and an empty `import {} from './x'` run the
+ * module, so they are too.
+ */
+function isImportTypeOnly(declaration: ts.ImportDeclaration): boolean {
+  const bindings = bindingsOfImport(declaration)
+  return bindings.length > 0 && bindings.every((binding) => binding.typeOnly)
 }
 
 function isExportDeclarationTypeOnly(node: ts.ExportDeclaration): boolean {
@@ -212,8 +211,7 @@ interface NodeSpecifier {
 /** The specifier one node contributes, if it is a form that names a module. */
 function specifierOfNode(node: ts.Node): NodeSpecifier | undefined {
   if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-    const typeOnly = node.importClause !== undefined && isImportClauseTypeOnly(node.importClause)
-    return { specifier: node.moduleSpecifier.text, typeOnly }
+    return { specifier: node.moduleSpecifier.text, typeOnly: isImportTypeOnly(node) }
   }
   if (
     ts.isExportDeclaration(node) &&

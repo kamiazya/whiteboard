@@ -1,5 +1,11 @@
 import ts from '@typescript/typescript6'
-import { parseSource, scriptKindOf, unwrapExpression } from './ast-helpers.js'
+import {
+  bindingsOfImport,
+  importBindingsOf,
+  parseSource,
+  scriptKindOf,
+  unwrapExpression,
+} from './ast-helpers.js'
 import { createExportResolver, type ModuleExports } from './module-exports-resolve.js'
 import { isShippedPath } from './source-scan.js'
 
@@ -152,23 +158,12 @@ interface StaticFacts {
 }
 
 function addImport(statement: ts.ImportDeclaration, facts: StaticFacts): void {
-  const clause = statement.importClause
-  const spec = specText(statement.moduleSpecifier)
-  if (clause?.name !== undefined) facts.importedLocals.add(clause.name.text)
-  const bindings = clause?.namedBindings
-  if (bindings === undefined) return
-  if (ts.isNamespaceImport(bindings)) {
-    facts.namespaces.set(bindings.name.text, spec)
-    facts.importedLocals.add(bindings.name.text)
-    return
-  }
-  for (const element of bindings.elements) {
-    facts.importedLocals.add(element.name.text)
-    facts.bindings.push({
-      name: (element.propertyName ?? element.name).text,
-      spec,
-      reexport: false,
-    })
+  for (const binding of bindingsOfImport(statement)) {
+    facts.importedLocals.add(binding.local)
+    if (binding.kind === 'namespace') facts.namespaces.set(binding.local, binding.spec)
+    else if (binding.kind === 'named') {
+      facts.bindings.push({ name: binding.imported, spec: binding.spec, reexport: false })
+    }
   }
 }
 
@@ -213,21 +208,8 @@ function addLocalExportList(
 
 /** The local name -> where it was imported from, for the named imports of a file. */
 function importedNamesOf(source: ts.SourceFile): Map<string, { spec: string; imported: string }> {
-  const importedAs = new Map<string, { spec: string; imported: string }>()
-  for (const statement of source.statements) {
-    const bindings = ts.isImportDeclaration(statement)
-      ? statement.importClause?.namedBindings
-      : undefined
-    const spec = ts.isImportDeclaration(statement) ? specText(statement.moduleSpecifier) : undefined
-    if (bindings === undefined || spec === undefined || !ts.isNamedImports(bindings)) continue
-    for (const element of bindings.elements) {
-      importedAs.set(element.name.text, {
-        spec,
-        imported: (element.propertyName ?? element.name).text,
-      })
-    }
-  }
-  return importedAs
+  const named = importBindingsOf(source).filter((binding) => binding.kind === 'named')
+  return new Map(named.map(({ local, spec, imported }) => [local, { spec, imported }]))
 }
 
 function staticFacts(source: ts.SourceFile): StaticFacts {

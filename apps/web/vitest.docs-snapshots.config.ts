@@ -15,7 +15,6 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
 import svgr from 'vite-plugin-svgr'
-import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../vitest.browser.launch-options.js'
@@ -59,7 +58,7 @@ export default defineConfig({
       '@docs-assets': DOCS_ASSETS_DIR,
     },
   },
-  plugins: [tailwindcss(), react(), svgr(), wasm(), topLevelAwait()],
+  plugins: [tailwindcss(), react(), svgr(), wasm()],
   test: {
     name: 'web-docs-snapshots',
     include: ['src/docs-snapshots/**/*.docs-snapshot.test.tsx'],

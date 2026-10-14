@@ -2,9 +2,9 @@
 // DECLARES, so one that requires an undeclared module resolves it solely
 // through NODE_PATH — which pnpm's `.bin` shims export and plain `node` does
 // not. pnpm-workspace.yaml's `packageExtensions` declares those modules for
-// it. Every vitest project shares one root config, so a single plugin that
-// cannot load stops them all, with an error naming a module and an app the
-// run had nothing to do with.
+// it. The failure names a module and a package the caller never imported,
+// and only appears outside a shim — under plain `node`, or a tool that
+// spawns one.
 //
 // Each case resolves the module from the package's REAL location in a child
 // process with NODE_PATH removed, because this test itself runs under the
@@ -17,9 +17,13 @@ import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 
 const CASES = [
-  // `vite-plugin-top-level-await` requires rollup at load time, and apps/web's
-  // vitest configs load the plugin.
-  { consumer: 'apps/web', pkg: 'vite-plugin-top-level-await', module: 'rollup' },
+  // transformers.node.mjs imports onnxruntime-common while declaring only
+  // onnxruntime-node, and the daemon's search loads it.
+  {
+    consumer: 'packages/mcp-server',
+    pkg: '@huggingface/transformers',
+    module: 'onnxruntime-common',
+  },
 ] as const
 
 function resolveWithoutNodePath(fromDir: string, module: string) {

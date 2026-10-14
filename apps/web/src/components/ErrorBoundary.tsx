@@ -2,9 +2,11 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { reportCrash } from '../lib/app-logger.js'
 import { ErrorFallback } from './status/ErrorFallback.js'
 
-// React error boundary for the whiteboard surface.
-// Keep the app recoverable instead of letting an Excalidraw, Loro, or routing error blank the whole root.
-// This is intentionally minimal; richer recovery actions can be added later if needed.
+// React error boundary: keeps the app recoverable instead of letting a render
+// throw or a rejected lazy chunk unmount the whole root. Place it OUTSIDE a
+// Suspense — a chunk failure propagates through Suspense to the nearest
+// boundary. Each screen frame holds one, and boot.ts wraps the root in one as
+// the floor for anything mounted outside a frame.
 
 // Module-local logging seam: kept separate from the boundary's render logic so
 // componentDidCatch has a single, mockable call site. Routed through
@@ -30,6 +32,10 @@ interface ErrorBoundaryProps {
   children: ReactNode
   // Optional custom fallback for callers that want a different recovery UI.
   fallback?: (args: { error: Error; reset: () => void }) => ReactNode
+  // A caught error is cleared when this changes, so a frame that stays
+  // mounted across navigation (a route-driven view) leaves its fallback once
+  // the person goes somewhere else. A healthy subtree is not remounted by it.
+  resetKey?: unknown
 }
 
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -44,6 +50,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     errorBoundaryLog.report('ErrorBoundary caught:', { error, componentStack: info.componentStack })
+  }
+
+  componentDidUpdate(prev: ErrorBoundaryProps): void {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.reset()
   }
 
   reset = (): void => {

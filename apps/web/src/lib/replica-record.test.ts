@@ -7,8 +7,10 @@ import {
   readNodeLocks,
   readSpatialCanvas,
   setNodeLock,
+  writeCoreFacets,
   writeFacets,
   writeMarkdownBody,
+  writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { STENCIL_LIBRARY_PATH, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
@@ -23,6 +25,7 @@ import {
   replicaReferenceGraph,
   replicaReferenceWire,
   replicaStencilLibrary,
+  replicaTagsInUse,
   writeReplicaLock,
   writeReplicaMarkdown,
   writeReplicaSpatial,
@@ -204,5 +207,32 @@ describe("the replica's stencil library", () => {
       [VISUAL_STENCILS_KEY]: { stencils: { lakehouse, broken: { color: 42 } } },
     })
     expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({ lakehouse })
+  })
+})
+
+describe("the replica's tags in use", () => {
+  it("lists every document's tags and its contents' once each, in code-unit order", () => {
+    const doc = record()
+    writeCoreFacets(documentContainers(doc, MD), { type: 'note', tags: ['zeta', 'drafted'] })
+    writeCoreFacets(documentContainers(doc, LINKER), { type: 'note', tags: ['drafted'] })
+    writeSpatialCanvas(documentContainers(doc, SP), {
+      nodes: [
+        textNode({ id: 'a', x: 0, y: 0, width: 10, height: 10, text: 'a', tags: ['health:ok'] }),
+        textNode({ id: 'b', x: 20, y: 0, width: 10, height: 10, text: 'b', tags: ['Drafted'] }),
+      ],
+      edges: [],
+    })
+    doc.commit()
+    expect(replicaTagsInUse(doc, replicaEntries(doc))).toEqual([
+      'Drafted',
+      'drafted',
+      'health:ok',
+      'zeta',
+    ])
+  })
+
+  it('is empty for a replica whose documents carry no tags', () => {
+    const doc = record()
+    expect(replicaTagsInUse(doc, replicaEntries(doc))).toEqual([])
   })
 })

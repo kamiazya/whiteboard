@@ -712,6 +712,17 @@ describe('StorageReportCard', () => {
     expect(dbActions.textContent).not.toContain('Already optimal')
   })
 
+  // The actionable reason can come from any workspace in the sweep, not only
+  // the last one answered.
+  it.each([
+    ['raced', 'try again'],
+    ['no-versions', 'save a version first'],
+  ])('keeps an earlier workspace declining for %s when a later one had no gain', async (reason, wording) => {
+    const dbActions = await optimizeStatusFor([reason, 'no-gain'])
+    expect(dbActions.textContent).toContain(wording)
+    expect(dbActions.textContent).not.toContain('Already optimal')
+  })
+
   it('says how long ago the daemon last auto-optimised', async () => {
     const twoHoursAgo = Date.now() - 2 * 3_600_000
     vi.mocked(globalThis.fetch).mockImplementation(() =>

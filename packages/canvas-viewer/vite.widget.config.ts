@@ -56,7 +56,7 @@ export default defineConfig({
     // this also keeps vite-plugin-singlefile's job simple (one JS bundle,
     // one CSS bundle, both inlined into the HTML).
     cssCodeSplit: false,
-    rollupOptions: {
+    rolldownOptions: {
       input: fileURLToPath(new URL('./canvas-viewer.widget.html', import.meta.url)),
       output: {
         entryFileNames: 'canvas-viewer.js',
