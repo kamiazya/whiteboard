@@ -11,8 +11,8 @@ import { type SafeHref, trustedHref } from './format.js'
  * ordinary markdown link, and they must all draw the line in the same place.
  *
  * The line is the document-id grammar itself, not "has no scheme": a
- * relative markdown link (`guide.md`, `plan`) also has no scheme, and is not
- * a document.
+ * relative markdown link (`guide.md`, `plan`) also has no scheme, and names
+ * no document id.
  */
 export function documentHref(documentId: string): SafeHref {
   return trustedHref(documentId)
