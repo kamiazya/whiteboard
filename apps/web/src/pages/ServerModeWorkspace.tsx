@@ -8,58 +8,30 @@
  * extension's bridge authenticates the connection, and the server's data has
  * no replica in this browser.
  */
-import { lazy, type ReactNode, Suspense } from 'react'
+import type { ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { KeeperNotices } from '../components/connection/KeeperNotices.js'
-import { ErrorBoundary } from '../components/ErrorBoundary.js'
-import { LazyPageFallback } from '../components/LazyPageFallback.js'
 import { parseWorkspaceRoute, type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
-
-const DaemonIndexPage = lazy(() =>
-  import('./DaemonIndexPage.js').then((m) => ({ default: m.DaemonIndexPage })),
-)
-const DaemonDocumentPage = lazy(() =>
-  import('./DaemonDocumentPage.js').then((m) => ({ default: m.DaemonDocumentPage })),
-)
+import { DaemonWorkspacePages } from './DaemonWorkspacePages.js'
 
 export function ServerModeWorkspace({ shell }: { shell: ReactNode }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const view = parseWorkspaceRoute(pathname)
   const onView = (next: WorkspaceRoute) => navigate(workspaceRoutePath(next))
-  const origin = window.location.origin
   if (view === null) return null
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       {shell}
       <KeeperNotices />
       <main className="min-h-0 flex-1 overflow-hidden">
-        {/* Outside Suspense, so a rejected page chunk lands here rather than
-            unmounting the root; inside the frame, so the header survives. */}
-        <ErrorBoundary resetKey={pathname}>
-          <Suspense
-            fallback={<LazyPageFallback heightClass="h-full" message="Opening workspace…" />}
-          >
-            {view.kind === 'index' ? (
-              <DaemonIndexPage
-                daemonBaseUrl={origin}
-                workspace={view.workspace}
-                serverMode
-                onWorkspaceResolved={(workspace) => onView({ kind: 'index', workspace })}
-                onOpenDocument={(workspace, path) => onView({ kind: 'document', workspace, path })}
-              />
-            ) : (
-              <DaemonDocumentPage
-                key={`${view.workspace}:${view.path}`}
-                daemonBaseUrl={origin}
-                workspaceId={view.workspace}
-                path={view.path}
-                serverMode
-                onNavigateBack={() => onView({ kind: 'index', workspace: view.workspace })}
-              />
-            )}
-          </Suspense>
-        </ErrorBoundary>
+        <DaemonWorkspacePages
+          daemonBaseUrl={window.location.origin}
+          view={view}
+          onView={onView}
+          serverMode
+          waitingMessage="Opening workspace…"
+        />
       </main>
     </div>
   )

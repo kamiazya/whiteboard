@@ -15,6 +15,11 @@
  * binding that resolves to it; comments are stripped, so a commented-out
  * `<KeeperNotices />` does not count as mounted.
  *
+ * A page SWITCH is read as a page: `DaemonWorkspacePages` mounts the daemon's
+ * pages for the frames that render it, and the notices belong to those
+ * frames, which keep them outside the switch's error boundary. The module
+ * defining the switch is therefore not a frame itself.
+ *
  * Blind spot: a page passed through a variable that is none of those (a
  * component map, a prop) is not seen as mounted.
  *
@@ -30,7 +35,8 @@ const sourceModules = import.meta.glob('./**/*.tsx', {
   import: 'default',
 }) as Record<string, string>
 
-const PAGE = '(?:Daemon|Browser)DocumentPage'
+const PAGE = '(?:(?:Daemon|Browser)DocumentPage|DaemonWorkspacePages)'
+const DEFINES_PAGE = new RegExp(String.raw`\bexport\s+function\s+${PAGE}\b`)
 const IMPORT_ALIAS = new RegExp(String.raw`\b${PAGE}\s+as\s+(\w+)`, 'g')
 const LAZY_BINDING = new RegExp(
   String.raw`\b(\w+)\s*=\s*lazy\(\s*\(\)\s*=>\s*import\([^)]*\)\s*\.then\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*\(\{\s*default:\s*\2\.${PAGE}\b`,
@@ -44,6 +50,7 @@ function readFrame(source: string): {
   readonly holdsNotices: boolean
 } {
   const code = stripComments(source)
+  if (DEFINES_PAGE.test(code)) return { holdsPage: false, holdsNotices: false }
   const names = [
     PAGE,
     ...[...code.matchAll(IMPORT_ALIAS)].map((m) => m[1]),
@@ -79,6 +86,11 @@ describe('frames that hold a document page', () => {
       ).holdsPage,
     ).toBe(true)
     expect(readFrame('<DocumentPageSkeleton />').holdsPage).toBe(false)
+    expect(readFrame('<DaemonWorkspacePages view={view} />').holdsPage).toBe(true)
+    expect(
+      readFrame('export function DaemonWorkspacePages() {\n  return <DaemonDocumentPage />\n}')
+        .holdsPage,
+    ).toBe(false)
     expect(
       readFrame('<div>\n{/* <KeeperNotices /> is mounted by the shell */}\n<BrowserDocumentPage />')
         .holdsNotices,
