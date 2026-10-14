@@ -17,8 +17,10 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest'
+import { getAppLogger } from '../lib/app-logger.js'
 import { whiteboardDbName } from '../lib/browser-idb.js'
-import { clearWhiteboardDb } from './browser-document.js'
+import { foldOrServeTheTree } from '../lib/fold-workspace.js'
+import { clearWhiteboardDb, registerTestWorkspace } from './browser-document.js'
 import { claimIsolatedWhiteboardDb } from './isolated-whiteboard-db.js'
 
 const ISOLATED_DB = claimIsolatedWhiteboardDb('clear-whiteboard-db')
@@ -140,6 +142,21 @@ describe('clearWhiteboardDb', () => {
     } finally {
       clearInterval(tail)
     }
+  })
+
+  it('waits out a startup fold still in flight before deleting', async () => {
+    // A page unmounted a moment ago leaves its startup fold running: it
+    // listed the workspace's rows, and next opens the record. A deletion
+    // landing in between hands that open an empty database with no registry
+    // row, which the record refuses as a removed workspace — a failure the
+    // fold logs into whichever test runs next.
+    await registerTestWorkspace()
+    const fold = foldOrServeTheTree(getAppLogger('clear-whiteboard-db-test'))
+
+    await clearWhiteboardDb()
+
+    expect(await fold).toEqual({ folded: 0, skipped: 0 })
+    expect(await databaseExists()).toBe(false)
   })
 
   it('waits out a blocked deletion instead of resolving over it', async () => {
