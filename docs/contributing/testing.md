@@ -277,10 +277,10 @@ Not included in `pnpm test`. Requires `dist/server/mcp/stdio.js` to exist. `test
 
 | Script | What it covers | Build included |
 |---|---|---|
-| `pnpm smoke:packaged` | Packaged `dist/server/mcp/stdio.js` passes full e2e checkpoint flow | No |
-| `pnpm smoke:tarball` | `npm pack` → install → installed entry passes full e2e checkpoint flow | No |
-| `pnpm smoke:codex-config` | Plugin manifest + published MCP config valid; packaged entry starts | No |
-| `pnpm test:distribution` | All three above, after `pnpm build` | Yes |
+| `pnpm test:distribution` | The three vitest files `vitest.distribution.config.ts` selects, after `pnpm build`: `packaged.distribution.test.ts` (the checkpoint flow against `dist/server/mcp/stdio.js`), `tarball.distribution.test.ts` (`npm pack` → install → the installed entry, plain and under `WHITEBOARD_DEV=1`) and `codex-config.distribution.test.ts` (the Codex plugin manifest and published MCP config) | Yes |
+| `pnpm smoke:packaged` | `mcp-e2e-smoke.mjs` against `dist/server/mcp/stdio.js`: the full tool tour, a different flow from any file above. CI's `verify` job runs it | No |
+| `pnpm smoke:tarball` | A node script driving the same flow as `tarball.distribution.test.ts`; manual, not a gate | No |
+| `pnpm smoke:codex-config` | A node script driving the same flow as `codex-config.distribution.test.ts`; manual, not a gate | No |
 
 ### Real-browser smokes — opt-in, require `pnpm build` + Chromium
 
@@ -466,7 +466,7 @@ module graph — which is the reason they are left out in the first place.
 | Contract / persistence / security / state-machine / race | Add or update nearest property/model/race test |
 | MCP tool or route change | `pnpm smoke:e2e` green; real MCP client verify |
 | Browser interaction or UI flow | `pnpm test:browser` green; manual browser verify |
-| Packaging, tarball, or binary | `pnpm test:distribution` green, and `pnpm smoke:distribution:packaged:node` (the packaged-daemon and server-mode smokes CI's `packaged-smoke` job runs on every PR; it needs a build and, unlike `smoke:distribution:packaged`, spends no CLI API quota) |
+| Packaging, tarball, or binary | `pnpm test:distribution` and `pnpm smoke:packaged` green (the dist tool tour CI's `verify` job runs), and `pnpm smoke:distribution:packaged:node` (the packaged-daemon and server-mode smokes CI's `packaged-smoke` job runs on every PR; it needs a build and, unlike `smoke:distribution:packaged`, spends no CLI API quota) |
 | Hosted web app / Cloudflare Pages artifact | `pnpm check:pages-release` (build + `smoke:artifact` + `smoke:preview-origin`); release-candidate adjacent, see [Hosted Web App Release Gates](#hosted-web-app-cloudflare-pages-release-gates) |
 | Typing or packaging impact | `pnpm --filter @kamiazya/whiteboard-mcp typecheck && pnpm build` |
 | Behavioral production change inside Stryker target set | Run `pnpm mutation:contracts`; report killed/survived in PR body |

@@ -234,7 +234,7 @@ describe('release.yml publish-mcp job runs the publish-gate runner exactly once,
     'pnpm build',
     'pnpm smoke:packaged',
     'pnpm smoke:tarball',
-  ])('does not run "%s" as a standalone step (it lives inside the publish-gate runner)', (command) => {
+  ])('does not run "%s" as a standalone step of the npm publish job', (command) => {
     const section = npmSection()
     const lines = section.split('\n').map((l) => l.trim())
     const standalone = lines.filter((l) => l === `run: ${command}`)

@@ -233,6 +233,41 @@ describe('CONTRIBUTING.md and testing.md carry the packaging and layout pointers
   })
 })
 
+// The distribution vitest files and the `smoke:*` node scripts share names and
+// not flows: `smoke:packaged` is the dist tool tour, the checkpoint flow is
+// `packaged.distribution.test.ts`. The table is held to the config's own
+// include, so a file added there is a row someone has to write.
+describe("testing.md's mcp-distribution table names what each command runs", () => {
+  const config = read('packages/mcp-server/vitest.distribution.config.ts')
+  const suffix = /include: \['src\/\*\*\/\*([\w.-]+)'\]/.exec(config)?.[1]
+  const files =
+    suffix === undefined
+      ? []
+      : readdirSync(join(REPO_ROOT, 'packages/mcp-server/src'), { recursive: true })
+          .map(String)
+          .filter((file) => file.endsWith(suffix))
+          .map((file) => file.split('/').at(-1) as string)
+  const testing = read('docs/contributing/testing.md')
+  const start = testing.indexOf('### `mcp-distribution`')
+  const table = testing.slice(start, testing.indexOf('\n### ', start + 1))
+
+  it('reads the include and finds the files it selects', () => {
+    expect(suffix).toBe('.distribution.test.ts')
+    expect(files.length).toBeGreaterThanOrEqual(3)
+    expect(start).toBeGreaterThan(0)
+  })
+
+  it.each(files)('names %s', (file) => {
+    expect(table).toContain(`\`${file}\``)
+  })
+
+  it('does not call the smoke:packaged tool tour the checkpoint flow', () => {
+    const rows = table.split('\n').filter((line) => line.includes('`pnpm smoke:packaged`'))
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) expect(row).not.toMatch(/checkpoint/i)
+  })
+})
+
 describe("testing.md's bundle-size row names every budget the gate enforces", () => {
   const script = read('apps/web/scripts/smoke-bundle-size.mjs')
   const row =
