@@ -1,5 +1,7 @@
+import { spatialThemeModeSchema } from '@kamiazya/whiteboard-canvas-render'
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { themeModeSchema } from '../lib/theme.js'
 import {
   applyThemeClass,
   readPersistedTheme,
@@ -58,6 +60,16 @@ describe('readPersistedTheme', () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'system')
     expect(readPersistedTheme()).toBe('system')
     window.localStorage.removeItem(THEME_STORAGE_KEY)
+    expect(readPersistedTheme()).toBe('system')
+  })
+
+  it('round-trips every mode the render knows plus "system", and only those', () => {
+    expect(themeModeSchema.options).toEqual([...spatialThemeModeSchema.options, 'system'])
+    for (const mode of themeModeSchema.options) {
+      window.localStorage.setItem(THEME_STORAGE_KEY, mode)
+      expect(readPersistedTheme()).toBe(mode)
+    }
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'DARK')
     expect(readPersistedTheme()).toBe('system')
   })
 

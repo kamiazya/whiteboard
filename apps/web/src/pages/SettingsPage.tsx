@@ -54,6 +54,7 @@ import {
   queryStorageEstimate,
 } from '../lib/persistent-storage.js'
 import { readStorageReport } from '../lib/storage-report.js'
+import type { ThemeMode } from '../lib/theme.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
 export interface SettingsPageProps {
@@ -74,7 +75,7 @@ export interface SettingsPageProps {
 }
 
 const THEME_OPTIONS: Array<{
-  value: 'light' | 'dark' | 'system'
+  value: ThemeMode
   label: string
   icon: typeof Sun
 }> = [
@@ -99,8 +100,8 @@ const NAV_ITEMS: Array<{ section: SettingsSection; label: string; icon: typeof P
 const settingsStore = createUserSettingsStore()
 
 interface GeneralSectionProps {
-  theme: 'light' | 'dark' | 'system'
-  onThemeChange: (next: 'light' | 'dark' | 'system') => void
+  theme: ThemeMode
+  onThemeChange: (next: ThemeMode) => void
   faviconStyle: FaviconStyle
   onFaviconStyleChange: (next: FaviconStyle) => void
   webMcpEnabled: boolean
@@ -361,8 +362,8 @@ function FontsSection({ daemon }: { daemon?: ConnectedDaemon }) {
 function sectionContent(
   section: SettingsSection,
   props: {
-    theme: 'light' | 'dark' | 'system'
-    onThemeChange: (next: 'light' | 'dark' | 'system') => void
+    theme: ThemeMode
+    onThemeChange: (next: ThemeMode) => void
     faviconStyle: FaviconStyle
     onFaviconStyleChange: (next: FaviconStyle) => void
     webMcpEnabled: boolean
