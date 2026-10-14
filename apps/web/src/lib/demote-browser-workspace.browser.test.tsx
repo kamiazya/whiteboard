@@ -34,6 +34,7 @@ import {
 import { demoteBrowserWorkspace, replicaCarriesAll } from './demote-browser-workspace.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 import { touchContentTimestamp } from './loro-store.js'
 import { openDocumentStore } from './replica-store.js'
 import { isWorkspaceRemovedError } from './workspace-tombstone.js'
@@ -75,21 +76,13 @@ describe('demoteBrowserWorkspace', () => {
     // The in-memory identity followed, so a racing write cannot resurrect
     // the deleted record under its old id.
     expect(getBrowserWorkspaceId()).toBe(rows[0])
-    // The fresh row carries the default segment, so addresses keep a name.
-    const db = await openWhiteboardDb()
-    try {
-      const row = await new Promise<{ segment?: string }>((resolve, reject) => {
-        const req = db
-          .transaction([WORKSPACES_STORE])
-          .objectStore(WORKSPACES_STORE)
-          .get(rows[0] as string)
-        req.onsuccess = () => resolve(req.result as { segment?: string })
-        req.onerror = () => reject(req.error)
-      })
-      expect(row.segment).toBe(BROWSER_DEFAULT_SEGMENT)
-    } finally {
-      db.close()
-    }
+    // The fresh row carries the default segment, so addresses keep a name —
+    // read through the registry's own reader, whose schema drops a key it
+    // does not know rather than failing, so the writer's spelling alone
+    // proves nothing.
+    expect(await new IdbDocumentIndex().listWorkspaces()).toEqual([
+      { workspaceId: rows[0], segment: BROWSER_DEFAULT_SEGMENT },
+    ])
   })
 })
 

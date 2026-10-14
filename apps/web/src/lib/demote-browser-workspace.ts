@@ -47,6 +47,7 @@ import {
   type TrashEntry,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
 import { BROWSER_DEFAULT_SEGMENT, WORKSPACES_STORE } from './browser-idb.js'
 import { deleteVersionRowsOfWorkspace } from './browser-version-store.js'
@@ -137,7 +138,10 @@ function dropRegistryRow(
     const kept = remaining[0]
     if (kept !== undefined) return { nextHandle: kept, remaining }
     const fresh = generateDocumentId()
-    workspaces.put({ workspaceId: fresh, segment: BROWSER_DEFAULT_SEGMENT }, fresh)
+    // Typed at the writer: `put` takes anything, and the reader's schema drops
+    // a key it does not know, so a misspelling would only lose the segment.
+    const entry = { workspaceId: fresh, segment: BROWSER_DEFAULT_SEGMENT } satisfies WorkspaceEntry
+    workspaces.put(entry, fresh)
     return { nextHandle: fresh, remaining }
   })
 }
