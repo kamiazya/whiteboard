@@ -9,10 +9,11 @@
 // unguarded anchor navigates the test page itself, and the document-level
 // listener below both records whether the surface prevented it and keeps a
 // regression from taking the runner down with it.
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { STORAGE_KEY } from '../../lib/recent-documents.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
@@ -36,7 +37,10 @@ const source = () =>
     loadMarkdown: async (entry) => ({ body: bodies[entry.documentId] ?? '' }),
   })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  localStorage.removeItem(STORAGE_KEY)
+})
 
 async function anchorIn(selector: string): Promise<Element> {
   return vi.waitFor(
@@ -77,6 +81,23 @@ it('a wiki link in the preview opens its target in place', async () => {
   expect(clickAnchor(anchor)).toBe(true)
   await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('plan'))
   expect(onOpenDocument).toHaveBeenCalledTimes(1)
+})
+
+it('a document opened through a preview link joins the Recent lane', async () => {
+  localStorage.removeItem(STORAGE_KEY)
+  render(<WorkspaceFilesPanel source={source()} memoryScope="links" onOpenDocument={() => {}} />)
+  await userEvent.click(await screen.findByRole('button', { name: /linker/i }))
+  const anchor = await anchorIn('[data-testid="preview-render"]')
+
+  clickAnchor(anchor)
+  const lane = await screen.findByTestId('recent-lane')
+  await waitFor(() =>
+    expect(
+      within(lane)
+        .getAllByRole('button')
+        .map((each) => each.textContent),
+    ).toEqual(['plan']),
+  )
 })
 
 it('a link inside a card picture opens the card, not the link', async () => {

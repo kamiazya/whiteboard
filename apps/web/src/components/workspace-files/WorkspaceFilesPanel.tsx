@@ -771,7 +771,7 @@ export function WorkspaceFilesPanel({
               selected={selected}
               loadRender={loadRender}
               findDocument={findListed}
-              onOpenDocument={onOpenDocument}
+              onOpen={onOpenDocument === undefined ? undefined : openEntry}
               onRename={rename.open}
               onDuplicateDocument={onDuplicateDocument}
               onRequestDelete={onRequestDelete}

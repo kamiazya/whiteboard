@@ -123,7 +123,7 @@ export function PanelPreview({
   selected,
   loadRender,
   findDocument,
-  onOpenDocument,
+  onOpen,
   onRename,
   onDuplicateDocument,
   onRequestDelete,
@@ -131,7 +131,12 @@ export function PanelPreview({
   selected: WorkspaceDocumentEntry | null
   loadRender: ComponentProps<typeof DocumentPreview>['loadRender']
   findDocument: NonNullable<ComponentProps<typeof DocumentPreview>['findDocument']>
-  onOpenDocument: WorkspaceFilesPanelProps['onOpenDocument']
+  /**
+   * The panel's own open, so an open from the preview — its button or a link
+   * drawn in it — is remembered like any other. Absent on a host that cannot
+   * open a document.
+   */
+  onOpen: ((entry: WorkspaceDocumentEntry) => void) | undefined
   onRename: (entry: WorkspaceDocumentEntry) => void
   onDuplicateDocument: WorkspaceFilesPanelProps['onDuplicateDocument']
   onRequestDelete: WorkspaceFilesPanelProps['onRequestDelete']
@@ -141,9 +146,7 @@ export function PanelPreview({
       document={selected}
       loadRender={loadRender}
       findDocument={findDocument}
-      {...(onOpenDocument === undefined
-        ? {}
-        : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
+      {...(onOpen === undefined ? {} : { onOpen })}
       onRename={onRename}
       {...(onDuplicateDocument === undefined
         ? {}
