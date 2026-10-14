@@ -232,3 +232,45 @@ describe('CONTRIBUTING.md and testing.md carry the packaging and layout pointers
     expect(read('docs/README.md')).not.toMatch(/copy TBD/i)
   })
 })
+
+describe("testing.md's bundle-size row names every budget the gate enforces", () => {
+  const script = read('apps/web/scripts/smoke-bundle-size.mjs')
+  const row =
+    read('docs/contributing/testing.md')
+      .split('\n')
+      .find((line) => line.startsWith('|') && line.includes('smoke:bundle-size')) ?? ''
+  const constant = (name: string): string =>
+    new RegExp(`^const ${name} = (\\d+)$`, 'm').exec(script)?.[1] ?? `<no ${name}>`
+  // Each per-chunk budget, read from the script's BUDGETS table: the glob in
+  // its label and its limit in KB.
+  const chunkBudgets = [
+    ...script.matchAll(/label: '[^']*\(([^)]+)\)',[^}]*?limit: (\d+) \* KB/g),
+  ].map((m) => ({ glob: m[1] as string, kb: m[2] as string }))
+
+  it('finds the row and every per-chunk budget in the script', () => {
+    expect(row).not.toBe('')
+    expect(chunkBudgets.length).toBeGreaterThanOrEqual(3)
+    // A BUDGETS entry spelled so the pattern above misses it would go unchecked.
+    expect(chunkBudgets).toHaveLength([...script.matchAll(/\blabel: /g)].length)
+  })
+
+  it.each([
+    'CRITICAL_PATH_BUDGET_KB',
+    'CRITICAL_PATH_FILE_BUDGET',
+  ])('states %s at its current value', (name) => {
+    const unit = name.endsWith('_KB') ? 'KB' : 'files'
+    expect(row).toContain(`${constant(name)} ${unit}`)
+  })
+
+  it('states each per-chunk budget beside the chunk it limits', () => {
+    for (const { glob, kb } of chunkBudgets) {
+      const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      expect(row, `${glob} at ${kb} KB`).toMatch(new RegExp(`\`${escaped}\`, ${kb} KB`))
+    }
+  })
+
+  it('names the deferred-export refusal while the script enforces it', () => {
+    expect(script).toContain('export function deferredExportFailures')
+    expect(row).toContain('`__tla`')
+  })
+})
