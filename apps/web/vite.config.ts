@@ -38,6 +38,12 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    // Just above the largest chunk (the lazy svg renderer, ~1.26 MB): the
+    // editor, the renderer and mermaid are big by design and load lazily, so
+    // Vite's 500 kB default only taught everyone to skip its warning. The
+    // enforced budgets are scripts/smoke-bundle-size.mjs (first paint) and
+    // scripts/check-pwa-precache.mjs (what the service worker caches).
+    chunkSizeWarningLimit: 1300,
     rolldownOptions: {
       output: {
         // The bundle-size gate (scripts/smoke-bundle-size.mjs) matches this
