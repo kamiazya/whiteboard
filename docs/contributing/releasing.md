@@ -84,8 +84,9 @@ credentials are requested.
 via `pnpm publish-gate` (`tools/checks/src/publish-gate.mjs`, a matrix-driven runner that
 mirrors `pages-release.mjs`). That tier is scoped to **publishability**: does the tarball
 build correctly, contain the required files, carry an SBOM, and actually start when
-unpacked (`smoke:tarball`, `smoke:packaged`, the packaged-daemon/server-mode node smokes,
-`smoke:claude`, `smoke:codex`)? It also carries a fast, deterministic **correctness floor**
+unpacked (the `test:distribution` vitest suite — the packed tarball, plain and under
+`WHITEBOARD_DEV=1`, the Codex config and the packaged entry — then `smoke:packaged` and the
+packaged-daemon/server-mode node smokes)? It also carries a fast, deterministic **correctness floor**
 (`pnpm typecheck` + `pnpm test:mcp-node`) so an obviously broken tag never publishes.
 
 It deliberately does **not** re-run the full browser/jsdom test matrix

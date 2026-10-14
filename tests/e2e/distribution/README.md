@@ -105,13 +105,14 @@ Each `.mjs` script in this directory targets a specific packaged deployment scen
 
 The gates in `release-gate-matrix.json` reference commands from the root `package.json`.
 A tier runs each gate once. `smoke:packaged` runs inside `test:e2e:distribution:only`.
-`smoke:tarball` and `smoke:codex-config` do not appear in `check:release-candidate`'s chain at
-all: they drive the same `*.distribution-impl.ts` flows as `tarball.distribution.test.ts` and
-`codex-config.distribution.test.ts`, which the `test:distribution` gate's vitest suite already
-runs (the tarball under `WHITEBOARD_DEV=1` too), so the suite is the one invocation. The standalone
-scripts remain for running one smoke by hand and for CI's `verify` steps.
-`release-gate-matrix.test.ts` expands each tier's chain through every script it names and fails
-when a command, or a smoke implementation, is reached twice.
+`smoke:tarball` and `smoke:codex-config` are not gates of any tier, and CI's `verify` job has no
+step for them: they drive the same `*.distribution-impl.ts` flows as `tarball.distribution.test.ts`
+and `codex-config.distribution.test.ts`, which the `test:distribution` gate's vitest suite already
+runs (the tarball under `WHITEBOARD_DEV=1` too), so the suite is the one invocation on every tier
+and in CI. The standalone scripts remain for running one smoke by hand.
+`release-gate-matrix.test.ts` expands each tier's chain — the publish tier through its matrix
+gates — through every script it names and fails when a command, or a smoke implementation, is
+reached twice.
 
 A gate's `requiredFor` tiers name the aggregate **script** that must invoke it, not
 where it happens to run. Each tier has exactly one runner:

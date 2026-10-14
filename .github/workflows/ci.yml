@@ -561,7 +561,10 @@ jobs:
       # Runs the packed-tarball / packaged-entry / codex-config distribution
       # vitest suite (vitest.distribution.config.ts) against this dist — the
       # exact npm-install code path that broke a real publish (v0.0.9+) and
-      # otherwise only ran via a manual `pnpm test:distribution`.
+      # otherwise only ran via a manual `pnpm test:distribution`. This is the
+      # one run of the tarball and codex-config flows: `pnpm smoke:tarball` and
+      # `pnpm smoke:codex-config` drive the same *.distribution-impl.ts modules,
+      # so they are not steps of their own (release-gate-matrix.test.ts).
       - name: Distribution vitest suite
         run: pnpm --filter @kamiazya/whiteboard-mcp test:distribution:only
 
@@ -615,12 +618,6 @@ jobs:
 
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
-
-      - name: Packed tarball smoke
-        run: pnpm smoke:tarball
-
-      - name: Codex config smoke
-        run: pnpm smoke:codex-config
 
       - name: Check release artifacts
         run: pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts

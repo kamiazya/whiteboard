@@ -107,21 +107,6 @@
       }
     },
     {
-      "id": "smoke:tarball",
-      "command": "pnpm smoke:tarball",
-      "category": "tarball",
-      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
-      "requiresDocker": false,
-      "requiresNetwork": false,
-      "expectedRuntimeBucket": "medium",
-      "prCoverage": {
-        "kind": "workflow-step",
-        "workflow": "ci.yml",
-        "jobId": "verify",
-        "stepName": "Packed tarball smoke"
-      }
-    },
-    {
       "id": "smoke:packaged",
       "command": "pnpm smoke:packaged",
       "category": "mcp-protocol",
@@ -149,21 +134,6 @@
         "workflow": "ci.yml",
         "jobId": "packaged-smoke",
         "stepName": "Packaged distribution smoke"
-      }
-    },
-    {
-      "id": "smoke:codex-config",
-      "command": "pnpm smoke:codex-config",
-      "category": "codex-config",
-      "requiredFor": ["ci", "local-release", "docker-release"],
-      "requiresDocker": false,
-      "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast",
-      "prCoverage": {
-        "kind": "workflow-step",
-        "workflow": "ci.yml",
-        "jobId": "verify",
-        "stepName": "Codex config smoke"
       }
     },
     {

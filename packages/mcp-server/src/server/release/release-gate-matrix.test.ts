@@ -242,41 +242,49 @@ const TIER_RUNNERS = [
   'test:e2e:distribution',
 ]
 
+// What each tier finally runs. The script tiers expand their runner script;
+// the publish tier has no script — publish-gate.mjs runs its matrix gates in
+// order — so it expands those gates' commands. CI's verify job is held to the
+// same rule over its single-line `run:` steps.
+const ciYml = readText('.github/workflows/ci.yml')
+const verifyJob = /\n {2}verify:\n([\s\S]*?)\n {2}[a-z][\w-]*:\n/.exec(ciYml)?.[1] ?? ''
+const TIER_CHAINS: Record<string, Leaf[]> = {
+  'ci.yml verify job': [...verifyJob.matchAll(/^ +run: (pnpm [^|\n]+)$/gm)].flatMap((m) =>
+    expandChain((m[1] as string).trim()),
+  ),
+  ...Object.fromEntries(TIER_RUNNERS.map((runner) => [runner, expandChain(`pnpm ${runner}`)])),
+  'publish (publish-gate.mjs)': matrix.gates
+    .filter((g) => g.requiredFor.includes('publish'))
+    .flatMap((g) => expandChain(g.command)),
+}
+const leafKey = (leaf: Leaf): string => `${leaf.cwd}: ${leaf.command}`
+
 describe('a tier runs each gate once', () => {
-  it('expands every tier runner through its scripts into the smokes it drives', () => {
-    const leaves = expandChain('pnpm check:release-candidate')
-    expect(leaves.length).toBeGreaterThan(15)
-    expect(leaves.flatMap(implementations).length).toBeGreaterThanOrEqual(2)
+  it('expands every tier through its scripts into the smokes it drives', () => {
     for (const runner of TIER_RUNNERS) expect(rootPkg.scripts).toHaveProperty(runner)
+    for (const leaves of Object.values(TIER_CHAINS)) {
+      expect(leaves.length).toBeGreaterThan(8)
+      expect(leaves.flatMap(implementations).length).toBeGreaterThanOrEqual(2)
+    }
   })
 
-  it.each(TIER_RUNNERS)('%s runs no command twice', (runner) => {
-    const leaves = expandChain(`pnpm ${runner}`).map((leaf) => `${leaf.cwd}: ${leaf.command}`)
-    expect(repeated(leaves)).toEqual([])
+  it.each(Object.keys(TIER_CHAINS))('%s runs no command twice', (tier) => {
+    expect(repeated((TIER_CHAINS[tier] ?? []).map(leafKey))).toEqual([])
   })
 
-  it.each(TIER_RUNNERS)('%s drives no smoke implementation twice', (runner) => {
-    expect(repeated(expandChain(`pnpm ${runner}`).flatMap(implementations))).toEqual([])
+  it.each(Object.keys(TIER_CHAINS))('%s drives no smoke implementation twice', (tier) => {
+    expect(repeated((TIER_CHAINS[tier] ?? []).flatMap(implementations))).toEqual([])
   })
 })
 
 describe('tier aggregate completeness drift', () => {
-  // A gate is covered when the chain runs every command the gate runs, or —
-  // for a smoke that the distribution vitest suite also drives — every
-  // implementation the gate's commands drive.
   it('check:release-candidate covers every ci-required gate', () => {
-    const chain = expandChain('pnpm check:release-candidate')
-    const commands = new Set(chain.map((leaf) => `${leaf.cwd}: ${leaf.command}`))
-    const driven = new Set(chain.flatMap(implementations))
+    const commands = new Set((TIER_CHAINS['check:release-candidate'] ?? []).map(leafKey))
     const ciGates = matrix.gates.filter((g) => g.requiredFor.includes('ci'))
     expect(ciGates.length).toBeGreaterThan(5)
     for (const gate of ciGates) {
-      const leaves = expandChain(gate.command)
-      const runs = leaves.every((leaf) => commands.has(`${leaf.cwd}: ${leaf.command}`))
-      const impls = leaves.flatMap(implementations)
-      const drives = impls.length > 0 && impls.every((impl) => driven.has(impl))
       expect(
-        runs || drives,
+        expandChain(gate.command).every((leaf) => commands.has(leafKey(leaf))),
         `check:release-candidate is missing ci-required gate "${gate.id}"`,
       ).toBe(true)
     }
