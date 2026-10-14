@@ -280,3 +280,20 @@ and look for a StartWorkerRequested trace event between StopWorker and OnStopped
 step that times out waiting for the page to stop requesting names the in-flight
 request; a request left from a dead document is cleared on main-frame
 navigation.
+
+### fold-outlives-unmount
+
+**A `web-browser` test fails saying it logged a failure, and the record is
+`[browser-backend] startup fold failed; serving what the tree holds
+WorkspaceRemovedError: workspace … was removed from this browser`, only in a
+loaded full run, passing alone.** The previous test ended on a remount whose
+wait can pass before the page finished loading, so its `BrowserBackend`
+startup fold kept running past `cleanup()`. The fold listed the legacy rows,
+the next test's `beforeEach(clearWhiteboardDb)` deleted the database, and the
+fold's record open found a fresh empty database with no registry row. The
+warning is correct for what it saw; deleting storage under a running fold is
+something only the harness does. `clearWhiteboardDb` awaits
+`startupFoldsSettled()` (`lib/fold-workspace.ts`) before it deletes, the same
+settle seam the checkpoint and index-write tails already had; pinned by
+`clear-whiteboard-db.browser.test.tsx`. Seen twice before the fix, in two
+waves' full browser runs.
