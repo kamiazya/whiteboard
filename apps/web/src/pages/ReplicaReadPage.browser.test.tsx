@@ -54,6 +54,7 @@ const DOC_MD = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const DOC_SP = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
 const DOC_LINKER = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
 const DOC_EMBEDDER = '01ARZ3NDEKTSV4RRFFQ69G5FB4'
+const DOC_POINTER = '01ARZ3NDEKTSV4RRFFQ69G5FB5'
 const SYNCED = '2026-09-01T12:00:00.000Z'
 const DAEMON = 'http://127.0.0.1:3099'
 
@@ -106,6 +107,15 @@ function buildReplica(record: LoroDoc): void {
     nodes: [
       textNode({ id: 'e1', x: 0, y: 0, width: 320, height: 220, text: 'See:\n\n![[notes/plan]]' }),
     ],
+    edges: [],
+  })
+  createWorkspaceDocumentAtPath(record, {
+    path: 'pointer',
+    documentId: DOC_POINTER,
+    kind: 'spatial',
+  })
+  writeSpatialCanvas(documentContainers(record, DOC_POINTER), {
+    nodes: [textNode({ id: 'p1', x: 0, y: 0, width: 240, height: 80, text: 'Go [[notes/plan]]' })],
     edges: [],
   })
 }
@@ -364,6 +374,30 @@ describe('ReplicaReadPage', () => {
         .join(' ')
       expect(drawn).toContain('Hello from the cache')
     })
+  })
+
+  it('a wiki link drawn on a canvas opens its target from the replica in place', async () => {
+    await seedReplica()
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        syncedAt={SYNCED}
+        daemonBaseUrl={DAEMON}
+        onReconnect={noopReconnect}
+      />,
+    )
+    await userEvent.click(await screen.findByText('pointer'))
+    const anchor = await vi.waitFor(() => {
+      const found = document.querySelector(`svg a[href="${DOC_MD}"]`)
+      if (found === null) throw new Error('the canvas did not draw the wiki link')
+      return found
+    })
+    // Cancels whatever the page let through, so a failure cannot unload the test.
+    const cancel = (event: MouseEvent) => event.preventDefault()
+    document.addEventListener('click', cancel)
+    anchor.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    document.removeEventListener('click', cancel)
+    await screen.findAllByText(/Hello from the cache/)
   })
 
   it('a markdown edit persists to the replica record, and files no index row', async () => {
