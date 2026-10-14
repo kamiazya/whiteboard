@@ -271,12 +271,11 @@ export function useDocumentSync(
   backend: DocumentBackend | null,
   options?: UseDocumentSyncOptions,
 ): UseDocumentSyncResult {
-  // Latest-prop mirrors deliberately excluded from the connect effect's
-  // dependency array below: reading `backend`/`options` through these refs
-  // (rather than as effect deps) means a fresh inline object passed on every
-  // render never forces a reconnect.
-  const backendRef = useRef<DocumentBackend | null>(backend)
-  backendRef.current = backend
+  // A latest-prop mirror deliberately excluded from the connect effect's
+  // dependency array below: reading `options` through this ref (rather than
+  // as an effect dep) means a fresh inline object passed on every render
+  // never forces a reconnect. `backend` IS a dependency — a new backend
+  // identity reconnects.
   const optionsRef = useRef<UseDocumentSyncOptions>(options ?? {})
   optionsRef.current = options ?? {}
 
