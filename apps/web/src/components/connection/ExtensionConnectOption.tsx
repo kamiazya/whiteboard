@@ -12,7 +12,9 @@ import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { Button } from '../ui/button.js'
 
 type OptionState =
-  | { status: 'checking' | 'absent' | 'ready' | 'connecting' | 'no-daemon' }
+  | { status: 'checking' | 'absent' | 'ready' | 'connecting' }
+  /** `refusal` is the daemon record's own account of why it is not reachable. */
+  | { status: 'no-daemon'; refusal?: string }
   /** `why` is `bridgeSkew`'s diagnosis, which names the side to update. */
   | { status: 'skewed'; why: string }
 
@@ -60,7 +62,11 @@ export function ExtensionConnectOption({
     setState({ status: 'connecting' })
     const result = await connect()
     if (result.status !== 'connected') {
-      setState({ status: 'no-daemon' })
+      setState(
+        result.refusal === undefined
+          ? { status: 'no-daemon' }
+          : { status: 'no-daemon', refusal: result.refusal },
+      )
       return
     }
     settingsStore.update((current) => ({
@@ -74,7 +80,7 @@ export function ExtensionConnectOption({
     <ConnectButton
       lead={lead}
       connecting={state.status === 'connecting'}
-      noDaemon={state.status === 'no-daemon'}
+      noDaemon={state.status === 'no-daemon' ? { refusal: state.refusal } : null}
       onConnect={() => void onConnect()}
     />
   )
@@ -121,7 +127,7 @@ function ConnectButton({
 }: {
   lead: string | undefined
   connecting: boolean
-  noDaemon: boolean
+  noDaemon: { refusal: string | undefined } | null
   onConnect: () => void
 }) {
   return (
@@ -139,7 +145,15 @@ function ConnectButton({
       </Button>
       {/* Mounted before it speaks, so the message is announced when it arrives. */}
       <span role="status" className="text-xs text-muted-foreground">
-        {noDaemon && (
+        {noDaemon !== null && noDaemon.refusal !== undefined && (
+          // The host's refusal names what is wrong and what to do; "start
+          // one" would send the person to a command that refuses too.
+          <>
+            The whiteboard extension is installed, but the daemon could not be reached:{' '}
+            {noDaemon.refusal}
+          </>
+        )}
+        {noDaemon !== null && noDaemon.refusal === undefined && (
           <>
             The whiteboard extension is installed, but no daemon answered. Start one with{' '}
             <code>whiteboard daemon run</code>, then try again.
