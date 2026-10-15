@@ -131,13 +131,14 @@ function claimExclusiveFile({
     /* Absent or unreadable — the caller's predicate decides what that means. */
   }
 
-  let mtimeMs
+  let judged
   try {
-    mtimeMs = fsStat(path).mtimeMs
+    judged = fsStat(path)
   } catch {
     return { kind: 'held', holderText: text }
   }
 
+  const mtimeMs = judged.mtimeMs
   if (!isHolderGone({ text, mtimeMs })) return { kind: 'held', holderText: text }
 
   const claimPath = `${path}.stale-${process.pid}-${nowMs}-${randomUUID()}`
@@ -152,9 +153,11 @@ function claimExclusiveFile({
 
   // The rename moves whatever sits at `path` NOW. Another stealer may have
   // moved the judged file away and created its own in between, so the moved
-  // file must still be the one judged — rename keeps mtime, a fresh create
-  // does not. If it is not, it goes back with link(), which never overwrites.
-  if (movedMtimeMs(claimPath, fsStat) !== mtimeMs) {
+  // file must still be the one judged: rename keeps the inode, a fresh create
+  // gets a new one (mtime is checked too, but alone it is no identity — two
+  // files can share a timestamp). If it is not, it goes back with link(),
+  // which never overwrites.
+  if (!isSameFile(claimPath, judged, fsStat)) {
     let moved = null
     try {
       moved = fsReadFile(claimPath, 'utf8')
@@ -184,11 +187,12 @@ function claimExclusiveFile({
   }
 }
 
-function movedMtimeMs(claimPath, fsStat) {
+function isSameFile(claimPath, judged, fsStat) {
   try {
-    return fsStat(claimPath).mtimeMs
+    const moved = fsStat(claimPath)
+    return moved.dev === judged.dev && moved.ino === judged.ino && moved.mtimeMs === judged.mtimeMs
   } catch {
-    return null
+    return false
   }
 }
 

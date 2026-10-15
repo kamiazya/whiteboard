@@ -193,7 +193,10 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
     expect(readFileSync(lockPath, 'utf8')).toBe(winnerContent)
   })
 
-  it('puts back a newer holder a stealer moved by mistake, and stays held-by-other', () => {
+  it.each([
+    ['a newer mtime', new Date()],
+    ['the same mtime', new Date(0)],
+  ])('puts back a newer holder with %s a stealer moved by mistake, staying held-by-other', (_label, newerMtime) => {
     acquireSpawnLock({
       lockPath,
       meta: { pid: 999_999 },
@@ -212,6 +215,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       fsRename: (from, to) => {
         renameSyncReal(from, `${String(from)}.other-stealer`)
         writeFileSync(from, fresh)
+        utimesSync(from, newerMtime, newerMtime)
         renameSyncReal(from, to)
       },
     })
