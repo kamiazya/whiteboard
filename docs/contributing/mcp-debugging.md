@@ -173,6 +173,22 @@ points at (credentials removed), never an assumed `~/.whiteboard`.
   rename land in a diff a reviewer sees rather than silently. Re-create the
   database, as below.
 
+A third failure is neither, and must not be answered by re-creating anything:
+a plain schema error at some migration step on a data directory that was fresh
+or had a migration pending — `table "…" already exists`, `no such table`,
+`no such column`, `duplicate column`, or
+`UNIQUE constraint failed: kysely_migration.name`. That was two processes
+migrating the same data directory at once (two stdio servers, `pnpm mcp` twice,
+`pnpm mcp:http:dev` beside `pnpm mcp`), and the loser died at whichever step it
+collided on. Startup now serializes them on `migration.lock` in the data
+directory: the second process logs `waiting for another process to finish
+migrating this data directory` (at `info`) and then finds nothing pending. A
+lock left by a process that exited, or whose pid a later process has taken, is
+replaced; a live holder is waited out for 120 seconds, after which the error
+names its pid and the lock file. On a build older than the lock, **restart the
+failed process** — the winner's database is intact. Do not delete `.dev-data`:
+it holds this checkout's ticket documents.
+
 **Pre-1.0 policy**: the data dir's databases are **disposable**. For a renamed or missing migration, re-create the database. `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
 
 ```bash

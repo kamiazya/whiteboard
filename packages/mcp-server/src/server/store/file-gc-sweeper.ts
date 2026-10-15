@@ -12,15 +12,15 @@
 // own pass has settled does not.
 
 import type { Dirent } from 'node:fs'
-import { lstat, readdir, realpath } from 'node:fs/promises'
-import { join, sep } from 'node:path'
+import { lstat, readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { isMissingFileError } from '../../shared/errno.js'
 import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
 import { getLogger } from '../log.js'
-import { workspaceDir, workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
+import { workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
 import { validateWorkspaceId } from '../validators.js'
 import { listWorkspaces } from './document-store.js'
-import { purgeDanglingFiles } from './file-gc.js'
+import { FilesDirNotContainedError, purgeDanglingFiles } from './file-gc.js'
 import { parseFileGcIntervalMs } from './storage-env.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
@@ -30,11 +30,6 @@ const log = getLogger('file-gc-sweeper')
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000
 
-// Env parsing is deliberately STRICTER than file-gc.ts's resolveGraceMs
-// (which uses Number.parseInt and would silently accept "1x" as 1): only a
-// bare non-negative base-10 integer string is accepted. Anything else falls
-// back to the default rather than risking a mistyped env var arming a much
-// shorter (or negative) sweep interval than intended.
 function resolveIntervalMs(explicit: number | undefined): number {
   // Number.isFinite (not just typeof === 'number') also rejects NaN --
   // Math.max(0, NaN) and Math.min(NaN, MAX) both evaluate to NaN, and
@@ -45,10 +40,9 @@ function resolveIntervalMs(explicit: number | undefined): number {
   if (typeof explicit === 'number' && Number.isFinite(explicit)) {
     return Math.min(Math.max(0, explicit), MAX_TIMER_DELAY_MS)
   }
-  // One definition of the rule, in storage-env.ts, which startup also uses to
-  // refuse a value it cannot understand. This fallback is therefore
-  // unreachable in a started server and kept only so library and test callers
-  // get a safe value rather than a throw.
+  // One rule for the value, in storage-env.ts, and startup refuses a
+  // malformed one (collectStorageEnvIssues), so a started server never
+  // reaches the default below: it serves only library and test callers.
   const parsed = parseFileGcIntervalMs(process.env)
   if (parsed.ok && parsed.value !== null) return Math.min(parsed.value, MAX_TIMER_DELAY_MS)
   return DEFAULT_INTERVAL_MS
@@ -60,10 +54,10 @@ function resolveIntervalMs(explicit: number | undefined): number {
  * `files/` directory inside. A workspace named `blobs` is therefore not
  * confusable with the blob root, which lives elsewhere and has no `files/`.
  *
- * This is enumeration, not the safety check. Containment is decided by
- * `isWorkspaceDirContained`, which `runPass` runs on every id immediately
- * before its purge — discovered and DB-listed alike — so checking it here
- * as well would only be a second copy that no outcome depends on.
+ * This is enumeration, not the safety check. Containment is decided inside
+ * `purgeDanglingFiles`, under the workspace write barrier, for every id —
+ * discovered and DB-listed alike — so checking it here as well would only be
+ * a second copy that no outcome depends on.
  */
 async function discoveredWorkspaceId(name: string, scope: StoreScope): Promise<string | null> {
   const { dataDir } = scope
@@ -102,95 +96,6 @@ async function discoverFsWorkspaces(scope: StoreScope): Promise<string[]> {
     if (workspaceId !== null) result.push(workspaceId)
   }
   return result
-}
-
-type ContainmentCheck = 'missing' | 'safe' | 'unsafe'
-
-// One lstat+realpath containment check, run on a workspace's top-level
-// directory and on its files/ child (see isWorkspaceDirContained below).
-// `treatNonDirectoryAsMissing` only applies to the files/ child: a files
-// entry that exists but is not a directory can't be an escape vector
-// (realpath of a regular file just resolves in place) and purgeDanglingFiles'
-// own readdir() will fail loudly on it later, so there is nothing to fail
-// closed over here.
-async function checkSubpathContainment(
-  workspaceId: string,
-  targetPath: string,
-  realDataDir: string,
-  label: string,
-  treatNonDirectoryAsMissing = false,
-): Promise<ContainmentCheck> {
-  let stats: Awaited<ReturnType<typeof lstat>>
-  try {
-    stats = await lstat(targetPath)
-  } catch (err) {
-    // Missing is not a containment risk -- purgeDanglingFiles() itself
-    // handles a missing files dir by returning zero purged.
-    if (isMissingFileError(err)) return 'missing'
-    log.warning({ workspaceId, err }, `file-gc sweep: skipped workspace, could not stat ${label}`)
-    return 'unsafe'
-  }
-  if (stats.isSymbolicLink()) {
-    log.warning({ workspaceId }, `file-gc sweep: skipped workspace with symlinked ${label}`)
-    return 'unsafe'
-  }
-  if (treatNonDirectoryAsMissing && !stats.isDirectory()) return 'missing'
-
-  let realTargetPath: string
-  try {
-    realTargetPath = await realpath(targetPath)
-  } catch (err) {
-    log.warning(
-      { workspaceId, err },
-      `file-gc sweep: skipped workspace, could not resolve ${label} realpath`,
-    )
-    return 'unsafe'
-  }
-  if (realTargetPath !== realDataDir && !realTargetPath.startsWith(realDataDir + sep)) {
-    log.warning({ workspaceId }, `file-gc sweep: skipped workspace ${label} escaping data dir`)
-    return 'unsafe'
-  }
-  return 'safe'
-}
-
-// THE gate before every purge: whether a workspace's directory, and its
-// files/ child, really resolve inside the data dir. purgeDanglingFiles() only
-// joins <workspaceDir>/files lexically (assertPathWithinDir) and follows
-// whatever that resolves to, so without this a purge could unlink through a
-// symlink — at the workspace dir, at its files/ child, or at an ANCESTOR such
-// as the workspaces root, which only realpath can see — into a directory
-// outside the data dir. Neither source of ids is trusted: a DB row can
-// outlive its directory being replaced by a symlink, and a directory found on
-// disk can be re-pointed between discovery and its own turn.
-async function isWorkspaceDirContained(scope: StoreScope, workspaceId: string): Promise<boolean> {
-  const { dataDir } = scope
-  const { tenantId } = scope.layout
-  const entryPath = workspaceDir(dataDir, tenantId, workspaceId)
-
-  let realDataDir: string
-  try {
-    realDataDir = await realpath(dataDir)
-  } catch (err) {
-    log.warning(
-      { workspaceId, err },
-      'file-gc sweep: skipped workspace, could not resolve data dir realpath',
-    )
-    return false
-  }
-
-  const dirCheck = await checkSubpathContainment(workspaceId, entryPath, realDataDir, 'dir')
-  if (dirCheck === 'unsafe') return false
-  if (dirCheck === 'missing') return true
-
-  const filesPath = workspaceFilesDir(dataDir, tenantId, workspaceId)
-  const filesCheck = await checkSubpathContainment(
-    workspaceId,
-    filesPath,
-    realDataDir,
-    'files dir',
-    true,
-  )
-  return filesCheck !== 'unsafe'
 }
 
 export interface FileGcSweeperOptions {
@@ -243,8 +148,8 @@ export interface FileGcSweeper {
 
 /**
  * Every workspace this pass should visit, in one set: those found on disk,
- * then the DB's. Nothing here is a safety check — `runPass` gates each id on
- * containment immediately before purging it.
+ * then the DB's. Nothing here is a safety check — the purge gates each id on
+ * containment itself.
  */
 async function workspacesToSweep(
   scope: StoreScope,
@@ -278,19 +183,11 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
     // benefit at a 24h-default cadence.
     for (const workspaceId of ids) {
       try {
-        // Containment is checked here, immediately before the destructive
-        // call, and nowhere earlier: a pass over every workspace can take a
-        // while (a full document scan each), so a check made while building
-        // `ids` could be stale by this workspace's turn. This does not make
-        // the check ATOMIC with purgeDanglingFiles' own readdir/unlink (that
-        // would need directory-handle/no-follow semantics it does not have),
-        // but it shrinks the exposure to this one iteration.
-        //
-        // `isWorkspaceDirContained` already logs the specific reason it
-        // refused, so there is nothing more to log here.
-        if (!(await isWorkspaceDirContained(scope, workspaceId))) continue
         await purge(workspaceId)
       } catch (err) {
+        // A containment refusal is a skip, not a failure: the purge already
+        // logged the hop that escaped, and the next workspace still runs.
+        if (err instanceof FilesDirNotContainedError) continue
         log.error({ workspaceId, err }, 'file-gc sweep failed for workspace')
       }
     }

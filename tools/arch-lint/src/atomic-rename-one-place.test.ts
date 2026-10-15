@@ -55,6 +55,10 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
     calls: 1,
     why: 'seals a finished backup by renaming its staging DIRECTORY; syncTree fsyncs every file and directory in it before, and the parent is synced after',
   },
+  'packages/mcp-server/src/server/store/db/migration-lock.ts': {
+    calls: 1,
+    why: 'moves a stale lock aside so only one of two racing replacers wins; no file data is staged',
+  },
   'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts': {
     calls: 2,
     why: MIGRATION_HISTORY,
@@ -172,6 +176,6 @@ describe('a file is renamed into place in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(7)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(8)
   })
 })

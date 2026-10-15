@@ -66,7 +66,7 @@ describe('followWorkspaceWrites', () => {
     const f = follow()
     f.connection(true)
     vi.advanceTimersByTime(1000)
-    expect(f.onMoved).not.toHaveBeenCalled()
+    f.onMoved.mockClear()
 
     f.connection(false)
     f.connection(true)
@@ -74,12 +74,33 @@ describe('followWorkspaceWrites', () => {
     expect(f.onMoved).toHaveBeenCalledTimes(1)
   })
 
-  it('does not read for the first connection, which has missed nothing', () => {
+  it('reads once the first routing is answered, because the list was read before it', () => {
     const f = follow()
     f.connection(false)
     f.connection(true)
-    vi.advanceTimersByTime(1000)
+    vi.advanceTimersByTime(60)
     expect(f.onMoved).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads once for the first routing and a burst of frames around it', () => {
+    const f = follow()
+    f.connection(false)
+    f.connection(true)
+    f.frame()
+    f.frame()
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not read again for a routing repeated without a drop', () => {
+    const f = follow()
+    f.connection(true)
+    vi.advanceTimersByTime(1000)
+    f.connection(true)
+    vi.advanceTimersByTime(1000)
+    expect(f.onMoved).toHaveBeenCalledTimes(1)
   })
 
   it('cancels a read still waiting out a burst when it is stopped', () => {

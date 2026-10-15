@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setImmediate as realSetImmediate, setTimeout as realSetTimeout } from 'node:timers'
@@ -28,36 +28,8 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Lets tests inject a one-off, path-scoped rejection from lstat/realpath to
-// exercise isWorkspaceDirContained's generic (non-ENOENT) failure branches,
-// which a real filesystem can't reliably reproduce (permission checks are
-// bypassed for the root user, which many CI containers run as). Every path
-// not matching the override falls through to the real implementation.
-const { fsFailureOverrides } = vi.hoisted(() => ({
-  fsFailureOverrides: {
-    lstat: null as null | { path: string; err: unknown },
-    realpath: null as null | { path: string; err: unknown },
-  },
-}))
-
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>()
-  return {
-    ...actual,
-    lstat: (path: Parameters<typeof actual.lstat>[0], ...rest: unknown[]) => {
-      const override = fsFailureOverrides.lstat
-      if (override && path === override.path) return Promise.reject(override.err)
-      return (actual.lstat as (...args: unknown[]) => unknown)(path, ...rest)
-    },
-    realpath: (path: Parameters<typeof actual.realpath>[0], ...rest: unknown[]) => {
-      const override = fsFailureOverrides.realpath
-      if (override && path === override.path) return Promise.reject(override.err)
-      return (actual.realpath as (...args: unknown[]) => unknown)(path, ...rest)
-    },
-  }
-})
-
 const { createFileGcSweeper } = await import('./file-gc-sweeper.js')
+const { purgeDanglingFiles } = await import('./file-gc.js')
 const { saveDocument, loadDocument } = await import('./document-store.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { captureLogsForTests } = await import('../log.js')
@@ -73,16 +45,14 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.useRealTimers()
-  fsFailureOverrides.lstat = null
-  fsFailureOverrides.realpath = null
   await handle.dispose()
   await rm(tempDir, { recursive: true, force: true })
 })
 
 // vi.advanceTimersByTimeAsync() fast-forwards the fake JS clock and flushes
-// the microtasks that produces, but runPass() now also awaits real
-// (libuv-backed) fs.promises calls -- the containment check's
-// lstat/realpath -- which fake timers cannot fast-forward or see, and which
+// the microtasks that produces, but runPass() can also await real
+// (libuv-backed) fs.promises calls -- discovery's lstat, a real purge's
+// containment check and listing -- which fake timers cannot see, and which
 // only settle once the real event loop actually turns. process.nextTick()
 // alone is not enough (it never yields to libuv's poll/check phases); the
 // real node:timers setImmediate captured above -- unaffected by
@@ -129,8 +99,8 @@ async function flushRealAsync(): Promise<void> {
     await new Promise<void>((resolve) => realSetImmediate(resolve))
   }
   // setImmediate turns do NOT wait for libuv threadpool completions -- a
-  // slow-disk CI runner can leave an lstat/realpath from the containment
-  // check un-landed after any number of immediate turns. One short REAL
+  // slow-disk CI runner can leave a real fs call un-landed after any number
+  // of immediate turns. One short REAL
   // sleep (node:timers, unaffected by fake timers) yields wall-clock time
   // to the threadpool.
   await new Promise<void>((resolve) => realSetTimeout(resolve, 5))
@@ -177,8 +147,7 @@ describe('createFileGcSweeper scheduling', () => {
     await advanceUntilCalls(purge, 1)
     // The message discriminates the two ways this has flaked: listWs=0
     // means the timer never fired; listWs>0 with purge=0 means the timer
-    // fired and the pass stalled between listWorkspaces and purge — i.e. in
-    // the real-fs containment check, the one unmocked dependency here.
+    // fired and the pass stalled between listWorkspaces and purge.
     expect(
       purge,
       `listWs=${listWorkspaces.mock.calls.length} purge=${purge.mock.calls.length}`,
@@ -280,8 +249,8 @@ describe('createFileGcSweeper single-flight', () => {
     })
 
     const first = sweeper.tick()
-    // Wait (condition-based) until the pass's discovery + DB containment
-    // check + purge call have actually landed before the second tick()
+    // Wait (condition-based) until the pass's discovery and purge call have
+    // actually landed before the second tick()
     // races in -- fixed flush turns are not enough on slow-disk runners.
     await advanceUntilCalls(purge, 1)
     const second = sweeper.tick()
@@ -746,40 +715,6 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     }
   })
 
-  it('skips a DB-listed workspace whose directory is a symlink escaping the data dir', async () => {
-    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-db-outside-'))
-    try {
-      const outsideFilesDir = join(outsideDir, 'files')
-      await mkdir(outsideFilesDir, { recursive: true })
-      await writeFile(join(outsideFilesDir, 'secret.png'), Buffer.alloc(10, 4))
-      const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
-      await import('node:fs/promises').then((m) =>
-        m.utimes(join(outsideFilesDir, 'secret.png'), past, past),
-      )
-
-      // The workspace's directory is a symlink pointing outside the data
-      // dir, but the DB still lists it as a workspace, so only the
-      // containment gate before the purge stands between it and an unlink.
-      await mkdir(wsRoot(), { recursive: true })
-      await symlink(outsideDir, wsDir('evil_db_ws'), 'dir')
-
-      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
-      const sweeper = createFileGcSweeper({
-        listWorkspaces: async () => [{ workspaceId: 'evil_db_ws' }],
-        discoverFsWorkspaces: async () => [],
-        purge,
-      })
-      await sweeper.tick()
-      await sweeper.stop()
-
-      expect(purge).not.toHaveBeenCalledWith('evil_db_ws')
-      const remaining = await import('node:fs/promises').then((m) => m.readdir(outsideFilesDir))
-      expect(remaining).toEqual(['secret.png'])
-    } finally {
-      await rm(outsideDir, { recursive: true, force: true })
-    }
-  })
-
   it('skips the blobs dir when it only holds canvas snapshots (no files/ child)', async () => {
     // document-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/document/...
     // -- no files/ child of its own -- so discovery's files/ requirement
@@ -815,71 +750,32 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     const remaining = await import('node:fs/promises').then((m) => m.readdir(filesDir))
     expect(remaining).toEqual([])
   })
-
-  it('skips a DB-listed workspace whose top-level dir is safe but files/ is a symlink escaping the data dir', async () => {
-    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-db-files-outside-'))
-    try {
-      await writeFile(join(outsideDir, 'secret.png'), Buffer.alloc(10, 5))
-      const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
-      await import('node:fs/promises').then((m) =>
-        m.utimes(join(outsideDir, 'secret.png'), past, past),
-      )
-
-      // The workspace's own top-level dir is a real, non-symlinked directory
-      // (so it passes isWorkspaceDirContained's first containment check on its
-      // own), but its files/ CHILD is a symlink pointing outside the data
-      // dir. purgeDanglingFiles() only lexically joins <dir>/files and
-      // follows whatever that resolves to.
-      const workspaceDir = wsDir('ws_files_symlink')
-      await mkdir(workspaceDir, { recursive: true })
-      await symlink(outsideDir, join(workspaceDir, 'files'), 'dir')
-
-      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
-      const sweeper = createFileGcSweeper({
-        listWorkspaces: async () => [{ workspaceId: 'ws_files_symlink' }],
-        discoverFsWorkspaces: async () => [],
-        purge,
-      })
-      await sweeper.tick()
-      await sweeper.stop()
-
-      expect(purge).not.toHaveBeenCalledWith('ws_files_symlink')
-      const remaining = await import('node:fs/promises').then((m) => m.readdir(outsideDir))
-      expect(remaining).toEqual(['secret.png'])
-    } finally {
-      await rm(outsideDir, { recursive: true, force: true })
-    }
-  })
 })
 
 describe('createFileGcSweeper per-workspace containment revalidation', () => {
-  it('skips a later workspace whose dir was swapped for a symlink after discovery but before its own purge turn', async () => {
-    // Both workspaces pass containment at discovery time. Processing
-    // ws_first (which happens first -- fsWorkspaces order is preserved
-    // into the purge loop) swaps ws_second's directory for a symlink
-    // escaping the data dir, simulating another process racing the
-    // sweeper mid-pass. Without revalidating immediately before each
-    // purge call, ws_second's one-time discovery-time check would be
-    // stale by the time its turn comes.
+  it('refuses a later workspace whose dir was swapped for a symlink after discovery', async () => {
+    // Processing ws_first swaps ws_second's directory for a symlink escaping
+    // the data dir, as another process racing the sweeper mid-pass would. A
+    // containment check made once while listing the ids would be stale by
+    // ws_second's turn; the one inside each purge is not.
     const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-race-outside-'))
     try {
       const outsideFilesDir = join(outsideDir, 'files')
       await mkdir(outsideFilesDir, { recursive: true })
       await writeFile(join(outsideFilesDir, 'secret.png'), Buffer.alloc(10, 7))
+      const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
+      await utimes(join(outsideFilesDir, 'secret.png'), past, past)
 
       await mkdir(wsFiles('ws_first'), { recursive: true })
       await mkdir(wsFiles('ws_second'), { recursive: true })
 
+      const versionStore = new FileVersionStore()
       const purge = vi.fn(async (workspaceId: string) => {
         if (workspaceId === 'ws_first') {
-          await rm(wsDir('ws_second'), {
-            recursive: true,
-            force: true,
-          })
-          await mkdir(wsRoot(), { recursive: true })
+          await rm(wsDir('ws_second'), { recursive: true, force: true })
           await symlink(outsideDir, wsDir('ws_second'), 'dir')
         }
-        return { purgedCount: 0, purgedBytes: 0 }
+        return purgeDanglingFiles(workspaceId, { versionStore })
       })
 
       const sweeper = createFileGcSweeper({
@@ -890,78 +786,10 @@ describe('createFileGcSweeper per-workspace containment revalidation', () => {
       await sweeper.tick()
       await sweeper.stop()
 
-      expect(purge).toHaveBeenCalledWith('ws_first')
-      expect(purge).not.toHaveBeenCalledWith('ws_second')
+      expect(purge).toHaveBeenCalledWith('ws_second')
+      expect(await readdir(outsideFilesDir)).toEqual(['secret.png'])
     } finally {
       await rm(outsideDir, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('isWorkspaceDirContained generic (non-ENOENT) stat/realpath failures', () => {
-  it('fails closed and logs a warning when stat rejects with a permission error', async () => {
-    const cap = captureLogsForTests('debug')
-    try {
-      const workspaceDir = wsDir('ws_locked')
-      await mkdir(workspaceDir, { recursive: true })
-      const boom = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
-      fsFailureOverrides.lstat = { path: workspaceDir, err: boom }
-
-      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
-      const sweeper = createFileGcSweeper({
-        listWorkspaces: async () => [{ workspaceId: 'ws_locked' }],
-        discoverFsWorkspaces: async () => [],
-        purge,
-      })
-      await sweeper.tick()
-      await sweeper.stop()
-
-      expect(purge).not.toHaveBeenCalledWith('ws_locked')
-      const warnRecords = cap.records.filter(
-        (r) => r.scope === 'file-gc-sweeper' && r.level === 'warning',
-      )
-      expect(
-        warnRecords.some(
-          (r) =>
-            r.data?.workspaceId === 'ws_locked' &&
-            String((r.data?.err as Error | undefined)?.message).includes('EACCES'),
-        ),
-      ).toBe(true)
-    } finally {
-      cap.restore()
-    }
-  })
-
-  it('fails closed and logs a warning when realpath rejects with a non-ENOENT error', async () => {
-    const cap = captureLogsForTests('debug')
-    try {
-      const workspaceDir = wsDir('ws_unresolvable')
-      await mkdir(workspaceDir, { recursive: true })
-      const boom = Object.assign(new Error('EIO: i/o error'), { code: 'EIO' })
-      fsFailureOverrides.realpath = { path: workspaceDir, err: boom }
-
-      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
-      const sweeper = createFileGcSweeper({
-        listWorkspaces: async () => [{ workspaceId: 'ws_unresolvable' }],
-        discoverFsWorkspaces: async () => [],
-        purge,
-      })
-      await sweeper.tick()
-      await sweeper.stop()
-
-      expect(purge).not.toHaveBeenCalledWith('ws_unresolvable')
-      const warnRecords = cap.records.filter(
-        (r) => r.scope === 'file-gc-sweeper' && r.level === 'warning',
-      )
-      expect(
-        warnRecords.some(
-          (r) =>
-            r.data?.workspaceId === 'ws_unresolvable' &&
-            String((r.data?.err as Error | undefined)?.message).includes('EIO'),
-        ),
-      ).toBe(true)
-    } finally {
-      cap.restore()
     }
   })
 })
