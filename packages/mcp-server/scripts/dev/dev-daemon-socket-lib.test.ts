@@ -8,6 +8,7 @@ import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { daemonLiveness } from '../../src/daemon/daemon-liveness.js'
+import { isOccupying } from '../../src/daemon/daemon-record.js'
 import { daemonRecordSchema } from '../../src/daemon/daemon-record-schema.js'
 import { DaemonNoAnswerError } from '../../src/daemon/daemon-request.js'
 import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.js'
@@ -150,10 +151,14 @@ describe('assessRecordedDaemon', () => {
   const startedAt = '2026-01-01T00:00:00.000Z'
   const recordedAt = Date.parse(startedAt)
   const record = { pid: 42, socketPath: '/s', startedAt }
+  const refused = async (): Promise<never> => {
+    throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+  }
   const seams = (over: Partial<Parameters<typeof assessRecordedDaemon>[1]> = {}) => ({
     answers: async () => false,
     isAlive: () => true,
     startMs: () => recordedAt - 5_000,
+    request: refused,
     ...over,
   })
 
@@ -162,6 +167,7 @@ describe('assessRecordedDaemon', () => {
       running: true,
       answering: true,
       process: 'daemon',
+      liveness: 'running',
     })
   })
 
@@ -170,13 +176,14 @@ describe('assessRecordedDaemon', () => {
       running: true,
       answering: false,
       process: 'daemon',
+      liveness: 'running',
     })
   })
 
   it('is not running when the recorded pid started after the record was written', async () => {
     expect(
       await assessRecordedDaemon(record, seams({ startMs: () => recordedAt + 60_000 })),
-    ).toEqual({ running: false, answering: false, process: 'foreign' })
+    ).toEqual({ running: false, answering: false, process: 'foreign', liveness: 'pid-reused' })
   })
 
   it('is not running when the recorded pid is gone', async () => {
@@ -184,7 +191,35 @@ describe('assessRecordedDaemon', () => {
       running: false,
       answering: false,
       process: 'dead',
+      liveness: 'dead',
     })
+  })
+
+  it('is running when the socket answers though the recorded pid is gone', async () => {
+    expect(
+      await assessRecordedDaemon(
+        record,
+        seams({ isAlive: () => false, answers: async () => true }),
+      ),
+    ).toEqual({ running: true, answering: true, process: 'dead', liveness: 'dead' })
+  })
+
+  it('asks a late-starting pid’s socket once, and reads its reply as the answer', async () => {
+    const answers = vi.fn(async () => false)
+    const request = vi.fn(async () => ({
+      status: 200,
+      contentType: 'application/json',
+      text: JSON.stringify({ pid: 42 }),
+    }))
+    const late = seams({ startMs: () => recordedAt + 60_000, answers, request })
+    expect(await assessRecordedDaemon(record, late)).toEqual({
+      running: true,
+      answering: true,
+      process: 'foreign',
+      liveness: 'running',
+    })
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(answers).not.toHaveBeenCalled()
   })
 
   it('takes a live pid as the daemon when the start time or the record cannot say otherwise', async () => {
@@ -209,6 +244,7 @@ describe('assessRecordedDaemon', () => {
           running: false,
           answering: false,
           process: 'foreign',
+          liveness: 'pid-reused',
         })
         const current = { ...stale, startedAt: new Date(Date.now() + 1_000).toISOString() }
         expect((await assessRecordedDaemon(current)).process).toBe('daemon')
@@ -316,6 +352,49 @@ describe('a socket that says nothing', () => {
     }
   })
 
+  it('rejects as unanswered when the connection is hung up on partway through a reply', async () => {
+    const socketPath = join(dataDirWith(null), 'midbody.sock')
+    const server = createSocketServer((socket) => {
+      socket.once('data', () => {
+        socket.write(
+          'HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 64\r\n\r\n{"pid":',
+          () => socket.destroy(),
+        )
+      })
+    })
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    // The request's own timeout is spent once the reply has begun, so nothing
+    // but the response's error bounds this: a stuck promise fails here rather
+    // than at the test timeout.
+    const settled = <T>(promise: Promise<T>) =>
+      Promise.race([
+        promise.then(
+          (value) => ({ settled: 'resolved' as const, value }),
+          (error: unknown) => ({ settled: 'rejected' as const, error }),
+        ),
+        new Promise<{ settled: 'hung' }>((hung) =>
+          setTimeout(() => hung({ settled: 'hung' }), 4_000),
+        ),
+      ])
+    try {
+      expect(
+        await settled(requestDaemon({ socketPath }, { path: '/x', timeoutMs: 1_000 })),
+      ).toEqual({
+        settled: 'rejected',
+        error: expect.objectContaining({ code: NO_ANSWER }),
+      })
+      const startedAt = '2026-01-01T00:00:00.000Z'
+      const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+      const record = { pid: 42, startedAt, socketPath, token: 't' }
+      expect(await settled(recordedDaemonLiveness(record, late))).toEqual({
+        settled: 'resolved',
+        value: 'unconfirmed',
+      })
+    } finally {
+      await new Promise<void>((closed) => server.close(() => closed()))
+    }
+  }, 15_000)
+
   it('rejects as a refused connection when nothing listens', async () => {
     const socketPath = join(dataDirWith(null), 'nobody.sock')
     const refused = await requestDaemon({ socketPath }, { path: '/x', timeoutMs: 100 }).catch(
@@ -338,6 +417,24 @@ describe('a socket that says nothing', () => {
     const gone = { pid: 42, startedAt, socketPath: join(dataDirWith(null), 'gone.sock') }
     expect(await recordedDaemonLiveness(gone, late)).toBe('pid-reused')
   })
+
+  // A spawned daemon dies on a socket something still serves, so the verdict
+  // every script acts on must read a wedged socket as occupied, not free.
+  it('reads a late-starting pid behind a wedged socket as an occupied record', async () => {
+    const startedAt = '2026-01-01T00:00:00.000Z'
+    const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+    const daemon = await wedged()
+    try {
+      const record = { pid: 42, startedAt, socketPath: daemon.socketPath, token: 't' }
+      expect(await assessRecordedDaemon(record, late)).toMatchObject({
+        running: true,
+        answering: false,
+        process: 'foreign',
+      })
+    } finally {
+      await daemon.close()
+    }
+  }, 15_000)
 })
 
 describe('isRecordWriter', () => {
@@ -443,6 +540,7 @@ describe("the liveness verdict against the daemon's own", () => {
     const seen = new Set<string>()
     let confirmedBySocket = 0
     let wedgedUnconfirmed = 0
+    let wedgedOccupied = 0
     await fc.assert(
       fc.asyncProperty(
         fc.constantFrom(true, true, true, false),
@@ -471,26 +569,45 @@ describe("the liveness verdict against the daemon's own", () => {
             if (reply.kind === 'wedged') throw new DaemonNoAnswerError('no answer within 1500ms')
             return presented === token ? reply : { status: 401, body: {} }
           }
-          const daemonSide = (
-            await daemonLiveness(record, {
-              ...identity,
-              request: async (req) => answer(req.record.token),
-            })
-          ).state
+          const daemonVerdict = await daemonLiveness(record, {
+            ...identity,
+            request: async (req) => answer(req.record.token),
+          })
+          const daemonSide = daemonVerdict.state
+          const devRequest = async (
+            _record: unknown,
+            req: { headers?: Record<string, string> },
+          ) => {
+            if (reply.kind === 'wedged') {
+              throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
+            }
+            const presented = req.headers?.authorization?.replace(/^Bearer /, '')
+            const { status, body } = answer(presented)
+            const text =
+              body === undefined ? '' : typeof body === 'string' ? body : JSON.stringify(body)
+            return { status, contentType: 'application/json', text }
+          }
           const devSide = await recordedDaemonLiveness(record, {
             ...identity,
-            request: async (_record, req) => {
-              if (reply.kind === 'wedged') {
-                throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
-              }
-              const presented = req.headers?.authorization?.replace(/^Bearer /, '')
-              const { status, body } = answer(presented)
-              const text =
-                body === undefined ? '' : typeof body === 'string' ? body : JSON.stringify(body)
-              return { status, contentType: 'application/json', text }
-            },
+            request: devRequest,
           })
           expect(devSide).toBe(daemonSide)
+          // The verdict the scripts act on is occupied exactly when the daemon
+          // would call the record held, or — whatever the pid — when something
+          // answers its socket, which a new daemon could not take either.
+          const pings = socketPath !== undefined && reply.kind === 'reply'
+          // A record without a socket is never read by these scripts; it is
+          // passed as generated so both sides judge the same record.
+          const assessed = await assessRecordedDaemon(
+            record as typeof record & { socketPath: string },
+            { ...identity, request: devRequest, answers: async () => pings },
+          )
+          expect(assessed.running).toBe(
+            isOccupying(daemonVerdict) || (daemonSide === 'dead' && pings),
+          )
+          if (reply.kind === 'wedged' && assessed.running && daemonSide === 'unconfirmed') {
+            wedgedOccupied += 1
+          }
           if (reply.kind === 'wedged' && devSide === 'unconfirmed') wedgedUnconfirmed += 1
           seen.add(devSide)
           if (daemonSide === 'running' && offset !== null && offset > 5_000) {
@@ -504,5 +621,6 @@ describe("the liveness verdict against the daemon's own", () => {
     expect([...seen].sort()).toEqual(['dead', 'pid-reused', 'running', 'unconfirmed'])
     expect(confirmedBySocket).toBeGreaterThan(0)
     expect(wedgedUnconfirmed).toBeGreaterThan(0)
+    expect(wedgedOccupied).toBeGreaterThan(0)
   })
 })

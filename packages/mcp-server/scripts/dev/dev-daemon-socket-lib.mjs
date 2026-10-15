@@ -245,31 +245,6 @@ export function isPidFileWriter(pid, writtenAtMs, seams) {
 }
 
 /**
- * The one answer to "is this checkout's daemon running", shared by the
- * wrapper's refusal to start a second one, `pnpm mcp:http:stop` and the
- * SessionStart hook: its socket answers, or the pid its record names is alive
- * AND is the process that wrote the record. A daemon too busy to answer the
- * ping is therefore still running — no second daemon, no stop — while a pid
- * reused by an unrelated process after a crash or a reboot is not.
- *
- * @param {{ pid: number, socketPath: string, startedAt?: string }} record
- * @param {{
- *   answers?: (record: { socketPath: string }) => Promise<boolean>,
- *   isAlive?: (pid: number) => boolean,
- *   startMs?: (pid: number) => number | null,
- * }} [seams]
- * @returns {Promise<{ running: boolean, answering: boolean, process: 'daemon' | 'foreign' | 'dead' }>}
- */
-export async function assessRecordedDaemon(
-  record,
-  { answers = answersPing, isAlive = isPidAlive, startMs = readProcessStartMs } = {},
-) {
-  const identity = recordedProcess(record.pid, record.startedAt, { isAlive, startMs })
-  const answering = await answers(record)
-  return { running: answering || identity === 'daemon', answering, process: identity }
-}
-
-/**
  * Long enough for a daemon busy on a large write to answer, short enough that
  * a stop run against a socket nobody serves does not appear to hang — the
  * daemon's own `daemonLiveness` waits as long.
@@ -308,15 +283,27 @@ const STATUS_ASK_TIMEOUT_MS = 1_500
  * }} [seams]
  * @returns {Promise<'running' | 'unconfirmed' | 'pid-reused' | 'dead'>}
  */
-export async function recordedDaemonLiveness(
+export async function recordedDaemonLiveness(record, seams = {}) {
+  return (await judgeLiveness(record, seams)).liveness
+}
+
+/**
+ * `recordedDaemonLiveness`'s verdict, with the process judgement it started
+ * from and — when the socket was asked — whether anything answered it.
+ *
+ * @param {{ pid: number, socketPath?: string, startedAt?: string, token?: string }} record
+ * @param {Parameters<typeof recordedDaemonLiveness>[1]} seams
+ * @returns {Promise<{ liveness: 'running' | 'unconfirmed' | 'pid-reused' | 'dead', process: 'daemon' | 'foreign' | 'dead', answered?: boolean }>}
+ */
+async function judgeLiveness(
   record,
   { isAlive = isPidAlive, startMs = readProcessStartMs, request = requestDaemon } = {},
 ) {
   const identity = recordedProcess(record.pid, record.startedAt, { isAlive, startMs })
-  if (identity === 'daemon') return 'running'
-  if (identity === 'dead') return 'dead'
+  if (identity === 'daemon') return { liveness: 'running', process: identity }
+  if (identity === 'dead') return { liveness: 'dead', process: identity }
   const { socketPath } = record
-  if (socketPath === undefined) return 'pid-reused'
+  if (socketPath === undefined) return { liveness: 'pid-reused', process: identity }
   let answer
   try {
     answer = await request(
@@ -331,9 +318,47 @@ export async function recordedDaemonLiveness(
       },
     )
   } catch (error) {
-    return error?.code === NO_ANSWER ? 'unconfirmed' : 'pid-reused'
+    const liveness = error?.code === NO_ANSWER ? 'unconfirmed' : 'pid-reused'
+    return { liveness, process: identity, answered: false }
   }
-  return answer.status === 200 && statusPid(answer.text) === record.pid ? 'running' : 'unconfirmed'
+  const confirmed = answer.status === 200 && statusPid(answer.text) === record.pid
+  return { liveness: confirmed ? 'running' : 'unconfirmed', process: identity, answered: true }
+}
+
+/**
+ * The one answer to "is this checkout's daemon running", shared by the
+ * wrapper's refusal to start a second one, `pnpm mcp:http:stop`, the built
+ * launcher and the SessionStart hook. `running` is "a daemon started now
+ * would be refused": `recordedDaemonLiveness` says the record is held
+ * (`running` or `unconfirmed`, the daemon's own `isOccupying`), or its socket
+ * answers whatever the pid says, since a daemon cannot take a socket something
+ * still serves. A daemon too busy to answer is therefore still running — no
+ * second daemon, no stop — while a pid reused by an unrelated process after a
+ * crash or a reboot, behind a socket nobody serves, is not.
+ *
+ * `answering` is for telling a healthy daemon from a busy one. The socket is
+ * asked once: where the liveness verdict already asked it, whether anything
+ * replied is the answer; otherwise the unauthenticated ping is.
+ *
+ * @param {{ pid: number, socketPath: string, startedAt?: string, token?: string }} record
+ * @param {{
+ *   answers?: (record: { socketPath: string }) => Promise<boolean>,
+ *   isAlive?: (pid: number) => boolean,
+ *   startMs?: (pid: number) => number | null,
+ *   request?: typeof requestDaemon,
+ * }} [seams]
+ * @returns {Promise<{ running: boolean, answering: boolean, process: 'daemon' | 'foreign' | 'dead', liveness: 'running' | 'unconfirmed' | 'pid-reused' | 'dead' }>}
+ */
+export async function assessRecordedDaemon(record, { answers = answersPing, ...seams } = {}) {
+  const judged = await judgeLiveness(record, seams)
+  const answering = judged.answered ?? (await answers(record))
+  const occupied = judged.liveness === 'running' || judged.liveness === 'unconfirmed'
+  return {
+    running: occupied || answering,
+    answering,
+    process: judged.process,
+    liveness: judged.liveness,
+  }
 }
 
 /**
