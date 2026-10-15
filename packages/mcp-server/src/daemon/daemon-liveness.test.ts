@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 import { answeringDaemonSocket } from './_test-daemon-socket.js'
-import { daemonLiveness } from './daemon-liveness.js'
+import { daemonLiveness, servingPidOf } from './daemon-liveness.js'
 import { DaemonNoAnswerError, requestDaemon } from './daemon-request.js'
 
 const startedAt = '2026-01-01T00:00:00.000Z'
@@ -165,5 +165,17 @@ describe('daemonLiveness', () => {
     const daemon = await answeringDaemonSocket(pid, TOKEN)
     const record = { pid: PID, startedAt, socketPath: daemon.socketPath, token: TOKEN }
     expect(await daemonLiveness(record, startedAfter)).toEqual({ state: 'unconfirmed' })
+  })
+})
+
+describe('servingPidOf', () => {
+  it.each([
+    [{ state: 'running' } as const, {}],
+    [{ state: 'unconfirmed' } as const, {}],
+    [{ state: 'unconfirmed', servingPid: 7 } as const, { servingPid: 7 }],
+    [{ state: 'pid-reused' } as const, {}],
+    [{ state: 'dead' } as const, {}],
+  ])('projects %o to %o', (liveness, expected) => {
+    expect(servingPidOf(liveness)).toEqual(expected)
   })
 })

@@ -45,6 +45,17 @@ export type DaemonLiveness =
   | { readonly state: 'pid-reused' }
   | { readonly state: 'dead' }
 
+/**
+ * The pid that answered on the record's socket where it was not the record's,
+ * as the field a result carries it in — absent in every other case, so a
+ * result spreads it without a branch of its own.
+ */
+export function servingPidOf(liveness: DaemonLiveness): { servingPid?: number } {
+  return liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
+    ? { servingPid: liveness.servingPid }
+    : {}
+}
+
 export interface DaemonLivenessSeams extends ProcessIdentitySeams {
   readonly request?: (req: DaemonRequest) => Promise<DaemonAnswer>
 }

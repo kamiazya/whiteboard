@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
+import type { DaemonLiveness } from '../daemon/daemon-liveness.js'
 import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
-import { runDaemonStatus } from './daemon-status.js'
+import { type DaemonStatusOptions, runDaemonStatus } from './daemon-status.js'
 
 // Tests inject isPidAlive and processStartMs, so no real process decides an
 // answer; all but the last describe inject parseRecord too.
@@ -187,7 +188,7 @@ describe('runDaemonStatus: valid record, its pid taken by a later process', () =
       ok: false,
       reason: 'pid-reused',
       recordFresh: false,
-      pidAlive: true,
+      pidAlive: false,
     })
     expect(result).not.toHaveProperty('pingOk')
     expect(result).not.toHaveProperty('servingPid')
@@ -361,5 +362,98 @@ describe('runDaemonStatus: a socket answering with a pid no process can have', (
     })
     expect(result).toMatchObject({ reason: 'identity-unconfirmed' })
     expect(result).not.toHaveProperty('servingPid')
+  })
+})
+
+// `pidAlive` has one meaning whichever arm reports it: something may still hold
+// the record. A pid a later process took holds nothing, alive or not.
+describe('runDaemonStatus: pidAlive across every liveness and both record arms', () => {
+  const SERVING = validRecord.pid + 1
+  const laterStart = () => Date.parse(validRecord.startedAt) + 6_000
+  const cases: readonly { liveness: DaemonLiveness; pidAlive: boolean }[] = [
+    { liveness: { state: 'running' }, pidAlive: true },
+    { liveness: { state: 'unconfirmed', servingPid: SERVING }, pidAlive: true },
+    { liveness: { state: 'unconfirmed' }, pidAlive: true },
+    { liveness: { state: 'pid-reused' }, pidAlive: false },
+    { liveness: { state: 'dead' }, pidAlive: false },
+  ]
+  const servingOf = (liveness: DaemonLiveness) =>
+    liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
+      ? { servingPid: liveness.servingPid }
+      : {}
+
+  /** Options under which a valid record's own liveness check reaches `liveness`. */
+  async function validArm(liveness: DaemonLiveness): Promise<DaemonStatusOptions> {
+    const valid = (socketPath: string) => async () =>
+      ({ kind: 'valid', record: { ...validRecord, socketPath } }) as const
+    switch (liveness.state) {
+      case 'running':
+        return {
+          dataDir: '/fake',
+          parseRecord: valid(validRecord.socketPath),
+          isPidAlive: () => true,
+          processStartMs: () => null,
+        }
+      case 'dead':
+        return {
+          dataDir: '/fake',
+          parseRecord: valid(validRecord.socketPath),
+          isPidAlive: () => false,
+        }
+      case 'pid-reused':
+        return {
+          dataDir: '/fake',
+          parseRecord: valid(validRecord.socketPath),
+          isPidAlive: () => true,
+          processStartMs: laterStart,
+        }
+      case 'unconfirmed': {
+        const daemon = await answeringDaemonSocket(liveness.servingPid ?? 0, validRecord.token)
+        return {
+          dataDir: '/fake',
+          parseRecord: valid(daemon.socketPath),
+          isPidAlive: () => true,
+          processStartMs: laterStart,
+        }
+      }
+    }
+  }
+
+  const tokenMissingArm = (liveness: DaemonLiveness): DaemonStatusOptions => ({
+    dataDir: '/fake',
+    parseRecord: async () => ({
+      kind: 'token-missing',
+      record: {
+        pid: validRecord.pid,
+        version: validRecord.version,
+        startedAt: validRecord.startedAt,
+        socketPath: '/x',
+      },
+      liveness,
+    }),
+  })
+
+  it.each(cases)('valid record, $liveness.state: pidAlive $pidAlive', async ({
+    liveness,
+    pidAlive,
+  }) => {
+    const { result } = await runDaemonStatus(await validArm(liveness))
+    expect({ pidAlive: result.pidAlive, servingPid: result.servingPid }).toEqual({
+      pidAlive,
+      servingPid: undefined,
+      ...servingOf(liveness),
+    })
+  })
+
+  it.each(cases)('token-less record, $liveness.state: pidAlive $pidAlive', async ({
+    liveness,
+    pidAlive,
+  }) => {
+    const { result } = await runDaemonStatus(tokenMissingArm(liveness))
+    expect({ pidAlive: result.pidAlive, servingPid: result.servingPid }).toEqual({
+      pidAlive,
+      servingPid: undefined,
+      ...servingOf(liveness),
+    })
   })
 })

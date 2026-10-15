@@ -1,7 +1,7 @@
 import {
-  type DaemonLiveness,
   type DaemonLivenessSeams,
   daemonLiveness,
+  servingPidOf,
 } from '../daemon/daemon-liveness.js'
 import {
   type DaemonRecordParseResult,
@@ -33,13 +33,6 @@ const STATUS_REASON = {
   unconfirmed: 'identity-unconfirmed',
 } as const
 
-/** The pid a runtime status on the record's socket named, where it was not the record's. */
-function servingPidOf(liveness: DaemonLiveness): { servingPid?: number } {
-  return liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
-    ? { servingPid: liveness.servingPid }
-    : {}
-}
-
 type StatusFields = Omit<DaemonStatusResult, 'schemaVersion' | 'ok' | 'recordFound'>
 
 /** What a record no daemon can be asked through says, `recordFound` aside. */
@@ -53,8 +46,6 @@ function unusableRecord(
       return {
         reason: 'record-token-missing',
         recordFresh: false,
-        // Alive as the other readers judge it: a pid another process took
-        // is not the daemon, and stop and run go ahead over it.
         pidAlive: isOccupying(parsed.liveness),
         ...servingPidOf(parsed.liveness),
         record: recordSummary(parsed.record),
@@ -105,7 +96,7 @@ export async function runDaemonStatus(
     return answer(1, true, {
       reason: STATUS_REASON[liveness.state],
       recordFresh: false,
-      pidAlive: liveness.state !== 'dead',
+      pidAlive: isOccupying(liveness),
       ...servingPidOf(liveness),
       record: recordSummary(parsed.record),
     })

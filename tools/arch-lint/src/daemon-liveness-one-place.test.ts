@@ -20,6 +20,12 @@
  * live daemon of another version while the first refused to start a second
  * daemon beside it, so a module importing a record schema other than that
  * reader fails here.
+ *
+ * Who serves the socket under `unconfirmed` is read in those two modules
+ * alone: `servingPidOf` projects it onto a result, `describeOccupant` and
+ * `describeUnconfirmed` say it in a sentence. Each liveness field had to reach
+ * every hand-written copy of that projection by hand, and nothing failed when
+ * one was missed, so a `.servingPid` read anywhere else fails here.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -58,6 +64,30 @@ function recordSchemas(fileName: string, source: string): string[] {
           ? [binding.imported]
           : [],
     )
+}
+
+const SERVING_PID_READERS = new Set([ONE_PLACE, ONE_READER])
+
+/**
+ * Where `source` reads a `servingPid` property — `x.servingPid`,
+ * `x?.servingPid` or `x['servingPid']`. A destructuring is not a read of a
+ * liveness: the projection's own result destructures it, and telling the two
+ * apart needs the type checker.
+ */
+function servingPidReads(fileName: string, source: string): number[] {
+  const file = parseSource(fileName, source)
+  const lines: number[] = []
+  const visit = (node: ts.Node): void => {
+    const named =
+      (ts.isPropertyAccessExpression(node) && node.name.text === 'servingPid') ||
+      (ts.isElementAccessExpression(node) &&
+        ts.isStringLiteralLike(node.argumentExpression) &&
+        node.argumentExpression.text === 'servingPid')
+    if (named) lines.push(file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1)
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return lines
 }
 
 /** Relative path -> the lower answer it imports, and why. Both-sided. */
@@ -214,6 +244,29 @@ describe("a daemon record's liveness is judged in one place", () => {
     )
     expect(
       recordSchemas('f.ts', "import { daemonLaunchOfModule } from './daemon-record-schema.js'"),
+    ).toEqual([])
+  })
+
+  it('reads who serves the socket only where liveness is judged and worded', () => {
+    for (const rel of SERVING_PID_READERS) {
+      expect(servingPidReads(rel, sourceOf(rel)), rel).not.toEqual([])
+    }
+    const reads = files
+      .map(relOf)
+      .filter((rel) => !SERVING_PID_READERS.has(rel))
+      .flatMap((rel) => servingPidReads(rel, sourceOf(rel)).map((line) => `${rel}:${line}`))
+    expect(
+      reads,
+      'project it with `servingPidOf`, or word it with `describeOccupant` / `describeUnconfirmed`',
+    ).toEqual([])
+  })
+
+  it('recognises a servingPid read by dot, optional chain and element access', () => {
+    expect(servingPidReads('f.ts', 'const a = l.servingPid')).toEqual([1])
+    expect(servingPidReads('f.ts', 'const a = l?.servingPid')).toEqual([1])
+    expect(servingPidReads('f.ts', "const a = l['servingPid']")).toEqual([1])
+    expect(
+      servingPidReads('f.ts', 'const { servingPid } = n; const o = { servingPid: 1 }'),
     ).toEqual([])
   })
 })
