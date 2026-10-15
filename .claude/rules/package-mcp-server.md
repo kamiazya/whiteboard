@@ -324,7 +324,7 @@ recorded pid is the writer; one that answers otherwise, or accepts the
 connection and stays silent past the ask's timeout, is `unconfirmed` — only
 a connection nobody accepts is `pid-reused` — and `daemon stop` then refuses
 without signalling or deleting the record. The dev scripts' stop
-(`scripts/dev/dev-daemon-socket-lib.mjs`'s `recordedDaemonLiveness`) is a
+(`packages/mcp-server/scripts/dev/dev-daemon-socket-lib.mjs`'s `recordedDaemonLiveness`) is a
 bare-node copy held to it by a parity property.
 
 ## Log redaction
