@@ -312,10 +312,10 @@ function useDocumentListReader(
 /** How long a burst of remote updates settles before the record is compared. */
 const LIST_FOLLOW_SETTLE_MS = 250
 
-/** What the list shows of each document the record holds, as one comparable value. */
 /** The workspace record, named through the adapter so pages never import the CRDT. */
 type WorkspaceRecord = Parameters<typeof readWorkspaceNodes>[0]
 
+/** What the list shows of each document the record holds, as one comparable value. */
 function listedShapeOf(record: WorkspaceRecord): string {
   const rows = readWorkspaceNodes(record).flatMap((node) =>
     node.type === 'document'
