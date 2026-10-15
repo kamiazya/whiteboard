@@ -107,4 +107,83 @@ describe('useBrowserDocumentController delete', () => {
     expect(result.current.snapshot?.documentId).toBe(C2)
     expect(await store.getDefaultDocumentId()).toBe(C2)
   })
+
+  it('a delete whose next open fails leaves the screen, not the deleted document', async () => {
+    // The delete stands, so the recovery the page offers is load-failed; a
+    // snapshot still naming the removed document would keep editing a row
+    // that no longer exists.
+    const store = new BrowserStoreDouble()
+    await store.setDefaultDocumentId(C1)
+    await store.save(snap)
+    await store.save({ ...snap, documentId: C2, path: 'other', name: 'Other' })
+    const { result } = renderHook(() =>
+      useBrowserDocumentController(store.index, {
+        loro: store.loro,
+        pointer: store.pointer,
+        clock: store.clock,
+      }),
+    )
+    await act(async () => {})
+    expect(result.current.snapshot?.documentId).toBe(C1)
+    store.index.listDocuments = async () => {
+      throw new Error('the index could not be listed')
+    }
+    await act(async () => {
+      await result.current.deleteDocument()
+    })
+    expect(result.current.snapshot).toBeNull()
+    expect(result.current.persistence).toMatchObject({ kind: 'degraded', reason: 'load-failed' })
+    expect(
+      await store.index.resolveDocumentById({
+        workspaceId: getBrowserWorkspaceId(),
+        documentId: C1,
+      }),
+    ).toBeNull()
+  })
+
+  it('a switch to the document being deleted, landing after the delete, does not bring it back', async () => {
+    // The switch read the row before the delete removed it, so nothing it
+    // does afterwards can see the row is gone; only the generation the
+    // delete stamps stops it from committing.
+    const store = new BrowserStoreDouble()
+    await store.setDefaultDocumentId(C1)
+    await store.save(snap)
+    await store.save({ ...snap, documentId: C2, path: 'other', name: 'Other' })
+    let parkC1 = false
+    let arrived = () => {}
+    let release = () => {}
+    const switchParked = new Promise<void>((resolve) => {
+      arrived = resolve
+    })
+    const parked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { result } = renderHook(() =>
+      useBrowserDocumentController(store.index, {
+        loro: store.loro,
+        pointer: store.pointer,
+        clock: async (ids) => {
+          if (parkC1 && ids.includes(C1)) {
+            arrived()
+            await parked
+          }
+          return store.clock(ids)
+        },
+      }),
+    )
+    await act(async () => {})
+    expect(result.current.snapshot?.documentId).toBe(C1)
+    parkC1 = true
+    let switched: boolean | undefined
+    await act(async () => {
+      const pending = result.current.switchDocument(C1)
+      await switchParked
+      await result.current.deleteDocument()
+      release()
+      switched = await pending
+    })
+    expect(switched).toBe(false)
+    expect(result.current.snapshot?.documentId).toBe(C2)
+    expect(await store.getDefaultDocumentId()).toBe(C2)
+  })
 })
