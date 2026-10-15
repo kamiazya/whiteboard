@@ -1,8 +1,8 @@
 import { fileURLToPath } from 'node:url'
+import { daemonLiveness } from '../../../daemon/daemon-liveness.js'
 import { parseDaemonRecord } from '../../../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../../../daemon/version-skew.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
-import { isPidAlive } from '../../../shared/process-alive.js'
 import { getLogger } from '../../log.js'
 import { moveLegacyDataDirUnderTenant } from '../../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
@@ -33,15 +33,16 @@ function describeDatabase(dataDir: string): string {
 // migrates under a live daemon of another version changes the schema beneath
 // it. Startup is not blocked: the two can be compatible, and refusing would
 // strand a user whose old daemon they cannot easily stop. A record whose
-// process is gone, or is this process, is a leftover rather than a neighbour.
+// process is gone, whose pid another process took, or that names this process
+// is a leftover rather than a neighbour.
 async function warnOnDaemonVersionSkew(dataDir: string): Promise<void> {
   try {
     const parsed = await parseDaemonRecord(dataDir)
     if (parsed.kind !== 'valid' && parsed.kind !== 'token-missing') return
     const { pid, version } = parsed.record
-    if (pid === process.pid || !isPidAlive(pid)) return
+    if (pid === process.pid) return
     const skew = describeDaemonVersionSkew(version, PACKAGE_VERSION)
-    if (skew === null) return
+    if (skew === null || (await daemonLiveness(parsed.record)) !== 'running') return
     log.warning(
       { dataDir, pid, recordedVersion: version, runningVersion: PACKAGE_VERSION },
       `${skew}; migrating in-process may change the schema under it. Restart that daemon on the same version.`,

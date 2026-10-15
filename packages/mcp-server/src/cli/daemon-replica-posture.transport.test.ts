@@ -23,9 +23,10 @@ let listing: { status: number; body: string }
 const recordAt = (socketPath: string): DaemonRecordParseResult => ({
   kind: 'valid',
   record: {
+    // This process stands in for the daemon, and wrote the record after it started.
     pid: process.pid,
     version: '0.0.1',
-    startedAt: '2026-01-01T00:00:00.000Z',
+    startedAt: new Date().toISOString(),
     socketPath,
     token: 'the-daemon-token',
   },

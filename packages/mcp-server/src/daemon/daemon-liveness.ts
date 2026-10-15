@@ -1,0 +1,76 @@
+// Whether the daemon a daemon.json names is still running — answered here
+// once for every reader of the record, because each reader that chose its own
+// check chose a different one, and `daemon doctor` called a pid another
+// process had taken "running" beside a `daemon status` that said otherwise.
+//
+// The pid's start time decides on the plain path (`shared/process-identity`).
+// When it says the pid belongs to a process that started after the record,
+// the record's socket is asked before that is believed: `/proc/stat`'s btime
+// moves with a stepped wall clock while a process's start ticks do not, so a
+// forward step of a few seconds makes a live daemon look as if it started
+// after its own record. Believing that would delete the record of a daemon
+// still serving, and the next start would fail on its socket. The daemon's
+// runtime status, asked under the record's token, names its pid; naming the
+// recorded one makes it the writer whatever /proc says. The socket is asked
+// on that ambiguous path alone, so the plain path costs no connection.
+
+import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
+import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { type ProcessIdentitySeams, recordedProcess } from '../shared/process-identity.js'
+import { type DaemonAnswer, type DaemonRequest, requestDaemon } from './daemon-request.js'
+
+/**
+ * - `running`: the pid is the process that wrote the record.
+ * - `unconfirmed`: the pid's start time says it is not the writer, yet a
+ *   daemon answers on the record's socket without confirming that pid. Something
+ *   is serving there, so nothing may treat the record as a leftover — and
+ *   nothing may signal the pid either.
+ * - `pid-reused`: the pid is alive, started after the record, and nothing
+ *   answers on the record's socket.
+ * - `dead`: no process has the pid.
+ */
+export type DaemonLiveness = 'running' | 'unconfirmed' | 'pid-reused' | 'dead'
+
+/** What a reader knows of a record: the pid at least, the rest where it parsed. */
+export interface RecordedDaemon {
+  readonly pid: number
+  readonly startedAt?: string
+  readonly socketPath?: string
+  readonly token?: string
+}
+
+export interface DaemonLivenessSeams extends ProcessIdentitySeams {
+  readonly request?: (req: DaemonRequest) => Promise<DaemonAnswer>
+}
+
+/**
+ * Long enough for a daemon busy on a large write to answer, short enough that
+ * a command run against a socket nobody serves does not appear to hang.
+ */
+const SOCKET_ASK_TIMEOUT_MS = 1_500
+
+export async function daemonLiveness(
+  record: RecordedDaemon,
+  { request = requestDaemon, ...identitySeams }: DaemonLivenessSeams = {},
+): Promise<DaemonLiveness> {
+  const writtenAtMs = record.startedAt === undefined ? Number.NaN : Date.parse(record.startedAt)
+  const identity = recordedProcess(record.pid, writtenAtMs, identitySeams)
+  if (identity === 'writer') return 'running'
+  if (identity === 'dead') return 'dead'
+  const { socketPath } = record
+  if (socketPath === undefined) return 'pid-reused'
+  let answer: DaemonAnswer
+  try {
+    answer = await request({
+      record: { socketPath, ...(record.token === undefined ? {} : { token: record.token }) },
+      method: 'GET',
+      path: runtimeStatusApiUrl(),
+      timeoutMs: SOCKET_ASK_TIMEOUT_MS,
+    })
+  } catch {
+    return 'pid-reused'
+  }
+  const status = runtimeStatusResponseSchema.safeParse(answer.body)
+  const confirmed = answer.status === 200 && status.success && status.data.pid === record.pid
+  return confirmed ? 'running' : 'unconfirmed'
+}

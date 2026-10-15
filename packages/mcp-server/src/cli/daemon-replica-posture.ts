@@ -13,7 +13,6 @@
  * its live sessions never hear about. The daemon record supplies both the
  * socket and the token, exactly as the native host reaches it.
  */
-import { request as httpRequest } from 'node:http'
 import {
   replicaKeyRotateApiUrl,
   replicaTierApiUrl,
@@ -30,73 +29,24 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType, z } from 'zod'
+import { daemonLiveness } from '../daemon/daemon-liveness.js'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
+import { type DaemonAnswer, type DaemonRequest, requestDaemon } from '../daemon/daemon-request.js'
 import {
   type DaemonRotateReplicaKeyResult,
   type DaemonSetReplicaTierResult,
   daemonRotateReplicaKeyResultSchema,
   daemonSetReplicaTierResultSchema,
 } from '../shared/api-contracts/daemon-replica-posture.js'
-import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
-
-export interface DaemonRequest {
-  readonly record: DaemonRecord
-  readonly method: 'GET' | 'POST' | 'PUT'
-  readonly path: string
-  readonly body?: unknown
-}
-
-interface DaemonAnswer {
-  readonly status: number
-  /** The JSON body, or the raw text when it is not JSON. */
-  readonly body: unknown
-}
-
-/** One request over the daemon's socket under its token, answered as JSON. */
-function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
-  return new Promise((resolve, reject) => {
-    const payload = req.body === undefined ? undefined : JSON.stringify(req.body)
-    const outgoing = httpRequest(
-      {
-        socketPath: req.record.socketPath,
-        method: req.method,
-        path: req.path,
-        headers: {
-          authorization: `Bearer ${req.record.token}`,
-          accept: 'application/json',
-          ...(payload === undefined
-            ? {}
-            : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }),
-        },
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.on('error', reject)
-        res.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8')
-          let body: unknown = text
-          try {
-            body = text === '' ? undefined : JSON.parse(text)
-          } catch {
-            // Not JSON: reported as the text it was.
-          }
-          resolve({ status: res.statusCode ?? 0, body })
-        })
-      },
-    )
-    outgoing.on('error', reject)
-    if (payload !== undefined) outgoing.write(payload)
-    outgoing.end()
-  })
-}
 
 interface PostureOptions {
   dataDir: string
   workspaceId: string
   parseRecord?: (dataDir: string) => Promise<DaemonRecordParseResult>
   isPidAlive?: (pid: number) => boolean
+  /** When a pid's process started; null where the platform cannot say. */
+  processStartMs?: (pid: number) => number | null
   request?: (req: DaemonRequest) => Promise<DaemonAnswer>
 }
 
@@ -123,7 +73,6 @@ async function runningDaemon(
   options: PostureOptions,
 ): Promise<{ record: DaemonRecord } | { refusal: Refused }> {
   const parsed = await (options.parseRecord ?? parseDaemonRecord)(options.dataDir)
-  const isAlive = options.isPidAlive ?? defaultIsPidAlive
   const { workspaceId } = options
   const none = (message: string) => ({
     refusal: refused(workspaceId, 'daemon-not-running', message),
@@ -131,7 +80,19 @@ async function runningDaemon(
   if (parsed.kind === 'missing') return none('no daemon record found under the data directory')
   if (parsed.kind === 'malformed') return none('the daemon record cannot be read')
   if (parsed.kind === 'token-missing') return none('the daemon record carries no token')
-  if (!isAlive(parsed.record.pid)) return none(`daemon pid ${parsed.record.pid} is not running`)
+  const { pid } = parsed.record
+  const liveness = await daemonLiveness(parsed.record, {
+    isAlive: options.isPidAlive,
+    startMs: options.processStartMs,
+    ...(options.request === undefined ? {} : { request: options.request }),
+  })
+  if (liveness === 'dead') return none(`daemon pid ${pid} is not running`)
+  if (liveness === 'pid-reused') return none(`daemon pid ${pid} now belongs to another process`)
+  if (liveness === 'unconfirmed') {
+    return none(
+      `a daemon answers on the recorded socket, but not as pid ${pid}, which the record names`,
+    )
+  }
   return { record: parsed.record }
 }
 

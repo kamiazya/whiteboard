@@ -1,12 +1,13 @@
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { z } from 'zod'
 import {
   assertDataDirOwnedByUser,
   DATA_DIR,
   readFileOwnedByUser,
 } from '../shared/data-dir-secure.js'
-import { isPidAlive } from '../shared/process-alive.js'
 import { writeFileAtomic } from '../shared/write-file-atomic.js'
+import { daemonLiveness } from './daemon-liveness.js'
 import {
   type DaemonRecord,
   type DaemonRecordWrite,
@@ -28,21 +29,34 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
 }
 
 /**
+ * What a record this build cannot interpret still says about its daemon: the
+ * pid it must, and whatever else of the liveness fields reads as itself.
+ */
+const recordedDaemonSchema = daemonRecordBaseSchema.pick({ pid: true }).extend({
+  startedAt: z.string().optional().catch(undefined),
+  socketPath: z.string().min(1).optional().catch(undefined),
+  token: z.string().min(1).optional().catch(undefined),
+})
+
+/**
  * The running daemon's record, or `null` when there is none.
  *
  * `null` is what a caller reads as "no daemon is running" before it deletes
  * the record and starts a new daemon, so it is only returned where that is safe:
  * ENOENT; text that is not a JSON object (writes are atomic, so that is a
  * damaged file, not a half-written one, and it names no process); and a
- * record this build cannot interpret whose `pid` is not running.
+ * record this build cannot interpret whose daemon `daemonLiveness` finds gone
+ * — its pid dead, or taken by a later process with nothing answering on the
+ * socket it names.
  *
  * Two cases throw instead, each naming the file, because answering `null`
  * would start a second daemon beside one still serving:
  * - the record exists but cannot be READ;
- * - the record cannot be interpreted but names a pid that is ALIVE — likeliest
- *   a daemon of another version, whose record this schema refuses.
- * A live pid can also be an unrelated process that reused it; the message
- * says to remove the file then, since only a person can tell the two apart.
+ * - the record cannot be interpreted but its daemon is still there —
+ *   likeliest one of another version, whose record this schema refuses.
+ * Where the platform cannot tell a process's start time, a live pid can also
+ * be an unrelated process that reused it; the message says to remove the file
+ * then, since only a person can tell the two apart.
  */
 export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
   assertDataDirOwnedByUser(dataDir)
@@ -64,8 +78,16 @@ export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<Daem
   }
   const result = daemonRecordSchema.safeParse(raw)
   if (result.success) return result.data
-  const named = daemonRecordBaseSchema.pick({ pid: true }).safeParse(raw)
-  if (named.success && isPidAlive(named.data.pid)) {
+  const named = recordedDaemonSchema.safeParse(raw)
+  if (!named.success) return null
+  const liveness = await daemonLiveness(named.data)
+  if (liveness === 'unconfirmed') {
+    throw new Error(
+      `the daemon record ${path} cannot be interpreted by this version, and a daemon answers on its socket ${named.data.socketPath}. ` +
+        'If that is a whiteboard daemon of another version, stop it with that version.',
+    )
+  }
+  if (liveness === 'running') {
     throw new Error(
       `the daemon record ${path} cannot be interpreted by this version, but names pid ${named.data.pid}, which is running. ` +
         'If that is a whiteboard daemon of another version, stop it with that version; if it is not a daemon, remove the file.',

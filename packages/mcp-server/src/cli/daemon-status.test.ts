@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { runDaemonStatus } from './daemon-status.js'
 
 // All tests inject parseRecord, isPidAlive and processStartMs — no filesystem or process access.
@@ -169,6 +170,46 @@ describe('runDaemonStatus: valid record, its pid taken by a later process', () =
       processStartMs: () => Date.parse(validRecord.startedAt) + 60_000,
     })
     expect(exitCode).toBe(1)
-    expect(result).toMatchObject({ ok: false, reason: 'pid-reused', recordFresh: false })
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'pid-reused',
+      recordFresh: false,
+      pidAlive: true,
+    })
+  })
+})
+
+// A forward wall-clock step moves /proc/stat's btime and not a process's start
+// ticks, so a live daemon can read as having started after its own record.
+describe('runDaemonStatus: a live daemon after the wall clock stepped forward', () => {
+  const steppedStart = () => Date.parse(validRecord.startedAt) + 6_000
+
+  it('reports the daemon running when its socket names the recorded pid', async () => {
+    const daemon = await answeringDaemonSocket(validRecord.pid, validRecord.token)
+    const { result, exitCode } = await runDaemonStatus({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'valid',
+        record: { ...validRecord, socketPath: daemon.socketPath },
+      }),
+      isPidAlive: () => true,
+      processStartMs: steppedStart,
+    })
+    expect(result).toMatchObject({ ok: true, reason: null, pidAlive: true })
+    expect(exitCode).toBe(0)
+  })
+
+  it('asks the socket only when the start time contradicts the record', async () => {
+    const daemon = await answeringDaemonSocket(validRecord.pid, validRecord.token)
+    await runDaemonStatus({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'valid',
+        record: { ...validRecord, socketPath: daemon.socketPath },
+      }),
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(validRecord.startedAt) - 1_000,
+    })
+    expect(daemon.asked).toEqual([])
   })
 })

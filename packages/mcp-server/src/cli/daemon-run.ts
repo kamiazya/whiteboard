@@ -7,6 +7,7 @@
 // removed and `stopped` settles; the dispatcher waits on it.
 
 import { nanoid } from 'nanoid'
+import { daemonLiveness } from '../daemon/daemon-liveness.js'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import { daemonLaunchOfModule } from '../daemon/daemon-record-schema.js'
 import {
@@ -29,7 +30,6 @@ import {
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { recordedProcessOf } from '../shared/process-identity.js'
 
 export type DaemonRunOutcome =
   | {
@@ -183,8 +183,27 @@ async function resolveStartupToken(
 }
 
 // A daemon.json that outlived its daemon can name a pid a later process took;
-// `recordedProcessOf` answers 'writer' only for the process that wrote it, so
-// the refusal below is never over an unrelated process.
+// `daemonLiveness` answers 'running' only for the process that wrote it, so
+// the refusal is never over an unrelated process — and 'unconfirmed' when a
+// daemon answers on the record's socket regardless, which a start would only
+// collide with.
+async function refusalOverRecord(dataDir: string): Promise<DaemonRunOutcome | null> {
+  const existing = await loadDaemonRecord(dataDir)
+  if (existing === null) return null
+  const liveness = await daemonLiveness(existing)
+  if (liveness === 'running') {
+    return {
+      kind: 'refused',
+      message: 'A daemon is already running. Stop it first with: whiteboard daemon stop --json',
+    }
+  }
+  if (liveness !== 'unconfirmed') return null
+  return {
+    kind: 'refused',
+    message: `A daemon answers on ${existing.socketPath}, but not as pid ${existing.pid}, which daemon.json names. Stop the process serving that socket first.`,
+  }
+}
+
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
   // An explicit --data-dir must govern ALL persistence (sqlite db, document
   // blobs, exports), not just the daemon registry file. Redirect the shared
@@ -202,13 +221,8 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   const refusal = startupEnvRefusal(options.env ?? process.env, options)
   if (refusal !== null) return refusal.outcome
 
-  const existing = await loadDaemonRecord(dataDir)
-  if (existing !== null && recordedProcessOf(existing) === 'writer') {
-    return {
-      kind: 'refused',
-      message: 'A daemon is already running. Stop it first with: whiteboard daemon stop --json',
-    }
-  }
+  const occupied = await refusalOverRecord(dataDir)
+  if (occupied !== null) return occupied
 
   const resolved = await resolveStartupToken(options)
   if ('outcome' in resolved) return resolved.outcome

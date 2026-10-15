@@ -1,3 +1,4 @@
+import { type DaemonLiveness, daemonLiveness } from '../daemon/daemon-liveness.js'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../daemon/version-skew.js'
 import {
@@ -6,12 +7,13 @@ import {
   daemonDoctorResultSchema,
 } from '../shared/api-contracts/daemon-doctor.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
 
 export interface DaemonDoctorOptions {
   dataDir: string
   parseRecord?: (dataDir: string) => Promise<DaemonRecordParseResult>
   isPidAlive?: (pid: number) => boolean
+  /** When a pid's process started; null where the platform cannot say. */
+  processStartMs?: (pid: number) => number | null
   runningVersion?: string
 }
 
@@ -43,11 +45,40 @@ function unusableRecordCheck(
   }
 }
 
+// Summaries name no path: the support bundle embeds them and refuses one.
+function processCheck(liveness: DaemonLiveness, pid: number): DaemonDoctorCheck {
+  switch (liveness) {
+    case 'running':
+      return { id: 'daemon.process', status: 'ok', summary: 'Daemon process is running.' }
+    case 'dead':
+      return {
+        id: 'daemon.process',
+        status: 'error',
+        summary: 'Daemon process is not running.',
+        remediation: 'Start the daemon: whiteboard daemon run',
+      }
+    case 'pid-reused':
+      return {
+        id: 'daemon.process',
+        status: 'error',
+        summary: `Daemon process is not running (pid ${pid} now belongs to another process).`,
+        remediation: 'Start the daemon: whiteboard daemon run',
+      }
+    case 'unconfirmed':
+      return {
+        id: 'daemon.process',
+        status: 'error',
+        summary: `A daemon answers on the recorded socket, but not as pid ${pid}, which the record names.`,
+        remediation:
+          'Stop the process serving the socket named in daemon.json, then start the daemon: whiteboard daemon run',
+      }
+  }
+}
+
 export async function runDaemonDoctor(
   options: DaemonDoctorOptions,
 ): Promise<{ result: DaemonDoctorResult; exitCode: 0 | 1 }> {
   const parse = options.parseRecord ?? parseDaemonRecord
-  const isAlive = options.isPidAlive ?? defaultIsPidAlive
 
   const checks: DaemonDoctorCheck[] = []
   const errorResult = (): { result: DaemonDoctorResult; exitCode: 1 } => ({
@@ -66,7 +97,11 @@ export async function runDaemonDoctor(
     return errorResult()
   }
 
-  const alive = isAlive(parsed.record.pid)
+  const liveness = await daemonLiveness(parsed.record, {
+    isAlive: options.isPidAlive,
+    startMs: options.processStartMs,
+  })
+  const alive = liveness === 'running'
 
   checks.push({
     id: 'daemon.record',
@@ -74,12 +109,7 @@ export async function runDaemonDoctor(
     summary: 'Daemon record found and valid.',
   })
 
-  checks.push({
-    id: 'daemon.process',
-    status: alive ? 'ok' : 'error',
-    summary: alive ? 'Daemon process is running.' : 'Daemon process is not running.',
-    remediation: alive ? undefined : 'Start the daemon: whiteboard daemon run',
-  })
+  checks.push(processCheck(liveness, parsed.record.pid))
 
   const skew = describeDaemonVersionSkew(
     parsed.record.version,
