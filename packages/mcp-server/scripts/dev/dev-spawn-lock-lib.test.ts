@@ -128,10 +128,10 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       staleAfterMs: 10_000,
       isPidAlive,
     })
-    expect(result).toBe('acquired')
+    expect(result).toEqual({ kind: 'acquired' })
   })
 
-  it('returns held-by-other on an immediate second call from a live holder', () => {
+  it('returns held on an immediate second call from a live holder', () => {
     acquireSpawnLock({ lockPath, meta: { pid: process.pid }, staleAfterMs: 10_000, isPidAlive })
     const second = acquireSpawnLock({
       lockPath,
@@ -139,7 +139,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       staleAfterMs: 10_000,
       isPidAlive,
     })
-    expect(second).toBe('held-by-other')
+    expect(second).toEqual({ kind: 'held', holderPid: process.pid })
   })
 
   it('steals a lock whose recorded pid is dead', () => {
@@ -155,10 +155,10 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       staleAfterMs: 10_000,
       isPidAlive: () => false,
     })
-    expect(stolen).toBe('acquired')
+    expect(stolen).toEqual({ kind: 'acquired' })
   })
 
-  it('never lets a losing stealer clobber the winner: a failed atomic rename degrades to held-by-other without touching the winner lock (TOCTOU regression)', () => {
+  it('never lets a losing stealer clobber the winner: a failed atomic rename degrades to held without touching the winner lock (TOCTOU regression)', () => {
     acquireSpawnLock({
       lockPath,
       meta: { pid: 999_999 },
@@ -171,7 +171,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       staleAfterMs: 10_000,
       isPidAlive: () => false,
     })
-    expect(winner).toBe('acquired')
+    expect(winner).toEqual({ kind: 'acquired' })
     const winnerContent = readFileSync(lockPath, 'utf8')
 
     // Simulates a second stealer that inspected the same stale snapshot but
@@ -189,14 +189,14 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       },
     })
 
-    expect(loser).toBe('held-by-other')
+    expect(loser).toEqual({ kind: 'held', holderPid: process.pid })
     expect(readFileSync(lockPath, 'utf8')).toBe(winnerContent)
   })
 
   it.each([
     ['a newer mtime', new Date()],
     ['the same mtime', new Date(0)],
-  ])('puts back a newer holder with %s a stealer moved by mistake, staying held-by-other', (_label, newerMtime) => {
+  ])('puts back a newer holder with %s a stealer moved by mistake, staying held', (_label, newerMtime) => {
     acquireSpawnLock({
       lockPath,
       meta: { pid: 999_999 },
@@ -219,7 +219,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
         renameSyncReal(from, to)
       },
     })
-    expect(result).toBe('held-by-other')
+    expect(result).toEqual({ kind: 'held', holderPid: 777 })
     expect(readFileSync(lockPath, 'utf8')).toBe(fresh)
     expect(readdirSync(dir).filter((name) => name.includes('.stale-'))).toEqual([])
   })
@@ -242,11 +242,11 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
         renameSyncReal(from, to)
       },
     })
-    expect(result).toBe('acquired')
+    expect(result).toEqual({ kind: 'acquired' })
     expect(calls).toEqual(['rename'])
   })
 
-  it('returns held-by-other when a steal-retry loses to a concurrent EEXIST', () => {
+  it('returns held when a steal-retry loses to a concurrent EEXIST', () => {
     acquireSpawnLock({
       lockPath,
       meta: { pid: 999_999 },
@@ -263,7 +263,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
         throw eexist
       },
     })
-    expect(result).toBe('held-by-other')
+    expect(result).toEqual({ kind: 'held', holderPid: null })
   })
 
   it('never checks existence before creating: the injected open() is called first, with the wx flag', () => {
@@ -286,11 +286,11 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
         closeSyncReal(fd)
       },
     })
-    expect(result).toBe('acquired')
+    expect(result).toEqual({ kind: 'acquired' })
     expect(calls[0]).toBe('open:wx')
   })
 
-  it('degrades to held-by-other on an unexpected fs error instead of throwing', () => {
+  it('degrades to held on an unexpected fs error instead of throwing', () => {
     const boom = new Error('boom')
     const result = acquireSpawnLock({
       lockPath,
@@ -301,7 +301,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
         throw boom
       },
     })
-    expect(result).toBe('held-by-other')
+    expect(result).toEqual({ kind: 'held', holderPid: null })
   })
 
   it('releases a lock recording our own pid', () => {
@@ -313,7 +313,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       staleAfterMs: 10_000,
       isPidAlive,
     })
-    expect(reacquired).toBe('acquired')
+    expect(reacquired).toEqual({ kind: 'acquired' })
   })
 
   it('leaves a lock recording a different pid untouched (never clobbers a successor)', () => {
@@ -325,7 +325,22 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       staleAfterMs: 10_000,
       isPidAlive,
     })
-    expect(stillHeld).toBe('held-by-other')
+    expect(stillHeld).toEqual({ kind: 'held', holderPid: 424_242 })
+  })
+
+  it.each([
+    ['names no pid', JSON.stringify({ startedAt: 'x' })],
+    ['is not JSON', 'not json'],
+    ['names a pid that is no pid', JSON.stringify({ pid: -1 })],
+  ])('reports no holder pid for a live lock whose metadata %s', (_label, text) => {
+    writeFileSync(lockPath, text)
+    const result = acquireSpawnLock({
+      lockPath,
+      meta: { pid: process.pid },
+      staleAfterMs: 10_000,
+      isPidAlive,
+    })
+    expect(result).toEqual({ kind: 'held', holderPid: null })
   })
 
   it('is a no-op (never throws) when the lock file is already gone', () => {

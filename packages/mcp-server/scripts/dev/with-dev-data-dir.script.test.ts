@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
+import { devSpawnLockPath } from './with-dev-data-dir-lib.mjs'
 
 const WRAPPER = resolve(import.meta.dirname, 'with-dev-data-dir.mjs')
 const STOP = resolve(import.meta.dirname, 'stop-http-dev-daemon.mjs')
@@ -472,7 +473,7 @@ describe("with-dev-data-dir.mjs and another wrapper's pid file", () => {
 describe('with-dev-data-dir.mjs started by the holder of the spawn lock', () => {
   it('starts its watcher under the lock its parent holds', async () => {
     const { cwd } = fakeCheckout()
-    const lockPath = join(cwd, 'data', 'dev-daemon-spawn.lock')
+    const lockPath = devSpawnLockPath(join(cwd, 'data'))
     writeFileSync(lockPath, JSON.stringify({ pid: process.pid }))
 
     launchWrapper(cwd)

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import {
   assessRecordedDaemon,
@@ -19,6 +19,7 @@ import {
 } from './dev-spawn-lock-lib.mjs'
 import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
 import {
+  devSpawnLockPath,
   devWrapperPidPath,
   ensureDevDataDirSecured,
   resolveDevDataDirEnv,
@@ -79,8 +80,9 @@ async function handOverIfRunning() {
 // record appears or the child exits. The hook starts this wrapper as its direct
 // child while holding that lock, so a lock held by the parent is this start's
 // own.
-const lockPath = join(env.WHITEBOARD_DATA_DIR, 'dev-daemon-spawn.lock')
+const lockPath = devSpawnLockPath(env.WHITEBOARD_DATA_DIR)
 let ownsLock = false
+let lockHolderPid = null
 function releaseLock() {
   if (ownsLock) releaseSpawnLock({ lockPath, ownerPid: process.pid })
   ownsLock = false
@@ -90,27 +92,24 @@ function exitReleasingLock(code) {
   process.exit(code)
 }
 function tryLock() {
-  const verdict = acquireSpawnLock({
+  const claim = acquireSpawnLock({
     lockPath,
     meta: { pid: process.pid, startedAt: new Date().toISOString(), repoRoot },
     staleAfterMs: resolveSpawnLockStaleMs(process.env),
     isPidAlive,
   })
-  if (verdict === 'acquired') ownsLock = true
-  return verdict === 'acquired' || lockHolderPid() === process.ppid
-}
-function lockHolderPid() {
-  try {
-    return JSON.parse(readFileSync(lockPath, 'utf8'))?.pid ?? null
-  } catch {
-    return null
+  if (claim.kind === 'acquired') {
+    ownsLock = true
+    return true
   }
+  lockHolderPid = claim.holderPid
+  return lockHolderPid === process.ppid
 }
 
 await handOverIfRunning()
 if (!tryLock()) {
   console.error(
-    `[with-dev-data-dir] another dev daemon is starting for ${env.WHITEBOARD_DATA_DIR} (pid ${lockHolderPid()} holds ${lockPath}); waiting for it to come up.`,
+    `[with-dev-data-dir] another dev daemon is starting for ${env.WHITEBOARD_DATA_DIR} (pid ${lockHolderPid} holds ${lockPath}); waiting for it to come up.`,
   )
   const waitMs = resolveReadyTimeoutMs(process.env)
   const startedAt = Date.now()
