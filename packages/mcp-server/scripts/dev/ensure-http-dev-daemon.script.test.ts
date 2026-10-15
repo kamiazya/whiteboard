@@ -344,6 +344,11 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       expect(exitCode).not.toBe(0)
       expect(countSpawns()).toBe(0)
       expect(stderr).toContain('no second daemon was started')
+      // The status ask is what went unanswered here, not the ping, so the
+      // line names that ask's own wait and does not vouch for the pid.
+      expect(stderr).toContain('did not answer /api/runtime/status within 1500ms')
+      expect(stderr).not.toContain('3000ms')
+      expect(stderr).toContain(`recorded pid ${process.pid}, unconfirmed`)
     },
     30_000,
   )

@@ -15,6 +15,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createServer as createSocketServer, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -269,6 +270,38 @@ describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running',
     expect(second.stderr).toMatch(/reusing the dev daemon/)
     expect(existsSync(pidFile)).toBe(false)
   })
+
+  // The record's pid started after it, so only the socket speaks for the
+  // daemon: the line names the ask that went unanswered and does not vouch
+  // for a pid nothing confirmed.
+  it('hands over to a wedged socket naming the status ask and an unconfirmed pid', async () => {
+    const { cwd, pidFile } = fakeCheckout()
+    const socketPath = join(cwd, 'data', 'wedged.sock')
+    const held: Socket[] = []
+    const wedged = createSocketServer((socket) => held.push(socket))
+    await new Promise<void>((listening) => wedged.listen(socketPath, () => listening()))
+    cleanups.push(() => {
+      for (const socket of held) socket.destroy()
+      wedged.close()
+    })
+    writeFileSync(
+      join(cwd, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: process.pid,
+        socketPath,
+        token: 't',
+        startedAt: '2000-01-01T00:00:00.000Z',
+      }),
+    )
+
+    const second = await runWrapper(cwd)
+
+    expect(second.status, second.stderr).toBe(0)
+    expect(second.stderr).toContain(
+      `(recorded pid ${process.pid}, unconfirmed) (busy: it did not answer /api/runtime/status within 1500ms)`,
+    )
+    expect(existsSync(pidFile)).toBe(false)
+  }, 30_000)
 
   // A built daemon runs dist/, so handing a watch-mode start over to it as if
   // it were the dev daemon leaves every source edit without effect.
