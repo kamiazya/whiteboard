@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
+import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 
 // Tests inject isPidAlive and processStartMs, so no real process decides an
@@ -306,5 +307,42 @@ describe('runDaemonDoctor: a record this build cannot interpret', () => {
     const { result } = await doctorOver(noToken, true)
     expect(result.checks[0]).toMatchObject({ id: 'daemon.record', status: 'error' })
     expect(result.checks[0]?.remediation).toMatch(/^Stop that daemon/)
+  })
+})
+
+// The ownership check refuses the directory before the record is opened, so
+// whether a daemon still serves there is unknown: removing its record would
+// let the next `daemon run` start beside it.
+describe.skipIf(!CHMOD_IS_OBSERVABLE)('runDaemonDoctor: a data dir it refuses to read', () => {
+  let dataDir: string
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'daemon-doctor-unreadable-'))
+  })
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  it.each([
+    ['holding the record of a live daemon', true],
+    ['holding no record', false],
+  ])('names the cause and its fix, %s, and never advises removal', async (_, withRecord) => {
+    if (withRecord) {
+      await writeFile(
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({ ...validRecord, pid: process.pid }),
+      )
+    }
+    await chmod(dataDir, 0o777)
+    const { result, exitCode } = await runDaemonDoctor({ dataDir })
+    expect(exitCode).toBe(1)
+    expect(result.checks).toEqual([
+      expect.objectContaining({
+        id: 'daemon.record',
+        status: 'error',
+        summary: 'Daemon record cannot be read.',
+        detail: expect.stringContaining(`chmod 700 ${dataDir}`),
+      }),
+    ])
+    expect(JSON.stringify(result)).not.toMatch(/[Rr]emove|malformed/)
   })
 })

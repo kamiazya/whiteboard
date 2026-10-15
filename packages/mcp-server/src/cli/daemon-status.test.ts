@@ -1,8 +1,9 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
+import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
 import { runDaemonStatus } from './daemon-status.js'
 
 // Tests inject isPidAlive and processStartMs, so no real process decides an
@@ -289,5 +290,76 @@ describe('runDaemonStatus: a record this build cannot interpret', () => {
   it('reports it malformed once the daemon it names is gone', async () => {
     const { result } = await statusOver(false)
     expect(result.reason).toBe('record-malformed')
+  })
+})
+
+// A data dir others can write fails the ownership check before daemon.json is
+// opened, so nothing about the record is known except whether it is there.
+describe.skipIf(!CHMOD_IS_OBSERVABLE)('runDaemonStatus: a data dir it refuses to read', () => {
+  let dataDir: string
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'daemon-status-unreadable-'))
+  })
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  async function statusOver(withRecord: boolean) {
+    if (withRecord) {
+      await writeFile(
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({ ...validRecord, pid: process.pid }),
+      )
+    }
+    await chmod(dataDir, 0o777)
+    return runDaemonStatus({ dataDir })
+  }
+
+  it('reports the record unreadable, not malformed, when a live daemon wrote it', async () => {
+    const { result, exitCode } = await statusOver(true)
+    expect(exitCode).toBe(1)
+    expect(result).toEqual({
+      schemaVersion: 1,
+      ok: false,
+      reason: 'record-unreadable',
+      recordFound: true,
+      recordFresh: false,
+    })
+  })
+
+  it('reports no record found where there is none', async () => {
+    const { result } = await statusOver(false)
+    expect(result).toMatchObject({ reason: 'record-unreadable', recordFound: false })
+  })
+})
+
+describe('runDaemonStatus: a token-less record whose pid a later process took', () => {
+  it('says the pid is not the daemon, as stop and run read it', async () => {
+    const { result } = await runDaemonStatus({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'token-missing',
+        record: { pid: 42, version: '0.1.0', startedAt: validRecord.startedAt, socketPath: '/x' },
+        liveness: { state: 'pid-reused' },
+      }),
+    })
+    expect(result).toMatchObject({ reason: 'record-token-missing', pidAlive: false })
+  })
+})
+
+describe('runDaemonStatus: a socket answering with a pid no process can have', () => {
+  it('reports the identity unconfirmed, naming no serving pid, rather than throwing', async () => {
+    const daemon = await answeringDaemonSocket(0, validRecord.token)
+    const { result } = await runDaemonStatus({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'valid',
+        record: { ...validRecord, socketPath: daemon.socketPath },
+      }),
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(validRecord.startedAt) + 6_000,
+    })
+    expect(result).toMatchObject({ reason: 'identity-unconfirmed' })
+    expect(result).not.toHaveProperty('servingPid')
   })
 })

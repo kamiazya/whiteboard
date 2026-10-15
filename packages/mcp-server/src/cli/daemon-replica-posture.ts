@@ -30,7 +30,11 @@ import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType, z } from 'zod'
 import { type DaemonLivenessSeams, daemonLiveness } from '../daemon/daemon-liveness.js'
-import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
+import {
+  type DaemonRecordParseResult,
+  describeOccupant,
+  parseDaemonRecord,
+} from '../daemon/daemon-record.js'
 import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
 import { type DaemonAnswer, type DaemonRequest, requestDaemon } from '../daemon/daemon-request.js'
 import {
@@ -83,11 +87,14 @@ async function runningDaemon(
     refusal: refused(workspaceId, 'daemon-not-running', message),
   })
   if (parsed.kind === 'missing') return none('no daemon record found under the data directory')
-  if (parsed.kind === 'malformed') return none('the daemon record cannot be read')
+  if (parsed.kind === 'unreadable') {
+    return none(`the daemon record cannot be read: ${parsed.error.message}`)
+  }
+  if (parsed.kind === 'malformed') return none('the daemon record is malformed')
   if (parsed.kind === 'token-missing') return none('the daemon record carries no token')
   if (parsed.kind === 'uninterpretable') {
     return none(
-      `the daemon record cannot be interpreted by this version, and the daemon it names (pid ${parsed.recorded.pid}) is still there; stop it with the version that started it`,
+      `the daemon record cannot be interpreted by this version, and ${describeOccupant(parsed.liveness, parsed.recorded.pid)}; stop it with the version that started it`,
     )
   }
   const { pid } = parsed.record

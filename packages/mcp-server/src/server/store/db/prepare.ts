@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
-import { daemonLiveness } from '../../../daemon/daemon-liveness.js'
-import { parseDaemonRecord } from '../../../daemon/daemon-record.js'
+import { type DaemonLiveness, daemonLiveness } from '../../../daemon/daemon-liveness.js'
+import { isOccupying, parseDaemonRecord } from '../../../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../../../daemon/version-skew.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
 import { getLogger } from '../../log.js'
@@ -34,18 +34,26 @@ function describeDatabase(dataDir: string): string {
 // it. Startup is not blocked: the two can be compatible, and refusing would
 // strand a user whose old daemon they cannot easily stop. A record whose
 // process is gone, whose pid another process took, or that names this process
-// is a leftover rather than a neighbour. A record this build cannot interpret
-// is warned about whatever version it names: it is the likeliest to be
-// another version's, and the record shape changing is itself a skew.
+// is a leftover rather than a neighbour; one whose socket answers as another
+// pid is not, since something still serves the data dir. A record this build
+// cannot interpret is warned about whatever version it names: it is the
+// likeliest to be another version's, and the record shape changing is itself
+// a skew.
 async function warnOnDaemonVersionSkew(dataDir: string): Promise<void> {
   try {
     const neighbour = await liveNeighbour(dataDir)
     if (neighbour === null || neighbour.pid === process.pid) return
-    const { pid, version, uninterpretable } = neighbour
+    const { pid, version, uninterpretable, servingPid } = neighbour
     const skew = version === undefined ? null : describeDaemonVersionSkew(version, PACKAGE_VERSION)
     if (skew === null && !uninterpretable) return
     log.warning(
-      { dataDir, pid, recordedVersion: version ?? null, runningVersion: PACKAGE_VERSION },
+      {
+        dataDir,
+        pid,
+        ...(servingPid === undefined ? {} : { servingPid }),
+        recordedVersion: version ?? null,
+        runningVersion: PACKAGE_VERSION,
+      },
       `${skew ?? `daemon pid ${pid} wrote a record this build cannot interpret`}; migrating in-process may change the schema under it. Restart that daemon on the same version.`,
     )
   } catch {
@@ -53,27 +61,47 @@ async function warnOnDaemonVersionSkew(dataDir: string): Promise<void> {
   }
 }
 
-/** The daemon the record names, when it is running. */
-async function liveNeighbour(
-  dataDir: string,
-): Promise<{ pid: number; version?: string; uninterpretable: boolean } | null> {
+interface Neighbour {
+  pid: number
+  version?: string
+  uninterpretable: boolean
+  /** The pid that answered on the record's socket, where it was not the record's. */
+  servingPid?: number
+}
+
+function occupyingNeighbour(
+  liveness: DaemonLiveness,
+  neighbour: Omit<Neighbour, 'servingPid'>,
+): Neighbour | null {
+  if (!isOccupying(liveness)) return null
+  return liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
+    ? { ...neighbour, servingPid: liveness.servingPid }
+    : neighbour
+}
+
+/** The daemon the record names, when it may still be serving. */
+async function liveNeighbour(dataDir: string): Promise<Neighbour | null> {
   const parsed = await parseDaemonRecord(dataDir)
   switch (parsed.kind) {
     case 'missing':
+    case 'unreadable':
     case 'malformed':
       return null
-    case 'uninterpretable':
-      if (parsed.liveness.state !== 'running') return null
-      return { pid: parsed.recorded.pid, version: parsed.recorded.version, uninterpretable: true }
-    case 'token-missing':
-      if (parsed.liveness.state !== 'running') return null
-      return { pid: parsed.record.pid, version: parsed.record.version, uninterpretable: false }
+    case 'uninterpretable': {
+      const { pid, version } = parsed.recorded
+      return occupyingNeighbour(parsed.liveness, { pid, version, uninterpretable: true })
+    }
+    case 'token-missing': {
+      const { pid, version } = parsed.record
+      return occupyingNeighbour(parsed.liveness, { pid, version, uninterpretable: false })
+    }
     case 'valid': {
       const { pid, version } = parsed.record
+      // Checked before liveness, so the common unskewed start asks no socket.
       if (pid === process.pid) return null
       if (describeDaemonVersionSkew(version, PACKAGE_VERSION) === null) return null
-      if ((await daemonLiveness(parsed.record)).state !== 'running') return null
-      return { pid, version, uninterpretable: false }
+      const liveness = await daemonLiveness(parsed.record)
+      return occupyingNeighbour(liveness, { pid, version, uninterpretable: false })
     }
   }
 }

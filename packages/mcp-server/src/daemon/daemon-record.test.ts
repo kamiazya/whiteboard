@@ -1,7 +1,8 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
 import { parseDaemonRecord } from './daemon-record.js'
 import { getDaemonRecordPath } from './daemon-registry.js'
 
@@ -25,6 +26,27 @@ describe('parseDaemonRecord', () => {
     const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result).toEqual({ kind: 'missing' })
+  })
+
+  // A directory others can write could hold anything under the record's name,
+  // so it is never opened there; what the report owes is the fix, and whether
+  // a file stands under that name.
+  describe.skipIf(!CHMOD_IS_OBSERVABLE)('in a data dir others can write', () => {
+    it.each([
+      ['a record', true],
+      ['no record', false],
+    ])('returns "unreadable" naming the fix, over %s', async (_, withRecord) => {
+      if (withRecord) await writeFile(getDaemonRecordPath(dataDir), '{}', 'utf-8')
+      await chmod(dataDir, 0o777)
+
+      expect(await parseDaemonRecord(dataDir, running)).toEqual({
+        kind: 'unreadable',
+        error: expect.objectContaining({
+          message: expect.stringContaining(`chmod 700 ${dataDir}`),
+        }),
+        recordFound: withRecord,
+      })
+    })
   })
 
   it('returns "malformed" for invalid JSON', async () => {
