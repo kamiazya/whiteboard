@@ -140,12 +140,14 @@ async function isWorkspaceDirContained(scope: StoreScope, workspaceId: string): 
  * The files dir a purge may list and unlink in, or a refusal. Every caller of
  * the purge — the periodic sweeper and the Storage card's route alike — gets
  * the containment gate by reaching the files dir only through here, under the
- * write barrier and immediately before the listing, so no caller can skip it
- * and none checks it a second time.
+ * write barrier, so no caller can skip it. The purge asks twice: before the
+ * listing, and again after the reference scan — the pass's longest step —
+ * immediately before the unlinks.
  *
  * This is not ATOMIC with the unlinks: that would need directory-handle,
- * no-follow semantics the fs API does not offer. It narrows the window to the
- * one pass that holds the barrier.
+ * no-follow semantics the fs API does not offer. The second check shrinks the
+ * window to the span between it and the unlinks; it does not close it, and
+ * the write barrier does not stop a filesystem re-point.
  */
 async function containedFilesDir(scope: StoreScope, workspaceId: string): Promise<string> {
   validateWorkspaceId(workspaceId)
@@ -381,6 +383,36 @@ function resolveGraceMs(options: PurgeFilesOptions): number {
   return DEFAULT_FILE_GRACE_MS
 }
 
+/**
+ * The fence between the reference scan and the unlinks. Collecting forks and
+ * checks out every version of every document, so it is the longest window in
+ * a purge and the one another instance is most likely to write into. A record
+ * that moved means the referenced set was computed against a state that no
+ * longer exists, so the pass stands down rather than acting on it. Purging is
+ * periodic; the next pass sees the new state and decides again.
+ *
+ * The containment gate is asked again here for the same reason: a files dir
+ * re-pointed outside the data dir during the scan would otherwise be unlinked
+ * through, and the write barrier does not stop a filesystem re-point.
+ *
+ * Both narrow the window to the span between this check and the unlinks
+ * rather than closing it, which is what a fence over a filesystem can do —
+ * the grace period covers what is left.
+ */
+async function fenceAfterScan(
+  scope: StoreScope,
+  workspaceId: string,
+  before: Awaited<ReturnType<typeof catchUpWorkspaceDoc>>,
+): Promise<PurgeFilesResult | null> {
+  const after = await catchUpWorkspaceDoc(workspaceId, scope)
+  if (after.generation !== before.generation || after.afterSeq !== before.afterSeq) {
+    log.info({ workspaceId }, 'purge stood down: the workspace record moved mid-pass')
+    return { purgedCount: 0, purgedBytes: 0, skippedReason: 'record-moved' as const }
+  }
+  await containedFilesDir(scope, workspaceId)
+  return null
+}
+
 export async function purgeDanglingFiles(
   workspaceId: string,
   options: PurgeFilesOptions,
@@ -442,21 +474,8 @@ export async function purgeDanglingFiles(
 
     const referenced = await collectReferencedFileIds(workspaceId, scope, options.versionStore)
 
-    // The fence. Collecting forks and checks out every version of every
-    // document, so it is the longest window in this pass and the one
-    // another instance is most likely to write into. A record that moved
-    // means the referenced set was computed against a state that no longer
-    // exists, so this pass stands down rather than acting on it. Purging is
-    // periodic; the next pass sees the new state and decides again.
-    //
-    // This narrows the window to the span between the check and the unlinks
-    // rather than closing it, which is what a fence over a filesystem can do
-    // — the grace period covers what is left.
-    const after = await catchUpWorkspaceDoc(workspaceId, scope)
-    if (after.generation !== before.generation || after.afterSeq !== before.afterSeq) {
-      log.info({ workspaceId }, 'purge stood down: the workspace record moved mid-pass')
-      return { purgedCount: 0, purgedBytes: 0, skippedReason: 'record-moved' as const }
-    }
+    const stoodDown = await fenceAfterScan(scope, workspaceId, before)
+    if (stoodDown !== null) return stoodDown
 
     return await unlinkDangling({ workspaceId, dir, entries, referenced, graceMs })
   })
