@@ -134,6 +134,10 @@ function retire(
   listeners: Map<string, Set<DocListener>>,
   snapshotWaiters: Map<string, Set<SnapshotWaiter>>,
 ): void {
+  // Forgotten before anyone is told, so a listener that reconnects on the
+  // news is handed its own stream rather than this dead worker.
+  sources.delete(baseUrl)
+  failedOrigins.add(baseUrl)
   for (const set of listeners.values()) {
     for (const listener of set) listener.onConnectionChange?.(false)
   }
@@ -143,8 +147,6 @@ function retire(
     for (const waiter of waiters) waiter.reject(failed)
   }
   snapshotWaiters.clear()
-  sources.delete(baseUrl)
-  failedOrigins.add(baseUrl)
   for (const listener of failureListeners) listener()
 }
 

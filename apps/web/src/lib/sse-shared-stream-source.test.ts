@@ -80,6 +80,22 @@ describe('a shared worker that fails to load', () => {
     expect(sharedStreamFailed(origin('elsewhere'))).toBe(false)
   })
 
+  it('is already forgotten when a listener reconnects on the disconnect it is told', () => {
+    let reopened: ReturnType<typeof createSharedSseStreamSource> | 'not asked' = 'not asked'
+    const source = createSharedSseStreamSource(origin('reconnect'))
+    source?.subscribe('w/doc', {
+      onUpdate: vi.fn(),
+      onMessage: vi.fn(),
+      onConnectionChange: (connected) => {
+        if (!connected) reopened = createSharedSseStreamSource(origin('reconnect'))
+      },
+    })
+
+    FakeSharedWorker.instances[0]?.fail()
+
+    expect(reopened).toBeNull()
+  })
+
   it('rejects a snapshot it was still waiting on', async () => {
     const source = createSharedSseStreamSource(origin('pending-snapshot'))
     const pending = source?.snapshot('workspace:w')
