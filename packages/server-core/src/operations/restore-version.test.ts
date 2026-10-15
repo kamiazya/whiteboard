@@ -244,6 +244,12 @@ function expectAllCallsLocked(live: FakeLive) {
   }
 }
 
+/** The node ids of the live document at `path`, or null when none is stored. */
+function nodeIdsAt(live: FakeLive, path: string): string[] | null {
+  const stored = live.stored(path)
+  return stored === undefined ? null : readSpatialCanvas(stored.doc).nodes.map((n) => n.id)
+}
+
 describe('restoreVersion result union', () => {
   it('answers not-found for a version id history does not hold', async () => {
     const live = new FakeLive()
@@ -535,6 +541,49 @@ describe('restoreVersion subtree mode', () => {
     expectAllCallsLocked(live)
   })
 
+  // The version must hold the outside document too: a past workspace that
+  // never held it cannot tell a scoped rollback from a workspace-wide one.
+  it('leaves a document outside the subtree alone even when the version held it', async () => {
+    const live = new FakeLive()
+    const rootId = generateDocumentId()
+    const elsewhereId = generateDocumentId()
+    live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
+    live.seed('elsewhere', spatialDoc(['elsewhere-new']), 'spatial', elsewhereId)
+    const pastWorkspace = workspaceDocWith([
+      { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
+      { path: 'elsewhere', documentId: elsewhereId, nodeIds: ['elsewhere-old'] },
+    ])
+    const versions = versionsWith({
+      v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace },
+    })
+    const result = await run(live, versions, { subtree: true })
+    expect(result).toEqual({ kind: 'restored-subtree', restoredCount: 1 })
+    expect(nodeIdsAt(live, 'elsewhere')).toEqual(['elsewhere-new'])
+    expect(versions.saved.map((s) => s.path)).toEqual(['canvas-a'])
+  })
+
+  it('reverts the content of a surviving descendant in place, keeping its identity', async () => {
+    const live = new FakeLive()
+    const rootId = generateDocumentId()
+    const childId = generateDocumentId()
+    live.seed('canvas-a', spatialDoc(['root-new']), 'spatial', rootId)
+    live.seed('canvas-a/child', spatialDoc(['child-new']), 'spatial', childId)
+    const pastWorkspace = workspaceDocWith([
+      { path: 'canvas-a', documentId: rootId, nodeIds: ['root-old'] },
+      { path: 'canvas-a/child', documentId: childId, nodeIds: ['child-old'] },
+    ])
+    await run(
+      live,
+      versionsWith({ v1: { doc: spatialDoc(['root-old']), workspace: pastWorkspace } }),
+      { subtree: true },
+    )
+    expect(nodeIdsAt(live, 'canvas-a')).toEqual(['root-old'])
+    expect(nodeIdsAt(live, 'canvas-a/child')).toEqual(['child-old'])
+    expect(live.stored('canvas-a')?.id).toBe(rootId)
+    expect(live.stored('canvas-a/child')?.id).toBe(childId)
+    expect(live.calls.filter((c) => c.method === 'delete')).toEqual([])
+  })
+
   it('leaves a sibling whose name merely starts with the subtree path alone', async () => {
     const live = new FakeLive()
     const rootId = generateDocumentId()
@@ -671,6 +720,22 @@ describe('a restore records the merge point it creates', () => {
     expect(versions.saved[0]?.options.restoredFrom).toBe('v-past')
     // Not a bookmark: nobody typed a name for it.
     expect(versions.saved[0]?.options.auto).toBe(true)
+  })
+
+  it('records the merge on a brand-new target created by the restore', async () => {
+    const live = new FakeLive()
+    live.seed('canvas-a', spatialDoc(['now']))
+    const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
+
+    const result = await restoreVersion(
+      { versions, liveDocuments: live },
+      { workspaceId: WS, path: 'canvas-a', versionId: 'v-past', targetPath: 'canvas-new' },
+    )
+
+    expect(result).toMatchObject({ kind: 'restored-to-target', targetPath: 'canvas-new' })
+    expect(versions.saved).toEqual([
+      { path: 'canvas-new', options: { auto: true, restoredFrom: 'v-past' } },
+    ])
   })
 
   it('records the merge against the TARGET when restoring into another document', async () => {
