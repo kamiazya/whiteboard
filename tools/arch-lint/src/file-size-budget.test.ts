@@ -424,11 +424,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
   // The tool-write half of the race says which lock it holds.
   'packages/mcp-server/src/server/store/document-store.test.ts': 863,
-  // +17 for the tenant layout: this file's subject IS filesystem paths, so
-  // every seed now names a tenant's workspaces root, and three symlink seeds
-  // gained the parent mkdir that root needs. Splitting it instead would have
-  // duplicated ~148 lines of vi.mock/hoisted setup into the second file.
-  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 1002,
   // The agent-activity summary's wording and order are pinned by a case of their
   // own, because the one assertion it had (`toMatch(/\S/)`) a mutation proved vacuous.
   // The describes that stand alone (`region.set`, `node.add within a group`,

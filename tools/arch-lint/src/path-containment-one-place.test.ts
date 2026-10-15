@@ -30,15 +30,15 @@ const REALPATH_NAMES = ['realpath', 'realpathSync']
 /**
  * Calls outside the shared module, by file, with what each one is for.
  *
- * The sweeper's checks all require the path to EXIST (a missing entry is
- * skipped, not judged), compare against the data directory resolved at the
- * gate before each purge, and log a distinct reason per branch; the shared walk answers none of
- * those. The other two are not containment at all.
+ * The file-GC purge gate's checks all require the path to EXIST (a missing
+ * entry is skipped, not judged), compare against the data directory resolved
+ * at the gate inside each purge, and log a distinct reason per branch; the
+ * shared walk answers none of those. The other two are not containment at all.
  */
 const LEDGER: Readonly<Record<string, { calls: number; why: string }>> = {
-  'packages/mcp-server/src/server/store/file-gc-sweeper.ts': {
+  'packages/mcp-server/src/server/store/file-gc.ts': {
     calls: 2,
-    why: 'existence-required containment of each workspace directory and its files/ child, at the gate before each purge, one log reason per branch',
+    why: 'existence-required containment of each workspace directory and its files/ child, at the gate inside every purge under the write barrier, one log reason per branch',
   },
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts': {
     calls: 1,

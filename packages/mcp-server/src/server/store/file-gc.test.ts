@@ -1,11 +1,11 @@
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { workspaceDir, workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
@@ -173,6 +173,29 @@ describe('purgeDanglingFiles', () => {
   it('returns zero counts for a workspace with no files dir yet', async () => {
     const result = await purgeDanglingFiles('ws_empty', withVersions())
     expect(result).toEqual({ purgedCount: 0, purgedBytes: 0 })
+  })
+
+  it('refuses, deleting nothing, when files/ is a symlink out of the data dir', async () => {
+    // The lexical join every caller builds the files dir from cannot see a
+    // symlink, so the purge itself decides containment — the route and the
+    // sweeper alike reach it only through here.
+    const outside = await mkdtemp(join(tmpdir(), 'whiteboard-file-gc-outside-'))
+    try {
+      await writeFile(join(outside, 'victim.png'), Buffer.alloc(10, 1))
+      const past = (Date.now() - 2 * 60 * 60 * 1000) / 1000
+      await utimes(join(outside, 'victim.png'), past, past)
+      const dir = workspaceDir(tempDir, SELF_HOST_TENANT_ID, 'ws_files_link')
+      await mkdir(dir, { recursive: true })
+      await symlink(outside, join(dir, 'files'), 'dir')
+
+      await expect(purgeDanglingFiles('ws_files_link', withVersions())).rejects.toMatchObject({
+        name: 'FilesDirNotContainedError',
+        workspaceId: 'ws_files_link',
+      })
+      expect(await readdir(outside)).toEqual(['victim.png'])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 
   it('mixed workspace: a nodes-model doc protects its file while a legacy-elements doc does not', async () => {
