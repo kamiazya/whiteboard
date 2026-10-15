@@ -107,8 +107,6 @@ export interface Unit {
   readonly rootId: string
   /** Every node of the unit, the root included. */
   readonly members: readonly TidyNode[]
-  /** Member node ids that move with the unit (locked members excluded). */
-  readonly movableIds: readonly string[]
   bbox: Rect
   readonly movable: boolean
   dx: number
@@ -197,7 +195,6 @@ export function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Un
     units.push({
       rootId,
       members: memberNodes,
-      movableIds: memberNodes.filter((m) => !locked(m.id)).map((m) => m.id),
       bbox: { ...bbox },
       movable,
       dx: 0,

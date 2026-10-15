@@ -506,11 +506,14 @@ function runPassesToFixpoint(
   }
 }
 
-/** Carry each unit's accumulated delta onto every member it moves. */
+/**
+ * Carry each unit's accumulated delta onto all of its members. A movable unit
+ * holds no locked member, so there is no partial move to make.
+ */
 function applyUnitDeltas(units: readonly Unit[], settled: Map<string, Rect>): void {
   for (const unit of units) {
     if (!unit.movable || (unit.dx === 0 && unit.dy === 0)) continue
-    for (const id of unit.movableIds) {
+    for (const { id } of unit.members) {
       const rect = settled.get(id)
       if (rect === undefined) continue
       settled.set(id, { ...rect, x: rect.x + unit.dx, y: rect.y + unit.dy })
