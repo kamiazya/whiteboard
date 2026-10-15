@@ -40,8 +40,12 @@ afterEach(async () => {
 })
 
 describe('a stale migration lock that cannot be moved aside', () => {
-  it('migrates without the lock when the directory refuses the rename', async () => {
-    renameError.code = 'EACCES'
+  it.each([
+    'EACCES',
+    'EPERM',
+    'EROFS',
+  ])('migrates without the lock when the rename is refused with %s', async (code) => {
+    renameError.code = code
     const work = vi.fn(async () => 'done')
     await expect(withMigrationLock(dataDir, work, { timeoutMs: 1_000, pollMs: 10 })).resolves.toBe(
       'done',

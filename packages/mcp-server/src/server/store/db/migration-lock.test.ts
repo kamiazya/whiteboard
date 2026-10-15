@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { pathExists } from '../../../shared/test-utils/path-exists.js'
@@ -55,7 +55,7 @@ async function backdate(path: string, ms: number): Promise<void> {
 describe('withMigrationLock', () => {
   it('holds the lock file, naming this process, while the work runs', async () => {
     const seen = await withMigrationLock(dataDir, async () => readFile(lockPath, 'utf8'))
-    expect(seen).toBe(String(process.pid))
+    expect(seen).toBe(`${process.pid}\n${hostname()}`)
     expect(await pathExists(lockPath)).toBe(false)
   })
 
@@ -88,7 +88,9 @@ describe('withMigrationLock', () => {
     async () => {
       const reused = await liveUnrelatedPid()
       await writeFile(lockPath, String(reused))
-      await backdate(lockPath, 60 * 60_000)
+      // Seconds, not hours: a host up for less than the backdate (a CI
+      // runner) would start every process after it, and prove nothing.
+      await backdate(lockPath, 30_000)
       let ran = false
       await withMigrationLock(
         dataDir,
@@ -153,5 +155,50 @@ describe('withMigrationLock', () => {
       await writeFile(lockPath, String(successor))
     })
     expect(await readFile(lockPath, 'utf8')).toBe(String(successor))
+  })
+
+  // Containers sharing one data volume each number their own processes, and
+  // each runs as pid 1: another host's pid says nothing here.
+  it('waits out a holder recorded on another host, whatever its pid reads as here', async () => {
+    await writeFile(lockPath, `${deadPid()}\nanother-host`)
+    await expect(
+      withMigrationLock(dataDir, async () => {}, { timeoutMs: 150, pollMs: 10 }),
+    ).rejects.toThrow('on host another-host')
+    expect(await readFile(lockPath, 'utf8')).toContain('another-host')
+  })
+
+  // Every container's server is pid 1, so a lock naming this pid may be
+  // another container's.
+  it('leaves a lock that names its pid but not its host when it finishes', async () => {
+    const elsewhere = String(process.pid)
+    await withMigrationLock(dataDir, async () => {
+      await writeFile(lockPath, elsewhere)
+    })
+    expect(await readFile(lockPath, 'utf8')).toBe(elsewhere)
+  })
+
+  // The default log level is `warning`; a wait announced below it leaves a
+  // caller that gives up first looking at an empty log.
+  it('announces a wait at the default log level, naming the holder, lock and deadline', async () => {
+    const warnings = captureLogsForTests('warning')
+    try {
+      const holder = await liveUnrelatedPid()
+      await writeFile(lockPath, String(holder))
+      await expect(
+        withMigrationLock(dataDir, async () => {}, { timeoutMs: 100, pollMs: 10 }),
+      ).rejects.toThrow()
+      expect(warnings.records).toContainEqual(
+        expect.objectContaining({
+          level: 'warning',
+          data: expect.objectContaining({
+            holderPid: holder,
+            lockPath,
+            deadline: expect.any(String),
+          }),
+        }),
+      )
+    } finally {
+      warnings.restore()
+    }
   })
 })
