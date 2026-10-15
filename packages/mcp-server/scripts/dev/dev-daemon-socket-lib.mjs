@@ -63,6 +63,13 @@ export function isPidAlive(pid) {
 }
 
 /**
+ * The `code` of `requestDaemon`'s rejection when the socket accepted the
+ * connection and gave no answer within its timeout — something is serving
+ * there — as against a connection refused or a socket that does not exist.
+ */
+export const NO_ANSWER = 'ERR_DAEMON_NO_ANSWER'
+
+/**
  * One HTTP exchange with the daemon a record names. `socketPath` is a Unix
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
@@ -81,6 +88,18 @@ export function requestDaemon(
   { method = 'GET', path, headers = {}, body, timeoutMs, onChunk },
 ) {
   return new Promise((resolveRequest, rejectRequest) => {
+    // Once the socket took the connection, anything going wrong after is a
+    // daemon that did not answer, not a socket nobody listens on.
+    let connected = false
+    const fail = (error) =>
+      rejectRequest(
+        connected && error?.code !== NO_ANSWER
+          ? Object.assign(new Error(error?.message ?? 'daemon did not answer'), {
+              code: NO_ANSWER,
+              cause: error,
+            })
+          : error,
+      )
     const req = request({ socketPath: record.socketPath, path, method, headers }, (res) => {
       let text = ''
       const head = {
@@ -98,11 +117,21 @@ export function requestDaemon(
         onChunk?.(chunk, head)
       })
       res.on('end', () => resolveRequest({ ...head, text }))
-      res.on('error', rejectRequest)
+      res.on('error', fail)
     })
-    req.on('error', rejectRequest)
+    req.on('error', fail)
+    req.on('socket', (socket) => {
+      if (!socket.connecting) connected = true
+      else socket.once('connect', () => (connected = true))
+    })
     if (timeoutMs !== undefined) {
-      req.setTimeout(timeoutMs, () => req.destroy(new Error(`no answer within ${timeoutMs}ms`)))
+      // A Unix socket or named pipe refuses a connection at once, or takes
+      // it: running out of time means it was taken and then left unanswered.
+      req.setTimeout(timeoutMs, () =>
+        req.destroy(
+          Object.assign(new Error(`no answer within ${timeoutMs}ms`), { code: NO_ANSWER }),
+        ),
+      )
     }
     req.end(body)
   })
@@ -238,4 +267,87 @@ export async function assessRecordedDaemon(
   const identity = recordedProcess(record.pid, record.startedAt, { isAlive, startMs })
   const answering = await answers(record)
   return { running: answering || identity === 'daemon', answering, process: identity }
+}
+
+/**
+ * Long enough for a daemon busy on a large write to answer, short enough that
+ * a stop run against a socket nobody serves does not appear to hang — the
+ * daemon's own `daemonLiveness` waits as long.
+ */
+const STATUS_ASK_TIMEOUT_MS = 1_500
+
+/**
+ * Whether the daemon a record names is running, by the daemon's own rule
+ * (`daemonLiveness`, src/daemon/daemon-liveness.ts), restated for bare `node`;
+ * `dev-daemon-socket-lib.test.ts` holds the two to the same answers.
+ *
+ * The pid's start time decides on the plain path. When it says the pid started
+ * after the record, the record's socket is asked before that is believed: a
+ * forward step of the wall clock moves `/proc/stat`'s btime but not a
+ * process's start ticks, so a live daemon then reads as having started after
+ * its own record. Its runtime status, asked under the record's token, names its
+ * pid; naming the recorded one makes it the writer. Only the `pid` of that
+ * answer is read — the rest of `runtimeStatusResponseSchema` is not something
+ * this script can import, and an answer under the record's token naming the
+ * recorded pid is the daemon whatever else it says.
+ *
+ * - `running`: the pid is the process that wrote the record.
+ * - `unconfirmed`: the start time says otherwise, and something serves the
+ *   record's socket without confirming the pid — an answer naming another pid,
+ *   or a connection taken and left unanswered, as a daemon wedged on its loop
+ *   does. Nothing may signal it, and its record is not a leftover.
+ * - `pid-reused`: the pid started after the record and the socket refuses the
+ *   connection, or is not there.
+ * - `dead`: no process has the pid.
+ *
+ * @param {{ pid: number, socketPath?: string, startedAt?: string, token?: string }} record
+ * @param {{
+ *   isAlive?: (pid: number) => boolean,
+ *   startMs?: (pid: number) => number | null,
+ *   request?: typeof requestDaemon,
+ * }} [seams]
+ * @returns {Promise<'running' | 'unconfirmed' | 'pid-reused' | 'dead'>}
+ */
+export async function recordedDaemonLiveness(
+  record,
+  { isAlive = isPidAlive, startMs = readProcessStartMs, request = requestDaemon } = {},
+) {
+  const identity = recordedProcess(record.pid, record.startedAt, { isAlive, startMs })
+  if (identity === 'daemon') return 'running'
+  if (identity === 'dead') return 'dead'
+  const { socketPath } = record
+  if (socketPath === undefined) return 'pid-reused'
+  let answer
+  try {
+    answer = await request(
+      { socketPath },
+      {
+        path: '/api/runtime/status',
+        headers: {
+          ...(record.token === undefined ? {} : { authorization: `Bearer ${record.token}` }),
+          accept: 'application/json',
+        },
+        timeoutMs: STATUS_ASK_TIMEOUT_MS,
+      },
+    )
+  } catch (error) {
+    return error?.code === NO_ANSWER ? 'unconfirmed' : 'pid-reused'
+  }
+  return answer.status === 200 && statusPid(answer.text) === record.pid ? 'running' : 'unconfirmed'
+}
+
+/**
+ * The `pid` a runtime status body names, or null when it names none.
+ * @param {string} text
+ * @returns {number | null}
+ */
+function statusPid(text) {
+  try {
+    const body = JSON.parse(text)
+    return body !== null && typeof body === 'object' && typeof body.pid === 'number'
+      ? body.pid
+      : null
+  } catch {
+    return null
+  }
 }

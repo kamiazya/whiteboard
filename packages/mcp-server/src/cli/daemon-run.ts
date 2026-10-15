@@ -191,16 +191,20 @@ async function refusalOverRecord(dataDir: string): Promise<DaemonRunOutcome | nu
   const existing = await loadDaemonRecord(dataDir)
   if (existing === null) return null
   const liveness = await daemonLiveness(existing)
-  if (liveness === 'running') {
+  if (liveness.state === 'running') {
     return {
       kind: 'refused',
       message: 'A daemon is already running. Stop it first with: whiteboard daemon stop --json',
     }
   }
-  if (liveness !== 'unconfirmed') return null
+  if (liveness.state !== 'unconfirmed') return null
+  const { pid, socketPath } = existing
   return {
     kind: 'refused',
-    message: `A daemon answers on ${existing.socketPath}, but not as pid ${existing.pid}, which daemon.json names. Stop the process serving that socket first.`,
+    message:
+      liveness.servingPid === undefined
+        ? `A daemon answers on ${socketPath}, but not as pid ${pid}, which daemon.json names. Stop the process serving that socket first.`
+        : `daemon.json names pid ${pid}, but the process serving ${socketPath} is pid ${liveness.servingPid}, not pid ${pid}. Stop that process first.`,
   }
 }
 

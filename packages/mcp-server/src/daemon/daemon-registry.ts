@@ -1,99 +1,83 @@
 import { mkdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
-import { z } from 'zod'
-import {
-  assertDataDirOwnedByUser,
-  DATA_DIR,
-  readFileOwnedByUser,
-} from '../shared/data-dir-secure.js'
+import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { writeFileAtomic } from '../shared/write-file-atomic.js'
-import { daemonLiveness } from './daemon-liveness.js'
+import type { DaemonLivenessSeams } from './daemon-liveness.js'
 import {
-  type DaemonRecord,
-  type DaemonRecordWrite,
-  daemonRecordBaseSchema,
-  daemonRecordSchema,
-} from './daemon-record-schema.js'
+  getDaemonRecordPath,
+  isOccupying,
+  type OccupyingLiveness,
+  parseDaemonRecord,
+} from './daemon-record.js'
+import type { DaemonRecord, DaemonRecordWrite } from './daemon-record-schema.js'
 
+export { DAEMON_RECORD_FILENAME, getDaemonRecordPath } from './daemon-record.js'
 export type { DaemonRecord } from './daemon-record-schema.js'
 
-/**
- * Exported so `backupDataDir` can keep it OUT of a backup. The file holds the
- * Bearer token the daemon authenticates its HTTP routes and sync stream with — which is why it is
- * written 0o600 below — and a backup directory is the opposite of owner-only.
- */
-export const DAEMON_RECORD_FILENAME = 'daemon.json'
-
-export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
-  return join(dataDir, DAEMON_RECORD_FILENAME)
+/** Who still holds the record, in the words a refusal names them with. */
+function occupant(
+  liveness: OccupyingLiveness,
+  pid: number,
+  socketPath: string | undefined,
+): string {
+  if (liveness.state === 'running') return `names pid ${pid}, which is running`
+  const serving = liveness.servingPid === undefined ? '' : ` as pid ${liveness.servingPid}`
+  return `a daemon answers on its socket ${socketPath}${serving}`
 }
 
 /**
- * What a record this build cannot interpret still says about its daemon: the
- * pid it must, and whatever else of the liveness fields reads as itself.
- */
-const recordedDaemonSchema = daemonRecordBaseSchema.pick({ pid: true }).extend({
-  startedAt: z.string().optional().catch(undefined),
-  socketPath: z.string().min(1).optional().catch(undefined),
-  token: z.string().min(1).optional().catch(undefined),
-})
-
-/**
- * The running daemon's record, or `null` when there is none.
+ * The running daemon's record, or `null` when there is none — a projection of
+ * `parseDaemonRecord`, so it never reaches a verdict the other commands do not.
  *
  * `null` is what a caller reads as "no daemon is running" before it deletes
- * the record and starts a new daemon, so it is only returned where that is safe:
- * ENOENT; text that is not a JSON object (writes are atomic, so that is a
- * damaged file, not a half-written one, and it names no process); and a
- * record this build cannot interpret whose daemon `daemonLiveness` finds gone
- * — its pid dead, or taken by a later process with nothing answering on the
- * socket it names.
+ * the record and starts a new daemon, so it is only returned where that is
+ * safe: no record; one that names no daemon (writes are atomic, so text that
+ * is not a record is a damaged file, not a half-written one); and one this
+ * build cannot use whose daemon `daemonLiveness` finds gone.
  *
- * Two cases throw instead, each naming the file, because answering `null`
+ * Three cases throw instead, each naming the file, because answering `null`
  * would start a second daemon beside one still serving:
  * - the record exists but cannot be READ;
  * - the record cannot be interpreted but its daemon is still there —
- *   likeliest one of another version, whose record this schema refuses.
+ *   likeliest one of another version, whose record this schema refuses;
+ * - the record carries no token but its daemon is still there.
  * Where the platform cannot tell a process's start time, a live pid can also
  * be an unrelated process that reused it; the message says to remove the file
  * then, since only a person can tell the two apart.
+ *
+ * `seams` reach the liveness question, so a caller's test doubles decide it.
  */
-export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
-  assertDataDirOwnedByUser(dataDir)
+export async function loadDaemonRecord(
+  dataDir: string = DATA_DIR,
+  seams: DaemonLivenessSeams = {},
+): Promise<DaemonRecord | null> {
+  const parsed = await parseDaemonRecord(dataDir, seams)
   const path = getDaemonRecordPath(dataDir)
-  let read: Awaited<ReturnType<typeof readFileOwnedByUser>>
-  try {
-    read = await readFileOwnedByUser(path)
-  } catch (err) {
-    throw new Error(`the daemon record ${path} exists but cannot be read`, { cause: err })
+  switch (parsed.kind) {
+    case 'valid':
+      return parsed.record
+    case 'missing':
+      return null
+    case 'malformed':
+      if (parsed.unreadable !== undefined) throw parsed.unreadable
+      return null
+    case 'token-missing': {
+      const { liveness, record } = parsed
+      if (!isOccupying(liveness)) return null
+      throw new Error(
+        `the daemon record ${path} carries no token, but ${occupant(liveness, record.pid, record.socketPath)}. ` +
+          'Stop that daemon with the build that started it; if it is not a daemon, remove the file.',
+      )
+    }
+    case 'uninterpretable': {
+      const { liveness, recorded } = parsed
+      const unlessNotADaemon =
+        liveness.state === 'running' ? '; if it is not a daemon, remove the file' : ''
+      throw new Error(
+        `the daemon record ${path} cannot be interpreted by this version, but ${occupant(liveness, recorded.pid, recorded.socketPath)}. ` +
+          `If that is a whiteboard daemon of another version, stop it with that version${unlessNotADaemon}.`,
+      )
+    }
   }
-  if (read.kind === 'missing') return null
-  if (read.kind === 'not-owned') throw new Error(read.message)
-  const text = read.text
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    return null
-  }
-  const result = daemonRecordSchema.safeParse(raw)
-  if (result.success) return result.data
-  const named = recordedDaemonSchema.safeParse(raw)
-  if (!named.success) return null
-  const liveness = await daemonLiveness(named.data)
-  if (liveness === 'unconfirmed') {
-    throw new Error(
-      `the daemon record ${path} cannot be interpreted by this version, and a daemon answers on its socket ${named.data.socketPath}. ` +
-        'If that is a whiteboard daemon of another version, stop it with that version.',
-    )
-  }
-  if (liveness === 'running') {
-    throw new Error(
-      `the daemon record ${path} cannot be interpreted by this version, but names pid ${named.data.pid}, which is running. ` +
-        'If that is a whiteboard daemon of another version, stop it with that version; if it is not a daemon, remove the file.',
-    )
-  }
-  return null
 }
 
 /**

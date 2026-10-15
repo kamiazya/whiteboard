@@ -2,9 +2,8 @@ import { z } from 'zod'
 
 // daemon.json is the persisted contract for the local daemon's bearer token,
 // process identity and the socket it answers on. This schema is the single
-// source of truth for both the registry loader (daemon-registry.ts) and the
-// CLI-facing parser (daemon-record.ts) — do not hand-write a parallel
-// interface.
+// source of truth for its one reader (daemon-record.ts) — do not hand-write a
+// parallel interface.
 // What the daemon process is running: its TypeScript source (the watch-mode
 // dev daemon) or a build under dist/ (`pnpm mcp:http`, `whiteboard daemon run`,
 // the packaged install). A watch-mode start that finds a built daemon on its
@@ -38,6 +37,19 @@ export const daemonRecordSchema = daemonRecordBaseSchema.extend({
   token: z.string().min(1),
 })
 
+/**
+ * What a record this build cannot interpret still says about its daemon: the
+ * pid it must, and whatever else reads as itself. Enough to ask whether that
+ * daemon is still there, and to name it to a person.
+ */
+export const recordedDaemonSchema = daemonRecordBaseSchema.pick({ pid: true }).extend({
+  version: z.string().optional().catch(undefined),
+  startedAt: z.string().optional().catch(undefined),
+  socketPath: z.string().min(1).optional().catch(undefined),
+  token: z.string().min(1).optional().catch(undefined),
+})
+
+export type RecordedDaemon = z.infer<typeof recordedDaemonSchema>
 export type DaemonRecordBase = z.infer<typeof daemonRecordBaseSchema>
 export type DaemonRecord = z.infer<typeof daemonRecordSchema>
 

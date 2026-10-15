@@ -511,7 +511,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/history/src/checkpoints/scheduler.ts#createCheckpointScheduler': 87,
   'packages/mcp-server/src/cli/daemon-doctor.ts#runDaemonDoctor': 73,
   'packages/mcp-server/src/cli/daemon-run.ts#runDaemonRun': 86,
-  'packages/mcp-server/src/cli/daemon-status.ts#runDaemonStatus': 84,
   'packages/mcp-server/src/cli/daemon-stop.ts#runDaemonStop': 84,
   'packages/mcp-server/src/cli/daemon-support-bundle.ts#runDaemonSupportBundle': 104,
   'packages/mcp-server/src/cli/dispatcher.ts#dispatchRun': 62,

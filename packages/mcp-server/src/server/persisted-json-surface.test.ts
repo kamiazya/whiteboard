@@ -75,7 +75,6 @@ const notModelled = (reason: string): PersistedJsonCoverage => `not modelled: ${
 const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
   // The daemon's own records, and the stores under them.
   'daemon/daemon-record.ts': 'round-tripped: the daemon record',
-  'daemon/daemon-registry.ts': 'round-tripped: the daemon record',
   'server/security/server-mode-record.ts': 'round-tripped: the server-mode record',
   'server/store/backup-in-progress.ts': 'round-tripped: the backup-in-progress marker',
   'server/store/backup-blob-mirror.ts': 'round-tripped: the blob manifest',

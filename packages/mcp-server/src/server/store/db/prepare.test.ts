@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -106,6 +106,44 @@ describe('prepareDataDir: daemon version skew', () => {
 
   it('stays quiet for a record this process wrote itself', async () => {
     expect(await skewWarnings({ pid: process.pid })).toEqual([])
+  })
+
+  // The record a newer daemon writes is the one this build is likeliest to
+  // refuse, and the daemon behind it the likeliest to be of another version.
+  it('warns for a live daemon whose record this build cannot interpret', async () => {
+    await writeFile(
+      join(tempDir, 'daemon.json'),
+      JSON.stringify({ ...record({}), version: '9.9.9', launch: 'packaged' }),
+    )
+    const capture = captureLogsForTests('warning')
+    try {
+      await prepareDataDir(tempDir)
+      const warnings = capture.records.filter((r) => r.data?.recordedVersion !== undefined)
+      expect(warnings).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ pid: process.ppid, recordedVersion: '9.9.9' }),
+        }),
+      ])
+    } finally {
+      capture.restore()
+    }
+  })
+
+  it('warns for a live daemon of another version whose record has no token', async () => {
+    const { token: _token, ...tokenless } = record({})
+    await writeFile(join(tempDir, 'daemon.json'), JSON.stringify(tokenless))
+    const capture = captureLogsForTests('warning')
+    try {
+      await prepareDataDir(tempDir)
+      const warnings = capture.records.filter((r) => r.data?.recordedVersion !== undefined)
+      expect(warnings).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ recordedVersion: '0.0.0-older' }),
+        }),
+      ])
+    } finally {
+      capture.restore()
+    }
   })
 
   it('still migrates when the versions differ', async () => {

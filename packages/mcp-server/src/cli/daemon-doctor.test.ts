@@ -1,9 +1,14 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 
-// All tests inject parseRecord and isPidAlive — no filesystem or process access.
+// Tests inject isPidAlive and processStartMs, so no real process decides an
+// answer; all but the last describe inject parseRecord too.
 
 type ParseRecord = Parameters<typeof runDaemonDoctor>[0]['parseRecord']
 
@@ -69,7 +74,11 @@ describe('runDaemonDoctor: record malformed', () => {
 })
 
 describe('runDaemonDoctor: token missing', () => {
-  const parseTokenMissing: ParseRecord = async () => ({ kind: 'token-missing', record: baseRecord })
+  const parseTokenMissing: ParseRecord = async () => ({
+    kind: 'token-missing',
+    record: baseRecord,
+    liveness: { state: 'dead' },
+  })
 
   it('returns exitCode 1 and ok=false', async () => {
     const { result, exitCode } = await runDoctor(parseTokenMissing, () => false)
@@ -154,6 +163,33 @@ describe('runDaemonDoctor: valid record, its pid taken by a later process', () =
   })
 })
 
+// A forward clock step makes a live daemon read as having started after its
+// record; its socket is asked, and here answers as another pid.
+describe('runDaemonDoctor: a socket that answers as another pid', () => {
+  it('reports the process check in error, naming the pid that answered, and exits 1', async () => {
+    const daemon = await answeringDaemonSocket(validRecord.pid + 1, validRecord.token)
+    const { result, exitCode } = await runDaemonDoctor({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'valid',
+        record: { ...validRecord, socketPath: daemon.socketPath },
+      }),
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(validRecord.startedAt) + 6_000,
+      runningVersion: validRecord.version,
+    })
+    expect(result.checks).toContainEqual({
+      id: 'daemon.process',
+      status: 'error',
+      summary: `A daemon answers on the recorded socket as pid ${validRecord.pid + 1}, not as pid ${validRecord.pid}, which the record names.`,
+      remediation:
+        'Stop the process serving the socket named in daemon.json, then start the daemon: whiteboard daemon run',
+    })
+    expect(result).toMatchObject({ ok: false, status: 'error' })
+    expect(exitCode).toBe(1)
+  })
+})
+
 describe('runDaemonDoctor: version skew', () => {
   const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
 
@@ -203,7 +239,7 @@ describe('runDaemonDoctor: remediation is the human form of the command', () => 
   const records: readonly ParseRecord[] = [
     async () => ({ kind: 'missing' }),
     async () => ({ kind: 'malformed', message: 'not json' }),
-    async () => ({ kind: 'token-missing', record: baseRecord }),
+    async () => ({ kind: 'token-missing', record: baseRecord, liveness: { state: 'dead' } }),
     async () => ({ kind: 'valid', record: validRecord }),
   ]
 
@@ -219,5 +255,56 @@ describe('runDaemonDoctor: remediation is the human form of the command', () => 
     // below that means the scenarios stopped reaching the remediation.
     expect(remediations.filter((text) => /daemon run/.test(text))).toHaveLength(4)
     expect(remediations.filter((text) => text.includes('--json'))).toEqual([])
+  })
+})
+
+// A record this build cannot interpret is likeliest another version's, and
+// that daemon may still be serving: removing its record leaves it running with
+// no record, where `daemon run` collides with its socket and its own version's
+// `daemon stop` finds nothing to stop.
+describe('runDaemonDoctor: a record this build cannot interpret', () => {
+  let dataDir: string
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'daemon-doctor-record-'))
+  })
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  async function doctorOver(record: Record<string, unknown>, isPidAlive: boolean) {
+    await writeFile(join(dataDir, 'daemon.json'), JSON.stringify(record))
+    return runDaemonDoctor({
+      dataDir,
+      isPidAlive: () => isPidAlive,
+      processStartMs: () => null,
+      runningVersion: baseRecord.version,
+    })
+  }
+  const otherVersion = { ...validRecord, version: '9.9.9', launch: 'packaged' }
+
+  it('names the running daemon and never advises removing its record', async () => {
+    const { result, exitCode } = await doctorOver(otherVersion, true)
+    expect(exitCode).toBe(1)
+    expect(result.checks).toEqual([
+      expect.objectContaining({
+        id: 'daemon.record',
+        status: 'error',
+        summary: expect.stringContaining(`pid ${validRecord.pid}`),
+        remediation: expect.stringMatching(/stop it with that version/),
+      }),
+    ])
+    expect(result.checks[0]?.remediation).not.toMatch(/[Rr]emove/)
+  })
+
+  it('calls it malformed, to be removed, once the daemon it names is gone', async () => {
+    const { result } = await doctorOver(otherVersion, false)
+    expect(result.checks[0]?.remediation).toMatch(/Remove the daemon record/)
+  })
+
+  it('does not send a person to `daemon run` over a live record that has no token', async () => {
+    const { token: _token, ...noToken } = validRecord
+    const { result } = await doctorOver(noToken, true)
+    expect(result.checks[0]).toMatchObject({ id: 'daemon.record', status: 'error' })
+    expect(result.checks[0]?.remediation).toMatch(/^Stop that daemon/)
   })
 })

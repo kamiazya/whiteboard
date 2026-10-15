@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseDaemonRecord } from './daemon-record.js'
 import { getDaemonRecordPath } from './daemon-registry.js'
 
+// Every pid below is a fake; a real process under the same number must not
+// decide what the record is.
+const gone = { isAlive: () => false }
+const running = { isAlive: () => true, startMs: () => null }
+
 describe('parseDaemonRecord', () => {
   let dataDir: string
 
@@ -17,7 +22,7 @@ describe('parseDaemonRecord', () => {
   })
 
   it('returns "missing" when daemon.json does not exist', async () => {
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result).toEqual({ kind: 'missing' })
   })
@@ -25,7 +30,7 @@ describe('parseDaemonRecord', () => {
   it('returns "malformed" for invalid JSON', async () => {
     await writeFile(getDaemonRecordPath(dataDir), '{ not valid json', 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result.kind).toBe('malformed')
   })
@@ -33,7 +38,7 @@ describe('parseDaemonRecord', () => {
   it('returns "malformed" when the JSON is not an object', async () => {
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify('not-an-object'), 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result).toEqual({
       kind: 'malformed',
@@ -44,11 +49,11 @@ describe('parseDaemonRecord', () => {
   it('returns "malformed" when required base fields are missing', async () => {
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify({ pid: 123 }), 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result).toEqual({
       kind: 'malformed',
-      message: 'Daemon record is missing required fields.',
+      message: 'Daemon record cannot be interpreted by this version, and its daemon is gone.',
     })
   })
 
@@ -61,9 +66,9 @@ describe('parseDaemonRecord', () => {
     }
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(base), 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
-    expect(result).toEqual({ kind: 'token-missing', record: base })
+    expect(result).toEqual({ kind: 'token-missing', record: base, liveness: { state: 'dead' } })
   })
 
   it('returns "token-missing" when the token is present but empty', async () => {
@@ -76,7 +81,7 @@ describe('parseDaemonRecord', () => {
     }
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(base), 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result.kind).toBe('token-missing')
   })
@@ -91,7 +96,7 @@ describe('parseDaemonRecord', () => {
     }
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(record), 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result.kind).toBe('malformed')
   })
@@ -99,7 +104,7 @@ describe('parseDaemonRecord', () => {
   it('returns "malformed" for a top-level JSON array', async () => {
     await writeFile(getDaemonRecordPath(dataDir), '[]', 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result).toEqual({ kind: 'malformed', message: 'Daemon record is not an object.' })
   })
@@ -114,8 +119,61 @@ describe('parseDaemonRecord', () => {
     }
     await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(record), 'utf-8')
 
-    const result = await parseDaemonRecord(dataDir)
+    const result = await parseDaemonRecord(dataDir, gone)
 
     expect(result).toEqual({ kind: 'valid', record })
+  })
+
+  it('returns "malformed" for an object that names no pid', async () => {
+    await writeFile(getDaemonRecordPath(dataDir), JSON.stringify({ version: '1' }), 'utf-8')
+
+    expect(await parseDaemonRecord(dataDir, running)).toEqual({
+      kind: 'malformed',
+      message: 'Daemon record is missing required fields.',
+    })
+  })
+
+  describe('a record this build cannot interpret', () => {
+    const record = {
+      pid: 123,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
+      version: '9.9.9',
+      startedAt: '2026-04-23T00:00:00.000Z',
+      token: 'secret',
+      launch: 'packaged',
+    }
+
+    it('is reported with what it names while its daemon is running', async () => {
+      await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(record), 'utf-8')
+
+      const { launch: _launch, ...named } = record
+      expect(await parseDaemonRecord(dataDir, running)).toEqual({
+        kind: 'uninterpretable',
+        recorded: named,
+        liveness: { state: 'running' },
+      })
+    })
+
+    it('is malformed once its daemon is gone', async () => {
+      await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(record), 'utf-8')
+
+      expect((await parseDaemonRecord(dataDir, gone)).kind).toBe('malformed')
+    })
+  })
+
+  it('reports whether the daemon a token-less record names is still running', async () => {
+    const base = {
+      pid: 123,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
+      version: '0.1.0',
+      startedAt: '2026-04-23T00:00:00.000Z',
+    }
+    await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(base), 'utf-8')
+
+    expect(await parseDaemonRecord(dataDir, running)).toEqual({
+      kind: 'token-missing',
+      record: base,
+      liveness: { state: 'running' },
+    })
   })
 })

@@ -10,6 +10,10 @@ export const daemonStopResultSchema = z
     action: z.enum(['stopped', 'not-running', 'refused']),
     reason: z.string().nullable(),
     pid: z.number().nullable(),
+    // On an `identity-unconfirmed` refusal, the pid the daemon answering on
+    // the record's socket named, when its answer named one: the process to
+    // stop, which the record cannot identify.
+    servingPid: z.number().int().positive().optional(),
   })
   .strict()
 

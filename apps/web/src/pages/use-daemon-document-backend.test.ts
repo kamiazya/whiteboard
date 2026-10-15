@@ -11,12 +11,19 @@
  * URL.
  */
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { SseBackend, UNROUTED_OPEN_MS } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from '../lib/bridge-address.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
+
+// A failed worker is remembered per origin for the module's lifetime, so each
+// run that fails one takes an origin of its own.
+let failingOrigins = 0
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 const fetchFn = vi.fn() as unknown as typeof fetch
@@ -117,5 +124,72 @@ describe('useDaemonDocumentBackend transport', () => {
   ])('syncs over SSE for %s', (_what, daemonBaseUrl) => {
     const { result } = renderHook(() => useDaemonDocumentBackend(options({ daemonBaseUrl })))
     expect(result.current.backend).toBeInstanceOf(SseBackend)
+  })
+})
+
+/** A SharedWorker that constructs fine and fails to load afterwards, the way a missing chunk does. */
+class FailingSharedWorker {
+  static instances: FailingSharedWorker[] = []
+  onerror: ((event: unknown) => void) | null = null
+  readonly port = { postMessage: vi.fn(), start: vi.fn(), onmessage: null }
+  constructor() {
+    FailingSharedWorker.instances.push(this)
+  }
+  fail() {
+    this.onerror?.({ message: 'chunk failed to load' })
+  }
+}
+
+function snapshotHandlers(onSnapshot: (bytes: Uint8Array) => void): DocumentBackendHandlers {
+  return {
+    onSnapshot,
+    onRemoteUpdate: () => {},
+    onConnected: () => {},
+    onVersionCreated: () => {},
+    onRestoreStarted: () => {},
+    onRestoreComplete: () => {},
+    onViewportRequest: () => {},
+  }
+}
+
+describe('useDaemonDocumentBackend when the shared worker fails to load', () => {
+  const originalSharedWorker = globalThis.SharedWorker
+  afterEach(() => {
+    vi.useRealTimers()
+    globalThis.SharedWorker = originalSharedWorker
+  })
+
+  it('rebuilds on its own stream, and the page opens from its own read', async () => {
+    vi.useFakeTimers()
+    FailingSharedWorker.instances = []
+    globalThis.SharedWorker = FailingSharedWorker as unknown as typeof SharedWorker
+    // Every snapshot read answers; the stream itself never does, so the open
+    // can only come from the unrouted-open read.
+    const daemonFetch = vi.fn((input: RequestInfo | URL) =>
+      String(input).endsWith('/snapshot')
+        ? Promise.resolve(new Response(new Uint8Array([7])))
+        : new Promise<Response>(() => {}),
+    ) as unknown as typeof fetch
+    const daemonBaseUrl = `http://worker-fails-${++failingOrigins}.test`
+    const { result } = renderHook(() =>
+      useDaemonDocumentBackend(options({ daemonBaseUrl: daemonBaseUrl, daemonFetch })),
+    )
+    const onTheWorker = result.current.backend
+    onTheWorker?.connect(snapshotHandlers(() => {}))
+    expect(FailingSharedWorker.instances).toHaveLength(1)
+
+    act(() => FailingSharedWorker.instances[0]?.fail())
+
+    const rebuilt = result.current.backend
+    expect(rebuilt).not.toBeNull()
+    expect(rebuilt).not.toBe(onTheWorker)
+    onTheWorker?.disconnect()
+    const onSnapshot = vi.fn()
+    rebuilt?.connect(snapshotHandlers(onSnapshot))
+    await act(() => vi.advanceTimersByTimeAsync(UNROUTED_OPEN_MS))
+
+    expect(onSnapshot).toHaveBeenCalledWith(new Uint8Array([7]))
+    expect(FailingSharedWorker.instances).toHaveLength(1)
+    rebuilt?.disconnect()
   })
 })

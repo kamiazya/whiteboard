@@ -3,9 +3,13 @@ import type {
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useFollowWorkspaceWrites } from './use-follow-workspace-writes.js'
+
+// A failed worker is remembered per origin for the module's lifetime, so each
+// run that fails one takes an origin of its own.
+let failingOrigins = 0
 
 afterEach(() => {
   vi.useRealTimers()
@@ -98,5 +102,45 @@ describe('useFollowWorkspaceWrites', () => {
     expect(close).not.toHaveBeenCalled()
     hook.unmount()
     expect(close).toHaveBeenCalledTimes(1)
+  })
+})
+
+/** A SharedWorker that constructs fine and fails to load afterwards, the way a missing chunk does. */
+class FailingSharedWorker {
+  static instances: FailingSharedWorker[] = []
+  onerror: ((event: unknown) => void) | null = null
+  readonly port = { postMessage: vi.fn(), start: vi.fn(), onmessage: null }
+  constructor() {
+    FailingSharedWorker.instances.push(this)
+  }
+  fail() {
+    this.onerror?.({ message: 'chunk failed to load' })
+  }
+}
+
+describe('useFollowWorkspaceWrites when the shared worker fails to load', () => {
+  const originalSharedWorker = globalThis.SharedWorker
+  afterEach(() => {
+    globalThis.SharedWorker = originalSharedWorker
+  })
+
+  it('follows the workspace again through a stream of its own', () => {
+    FailingSharedWorker.instances = []
+    globalThis.SharedWorker = FailingSharedWorker as unknown as typeof SharedWorker
+    const subscribe = vi.spyOn(SseStreamHub.prototype, 'subscribe').mockReturnValue(() => {})
+    // Held stable, as the page holds it, so nothing but the failure can
+    // re-run the follow.
+    const reload = vi.fn<Reload>(async () => {})
+    const daemonBaseUrl = `http://follow-worker-fails-${++failingOrigins}.test`
+    renderHook(() =>
+      useFollowWorkspaceWrites({ daemonFetch, daemonBaseUrl: daemonBaseUrl }, 'ws-1', reload),
+    )
+    expect(FailingSharedWorker.instances).toHaveLength(1)
+    expect(subscribe).not.toHaveBeenCalled()
+
+    act(() => FailingSharedWorker.instances[0]?.fail())
+
+    expect(subscribe.mock.calls.map(([doc]) => doc)).toEqual(['workspace:ws-1'])
+    expect(FailingSharedWorker.instances).toHaveLength(1)
   })
 })

@@ -192,6 +192,58 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
     },
   )
 
+  // The parent started after the record's date, so the socket is asked, and
+  // it answers as this process.
+  it.skipIf(readProcessStartMs(process.ppid) === null)(
+    'refuses over a socket another pid serves, naming that pid',
+    async () => {
+      const daemon = await answeringDaemonSocket(process.pid, 'tok')
+      loadDaemonRecordMock.mockResolvedValueOnce({
+        pid: process.ppid,
+        socketPath: daemon.socketPath,
+        token: 'tok',
+        startedAt: '2024-01-01T00:00:00.000Z',
+      })
+      isPidAliveMock.mockReturnValueOnce(true)
+      const outcome = await runDaemonRun({
+        tokenStdin: false,
+        dataDir: '/tmp/whiteboard-test',
+        env: {},
+      })
+      expect(outcome).toEqual({
+        kind: 'refused',
+        message: expect.stringContaining(
+          `the process serving ${daemon.socketPath} is pid ${process.pid}, not pid ${process.ppid}`,
+        ),
+      })
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+    },
+  )
+
+  it.skipIf(readProcessStartMs(process.ppid) === null)(
+    'refuses over a socket that answers without naming the recorded pid',
+    async () => {
+      const daemon = await answeringDaemonSocket(process.ppid, 'another-token')
+      loadDaemonRecordMock.mockResolvedValueOnce({
+        pid: process.ppid,
+        socketPath: daemon.socketPath,
+        token: 'tok',
+        startedAt: '2024-01-01T00:00:00.000Z',
+      })
+      isPidAliveMock.mockReturnValueOnce(true)
+      const outcome = await runDaemonRun({
+        tokenStdin: false,
+        dataDir: '/tmp/whiteboard-test',
+        env: {},
+      })
+      expect(outcome).toEqual({
+        kind: 'refused',
+        message: `A daemon answers on ${daemon.socketPath}, but not as pid ${process.ppid}, which daemon.json names. Stop the process serving that socket first.`,
+      })
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+    },
+  )
+
   it('starts over a record whose process is gone', async () => {
     loadDaemonRecordMock.mockResolvedValueOnce(RECORD)
     isPidAliveMock.mockReturnValueOnce(false)

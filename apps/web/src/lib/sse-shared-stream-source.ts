@@ -3,8 +3,9 @@
  * reads one SSE stream per daemon origin instead of one per canvas.
  *
  * Falls back to `null` where SharedWorker is unavailable (Chrome on Android,
- * and some embedded webviews). The caller then lets SseBackend open its own
- * stream — correct, just without the cross-tab sharing.
+ * and some embedded webviews), and for an origin whose worker failed to load.
+ * The caller then lets SseBackend open its own stream — correct, just without
+ * the cross-tab sharing.
  */
 import type {
   DocListener,
@@ -19,6 +20,32 @@ import {
 } from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
+
+/**
+ * Origins whose worker failed to load. Remembered for the page's lifetime
+ * because what makes one fail — a chunk missing from the deploy, a CSP
+ * refusal — fails a fresh worker the same way, so this origin takes the
+ * own-stream path from then on.
+ */
+const failedOrigins = new Set<string>()
+const failureListeners = new Set<() => void>()
+
+/** Whether this origin's worker failed, so a caller built on it should rebuild. */
+export function sharedStreamFailed(baseUrl: string): boolean {
+  return failedOrigins.has(baseUrl)
+}
+
+/**
+ * Told when a worker fails. Its source is dead from then on — every listener
+ * cut off, every read rejected — so a caller holding one rebuilds, and the
+ * rebuild opens its own stream.
+ */
+export function subscribeSharedStreamFailure(listener: () => void): () => void {
+  failureListeners.add(listener)
+  return () => {
+    failureListeners.delete(listener)
+  }
+}
 
 /** One tab waiting on a snapshot: answered with the state, or told the read failed. */
 interface SnapshotWaiter {
@@ -95,11 +122,43 @@ function deliverWriteNews(
   }
 }
 
+/**
+ * What a worker that failed to load leaves behind. Whoever is watching is told
+ * they are not connected — the UI reads this to stop claiming a live daemon —
+ * and a read waiting on the port rejects, as the contract says a read that
+ * cannot be served does. The origin is remembered, and whoever follows
+ * failures is told so it can rebuild.
+ */
+function retire(
+  baseUrl: string,
+  listeners: Map<string, Set<DocListener>>,
+  snapshotWaiters: Map<string, Set<SnapshotWaiter>>,
+): void {
+  // Forgotten before anyone is told, so a listener that reconnects on the
+  // news is handed its own stream rather than this dead worker.
+  sources.delete(baseUrl)
+  failedOrigins.add(baseUrl)
+  for (const set of listeners.values()) {
+    for (const listener of set) listener.onConnectionChange?.(false)
+  }
+  listeners.clear()
+  const failed = workerFailed(baseUrl)
+  for (const waiters of snapshotWaiters.values()) {
+    for (const waiter of waiters) waiter.reject(failed)
+  }
+  snapshotWaiters.clear()
+  for (const listener of failureListeners) listener()
+}
+
+const workerFailed = (baseUrl: string) =>
+  new Error(`the shared worker for ${baseUrl} failed to load`)
+
 export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | null {
   if (typeof SharedWorker === 'undefined') return null
   // A worker has no `chrome.runtime`, so it cannot reach a daemon through the
   // extension (ADR-0050); the page opens that stream itself.
   if (isBridgeDaemon(baseUrl)) return null
+  if (failedOrigins.has(baseUrl)) return null
 
   const cached = sources.get(baseUrl)
   if (cached) return cached.source
@@ -125,6 +184,8 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
   const snapshotWaiters = new Map<string, Set<SnapshotWaiter>>()
   const port = worker.port
 
+  let dead = false
+
   // A module worker that fails to LOAD does not throw above — construction
   // succeeds and the failure arrives here instead. Without this the port is a
   // hole: every subscribe posts into it, nothing ever answers, and the caller
@@ -138,15 +199,9 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
   // missing chunk or a CSP refusal. It stays because a source of truth behind
   // this worker would make a silent hole much more expensive than it is now.
   worker.onerror = () => {
-    // Tell whoever is watching that they are not connected — the UI reads this
-    // to stop claiming a live daemon.
-    for (const set of listeners.values()) {
-      for (const listener of set) listener.onConnectionChange?.(false)
-    }
-    listeners.clear()
-    // Evicted, so the next creation for this origin builds a fresh worker
-    // rather than handing out the dead one from the cache forever.
-    sources.delete(baseUrl)
+    if (dead) return
+    dead = true
+    retire(baseUrl, listeners, snapshotWaiters)
   }
   port.onmessage = (e: MessageEvent) => {
     const parsed = sseWorkerEventSchema.safeParse(e.data)
@@ -204,6 +259,7 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
       // and with no bytes when its own read of the daemon failed, which
       // rejects — so this settles rather than racing a timeout. `null` is
       // reserved for the hub implementation's 404, which has a daemon to ask.
+      if (dead) return Promise.reject(workerFailed(baseUrl))
       return new Promise((resolve, reject) => {
         let waiters = snapshotWaiters.get(doc)
         if (!waiters) {

@@ -304,18 +304,28 @@ host and therefore never judged by pid, only waited out. Without the lock, one p
 and once re-ran a whole-table rebuild before failing.
 
 Whether the daemon a `daemon.json` names is still running is answered once,
-by `daemon/daemon-liveness.ts`'s `daemonLiveness` (`running | unconfirmed |
-pid-reused | dead`). `daemon stop`/`run`/`status`/`doctor`, the
-replica-posture commands, the startup version-skew warning and the
-registry's refusal of an uninterpretable record all ask it;
+by `daemon/daemon-liveness.ts`'s `daemonLiveness`, whose `.state` is
+`running | unconfirmed | pid-reused | dead` (an `unconfirmed` answer carries
+the `servingPid` the socket named). The record itself has ONE reader,
+`daemon/daemon-record.ts`'s `parseDaemonRecord`: it asks `daemonLiveness` of
+any record it cannot use, so a record this build cannot interpret whose
+daemon is still there is `uninterpretable` (status `record-other-version`,
+never "remove it"), and `loadDaemonRecord` (stop, run, native host) is a
+projection of it. `daemon stop`/`run`/`status`/`doctor`, the replica-posture
+commands and the startup version-skew warning all read through it.
 `tools/arch-lint`'s `daemon-liveness-one-place.test.ts` fails a reader that
-imports `isPidAlive` or `recordedProcess` instead. Start time decides on the
-plain path; only when it says the pid started after the record is the
-record's socket asked (`/api/runtime/status` under the record's token),
-because a stepped wall clock moves `btime` and not a process's start ticks.
-A socket naming the recorded pid is the writer; one that answers otherwise
-is `unconfirmed`, and `daemon stop` then refuses without signalling or
-deleting the record.
+imports `isPidAlive` or `recordedProcess`, imports them dynamically, or calls
+a bare `process.kill(pid, 0)`, and fails any module but `daemon-record.ts`
+importing a record schema. Start time decides on the plain path; only when
+it says the pid started after the record is the record's socket asked
+(`/api/runtime/status` under the record's token), because a stepped wall
+clock moves `btime` and not a process's start ticks. A socket naming the
+recorded pid is the writer; one that answers otherwise, or accepts the
+connection and stays silent past the ask's timeout, is `unconfirmed` — only
+a connection nobody accepts is `pid-reused` — and `daemon stop` then refuses
+without signalling or deleting the record. The dev scripts' stop
+(`packages/mcp-server/scripts/dev/dev-daemon-socket-lib.mjs`'s `recordedDaemonLiveness`) is a
+bare-node copy held to it by a parity property.
 
 ## Log redaction
 

@@ -90,13 +90,18 @@ export const supportBundleManifestSchema = z.discriminatedUnion('mode', [
 ])
 type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
 
-// Redacted status section. The input IS the status result, so a field added to
-// `daemon status --json` is a type error here until the bundle decides whether
-// it may leave the machine. `record.token`, `auth.hasToken`, `mcp.endpoint`,
-// anything path-shaped goes through the redactor or never copies. `pingOk` and
-// `statusOk` are the status contract's own: `daemon status` does not ping, so
-// they are null until it does, and the section carries them so that day needs
-// no second edit.
+// Redacted status section. The input IS the status result, so a REQUIRED field
+// added to `daemon status --json` is a type error here until the bundle decides
+// whether it may leave the machine; an optional one is not, and is decided here
+// by hand. `record.token`, `auth.hasToken`, `mcp.endpoint`, anything
+// path-shaped goes through the redactor or never copies. `pingOk` and
+// `statusOk` are the status contract's own and nothing sets them: `daemon
+// status` asks the record's socket only when a start time contradicts the
+// record, and what that answer says reaches the result as its `reason` and
+// `servingPid`, never as a ping. They stay null, and the section carries them so
+// a status that does ping needs no second edit. `servingPid` is not copied: the
+// `identity-unconfirmed` reason already says another process serves the
+// socket, and which one is a fact about the reporter's machine at that moment.
 type SupportBundleStatusInput = Omit<DaemonStatusResult, 'schemaVersion'>
 
 const absentAsNull = <T extends z.ZodTypeAny>(field: z.ZodOptional<T>) => field.unwrap().nullable()

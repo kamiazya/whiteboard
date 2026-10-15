@@ -123,6 +123,7 @@ describe('the daemon record', () => {
       expect(await parseDaemonRecord(dataDir)).toEqual({
         kind: 'token-missing',
         record: viaJson(base),
+        liveness: { state: 'dead' },
       })
     },
   )

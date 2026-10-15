@@ -29,7 +29,7 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import type { ZodType, z } from 'zod'
-import { daemonLiveness } from '../daemon/daemon-liveness.js'
+import { type DaemonLivenessSeams, daemonLiveness } from '../daemon/daemon-liveness.js'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
 import { type DaemonAnswer, type DaemonRequest, requestDaemon } from '../daemon/daemon-request.js'
@@ -43,7 +43,7 @@ import {
 interface PostureOptions {
   dataDir: string
   workspaceId: string
-  parseRecord?: (dataDir: string) => Promise<DaemonRecordParseResult>
+  parseRecord?: (dataDir: string, seams?: DaemonLivenessSeams) => Promise<DaemonRecordParseResult>
   isPidAlive?: (pid: number) => boolean
   /** When a pid's process started; null where the platform cannot say. */
   processStartMs?: (pid: number) => number | null
@@ -72,7 +72,12 @@ function refused(
 async function runningDaemon(
   options: PostureOptions,
 ): Promise<{ record: DaemonRecord } | { refusal: Refused }> {
-  const parsed = await (options.parseRecord ?? parseDaemonRecord)(options.dataDir)
+  const seams = {
+    isAlive: options.isPidAlive,
+    startMs: options.processStartMs,
+    ...(options.request === undefined ? {} : { request: options.request }),
+  }
+  const parsed = await (options.parseRecord ?? parseDaemonRecord)(options.dataDir, seams)
   const { workspaceId } = options
   const none = (message: string) => ({
     refusal: refused(workspaceId, 'daemon-not-running', message),
@@ -80,15 +85,18 @@ async function runningDaemon(
   if (parsed.kind === 'missing') return none('no daemon record found under the data directory')
   if (parsed.kind === 'malformed') return none('the daemon record cannot be read')
   if (parsed.kind === 'token-missing') return none('the daemon record carries no token')
+  if (parsed.kind === 'uninterpretable') {
+    return none(
+      `the daemon record cannot be interpreted by this version, and the daemon it names (pid ${parsed.recorded.pid}) is still there; stop it with the version that started it`,
+    )
+  }
   const { pid } = parsed.record
-  const liveness = await daemonLiveness(parsed.record, {
-    isAlive: options.isPidAlive,
-    startMs: options.processStartMs,
-    ...(options.request === undefined ? {} : { request: options.request }),
-  })
-  if (liveness === 'dead') return none(`daemon pid ${pid} is not running`)
-  if (liveness === 'pid-reused') return none(`daemon pid ${pid} now belongs to another process`)
-  if (liveness === 'unconfirmed') {
+  const liveness = await daemonLiveness(parsed.record, seams)
+  if (liveness.state === 'dead') return none(`daemon pid ${pid} is not running`)
+  if (liveness.state === 'pid-reused') {
+    return none(`daemon pid ${pid} now belongs to another process`)
+  }
+  if (liveness.state === 'unconfirmed') {
     return none(
       `a daemon answers on the recorded socket, but not as pid ${pid}, which the record names`,
     )

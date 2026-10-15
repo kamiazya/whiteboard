@@ -1,11 +1,15 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { createServer as createSocketServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { daemonLiveness } from '../../src/daemon/daemon-liveness.js'
 import { daemonRecordSchema } from '../../src/daemon/daemon-record-schema.js'
+import { DaemonNoAnswerError } from '../../src/daemon/daemon-request.js'
 import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.js'
 import {
   readProcessStartMs as daemonReadProcessStartMs,
@@ -17,8 +21,10 @@ import {
   BUILT_LAUNCH,
   isPidAlive,
   isRecordWriter,
+  NO_ANSWER,
   readDaemonRecord,
   readProcessStartMs,
+  recordedDaemonLiveness,
   requestDaemon,
 } from './dev-daemon-socket-lib.mjs'
 
@@ -264,6 +270,76 @@ describe('requestDaemon', () => {
   })
 })
 
+// What a liveness check makes of a socket that says nothing depends on WHY it
+// said nothing: a connection refused, or no socket at all, is no daemon, while
+// one taken and then left unanswered is a daemon wedged on its loop.
+describe('a socket that says nothing', () => {
+  async function wedged() {
+    const socketPath = join(dataDirWith(null), 'wedged.sock')
+    const server = createServer(() => {})
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    return {
+      socketPath,
+      close: () =>
+        new Promise<void>((closed) => {
+          server.close(() => closed())
+          server.closeAllConnections()
+        }),
+    }
+  }
+
+  it('rejects as unanswered once a connection it took stays silent', async () => {
+    const daemon = await wedged()
+    try {
+      await expect(requestDaemon(daemon, { path: '/x', timeoutMs: 100 })).rejects.toMatchObject({
+        code: NO_ANSWER,
+      })
+    } finally {
+      await daemon.close()
+    }
+  })
+
+  it('rejects as unanswered when a connection it took is hung up on', async () => {
+    const socketPath = join(dataDirWith(null), 'hangup.sock')
+    const server = createSocketServer((socket) => socket.destroy())
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    try {
+      await expect(
+        requestDaemon({ socketPath }, { path: '/x', timeoutMs: 1_000 }),
+      ).rejects.toMatchObject({ code: NO_ANSWER })
+      const startedAt = '2026-01-01T00:00:00.000Z'
+      const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+      const record = { pid: 42, startedAt, socketPath, token: 't' }
+      expect(await recordedDaemonLiveness(record, late)).toBe('unconfirmed')
+    } finally {
+      await new Promise<void>((closed) => server.close(() => closed()))
+    }
+  })
+
+  it('rejects as a refused connection when nothing listens', async () => {
+    const socketPath = join(dataDirWith(null), 'nobody.sock')
+    const refused = await requestDaemon({ socketPath }, { path: '/x', timeoutMs: 100 }).catch(
+      (error: { code?: string }) => error,
+    )
+    expect(refused).toMatchObject({ code: expect.any(String) })
+    expect((refused as { code: string }).code).not.toBe(NO_ANSWER)
+  })
+
+  it('reads a late-starting pid behind a wedged socket as unconfirmed, behind none as reused', async () => {
+    const startedAt = '2026-01-01T00:00:00.000Z'
+    const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+    const daemon = await wedged()
+    try {
+      const record = { pid: 42, startedAt, socketPath: daemon.socketPath, token: 't' }
+      expect(await recordedDaemonLiveness(record, late)).toBe('unconfirmed')
+    } finally {
+      await daemon.close()
+    }
+    const gone = { pid: 42, startedAt, socketPath: join(dataDirWith(null), 'gone.sock') }
+    expect(await recordedDaemonLiveness(gone, late)).toBe('pid-reused')
+  })
+})
+
 describe('isRecordWriter', () => {
   const writtenAt = '2026-01-01T00:00:10.000Z'
   const writtenAtMs = Date.parse(writtenAt)
@@ -320,5 +396,113 @@ describe("the pid-reuse judgement against the daemon's own", () => {
     expect(isRecordWriter(7, new Date(writtenAtMs).toISOString(), seams)).toBe(
       daemonRecordedProcess(7, writtenAtMs, seams) === 'writer',
     )
+  })
+})
+
+// `pnpm mcp:http:stop` decides whether to signal a pid by this verdict, so it
+// must be the daemon's own: a stop that calls a daemon stale which the daemon
+// calls running leaves it serving, unstoppable, with its worktree deleted
+// around it. Held over the same /proc answers, clock and socket replies — a
+// stepped clock included, which is where the socket is asked at all.
+describe("the liveness verdict against the daemon's own", () => {
+  const RECORDED_PID = 7
+  // What the socket says, as the daemon's request helper hands it over (a
+  // parsed body) — the dev helper gets the same reply as its raw text. A
+  // status names the recorded pid or another; the other bodies name none.
+  // Weighted so the arrangement that matters — a late start time, a socket,
+  // and a status confirming the pid — is common rather than a rare corner.
+  const replyArbitrary = fc.oneof(
+    // Nothing listening: the connection is refused.
+    { arbitrary: fc.constant({ kind: 'refused' as const }), weight: 1 },
+    // Listening, taking the connection, never answering: a wedged daemon.
+    { arbitrary: fc.constant({ kind: 'wedged' as const }), weight: 1 },
+    {
+      arbitrary: fc.record({
+        kind: fc.constant('reply' as const),
+        status: fc.constantFrom(200, 200, 200, 401, 500),
+        body: fc.oneof(
+          {
+            arbitrary: fc
+              .tuple(
+                arbitraryForSchema(runtimeStatusResponseSchema),
+                fc.constantFrom(RECORDED_PID, 8),
+              )
+              .map(([status, pid]) => ({ ...status, pid }) as unknown),
+            weight: 4,
+          },
+          { arbitrary: fc.record({ ok: fc.boolean() }) as fc.Arbitrary<unknown>, weight: 1 },
+          { arbitrary: fc.string().map((text) => `not json ${text}` as unknown), weight: 1 },
+          { arbitrary: fc.constant(undefined as unknown), weight: 1 },
+        ),
+      }),
+      weight: 3,
+    },
+  )
+
+  it('agrees on running, unconfirmed, pid-reused and dead', async () => {
+    const seen = new Set<string>()
+    let confirmedBySocket = 0
+    let wedgedUnconfirmed = 0
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom(true, true, true, false),
+        // The start time relative to the record: before it, inside the slack,
+        // or past it as a stepped clock or a reused pid makes it.
+        fc.option(fc.integer({ min: -10_000, max: 20_000 }), { nil: null, freq: 8 }),
+        fc.integer({ min: 0, max: 20_000 }),
+        fc.option(fc.constant('/daemon.sock'), { nil: undefined, freq: 8 }),
+        fc.option(fc.string({ minLength: 1, maxLength: 8 }), { nil: undefined }),
+        replyArbitrary,
+        async (alive, offset, writtenAtMs, socketPath, token, reply) => {
+          const started = offset === null ? null : writtenAtMs + offset
+          const record = {
+            pid: RECORDED_PID,
+            startedAt: new Date(writtenAtMs).toISOString(),
+            ...(socketPath === undefined ? {} : { socketPath }),
+            ...(token === undefined ? {} : { token }),
+          }
+          const identity = { isAlive: () => alive, startMs: () => started }
+          // The socket answers only an ask carrying the record's token, as the
+          // daemon does, so a side that dropped the token reads a 401.
+          const answer = (presented: string | undefined) => {
+            if (reply.kind === 'refused') {
+              throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+            }
+            if (reply.kind === 'wedged') throw new DaemonNoAnswerError('no answer within 1500ms')
+            return presented === token ? reply : { status: 401, body: {} }
+          }
+          const daemonSide = (
+            await daemonLiveness(record, {
+              ...identity,
+              request: async (req) => answer(req.record.token),
+            })
+          ).state
+          const devSide = await recordedDaemonLiveness(record, {
+            ...identity,
+            request: async (_record, req) => {
+              if (reply.kind === 'wedged') {
+                throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
+              }
+              const presented = req.headers?.authorization?.replace(/^Bearer /, '')
+              const { status, body } = answer(presented)
+              const text =
+                body === undefined ? '' : typeof body === 'string' ? body : JSON.stringify(body)
+              return { status, contentType: 'application/json', text }
+            },
+          })
+          expect(devSide).toBe(daemonSide)
+          if (reply.kind === 'wedged' && devSide === 'unconfirmed') wedgedUnconfirmed += 1
+          seen.add(devSide)
+          if (daemonSide === 'running' && offset !== null && offset > 5_000) {
+            confirmedBySocket += 1
+          }
+        },
+      ),
+      withDefaults({ numRuns: 400 }),
+    )
+    // A generator that never reached the socket would agree vacuously.
+    expect([...seen].sort()).toEqual(['dead', 'pid-reused', 'running', 'unconfirmed'])
+    expect(confirmedBySocket).toBeGreaterThan(0)
+    expect(wedgedUnconfirmed).toBeGreaterThan(0)
   })
 })

@@ -14,6 +14,11 @@ export const daemonStatusResultSchema = z
     recordFound: z.boolean(),
     recordFresh: z.boolean(),
     pidAlive: z.boolean().optional(),
+    // The pid a runtime status on the record's socket named when it was not
+    // the record's pid — the process a person has to stop before a daemon of
+    // this build can start there. Absent where nothing answered, the answer
+    // named no pid, or the socket was not asked.
+    servingPid: z.number().int().positive().optional(),
     pingOk: z.boolean().optional(),
     statusOk: z.boolean().optional(),
     record: z
