@@ -97,9 +97,11 @@ describe('segmenting a run against measuring it whole', () => {
   })
 
   afterAllFloor(['sums to what one opentype call measures for the whole run'], () => {
-    // Reachability: a cut every 64 code points regardless of what follows
+    // Reachability: a cut every 32 code points regardless of what follows
     // must be WRONG in a good share of runs, or the property passes whatever
-    // rule the measurer cuts by. Measured at 14-23 runs of 60 over six runs.
+    // rule the measurer cuts by. Over 300 samples of 60 runs it caught 16-38
+    // (5th percentile 19); a 64-point cut caught as few as 6, the floor's own
+    // edge, and failed it on CI once.
     expect(carelessCutsCaught).toBeGreaterThan(NUM_RUNS / 10)
   })
 
@@ -113,8 +115,8 @@ describe('segmenting a run against measuring it whole', () => {
 
     const codePoints = Array.from(text)
     let careless = 0
-    for (let start = 0; start < codePoints.length; start += 64) {
-      careless += advanceOf(codePoints.slice(start, start + 64).join(''))
+    for (let start = 0; start < codePoints.length; start += 32) {
+      careless += advanceOf(codePoints.slice(start, start + 32).join(''))
     }
     if (Math.abs(careless - whole) > 1e-9) carelessCutsCaught++
 
