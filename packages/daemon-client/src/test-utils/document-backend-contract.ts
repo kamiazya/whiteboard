@@ -49,6 +49,19 @@ export interface DocumentBackendHarness {
    */
   refuseAuth?(): void
   /**
+   * How many times this backend has opened its stream to the keeper, refused
+   * opens included — so a case can tell a backend that stopped from one
+   * still retrying. Omitted, with `failsNextStreamOpen`, by an implementation
+   * with no stream.
+   */
+  streamOpens?(): number
+  /**
+   * Make the keeper answer this backend's next stream open with a failure
+   * that is not a refused credential (a daemon restarting), and the opens
+   * after it normally.
+   */
+  failsNextStreamOpen?(): void
+  /**
    * An update a caller of this port would push, built against the snapshot
    * the backend delivered, and how to tell the keeper took it. For an
    * implementation whose upstream is not a byte relay; one with
@@ -313,6 +326,43 @@ function transportCases(
   })
 }
 
+/**
+ * Resolves once a control backend, dropped with a failure that is NOT a
+ * refused credential when `drop` is called, has opened its stream twice more:
+ * the reconnect, then the retry its backoff schedules. A backend dropped just
+ * before it that kept retrying after a refusal has had the same schedule to
+ * make its own retry in, however slow the machine is running.
+ */
+async function backoffClock(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): Promise<{ drop(): void; retried(): Promise<void>; cleanup(): void } | null> {
+  const control = await create()
+  const { streamOpens, failsNextStreamOpen, dropTransport } = control
+  if (!streamOpens || !failsNextStreamOpen || !dropTransport) {
+    control.cleanup()
+    return null
+  }
+  const rec = recorder()
+  control.backend.connect(rec.handlers)
+  await called(rec, 'connected')
+  let before = streamOpens()
+  return {
+    drop: () => {
+      before = streamOpens()
+      failsNextStreamOpen()
+      dropTransport()
+    },
+    retried: () =>
+      vi.waitFor(() => expect(streamOpens()).toBeGreaterThanOrEqual(before + 2), {
+        timeout: DELIVERY_TIMEOUT_MS,
+      }),
+    cleanup: () => {
+      control.backend.disconnect()
+      control.cleanup()
+    },
+  }
+}
+
 /** What a caller is told when the keeper refuses its credential. */
 function authCases(create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>): void {
   it('reports a refused credential as an auth error, not as a disconnect', async () => {
@@ -327,17 +377,25 @@ function authCases(create: () => DocumentBackendHarness | Promise<DocumentBacken
     const rec = recorder()
     h.backend.connect(rec.handlers)
     await called(rec, 'connected')
+    // A backend that retries a refused credential announces it again only at
+    // its next attempt, a backoff later and past any fixed window, so a
+    // control's own retry is what says that attempt would have come by now.
+    const clock = await backoffClock(create)
+    const opensBefore = h.streamOpens?.()
 
     h.refuseAuth()
     h.dropTransport()
+    clock?.drop()
     // Polled, not settled: the refusal is met on the backend's own reconnect
     // attempt, which sits behind its production backoff.
-    await vi.waitFor(() => expect(rec.calls).toContain('authError'), {
-      timeout: DELIVERY_TIMEOUT_MS,
-    })
+    await called(rec, 'authError')
+    await clock?.retried()
     await settle()
 
     expect(rec.calls.filter((c) => c === 'authError')).toEqual(['authError'])
+    // The refused reconnect, and no attempt after it.
+    if (opensBefore !== undefined) expect(h.streamOpens?.()).toBe(opensBefore + 1)
+    clock?.cleanup()
     h.backend.disconnect()
     h.cleanup()
   })
