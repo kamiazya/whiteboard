@@ -7,7 +7,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
-import { createSharedSseStreamSource } from './sse-shared-stream-source.js'
+import {
+  createSharedSseStreamSource,
+  sharedStreamFailed,
+  subscribeSharedStreamFailure,
+} from './sse-shared-stream-source.js'
 
 type ErrorHandler = ((event: { message?: string }) => void) | null
 
@@ -42,7 +46,7 @@ afterEach(() => {
 
 describe('a shared worker that fails to load', () => {
   it('tells its listeners they are disconnected instead of going quiet', () => {
-    const source = createSharedSseStreamSource('http://daemon.test')
+    const source = createSharedSseStreamSource('http://disconnected.test')
     expect(source).not.toBeNull()
     const onConnectionChange = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
@@ -52,18 +56,49 @@ describe('a shared worker that fails to load', () => {
     expect(onConnectionChange).toHaveBeenCalledWith(false)
   })
 
-  it('is evicted, so the next caller gets a fresh worker rather than the dead one', () => {
-    createSharedSseStreamSource('http://daemon.test')
+  it('is remembered, so the next caller for that origin opens its own stream', () => {
+    createSharedSseStreamSource('http://evicted.test')
     expect(FakeSharedWorker.instances).toHaveLength(1)
-
-    // Without eviction this returns the cached source built on the dead
-    // worker, and the hole outlives the failure for the whole session.
-    createSharedSseStreamSource('http://daemon.test')
+    expect(createSharedSseStreamSource('http://evicted.test')).not.toBeNull()
     expect(FakeSharedWorker.instances).toHaveLength(1)
 
     FakeSharedWorker.instances[0]?.fail()
-    createSharedSseStreamSource('http://daemon.test')
-    expect(FakeSharedWorker.instances).toHaveLength(2)
+
+    // A missing chunk or a CSP refusal is the same on every attempt, so a
+    // fresh worker would fail the same way; `null` is the own-stream path.
+    expect(createSharedSseStreamSource('http://evicted.test')).toBeNull()
+    expect(FakeSharedWorker.instances).toHaveLength(1)
+    expect(sharedStreamFailed('http://evicted.test')).toBe(true)
+    expect(sharedStreamFailed('http://elsewhere.test')).toBe(false)
+  })
+
+  it('rejects a snapshot it was still waiting on', async () => {
+    const source = createSharedSseStreamSource('http://pending-snapshot.test')
+    const pending = source?.snapshot('workspace:w')
+
+    FakeSharedWorker.instances[0]?.fail()
+
+    await expect(pending).rejects.toThrow()
+  })
+
+  it('rejects every later snapshot at once rather than posting into the dead port', async () => {
+    const source = createSharedSseStreamSource('http://later-snapshot.test')
+    FakeSharedWorker.instances[0]?.fail()
+
+    await expect(source?.snapshot('workspace:w')).rejects.toThrow()
+    expect(postedOfType('snapshot-request')).toEqual([])
+  })
+
+  it('tells whoever follows the failures, once', () => {
+    const told = vi.fn()
+    const stop = subscribeSharedStreamFailure(told)
+    createSharedSseStreamSource('http://told.test')
+
+    FakeSharedWorker.instances[0]?.fail()
+    FakeSharedWorker.instances[0]?.fail()
+    stop()
+
+    expect(told).toHaveBeenCalledTimes(1)
   })
 })
 
