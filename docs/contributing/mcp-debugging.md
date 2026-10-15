@@ -182,10 +182,12 @@ migrating the same data directory at once (two stdio servers, `pnpm mcp` twice,
 `pnpm mcp:http:dev` beside `pnpm mcp`), and the loser died at whichever step it
 collided on. Startup now serializes them on `migration.lock` in the data
 directory: the second process logs `waiting for another process to finish
-migrating this data directory` (at `info`) and then finds nothing pending. A
+migrating this data directory` (at `warning`, the default level, naming the
+holder's pid, the lock file and the deadline) and then finds nothing pending. A
 lock left by a process that exited, or whose pid a later process has taken, is
-replaced; a live holder is waited out for 120 seconds, after which the error
-names its pid and the lock file. On a build older than the lock, **restart the
+replaced; a live holder — or one recorded on another host, such as a container
+sharing the data volume, whose pid means nothing here — is waited out for 120
+seconds, after which the error names it and the lock file. On a build older than the lock, **restart the
 failed process** — the winner's database is intact. Do not delete `.dev-data`:
 it holds this checkout's ticket documents.
 

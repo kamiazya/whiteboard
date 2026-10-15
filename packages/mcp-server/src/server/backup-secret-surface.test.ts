@@ -49,24 +49,41 @@ const BACKUP_DISPOSITION = {
   'daemon-identity.json':
     'never-copied: the Ed25519 private key behind the daemon did:key, the actor its versions name. Decided 2026-09-19 against a real cost — a restored daemon gets a fresh identity, so pairings must be redone and old versions name a former actor. Taken because that is recoverable and a signing key in a backup is not.',
   'migration.lock':
-    'copied: exists only while a starting process migrates, so a backup rarely meets one. A restored one is judged like any other: the next start replaces it unless the pid it names is a live process that started before the file was written (migration-lock.ts).',
+    'copied: exists only while a starting process migrates, so a backup rarely meets one. A restored one is judged like any other: the next start replaces it unless the pid it names is a live process that started before the file was written (stale-lock.ts). One recorded on another host is waited out to the bound, whose error names the file to remove.',
   'storage.json':
     'copied: the database location record. A restore needs it to find the database it just restored.',
   'whiteboard.db':
     'copied: the database itself — the point of the backup. `excludeDatabaseFile` is a per-call option, not a standing exclusion.',
 
+  'daemon.lock':
+    'copied: a directory that exists only while a daemon starts, so a backup rarely meets one. A restored one is judged like any lock (stale-lock.ts): replaced when its owner exited, its pid was reused, or it names no owner past the grace; one recorded on another host is waited out to the startup bound, whose error names the directory to remove.',
+  'owner.json':
+    "copied: the holder record inside daemon.lock (mkdir-lock.ts), and judged with it — see daemon.lock's entry.",
+  '.pending-writes':
+    'never-copied: writes staged before their rename into place; a copy would restore a write that never committed.',
+  tenants: "copied: every tenant's stored workspaces, blobs and files — what a backup exists for.",
+  workspaces: 'copied: the per-workspace directories under each tenant.',
+  blobs:
+    "copied: a tenant's document blobs (`excludeBlobs` is a per-call option for the mirror, not a standing exclusion). Also the backup mirror's own flat store.",
+  files: "copied: a workspace's uploaded files. Also the backup mirror's own flat store.",
+  exports: 'copied: files a person asked to have written out, under the workspace id.',
+  fonts:
+    'copied: installed fonts the export measurer reads; a restore without them would render with fallbacks.',
+
   'blobs.json':
     'not-in-data-dir: the blob manifest inside a backup MIRROR directory, written by backup-blob-mirror.ts.',
-  'owner.json':
-    'not-in-data-dir: mkdir-lock.ts writes it inside the lock directory it creates, wherever the caller puts that.',
 } satisfies Record<string, BackupDisposition>
 
-/** Every `…FILENAME = '<name>'` constant this package declares. */
+/**
+ * Every `…FILENAME = '<name>'` and `…DIRNAME = '<name>'` constant this package
+ * declares: the copy is recursive, so a directory is copied whole as readily as
+ * a file.
+ */
 async function scanDeclaredFilenames(): Promise<Set<string>> {
   const found = new Set<string>()
   for (const file of productionSourceFiles(PACKAGE_SRC, { extensions: ['.ts'] })) {
     const source = await readFile(file, 'utf8')
-    for (const match of source.matchAll(/(?:^|\s)[A-Z_]*FILENAME\s*=\s*'([^']+)'/gm)) {
+    for (const match of source.matchAll(/(?:^|\s)[A-Z_]*(?:FILENAME|DIRNAME)\s*=\s*'([^']+)'/gm)) {
       found.add(match[1] as string)
     }
   }
@@ -77,7 +94,7 @@ describe('every data-dir filename is classified against what a backup copies', (
   // A count, because a regex that stops matching otherwise reports itself as
   // "every entry is stale" and sends the reader to the wrong file entirely.
   it('finds a plausible number of declared filenames', async () => {
-    expect((await scanDeclaredFilenames()).size).toBeGreaterThanOrEqual(8)
+    expect((await scanDeclaredFilenames()).size).toBeGreaterThanOrEqual(16)
   })
 
   it('classifies every filename the source declares', async () => {
@@ -104,10 +121,6 @@ describe('the ledger agrees with the exclusion list it describes', () => {
       .map(([name]) => name)
       .sort()
 
-    // `pending-writes` is a DIRECTORY rather than a declared filename, so it
-    // is in the exclusion list and cannot be in a filename ledger.
-    const excludedFiles = NEVER_COPIED_FOR_TESTS.filter((name) => name.endsWith('.json')).sort()
-
-    expect(excludedFiles).toEqual(classifiedNeverCopied)
+    expect([...NEVER_COPIED_FOR_TESTS].sort()).toEqual(classifiedNeverCopied)
   })
 })

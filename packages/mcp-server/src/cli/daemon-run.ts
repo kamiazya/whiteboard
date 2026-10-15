@@ -29,7 +29,7 @@ import {
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { isPidAlive } from '../shared/process-alive.js'
+import { recordedProcessOf } from '../shared/process-identity.js'
 
 export type DaemonRunOutcome =
   | {
@@ -182,6 +182,9 @@ async function resolveStartupToken(
   return { token }
 }
 
+// A daemon.json that outlived its daemon can name a pid a later process took;
+// `recordedProcessOf` answers 'writer' only for the process that wrote it, so
+// the refusal below is never over an unrelated process.
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
   // An explicit --data-dir must govern ALL persistence (sqlite db, document
   // blobs, exports), not just the daemon registry file. Redirect the shared
@@ -200,7 +203,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   if (refusal !== null) return refusal.outcome
 
   const existing = await loadDaemonRecord(dataDir)
-  if (existing !== null && isPidAlive(existing.pid)) {
+  if (existing !== null && recordedProcessOf(existing) === 'writer') {
     return {
       kind: 'refused',
       message: 'A daemon is already running. Stop it first with: whiteboard daemon stop --json',

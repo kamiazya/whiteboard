@@ -4,12 +4,15 @@ import {
   daemonStopResultSchema,
 } from '../shared/api-contracts/daemon-stop.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import { readProcessStartMs, recordedProcessOf } from '../shared/process-identity.js'
 import { STOP_SIGTERM_WINDOW_MS } from '../shared/stop-timeouts.js'
 import { terminateAndWait } from '../shared/terminate-and-wait.js'
 
 export interface DaemonStopOptions {
   dataDir: string
   isPidAlive?: (pid: number) => boolean
+  /** When a pid's process started; null where the platform cannot say. */
+  processStartMs?: (pid: number) => number | null
   killFn?: (pid: number, signal: string) => void
   sleep?: (ms: number) => Promise<void>
   stopTimeoutMs?: number
@@ -61,15 +64,19 @@ export async function runDaemonStop(
   }
 
   const { pid } = record
-
-  if (!isAlive(pid)) {
+  // A record that outlived its daemon can name a pid another process has
+  // since taken; that process is not the daemon and must not be signalled.
+  const startMs = options.processStartMs ?? readProcessStartMs
+  const identify = () => recordedProcessOf(record, { isAlive, startMs })
+  const identity = identify()
+  if (identity !== 'writer') {
     await removeRecord(options.dataDir)
     return {
       result: daemonStopResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         action: 'not-running',
-        reason: 'process-not-running',
+        reason: identity === 'dead' ? 'process-not-running' : 'pid-reused',
         pid,
       }),
       exitCode: 1,
@@ -84,6 +91,7 @@ export async function runDaemonStop(
     timeoutMs: stopTimeoutMs,
     pollMs: POLL_INTERVAL_MS,
     killWaitMs,
+    confirmKill: async () => identify() === 'writer',
   })
   if (stopped.kind === 'signal-failed') {
     return {

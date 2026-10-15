@@ -36,14 +36,12 @@ const VOCABULARY = /^(probe|fails-safe|degrades-visibly|deliberate|debt): (\S+\s
 const LEDGER: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/daemon/container-detection.ts#defaultReadCgroup':
     'probe: reads /proc/1/cgroup to guess whether this runs in a container, and an unreadable file only means it cannot tell',
-  'packages/mcp-server/src/shared/mkdir-lock.ts#loadOwnerMetadata':
-    'fails-safe: an owner it cannot read is never judged dead, so the lock is waited on rather than broken',
   'packages/mcp-server/src/server/server-mode-web-app.ts#mountServerModeWebApp':
     'degrades-visibly: a shell it cannot read serves the placeholder page, which says the app is missing rather than pretending',
   'packages/mcp-server/src/server/store/db/location-record.ts#readDatabaseLocationRecord':
     'deliberate: backup falls back to the environment and restore to its file-presence check, and restore refuses a mismatch either way',
-  'packages/mcp-server/src/server/store/db/migration-lock.ts#readProcessStartMs':
-    'probe: reads /proc to tell a reused pid from the lock holder, and an unreadable entry only means it cannot tell, so the holder is waited on rather than replaced',
+  'packages/mcp-server/src/shared/process-identity.ts#readProcessStartMs':
+    'probe: reads /proc to tell a reused pid from the process that wrote a record, and an unreadable entry only means it cannot tell, so the live pid is trusted — a lock holder waited on, a daemon not restarted over',
   'packages/mcp-server/src/server/store/db/migration-lock.ts#release':
     'fails-safe: a lock it cannot read is left in place, and the next start judges its holder like any other',
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#importOneBlob':

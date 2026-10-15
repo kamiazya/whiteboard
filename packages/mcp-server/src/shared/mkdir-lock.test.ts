@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -161,5 +163,86 @@ describe('withMkdirLock', () => {
         clearTimeout(letGo)
       }
     })
+  })
+
+  // A holder that died between creating the directory and writing its owner
+  // leaves a lock nobody names; past the grace nobody is still writing it.
+  describe('a lock whose holder wrote no owner', () => {
+    it('is waited on within the grace, and the timeout names the lock directory', async () => {
+      await mkdir(lockPath)
+      await expect(
+        withMkdirLock(lockPath, async () => {}, { retryDelayMs: 5, timeoutMs: 100 }),
+      ).rejects.toThrow(lockPath)
+    })
+
+    it('is reclaimed once the grace has passed', async () => {
+      await mkdir(lockPath)
+      const longAgo = new Date(Date.now() - 60_000)
+      await utimes(lockPath, longAgo, longAgo)
+      let ran = false
+      await withMkdirLock(
+        lockPath,
+        async () => {
+          ran = true
+        },
+        { retryDelayMs: 5, timeoutMs: 1_000 },
+      )
+      expect(ran).toBe(true)
+    })
+  })
+
+  it.skipIf(!existsSync('/proc/self/stat'))(
+    'reclaims a lock whose pid a later process has taken',
+    async () => {
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)'], {
+        stdio: 'ignore',
+      })
+      try {
+        await new Promise<void>((resolve, reject) => {
+          child.once('spawn', resolve)
+          child.once('error', reject)
+        })
+        await mkdir(lockPath)
+        await writeFile(
+          join(lockPath, 'owner.json'),
+          // Seconds, not years: a USER_HZ misread still lands within hours.
+          JSON.stringify({
+            pid: child.pid,
+            startedAt: new Date(Date.now() - 30_000).toISOString(),
+          }),
+        )
+        let ran = false
+        await withMkdirLock(
+          lockPath,
+          async () => {
+            ran = true
+          },
+          { retryDelayMs: 5, timeoutMs: 1_000 },
+        )
+        expect(ran).toBe(true)
+      } finally {
+        child.kill('SIGKILL')
+      }
+    },
+  )
+
+  // Containers sharing one data volume each number their own processes.
+  it('waits out an owner recorded on another host, whatever its pid reads as here', async () => {
+    await mkdir(lockPath)
+    await writeFile(
+      join(lockPath, 'owner.json'),
+      JSON.stringify({ pid: DEAD_PID, startedAt: new Date().toISOString(), host: 'another-host' }),
+    )
+    await expect(
+      withMkdirLock(lockPath, async () => {}, { retryDelayMs: 5, timeoutMs: 100 }),
+    ).rejects.toThrow('on host another-host')
+  })
+
+  it('leaves a lock another holder owns by the time it finishes', async () => {
+    const successor = JSON.stringify({ pid: DEAD_PID, startedAt: new Date().toISOString() })
+    await withMkdirLock(lockPath, async () => {
+      await writeFile(join(lockPath, 'owner.json'), successor)
+    })
+    expect(await readFile(join(lockPath, 'owner.json'), 'utf8')).toBe(successor)
   })
 })

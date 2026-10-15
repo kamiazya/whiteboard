@@ -1,9 +1,11 @@
+import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
+import { readProcessStartMs } from '../shared/process-identity.js'
 import { captureSignalListeners } from '../shared/test-utils/signal-listeners.js'
 
 const { loadDaemonRecordMock, isPidAliveMock, startHttpServerMock } = vi.hoisted(() => ({
@@ -116,6 +118,39 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
     expect(isPidAliveMock).toHaveBeenCalledWith(RECORD.pid)
     expect(startHttpServerMock).not.toHaveBeenCalled()
   })
+
+  // A record written before a process started cannot be that process's: its
+  // pid was taken by a later one, so no daemon is running.
+  it.skipIf(readProcessStartMs(process.pid) === null)(
+    'starts over a record whose pid a later process took',
+    async () => {
+      const later = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)'], {
+        stdio: 'ignore',
+      })
+      await new Promise<void>((resolve, reject) => {
+        later.once('spawn', resolve)
+        later.once('error', reject)
+      })
+      loadDaemonRecordMock.mockResolvedValueOnce({
+        ...RECORD,
+        pid: later.pid,
+        startedAt: new Date(Date.now() - 30_000).toISOString(),
+      })
+      isPidAliveMock.mockReturnValue(true)
+      try {
+        const outcome = await runDaemonRun({
+          tokenStdin: false,
+          dataDir: '/tmp/whiteboard-test',
+          env: {},
+        })
+        expect(outcome.kind).toBe('running')
+        expect(startHttpServerMock).toHaveBeenCalledTimes(1)
+      } finally {
+        isPidAliveMock.mockReturnValue(false)
+        later.kill('SIGKILL')
+      }
+    },
+  )
 
   it('starts over a record whose process is gone', async () => {
     loadDaemonRecordMock.mockResolvedValueOnce(RECORD)
