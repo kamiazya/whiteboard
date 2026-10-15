@@ -173,6 +173,9 @@ const TIMER_OWNERS: Record<
   'db/busy-retry.ts': {
     awaited: 'the backoff between SQLITE_BUSY retries, awaited by the statement that was refused',
   },
+  'db/migration-lock.ts': {
+    awaited: 'the poll while another process holds the migration lock, awaited by startup',
+  },
 }
 
 describe('a timer-owning store module is a declared worker', () => {
