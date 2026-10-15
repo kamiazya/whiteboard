@@ -1,10 +1,9 @@
+import { daemonLiveness } from '../daemon/daemon-liveness.js'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import {
   type DaemonStatusResult,
   daemonStatusResultSchema,
 } from '../shared/api-contracts/daemon-status.js'
-import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
-import { readProcessStartMs, recordedProcessOf } from '../shared/process-identity.js'
 
 export interface DaemonStatusOptions {
   dataDir: string
@@ -20,11 +19,16 @@ const recordSummary = ({ pid, version, startedAt }: NonNullable<DaemonStatusResu
   startedAt,
 })
 
+const STATUS_REASON = {
+  dead: 'process-not-running',
+  'pid-reused': 'pid-reused',
+  unconfirmed: 'identity-unconfirmed',
+} as const
+
 export async function runDaemonStatus(
   options: DaemonStatusOptions,
 ): Promise<{ result: DaemonStatusResult; exitCode: 0 | 1 }> {
   const parse = options.parseRecord ?? parseDaemonRecord
-  const isAlive = options.isPidAlive ?? defaultIsPidAlive
 
   const parsed = await parse(options.dataDir)
 
@@ -68,19 +72,21 @@ export async function runDaemonStatus(
     }
   }
 
-  // A pid a later process took after the daemon died is alive, and not it.
-  const startMs = options.processStartMs ?? readProcessStartMs
-  const identity = recordedProcessOf(parsed.record, { isAlive, startMs })
+  const liveness = await daemonLiveness(parsed.record, {
+    isAlive: options.isPidAlive,
+    startMs: options.processStartMs,
+  })
 
-  if (identity !== 'writer') {
+  if (liveness !== 'running') {
     return {
       result: daemonStatusResultSchema.parse({
         schemaVersion: 1,
         ok: false,
-        reason: identity === 'dead' ? 'process-not-running' : 'pid-reused',
+        reason: STATUS_REASON[liveness],
         recordFound: true,
         recordFresh: false,
-        pidAlive: identity !== 'dead',
+        pidAlive: liveness !== 'dead',
+        ...(liveness === 'unconfirmed' ? { pingOk: true } : {}),
         record: recordSummary(parsed.record),
       }),
       exitCode: 1,

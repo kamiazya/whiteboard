@@ -13,6 +13,7 @@ const { loadDaemonRecordMock } = vi.hoisted(() => ({
         version: string
         startedAt: string
         token: string
+        socketPath?: string
       }>
     >(),
 }))
@@ -25,6 +26,7 @@ vi.mock('../daemon/daemon-registry.js', () => ({
 }))
 
 const { runDaemonStop } = await import('./daemon-stop.js')
+const { answeringDaemonSocket } = await import('../daemon/_test-daemon-socket.js')
 
 const fakeRecord = {
   pid: 12345,
@@ -359,5 +361,45 @@ describe('runDaemonStop: a stale record whose pid another process took', () => {
     expect(killFn).toHaveBeenCalledWith(fakeRecord.pid, 'SIGTERM')
     expect(killFn).toHaveBeenCalledWith(fakeRecord.pid, 'SIGKILL')
     expect(result.action).toBe('stopped')
+  })
+})
+
+// /proc/stat's btime moves with a stepped wall clock while a process's start
+// ticks do not, so after a forward step of a few seconds the daemon itself
+// reads as having started after its own record. Its socket still answers.
+describe('runDaemonStop: a live daemon after the wall clock stepped forward', () => {
+  const recordedAtMs = Date.parse(fakeRecord.startedAt)
+  const steppedStart = () => recordedAtMs + 6_000
+
+  it('stops the daemon its socket confirms rather than dropping its record', async () => {
+    const daemon = await answeringDaemonSocket(fakeRecord.pid, fakeRecord.token)
+    loadDaemonRecordMock.mockResolvedValueOnce({ ...fakeRecord, socketPath: daemon.socketPath })
+    const killFn = vi.fn()
+    const alive = [true, false]
+    const { result, exitCode } = await runDaemonStop(
+      baseOpts({
+        isPidAlive: () => alive.shift() ?? false,
+        processStartMs: steppedStart,
+        stopTimeoutMs: 1_000,
+        killFn,
+      }),
+    )
+    expect(result).toMatchObject({ ok: true, action: 'stopped', reason: null })
+    expect(killFn).toHaveBeenCalledWith(fakeRecord.pid, 'SIGTERM')
+    expect(exitCode).toBe(0)
+  })
+
+  it('keeps the record and signals nothing when the socket answers for another pid', async () => {
+    const daemon = await answeringDaemonSocket(fakeRecord.pid + 1, fakeRecord.token)
+    loadDaemonRecordMock.mockResolvedValueOnce({ ...fakeRecord, socketPath: daemon.socketPath })
+    const killFn = vi.fn()
+    const removeRecord = vi.fn(async () => undefined)
+    const { result, exitCode } = await runDaemonStop(
+      baseOpts({ isPidAlive: () => true, processStartMs: steppedStart, killFn, removeRecord }),
+    )
+    expect(result).toMatchObject({ ok: false, action: 'refused', reason: 'identity-unconfirmed' })
+    expect(killFn).not.toHaveBeenCalled()
+    expect(removeRecord).not.toHaveBeenCalled()
+    expect(exitCode).toBe(1)
   })
 })

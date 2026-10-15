@@ -1,10 +1,10 @@
+import { type DaemonLiveness, daemonLiveness } from '../daemon/daemon-liveness.js'
 import { deleteDaemonRecord, loadDaemonRecord } from '../daemon/daemon-registry.js'
 import {
   type DaemonStopResult,
   daemonStopResultSchema,
 } from '../shared/api-contracts/daemon-stop.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
-import { readProcessStartMs, recordedProcessOf } from '../shared/process-identity.js'
 import { STOP_SIGTERM_WINDOW_MS } from '../shared/stop-timeouts.js'
 import { terminateAndWait } from '../shared/terminate-and-wait.js'
 
@@ -38,6 +38,21 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+const NOT_STOPPED = {
+  unconfirmed: { action: 'refused', reason: 'identity-unconfirmed' },
+  'pid-reused': { action: 'not-running', reason: 'pid-reused' },
+  dead: { action: 'not-running', reason: 'process-not-running' },
+} as const
+
+function notStopped(liveness: Exclude<DaemonLiveness, 'running'>, pid: number): DaemonStopResult {
+  return daemonStopResultSchema.parse({
+    schemaVersion: 1,
+    ok: false,
+    ...NOT_STOPPED[liveness],
+    pid,
+  })
+}
+
 export async function runDaemonStop(
   options: DaemonStopOptions,
 ): Promise<{ result: DaemonStopResult; exitCode: 0 | 1 }> {
@@ -66,21 +81,15 @@ export async function runDaemonStop(
   const { pid } = record
   // A record that outlived its daemon can name a pid another process has
   // since taken; that process is not the daemon and must not be signalled.
-  const startMs = options.processStartMs ?? readProcessStartMs
-  const identify = () => recordedProcessOf(record, { isAlive, startMs })
-  const identity = identify()
-  if (identity !== 'writer') {
-    await removeRecord(options.dataDir)
-    return {
-      result: daemonStopResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        action: 'not-running',
-        reason: identity === 'dead' ? 'process-not-running' : 'pid-reused',
-        pid,
-      }),
-      exitCode: 1,
-    }
+  const judge = () =>
+    daemonLiveness(record, { isAlive: options.isPidAlive, startMs: options.processStartMs })
+  const liveness = await judge()
+  if (liveness !== 'running') {
+    // An unconfirmed daemon answers on the record's socket but not as this
+    // pid: something is serving, so the record is not a leftover to drop, and
+    // the pid is not known to be what is serving, so it is not signalled.
+    if (liveness !== 'unconfirmed') await removeRecord(options.dataDir)
+    return { result: notStopped(liveness, pid), exitCode: 1 }
   }
 
   const stopped = await terminateAndWait({
@@ -91,7 +100,7 @@ export async function runDaemonStop(
     timeoutMs: stopTimeoutMs,
     pollMs: POLL_INTERVAL_MS,
     killWaitMs,
-    confirmKill: async () => identify() === 'writer',
+    confirmKill: async () => (await judge()) === 'running',
   })
   if (stopped.kind === 'signal-failed') {
     return {

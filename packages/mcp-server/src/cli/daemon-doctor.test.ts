@@ -20,7 +20,15 @@ function runDoctor(
   isPidAlive: () => boolean,
   runningVersion = baseRecord.version,
 ) {
-  return runDaemonDoctor({ dataDir: '/fake', parseRecord, isPidAlive, runningVersion })
+  // Every fake pid here is the daemon; a real /proc entry under the same
+  // number must not decide it.
+  return runDaemonDoctor({
+    dataDir: '/fake',
+    parseRecord,
+    isPidAlive,
+    processStartMs: () => null,
+    runningVersion,
+  })
 }
 
 describe('runDaemonDoctor: record missing', () => {
@@ -121,6 +129,28 @@ describe('runDaemonDoctor: valid record, process dead', () => {
     const { result } = await runDoctor(parseValid, () => false)
     const recordCheck = result.checks.find((c) => c.id === 'daemon.record')
     expect(recordCheck?.status).toBe('ok')
+  })
+})
+
+describe('runDaemonDoctor: valid record, its pid taken by a later process', () => {
+  const parseValid: ParseRecord = async () => ({ kind: 'valid', record: validRecord })
+  const reused = () =>
+    runDaemonDoctor({
+      dataDir: '/fake',
+      parseRecord: parseValid,
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(validRecord.startedAt) + 60_000,
+      runningVersion: validRecord.version,
+    })
+
+  it('reports the daemon not running, as `daemon status` does, and exits 1', async () => {
+    const { result, exitCode } = await reused()
+    const processCheck = result.checks.find((c) => c.id === 'daemon.process')
+    expect(processCheck?.status).toBe('error')
+    expect(processCheck?.summary).toMatch(/another process/)
+    expect(processCheck?.remediation).toMatch(/daemon run/)
+    expect(result).toMatchObject({ ok: false, status: 'error' })
+    expect(exitCode).toBe(1)
   })
 })
 

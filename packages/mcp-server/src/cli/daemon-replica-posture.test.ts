@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DaemonRecordParseResult } from '../daemon/daemon-record.js'
-import {
-  type DaemonRequest,
-  runDaemonRotateReplicaKey,
-  runDaemonSetReplicaTier,
-} from './daemon-replica-posture.js'
+import type { DaemonRequest } from '../daemon/daemon-request.js'
+import { runDaemonRotateReplicaKey, runDaemonSetReplicaTier } from './daemon-replica-posture.js'
 
 const record = {
   pid: 4242,
@@ -97,6 +94,24 @@ describe('whiteboard daemon rotate-replica-key', () => {
     })
     expect(result).toMatchObject({ ok: false, reason: 'daemon-not-running' })
     expect(daemon.asked).toEqual([])
+  })
+
+  it('treats a record whose pid a later process took as no daemon, posting nothing', async () => {
+    const asked: DaemonRequest[] = []
+    const { result, exitCode } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'ws-1',
+      parseRecord: async () => running,
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(record.startedAt) + 60_000,
+      request: async (req) => {
+        asked.push(req)
+        throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+      },
+    })
+    expect(result).toMatchObject({ ok: false, reason: 'daemon-not-running' })
+    expect(exitCode).toBe(1)
+    expect(asked.map((req) => req.method)).toEqual(['GET'])
   })
 
   it("reports the daemon's refusal with its status and reason, exit 1", async () => {

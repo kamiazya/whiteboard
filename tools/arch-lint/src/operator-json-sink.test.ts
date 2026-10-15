@@ -26,8 +26,6 @@ const SCHEMA_IDENTIFIER = /^(?:[A-Za-z_$][\w$]*\.)*(?:schema|[A-Za-z_$][\w$]*Sch
 const STRINGIFY_ALLOWLIST: Readonly<Record<string, string>> = {
   [`${CLI_DIR}/operator-json.ts`]:
     'the one place an output is stringified, after its schema parsed it',
-  [`${CLI_DIR}/daemon-replica-posture.ts`]:
-    'serialises the REQUEST body sent to the daemon, not an output',
 }
 
 function badSinkCalls(source: string): string[] {

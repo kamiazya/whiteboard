@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveDaemonRecord } from '../../../daemon/daemon-registry.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
+import { readProcessStartMs } from '../../../shared/process-identity.js'
 import { captureLogsForTests } from '../../log.js'
 import { closeDb, getDb } from './index.js'
 import { runMigrations } from './migrator.js'
@@ -52,17 +53,18 @@ describe('prepareDataDir', () => {
 })
 
 describe('prepareDataDir: daemon version skew', () => {
-  const record = (overrides: { pid?: number; version?: string }) => ({
+  // The parent process is a live neighbour that started before this record.
+  const record = (overrides: { pid?: number; version?: string; startedAt?: string }) => ({
     pid: process.ppid,
     token: 'tok',
     version: '0.0.0-older',
-    startedAt: '2024-01-01T00:00:00.000Z',
+    startedAt: new Date().toISOString(),
     socketPath: '/fake/daemon.sock',
     launch: 'source' as const,
     ...overrides,
   })
 
-  async function skewWarnings(overrides: { pid?: number; version?: string }) {
+  async function skewWarnings(overrides: { pid?: number; version?: string; startedAt?: string }) {
     await saveDaemonRecord(record(overrides), tempDir)
     const capture = captureLogsForTests('warning')
     try {
@@ -92,6 +94,15 @@ describe('prepareDataDir: daemon version skew', () => {
   it('stays quiet for a leftover record whose process is gone', async () => {
     expect(await skewWarnings({ pid: 2_147_483_646 })).toEqual([])
   })
+
+  // A record dated before its pid's process started was written by a daemon
+  // that died; the pid now belongs to whatever took it.
+  it.skipIf(readProcessStartMs(process.ppid) === null)(
+    'stays quiet for a leftover record whose pid a later process took',
+    async () => {
+      expect(await skewWarnings({ startedAt: '2024-01-01T00:00:00.000Z' })).toEqual([])
+    },
+  )
 
   it('stays quiet for a record this process wrote itself', async () => {
     expect(await skewWarnings({ pid: process.pid })).toEqual([])
