@@ -1,6 +1,7 @@
 import type { WorkspaceRoute } from './app-routes.js'
 import { browserWorkspaceMatches } from './browser-workspace-id.js'
 import type { ConnectedDaemon } from './daemon-fetch.js'
+import type { ExtensionConnection } from './extension-connection.js'
 import type { ProviderState } from './provider.js'
 import { findReplicaForHandle, type ReplicaMatch } from './replicas.js'
 import type { UserSettings } from './user-settings-store.js'
@@ -101,6 +102,16 @@ export function browserDocumentPath(route: WorkspaceRoute | null): string | unde
 }
 
 /**
+ * A remembered daemon did not answer the reconnection. `refusal` is the daemon
+ * record's account of why the native host would not relay, when it gave one:
+ * a daemon of another version still running does not "return" on its own.
+ */
+export type DaemonRenewal = { readonly kind: 'unreachable' } & Pick<
+  Extract<ExtensionConnection, { status: 'none' }>,
+  'refusal'
+>
+
+/**
  * ADR-0023's offline read: the addressed workspace is daemon-kept, the daemon
  * did not answer the reconnection, and this browser holds a replica
  * of it — so the session reads that replica instead of silently landing on
@@ -116,11 +127,11 @@ export function replicaRead({
   route,
   settings,
 }: {
-  renewal: 'unreachable' | null
+  renewal: DaemonRenewal | null
   daemonKept: boolean
   route: WorkspaceRoute | null
   settings: UserSettings
-}): { match: ReplicaMatch; renewal: 'unreachable' } | null {
+}): { match: ReplicaMatch; renewal: DaemonRenewal } | null {
   if (renewal === null || daemonKept) return null
   if (route?.workspace === undefined) return null
   const match = findReplicaForHandle(settings, route.workspace)

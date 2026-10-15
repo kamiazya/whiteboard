@@ -222,7 +222,11 @@ describe('reconnecting a remembered daemon through the extension', () => {
     })
   })
 
-  it('serves the replica when the daemon is unreachable and a replica exists', async () => {
+  // A refusal (another version's daemon running) is not a daemon that will return.
+  it.each([
+    ['no refusal', undefined],
+    ['a refusal', 'pid 7 runs another version'],
+  ])('serves the replica when the daemon is unreachable and a replica exists, with %s', async (_why, refusal) => {
     // ADR-0023's offline read: the address names a daemon workspace this
     // browser holds a replica of, the daemon cannot be reached, so the
     // replica page serves it — addressed by SEGMENT, resolved to the
@@ -237,7 +241,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
         },
       },
     })
-    mockConnectResult = { status: 'none' }
+    mockConnectResult = refusal === undefined ? { status: 'none' } : { status: 'none', refusal }
     await act(async () => {
       render(
         <MemoryRouter initialEntries={['/w/team']}>
@@ -251,6 +255,7 @@ describe('reconnecting a remembered daemon through the extension', () => {
     // The banner's name follows workspaceLabel, which needs the segment for a
     // workspace nobody gave a display name.
     expect(receivedReplicaPageProps?.segment).toBe('team')
+    expect(receivedReplicaPageProps?.refusal).toBe(refusal)
   })
 
   it('Reconnect re-runs renewal, and a now-paired answer unmounts the replica page for the daemon page', async () => {

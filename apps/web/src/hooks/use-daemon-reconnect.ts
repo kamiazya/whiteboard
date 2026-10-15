@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { isBridgeDaemon } from '../lib/bridge-address.js'
 import type { ExtensionConnection } from '../lib/extension-connection.js'
 import type { ProviderState } from '../lib/provider.js'
+import type { DaemonRenewal } from '../lib/session-keeper.js'
 import type { UserSettingsStore } from '../lib/user-settings-store.js'
 
 /**
@@ -30,9 +31,9 @@ export interface DaemonReconnect {
   /**
    * The remembered daemon did not answer. Held so the render can offer the
    * replica read (ADR-0023) instead of silently landing on the browser's own
-   * workspaces.
+   * workspaces, with the host's refusal when it gave one.
    */
-  readonly renewal: 'unreachable' | null
+  readonly renewal: DaemonRenewal | null
   /** Re-run by ReplicaReadPage's Reconnect action, through the same gate. */
   readonly attemptRenewal: () => Promise<void>
   /**
@@ -52,7 +53,7 @@ export function useDaemonReconnect(input: {
   userSettingsStore: UserSettingsStore
 }): DaemonReconnect {
   const [connection, setConnection] = useState<Connected | null>(null)
-  const [renewal, setRenewal] = useState<'unreachable' | null>(null)
+  const [renewal, setRenewal] = useState<DaemonRenewal | null>(null)
 
   const target = storedDaemonForReconnect({
     providerKind: input.providerKind,
@@ -70,7 +71,11 @@ export function useDaemonReconnect(input: {
       setConnection(result)
       return
     }
-    setRenewal('unreachable')
+    setRenewal(
+      result.refusal === undefined
+        ? { kind: 'unreachable' }
+        : { kind: 'unreachable', refusal: result.refusal },
+    )
   }, [target])
 
   useOnMount(attemptRenewal)
