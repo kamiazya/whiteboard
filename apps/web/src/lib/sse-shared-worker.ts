@@ -334,6 +334,10 @@ function replaceReplica(
   attempt: number,
 ): void {
   const key = replicaKey(baseUrl, doc)
+  // A refusal arriving while a snapshot retry waits starts the rebuild now,
+  // and the waiting retry would start a second one for the same document.
+  clearTimeout(snapshotRetries.get(key))
+  snapshotRetries.delete(key)
   queueReplicaWork(async () => {
     let bytes: Uint8Array | null
     try {

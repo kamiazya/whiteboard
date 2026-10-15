@@ -11,6 +11,7 @@
 // the "no existence-check before create" structural guarantee without
 // touching the real filesystem.
 
+import { randomUUID } from 'node:crypto'
 import {
   closeSync,
   openSync,
@@ -139,7 +140,7 @@ export function acquireSpawnLock({
     return 'held-by-other'
   }
 
-  const claimPath = `${lockPath}.stale-${process.pid}-${nowMs}-${Math.random().toString(36).slice(2)}`
+  const claimPath = `${lockPath}.stale-${process.pid}-${nowMs}-${randomUUID()}`
   try {
     fsRename(lockPath, claimPath)
   } catch {
@@ -232,7 +233,7 @@ export function claimPidFile({
   }
   if (holder !== null && isWriterAlive(holder, writtenAtMs)) return { kind: 'held', pid: holder }
 
-  const claimPath = `${pidPath}.stale-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const claimPath = `${pidPath}.stale-${process.pid}-${Date.now()}-${randomUUID()}`
   try {
     fsRename(pidPath, claimPath)
   } catch {
