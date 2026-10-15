@@ -160,8 +160,11 @@ file. Without that, two auditors mutating one file on a shared tree corrupted
 each other: the second read the first's mutated text as its "before", the first
 restored, and the second then wrote the first's mutation back — the tree left
 mutated with no helper alive, and the first's result taken against a doubly
-mutated file. The lock sits in the OS temp dir (`mutate-lock-<hash of the
-realpath>`), claimed with the dev wrapper's own `claimPidFile`
+mutated file. The lock sits where `$TMPDIR` cannot move it — under the clone's
+common git dir (`mutate-locks/<hash of the realpath>`, shared by every worktree),
+or `/tmp/mutate-lock-<hash>` for a file outside any clone — since a lock under
+`os.tmpdir()` let two runs with different TMPDIRs both mutate one file and leave
+it mutated. It is claimed with the dev wrapper's own `claimPidFile`
 (`packages/mcp-server/scripts/dev/dev-spawn-lock-lib.mjs`); one whose pid is
 dead, as after SIGKILL, or since taken by a later process, is replaced on the
 next run. It does NOT refuse a file that differs from HEAD — mutating a dirty tree

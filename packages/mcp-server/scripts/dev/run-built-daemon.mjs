@@ -24,7 +24,7 @@ import {
   releaseSpawnLock,
   resolveSpawnLockStaleMs,
 } from './dev-spawn-lock-lib.mjs'
-import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
+import { resolveReadyTimeoutMs, waitForDaemon } from './ensure-http-dev-daemon-lib.mjs'
 import {
   devSpawnLockPath,
   devWrapperPidPath,
@@ -118,13 +118,15 @@ child.on('exit', (code) => {
   process.exit(code ?? 1)
 })
 
-const bootStartedAt = Date.now()
-const bootBudgetMs = resolveReadyTimeoutMs(process.env)
-while (!childExited && Date.now() - bootStartedAt < bootBudgetMs) {
-  const record = readDaemonRecord(dataDir)
-  if (record?.pid === child.pid) break
-  await sleep(200)
-}
+await waitForDaemon({
+  // The daemon is this script's direct child and writes its record only once
+  // it listens, so booted means the record names that child.
+  isUp: () => readDaemonRecord(dataDir)?.pid === child.pid,
+  gaveUp: () => childExited,
+  sleep,
+  timeoutMs: resolveReadyTimeoutMs(process.env),
+  pollIntervalMs: 200,
+})
 releaseLock()
 
 function releaseLock() {

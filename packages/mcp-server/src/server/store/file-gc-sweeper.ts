@@ -55,69 +55,32 @@ function resolveIntervalMs(explicit: number | undefined): number {
 }
 
 /**
- * Whether one entry under the workspaces root is a workspace this sweep may
- * touch, and its id if so.
+ * Whether one entry under the workspaces root looks like a workspace, and its
+ * id if so: a real (non-symlinked) directory, named by a valid id, with a
+ * `files/` directory inside. A workspace named `blobs` is therefore not
+ * confusable with the blob root, which lives elsewhere and has no `files/`.
  *
- * Every refusal here is a SAFETY refusal, not a tidiness one: discovery feeds
- * a destructive unlink pass, so this is a TOCTOU-sensitive choke point.
- *
- * - `lstat` comes BEFORE any further inspection, because a symlinked
- *   top-level entry could point outside the data dir entirely.
- * - Lexical containment (`assertPathWithinDir`) is insufficient, because it
- *   cannot see through a symlink further down the tree; `realpath` resolves
- *   the actual target, so a directory that LOOKS like a plain workspace dir
- *   and ultimately resolves outside `dataDir` is still caught.
- * - A workspace dir is one with a `files/` child. Since the tenant layout
- *   puts workspaces under their own root, a workspace named `blobs` is no
- *   longer confusable with the blob root.
+ * This is enumeration, not the safety check. Containment is decided by
+ * `isWorkspaceDirContained`, which `runPass` runs on every id immediately
+ * before its purge — discovered and DB-listed alike — so checking it here
+ * as well would only be a second copy that no outcome depends on.
  */
-async function admittedWorkspaceDir(
-  name: string,
-  scope: StoreScope,
-  realDataDir: string,
-): Promise<string | null> {
+async function discoveredWorkspaceId(name: string, scope: StoreScope): Promise<string | null> {
   const { dataDir } = scope
   const { tenantId } = scope.layout
-  const entryPath = join(workspacesRoot(dataDir, tenantId), name)
-
-  let stats: Awaited<ReturnType<typeof lstat>>
   try {
-    stats = await lstat(entryPath)
-  } catch {
-    return null
-  }
-  if (stats.isSymbolicLink()) {
-    log.warning({ name }, 'file-gc sweep: skipped symlinked top-level entry')
-    return null
-  }
-  if (!stats.isDirectory()) return null
-
-  let workspaceId: string
-  try {
-    workspaceId = validateWorkspaceId(name)
-  } catch {
-    return null
-  }
-
-  let realEntryPath: string
-  try {
-    realEntryPath = await realpath(entryPath)
-  } catch {
-    return null
-  }
-  if (realEntryPath !== realDataDir && !realEntryPath.startsWith(realDataDir + sep)) {
-    log.warning({ workspaceId }, 'file-gc sweep: skipped workspace dir escaping data dir')
-    return null
-  }
-
-  try {
+    const stats = await lstat(join(workspacesRoot(dataDir, tenantId), name))
+    if (stats.isSymbolicLink()) {
+      log.warning({ name }, 'file-gc sweep: skipped symlinked top-level entry')
+      return null
+    }
+    if (!stats.isDirectory()) return null
+    const workspaceId = validateWorkspaceId(name)
     const filesStat = await lstat(workspaceFilesDir(dataDir, tenantId, name))
-    if (!filesStat.isDirectory()) return null
+    return filesStat.isDirectory() ? workspaceId : null
   } catch {
     return null
   }
-
-  return workspaceId
 }
 
 async function discoverFsWorkspaces(scope: StoreScope): Promise<string[]> {
@@ -133,16 +96,9 @@ async function discoverFsWorkspaces(scope: StoreScope): Promise<string[]> {
     throw err
   }
 
-  let realDataDir: string
-  try {
-    realDataDir = await realpath(dataDir)
-  } catch {
-    return []
-  }
-
   const result: string[] = []
   for (const entry of entries) {
-    const workspaceId = await admittedWorkspaceDir(entry.name, scope, realDataDir)
+    const workspaceId = await discoveredWorkspaceId(entry.name, scope)
     if (workspaceId !== null) result.push(workspaceId)
   }
   return result
@@ -150,8 +106,8 @@ async function discoverFsWorkspaces(scope: StoreScope): Promise<string[]> {
 
 type ContainmentCheck = 'missing' | 'safe' | 'unsafe'
 
-// Shared lstat+realpath containment check used for both a DB workspace's
-// top-level directory and its files/ child (see isDbWorkspaceDirSafe below).
+// One lstat+realpath containment check, run on a workspace's top-level
+// directory and on its files/ child (see isWorkspaceDirContained below).
 // `treatNonDirectoryAsMissing` only applies to the files/ child: a files
 // entry that exists but is not a directory can't be an escape vector
 // (realpath of a regular file just resolves in place) and purgeDanglingFiles'
@@ -171,14 +127,11 @@ async function checkSubpathContainment(
     // Missing is not a containment risk -- purgeDanglingFiles() itself
     // handles a missing files dir by returning zero purged.
     if (isMissingFileError(err)) return 'missing'
-    log.warning(
-      { workspaceId, err },
-      `file-gc sweep: skipped DB workspace, could not stat ${label}`,
-    )
+    log.warning({ workspaceId, err }, `file-gc sweep: skipped workspace, could not stat ${label}`)
     return 'unsafe'
   }
   if (stats.isSymbolicLink()) {
-    log.warning({ workspaceId }, `file-gc sweep: skipped DB workspace with symlinked ${label}`)
+    log.warning({ workspaceId }, `file-gc sweep: skipped workspace with symlinked ${label}`)
     return 'unsafe'
   }
   if (treatNonDirectoryAsMissing && !stats.isDirectory()) return 'missing'
@@ -189,34 +142,27 @@ async function checkSubpathContainment(
   } catch (err) {
     log.warning(
       { workspaceId, err },
-      `file-gc sweep: skipped DB workspace, could not resolve ${label} realpath`,
+      `file-gc sweep: skipped workspace, could not resolve ${label} realpath`,
     )
     return 'unsafe'
   }
   if (realTargetPath !== realDataDir && !realTargetPath.startsWith(realDataDir + sep)) {
-    log.warning({ workspaceId }, `file-gc sweep: skipped DB workspace ${label} escaping data dir`)
+    log.warning({ workspaceId }, `file-gc sweep: skipped workspace ${label} escaping data dir`)
     return 'unsafe'
   }
   return 'safe'
 }
 
-// DB-listed workspaces are trusted less than they look: a workspace row can
-// exist while its on-disk directory has since been replaced by a symlink (or
-// never matched the DB row's containment at all). discoverFsWorkspaces()
-// applies this same lstat+realpath containment check to every workspace it
-// discovers from the filesystem, but a DB row bypasses that discovery path
-// entirely -- without this check runPass() would purge through a symlinked
-// dir straight into purgeDanglingFiles(), which only does lexical
-// containment (assertPathWithinDir) and cannot see through a symlink.
-//
-// The top-level workspace dir passing containment is not enough on its own:
-// purgeDanglingFiles() only lexically joins <workspaceDir>/files and follows
-// whatever that resolves to, so a workspace dir that is itself safe can still
-// have its files/ CHILD replaced by a symlink escaping the data dir. A
-// filesystem-discovered workspace never reaches purge with such a files/ dir
-// (discoverFsWorkspaces()'s lstat().isDirectory() check is false for a
-// symlink), so a DB-listed workspace needs the same files/ subpath check.
-async function isDbWorkspaceDirSafe(scope: StoreScope, workspaceId: string): Promise<boolean> {
+// THE gate before every purge: whether a workspace's directory, and its
+// files/ child, really resolve inside the data dir. purgeDanglingFiles() only
+// joins <workspaceDir>/files lexically (assertPathWithinDir) and follows
+// whatever that resolves to, so without this a purge could unlink through a
+// symlink — at the workspace dir, at its files/ child, or at an ANCESTOR such
+// as the workspaces root, which only realpath can see — into a directory
+// outside the data dir. Neither source of ids is trusted: a DB row can
+// outlive its directory being replaced by a symlink, and a directory found on
+// disk can be re-pointed between discovery and its own turn.
+async function isWorkspaceDirContained(scope: StoreScope, workspaceId: string): Promise<boolean> {
   const { dataDir } = scope
   const { tenantId } = scope.layout
   const entryPath = workspaceDir(dataDir, tenantId, workspaceId)
@@ -227,7 +173,7 @@ async function isDbWorkspaceDirSafe(scope: StoreScope, workspaceId: string): Pro
   } catch (err) {
     log.warning(
       { workspaceId, err },
-      'file-gc sweep: skipped DB workspace, could not resolve data dir realpath',
+      'file-gc sweep: skipped workspace, could not resolve data dir realpath',
     )
     return false
   }
@@ -296,10 +242,9 @@ export interface FileGcSweeper {
 }
 
 /**
- * Every workspace this pass should visit, in one set.
- *
- * `fsWorkspaces` already passed containment inside `discoverFs`; a DB row
- * has not, so it gets its own check before joining.
+ * Every workspace this pass should visit, in one set: those found on disk,
+ * then the DB's. Nothing here is a safety check — `runPass` gates each id on
+ * containment immediately before purging it.
  */
 async function workspacesToSweep(
   scope: StoreScope,
@@ -308,12 +253,7 @@ async function workspacesToSweep(
   const listWs = options.listWorkspaces ?? (() => listWorkspaces(scope))
   const discoverFs = options.discoverFsWorkspaces ?? (() => discoverFsWorkspaces(scope))
   const [dbWorkspaces, fsWorkspaces] = await Promise.all([listWs(), discoverFs()])
-  const ids = new Set<string>(fsWorkspaces)
-  for (const w of dbWorkspaces) {
-    if (ids.has(w.workspaceId)) continue
-    if (await isDbWorkspaceDirSafe(scope, w.workspaceId)) ids.add(w.workspaceId)
-  }
-  return ids
+  return new Set([...fsWorkspaces, ...dbWorkspaces.map((w) => w.workspaceId)])
 }
 
 export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcSweeper {
@@ -338,21 +278,17 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
     // benefit at a 24h-default cadence.
     for (const workspaceId of ids) {
       try {
-        // Revalidate containment immediately before the destructive call,
-        // rather than trusting the check done once while building `ids`. A
-        // pass over every workspace can take a while (a full document scan
-        // each), and re-running the check here narrows the window in which a
-        // workspace dir (or its files/ child) could have been swapped for a
-        // symlink between discovery and this workspace's purge — for BOTH
-        // fs-discovered and DB-listed ids, since either could be re-pointed
-        // after its one-time check. This does not make the check ATOMIC with
-        // purgeDanglingFiles' own readdir/unlink (that would need
-        // directory-handle/no-follow semantics it does not have), but it
-        // shrinks the exposure from "the whole pass" to "this one iteration".
+        // Containment is checked here, immediately before the destructive
+        // call, and nowhere earlier: a pass over every workspace can take a
+        // while (a full document scan each), so a check made while building
+        // `ids` could be stale by this workspace's turn. This does not make
+        // the check ATOMIC with purgeDanglingFiles' own readdir/unlink (that
+        // would need directory-handle/no-follow semantics it does not have),
+        // but it shrinks the exposure to this one iteration.
         //
-        // `isDbWorkspaceDirSafe` already logs the specific reason it refused,
-        // so there is nothing more to log here beyond skipping the purge.
-        if (!(await isDbWorkspaceDirSafe(scope, workspaceId))) continue
+        // `isWorkspaceDirContained` already logs the specific reason it
+        // refused, so there is nothing more to log here.
+        if (!(await isWorkspaceDirContained(scope, workspaceId))) continue
         await purge(workspaceId)
       } catch (err) {
         log.error({ workspaceId, err }, 'file-gc sweep failed for workspace')
