@@ -132,12 +132,10 @@ async function tryAcquire(lockDirPath: string): Promise<LockOwner | null> {
     if (!isErrnoCode(err, 'EEXIST')) throw err
     return null
   }
-  try {
-    return await writeOwnerMetadata(lockDirPath)
-  } catch (err) {
-    await rm(lockDirPath, { recursive: true, force: true })
-    throw err
-  }
+  // A failed owner write leaves the directory for a waiter to reclaim once the
+  // unwritten grace passes: a write that stalled past that grace may already
+  // have lost the path to a successor, whose lock a cleanup here would delete.
+  return await writeOwnerMetadata(lockDirPath)
 }
 
 // Only while the lock still names this holder, so one whose lock was
