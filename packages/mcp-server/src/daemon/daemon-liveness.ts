@@ -17,6 +17,7 @@
 import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
 import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { type ProcessIdentitySeams, recordedProcess } from '../shared/process-identity.js'
+import type { RecordedDaemon } from './daemon-record-schema.js'
 import { type DaemonAnswer, type DaemonRequest, requestDaemon } from './daemon-request.js'
 
 /**
@@ -24,20 +25,18 @@ import { type DaemonAnswer, type DaemonRequest, requestDaemon } from './daemon-r
  * - `unconfirmed`: the pid's start time says it is not the writer, yet a
  *   daemon answers on the record's socket without confirming that pid. Something
  *   is serving there, so nothing may treat the record as a leftover — and
- *   nothing may signal the pid either.
+ *   nothing may signal the pid either. `servingPid` is the pid the answer
+ *   named, when it was a runtime status at all: a person has to find that
+ *   process to stop it, and the record cannot tell them.
  * - `pid-reused`: the pid is alive, started after the record, and nothing
  *   answers on the record's socket.
  * - `dead`: no process has the pid.
  */
-export type DaemonLiveness = 'running' | 'unconfirmed' | 'pid-reused' | 'dead'
-
-/** What a reader knows of a record: the pid at least, the rest where it parsed. */
-export interface RecordedDaemon {
-  readonly pid: number
-  readonly startedAt?: string
-  readonly socketPath?: string
-  readonly token?: string
-}
+export type DaemonLiveness =
+  | { readonly state: 'running' }
+  | { readonly state: 'unconfirmed'; readonly servingPid?: number }
+  | { readonly state: 'pid-reused' }
+  | { readonly state: 'dead' }
 
 export interface DaemonLivenessSeams extends ProcessIdentitySeams {
   readonly request?: (req: DaemonRequest) => Promise<DaemonAnswer>
@@ -55,10 +54,10 @@ export async function daemonLiveness(
 ): Promise<DaemonLiveness> {
   const writtenAtMs = record.startedAt === undefined ? Number.NaN : Date.parse(record.startedAt)
   const identity = recordedProcess(record.pid, writtenAtMs, identitySeams)
-  if (identity === 'writer') return 'running'
-  if (identity === 'dead') return 'dead'
+  if (identity === 'writer') return { state: 'running' }
+  if (identity === 'dead') return { state: 'dead' }
   const { socketPath } = record
-  if (socketPath === undefined) return 'pid-reused'
+  if (socketPath === undefined) return { state: 'pid-reused' }
   let answer: DaemonAnswer
   try {
     answer = await request({
@@ -68,9 +67,10 @@ export async function daemonLiveness(
       timeoutMs: SOCKET_ASK_TIMEOUT_MS,
     })
   } catch {
-    return 'pid-reused'
+    return { state: 'pid-reused' }
   }
   const status = runtimeStatusResponseSchema.safeParse(answer.body)
-  const confirmed = answer.status === 200 && status.success && status.data.pid === record.pid
-  return confirmed ? 'running' : 'unconfirmed'
+  if (answer.status !== 200 || !status.success) return { state: 'unconfirmed' }
+  if (status.data.pid === record.pid) return { state: 'running' }
+  return { state: 'unconfirmed', servingPid: status.data.pid }
 }

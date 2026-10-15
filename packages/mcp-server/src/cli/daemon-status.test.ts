@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { runDaemonStatus } from './daemon-status.js'
 
-// All tests inject parseRecord, isPidAlive and processStartMs — no filesystem or process access.
+// Tests inject isPidAlive and processStartMs, so no real process decides an
+// answer; all but the last describe inject parseRecord too.
 
 const validRecord = {
   pid: 12345,
@@ -69,7 +73,11 @@ describe('runDaemonStatus: token missing', () => {
     }
     const { result, exitCode } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'token-missing', record: tokenMissingRecord }),
+      parseRecord: async () => ({
+        kind: 'token-missing',
+        record: tokenMissingRecord,
+        liveness: { state: 'dead' },
+      }),
       isPidAlive: () => false,
     })
     expect(exitCode).toBe(1)
@@ -88,7 +96,11 @@ describe('runDaemonStatus: token missing', () => {
     }
     const { result } = await runDaemonStatus({
       dataDir: '/fake',
-      parseRecord: async () => ({ kind: 'token-missing', record: tokenMissingRecord }),
+      parseRecord: async () => ({
+        kind: 'token-missing',
+        record: tokenMissingRecord,
+        liveness: { state: 'dead' },
+      }),
       isPidAlive: () => false,
     })
     expect(result.record?.pid).toBe(42)
@@ -199,6 +211,33 @@ describe('runDaemonStatus: a live daemon after the wall clock stepped forward', 
     expect(exitCode).toBe(0)
   })
 
+  it('names the pid that answered on the socket instead, and claims no ping', async () => {
+    const daemon = await answeringDaemonSocket(validRecord.pid + 1, validRecord.token)
+    const { result } = await runDaemonStatus({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'valid',
+        record: { ...validRecord, socketPath: daemon.socketPath },
+      }),
+      isPidAlive: () => true,
+      processStartMs: steppedStart,
+    })
+    expect(result).toEqual({
+      schemaVersion: 1,
+      ok: false,
+      reason: 'identity-unconfirmed',
+      recordFound: true,
+      recordFresh: false,
+      pidAlive: true,
+      servingPid: validRecord.pid + 1,
+      record: {
+        pid: validRecord.pid,
+        version: validRecord.version,
+        startedAt: validRecord.startedAt,
+      },
+    })
+  })
+
   it('asks the socket only when the start time contradicts the record', async () => {
     const daemon = await answeringDaemonSocket(validRecord.pid, validRecord.token)
     await runDaemonStatus({
@@ -211,5 +250,42 @@ describe('runDaemonStatus: a live daemon after the wall clock stepped forward', 
       processStartMs: () => Date.parse(validRecord.startedAt) - 1_000,
     })
     expect(daemon.asked).toEqual([])
+  })
+})
+
+describe('runDaemonStatus: a record this build cannot interpret', () => {
+  let dataDir: string
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'daemon-status-record-'))
+  })
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true })
+  })
+
+  async function statusOver(isPidAlive: boolean) {
+    await writeFile(
+      join(dataDir, 'daemon.json'),
+      JSON.stringify({ ...validRecord, version: '9.9.9', launch: 'packaged' }),
+    )
+    return runDaemonStatus({ dataDir, isPidAlive: () => isPidAlive, processStartMs: () => null })
+  }
+
+  it('reports a daemon of another version running, not a malformed record', async () => {
+    const { result, exitCode } = await statusOver(true)
+    expect(exitCode).toBe(1)
+    expect(result).toEqual({
+      schemaVersion: 1,
+      ok: false,
+      reason: 'record-other-version',
+      recordFound: true,
+      recordFresh: false,
+      pidAlive: true,
+      record: { pid: validRecord.pid, version: '9.9.9', startedAt: validRecord.startedAt },
+    })
+  })
+
+  it('reports it malformed once the daemon it names is gone', async () => {
+    const { result } = await statusOver(false)
+    expect(result.reason).toBe('record-malformed')
   })
 })

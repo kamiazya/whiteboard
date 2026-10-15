@@ -55,6 +55,45 @@ version in the daemon's record differs from the build you are running, and
 points at `whiteboard daemon stop --json`. Stop it and start it again to pick
 up the new one.
 
+## When the daemon cannot be stopped or started
+
+`whiteboard daemon status --json` says what the CLI makes of the daemon's
+record (`daemon.json` in the data directory), in its `reason` field.
+`whiteboard daemon doctor --json` reaches the same verdict and words it as a
+finding with a remediation. `whiteboard daemon stop --json` and
+`whiteboard daemon run` read the record the same way.
+
+| `reason` | What it means | What to do |
+|---|---|---|
+| `null` (`ok: true`) | The daemon the record names is running. | Nothing. |
+| `record-not-found` | There is no record: no daemon is running on this data directory. | `whiteboard daemon run` |
+| `process-not-running` | The record names a process that has exited. | `whiteboard daemon run` starts over the record. `daemon stop` removes it. |
+| `pid-reused` | The record's pid now belongs to a process that started after the record was written, and nothing answers on the record's socket. The daemon has gone. | `whiteboard daemon run` starts over the record. `daemon stop` removes it and signals nothing. |
+| `identity-unconfirmed` | The record's pid looks like a later process, but something answers on the record's socket and does not confirm that pid. When the answer named its pid, `servingPid` gives it. | Stop the process serving the socket, then `whiteboard daemon run`. Use `servingPid` when it is present. Otherwise, find the socket's owner with `ss -xlp` or `lsof`. `daemon stop` refuses here: it signals nothing and keeps the record. |
+| `record-token-missing` | The record has no token. When `pidAlive` is `true`, the daemon it names is still there, and this record cannot reach it. | If `pidAlive` is `true`, stop that daemon with the build that started it. Otherwise, `whiteboard daemon run`. |
+| `record-other-version` | This build cannot interpret the record, and the daemon it names is still there. Most likely, a daemon of another version wrote it. `record.version` gives that version when it can be read. | Stop that daemon with the version that started it, then `whiteboard daemon run`. Do **not** remove `daemon.json`: that daemon would keep serving with no record, so no build could stop it. `daemon run` would then fail on its socket. |
+| `record-malformed` | The record cannot be read, or it names no daemon, or this build cannot interpret it and the daemon it names has gone. | Remove `daemon.json`, then `whiteboard daemon run`. |
+
+For `record-other-version`, and for `record-token-missing` while `pidAlive`
+is `true`, `daemon stop` and `daemon run` print no JSON. They exit `1` with
+one line on stderr that names the record file and says what is still running.
+They do the same, naming the file, for a record that exists but cannot be
+read at all. Over any other `record-malformed` record, `daemon stop` reports
+`record-not-found`, and `daemon run` starts and writes a new record in its
+place.
+
+`daemon stop --json` reports its own outcome in `action` and `reason`:
+
+- `stopped` (`reason: null`): the daemon exited and its record was removed.
+- `not-running`, with `record-not-found`, `process-not-running` or
+  `pid-reused`: there was nothing to stop. A record that outlived its daemon
+  is removed.
+- `refused`, with `identity-unconfirmed`: see the table above. The result
+  carries `servingPid` when the process serving the socket named itself.
+- `refused`, with `kill-failed`: the stop signal could not be sent to the
+  recorded pid, for example because another user owns that process. Nothing
+  else was changed.
+
 ## Get the `whiteboard` command
 
 Every `whiteboard ...` command on this page is the CLI that

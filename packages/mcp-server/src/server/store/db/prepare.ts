@@ -34,21 +34,47 @@ function describeDatabase(dataDir: string): string {
 // it. Startup is not blocked: the two can be compatible, and refusing would
 // strand a user whose old daemon they cannot easily stop. A record whose
 // process is gone, whose pid another process took, or that names this process
-// is a leftover rather than a neighbour.
+// is a leftover rather than a neighbour. A record this build cannot interpret
+// is warned about whatever version it names: it is the likeliest to be
+// another version's, and the record shape changing is itself a skew.
 async function warnOnDaemonVersionSkew(dataDir: string): Promise<void> {
   try {
-    const parsed = await parseDaemonRecord(dataDir)
-    if (parsed.kind !== 'valid' && parsed.kind !== 'token-missing') return
-    const { pid, version } = parsed.record
-    if (pid === process.pid) return
-    const skew = describeDaemonVersionSkew(version, PACKAGE_VERSION)
-    if (skew === null || (await daemonLiveness(parsed.record)) !== 'running') return
+    const neighbour = await liveNeighbour(dataDir)
+    if (neighbour === null || neighbour.pid === process.pid) return
+    const { pid, version, uninterpretable } = neighbour
+    const skew = version === undefined ? null : describeDaemonVersionSkew(version, PACKAGE_VERSION)
+    if (skew === null && !uninterpretable) return
     log.warning(
-      { dataDir, pid, recordedVersion: version, runningVersion: PACKAGE_VERSION },
-      `${skew}; migrating in-process may change the schema under it. Restart that daemon on the same version.`,
+      { dataDir, pid, recordedVersion: version ?? null, runningVersion: PACKAGE_VERSION },
+      `${skew ?? `daemon pid ${pid} wrote a record this build cannot interpret`}; migrating in-process may change the schema under it. Restart that daemon on the same version.`,
     )
   } catch {
     // Advisory only: an unreadable record must not cost the startup.
+  }
+}
+
+/** The daemon the record names, when it is running. */
+async function liveNeighbour(
+  dataDir: string,
+): Promise<{ pid: number; version?: string; uninterpretable: boolean } | null> {
+  const parsed = await parseDaemonRecord(dataDir)
+  switch (parsed.kind) {
+    case 'missing':
+    case 'malformed':
+      return null
+    case 'uninterpretable':
+      if (parsed.liveness.state !== 'running') return null
+      return { pid: parsed.recorded.pid, version: parsed.recorded.version, uninterpretable: true }
+    case 'token-missing':
+      if (parsed.liveness.state !== 'running') return null
+      return { pid: parsed.record.pid, version: parsed.record.version, uninterpretable: false }
+    case 'valid': {
+      const { pid, version } = parsed.record
+      if (pid === process.pid) return null
+      if (describeDaemonVersionSkew(version, PACKAGE_VERSION) === null) return null
+      if ((await daemonLiveness(parsed.record)).state !== 'running') return null
+      return { pid, version, uninterpretable: false }
+    }
   }
 }
 

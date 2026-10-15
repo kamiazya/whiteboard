@@ -13,6 +13,13 @@
  * record's parser or registry. It may not import the lower-level answers —
  * `isPidAlive`, `recordedProcess` — except where the
  * ledger below says why, so a new reader reaching for one fails here.
+ *
+ * The record's VERDICT is one place too: `daemon/daemon-record.ts`'s
+ * `parseDaemonRecord` is the only module that parses daemon.json against its
+ * schemas. A second parser answered "malformed, remove it" for a record of a
+ * live daemon of another version while the first refused to start a second
+ * daemon beside it, so a module importing a record schema other than that
+ * reader fails here.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
@@ -30,6 +37,27 @@ const LOWER_ANSWERS: readonly { module: RegExp; names: ReadonlySet<string> }[] =
   { module: /(^|\/)process-alive\.js$/, names: new Set(['isPidAlive']) },
   { module: /(^|\/)process-identity\.js$/, names: new Set(['recordedProcess']) },
 ]
+
+const ONE_READER = 'packages/mcp-server/src/daemon/daemon-record.ts'
+const RECORD_SCHEMA_MODULE = /(^|\/)daemon-record-schema\.js$/
+const RECORD_SCHEMAS = new Set([
+  'daemonRecordSchema',
+  'daemonRecordBaseSchema',
+  'recordedDaemonSchema',
+])
+
+/** The record schemas `source` imports, by their exported names. */
+function recordSchemas(fileName: string, source: string): string[] {
+  return importBindingsOf(parseSource(fileName, source))
+    .filter((binding) => RECORD_SCHEMA_MODULE.test(binding.spec))
+    .flatMap((binding) =>
+      binding.kind === 'namespace'
+        ? ['* (namespace)']
+        : RECORD_SCHEMAS.has(binding.imported)
+          ? [binding.imported]
+          : [],
+    )
+}
 
 /** Relative path -> the lower answer it imports, and why. Both-sided. */
 const LEDGER: Readonly<Record<string, { imports: readonly string[]; why: string }>> = {
@@ -116,5 +144,31 @@ describe("a daemon record's liveness is judged in one place", () => {
         : [`${rel}: records ${imports.join(', ')}, found ${found.join(', ') || 'none'}`]
     })
     expect(drift, 'an entry that outlives its site is how a ledger stops being read').toEqual([])
+  })
+
+  it('only the one reader parses daemon.json against its schemas', () => {
+    expect(recordSchemas(ONE_READER, sourceOf(ONE_READER)).sort()).toEqual(
+      [...RECORD_SCHEMAS].sort(),
+    )
+    const parsers = files
+      .map(relOf)
+      .filter((rel) => rel !== ONE_READER)
+      .flatMap((rel) => recordSchemas(rel, sourceOf(rel)).map((name) => `${rel}: ${name}`))
+    expect(
+      parsers,
+      'read daemon.json through `parseDaemonRecord` (or `loadDaemonRecord`, its projection): a second parser reaches a second verdict',
+    ).toEqual([])
+  })
+
+  it('recognises a record schema imported by name, alias or namespace', () => {
+    expect(
+      recordSchemas('f.ts', "import { daemonRecordSchema as s } from './daemon-record-schema.js'"),
+    ).toEqual(['daemonRecordSchema'])
+    expect(recordSchemas('f.ts', "import * as s from '../daemon/daemon-record-schema.js'")).toEqual(
+      ['* (namespace)'],
+    )
+    expect(
+      recordSchemas('f.ts', "import { daemonLaunchOfModule } from './daemon-record-schema.js'"),
+    ).toEqual([])
   })
 })

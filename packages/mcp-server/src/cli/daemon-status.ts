@@ -1,4 +1,8 @@
-import { daemonLiveness } from '../daemon/daemon-liveness.js'
+import {
+  type DaemonLiveness,
+  type DaemonLivenessSeams,
+  daemonLiveness,
+} from '../daemon/daemon-liveness.js'
 import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
 import {
   type DaemonStatusResult,
@@ -7,7 +11,7 @@ import {
 
 export interface DaemonStatusOptions {
   dataDir: string
-  parseRecord?: (dataDir: string) => Promise<DaemonRecordParseResult>
+  parseRecord?: (dataDir: string, seams?: DaemonLivenessSeams) => Promise<DaemonRecordParseResult>
   isPidAlive?: (pid: number) => boolean
   /** When a pid's process started; null where the platform cannot say. */
   processStartMs?: (pid: number) => number | null
@@ -25,84 +29,82 @@ const STATUS_REASON = {
   unconfirmed: 'identity-unconfirmed',
 } as const
 
+/** The pid a runtime status on the record's socket named, where it was not the record's. */
+function servingPidOf(liveness: DaemonLiveness): { servingPid?: number } {
+  return liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
+    ? { servingPid: liveness.servingPid }
+    : {}
+}
+
+type StatusFields = Omit<DaemonStatusResult, 'schemaVersion' | 'ok' | 'recordFound'>
+
+/** What a record no daemon can be asked through says, `recordFound` aside. */
+function unusableRecord(
+  parsed: Exclude<DaemonRecordParseResult, { kind: 'valid' | 'missing' }>,
+): StatusFields {
+  switch (parsed.kind) {
+    case 'malformed':
+      return { reason: 'record-malformed', recordFresh: false }
+    case 'token-missing':
+      return {
+        reason: 'record-token-missing',
+        recordFresh: false,
+        pidAlive: parsed.liveness.state !== 'dead',
+        ...servingPidOf(parsed.liveness),
+        record: recordSummary(parsed.record),
+      }
+    // A record this build cannot interpret, whose daemon is still there:
+    // likeliest another version's, and never to be reported as a leftover.
+    case 'uninterpretable': {
+      const { pid, version, startedAt } = parsed.recorded
+      return {
+        reason: 'record-other-version',
+        recordFresh: false,
+        pidAlive: true,
+        ...servingPidOf(parsed.liveness),
+        ...(version === undefined || startedAt === undefined
+          ? {}
+          : { record: { pid, version, startedAt } }),
+      }
+    }
+  }
+}
+
 export async function runDaemonStatus(
   options: DaemonStatusOptions,
 ): Promise<{ result: DaemonStatusResult; exitCode: 0 | 1 }> {
   const parse = options.parseRecord ?? parseDaemonRecord
-
-  const parsed = await parse(options.dataDir)
-
-  if (parsed.kind === 'missing') {
-    return {
-      result: daemonStatusResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        reason: 'record-not-found',
-        recordFound: false,
-        recordFresh: false,
-      }),
-      exitCode: 1,
-    }
-  }
-
-  if (parsed.kind === 'malformed') {
-    return {
-      result: daemonStatusResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        reason: 'record-malformed',
-        recordFound: true,
-        recordFresh: false,
-      }),
-      exitCode: 1,
-    }
-  }
-
-  if (parsed.kind === 'token-missing') {
-    return {
-      result: daemonStatusResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        reason: 'record-token-missing',
-        recordFound: true,
-        recordFresh: false,
-        record: recordSummary(parsed.record),
-      }),
-      exitCode: 1,
-    }
-  }
-
-  const liveness = await daemonLiveness(parsed.record, {
-    isAlive: options.isPidAlive,
-    startMs: options.processStartMs,
-  })
-
-  if (liveness !== 'running') {
-    return {
-      result: daemonStatusResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        reason: STATUS_REASON[liveness],
-        recordFound: true,
-        recordFresh: false,
-        pidAlive: liveness !== 'dead',
-        ...(liveness === 'unconfirmed' ? { pingOk: true } : {}),
-        record: recordSummary(parsed.record),
-      }),
-      exitCode: 1,
-    }
-  }
-
-  return {
+  const seams = { isAlive: options.isPidAlive, startMs: options.processStartMs }
+  const parsed = await parse(options.dataDir, seams)
+  const answer = (exitCode: 0 | 1, recordFound: boolean, fields: StatusFields) => ({
     result: daemonStatusResultSchema.parse({
       schemaVersion: 1,
-      ok: true,
-      reason: null,
-      recordFound: true,
-      recordFresh: true,
-      pidAlive: true,
-      record: recordSummary(parsed.record),
+      ok: exitCode === 0,
+      recordFound,
+      ...fields,
     }),
-    exitCode: 0,
+    exitCode,
+  })
+
+  if (parsed.kind === 'missing') {
+    return answer(1, false, { reason: 'record-not-found', recordFresh: false })
   }
+  if (parsed.kind !== 'valid') return answer(1, true, unusableRecord(parsed))
+
+  const liveness = await daemonLiveness(parsed.record, seams)
+  if (liveness.state !== 'running') {
+    return answer(1, true, {
+      reason: STATUS_REASON[liveness.state],
+      recordFresh: false,
+      pidAlive: liveness.state !== 'dead',
+      ...servingPidOf(liveness),
+      record: recordSummary(parsed.record),
+    })
+  }
+  return answer(0, true, {
+    reason: null,
+    recordFresh: true,
+    pidAlive: true,
+    record: recordSummary(parsed.record),
+  })
 }

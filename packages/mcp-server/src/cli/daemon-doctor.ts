@@ -1,5 +1,14 @@
-import { type DaemonLiveness, daemonLiveness } from '../daemon/daemon-liveness.js'
-import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
+import {
+  type DaemonLiveness,
+  type DaemonLivenessSeams,
+  daemonLiveness,
+} from '../daemon/daemon-liveness.js'
+import {
+  type DaemonRecordParseResult,
+  isOccupying,
+  type OccupyingLiveness,
+  parseDaemonRecord,
+} from '../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../daemon/version-skew.js'
 import {
   type DaemonDoctorCheck,
@@ -10,11 +19,18 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 export interface DaemonDoctorOptions {
   dataDir: string
-  parseRecord?: (dataDir: string) => Promise<DaemonRecordParseResult>
+  parseRecord?: (dataDir: string, seams?: DaemonLivenessSeams) => Promise<DaemonRecordParseResult>
   isPidAlive?: (pid: number) => boolean
   /** When a pid's process started; null where the platform cannot say. */
   processStartMs?: (pid: number) => number | null
   runningVersion?: string
+}
+
+/** Where a daemon whose record cannot be used is still to be found. */
+function stillServing(liveness: OccupyingLiveness, pid: number): string {
+  if (liveness.state === 'running') return `the daemon it names (pid ${pid}) is still running`
+  const serving = liveness.servingPid === undefined ? '' : ` (pid ${liveness.servingPid})`
+  return `a daemon answers on the socket it names${serving}`
 }
 
 function unusableRecordCheck(
@@ -36,18 +52,40 @@ function unusableRecordCheck(
         remediation: 'Remove the daemon record and restart: whiteboard daemon run',
       }
     case 'token-missing':
+      // `daemon run` refuses over a record whose daemon is still there, so a
+      // restart is only the remedy once it is gone.
+      if (isOccupying(parsed.liveness)) {
+        return {
+          id: 'daemon.record',
+          status: 'error',
+          summary: `Daemon record has no token, and ${stillServing(parsed.liveness, parsed.record.pid)}.`,
+          remediation:
+            'Stop that daemon with the build that started it (this record cannot reach it), then start the daemon: whiteboard daemon run',
+        }
+      }
       return {
         id: 'daemon.record',
         status: 'error',
         summary: 'Daemon record is present but has no token.',
         remediation: 'Restart the daemon: whiteboard daemon run',
       }
+    case 'uninterpretable': {
+      const { recorded } = parsed
+      const version = recorded.version === undefined ? '' : ` It names version ${recorded.version}.`
+      return {
+        id: 'daemon.record',
+        status: 'error',
+        summary: `Daemon record cannot be interpreted by this version, and ${stillServing(parsed.liveness, recorded.pid)}.${version}`,
+        remediation:
+          'A daemon of another version is likeliest: stop it with that version, then start this one: whiteboard daemon run',
+      }
+    }
   }
 }
 
 // Summaries name no path: the support bundle embeds them and refuses one.
 function processCheck(liveness: DaemonLiveness, pid: number): DaemonDoctorCheck {
-  switch (liveness) {
+  switch (liveness.state) {
     case 'running':
       return { id: 'daemon.process', status: 'ok', summary: 'Daemon process is running.' }
     case 'dead':
@@ -68,7 +106,10 @@ function processCheck(liveness: DaemonLiveness, pid: number): DaemonDoctorCheck 
       return {
         id: 'daemon.process',
         status: 'error',
-        summary: `A daemon answers on the recorded socket, but not as pid ${pid}, which the record names.`,
+        summary:
+          liveness.servingPid === undefined
+            ? `A daemon answers on the recorded socket, but not as pid ${pid}, which the record names.`
+            : `A daemon answers on the recorded socket as pid ${liveness.servingPid}, not as pid ${pid}, which the record names.`,
         remediation:
           'Stop the process serving the socket named in daemon.json, then start the daemon: whiteboard daemon run',
       }
@@ -90,18 +131,16 @@ export async function runDaemonDoctor(
     }),
     exitCode: 1,
   })
-  const parsed = await parse(options.dataDir)
+  const seams = { isAlive: options.isPidAlive, startMs: options.processStartMs }
+  const parsed = await parse(options.dataDir, seams)
 
   if (parsed.kind !== 'valid') {
     checks.push(unusableRecordCheck(parsed))
     return errorResult()
   }
 
-  const liveness = await daemonLiveness(parsed.record, {
-    isAlive: options.isPidAlive,
-    startMs: options.processStartMs,
-  })
-  const alive = liveness === 'running'
+  const liveness = await daemonLiveness(parsed.record, seams)
+  const alive = liveness.state === 'running'
 
   checks.push({
     id: 'daemon.record',

@@ -25,46 +25,53 @@ const startedAfter = { ...alive, startMs: () => writtenAtMs + 6_000 }
 describe('daemonLiveness', () => {
   it('answers dead for a pid no process has', async () => {
     const record = { pid: PID, startedAt, socketPath: silentSocketPath() }
-    expect(await daemonLiveness(record, { isAlive: () => false })).toBe('dead')
+    expect(await daemonLiveness(record, { isAlive: () => false })).toEqual({ state: 'dead' })
   })
 
   it('answers running, asking no socket, for a pid that started before its record', async () => {
     const daemon = await answeringDaemonSocket(PID, TOKEN)
     const record = { pid: PID, startedAt, socketPath: daemon.socketPath, token: TOKEN }
-    expect(await daemonLiveness(record, startedBefore)).toBe('running')
+    expect(await daemonLiveness(record, startedBefore)).toEqual({ state: 'running' })
     expect(daemon.asked).toEqual([])
   })
 
   it('answers running where the platform cannot tell when a process started', async () => {
     const record = { pid: PID, startedAt, socketPath: silentSocketPath() }
-    expect(await daemonLiveness(record, { ...alive, startMs: () => null })).toBe('running')
+    expect(await daemonLiveness(record, { ...alive, startMs: () => null })).toEqual({
+      state: 'running',
+    })
   })
 
   it('answers pid-reused for a later process when nothing answers on the socket', async () => {
     const record = { pid: PID, startedAt, socketPath: silentSocketPath(), token: TOKEN }
-    expect(await daemonLiveness(record, startedAfter)).toBe('pid-reused')
+    expect(await daemonLiveness(record, startedAfter)).toEqual({ state: 'pid-reused' })
   })
 
   it('answers pid-reused for a later process when the record names no socket', async () => {
-    expect(await daemonLiveness({ pid: PID, startedAt }, startedAfter)).toBe('pid-reused')
+    expect(await daemonLiveness({ pid: PID, startedAt }, startedAfter)).toEqual({
+      state: 'pid-reused',
+    })
   })
 
   it('answers running when the socket, asked under the token, names the recorded pid', async () => {
     const daemon = await answeringDaemonSocket(PID, TOKEN)
     const record = { pid: PID, startedAt, socketPath: daemon.socketPath, token: TOKEN }
-    expect(await daemonLiveness(record, startedAfter)).toBe('running')
+    expect(await daemonLiveness(record, startedAfter)).toEqual({ state: 'running' })
     expect(daemon.asked).toEqual(['/api/runtime/status'])
   })
 
-  it('answers unconfirmed when the socket names another pid', async () => {
+  it('answers unconfirmed, naming the pid that answered, when the socket names another', async () => {
     const daemon = await answeringDaemonSocket(PID + 1, TOKEN)
     const record = { pid: PID, startedAt, socketPath: daemon.socketPath, token: TOKEN }
-    expect(await daemonLiveness(record, startedAfter)).toBe('unconfirmed')
+    expect(await daemonLiveness(record, startedAfter)).toEqual({
+      state: 'unconfirmed',
+      servingPid: PID + 1,
+    })
   })
 
   it('answers unconfirmed when the socket refuses the recorded token', async () => {
     const daemon = await answeringDaemonSocket(PID, 'another-token')
     const record = { pid: PID, startedAt, socketPath: daemon.socketPath, token: TOKEN }
-    expect(await daemonLiveness(record, startedAfter)).toBe('unconfirmed')
+    expect(await daemonLiveness(record, startedAfter)).toEqual({ state: 'unconfirmed' })
   })
 })
