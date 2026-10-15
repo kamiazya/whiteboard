@@ -178,6 +178,21 @@ export function recordedProcess(
 }
 
 /**
+ * Whether `pid` is still the process that wrote a record at `writtenAt`:
+ * `recordedProcess`'s answer for a caller whose record was written by
+ * something other than the daemon (the dev wrapper's pid file), so its call
+ * site does not have to read as "is this process the daemon".
+ *
+ * @param {number} pid
+ * @param {string | undefined} writtenAt
+ * @param {{ isAlive?: (pid: number) => boolean, startMs?: (pid: number) => number | null }} [seams]
+ * @returns {boolean}
+ */
+export function isRecordWriter(pid, writtenAt, seams) {
+  return recordedProcess(pid, writtenAt, seams) === 'daemon'
+}
+
+/**
  * The one answer to "is this checkout's daemon running", shared by the
  * wrapper's refusal to start a second one, `pnpm mcp:http:stop` and the
  * SessionStart hook: its socket answers, or the pid its record names is alive

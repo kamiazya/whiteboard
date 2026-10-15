@@ -7,8 +7,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import {
   assessRecordedDaemon,
   isPidAlive,
+  isRecordWriter,
   readDaemonRecord,
-  recordedProcess,
 } from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
@@ -132,8 +132,7 @@ mkdirSync(dirname(pidPath), { recursive: true })
 const pidFile = claimPidFile({
   pidPath,
   pid: process.pid,
-  isWriterAlive: (pid, writtenAtMs) =>
-    recordedProcess(pid, new Date(writtenAtMs).toISOString()) === 'daemon',
+  isWriterAlive: (pid, writtenAtMs) => isRecordWriter(pid, new Date(writtenAtMs).toISOString()),
 })
 if (pidFile.kind === 'held') {
   console.error(
