@@ -597,12 +597,16 @@ function handleSnapshotRequest(
   // what this worker has seen.
   ensureSeeded(state.baseUrl, msg.doc)
   queueReplicaWork(() => {
-    // An empty snapshot for a document the daemon does not know is the right
-    // answer, not an error: forking from empty and letting updates fill it in
-    // is the same path a first-ever open already takes.
+    // A seed that failed answers NO bytes, which the tab reads as "ask
+    // again". The replica's own snapshot would be an empty document, read as
+    // the keeper's state — and as a corrupt one by a tab scoped to a document
+    // it lacks. A document the daemon does not know is seeded, and answered
+    // empty: forking from empty is the same path a first-ever open takes.
+    const seeded = seededDocs.has(replicaKey(state.baseUrl, msg.doc))
     const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
     if (snapshot === undefined) return
-    postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: bytesToBase64(snapshot) })
+    const answer = seeded ? bytesToBase64(snapshot) : ''
+    postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: answer })
   })
 }
 

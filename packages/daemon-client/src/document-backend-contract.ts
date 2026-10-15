@@ -69,7 +69,9 @@ export interface DocumentBackendHandlers {
    * transport that does not carry the document reports nothing here. When it
    * never does — the stream refused, or held back on the way — the backend
    * still delivers the keeper's state through `onSnapshot`, and the caller
-   * holds a document that is not live until this fires.
+   * holds a document that is not live until this fires. An opening read that
+   * fails is retried as a replacing read, never answered by a merge: a caller
+   * with no copy has nothing to merge into.
    *
    * A reconnect obliges the BACKEND to catch up: a stream carries only what
    * is written while it is open, so what the keeper took during the gap

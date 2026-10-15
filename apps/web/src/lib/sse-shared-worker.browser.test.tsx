@@ -170,13 +170,13 @@ it('keeps two daemon origins that share a document id apart', async () => {
     setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
   })
 
-  const forked = new LoroDoc()
-  forked.import(decode(snapshot))
-  expect(forked.getMap('m').size).toBe(0)
+  // No daemon answers here, so b's replica is unseeded and answers no bytes;
+  // a replica shared with a would have carried a's push to b as an update.
+  expect(decode(snapshot)).toHaveLength(0)
   expect(leaked).not.toHaveBeenCalled()
 }, 30_000)
 
-it('answers a document nobody has opened with an empty snapshot, not an error', async () => {
+it('answers no bytes, not an error, for a document its daemon cannot be reached for', async () => {
   // Lives here rather than in the jsdom file because that file can host
   // exactly one replica test — loro-crdt's WASM initialises once per realm and
   // the polyfill runs every worker in the host's, so the second worker to
@@ -195,42 +195,9 @@ it('answers a document nobody has opened with an empty snapshot, not an error', 
     setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
   })
 
-  // Forkable is the property that matters: forking from empty and letting the
-  // daemon fill it in is the same path a first-ever open takes.
-  const forked = new LoroDoc()
-  forked.import(decode(snapshot))
-  expect(forked.getMap('anything').size).toBe(0)
-}, 30_000)
-
-it('hands a later tab a snapshot that already contains an earlier push', async () => {
-  // The round trip a replica exists to remove: without it this snapshot would
-  // be empty until the daemon echoed the work back.
-  const NAME = 'whiteboard-sse-snapshot-test'
-  const port = openPort(NAME)
-  const doc = `w/snapshot-${Date.now()}`
-  port.postMessage({ type: 'init', baseUrl: 'http://127.0.0.1:1' })
-  port.postMessage({ type: 'subscribe', doc })
-
-  const tab = new LoroDoc()
-  tab.getMap('m').set('k', 'already-there')
-  tab.commit()
-  port.postMessage({ type: 'push', doc, update: bytesToBase64(tab.export({ mode: 'update' })) })
-
-  const snapshot = await new Promise<string>((resolve, reject) => {
-    port.addEventListener('message', (e: MessageEvent) => {
-      const data = e.data as { type?: string; snapshot?: string }
-      if (data.type === 'snapshot' && data.snapshot !== undefined) resolve(data.snapshot)
-    })
-    // Queued behind the push, which is the ordering the worker serialises its
-    // replica work to guarantee — a snapshot answered from before the push
-    // would be an authority that contradicts what it was just told.
-    port.postMessage({ type: 'snapshot-request', doc })
-    setTimeout(() => reject(new Error('no snapshot came back')), 10_000)
-  })
-
-  const forked = new LoroDoc()
-  forked.import(decode(snapshot))
-  expect(forked.getMap('m').get('k')).toBe('already-there')
+  // An answer, so the tab is not left waiting, and no bytes, so it asks
+  // again: an empty document would read as the keeper's state.
+  expect(decode(snapshot)).toHaveLength(0)
 }, 30_000)
 
 it('leaves a port that subscribed to a different document alone', async () => {

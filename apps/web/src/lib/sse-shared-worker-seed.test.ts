@@ -269,8 +269,9 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     // A 404 is an answer; a 503 or a dropped connection is not. Remembering
     // a failed fetch as "seeded" would hand every later tab an empty
     // document that the daemon actually has content for. While the outage
-    // lasts the answer is empty (each request retries and fails again); the
-    // first request after recovery gets the real state.
+    // lasts the answer is no bytes at all (each request retries and fails
+    // again) — never an empty document, which a tab would take as the
+    // keeper's; the first request after recovery gets the real state.
     const doc = nextDoc()
     const content = new LoroDoc()
     content.getMap('m').set('survives', 'the-outage')
@@ -279,9 +280,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     failingSnapshots.add(doc)
 
     await subscribed(doc)
-    const during = new LoroDoc()
-    during.import(await requestSnapshot(doc))
-    expect(during.getMap('m').get('survives')).toBeUndefined()
+    expect(await requestSnapshot(doc)).toHaveLength(0)
 
     failingSnapshots.delete(doc)
     const after = new LoroDoc()
@@ -315,6 +314,8 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     const seeded = new LoroDoc()
     seeded.import(await requestSnapshot(doc))
     expect(seeded.getMap('m').get('seeded')).toBe('yes')
+    // And the edit the replica already held: a later tab forks from both.
+    expect(seeded.getMap('m').get('edit')).toBe('before-seed')
 
     failingWrites.delete(doc)
     await until(() => writeStates.some((s) => s.doc === doc && s.landed))
