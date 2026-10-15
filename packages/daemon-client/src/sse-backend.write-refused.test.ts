@@ -504,6 +504,45 @@ describe('SseBackend through a source that writes onward itself', () => {
     backend.disconnect()
   })
 
+  it('still delivers an earlier keeper-state read when a later one fails', async () => {
+    // A failed read replaced nothing, so it outdates nothing: the earlier
+    // read is the newest state the caller can still be handed.
+    const listeners: DocListener[] = []
+    const pending: { resolve: (bytes: Uint8Array) => void; reject: (e: Error) => void }[] = []
+    let reads = 0
+    const source: SseStreamSource = {
+      subscribe: (_doc, listener) => {
+        listeners.push(listener)
+        listener.onConnectionChange?.(true)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () =>
+        ++reads === 1
+          ? Promise.resolve(new Uint8Array([1]))
+          : new Promise((resolve, reject) => {
+              pending.push({ resolve, reject })
+            }),
+    }
+    const order: string[] = []
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, source)
+    backend.connect({ ...r.handlers, onSnapshot: (b) => order.push(`snapshot ${b[0]}`) })
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1']))
+
+    const refusal = { code: 'node_text_too_large', message: 'too long' } as const
+    for (const l of listeners) l.onWriteRefused?.(refusal)
+    for (const l of listeners) l.onWriteRefused?.(refusal)
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+    pending[1]?.reject(new Error('the worker could not read the document'))
+    await flush()
+    pending[0]?.resolve(new Uint8Array([2]))
+
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1', 'snapshot 2']))
+    backend.disconnect()
+  })
+
   it('treats a refusal whose body is cut mid-read as the network, sending the bytes again', async () => {
     const cut = () =>
       new ReadableStream<Uint8Array>({

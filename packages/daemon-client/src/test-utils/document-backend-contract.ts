@@ -89,6 +89,15 @@ export interface DocumentBackendHarness {
    */
   failsOpeningRead?(): void
   /**
+   * Make the keeper refuse the next write this backend sends, for what its
+   * bytes would do; when `thenItsReadFails`, the read of the keeper's state
+   * that the refusal sends the backend to make fails as well. Omitted by an
+   * implementation whose keeper cannot refuse bytes, or whose refusal reaches
+   * the caller only once that read has already succeeded (the SharedWorker
+   * announces one after rebuilding its replica from the daemon).
+   */
+  refusesNextWrite?(thenItsReadFails: boolean): void
+  /**
    * Whether the bytes this backend delivered — the snapshot and every
    * update, in delivery order — reproduce the keeper's current state when
    * applied. False for a frame left waiting on history it builds on.
@@ -144,6 +153,7 @@ function recorder(): Recorded {
       onRestoreComplete: () => calls.push('restoreComplete'),
       onViewportRequest: () => calls.push('viewport'),
       onAuthError: () => calls.push('authError'),
+      onWriteRefused: () => calls.push('writeRefused'),
     } satisfies DocumentBackendHandlers,
   }
 }
@@ -160,6 +170,7 @@ export function documentBackendContract(
   routingGapCases(create)
   unroutedCases(create)
   failedOpenCases(create)
+  failedResyncCases(create)
   upstreamDeliveryCases(create)
 
   it('never throws on a control message sent before connecting', async () => {
@@ -444,6 +455,55 @@ function failedOpenCases(
       h.cleanup()
     })
   }
+}
+
+/**
+ * A refused write sends the caller to the keeper's state, and that read can
+ * fail like any other. The caller's copy is all it has then: replacing it
+ * with nothing, or counting the failure as a replacement that happened, loses
+ * the copy or the next read that would have replaced it.
+ */
+function failedResyncCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  // Polled: the refusal reaches the caller through the backend's write queue.
+  it('a resync answered with a failed read leaves the caller copy and onSnapshot untouched', {
+    timeout: 20_000,
+  }, async () => {
+    const h = await create()
+    const refusesNextWrite = h.refusesNextWrite
+    if (!refusesNextWrite) {
+      h.cleanup()
+      return
+    }
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+    const push = (): void => {
+      const edit = h.localEdit?.(rec.snapshot()) ?? sentBytes(h)
+      if (edit === null) throw new Error('a harness that refuses writes owes a way to make one')
+      void Promise.resolve(h.backend.pushLocalUpdate(edit.bytes)).catch(() => {})
+    }
+    const refusals = () => rec.calls.filter((c) => c === 'writeRefused').length
+    const before = [...rec.delivered]
+
+    refusesNextWrite(true)
+    push()
+    await vi.waitFor(() => expect(refusals()).toBe(1), { timeout: 5000 })
+    await settle()
+    expect(rec.delivered).toEqual(before)
+
+    // Nothing was spent on the failure: the next refusal's read still replaces.
+    refusesNextWrite(false)
+    push()
+    await vi.waitFor(() => expect(refusals()).toBe(2), { timeout: 5000 })
+    await vi.waitFor(
+      () => expect(rec.calls.filter((c) => c === 'snapshot')).toEqual(['snapshot', 'snapshot']),
+      { timeout: 5000 },
+    )
+    h.backend.disconnect()
+    h.cleanup()
+  })
 }
 
 /** What reaches the keeper of what a caller pushed — while connected, and across teardown. */

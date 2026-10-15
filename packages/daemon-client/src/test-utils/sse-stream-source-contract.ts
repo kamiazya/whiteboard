@@ -63,6 +63,11 @@ export interface SseStreamSourceHarness {
    * snapshot contract is about state the source never saw arrive.
    */
   seedDaemonState(doc: string, bytes: Uint8Array): void
+  /**
+   * Make the daemon's snapshot route fail the next read of `doc` — a daemon
+   * restarting, a proxy's passing 5xx — and answer the reads after it.
+   */
+  failsNextRead(doc: string): void
   /** Wait until the daemon has an open stream ready to receive frames. */
   ready(): Promise<void>
   /** End the current stream the way a dropped connection does. */
@@ -130,6 +135,7 @@ async function subscribed(h: SseStreamSourceHarness, doc: string) {
 export function sseStreamSourceContract(
   create: () => SseStreamSourceHarness | Promise<SseStreamSourceHarness>,
 ): void {
+  snapshotCases(create)
   it('announces a document to the daemon when it is first subscribed', async () => {
     const h = await create()
     const doc = nextDoc()
@@ -233,29 +239,6 @@ export function sseStreamSourceContract(
     h.cleanup()
   })
 
-  it('answers a snapshot with state the source did not witness arrive', async () => {
-    // The stream carries only incremental updates from subscription onward,
-    // so "the document's current state" is a question the stream cannot
-    // answer. The hub asks the daemon; the worker-backed source seeds its
-    // replica once and answers from memory. Either way, a document with
-    // PRE-EXISTING content must come back whole — an implementation that
-    // reconstructs from stream traffic alone passes every other case in this
-    // file and still hands a forking tab partial truth.
-    const h = await create()
-    const doc = nextDoc()
-    h.seedDaemonState(doc, LORO_UPDATE)
-    // With no subscription: a snapshot answers a request, not a
-    // subscription, and a caller may ask with no listener at all — an
-    // implementation that only answers documents it has listeners for would
-    // leave that caller waiting.
-    const bytes = await h.source.snapshot(doc)
-    expect(bytes).not.toBeNull()
-    const reconstructed = new LoroDoc()
-    reconstructed.import(bytes as Uint8Array)
-    expect(reconstructed.getMap('contract').get('pushed')).toBe('through')
-    h.cleanup()
-  })
-
   it('tells its subscribers when the stream drops', async () => {
     // A subscriber told only about frames cannot tell "nothing has changed"
     // from "nothing is arriving", so a dropped stream looks exactly like a
@@ -336,6 +319,52 @@ export function sseStreamSourceContract(
 
     await until(() => second.updates.length >= 1)
     expect(first.updates).toEqual([])
+    h.cleanup()
+  })
+}
+
+/** What a caller of `snapshot` is answered: the daemon's state, or a failed read. */
+function snapshotCases(
+  create: () => SseStreamSourceHarness | Promise<SseStreamSourceHarness>,
+): void {
+  it('answers a snapshot with state the source did not witness arrive', async () => {
+    // The stream carries only incremental updates from subscription onward,
+    // so "the document's current state" is a question the stream cannot
+    // answer. The hub asks the daemon; the worker-backed source seeds its
+    // replica once and answers from memory. Either way, a document with
+    // PRE-EXISTING content must come back whole — an implementation that
+    // reconstructs from stream traffic alone passes every other case in this
+    // file and still hands a forking tab partial truth.
+    const h = await create()
+    const doc = nextDoc()
+    h.seedDaemonState(doc, LORO_UPDATE)
+    // With no subscription: a snapshot answers a request, not a
+    // subscription, and a caller may ask with no listener at all — an
+    // implementation that only answers documents it has listeners for would
+    // leave that caller waiting.
+    const bytes = await h.source.snapshot(doc)
+    expect(bytes).not.toBeNull()
+    const reconstructed = new LoroDoc()
+    reconstructed.import(bytes as Uint8Array)
+    expect(reconstructed.getMap('contract').get('pushed')).toBe('through')
+    h.cleanup()
+  })
+
+  it('rejects a read the daemon could not serve, and answers the next one', async () => {
+    // A failed read is a rejection from every implementation, never bytes:
+    // a caller handed none would take them for the document's state, and
+    // Loro refuses to import zero bytes. `null` stays the daemon's own
+    // answer for a document it does not know.
+    const h = await create()
+    const doc = nextDoc()
+    h.seedDaemonState(doc, LORO_UPDATE)
+    h.failsNextRead(doc)
+
+    await expect(h.source.snapshot(doc)).rejects.toThrow()
+    const bytes = await h.source.snapshot(doc)
+    const reconstructed = new LoroDoc()
+    reconstructed.import(bytes as Uint8Array)
+    expect(reconstructed.getMap('contract').get('pushed')).toBe('through')
     h.cleanup()
   })
 }
