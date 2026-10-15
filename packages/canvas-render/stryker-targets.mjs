@@ -248,9 +248,47 @@ export const KNOWN_EQUIVALENT = {
   // positive, where the product is non-positive and fails it too. Verified by
   // applying each edit and running the file's property, which kills the five
   // non-equivalent mutants on the same two functions.
+  //
+  // The other three are `buildUnits`', each equivalent by construction.
+  // `h.id !== g.id` only excludes `g` itself, and for `g` the last conjunct is
+  // already `!true || index < index`, false (ids are unique in a canvas).
+  // `hIndex < index` -> false makes every twin of an identical pair a root,
+  // but the earlier twin is visited first and claims the later one, so the
+  // later is skipped as claimed. And `movableIds` drops locked members, which
+  // only a MOVABLE unit's deltas read — and a unit holding a locked member is
+  // never movable, so the filter is the identity wherever it is read. Each
+  // verified by applying the edit and running tidy's suites, drawing-quality
+  // and server-core's canvas-edit/propose tests, which stay green.
   'src/tidy-units.ts': {
     'EqualityOperator: w > 0 -> w >= 0': 1,
     'LogicalOperator: w > 0 && h > 0 -> w > 0 || h > 0': 1,
+    'ConditionalExpression: h.id !== g.id -> true': 1,
+    'ConditionalExpression: hIndex < index -> false': 1,
+    'MethodExpression: memberNodes.filter((m) => !locked(m.id)) -> memberNodes': 1,
+  },
+  // Guards that change no output of `tidyNodes`. A yield anchor list seeded
+  // with a string (both of `anchorsToYieldTo`'s arrays) is read only by
+  // `onSomeAnchor`, where the string minus a number is NaN and matches
+  // nothing. `at >= target` -> `>` differs only at `at === target`, where the
+  // shift is zero and `shift` returns early. The hop loop's `guard` never
+  // trips: each hop lands past the collider in one direction, so no rect is
+  // hit twice and the loop ends within `occupied.length` hops. Every `shift`
+  // is gated on `unit.movable`, so an immobile unit's delta is zero and
+  // `applyUnitDeltas` skipping it — or skipping a zero delta — adds nothing.
+  // And the output's finiteness check repeats `settleOnce`'s, which already
+  // falls back to the finite input for any non-finite rounded rect. Each
+  // verified as the `tidy-units.ts` entries above were. NOT recorded: the
+  // fixpoint loops' bounds and breaks, which change the result on a board
+  // that needs more passes or cycles; and `claimed.has` / `m.id === node.id`
+  // in `buildUnits`, which a frame claimed by an overlapping frame and a
+  // frame of negative size each tell apart.
+  'src/tidy.ts': {
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
+    'ConditionalExpression: guard-- > 0 -> true': 1,
+    'EqualityOperator: at >= target -> at > target': 1,
+    'ConditionalExpression: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> false': 1,
+    'ConditionalExpression: unit.dx === 0 && unit.dy === 0 -> false': 1,
+    'ConditionalExpression: !isFiniteRect({ x, y, width, height }) -> false': 1,
   },
   // `tags ?? []` only matters when the element carries no `tags` at all, and
   // then the substitute is iterated as a tag: a string with no colon is not
