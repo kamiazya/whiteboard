@@ -37,16 +37,24 @@ beforeEach(() => {
   FakeSharedWorker.instances = []
   globalThis.SharedWorker = FakeSharedWorker as unknown as typeof SharedWorker
 })
+// A worker that failed is remembered against its origin for the module's
+// lifetime, and every case fails its workers on the way out, so each run of
+// a case takes origins of its own: a repeated run must not inherit the last
+// run's failure.
+let run = 0
+beforeEach(() => {
+  run += 1
+})
+const origin = (name: string) => `http://${name}-${run}.test`
+
 afterEach(() => {
-  // Sources are cached per origin for the module's lifetime; failing every
-  // worker a case made evicts them, so a repeated run starts from nothing.
   for (const worker of FakeSharedWorker.instances) worker.fail()
   globalThis.SharedWorker = original
 })
 
 describe('a shared worker that fails to load', () => {
   it('tells its listeners they are disconnected instead of going quiet', () => {
-    const source = createSharedSseStreamSource('http://disconnected.test')
+    const source = createSharedSseStreamSource(origin('disconnected'))
     expect(source).not.toBeNull()
     const onConnectionChange = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
@@ -57,23 +65,23 @@ describe('a shared worker that fails to load', () => {
   })
 
   it('is remembered, so the next caller for that origin opens its own stream', () => {
-    createSharedSseStreamSource('http://evicted.test')
+    createSharedSseStreamSource(origin('evicted'))
     expect(FakeSharedWorker.instances).toHaveLength(1)
-    expect(createSharedSseStreamSource('http://evicted.test')).not.toBeNull()
+    expect(createSharedSseStreamSource(origin('evicted'))).not.toBeNull()
     expect(FakeSharedWorker.instances).toHaveLength(1)
 
     FakeSharedWorker.instances[0]?.fail()
 
     // A missing chunk or a CSP refusal is the same on every attempt, so a
     // fresh worker would fail the same way; `null` is the own-stream path.
-    expect(createSharedSseStreamSource('http://evicted.test')).toBeNull()
+    expect(createSharedSseStreamSource(origin('evicted'))).toBeNull()
     expect(FakeSharedWorker.instances).toHaveLength(1)
-    expect(sharedStreamFailed('http://evicted.test')).toBe(true)
-    expect(sharedStreamFailed('http://elsewhere.test')).toBe(false)
+    expect(sharedStreamFailed(origin('evicted'))).toBe(true)
+    expect(sharedStreamFailed(origin('elsewhere'))).toBe(false)
   })
 
   it('rejects a snapshot it was still waiting on', async () => {
-    const source = createSharedSseStreamSource('http://pending-snapshot.test')
+    const source = createSharedSseStreamSource(origin('pending-snapshot'))
     const pending = source?.snapshot('workspace:w')
 
     FakeSharedWorker.instances[0]?.fail()
@@ -82,7 +90,7 @@ describe('a shared worker that fails to load', () => {
   })
 
   it('rejects every later snapshot at once rather than posting into the dead port', async () => {
-    const source = createSharedSseStreamSource('http://later-snapshot.test')
+    const source = createSharedSseStreamSource(origin('later-snapshot'))
     FakeSharedWorker.instances[0]?.fail()
 
     await expect(source?.snapshot('workspace:w')).rejects.toThrow()
@@ -92,7 +100,7 @@ describe('a shared worker that fails to load', () => {
   it('tells whoever follows the failures, once', () => {
     const told = vi.fn()
     const stop = subscribeSharedStreamFailure(told)
-    createSharedSseStreamSource('http://told.test')
+    createSharedSseStreamSource(origin('told'))
 
     FakeSharedWorker.instances[0]?.fail()
     FakeSharedWorker.instances[0]?.fail()
@@ -106,7 +114,7 @@ describe("the worker's word on a document's writes", () => {
   // A tab's push returns before the keeper answers, so this event is the only
   // way a page learns its edit did not land — and that it later did.
   it('reaches the listener for that document, and no other', () => {
-    const source = createSharedSseStreamSource('http://write-state.test')
+    const source = createSharedSseStreamSource(origin('write-state'))
     const mine = vi.fn()
     const other = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteState: mine })
@@ -124,7 +132,7 @@ describe("the worker's word on a document's writes", () => {
 
 describe("the worker's word that the daemon refused a write for good", () => {
   it('reaches the listener for that document with the reason, and no other', () => {
-    const source = createSharedSseStreamSource('http://write-refused.test')
+    const source = createSharedSseStreamSource(origin('write-refused'))
     const mine = vi.fn()
     const other = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onWriteRefused: mine })
@@ -142,7 +150,7 @@ describe("the worker's word that the daemon refused a write for good", () => {
 
 describe("the worker's word that the daemon refused the session", () => {
   it('reaches the listener for that document, and no other', () => {
-    const source = createSharedSseStreamSource('http://auth-refused.test')
+    const source = createSharedSseStreamSource(origin('auth-refused'))
     const mine = vi.fn()
     const other = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: mine })
@@ -175,7 +183,7 @@ const postedOfType = (type: string) =>
 // announcing is no longer routed here until the tab announces it again.
 describe('a document closed and reopened in the same tab', () => {
   it('is announced to the worker again, so its updates are routed back here', () => {
-    const source = createSharedSseStreamSource('http://reopen.test')
+    const source = createSharedSseStreamSource(origin('reopen'))
     const unsubscribe = source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
     unsubscribe?.()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
@@ -190,7 +198,7 @@ describe('a document closed and reopened in the same tab', () => {
 
 describe('a tab navigating away', () => {
   it('hands each claimed document back to the worker once', () => {
-    const source = createSharedSseStreamSource('http://pagehide.test')
+    const source = createSharedSseStreamSource(origin('pagehide'))
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
 
     globalThis.dispatchEvent(new Event('pagehide'))
@@ -205,7 +213,7 @@ describe('a tab navigating away', () => {
 
 describe('a snapshot reply that is not base64', () => {
   it('leaves the waiter for the next reply instead of answering it with nothing', async () => {
-    const source = createSharedSseStreamSource('http://bad-snapshot.test')
+    const source = createSharedSseStreamSource(origin('bad-snapshot'))
     const pending = source?.snapshot('w/doc')
     const reply = (snapshot: string) =>
       FakeSharedWorker.instances[0]?.port.onmessage?.({
@@ -224,7 +232,7 @@ describe('a snapshot reply with no bytes', () => {
   // take it as the document's state — and Loro refuses zero bytes — so it is
   // the same failed read the hub implementation reports by throwing.
   it('rejects every waiter, and the next request is answered', async () => {
-    const source = createSharedSseStreamSource('http://empty-snapshot.test')
+    const source = createSharedSseStreamSource(origin('empty-snapshot'))
     const first = source?.snapshot('w/doc')
     const second = source?.snapshot('w/doc')
     const reply = (snapshot: string) =>
@@ -244,7 +252,7 @@ describe('a snapshot reply with no bytes', () => {
 
 describe('an event the worker protocol does not describe', () => {
   it('is dropped without reaching a listener or throwing', () => {
-    const source = createSharedSseStreamSource('http://malformed.test')
+    const source = createSharedSseStreamSource(origin('malformed'))
     const onMessage = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage })
 
@@ -263,6 +271,6 @@ describe('a SharedWorker the browser refuses to construct', () => {
       }
     } as unknown as typeof SharedWorker
 
-    expect(createSharedSseStreamSource('http://refused.test')).toBeNull()
+    expect(createSharedSseStreamSource(origin('refused'))).toBeNull()
   })
 })

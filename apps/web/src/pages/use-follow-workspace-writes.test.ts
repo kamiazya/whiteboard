@@ -7,6 +7,10 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useFollowWorkspaceWrites } from './use-follow-workspace-writes.js'
 
+// A failed worker is remembered per origin for the module's lifetime, so each
+// run that fails one takes an origin of its own.
+let failingOrigins = 0
+
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
@@ -127,12 +131,9 @@ describe('useFollowWorkspaceWrites when the shared worker fails to load', () => 
     // Held stable, as the page holds it, so nothing but the failure can
     // re-run the follow.
     const reload = vi.fn<Reload>(async () => {})
+    const daemonBaseUrl = `http://follow-worker-fails-${++failingOrigins}.test`
     renderHook(() =>
-      useFollowWorkspaceWrites(
-        { daemonFetch, daemonBaseUrl: 'http://follow-worker-fails.test' },
-        'ws-1',
-        reload,
-      ),
+      useFollowWorkspaceWrites({ daemonFetch, daemonBaseUrl: daemonBaseUrl }, 'ws-1', reload),
     )
     expect(FailingSharedWorker.instances).toHaveLength(1)
     expect(subscribe).not.toHaveBeenCalled()

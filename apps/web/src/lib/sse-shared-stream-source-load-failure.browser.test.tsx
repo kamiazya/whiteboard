@@ -22,7 +22,8 @@ it('a missing worker chunk rejects the read and falls back', async () => {
       super(new URL('/no-such-sse-worker-chunk.js', location.href), options)
     }
   }
-  const origin = 'http://missing-chunk.test'
+  // Remembered per origin once it fails, so a repeated run takes its own.
+  const origin = `http://missing-chunk-${crypto.randomUUID()}.test`
   const source = createSharedSseStreamSource(origin)
   expect(source).not.toBeNull()
 

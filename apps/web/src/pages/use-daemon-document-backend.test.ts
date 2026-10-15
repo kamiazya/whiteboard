@@ -21,6 +21,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BRIDGE_DAEMON_BASE_URL } from '../lib/bridge-address.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 
+// A failed worker is remembered per origin for the module's lifetime, so each
+// run that fails one takes an origin of its own.
+let failingOrigins = 0
+
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 const fetchFn = vi.fn() as unknown as typeof fetch
 
@@ -166,8 +170,9 @@ describe('useDaemonDocumentBackend when the shared worker fails to load', () => 
         ? Promise.resolve(new Response(new Uint8Array([7])))
         : new Promise<Response>(() => {}),
     ) as unknown as typeof fetch
+    const daemonBaseUrl = `http://worker-fails-${++failingOrigins}.test`
     const { result } = renderHook(() =>
-      useDaemonDocumentBackend(options({ daemonBaseUrl: 'http://worker-fails.test', daemonFetch })),
+      useDaemonDocumentBackend(options({ daemonBaseUrl: daemonBaseUrl, daemonFetch })),
     )
     const onTheWorker = result.current.backend
     onTheWorker?.connect(snapshotHandlers(() => {}))
