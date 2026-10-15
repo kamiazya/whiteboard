@@ -30,7 +30,12 @@ describe('useDocumentListRefresh', () => {
 
     const { result, rerender } = renderHook(
       ({ documentId }: { documentId: string }) =>
-        useDocumentListRefresh({ documentId, currentUpdatedAt: null, listDocuments }),
+        useDocumentListRefresh({
+          documentId,
+          currentUpdatedAt: null,
+          listDocuments,
+          workspaceId: null,
+        }),
       { initialProps: { documentId: 'first' } },
     )
     await waitFor(() => expect(resolvers.length).toBe(1))
@@ -50,7 +55,12 @@ describe('useDocumentListRefresh', () => {
   it('reports that the list has answered, which "no such path" is told apart by', async () => {
     const listDocuments = vi.fn(async () => [snapshot('only')])
     const { result } = renderHook(() =>
-      useDocumentListRefresh({ documentId: 'doc', currentUpdatedAt: null, listDocuments }),
+      useDocumentListRefresh({
+        documentId: 'doc',
+        currentUpdatedAt: null,
+        listDocuments,
+        workspaceId: null,
+      }),
     )
     expect(result.current.enumeratedRef.current).toBe(false)
     await waitFor(() => expect(result.current.enumeratedRef.current).toBe(true))
@@ -66,7 +76,12 @@ describe('useDocumentListRefresh', () => {
       throw new Error('store unreachable')
     })
     renderHook(() =>
-      useDocumentListRefresh({ documentId: 'doc', currentUpdatedAt: null, listDocuments }),
+      useDocumentListRefresh({
+        documentId: 'doc',
+        currentUpdatedAt: null,
+        listDocuments,
+        workspaceId: null,
+      }),
     )
     await expectLoggedFailure('listDocuments failed')
   })
@@ -77,7 +92,12 @@ describe('useDocumentListRefresh', () => {
       () => new Promise<DocumentSnapshot[]>((_resolve, reject) => rejecters.push(reject)),
     )
     const { unmount } = renderHook(() =>
-      useDocumentListRefresh({ documentId: 'doc', currentUpdatedAt: null, listDocuments }),
+      useDocumentListRefresh({
+        documentId: 'doc',
+        currentUpdatedAt: null,
+        listDocuments,
+        workspaceId: null,
+      }),
     )
     await waitFor(() => expect(rejecters.length).toBe(1))
     unmount()
@@ -95,7 +115,12 @@ describe('useDocumentListRefresh', () => {
     )
     const { rerender } = renderHook(
       ({ documentId }: { documentId: string }) =>
-        useDocumentListRefresh({ documentId, currentUpdatedAt: null, listDocuments }),
+        useDocumentListRefresh({
+          documentId,
+          currentUpdatedAt: null,
+          listDocuments,
+          workspaceId: null,
+        }),
       { initialProps: { documentId: 'first' } },
     )
     await waitFor(() => expect(rejecters.length).toBe(1))
@@ -109,7 +134,12 @@ describe('useDocumentListRefresh', () => {
   it('asks for nothing while no document is loaded', () => {
     const listDocuments = vi.fn(async () => [])
     renderHook(() =>
-      useDocumentListRefresh({ documentId: null, currentUpdatedAt: null, listDocuments }),
+      useDocumentListRefresh({
+        documentId: null,
+        currentUpdatedAt: null,
+        listDocuments,
+        workspaceId: null,
+      }),
     )
     expect(listDocuments).not.toHaveBeenCalled()
   })

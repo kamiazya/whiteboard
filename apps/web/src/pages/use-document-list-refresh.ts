@@ -4,8 +4,12 @@
  * Enumeration is a Promise, not reactive state, so it is refreshed whenever
  * the current document's identity or its own `updatedAt` changes — which
  * covers a switch, a create-then-switch, and an edit to the current row
- * reflecting in the list. The generation guard drops a stale resolution that
- * would otherwise clobber a newer refresh triggered by a fast switch.
+ * reflecting in the list — and whenever the workspace's channel says the
+ * record changed. That last one is what follows another tab: its create,
+ * rename or move is written by its index and announced by name, so no bytes
+ * reach the record this page syncs and nothing else here would move. The
+ * generation guard drops a stale resolution that would otherwise clobber a
+ * newer refresh triggered by a fast switch.
  *
  * `enumeratedRef` is returned rather than kept by the caller because this is
  * what WRITES it. The URL -> document effect reads it to tell "this path does
@@ -15,6 +19,7 @@
  */
 import { type RefObject, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
+import { followBrowserWorkspaceWrites } from '../lib/follow-workspace-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 // The page's own scope, deliberately: this is that screen's list, and a
@@ -28,15 +33,34 @@ export interface DocumentListRefresh {
   readonly enumeratedRef: RefObject<boolean>
 }
 
+/** A count that moves each time the workspace's channel says its record changed. */
+function useWorkspaceRevision(workspaceId: string | null): number {
+  const [revision, setRevision] = useState(0)
+  useEffect(() => {
+    if (workspaceId === null) return
+    return followBrowserWorkspaceWrites(workspaceId, {
+      onMoved: () => setRevision((n) => n + 1),
+      // The record leaving this browser is the sync session's to answer: it
+      // locks the page over a document that is gone, and a re-read here would
+      // only meet the registry's refusal.
+      onRemoved: () => {},
+    })
+  }, [workspaceId])
+  return revision
+}
+
 export function useDocumentListRefresh(options: {
   /** The document on screen, or null while none is loaded. */
   readonly documentId: string | null
   /** Its own `updatedAt`, so an edit to the current row reaches the list. */
   readonly currentUpdatedAt: string | null
   readonly listDocuments: () => Promise<DocumentSnapshot[]>
+  /** The workspace whose channel is followed, or null while none is resolved. */
+  readonly workspaceId: string | null
 }): DocumentListRefresh {
-  const { documentId, currentUpdatedAt, listDocuments } = options
+  const { documentId, currentUpdatedAt, listDocuments, workspaceId } = options
   const [documents, setDocuments] = useState<DocumentSnapshot[]>([])
+  const workspaceRevision = useWorkspaceRevision(workspaceId)
   const generationRef = useRef(0)
   const enumeratedRef = useRef(false)
 
@@ -61,7 +85,7 @@ export function useDocumentListRefresh(options: {
     return () => {
       generationRef.current += 1
     }
-  }, [documentId, currentUpdatedAt, listDocuments])
+  }, [documentId, currentUpdatedAt, listDocuments, workspaceRevision])
 
   return { documents, enumeratedRef }
 }
