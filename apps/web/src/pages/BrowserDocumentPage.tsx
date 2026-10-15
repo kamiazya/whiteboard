@@ -16,7 +16,11 @@ import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
-import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import {
+  browserWorkspaceHandleOrNull,
+  browserWorkspaceIdOrNull,
+  getBrowserWorkspaceId,
+} from '../lib/browser-workspace-id.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { documentLabel } from '../lib/document-label.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
@@ -145,6 +149,7 @@ function useBrowserDocument(
     documentId,
     currentUpdatedAt,
     listDocuments,
+    workspaceId: browserWorkspaceIdOrNull(),
   })
   // A ref that matches NEITHER a live id nor a live path points at a
   // deleted canvas: the editor renders a quiet "Missing reference" and hides
