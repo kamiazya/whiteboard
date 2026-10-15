@@ -176,6 +176,16 @@ const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve,
 /** A ceiling on a delivery the case requires, not a delay: it returns as soon as the delivery is there. */
 const DELIVERY_TIMEOUT_MS = 5000
 
+/**
+ * The ceiling on a delivery that first waits out one of the backend's own
+ * bounds — `UNROUTED_OPEN_MS` before an unrouted open, or a failed open's
+ * retry — so it owes that bound on top of the delivery itself.
+ */
+const BOUNDED_OPEN_TIMEOUT_MS = 10_000
+
+/** A case's own ceiling, for one that polls several steps behind a production reconnect backoff. */
+const CASE_TIMEOUT_MS = 20_000
+
 const called = (rec: Recorded, ...calls: string[]): Promise<void> =>
   vi.waitFor(
     () => {
@@ -183,6 +193,13 @@ const called = (rec: Recorded, ...calls: string[]): Promise<void> =>
     },
     { timeout: DELIVERY_TIMEOUT_MS },
   )
+
+/** Until the bytes delivered so far reproduce the keeper's state. */
+const caughtUpBy = (
+  rec: Recorded,
+  caughtUp: (delivered: readonly Uint8Array[]) => boolean,
+): Promise<void> =>
+  vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: DELIVERY_TIMEOUT_MS })
 
 export function documentBackendContract(
   create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
@@ -315,7 +332,9 @@ function authCases(create: () => DocumentBackendHarness | Promise<DocumentBacken
     h.dropTransport()
     // Polled, not settled: the refusal is met on the backend's own reconnect
     // attempt, which sits behind its production backoff.
-    await vi.waitFor(() => expect(rec.calls).toContain('authError'), { timeout: 5000 })
+    await vi.waitFor(() => expect(rec.calls).toContain('authError'), {
+      timeout: DELIVERY_TIMEOUT_MS,
+    })
     await settle()
 
     expect(rec.calls.filter((c) => c === 'authError')).toEqual(['authError'])
@@ -330,7 +349,7 @@ function catchUpCases(
 ): void {
   // Three polled steps behind a production reconnect backoff.
   it('delivers what the keeper wrote while the stream was down, after it reconnects', {
-    timeout: 20_000,
+    timeout: CASE_TIMEOUT_MS,
   }, async () => {
     // A stream carries only what is written while it is open, so the keeper's
     // writes during the gap reach no frame. Unless the backend asks for them
@@ -345,19 +364,19 @@ function catchUpCases(
     const { keeperWrites, caughtUp } = h
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+    await called(rec, 'connected')
 
     h.dropTransport()
     keeperWrites(false)
     await vi.waitFor(
       () => expect(rec.calls.filter((c) => c === 'connected').length).toBeGreaterThan(1),
-      { timeout: 5000 },
+      { timeout: DELIVERY_TIMEOUT_MS },
     )
-    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    await caughtUpBy(rec, caughtUp)
 
     // And the next live frame applies, rather than waiting on the gap.
     keeperWrites(true)
-    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    await caughtUpBy(rec, caughtUp)
     // Merged, never replacing: a caller rebuilds its document from a
     // snapshot, which would cost the page its undo history and remount the
     // editor at every reconnect.
@@ -378,7 +397,7 @@ function routingGapCases(
   create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
 ): void {
   it('delivers a keeper write committed after the snapshot but before the subscription', {
-    timeout: 20_000,
+    timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const h = await create()
     if (!h.keeperWritesAfterNextSnapshot || !h.keeperWrites || !h.caughtUp) {
@@ -389,17 +408,17 @@ function routingGapCases(
     h.keeperWritesAfterNextSnapshot()
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+    await called(rec, 'connected')
 
     keeperWrites(true)
-    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    await caughtUpBy(rec, caughtUp)
     h.backend.disconnect()
     h.cleanup()
   })
 
   // Polled steps behind a production reconnect backoff.
   it('delivers a keeper write committed after the catch-up snapshot but before the re-subscription', {
-    timeout: 20_000,
+    timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const h = await create()
     if (!h.dropTransport || !h.keeperWritesAfterNextSnapshot || !h.keeperWrites || !h.caughtUp) {
@@ -409,16 +428,16 @@ function routingGapCases(
     const { keeperWrites, caughtUp } = h
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+    await called(rec, 'connected')
 
     h.keeperWritesAfterNextSnapshot()
     h.dropTransport()
     await vi.waitFor(
       () => expect(rec.calls.filter((c) => c === 'connected').length).toBeGreaterThan(1),
-      { timeout: 5000 },
+      { timeout: DELIVERY_TIMEOUT_MS },
     )
     keeperWrites(true)
-    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    await caughtUpBy(rec, caughtUp)
     h.backend.disconnect()
     h.cleanup()
   })
@@ -438,7 +457,7 @@ function unroutedCases(
   for (const how of ['refused', 'silent'] as const) {
     // Polled: the silent case waits out the backend's own bound on routing.
     it(`a document whose stream is ${how === 'refused' ? 'refused' : 'never routed'} still receives the keeper's state`, {
-      timeout: 20_000,
+      timeout: CASE_TIMEOUT_MS,
     }, async () => {
       const h = await create()
       if (!h.neverRoutes || !h.caughtUp) {
@@ -450,7 +469,9 @@ function unroutedCases(
       const rec = recorder()
       h.backend.connect(rec.handlers)
 
-      await vi.waitFor(() => expect(rec.calls).toContain('snapshot'), { timeout: 10_000 })
+      await vi.waitFor(() => expect(rec.calls).toContain('snapshot'), {
+        timeout: BOUNDED_OPEN_TIMEOUT_MS,
+      })
       expect(caughtUp(rec.delivered)).toBe(true)
       // Not live, and not claimed to be: nothing carries the keeper's writes.
       expect(rec.calls).not.toContain('connected')
@@ -473,7 +494,7 @@ function failedOpenCases(
   for (const dropped of [false, true]) {
     // Polled: the retry waits out the backend's own bound, and a drop its reconnect backoff.
     it(`a document whose opening read fails${dropped ? ', then drops,' : ''} still receives the keeper's state through onSnapshot, not after connected`, {
-      timeout: 20_000,
+      timeout: CASE_TIMEOUT_MS,
     }, async () => {
       const h = await create()
       if (!h.failsOpeningRead || !h.caughtUp) {
@@ -489,11 +510,15 @@ function failedOpenCases(
         h.dropTransport?.()
       }
 
-      await vi.waitFor(() => expect(rec.calls).toContain('snapshot'), { timeout: 10_000 })
+      await vi.waitFor(() => expect(rec.calls).toContain('snapshot'), {
+        timeout: BOUNDED_OPEN_TIMEOUT_MS,
+      })
       expect(rec.calls.slice(0, rec.calls.indexOf('snapshot'))).not.toContain('connected')
       const snapshot = rec.snapshot()
       expect(snapshot !== null && caughtUp([snapshot])).toBe(true)
-      await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 10_000 })
+      await vi.waitFor(() => expect(rec.calls).toContain('connected'), {
+        timeout: BOUNDED_OPEN_TIMEOUT_MS,
+      })
       h.backend.disconnect()
       h.cleanup()
     })
@@ -502,12 +527,14 @@ function failedOpenCases(
 
 /**
  * Resolves once the keeper has answered one more read with a failure than it
- * had when this was called, when the harness can say — so a window after it
- * covers what the backend does with that answer on a machine of any speed.
+ * had when this was called — so a window after it covers what the backend
+ * does with that answer on a machine of any speed. Required of a harness
+ * that refuses writes: without it the window is a fixed guess at how long the
+ * failing read takes to arrive.
  */
 function failedReadCounter(h: DocumentBackendHarness): () => Promise<void> {
   const failedReads = h.failedReads
-  if (failedReads === undefined) return async () => {}
+  if (failedReads === undefined) throw new Error('a harness that refuses writes owes failedReads')
   const before = failedReads()
   return async () => {
     await vi.waitFor(() => expect(failedReads()).toBe(before + 1), {
@@ -527,7 +554,7 @@ function failedResyncCases(
 ): void {
   // Polled: the refusal reaches the caller through the backend's write queue.
   it('a resync answered with a failed read leaves the caller copy and onSnapshot untouched', {
-    timeout: 20_000,
+    timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const h = await create()
     const refusesNextWrite = h.refusesNextWrite
@@ -537,7 +564,7 @@ function failedResyncCases(
     }
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+    await called(rec, 'connected')
     const push = (): void => {
       const edit = h.localEdit?.(rec.snapshot()) ?? sentBytes(h)
       if (edit === null) throw new Error('a harness that refuses writes owes a way to make one')
@@ -549,7 +576,7 @@ function failedResyncCases(
 
     refusesNextWrite(true)
     push()
-    await vi.waitFor(() => expect(refusals()).toBe(1), { timeout: 5000 })
+    await vi.waitFor(() => expect(refusals()).toBe(1), { timeout: DELIVERY_TIMEOUT_MS })
     await failedReadAnswered()
     await settle()
     expect(rec.delivered).toEqual(before)
@@ -557,10 +584,10 @@ function failedResyncCases(
     // Nothing was spent on the failure: the next refusal's read still replaces.
     refusesNextWrite(false)
     push()
-    await vi.waitFor(() => expect(refusals()).toBe(2), { timeout: 5000 })
+    await vi.waitFor(() => expect(refusals()).toBe(2), { timeout: DELIVERY_TIMEOUT_MS })
     await vi.waitFor(
       () => expect(rec.calls.filter((c) => c === 'snapshot')).toEqual(['snapshot', 'snapshot']),
-      { timeout: 5000 },
+      { timeout: DELIVERY_TIMEOUT_MS },
     )
     // Asked again at the end, so a delivery the failure caused later than the
     // window above is caught too: the replacing snapshot is the only one since.
