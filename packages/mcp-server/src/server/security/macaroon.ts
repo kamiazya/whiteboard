@@ -165,17 +165,37 @@ async function chain(
   return signature
 }
 
-export function serializeMacaroon(macaroon: Macaroon): string {
+function encodeMacaroon(macaroon: Macaroon): string {
   return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(macaroon)))
 }
 
-/** Total: answers null for anything that is not a well-formed macaroon. */
+/**
+ * Written from the schema's parse rather than from the value as given, so
+ * key order is the schema's whatever order the caller built a caveat in —
+ * the only spelling `parseMacaroon` accepts.
+ */
+export function serializeMacaroon(macaroon: Macaroon): string {
+  return encodeMacaroon(macaroonSchema.parse(macaroon))
+}
+
+/**
+ * Total: answers null for anything that is not a well-formed macaroon.
+ *
+ * Canonical as well as well-formed: the token must be exactly what
+ * serializing its own parse yields. The chain signs PARSED values, so without
+ * this every JSON-equivalent rewrite (`\u000b` as `\u000B`, whitespace, key
+ * order, `1e3` for `1000`) and every base64-equivalent one (padding, nonzero
+ * discarded bits) would be a second token string that verifies — one
+ * macaroon, many spellings, and nothing keyed on a token string could treat
+ * it as an identity.
+ */
 export function parseMacaroon(token: string): Macaroon | null {
   const bytes = base64UrlToBytes(token)
   if (bytes === null) return null
   try {
     const parsed = macaroonSchema.safeParse(JSON.parse(new TextDecoder().decode(bytes)))
-    return parsed.success ? parsed.data : null
+    if (!parsed.success) return null
+    return encodeMacaroon(parsed.data) === token ? parsed.data : null
   } catch {
     return null
   }

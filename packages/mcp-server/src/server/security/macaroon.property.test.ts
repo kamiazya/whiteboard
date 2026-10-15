@@ -27,11 +27,11 @@ const WORKSPACE = 'ws-0'
 
 const toBase64Url = (text: string) => Buffer.from(text, 'utf8').toString('base64url')
 
-// Fields are listed in the schema's own order: `serializeMacaroon` writes the
-// caveat in whatever key order the caller built it, and `parseMacaroon`
-// answers in the schema's, so only a caveat built in that order round-trips
-// byte for byte. The signature does not care (the chain hashes a canonical
-// form), which the verification half of the round trip below pins.
+// Fields are listed in the schema's own order, because the near-miss
+// envelopes below are written with a bare `JSON.stringify` and the schema's
+// order is the only spelling `parseMacaroon` accepts. The issuers impose that
+// order themselves, which the round trip below pins by building each caveat
+// with its keys reversed as often as not.
 const scopesArb = fc.subarray([...AUTH_SCOPES], { minLength: 1 })
 const caveatArb: fc.Arbitrary<MacaroonCaveat> = fc.oneof(
   fc.record({
@@ -128,10 +128,18 @@ describe('macaroon — parsing is total over arbitrary input', () => {
 })
 
 describe('macaroon — serialization round trip', () => {
+  const reversedKeys = (caveat: MacaroonCaveat) =>
+    Object.fromEntries(Object.entries(caveat).reverse()) as MacaroonCaveat
   it('serialize(parse(mint(caveats))) is the minted token, and it still verifies', async () => {
+    let reversed = 0
     await fc.assert(
-      fc.asyncProperty(tokenIdArb, caveatsArb, async (tokenId, caveats) => {
-        const token = await mintMacaroon({ rootKey: ROOT_KEY, tokenId, caveats })
+      fc.asyncProperty(tokenIdArb, caveatsArb, fc.boolean(), async (tokenId, caveats, reverse) => {
+        const built = reverse ? caveats.map(reversedKeys) : caveats
+        if (reverse && caveats.length > 0) reversed += 1
+        const token = await mintMacaroon({ rootKey: ROOT_KEY, tokenId, caveats: built })
+        let attenuated = await mintMacaroon({ rootKey: ROOT_KEY, tokenId })
+        for (const caveat of built) attenuated = await attenuateMacaroon(attenuated, caveat)
+        expect(attenuated).toBe(token)
         const parsed = parseMacaroon(token)
         expect(parsed).not.toBeNull()
         expect(parsed?.id).toBe(tokenId)
@@ -154,6 +162,7 @@ describe('macaroon — serialization round trip', () => {
       }),
       withDefaults(),
     )
+    expect(reversed).toBeGreaterThan(10)
   })
 })
 
@@ -313,17 +322,15 @@ describe('macaroon — a changed token never verifies', () => {
   })
 
   // The same claim one layer out, over the CHARACTERS of the string a client
-  // holds. Here a flip CAN be a no-op, and that is measured rather than
-  // excluded: the final character of a token whose length is not a multiple
-  // of four carries bits base64 discards. So the stated claim is "verifies
-  // exactly when the decoded bytes are unchanged", the unchanged side judged
-  // by Node's own `Buffer` decoder and not by the module's `atob` — with one
-  // correction the oracle needs: Node also reads `+`/`/` as `-`/`_`, while
-  // the token's grammar is url-only, so a swap to either is a refusal
-  // whatever bytes Node makes of it. They stay in the draw for that reason.
+  // holds. A flip there can leave the decoded bytes alone — the final
+  // character of a token whose length is not a multiple of four carries bits
+  // base64 discards — and a token has one spelling, so that no-op is refused
+  // too. It is reached on purpose and counted, judged by Node's own `Buffer`
+  // decoder rather than the module's `atob`. `+` and `/` stay in the draw:
+  // Node reads them as `-` and `_`, the token's grammar is url-only.
   const alphabet = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_+/']
   const URL_ALPHABET = /^[A-Za-z0-9_-]$/
-  it('one changed character verifies only if it left the decoded bytes unchanged', async () => {
+  it('one changed character is refused even where it left the decoded bytes unchanged', async () => {
     let sameBytes = 0
     let changedBytes = 0
     await fc.assert(
@@ -341,7 +348,7 @@ describe('macaroon — a changed token never verifies', () => {
             Buffer.from(mutated, 'base64url').equals(Buffer.from(token, 'base64url'))
           const verdict = await verifyMacaroon({ token: mutated, rootKey: ROOT_KEY, context })
           expect(verdict.ok, `char ${at} of ${token.length}: ${token[at]} -> ${replacement}`).toBe(
-            unchanged,
+            false,
           )
           if (unchanged) sameBytes += 1
           else changedBytes += 1
@@ -351,7 +358,7 @@ describe('macaroon — a changed token never verifies', () => {
     )
     expect(changedBytes).toBeGreaterThan(300)
     // The no-op region is reached on purpose (the `-1` position), so the
-    // `unchanged` direction is asserted and not merely allowed.
+    // refusal of a bytes-identical respelling is asserted, not merely allowed.
     expect(sameBytes).toBeGreaterThan(0)
   })
 })

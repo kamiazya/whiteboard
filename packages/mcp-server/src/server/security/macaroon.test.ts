@@ -244,6 +244,93 @@ describe('macaroon — parsing is total', () => {
   })
 })
 
+// The chain signs PARSED values, so without a canonical-spelling rule every
+// JSON- or base64-equivalent rewrite of a token would be a second token that
+// verifies. Each row below is a validly signed macaroon spelled differently
+// from how it was issued.
+describe('macaroon — a token has exactly one spelling', () => {
+  const decode = (token: string) => Buffer.from(token, 'base64url').toString('utf8')
+  const encode = (text: string) => Buffer.from(text, 'utf8').toString('base64url')
+  const verdictFor = (token: string) =>
+    verifyMacaroon({ token, rootKey: ROOT_KEY, context: context() })
+
+  it('refuses a token whose only change is the case of a hex digit in an escape', async () => {
+    const token = await mintMacaroon({ rootKey: ROOT_KEY, tokenId: '\u000b\u0000' })
+    expect(token[16]).toBe('Y')
+    const flipped = `${token.slice(0, 16)}Q${token.slice(17)}`
+    expect(decode(flipped)).toContain('\\u000B')
+    expect(JSON.parse(decode(flipped))).toEqual(JSON.parse(decode(token)))
+
+    await expect(verdictFor(token)).resolves.toMatchObject({ ok: true })
+    await expect(verdictFor(flipped)).resolves.toEqual({ ok: false, reason: 'malformed' })
+  })
+
+  it.for([
+    ['whitespace between tokens', (json: string) => json.replace('{"id"', '{ "id"')],
+    [
+      'a reordered caveat',
+      (json: string) =>
+        json.replace(
+          '"kind":"workspace","workspaceId":"ws-alpha"',
+          '"workspaceId":"ws-alpha","kind":"workspace"',
+        ),
+    ],
+    [
+      'an exponent-spelled expiry',
+      (json: string) =>
+        json.replace(`"epochMs":${NOW + 1000}`, `"epochMs":${(NOW + 1000) / 1000}e3`),
+    ],
+    ['an escaped plain character', (json: string) => json.replace('"tok-1"', '"\\u0074ok-1"')],
+  ] as const)('refuses the same macaroon re-spelled with %s', async ([, respell]) => {
+    const token = await mintMacaroon({
+      rootKey: ROOT_KEY,
+      tokenId: 'tok-1',
+      caveats: [
+        { kind: 'workspace', workspaceId: 'ws-alpha' },
+        { kind: 'expiresAt', epochMs: NOW + 1000 },
+      ],
+    })
+    const json = decode(token)
+    const respelled = respell(json)
+    expect(respelled).not.toBe(json)
+    expect(JSON.parse(respelled)).toEqual(JSON.parse(json))
+
+    await expect(verdictFor(token)).resolves.toMatchObject({ ok: true })
+    await expect(verdictFor(encode(respelled))).resolves.toEqual({ ok: false, reason: 'malformed' })
+  })
+
+  it('refuses a padded token and one with nonzero discarded bits', async () => {
+    // A two-byte id leaves the JSON at a length that is not a multiple of
+    // three, so the token has both padding to add and trailing bits to set.
+    const token = await mintMacaroon({ rootKey: ROOT_KEY, tokenId: 'ab' })
+    const remainder = token.length % 4
+    expect(remainder).not.toBe(0)
+    const padded = `${token}${'='.repeat(4 - remainder)}`
+    const last = token.at(-1)!
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    const sibling = alphabet[alphabet.indexOf(last) ^ 1]!
+    const loose = `${token.slice(0, -1)}${sibling}`
+    expect(Buffer.from(padded, 'base64url')).toEqual(Buffer.from(token, 'base64url'))
+    expect(Buffer.from(loose, 'base64url')).toEqual(Buffer.from(token, 'base64url'))
+
+    await expect(verdictFor(token)).resolves.toMatchObject({ ok: true })
+    await expect(verdictFor(padded)).resolves.toEqual({ ok: false, reason: 'malformed' })
+    await expect(verdictFor(loose)).resolves.toEqual({ ok: false, reason: 'malformed' })
+  })
+
+  it('issues the canonical spelling whatever key order the caller built a caveat in', async () => {
+    const reordered = { workspaceId: 'ws-alpha', kind: 'workspace' } as MacaroonCaveat
+    const minted = await mintMacaroon({ rootKey: ROOT_KEY, tokenId: 'tok-1', caveats: [reordered] })
+    const attenuated = await attenuateMacaroon(
+      await mintMacaroon({ rootKey: ROOT_KEY, tokenId: 'tok-1' }),
+      reordered,
+    )
+
+    expect(attenuated).toBe(minted)
+    await expect(verdictFor(minted)).resolves.toMatchObject({ ok: true })
+  })
+})
+
 // A pinned construction, computed once and committed. It is NOT an external
 // reference — libmacaroons' SERIALIZATION vectors cannot match this module's
 // own JSON format, and the reference check that does apply is the
