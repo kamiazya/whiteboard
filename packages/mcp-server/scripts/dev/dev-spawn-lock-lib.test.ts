@@ -332,6 +332,7 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
     ['names no pid', JSON.stringify({ startedAt: 'x' })],
     ['is not JSON', 'not json'],
     ['names a pid that is no pid', JSON.stringify({ pid: -1 })],
+    ['is empty', ''],
   ])('reports no holder pid for a live lock whose metadata %s', (_label, text) => {
     writeFileSync(lockPath, text)
     const result = acquireSpawnLock({
@@ -341,6 +342,21 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       isPidAlive,
     })
     expect(result).toEqual({ kind: 'held', holderPid: null })
+  })
+
+  // A crash between the exclusive create and the metadata write leaves an
+  // empty file naming no pid, so its age is the only way it ever frees up.
+  it('takes an empty lock file once it is older than the staleness window', () => {
+    writeFileSync(lockPath, '')
+    const result = acquireSpawnLock({
+      lockPath,
+      meta: { pid: process.pid },
+      nowMs: Date.now() + 60_000,
+      staleAfterMs: 10_000,
+      isPidAlive,
+    })
+    expect(result).toEqual({ kind: 'acquired' })
+    expect(JSON.parse(readFileSync(lockPath, 'utf8'))).toEqual({ pid: process.pid })
   })
 
   it('is a no-op (never throws) when the lock file is already gone', () => {

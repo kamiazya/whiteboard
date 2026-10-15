@@ -8,7 +8,15 @@
 // The script resolves `dist/` and `src/` from its own location, so this runs a
 // copy of it inside a throwaway package whose build and source are fixtures.
 import { execFileSync, spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -61,11 +69,11 @@ function fakePackage(sourceMigrations: string[], builtMigrations: string[]) {
   return { root, started }
 }
 
-function runLauncher(root: string) {
+function runLauncher(root: string, extraEnv: Record<string, string> = {}) {
   return spawnSync(process.execPath, [join(root, 'scripts/dev/run-built-daemon.mjs')], {
     cwd: root,
     encoding: 'utf8',
-    env: { ...process.env, WHITEBOARD_DATA_DIR: join(root, 'data') },
+    env: { ...process.env, WHITEBOARD_DATA_DIR: join(root, 'data'), ...extraEnv },
     timeout: 30_000,
   })
 }
@@ -103,7 +111,66 @@ describe('run-built-daemon', () => {
     expect(result.stderr).toContain(join(root, 'data'))
     expect(result.stderr).toContain('pnpm mcp:http:stop')
     expect(existsSync(started)).toBe(false)
+    // Left behind, the lock would name a pid an unrelated process can reuse,
+    // and the next start would be refused for the whole staleness window.
+    expect(existsSync(devSpawnLockPath(join(root, 'data')))).toBe(false)
   })
+
+  // A daemon that crashed leaves its record behind. Refusing on the file alone
+  // would stop `pnpm mcp:http` until someone deleted it by hand.
+  it('starts beside a daemon.json left by a daemon whose pid is dead', () => {
+    const { root, started } = fakePackage(['0001-init'], ['0001-init'])
+    const deadPid = spawnSync(process.execPath, ['-e', '']).pid
+    write(
+      join(root, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: deadPid,
+        socketPath: join(root, 'data', 'absent.sock'),
+        token: 't',
+        startedAt: new Date().toISOString(),
+      }),
+    )
+    const result = runLauncher(root)
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+    expect(existsSync(started)).toBe(true)
+  })
+
+  // The lock exists for the boot window: a second daemon starting before the
+  // first has written its record fails its migrations instead of being told
+  // one is already starting. So the launcher holds it from before the spawn
+  // until the record names its child — and no longer, or the next start
+  // would wait out a daemon that is already up.
+  it('holds the spawn lock until the daemon record names the child, then lets go', () => {
+    const { root } = fakePackage(['0001-init'], ['0001-init'])
+    const dataDir = join(root, 'data')
+    const observed = join(root, 'boot-observed.json')
+    write(
+      join(root, 'dist/server/daemon-entry.js'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs'",
+        `const lock = ${JSON.stringify(devSpawnLockPath(dataDir))}`,
+        'const lockHeldAtBoot = existsSync(lock)',
+        `writeFileSync(${JSON.stringify(join(dataDir, 'daemon.json'))}, JSON.stringify({ pid: process.pid, socketPath: ${JSON.stringify(join(dataDir, 'absent.sock'))}, token: 't', startedAt: new Date().toISOString() }))`,
+        'const giveUpAt = Date.now() + 10_000',
+        'const poll = setInterval(() => {',
+        '  const released = !existsSync(lock)',
+        '  if (!released && Date.now() < giveUpAt) return',
+        '  clearInterval(poll)',
+        `  writeFileSync(${JSON.stringify(observed)}, JSON.stringify({ lockHeldAtBoot, releasedWhileRunning: released }))`,
+        '}, 20)',
+      ].join('\n'),
+    )
+    // A boot budget far past the fake daemon's own deadline, so a launcher
+    // that waits out the budget instead of the record is told apart.
+    const result = runLauncher(root, { WHITEBOARD_DEV_READY_TIMEOUT_MS: '60000' })
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+    expect(JSON.parse(readFileSync(observed, 'utf8'))).toEqual({
+      lockHeldAtBoot: true,
+      releasedWhileRunning: true,
+    })
+  }, 30_000)
 
   it('refuses while another dev daemon is starting under the spawn lock', () => {
     const { root, started } = fakePackage(['0001-init'], ['0001-init'])
