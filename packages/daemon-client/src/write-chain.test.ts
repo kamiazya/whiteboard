@@ -38,6 +38,11 @@ describe('retryAfterMsOf', () => {
     expect(retryAfterMsOf('soon')).toBeNull()
     expect(retryAfterMsOf(null)).toBeNull()
   })
+
+  it('reads delay-seconds with surrounding whitespace, and a date already past as no wait', () => {
+    expect(retryAfterMsOf(' 5 ')).toBe(5000)
+    expect(retryAfterMsOf('Wed, 21 Oct 2015 07:28:00 GMT', Date.UTC(2015, 9, 21, 7, 29, 0))).toBe(0)
+  })
 })
 
 /** A document whose state is a counter: the mark is the count a write covers. */
@@ -129,6 +134,119 @@ describe('WriteChain', () => {
     expect(c.acked()).toBe(3)
   })
 
+  it('keeps retrying through consecutive failures, announcing the run once', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let failuresLeft = 3
+    let pushes = 0
+    const c = counterChain(async () => {
+      pushes += 1
+      if (failuresLeft > 0) {
+        failuresLeft -= 1
+        throw new SyncWriteFailedError(503, null)
+      }
+    })
+    c.edit()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+    await vi.advanceTimersByTimeAsync(retryDelayMs(2))
+    expect(pushes).toBe(3)
+    await vi.advanceTimersByTimeAsync(retryDelayMs(3))
+    expect(pushes).toBe(4)
+    expect(c.acked()).toBe(1)
+    expect(c.events).toEqual(['failing', 'landed'])
+  })
+
+  // A run that landed leaves no account behind: the next outage is a run of
+  // its own, announced to the page, and backs off from one second again.
+  it('announces a second outage after the first landed, retrying it after one second', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let fail = true
+    const c = counterChain(async () => {
+      if (fail) throw new SyncWriteFailedError(503, null)
+    })
+    c.edit()
+    await vi.advanceTimersByTimeAsync(0)
+    fail = false
+    await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+    expect(c.chain.failing).toBe(false)
+
+    fail = true
+    c.edit()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(c.events).toEqual(['failing', 'landed', 'failing'])
+    fail = false
+    await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+    expect(c.events).toEqual(['failing', 'landed', 'failing', 'landed'])
+    expect(c.acked()).toBe(2)
+  })
+
+  it('says a refusal came during a failing run, and arms no retry for it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let refuse = false
+    const c = counterChain(async () => {
+      if (refuse) throw new SyncWriteRefusedError(413, { code: null, message: 'too big' })
+      throw new SyncWriteFailedError(503, null)
+    })
+    c.edit()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+    expect(c.events).toEqual(['failing'])
+    refuse = true
+    await vi.advanceTimersByTimeAsync(retryDelayMs(2))
+    expect(c.events).toEqual(['failing', 'refused:null:true'])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('acknowledges nothing that lands after it closed, and writes nothing more', async () => {
+    let release: () => void = () => {}
+    const pushes: number[] = []
+    const c = counterChain((bytes) => {
+      pushes.push(bytes[0] ?? -1)
+      return new Promise((resolve) => {
+        release = resolve
+      })
+    })
+    c.edit()
+    await flush()
+    c.chain.close()
+    release()
+    await flush()
+    expect(c.acked()).toBe(0)
+    c.edit()
+    await flush()
+    expect(pushes).toEqual([1])
+  })
+
+  it('reports and arms nothing for a write that fails after it closed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let reject: (err: Error) => void = () => {}
+    const c = counterChain(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail
+        }),
+    )
+    c.edit()
+    await vi.advanceTimersByTimeAsync(0)
+    c.chain.close()
+    reject(new SyncWriteFailedError(503, null))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(c.events).toEqual([])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('cancels a pending retry the moment it closes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const c = counterChain(async () => {
+      throw new SyncWriteFailedError(503, null)
+    })
+    c.edit()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(vi.getTimerCount()).toBe(1)
+    c.chain.close()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('stops retrying once closed', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     let pushes = 0
@@ -142,6 +260,35 @@ describe('WriteChain', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     expect(pushes).toBe(1)
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('QueuedWriter after a refusal', () => {
+  // A refusal is answered by the caller taking the keeper's state, so the
+  // writer has to go on sending what is written after it — a writer left
+  // halted queues every later edit and settles none of them.
+  it('sends the next write and settles it', async () => {
+    let refuse = true
+    const pushes: number[] = []
+    const refused: string[] = []
+    const writer = new QueuedWriter(
+      async (bytes) => {
+        pushes.push(bytes[0] ?? -1)
+        if (refuse) throw new SyncWriteRefusedError(413, { code: null, message: 'too big' })
+      },
+      { onFailing: () => {}, onLanded: () => {}, onRefused: () => refused.push('refused') },
+    )
+    await writer.write(new Uint8Array([1]))
+    expect(refused).toEqual(['refused'])
+
+    refuse = false
+    let settled = false
+    void writer.write(new Uint8Array([2])).then(() => {
+      settled = true
+    })
+    await flush()
+    expect(pushes).toEqual([1, 2])
+    expect(settled).toBe(true)
   })
 })
 
