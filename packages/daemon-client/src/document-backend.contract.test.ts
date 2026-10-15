@@ -59,6 +59,10 @@ interface Daemon {
   failNextSnapshot: boolean
   /** Whether the next update is refused for what its bytes would do, and whether the read after it fails. */
   refuseNextWrite: { thenItsReadFails: boolean } | null
+  /** How long every snapshot read takes to answer. */
+  snapshotLatencyMs: number
+  /** Snapshot reads answered with a failure so far. */
+  failedReads: number
 }
 
 const WORKSPACE_KEY = 'workspace:ws-1'
@@ -72,9 +76,13 @@ function keeperWrite(daemon: Daemon): void {
 }
 
 /** The daemon's snapshot route: the keeper's state, unless it is set to fail this read. */
-function snapshotAnswer(daemon: Daemon): Response {
+async function snapshotAnswer(daemon: Daemon): Promise<Response> {
+  if (daemon.snapshotLatencyMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, daemon.snapshotLatencyMs))
+  }
   if (daemon.failNextSnapshot) {
     daemon.failNextSnapshot = false
+    daemon.failedReads += 1
     return new Response('{"title":"unavailable"}', { status: 503 })
   }
   const snapshot = daemon.keeper.doc.export({ mode: 'snapshot' })
@@ -147,7 +155,7 @@ function reproduces(delivered: readonly Uint8Array[], keeperDoc: LoroDoc): boole
   return replica.getText('t').toString() === keeperDoc.getText('t').toString()
 }
 
-function harness(): DocumentBackendHarness {
+function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
   const daemon: Daemon = {
     keeper: keeper(),
     sent: [],
@@ -158,6 +166,8 @@ function harness(): DocumentBackendHarness {
     unroutable: null,
     failNextSnapshot: false,
     refuseNextWrite: null,
+    snapshotLatencyMs,
+    failedReads: 0,
   }
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
   return {
@@ -187,11 +197,20 @@ function harness(): DocumentBackendHarness {
     refusesNextWrite: (thenItsReadFails) => {
       daemon.refuseNextWrite = { thenItsReadFails }
     },
+    failedReads: () => daemon.failedReads,
     caughtUp: (delivered) => reproduces(delivered, daemon.keeper.doc),
     cleanup: () => backend.disconnect(),
   }
 }
 
 describe('DocumentBackend contract: SseBackend', () => {
-  documentBackendContract(harness)
+  documentBackendContract(() => harness())
+})
+
+// A keeper slower to answer than any fixed wait a case might make: the shape a
+// loaded machine gives the SharedWorker's longer chain. A case that waits for
+// time rather than for the delivery it then asserts fails here, every run,
+// instead of once in a stress run.
+describe('DocumentBackend contract: SseBackend over a slow keeper', () => {
+  documentBackendContract(() => harness(250))
 })

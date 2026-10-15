@@ -86,8 +86,9 @@ const LEDGER: Record<string, number> = {
   // The settle window of `waitForMarkdownSaved` when the caller has nothing to anchor on: it lets
   // the debounce window pass so a write scheduled behind the one just seen would show itself.
   'apps/web/src/test-utils/wait-for-saved.ts': 1,
-  // `settle()`, called per case: the contract asserts that nothing further happens after a
-  // connect or disconnect, and waiting for nothing to happen is the assertion.
+  // `settle()`, called before an ABSENCE (a second auth error, a delivery after a failed read),
+  // where waiting for nothing to happen is the assertion, and once to drop a transport mid-open.
+  // Every expected delivery is polled.
   'packages/daemon-client/src/test-utils/document-backend-contract.ts': 1,
   // `settle()`, called per case: a real window in which a wrong delivery could arrive, so
   // asserting none did is the assertion.
