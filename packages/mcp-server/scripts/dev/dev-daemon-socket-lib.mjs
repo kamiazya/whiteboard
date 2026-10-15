@@ -239,3 +239,83 @@ export async function assessRecordedDaemon(
   const answering = await answers(record)
   return { running: answering || identity === 'daemon', answering, process: identity }
 }
+
+/**
+ * Long enough for a daemon busy on a large write to answer, short enough that
+ * a stop run against a socket nobody serves does not appear to hang — the
+ * daemon's own `daemonLiveness` waits as long.
+ */
+const STATUS_ASK_TIMEOUT_MS = 1_500
+
+/**
+ * Whether the daemon a record names is running, by the daemon's own rule
+ * (`daemonLiveness`, src/daemon/daemon-liveness.ts), restated for bare `node`;
+ * `dev-daemon-socket-lib.test.ts` holds the two to the same answers.
+ *
+ * The pid's start time decides on the plain path. When it says the pid started
+ * after the record, the record's socket is asked before that is believed: a
+ * forward step of the wall clock moves `/proc/stat`'s btime but not a
+ * process's start ticks, so a live daemon then reads as having started after
+ * its own record. Its runtime status, asked under the record's token, names its
+ * pid; naming the recorded one makes it the writer. Only the `pid` of that
+ * answer is read — the rest of `runtimeStatusResponseSchema` is not something
+ * this script can import, and an answer under the record's token naming the
+ * recorded pid is the daemon whatever else it says.
+ *
+ * - `running`: the pid is the process that wrote the record.
+ * - `unconfirmed`: the start time says otherwise, and a daemon answers on the
+ *   record's socket without confirming the pid — nothing may signal it.
+ * - `pid-reused`: the pid started after the record and nothing answers.
+ * - `dead`: no process has the pid.
+ *
+ * @param {{ pid: number, socketPath?: string, startedAt?: string, token?: string }} record
+ * @param {{
+ *   isAlive?: (pid: number) => boolean,
+ *   startMs?: (pid: number) => number | null,
+ *   request?: typeof requestDaemon,
+ * }} [seams]
+ * @returns {Promise<'running' | 'unconfirmed' | 'pid-reused' | 'dead'>}
+ */
+export async function recordedDaemonLiveness(
+  record,
+  { isAlive = isPidAlive, startMs = readProcessStartMs, request = requestDaemon } = {},
+) {
+  const identity = recordedProcess(record.pid, record.startedAt, { isAlive, startMs })
+  if (identity === 'daemon') return 'running'
+  if (identity === 'dead') return 'dead'
+  const { socketPath } = record
+  if (socketPath === undefined) return 'pid-reused'
+  let answer
+  try {
+    answer = await request(
+      { socketPath },
+      {
+        path: '/api/runtime/status',
+        headers: {
+          ...(record.token === undefined ? {} : { authorization: `Bearer ${record.token}` }),
+          accept: 'application/json',
+        },
+        timeoutMs: STATUS_ASK_TIMEOUT_MS,
+      },
+    )
+  } catch {
+    return 'pid-reused'
+  }
+  return answer.status === 200 && statusPid(answer.text) === record.pid ? 'running' : 'unconfirmed'
+}
+
+/**
+ * The `pid` a runtime status body names, or null when it names none.
+ * @param {string} text
+ * @returns {number | null}
+ */
+function statusPid(text) {
+  try {
+    const body = JSON.parse(text)
+    return body !== null && typeof body === 'object' && typeof body.pid === 'number'
+      ? body.pid
+      : null
+  } catch {
+    return null
+  }
+}
