@@ -237,7 +237,6 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     })
 
     const startedAt = new Date().toISOString()
-
     await saveDaemonRecord(
       {
         pid: process.pid,
