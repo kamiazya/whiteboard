@@ -10,6 +10,7 @@ import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.j
 import { fc, fcTest, withDefaults } from '../../src/shared/test-utils/fast-check.js'
 import {
   assessRecordedDaemon,
+  BUILT_LAUNCH,
   isPidAlive,
   isRecordWriter,
   readDaemonRecord,
@@ -47,6 +48,12 @@ describe('readDaemonRecord against the daemon record schema', () => {
   )('refuses a record missing a field the scripts act on', (record, field) => {
     const { [field as 'pid' | 'socketPath']: _dropped, ...rest } = record
     expect(readDaemonRecord(dataDirWith(JSON.stringify(rest)))).toBeNull()
+  })
+
+  // The wrapper names a built daemon by this value; a schema that renamed the
+  // member would have every built daemon announced as the dev daemon.
+  it('spells a built launch as the schema does', () => {
+    expect(daemonRecordSchema.shape.launch.unwrap().options).toContain(BUILT_LAUNCH)
   })
 
   it('refuses the shape of the old port-based record, and what is not a record', () => {

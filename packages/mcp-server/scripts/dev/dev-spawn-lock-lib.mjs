@@ -283,13 +283,21 @@ export function releaseSpawnLock({
 }
 
 /**
- * Claims the wrapper's pid file (`dev-wrapper.pid`, the pid `pnpm
- * mcp:http:stop` signals) through `claimExclusiveFile`, so a second wrapper
- * can never overwrite the first one's. A file whose writer is gone — a
- * wrapper killed outright leaves one behind — is replaced. `isWriterAlive`
- * decides with the file's mtime, so a caller can tell the wrapper that wrote
- * it from an unrelated process that has since taken its pid. An unreadable
- * file is held, while one naming no pid is replaced.
+ * How long an EMPTY pid file is taken for a claim still writing its pid: the
+ * create and the write are two calls, so a racing claimer can read the file
+ * between them. Past this, it was left by a claimer that died in between.
+ */
+export const EMPTY_PID_FILE_GRACE_MS = 5_000
+
+/**
+ * Claims a pid file through `claimExclusiveFile`, so a second claimer can never
+ * overwrite the first one's — the wrapper's `dev-wrapper.pid` (the pid `pnpm
+ * mcp:http:stop` signals) and mutate.mjs's per-file lock. A file whose writer
+ * is gone — a process killed outright leaves one behind — is replaced.
+ * `isWriterAlive` decides with the file's mtime, so a caller can tell the
+ * process that wrote it from an unrelated one that has since taken its pid. An
+ * unreadable file is held, an empty one is held for `EMPTY_PID_FILE_GRACE_MS`,
+ * and one naming no pid is replaced.
  *
  * @param {{ pidPath: string, pid: number, isWriterAlive: (pid: number, writtenAtMs: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync, fsLink?: typeof linkSync }} args
  * @returns {{ kind: 'claimed' } | { kind: 'held', pid: number | null }}
@@ -307,12 +315,14 @@ export function claimPidFile({
   fsRename = renameSync,
   fsLink = linkSync,
 }) {
+  const nowMs = Date.now()
   const result = claimExclusiveFile({
     path: pidPath,
     content: String(pid),
-    nowMs: Date.now(),
+    nowMs,
     isHolderGone: ({ text, mtimeMs }) => {
       if (text === null) return false
+      if (text === '') return nowMs - mtimeMs > EMPTY_PID_FILE_GRACE_MS
       const holder = parsePid(text)
       return holder === null || !isWriterAlive(holder, mtimeMs)
     },
@@ -332,6 +342,25 @@ export function claimPidFile({
 function parsePid(text) {
   const parsed = Number(text)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+/**
+ * The pid a pid file names and when it was written, or null when it is absent
+ * or names no pid — what a caller judging its writer, as `claimPidFile` does,
+ * needs. Never throws.
+ *
+ * @param {string} pidPath
+ * @param {{ fsReadFile?: typeof readFileSync, fsStat?: typeof statSync }} [seams]
+ * @returns {{ pid: number, writtenAtMs: number } | null}
+ */
+export function readPidFile(pidPath, { fsReadFile = readFileSync, fsStat = statSync } = {}) {
+  try {
+    const writtenAtMs = fsStat(pidPath).mtimeMs
+    const pid = parsePid(fsReadFile(pidPath, 'utf8'))
+    return pid === null ? null : { pid, writtenAtMs }
+  } catch {
+    return null
+  }
 }
 
 /**

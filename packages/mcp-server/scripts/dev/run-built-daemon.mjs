@@ -12,15 +12,22 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assessRecordedDaemon, isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import {
+  assessRecordedDaemon,
+  isPidAlive,
+  isPidFileWriter,
+  readDaemonRecord,
+} from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
+  readPidFile,
   releaseSpawnLock,
   resolveSpawnLockStaleMs,
 } from './dev-spawn-lock-lib.mjs'
 import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
 import {
   devSpawnLockPath,
+  devWrapperPidPath,
   ensureDevDataDirSecured,
   resolveDevDataDirEnv,
   resolveRepoRootFromGit,
@@ -93,6 +100,14 @@ if (lock.kind === 'held') {
 const running = readDaemonRecord(dataDir)
 if (running !== null && (await assessRecordedDaemon(running)).running) {
   refuse(`the dev daemon (pid ${running.pid}) is running for ${dataDir}`)
+}
+// A dev daemon that crashed under `tsx watch` has removed its record while its
+// wrapper waits for the next source edit, which restarts it into this socket.
+const wrapper = readPidFile(devWrapperPidPath(dataDir))
+if (wrapper !== null && isPidFileWriter(wrapper.pid, wrapper.writtenAtMs)) {
+  refuse(
+    `a dev wrapper (pid ${wrapper.pid}) is running for ${dataDir} (its daemon is down, waiting for a source edit)`,
+  )
 }
 
 const child = spawn(process.execPath, [entry, '--token=whiteboard-dev'], { stdio: 'inherit', env })

@@ -251,6 +251,20 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     expect(saveMock.mock.calls.at(-1)?.[1]).toBe(resolve(rel))
   })
 
+  // The dev wrapper tells a build from watch-mode source by this field, and a
+  // writer that leaves it out reads as source.
+  it('records what it is running as the launch', async () => {
+    const outcome = await runDaemonRun({
+      tokenStdin: false,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    const registry = await import('../daemon/daemon-registry.js')
+    expect(vi.mocked(registry.saveDaemonRecord).mock.calls.at(-1)?.[0]).toMatchObject({
+      launch: 'source',
+    })
+  })
+
   it('leaves the seam untouched when no dataDir option is given', async () => {
     const before = getDataDir()
     const outcome = await runDaemonRun({

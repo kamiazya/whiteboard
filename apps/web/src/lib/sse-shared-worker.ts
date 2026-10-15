@@ -183,6 +183,48 @@ function ensureSeeded(baseUrl: string, doc: string): void {
   })
 }
 
+/**
+ * The daemon's state merged into the replica after its stream came back. A
+ * stream carries only what is written while it is open, so a write the
+ * daemon took during the gap reaches no frame — and every later frame builds
+ * on it, so the replica would hold each one back for history that never
+ * comes, and every tab forked from it with it. What the merge adds goes to
+ * the tabs as an authority update; on the replica queue, so a frame that
+ * arrives meanwhile lands after it.
+ */
+function catchUp(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  queueReplicaWork(async () => {
+    let bytes: Uint8Array | null
+    try {
+      bytes = await hubFor(baseUrl).snapshot(doc)
+    } catch {
+      // The next reconnect asks again.
+      return
+    }
+    const replica = replicas.get(key)
+    if (bytes === null || bytes.byteLength === 0 || replica === undefined) return
+    const before = replica.version()
+    try {
+      replica.import(bytes)
+    } catch {
+      return
+    }
+    // Acknowledged on the same terms as the seed: only when the replica held
+    // nothing unacknowledged, since the daemon's state says nothing of a
+    // tab's edit still on its way.
+    if (ackedVersions.get(key)?.compare(before) === 0) ackedVersions.set(key, replica.version())
+    // By version: an update export carries a header even when it holds no ops.
+    if (replica.version().compare(before) === 0) return
+    fanOutUpdate(
+      baseUrl,
+      doc,
+      bytesToBase64(replica.export({ mode: 'update', from: before })),
+      null,
+    )
+  })
+}
+
 function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): void {
   const key = replicaKey(baseUrl, doc)
   const existing = replicaFeeds.get(key)
@@ -191,18 +233,29 @@ function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): voi
     return
   }
   ensureSeeded(baseUrl, doc)
+  let live = false
+  let dropped = false
   const off = hub.subscribe(doc, {
     // `null`: the daemon is the source, so nobody is excluded from the fan-out.
     onUpdate: (bytes) => ingest(baseUrl, doc, bytes, null),
     onMessage: () => {},
     onConnectionChange: (connected) => {
+      if (!connected) {
+        dropped = live
+        return
+      }
+      live = true
+      if (dropped) {
+        dropped = false
+        catchUp(baseUrl, doc)
+      }
       // The stream coming back is the only signal a daemon that refused a
       // write is ready to take it, and the tab that made that edit may never
       // touch the canvas again — so without this the recovery would wait for a
       // second edit that never comes. A document with nothing outstanding
       // computes an empty delta and writes nothing, so this is free when there
       // is no work to redo.
-      if (connected) scheduleWrite(baseUrl, doc)
+      scheduleWrite(baseUrl, doc)
     },
   })
   replicaFeeds.set(key, { off, ports: 1 })

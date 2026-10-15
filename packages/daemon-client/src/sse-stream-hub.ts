@@ -161,6 +161,11 @@ export interface DocListener {
    * has changed" from "nothing is arriving", so a dropped stream looks exactly
    * like a quiet one and the UI keeps reporting a connection that is gone.
    * Optional because a caller that only applies updates has no use for it.
+   *
+   * Nothing is replayed across a drop: `true` after `false` means whatever
+   * was written in between reached no frame, and a subscriber that keeps
+   * state asks `snapshot` again — the worker for its replica, `SseBackend`
+   * for its page.
    */
   onConnectionChange?: (connected: boolean) => void
   /**

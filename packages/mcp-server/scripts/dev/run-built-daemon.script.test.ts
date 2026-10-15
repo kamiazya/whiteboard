@@ -20,7 +20,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { devSpawnLockPath } from './with-dev-data-dir-lib.mjs'
+import { devSpawnLockPath, devWrapperPidPath } from './with-dev-data-dir-lib.mjs'
 
 const HERE = import.meta.dirname
 
@@ -171,6 +171,32 @@ describe('run-built-daemon', () => {
       releasedWhileRunning: true,
     })
   }, 30_000)
+
+  // A dev daemon that crashed under `tsx watch` removes its record, while its
+  // wrapper waits to restart it on the next edit — into a socket a built
+  // daemon started meanwhile already holds.
+  it('refuses beside a live dev wrapper whose daemon is down, naming pnpm mcp:http:stop', () => {
+    const { root, started } = fakePackage(['0001-init'], ['0001-init'])
+    write(devWrapperPidPath(join(root, 'data')), String(process.pid))
+    const result = runLauncher(root)
+    expect(result.status).toBe(1)
+    expect(result.stderr).toMatch(new RegExp(`dev wrapper \\(pid ${process.pid}\\)`))
+    expect(result.stderr).toContain('pnpm mcp:http:stop')
+    expect(existsSync(started)).toBe(false)
+    expect(existsSync(devSpawnLockPath(join(root, 'data')))).toBe(false)
+  })
+
+  it('starts beside a wrapper pid file whose writer is gone', () => {
+    const { root, started } = fakePackage(['0001-init'], ['0001-init'])
+    write(
+      devWrapperPidPath(join(root, 'data')),
+      String(spawnSync(process.execPath, ['-e', '']).pid),
+    )
+    const result = runLauncher(root)
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+    expect(existsSync(started)).toBe(true)
+  })
 
   it('refuses while another dev daemon is starting under the spawn lock', () => {
     const { root, started } = fakePackage(['0001-init'], ['0001-init'])
