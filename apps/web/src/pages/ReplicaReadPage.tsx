@@ -35,7 +35,7 @@ import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-
 import { type FacetRegistry, withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import { imageRefId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import { Button } from '../components/ui/button.js'
@@ -47,7 +47,6 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
-import { formatRelative } from '../lib/format-relative.js'
 import { type LinkableDocument, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { replicaClipboardImages } from '../lib/replica-clipboard-images.js'
 import { loadReplicaImagesRetrying } from '../lib/replica-images.js'
@@ -74,6 +73,11 @@ import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unloc
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { workspaceLabel } from '../lib/workspace-handle.js'
+import {
+  ReplicaOfflineBanner,
+  type ReplicaOfflineBannerProps,
+  refusalLine,
+} from './ReplicaOfflineBanner.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
@@ -86,6 +90,9 @@ export interface ReplicaReadPageProps {
    *  an actual offline replica — only the readable banner's "(synced …)"
    *  clause reads it. */
   syncedAt?: string
+  /** What the daemon record said when the native host would not relay to it,
+   *  shown after the banner's offline sentence. */
+  refusal?: string
   /** The daemon this replica belongs to — what a Reconnect forgets keys for. */
   daemonBaseUrl: string
   /**
@@ -112,6 +119,15 @@ function keyInputFor(state: LoadState): ReplicaKeyInput {
   if (state.kind === 'rotated') return 'rotated'
   return 'missing'
 }
+
+const actionPanelBody = (
+  state: 'needs-connection' | 'locked' | 'rotated',
+  lockedLine: string | undefined,
+  refusal: string | undefined,
+) =>
+  [REPLICA_STATE_COPY[state].body, lockedLine, refusal && refusalLine(refusal)]
+    .filter(Boolean)
+    .join(' ')
 
 /**
  * The panel every non-readable state renders: the state's sentence, its one
@@ -421,8 +437,7 @@ function useReplicaSeams(
 
 interface ReplicaReaderProps {
   entries: WorkspaceDocumentEntry[]
-  label: string
-  syncedAt: ReplicaReadPageProps['syncedAt']
+  banner: ReplicaOfflineBannerProps
   selected: WorkspaceDocumentEntry | undefined
   selectedPath: string | null
   setSelectedPath: (path: string) => void
@@ -453,9 +468,14 @@ interface ReplicaReaderProps {
  *
  * Mounted with the readable page alone: that is where edits are made, and
  * the only state the "Offline copy" word is true of.
+ *
+ * A layout effect, so the store changes in the same commit that shows or
+ * removes the notice. A passive effect runs in a later task, and in between
+ * the notice is on screen while every tab-wide reader still answers "nothing
+ * held" — a reload or a close taken then drops the edits the notice is about.
  */
 function PublishReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     setShellConnection({ state: { keeper: 'replica', storage: failed ? 'failed' : 'ok' } })
     return () => setShellConnection(null)
   }, [failed])
@@ -486,28 +506,6 @@ function ReplicaSaveFailedNotice({ onRetry }: { onRetry: () => void }) {
   )
 }
 
-/** Where the person is: the daemon is away and this is the copy cached here. */
-function ReplicaOfflineBanner({
-  name,
-  syncedAt,
-}: {
-  name: string
-  syncedAt: ReplicaReadPageProps['syncedAt']
-}) {
-  return (
-    <div
-      data-testid="replica-offline-banner"
-      className="border-b bg-amber-500/10 px-4 py-2 text-sm"
-    >
-      <span className="font-medium">{name}</span>
-      {' — the daemon that keeps this workspace is unreachable. '}
-      This is the copy cached in this browser
-      {syncedAt !== undefined && <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>}
-      . Edits save here and ship to the daemon when it returns.
-    </div>
-  )
-}
-
 /**
  * The spatial editor measures itself: inside a padded overflow-auto box its
  * h-full slightly overflows, a scrollbar appears, the box shrinks, the
@@ -523,8 +521,7 @@ function contentPaneClass(content: ReplicaContent | null): string {
 /** The replica as a document surface: the banner, the tree, and the editor. */
 function ReplicaReader({
   entries,
-  label,
-  syncedAt,
+  banner,
   selected,
   selectedPath,
   setSelectedPath,
@@ -547,7 +544,7 @@ function ReplicaReader({
   const { resolvedTheme } = useThemeMode()
   return (
     <div className="flex h-full flex-col" data-testid="replica-state-readable">
-      <ReplicaOfflineBanner name={label} syncedAt={syncedAt} />
+      <ReplicaOfflineBanner {...banner} />
       <PublishReplicaSaveHealth failed={saveFailed} onRetry={onRetrySave} />
       <div className="flex min-h-0 flex-1">
         <div className="w-64 shrink-0 overflow-y-auto border-r p-2">
@@ -649,6 +646,7 @@ export function ReplicaReadPage({
   segment,
   displayName,
   syncedAt,
+  refusal,
   daemonBaseUrl,
   withheld,
   onReconnect,
@@ -739,8 +737,11 @@ export function ReplicaReadPage({
       {pageState === 'readable' && state.kind === 'ready' && (
         <ReplicaReader
           entries={state.entries}
-          label={workspaceLabel({ workspaceId, segment, displayName })}
-          syncedAt={syncedAt}
+          banner={{
+            name: workspaceLabel({ workspaceId, segment, displayName }),
+            syncedAt,
+            refusal,
+          }}
           selected={selected}
           selectedPath={selectedPath}
           setSelectedPath={setSelectedPath}
@@ -753,7 +754,7 @@ export function ReplicaReadPage({
       {(pageState === 'needs-connection' || pageState === 'locked' || pageState === 'rotated') && (
         <ReplicaActionPanel
           state={pageState}
-          body={REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')}
+          body={actionPanelBody(pageState, lockedLine, refusal)}
           action={REPLICA_STATE_COPY[pageState].action}
           busy={reconnecting}
           busyLine="Reconnecting…"

@@ -1,5 +1,9 @@
 import { fileURLToPath } from 'node:url'
-import { type DaemonLiveness, daemonLiveness } from '../../../daemon/daemon-liveness.js'
+import {
+  type DaemonLiveness,
+  daemonLiveness,
+  servingPidOf,
+} from '../../../daemon/daemon-liveness.js'
 import { isOccupying, parseDaemonRecord } from '../../../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../../../daemon/version-skew.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
@@ -73,10 +77,7 @@ function occupyingNeighbour(
   liveness: DaemonLiveness,
   neighbour: Omit<Neighbour, 'servingPid'>,
 ): Neighbour | null {
-  if (!isOccupying(liveness)) return null
-  return liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
-    ? { ...neighbour, servingPid: liveness.servingPid }
-    : neighbour
+  return isOccupying(liveness) ? { ...neighbour, ...servingPidOf(liveness) } : null
 }
 
 /** The daemon the record names, when it may still be serving. */

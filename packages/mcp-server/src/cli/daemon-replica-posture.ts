@@ -33,6 +33,7 @@ import { type DaemonLivenessSeams, daemonLiveness } from '../daemon/daemon-liven
 import {
   type DaemonRecordParseResult,
   describeOccupant,
+  describeUnconfirmed,
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
 import type { DaemonRecord } from '../daemon/daemon-record-schema.js'
@@ -104,9 +105,8 @@ async function runningDaemon(
     return none(`daemon pid ${pid} now belongs to another process`)
   }
   if (liveness.state === 'unconfirmed') {
-    return none(
-      `a daemon answers on the recorded socket, but not as pid ${pid}, which the record names`,
-    )
+    const occupant = describeUnconfirmed(liveness, pid, 'the recorded socket')
+    return none(`${occupant.charAt(0).toLowerCase()}${occupant.slice(1)}, which the record names`)
   }
   return { record: parsed.record }
 }

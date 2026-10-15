@@ -1,11 +1,13 @@
 /**
- * A push from a tree that is behind its lockfile fails once, naming the fix,
+ * A push from a tree that is behind its lockfile, or behind a workspace
+ * package's version, fails once, naming the fix,
  * instead of installing into itself from every pre-push command at once.
  *
  * pnpm 11 checks the installed tree before each `run`/`exec` (the `pnpm
  * vitest` fallback included) and, by default, answers a stale one by running
  * `pnpm install` — synchronous, unlocked, progress on stdout. Pre-push runs its
- * pnpm commands in parallel, so after a clean merge that moved the lockfile
+ * pnpm commands in parallel, so after a clean merge that moved the lockfile or bumped a package version
+ * (release-please does the latter)
  * each of them installed into the same tree, and the root `prepare` rewrote the
  * git hooks while the hook was running. Measured on a toy workspace: five
  * concurrent `pnpm exec` calls printed five `Packages: +2 … Done` blocks. The

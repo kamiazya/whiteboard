@@ -79,6 +79,7 @@ function requestIdOf(raw: unknown): string | null {
 }
 
 type Send = (message: HostToPage) => boolean
+type HostError = Omit<Extract<HostToPage, { type: 'error' }>, 'type' | 'id'>
 
 /**
  * A piece of body as base64 slices the browser accepts. Node hands a
@@ -132,16 +133,28 @@ interface RelayContext extends NativeHostOptions {
   settled: () => boolean
 }
 
+/**
+ * The daemon to relay to, or the error the page is answered with. A refusal is
+ * the record reader's sentence for the person; "no daemon" and a failed
+ * connect are not, and must not arrive under the refusal's reason.
+ */
+function resolveTarget(context: RelayContext): Promise<DaemonEndpoint | HostError> {
+  return context.resolveDaemon().then(
+    (endpoint) => endpoint ?? { reason: 'daemon-unreachable', message: 'no daemon is running' },
+    (err: unknown) => ({
+      reason: 'daemon-record-refused',
+      message: err instanceof Error ? err.message : 'the daemon record could not be read',
+    }),
+  )
+}
+
 async function relayRequest(message: Request, context: RelayContext): Promise<void> {
   const { id } = message
-  const daemon = await context.resolveDaemon().then(
-    (endpoint) => endpoint ?? 'no daemon is running',
-    (err: unknown) => (err instanceof Error ? err.message : 'the daemon record could not be read'),
-  )
+  const daemon = await resolveTarget(context)
   if (context.signal.aborted) return
-  if (typeof daemon === 'string') {
+  if ('reason' in daemon) {
     context.settled()
-    context.send({ type: 'error', id, reason: 'daemon-unreachable', message: daemon })
+    context.send({ type: 'error', id, ...daemon })
     return
   }
   const headers = {

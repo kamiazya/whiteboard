@@ -132,7 +132,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
     expect(result).toMatchObject({
       ok: false,
       reason: 'daemon-not-running',
-      message: expect.stringMatching(/answers on the recorded socket, but not as pid 4242/),
+      message: expect.stringMatching(/answers on the recorded socket as pid 4243, not as pid 4242/),
     })
     expect(exitCode).toBe(1)
     expect(asked.map((req) => req.method)).toEqual(['GET'])

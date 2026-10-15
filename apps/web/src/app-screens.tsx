@@ -8,6 +8,7 @@ import { LazyPageFallback } from './components/LazyPageFallback.js'
 import type { WorkspaceRoute } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-fetch.js'
 import type { ReplicaMatch } from './lib/replicas.js'
+import type { DaemonRenewal } from './lib/session-keeper.js'
 import { DaemonWorkspacePages } from './pages/DaemonWorkspacePages.js'
 
 // Every page below is lazy for the reason its own comment gives, and they are
@@ -214,9 +215,11 @@ export function InvalidConfigScreen({ message }: { message: string }) {
  */
 function ReplicaReadScreen({
   replica,
+  refusal,
   onReconnect,
 }: {
   replica: ReplicaMatch
+  refusal: DaemonRenewal['refusal']
   onReconnect: () => void | Promise<void>
 }) {
   return (
@@ -226,6 +229,7 @@ function ReplicaReadScreen({
       {...(replica.displayName === undefined ? {} : { displayName: replica.displayName })}
       syncedAt={replica.syncedAt}
       daemonBaseUrl={replica.daemonBaseUrl}
+      {...(refusal === undefined ? {} : { refusal })}
       onReconnect={onReconnect}
     />
   )
@@ -244,7 +248,7 @@ export function BrowserWorkspaceScreen({
   revision,
 }: {
   workspaces?: AppShellProps['workspaces']
-  replica: { match: ReplicaMatch; renewal: 'unreachable' } | null
+  replica: { match: ReplicaMatch; renewal: DaemonRenewal } | null
   onReconnect: () => void | Promise<void>
   path?: string
   onOpenDocument: (path: string) => void
@@ -255,7 +259,11 @@ export function BrowserWorkspaceScreen({
       <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
           {replica !== null ? (
-            <ReplicaReadScreen replica={replica.match} onReconnect={onReconnect} />
+            <ReplicaReadScreen
+              replica={replica.match}
+              refusal={replica.renewal.refusal}
+              onReconnect={onReconnect}
+            />
           ) : (
             <BrowserWorkspaceContent
               path={path}

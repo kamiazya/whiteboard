@@ -28,15 +28,15 @@ describe('connectThroughExtension', () => {
     expect(await connectThroughExtension(vi.fn<typeof fetch>(answer))).toEqual({ status: 'none' })
   })
 
-  // The native host answers `daemon-unreachable` with what the daemon record
-  // said, and the bridge rejects with that text after the reason. A refusal
+  // The native host answers `daemon-record-refused` with what the daemon
+  // record said, and the bridge rejects with that text after the reason. A refusal
   // naming a live daemon of another version must reach the person, or they
   // are sent to start a daemon the CLI then refuses to start.
   it("carries the host's refusal when the daemon record refuses", async () => {
     const refusal =
       'the daemon record /data/daemon.json cannot be interpreted by this version, but names pid 4242, which is running'
     const fetchFn = vi.fn<typeof fetch>(async () =>
-      Promise.reject(new TypeError(`daemon-unreachable: ${refusal}`)),
+      Promise.reject(new TypeError(`daemon-record-refused: ${refusal}`)),
     )
     expect(await connectThroughExtension(fetchFn)).toEqual({ status: 'none', refusal })
   })
@@ -51,7 +51,12 @@ describe('connectThroughExtension', () => {
       onDisconnect: { addListener: () => {} },
       postMessage: (m) => {
         if (m.type !== 'request') return
-        const frame = { type: 'error', id: m.id, reason: 'daemon-unreachable', message: refusal }
+        const frame = {
+          type: 'error',
+          id: m.id,
+          reason: 'daemon-record-refused',
+          message: refusal,
+        }
         queueMicrotask(() => {
           for (const l of listeners) l(frame)
         })
@@ -68,7 +73,11 @@ describe('connectThroughExtension', () => {
     ['no daemon is running', new TypeError('daemon-unreachable: no daemon is running')],
     ['another kind of bridge error', new TypeError('stream-failed: socket closed at /tmp/x')],
     ['a plain network error', new TypeError('the whiteboard extension is not available')],
-    ['an empty refusal', new TypeError('daemon-unreachable: ')],
+    ['an empty refusal', new TypeError('daemon-record-refused: ')],
+    // A daemon that died uncleanly leaves its record, and its socket answers
+    // an errno: that is "start one", not something the record said.
+    ['a socket nobody serves', new TypeError('daemon-unreachable: connect ENOENT /x.sock')],
+    ['a socket that refuses', new TypeError('daemon-unreachable: connect ECONNREFUSED /x.sock')],
   ])('carries no refusal for %s', async (_why, err) => {
     const fetchFn = vi.fn<typeof fetch>(async () => Promise.reject(err))
     expect(await connectThroughExtension(fetchFn)).toEqual({ status: 'none' })

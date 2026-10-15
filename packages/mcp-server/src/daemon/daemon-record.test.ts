@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CHMOD_IS_OBSERVABLE } from '../shared/test-utils/chmod-is-observable.js'
-import { parseDaemonRecord } from './daemon-record.js'
+import { describeOccupant, describeUnconfirmed, parseDaemonRecord } from './daemon-record.js'
 import { getDaemonRecordPath } from './daemon-registry.js'
 
 // Every pid below is a fake; a real process under the same number must not
@@ -197,5 +197,26 @@ describe('parseDaemonRecord', () => {
       record: base,
       liveness: { state: 'running' },
     })
+  })
+})
+
+describe('describeUnconfirmed', () => {
+  it('names the pid that answered on the socket where the answer gave one', () => {
+    expect(describeUnconfirmed({ state: 'unconfirmed', servingPid: 7 }, 5, '/s.sock')).toBe(
+      'A daemon answers on /s.sock as pid 7, not as pid 5',
+    )
+  })
+
+  it('says only that the recorded pid was not confirmed where the answer named none', () => {
+    expect(describeUnconfirmed({ state: 'unconfirmed' }, 5, 'the recorded socket')).toBe(
+      'A process holds the recorded socket but did not confirm it is pid 5',
+    )
+  })
+
+  it('names the serving pid the way describeOccupant does', () => {
+    const liveness = { state: 'unconfirmed', servingPid: 7 } as const
+    expect(describeOccupant(liveness, 5, '/s.sock')).toBe(
+      'a daemon answers on its socket /s.sock as pid 7',
+    )
   })
 })

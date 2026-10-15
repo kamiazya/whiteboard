@@ -104,6 +104,7 @@ describe('hostToPageSchema', () => {
       { type: 'chunk', id: 'r1', data: 'aGk=' },
       { type: 'end', id: 'r1' },
       { type: 'error', id: 'r1', reason: 'daemon-unreachable', message: 'no daemon' },
+      { type: 'error', id: 'r1', reason: 'daemon-record-refused', message: 'another version' },
     ]) {
       expect(hostToPageSchema.parse(message)).toEqual(message)
     }
@@ -131,8 +132,9 @@ describe('extensionToPageSchema', () => {
 })
 
 describe('hostToPageSchema.error', () => {
-  // The reason is only displayed, so a host that names a failure this page has
-  // no word for must not make the whole message unreadable.
+  // A page older than its host must not make the whole message unreadable
+  // over a reason it has no word for; it degrades to the generic line, which
+  // no page reads a person-facing message from.
   it('reads a reason it has no word for as the generic one, keeping the message', () => {
     expect(
       hostToPageSchema.parse({ type: 'error', id: 'r1', reason: 'daemon-too-old', message: 'm' }),

@@ -325,7 +325,20 @@ describe('runNativeHost', () => {
     page.send({ type: 'request', id: 'r5', method: 'GET', path: '/api/runtime/ping', headers: {} })
     await page.until((m) => m.length > 0)
     expect(page.received).toEqual([
-      { type: 'error', id: 'r5', reason: 'daemon-unreachable', message: refusal },
+      { type: 'error', id: 'r5', reason: 'daemon-record-refused', message: refusal },
+    ])
+    page.close()
+    await page.done
+  })
+
+  // The page shows a record refusal in place of "start one", so a daemon that
+  // is simply gone must not arrive under that reason with a socket errno.
+  it('answers a socket nobody serves as unreachable, not as a refusal', async () => {
+    const page = connectPage()
+    page.send({ type: 'request', id: 'r6', method: 'GET', path: '/api/runtime/ping', headers: {} })
+    await page.until((m) => m.length > 0)
+    expect(page.received).toEqual([
+      expect.objectContaining({ type: 'error', id: 'r6', reason: 'daemon-unreachable' }),
     ])
     page.close()
     await page.done

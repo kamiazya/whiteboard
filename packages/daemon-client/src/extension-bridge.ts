@@ -97,9 +97,14 @@ export const hostToPageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('error'),
     id: idSchema,
-    // Only displayed, so a reason a newer host invents reads as the generic
-    // one and its `message` still reaches the person.
-    reason: z.enum(['bad-request', 'daemon-unreachable', 'stream-failed']).catch('stream-failed'),
+    // `daemon-record-refused` is the one reason whose `message` is written for
+    // the person — the daemon record's own account of why the host will not
+    // relay — and the page shows it in place of its "start one" line. Every
+    // other reason's text is a transport detail. A reason a newer host invents
+    // reads as the generic one, so an older page falls back to that line.
+    reason: z
+      .enum(['bad-request', 'daemon-unreachable', 'daemon-record-refused', 'stream-failed'])
+      .catch('stream-failed'),
     message: z.string(),
   }),
 ])

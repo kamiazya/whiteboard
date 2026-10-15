@@ -9,6 +9,7 @@
 import { nanoid } from 'nanoid'
 import { daemonLiveness } from '../daemon/daemon-liveness.js'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
+import { describeUnconfirmed } from '../daemon/daemon-record.js'
 import { daemonLaunchOfModule } from '../daemon/daemon-record-schema.js'
 import {
   deleteDaemonRecord,
@@ -201,10 +202,7 @@ async function refusalOverRecord(dataDir: string): Promise<DaemonRunOutcome | nu
   const { pid, socketPath } = existing
   return {
     kind: 'refused',
-    message:
-      liveness.servingPid === undefined
-        ? `A daemon answers on ${socketPath}, but not as pid ${pid}, which daemon.json names. Stop the process serving that socket first.`
-        : `daemon.json names pid ${pid}, but the process serving ${socketPath} is pid ${liveness.servingPid}, not pid ${pid}. Stop that process first.`,
+    message: `${describeUnconfirmed(liveness, pid, socketPath)}, which daemon.json names. Stop the process serving that socket first.`,
   }
 }
 

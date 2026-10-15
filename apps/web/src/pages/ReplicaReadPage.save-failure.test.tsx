@@ -82,6 +82,23 @@ function leaveIsPrevented(): boolean {
   return leave.defaultPrevented
 }
 
+/**
+ * Starts watching the DOM and answers, once an alert is on screen, what the
+ * tab-wide readers said at the first mutation that put it there. Read inside
+ * the observer because that is the earliest anything outside React can look:
+ * a reader that waits for `findByRole` lets later work land first and so
+ * cannot see a notice shown while the tab is not yet held.
+ */
+function watchHeldWhenAlertAppears(): { heldAtAlert: () => boolean | undefined; stop: () => void } {
+  let held: boolean | undefined
+  const observer = new MutationObserver(() => {
+    if (held !== undefined || document.querySelector('[role="alert"]') === null) return
+    held = !nothingHeldInTab()
+  })
+  observer.observe(document.body, { childList: true, subtree: true })
+  return { heldAtAlert: () => held, stop: () => observer.disconnect() }
+}
+
 describe('ReplicaReadPage save failure', () => {
   beforeEach(() => {
     store.record = seedRecord()
@@ -129,11 +146,23 @@ describe('ReplicaReadPage save failure', () => {
     expect(leaveIsPrevented()).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: REPLICA_SAVE_FAILED_COPY.action }))
-    // Polled on the store itself: the notice leaves in the render, while the
-    // publish is a passive effect that may land a tick after it.
+    // Polled: the retried save lands asynchronously after the click.
     await vi.waitFor(() => expect(nothingHeldInTab()).toBe(true))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(leaveIsPrevented()).toBe(false)
+  })
+
+  it('holds the tab in the same commit that shows the refusal', async () => {
+    store.save.mockRejectedValue(new Error('QuotaExceededError'))
+    const watch = watchHeldWhenAlertAppears()
+    try {
+      await openPlanAndEdit()
+      await screen.findByRole('alert')
+      await expectLoggedFailure('replica save failed')
+      expect(watch.heldAtAlert()).toBe(true)
+    } finally {
+      watch.stop()
+    }
   })
 
   it('says nothing to the shell once the page is gone', async () => {
