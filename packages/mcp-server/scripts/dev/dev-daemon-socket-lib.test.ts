@@ -7,6 +7,10 @@ import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { daemonRecordSchema } from '../../src/daemon/daemon-record-schema.js'
 import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.js'
+import {
+  readProcessStartMs as daemonReadProcessStartMs,
+  recordedProcess as daemonRecordedProcess,
+} from '../../src/shared/process-identity.js'
 import { fc, fcTest, withDefaults } from '../../src/shared/test-utils/fast-check.js'
 import {
   assessRecordedDaemon,
@@ -278,5 +282,43 @@ describe('isRecordWriter', () => {
 
   it('answers false for a dead pid', () => {
     expect(isRecordWriter(7, writtenAt, { isAlive: () => false, startMs: () => 0 })).toBe(false)
+  })
+})
+
+// The dev scripts run under bare node before any build, so they keep a copy
+// of the daemon's "did this pid write this record" judgement. This holds the
+// copy to the daemon's answers over the same /proc and the same clock.
+describe("the pid-reuse judgement against the daemon's own", () => {
+  function fakeProc(startTicks: number, btimeSeconds: number) {
+    return (path: string) => {
+      if (path === '/proc/stat') return `cpu  1 2 3\nbtime ${btimeSeconds}\n`
+      if (path === '/proc/42/stat') {
+        return `42 (we(i)rd) name) S 1 42 42 0 -1 4194560 1 0 0 0 0 0 0 0 20 0 1 0 ${startTicks} 1 1`
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    }
+  }
+
+  fcTest.prop(
+    [fc.nat({ max: 2 ** 31 }), fc.integer({ min: 0, max: 2_000_000_000 })],
+    withDefaults({ numRuns: 100 }),
+  )('reads the same start time from the same /proc', (ticks, btime) => {
+    const readFile = fakeProc(ticks, btime)
+    expect(readProcessStartMs(42, { readFile })).toBe(daemonReadProcessStartMs(42, { readFile }))
+    expect(readProcessStartMs(43, { readFile })).toBe(daemonReadProcessStartMs(43, { readFile }))
+  })
+
+  fcTest.prop(
+    [
+      fc.boolean(),
+      fc.option(fc.integer({ min: 0, max: 20_000 }), { nil: null }),
+      fc.integer({ min: 0, max: 20_000 }),
+    ],
+    withDefaults({ numRuns: 200 }),
+  )('agrees on whether a pid still names its writer', (alive, startMs, writtenAtMs) => {
+    const seams = { isAlive: () => alive, startMs: () => startMs }
+    expect(isRecordWriter(7, new Date(writtenAtMs).toISOString(), seams)).toBe(
+      daemonRecordedProcess(7, writtenAtMs, seams) === 'writer',
+    )
   })
 })
