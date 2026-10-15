@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { createServer as createSocketServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
@@ -295,6 +296,23 @@ describe('a socket that says nothing', () => {
       })
     } finally {
       await daemon.close()
+    }
+  })
+
+  it('rejects as unanswered when a connection it took is hung up on', async () => {
+    const socketPath = join(dataDirWith(null), 'hangup.sock')
+    const server = createSocketServer((socket) => socket.destroy())
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    try {
+      await expect(
+        requestDaemon({ socketPath }, { path: '/x', timeoutMs: 1_000 }),
+      ).rejects.toMatchObject({ code: NO_ANSWER })
+      const startedAt = '2026-01-01T00:00:00.000Z'
+      const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+      const record = { pid: 42, startedAt, socketPath, token: 't' }
+      expect(await recordedDaemonLiveness(record, late)).toBe('unconfirmed')
+    } finally {
+      await new Promise<void>((closed) => server.close(() => closed()))
     }
   })
 

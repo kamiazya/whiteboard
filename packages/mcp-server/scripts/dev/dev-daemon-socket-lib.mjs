@@ -88,6 +88,18 @@ export function requestDaemon(
   { method = 'GET', path, headers = {}, body, timeoutMs, onChunk },
 ) {
   return new Promise((resolveRequest, rejectRequest) => {
+    // Once the socket took the connection, anything going wrong after is a
+    // daemon that did not answer, not a socket nobody listens on.
+    let connected = false
+    const fail = (error) =>
+      rejectRequest(
+        connected && error?.code !== NO_ANSWER
+          ? Object.assign(new Error(error?.message ?? 'daemon did not answer'), {
+              code: NO_ANSWER,
+              cause: error,
+            })
+          : error,
+      )
     const req = request({ socketPath: record.socketPath, path, method, headers }, (res) => {
       let text = ''
       const head = {
@@ -105,9 +117,13 @@ export function requestDaemon(
         onChunk?.(chunk, head)
       })
       res.on('end', () => resolveRequest({ ...head, text }))
-      res.on('error', rejectRequest)
+      res.on('error', fail)
     })
-    req.on('error', rejectRequest)
+    req.on('error', fail)
+    req.on('socket', (socket) => {
+      if (!socket.connecting) connected = true
+      else socket.once('connect', () => (connected = true))
+    })
     if (timeoutMs !== undefined) {
       // A Unix socket or named pipe refuses a connection at once, or takes
       // it: running out of time means it was taken and then left unanswered.
