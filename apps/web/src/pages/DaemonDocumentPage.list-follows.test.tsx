@@ -200,7 +200,7 @@ describe('DaemonDocumentPage document list follows the record', () => {
     const lists = vi.mocked(daemonApiClient.listDocuments).mock.calls.length
     act(() => daemonWrites(createsPlan))
     await waitFor(() =>
-      expect(vi.mocked(daemonApiClient.listDocuments).mock.calls.length).toBe(lists + 1),
+      expect(vi.mocked(daemonApiClient.listDocuments).mock.calls).toHaveLength(lists + 1),
     )
 
     daemonLists([mainRow, planRow('2026-01-03')])
