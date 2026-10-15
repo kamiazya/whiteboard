@@ -1,10 +1,10 @@
 /**
  * DocumentBackend: transport/persistence seam for the canvas editor.
  *
- * This module lives in src/shared so it is included in the tsconfig.server.json
- * declaration emit (dist/shared/document-backend-contract.d.ts) and can be
- * exported from the package via a subpath without pulling JSX-heavy browser
- * UI code into the Node build.
+ * Published as this package's `./document-backend-contract` subpath, which
+ * points at this source file: two implementations read it — `SseBackend`
+ * here, and the backend over a workspace kept in the browser in apps/web —
+ * and neither should pull the other's code in to name the seam.
  *
  * DocumentBackend and DocumentBackendHandlers are intentionally hand-written
  * `interface` declarations — they are a pure in-process callback/transport
@@ -35,9 +35,17 @@ export type ViewportRequestPayload = ViewportRequestMessage
 export type AgentActivityPayload = AgentActivityMessage
 
 export interface DocumentBackendHandlers {
-  /** First binary frame from the server: raw Loro snapshot bytes. */
+  /**
+   * The keeper's whole state, as Loro bytes, which REPLACES the caller's
+   * copy: once at connect, and again after a write refusal
+   * (`onWriteRefused`). May arrive more than once per connection.
+   */
   onSnapshot: (bytes: Uint8Array) => void
-  /** Subsequent binary frames: raw Loro incremental-update bytes. */
+  /**
+   * Loro bytes to MERGE into the caller's copy: a frame's update, or the
+   * keeper's whole state after a reconnect (`onConnected`). Import is
+   * idempotent, so bytes the caller already holds change nothing.
+   */
   onRemoteUpdate: (bytes: Uint8Array) => void
   /** Server auto-saved a new version. */
   onVersionCreated: (payload: VersionCreatedPayload) => void
@@ -56,7 +64,9 @@ export interface DocumentBackendHandlers {
   onAgentActivity?: (payload: Omit<AgentActivityPayload, 'type'>) => void
   /**
    * Transport (re)connected. Called on every successful open — both the initial
-   * connection and every subsequent reconnect after a close/error cycle.
+   * connection and every subsequent reconnect after a close/error cycle. The
+   * initial one follows the connect's `onSnapshot`, so a caller is never told
+   * it is connected over a copy it does not have yet.
    *
    * A reconnect obliges the BACKEND to catch up: a stream carries only what
    * is written while it is open, so what the keeper took during the gap
@@ -97,8 +107,8 @@ export interface DocumentBackendHandlers {
    */
   onAuthError?: () => void
   /**
-   * Optional error callback for backend-level failures. Defaults to a no-op
-   * so existing implementors (e.g. DaemonBackend) are source-compatible.
+   * Optional error callback for backend-level failures, since a backend
+   * may have none of them to report.
    * 'corrupt-snapshot': the persisted snapshot bytes are not valid Loro bytes.
    * 'corrupt-delta': one of the persisted delta bytes is not valid Loro bytes.
    * 'unsupported-version': the envelope version number is not supported.

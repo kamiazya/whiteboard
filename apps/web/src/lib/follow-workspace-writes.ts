@@ -1,4 +1,5 @@
 import {
+  routingTransitions,
   type SseStreamSource,
   workspaceDocKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
@@ -50,20 +51,10 @@ export function followWorkspaceWrites(
   onMoved: () => void,
 ): () => void {
   const { soon, cancel } = inBursts(onMoved)
-  let everConnected = false
-  let dropped = false
   const unsubscribe = source.subscribe(workspaceDocKey(workspaceId), {
     onUpdate: soon,
     onMessage: () => {},
-    onConnectionChange(connected) {
-      if (!connected) {
-        dropped = everConnected
-        return
-      }
-      if (dropped) soon()
-      everConnected = true
-      dropped = false
-    },
+    onConnectionChange: routingTransitions({ resumed: soon }),
   })
   return () => {
     cancel()

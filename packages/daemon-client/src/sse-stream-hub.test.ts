@@ -293,10 +293,10 @@ describe('SseStreamHub', () => {
     hub.close()
   })
 
-  it('tells a late subscriber the state of the stream it just joined', async () => {
-    // Liveness announced only on transitions leaves anyone who subscribes to an
-    // already-open stream with no idea whether it is live — a second canvas
-    // opened in the same tab would show an unknown connection forever.
+  it('tells a late subscriber the state of the document it just joined', async () => {
+    // Routing announced only on transitions leaves anyone who subscribes to an
+    // already-routed document with no idea whether it is live — a second canvas
+    // opened in the same workspace would show an unknown connection forever.
     const fake = createFake()
     const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
     // Wait on the first subscriber actually observing the open stream, not on
@@ -311,13 +311,13 @@ describe('SseStreamHub', () => {
     await vi.waitFor(() => expect(first).toEqual([false, true]))
 
     const states: boolean[] = []
-    hub.subscribe('w/b', {
+    hub.subscribe('w/a', {
       onUpdate: () => {},
       onMessage: () => {},
       onConnectionChange: (connected) => states.push(connected),
     })
 
-    await vi.waitFor(() => expect(states).toEqual([true]))
+    expect(states).toEqual([true])
     hub.close()
   })
 
@@ -331,8 +331,8 @@ describe('SseStreamHub', () => {
     hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {} })
     await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
 
+    // Closing cancels the read, so the stream ends here as a dropped one would.
     hub.close()
-    fake.endStream()
     await flush()
 
     expect(fake.streamOpens()).toBe(1)
@@ -409,7 +409,8 @@ describe('SseStreamHub', () => {
       const states: boolean[] = []
       hub.subscribe('ok/a', quiet)
       hub.subscribe('full/b', { ...quiet, onConnectionChange: (c) => states.push(c) })
-      await vi.waitFor(() => expect(states).toEqual([false, true, false]))
+      // Never `true`: the stream is open, but it does not carry this document.
+      await vi.waitFor(() => expect(states).toEqual([false, false]))
 
       const late: boolean[] = []
       hub.subscribe('full/b', { ...quiet, onConnectionChange: (c) => late.push(c) })

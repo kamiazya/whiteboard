@@ -44,7 +44,25 @@ interface Daemon {
   keeper: ReturnType<typeof keeper>
   sent: Uint8Array[]
   stream: ReadableStreamDefaultController<Uint8Array> | null
+  /**
+   * Whether the open stream carries the workspace: set when a subscribe for
+   * it is taken, cleared with the stream, as the daemon's routing is. A
+   * frame reaches only a routed stream, and nothing is replayed.
+   */
+  routed: boolean
   refuseStreams: boolean
+  /** Whether the keeper commits a write of its own once it has served a snapshot. */
+  writeAfterSnapshot: boolean
+}
+
+const WORKSPACE_KEY = 'workspace:ws-1'
+
+/** A keeper write, broadcast as a frame when the stream carries the workspace. */
+function keeperWrite(daemon: Daemon): void {
+  const update = daemon.keeper.write()
+  if (!daemon.routed) return
+  const frame = { doc: WORKSPACE_KEY, update: bytesToBase64(update) }
+  daemon.stream?.enqueue(sseFrame('update', frame))
 }
 
 function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
@@ -55,11 +73,20 @@ function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
     }
     if (url.includes('/snapshot')) {
       const snapshot = daemon.keeper.doc.export({ mode: 'snapshot' })
+      if (daemon.writeAfterSnapshot) {
+        daemon.writeAfterSnapshot = false
+        keeperWrite(daemon)
+      }
       return new Response(snapshot.slice().buffer as ArrayBuffer, { status: 200 })
     }
     if (url.includes('/update')) {
       const body = init?.body
       if (body instanceof ArrayBuffer) daemon.sent.push(new Uint8Array(body))
+      return new Response('{}', { status: 200 })
+    }
+    if (url.includes('/api/sync/subscribe')) {
+      const body = JSON.parse(String(init?.body)) as { subscribe?: string[] }
+      if (body.subscribe?.includes(WORKSPACE_KEY)) daemon.routed = true
       return new Response('{}', { status: 200 })
     }
     if (url.includes('/api/sync/stream')) {
@@ -93,7 +120,14 @@ function reproduces(delivered: readonly Uint8Array[], keeperDoc: LoroDoc): boole
 }
 
 function harness(): DocumentBackendHarness {
-  const daemon: Daemon = { keeper: keeper(), sent: [], stream: null, refuseStreams: false }
+  const daemon: Daemon = {
+    keeper: keeper(),
+    sent: [],
+    stream: null,
+    routed: false,
+    refuseStreams: false,
+    writeAfterSnapshot: false,
+  }
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
   return {
     backend,
@@ -101,15 +135,17 @@ function harness(): DocumentBackendHarness {
     dropTransport: () => {
       daemon.stream?.close()
       daemon.stream = null
+      daemon.routed = false
     },
     refuseAuth: () => {
       daemon.refuseStreams = true
     },
     keeperWrites: (live) => {
-      const update = daemon.keeper.write()
-      if (!live) return
-      const frame = { doc: 'workspace:ws-1', update: bytesToBase64(update) }
-      daemon.stream?.enqueue(sseFrame('update', frame))
+      if (live) keeperWrite(daemon)
+      else daemon.keeper.write()
+    },
+    keeperWritesAfterNextSnapshot: () => {
+      daemon.writeAfterSnapshot = true
     },
     caughtUp: (delivered) => reproduces(delivered, daemon.keeper.doc),
     cleanup: () => backend.disconnect(),

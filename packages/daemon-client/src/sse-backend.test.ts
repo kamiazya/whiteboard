@@ -98,7 +98,8 @@ describe('SseBackend', () => {
     // response arriving and its bytes being decoded. Seeding a document the
     // caller has already torn down would resurrect state it deliberately left.
     const releaseBody: { current: (() => void) | null } = { current: null }
-    const fetch = vi.fn(async (input: string | URL | Request) => {
+    const daemon = createFakeTransport([]).transport.fetch
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input).includes('/snapshot')) {
         return {
           ok: true,
@@ -108,7 +109,7 @@ describe('SseBackend', () => {
             }),
         } as unknown as Response
       }
-      return new Response('{}', { status: 200 })
+      return daemon(input, init)
     })
     const { handlers, snapshots } = createHandlers()
     const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', {

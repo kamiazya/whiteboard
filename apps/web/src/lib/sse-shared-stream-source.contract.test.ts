@@ -66,6 +66,16 @@ const server = setupServer(
       headers: { 'Content-Type': 'application/octet-stream' },
     })
   }),
+  // The workspace record's snapshot route, which a `workspace:` key's replica
+  // seeds from once the stream carries it.
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
+    const bytes = daemonState.get(`workspace:${String(params.workspaceId)}`)
+    if (!bytes) return HttpResponse.json({ title: 'not found' }, { status: 404 })
+    return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
+      status: 200,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
+  }),
   // The canvas update route: where a push lands, after the worker's replica
   // has merged it. Addressed by workspace and path, which the worker
   // reconstructs from the document key it routes everything else by.
