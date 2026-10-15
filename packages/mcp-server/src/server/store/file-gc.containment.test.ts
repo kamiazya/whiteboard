@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -57,6 +57,8 @@ const { createFileGcSweeper } = await import('./file-gc-sweeper.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { captureLogsForTests } = await import('../log.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
+const { saveDocument } = await import('./document-store.js')
+const { makeSpatialDocWithImage } = await import('../../shared/test-utils/spatial-doc.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -142,6 +144,42 @@ describe('file-GC containment gate: a symlink out of the data dir', () => {
 
     await expect(purge('ws_plain')).resolves.toEqual({ purgedCount: 1, purgedBytes: 10 })
     expect(await readdir(filesDir)).toEqual([])
+  })
+})
+
+describe('file-GC containment gate: a files dir re-pointed during the reference scan', () => {
+  it('refuses to unlink through a files/ swapped for an outside symlink mid-scan', async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-gc-midscan-outside-'))
+    try {
+      const filesDir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_swap')
+      await saveDocument('ws_swap', 'page', makeSpatialDocWithImage('kept-ref'))
+      await seedAgedImage(filesDir, 'orphan.png')
+      await seedAgedImage(outsideDir, 'orphan.png')
+      let swapped = false
+      // The scan reads versions after the gate has passed and the listing is
+      // taken, which is exactly when a re-point would land.
+      const versionStore = {
+        listIdsByDocument: async () => {
+          if (!swapped) {
+            swapped = true
+            await rename(filesDir, `${filesDir}.moved`)
+            await symlink(outsideDir, filesDir, 'dir')
+          }
+          return []
+        },
+        load: async () => {
+          throw new Error('no versions were listed')
+        },
+      }
+
+      await expect(purgeDanglingFiles('ws_swap', { versionStore })).rejects.toMatchObject(
+        refusal('ws_swap'),
+      )
+      expect(swapped).toBe(true)
+      expect(await readdir(outsideDir)).toEqual(['orphan.png'])
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
   })
 })
 
