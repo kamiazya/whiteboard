@@ -163,8 +163,8 @@ function ensureSeeded(baseUrl: string, doc: string): void {
   const key = replicaKey(baseUrl, doc)
   if (seededDocs.has(key)) return
   // Marked before the await and unmarked on failure, not the other way
-  // around: two callers racing this (a subscribe and a snapshot-request)
-  // must not start two fetches.
+  // around: two callers racing this (a feed's first routing and a
+  // snapshot-request) must not start two fetches.
   seededDocs.add(key)
   queueReplicaWork(async () => {
     try {

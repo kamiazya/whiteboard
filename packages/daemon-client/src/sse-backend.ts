@@ -158,7 +158,8 @@ export class SseBackend implements DocumentBackend {
   }
 
   /**
-   * The keeper's state, read once the stream carries the workspace. Through
+   * The keeper's state, read once the stream carries the workspace — or,
+   * when it does not, on a refusal or once `UNROUTED_OPEN_MS` passes. Through
    * the source, not a direct fetch, for the same reason push is: which
    * authority answers is the implementations' difference. The hub asks the
    * daemon; the worker-backed source asks the worker's replica, so a second
@@ -199,7 +200,7 @@ export class SseBackend implements DocumentBackend {
         else handlers.onRemoteUpdate(bytes)
       },
       // Nothing addresses text to the workspace key; per-document text
-      // arrives on the per-document subscription `run` makes.
+      // arrives on the per-document subscription `connect` makes.
       onMessage: () => {},
       // The stream belongs to the source, so its liveness is the only signal
       // this backend has that updates are still arriving.

@@ -63,10 +63,13 @@ export interface DocumentBackendHandlers {
    */
   onAgentActivity?: (payload: Omit<AgentActivityPayload, 'type'>) => void
   /**
-   * Transport (re)connected. Called on every successful open — both the initial
-   * connection and every subsequent reconnect after a close/error cycle. The
-   * initial one follows the connect's `onSnapshot`, so a caller is never told
-   * it is connected over a copy it does not have yet.
+   * The document is routed into an open transport: first after the opening
+   * `onSnapshot`, so a caller is never told it is connected over a copy it
+   * does not have yet, then on each re-routing after a drop. An open
+   * transport that does not carry the document reports nothing here. When it
+   * never does — the stream refused, or held back on the way — the backend
+   * still delivers the keeper's state through `onSnapshot`, and the caller
+   * holds a document that is not live until this fires.
    *
    * A reconnect obliges the BACKEND to catch up: a stream carries only what
    * is written while it is open, so what the keeper took during the gap
