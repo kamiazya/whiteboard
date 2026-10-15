@@ -29,7 +29,7 @@ import {
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { isPidAlive } from '../shared/process-alive.js'
+import { recordedProcess } from '../shared/process-identity.js'
 
 export type DaemonRunOutcome =
   | {
@@ -200,7 +200,12 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   if (refusal !== null) return refusal.outcome
 
   const existing = await loadDaemonRecord(dataDir)
-  if (existing !== null && isPidAlive(existing.pid)) {
+  // A record that outlived its daemon can name a pid a later process took;
+  // that process is not a daemon to refuse over.
+  if (
+    existing !== null &&
+    recordedProcess(existing.pid, Date.parse(existing.startedAt)) === 'writer'
+  ) {
     return {
       kind: 'refused',
       message: 'A daemon is already running. Stop it first with: whiteboard daemon stop --json',

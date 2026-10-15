@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
+import { readProcessStartMs } from '../shared/process-identity.js'
 import { captureSignalListeners } from '../shared/test-utils/signal-listeners.js'
 
 const { loadDaemonRecordMock, isPidAliveMock, startHttpServerMock } = vi.hoisted(() => ({
@@ -116,6 +117,31 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
     expect(isPidAliveMock).toHaveBeenCalledWith(RECORD.pid)
     expect(startHttpServerMock).not.toHaveBeenCalled()
   })
+
+  // A record written before this test process started cannot be this
+  // process's: its pid was taken by a later one, so no daemon is running.
+  it.skipIf(readProcessStartMs(process.pid) === null)(
+    'starts over a record whose pid a later process took',
+    async () => {
+      loadDaemonRecordMock.mockResolvedValueOnce({
+        ...RECORD,
+        pid: process.pid,
+        startedAt: new Date(0).toISOString(),
+      })
+      isPidAliveMock.mockReturnValue(true)
+      try {
+        const outcome = await runDaemonRun({
+          tokenStdin: false,
+          dataDir: '/tmp/whiteboard-test',
+          env: {},
+        })
+        expect(outcome.kind).toBe('running')
+        expect(startHttpServerMock).toHaveBeenCalledTimes(1)
+      } finally {
+        isPidAliveMock.mockReturnValue(false)
+      }
+    },
+  )
 
   it('starts over a record whose process is gone', async () => {
     loadDaemonRecordMock.mockResolvedValueOnce(RECORD)

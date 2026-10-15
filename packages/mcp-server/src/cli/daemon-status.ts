@@ -4,11 +4,14 @@ import {
   daemonStatusResultSchema,
 } from '../shared/api-contracts/daemon-status.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
+import { readProcessStartMs, recordedProcess } from '../shared/process-identity.js'
 
 export interface DaemonStatusOptions {
   dataDir: string
   parseRecord?: (dataDir: string) => Promise<DaemonRecordParseResult>
   isPidAlive?: (pid: number) => boolean
+  /** When a pid's process started; null where the platform cannot say. */
+  processStartMs?: (pid: number) => number | null
 }
 
 export async function runDaemonStatus(
@@ -65,17 +68,22 @@ export async function runDaemonStatus(
     }
   }
 
-  const alive = isAlive(parsed.record.pid)
+  // A pid a later process took after the daemon died is alive, and is not
+  // the daemon.
+  const identity = recordedProcess(parsed.record.pid, Date.parse(parsed.record.startedAt), {
+    isAlive,
+    startMs: options.processStartMs ?? readProcessStartMs,
+  })
 
-  if (!alive) {
+  if (identity !== 'writer') {
     return {
       result: daemonStatusResultSchema.parse({
         schemaVersion: 1,
         ok: false,
-        reason: 'process-not-running',
+        reason: identity === 'dead' ? 'process-not-running' : 'pid-reused',
         recordFound: true,
         recordFresh: false,
-        pidAlive: false,
+        pidAlive: identity !== 'dead',
         record: recordSummary(parsed.record),
       }),
       exitCode: 1,

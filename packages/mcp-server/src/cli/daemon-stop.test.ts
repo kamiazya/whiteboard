@@ -41,6 +41,9 @@ function baseOpts(
   return {
     dataDir: '/fake',
     isPidAlive: () => false,
+    // Every fake pid here is the daemon; a real /proc entry under the same
+    // number must not decide it.
+    processStartMs: () => null,
     killFn: () => undefined,
     sleep: async () => undefined,
     stopTimeoutMs: 0,
@@ -251,6 +254,7 @@ describe('runDaemonStop: the default SIGTERM window', () => {
       let killedAfterMs: number | null = null
       await runDaemonStop({
         dataDir: '/fake',
+        processStartMs: () => null,
         isPidAlive: () => true,
         killFn: (_pid, signal) => {
           if (signal === 'SIGKILL') killedAfterMs = Date.now() - startedAt
@@ -281,6 +285,7 @@ describe('runDaemonStop: the default wait after SIGKILL', () => {
       let killedAt: number | null = null
       const { exitCode } = await runDaemonStop({
         dataDir: '/fake',
+        processStartMs: () => null,
         isPidAlive: () => true,
         killFn: (_pid, signal) => {
           if (signal === 'SIGKILL') killedAt = Date.now()
@@ -298,5 +303,61 @@ describe('runDaemonStop: the default wait after SIGKILL', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// daemon.json outlives a daemon that died without closing (SIGKILL, OOM, power
+// loss), and after a reboot its pid can belong to any process of this user. A
+// process that started after the record was written did not write it.
+describe('runDaemonStop: a stale record whose pid another process took', () => {
+  const recordedAtMs = Date.parse(fakeRecord.startedAt)
+
+  it('signals nothing, reports the daemon not running, and drops the record', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    const killFn = vi.fn()
+    const removeRecord = vi.fn(async () => undefined)
+    const { result, exitCode } = await runDaemonStop(
+      baseOpts({
+        isPidAlive: () => true,
+        processStartMs: () => recordedAtMs + 60_000,
+        killFn,
+        removeRecord,
+      }),
+    )
+    expect(killFn).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ ok: false, action: 'not-running', reason: 'pid-reused' })
+    expect(exitCode).toBe(1)
+    expect(removeRecord).toHaveBeenCalledWith('/fake')
+  })
+
+  it('withholds SIGKILL from a pid another process took during the SIGTERM window', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    const signals: string[] = []
+    const starts = [recordedAtMs - 1_000, recordedAtMs + 60_000]
+    await runDaemonStop(
+      baseOpts({
+        isPidAlive: () => true,
+        processStartMs: () => starts.shift() ?? recordedAtMs + 60_000,
+        killFn: (_pid, signal) => {
+          signals.push(signal)
+        },
+      }),
+    )
+    expect(signals).toEqual(['SIGTERM'])
+  })
+
+  it('still stops a process that started before its record was written', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(fakeRecord)
+    const killFn = vi.fn()
+    const { result } = await runDaemonStop(
+      baseOpts({
+        isPidAlive: () => true,
+        processStartMs: () => recordedAtMs - 1_000,
+        killFn,
+      }),
+    )
+    expect(killFn).toHaveBeenCalledWith(fakeRecord.pid, 'SIGTERM')
+    expect(killFn).toHaveBeenCalledWith(fakeRecord.pid, 'SIGKILL')
+    expect(result.action).toBe('stopped')
   })
 })
