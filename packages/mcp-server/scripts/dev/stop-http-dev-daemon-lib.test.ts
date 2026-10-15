@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { NO_ANSWER } from './dev-daemon-socket-lib.mjs'
 import { stopDevDaemon } from './stop-http-dev-daemon-lib.mjs'
 
 const STARTED_AT = '2026-01-01T00:00:00.000Z'
@@ -220,6 +221,26 @@ describe('stopDevDaemon', () => {
         startMs: stepped,
         answers: async () => true,
         request: servingAs(4242),
+      }
+      expect(await stopDevDaemon(input)).toEqual({
+        kind: 'unsignallable',
+        pid: 100,
+        reason: expect.stringContaining('/gone.sock'),
+      })
+      expect(w.signalled).toEqual([])
+    })
+
+    // A socket that takes the connection and then says nothing is a daemon
+    // wedged on its loop, not a pid somebody else has taken: its record stays.
+    it('refuses, signalling nothing, when the socket accepts and never answers', async () => {
+      const w = world({ wrapper: 50, token: 'tok' })
+      const input = {
+        ...w.input,
+        startMs: stepped,
+        answers: async () => false,
+        request: async (): Promise<{ status: number; contentType: string; text: string }> => {
+          throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
+        },
       }
       expect(await stopDevDaemon(input)).toEqual({
         kind: 'unsignallable',

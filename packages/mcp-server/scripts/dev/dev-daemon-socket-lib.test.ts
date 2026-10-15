@@ -19,6 +19,7 @@ import {
   BUILT_LAUNCH,
   isPidAlive,
   isRecordWriter,
+  NO_ANSWER,
   readDaemonRecord,
   readProcessStartMs,
   recordedDaemonLiveness,
@@ -267,6 +268,59 @@ describe('requestDaemon', () => {
   })
 })
 
+// What a liveness check makes of a socket that says nothing depends on WHY it
+// said nothing: a connection refused, or no socket at all, is no daemon, while
+// one taken and then left unanswered is a daemon wedged on its loop.
+describe('a socket that says nothing', () => {
+  async function wedged() {
+    const socketPath = join(dataDirWith(null), 'wedged.sock')
+    const server = createServer(() => {})
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    return {
+      socketPath,
+      close: () =>
+        new Promise<void>((closed) => {
+          server.close(() => closed())
+          server.closeAllConnections()
+        }),
+    }
+  }
+
+  it('rejects as unanswered once a connection it took stays silent', async () => {
+    const daemon = await wedged()
+    try {
+      await expect(requestDaemon(daemon, { path: '/x', timeoutMs: 100 })).rejects.toMatchObject({
+        code: NO_ANSWER,
+      })
+    } finally {
+      await daemon.close()
+    }
+  })
+
+  it('rejects as a refused connection when nothing listens', async () => {
+    const socketPath = join(dataDirWith(null), 'nobody.sock')
+    const refused = await requestDaemon({ socketPath }, { path: '/x', timeoutMs: 100 }).catch(
+      (error: { code?: string }) => error,
+    )
+    expect(refused).toMatchObject({ code: expect.any(String) })
+    expect((refused as { code: string }).code).not.toBe(NO_ANSWER)
+  })
+
+  it('reads a late-starting pid behind a wedged socket as unconfirmed, behind none as reused', async () => {
+    const startedAt = '2026-01-01T00:00:00.000Z'
+    const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+    const daemon = await wedged()
+    try {
+      const record = { pid: 42, startedAt, socketPath: daemon.socketPath, token: 't' }
+      expect(await recordedDaemonLiveness(record, late)).toBe('unconfirmed')
+    } finally {
+      await daemon.close()
+    }
+    const gone = { pid: 42, startedAt, socketPath: join(dataDirWith(null), 'gone.sock') }
+    expect(await recordedDaemonLiveness(gone, late)).toBe('pid-reused')
+  })
+})
+
 describe('isRecordWriter', () => {
   const writtenAt = '2026-01-01T00:00:10.000Z'
   const writtenAtMs = Date.parse(writtenAt)
@@ -339,7 +393,10 @@ describe("the liveness verdict against the daemon's own", () => {
   // Weighted so the arrangement that matters — a late start time, a socket,
   // and a status confirming the pid — is common rather than a rare corner.
   const replyArbitrary = fc.oneof(
-    { arbitrary: fc.constant({ kind: 'silent' as const }), weight: 1 },
+    // Nothing listening: the connection is refused.
+    { arbitrary: fc.constant({ kind: 'refused' as const }), weight: 1 },
+    // Listening, taking the connection, never answering: a wedged daemon.
+    { arbitrary: fc.constant({ kind: 'wedged' as const }), weight: 1 },
     {
       arbitrary: fc.record({
         kind: fc.constant('reply' as const),
@@ -366,6 +423,7 @@ describe("the liveness verdict against the daemon's own", () => {
   it('agrees on running, unconfirmed, pid-reused and dead', async () => {
     const seen = new Set<string>()
     let confirmedBySocket = 0
+    let wedgedUnconfirmed = 0
     await fc.assert(
       fc.asyncProperty(
         fc.constantFrom(true, true, true, false),
@@ -388,7 +446,10 @@ describe("the liveness verdict against the daemon's own", () => {
           // The socket answers only an ask carrying the record's token, as the
           // daemon does, so a side that dropped the token reads a 401.
           const answer = (presented: string | undefined) => {
-            if (reply.kind === 'silent') throw new Error('ECONNREFUSED')
+            if (reply.kind === 'refused') {
+              throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
+            }
+            if (reply.kind === 'wedged') throw new Error('no answer within 1500ms')
             return presented === token ? reply : { status: 401, body: {} }
           }
           const daemonSide = await daemonLiveness(record, {
@@ -398,6 +459,9 @@ describe("the liveness verdict against the daemon's own", () => {
           const devSide = await recordedDaemonLiveness(record, {
             ...identity,
             request: async (_record, req) => {
+              if (reply.kind === 'wedged') {
+                throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
+              }
               const presented = req.headers?.authorization?.replace(/^Bearer /, '')
               const { status, body } = answer(presented)
               const text =
@@ -405,8 +469,19 @@ describe("the liveness verdict against the daemon's own", () => {
               return { status, contentType: 'application/json', text }
             },
           })
-          expect(devSide).toBe(daemonSide)
-          seen.add(daemonSide)
+          if (reply.kind === 'wedged') {
+            // The daemon's request helper does not yet tell a wedged socket
+            // from a refused one, so its verdict there reads 'pid-reused'
+            // where the agreed answer is 'unconfirmed'. Once it does, this
+            // branch becomes the plain comparison below, with the daemon
+            // side's fake rejecting the way that helper does on a timeout.
+            const asked = daemonSide === 'pid-reused' && socketPath !== undefined
+            expect(devSide).toBe(asked ? 'unconfirmed' : daemonSide)
+            if (devSide === 'unconfirmed') wedgedUnconfirmed += 1
+          } else {
+            expect(devSide).toBe(daemonSide)
+          }
+          seen.add(devSide)
           if (daemonSide === 'running' && offset !== null && offset > 5_000) {
             confirmedBySocket += 1
           }
@@ -417,5 +492,6 @@ describe("the liveness verdict against the daemon's own", () => {
     // A generator that never reached the socket would agree vacuously.
     expect([...seen].sort()).toEqual(['dead', 'pid-reused', 'running', 'unconfirmed'])
     expect(confirmedBySocket).toBeGreaterThan(0)
+    expect(wedgedUnconfirmed).toBeGreaterThan(0)
   })
 })

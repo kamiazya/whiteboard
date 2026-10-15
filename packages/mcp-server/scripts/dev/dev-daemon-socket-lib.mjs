@@ -63,6 +63,13 @@ export function isPidAlive(pid) {
 }
 
 /**
+ * The `code` of `requestDaemon`'s rejection when the socket accepted the
+ * connection and gave no answer within its timeout — something is serving
+ * there — as against a connection refused or a socket that does not exist.
+ */
+export const NO_ANSWER = 'ERR_DAEMON_NO_ANSWER'
+
+/**
  * One HTTP exchange with the daemon a record names. `socketPath` is a Unix
  * socket, or a named pipe on Windows — `http.request` takes either.
  *
@@ -102,7 +109,13 @@ export function requestDaemon(
     })
     req.on('error', rejectRequest)
     if (timeoutMs !== undefined) {
-      req.setTimeout(timeoutMs, () => req.destroy(new Error(`no answer within ${timeoutMs}ms`)))
+      // A Unix socket or named pipe refuses a connection at once, or takes
+      // it: running out of time means it was taken and then left unanswered.
+      req.setTimeout(timeoutMs, () =>
+        req.destroy(
+          Object.assign(new Error(`no answer within ${timeoutMs}ms`), { code: NO_ANSWER }),
+        ),
+      )
     }
     req.end(body)
   })
@@ -263,9 +276,12 @@ const STATUS_ASK_TIMEOUT_MS = 1_500
  * recorded pid is the daemon whatever else it says.
  *
  * - `running`: the pid is the process that wrote the record.
- * - `unconfirmed`: the start time says otherwise, and a daemon answers on the
- *   record's socket without confirming the pid — nothing may signal it.
- * - `pid-reused`: the pid started after the record and nothing answers.
+ * - `unconfirmed`: the start time says otherwise, and something serves the
+ *   record's socket without confirming the pid — an answer naming another pid,
+ *   or a connection taken and left unanswered, as a daemon wedged on its loop
+ *   does. Nothing may signal it, and its record is not a leftover.
+ * - `pid-reused`: the pid started after the record and the socket refuses the
+ *   connection, or is not there.
  * - `dead`: no process has the pid.
  *
  * @param {{ pid: number, socketPath?: string, startedAt?: string, token?: string }} record
@@ -298,8 +314,8 @@ export async function recordedDaemonLiveness(
         timeoutMs: STATUS_ASK_TIMEOUT_MS,
       },
     )
-  } catch {
-    return 'pid-reused'
+  } catch (error) {
+    return error?.code === NO_ANSWER ? 'unconfirmed' : 'pid-reused'
   }
   return answer.status === 200 && statusPid(answer.text) === record.pid ? 'running' : 'unconfirmed'
 }

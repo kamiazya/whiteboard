@@ -25,7 +25,8 @@ import {
  * for the daemon is ever signalled. A pid whose start time says it is not the
  * daemon is judged as the daemon itself judges it (`recordedDaemonLiveness`):
  * the socket confirming the pid makes it the daemon, a socket answering as
- * anything else is a refusal, and silence makes the record stale — signalling
+ * anything else, or taking the connection and never answering, is a refusal,
+ * and a refused connection makes the record stale — signalling
  * a pid some other process has taken would stop a stranger.
  *
  * @param {{
@@ -105,7 +106,7 @@ async function unconfirmedForeign(record, seams) {
     return {
       kind: 'unsignallable',
       pid: record.pid,
-      reason: `a daemon answers on ${record.socketPath}, but not as pid ${record.pid}, which started after the record was written (${record.startedAt}) — stop the process serving that socket first`,
+      reason: `something serves ${record.socketPath} without confirming pid ${record.pid}, which started after the record was written (${record.startedAt}) — stop the process serving that socket first`,
     }
   }
   return {
