@@ -357,6 +357,13 @@ export class SseStreamHub implements SseStreamSource {
   private closed = false
   /** Set by a 401/403; the reconnect loop halts on it for this hub's life. */
   private authRefused = false
+  /**
+   * Set when the open stream is ended because a subscribe on it went
+   * unanswered. Such a stream does not count as one that opened for the
+   * backoff: a subscribe that keeps failing would otherwise reopen it at the
+   * floor delay forever, re-routing every healthy document each time.
+   */
+  private endedUnanswered = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryResolve: (() => void) | null = null
 
@@ -551,6 +558,7 @@ export class SseStreamHub implements SseStreamSource {
       // Unanswered, so whether the daemon routes these is unknown, and their
       // subscribers would wait on a routing nobody re-asks for. A new stream
       // re-asks for everything.
+      this.endedUnanswered = true
       this.abort?.abort()
       return false
     }
@@ -610,11 +618,13 @@ export class SseStreamHub implements SseStreamSource {
     this.started = false
   }
 
-  /** Opens the stream and reads it to its end. Resolves to whether it opened,
-   *  which is what decides between resetting and growing the backoff. */
+  /** Opens the stream and reads it to its end. Resolves to whether it opened
+   *  and was not ended for an unanswered subscribe, which is what decides
+   *  between resetting and growing the backoff. */
   private async readStreamOnce(): Promise<boolean> {
     const abort = new AbortController()
     this.abort = abort
+    this.endedUnanswered = false
 
     let res: Response
     try {
@@ -655,7 +665,7 @@ export class SseStreamHub implements SseStreamSource {
     this.streamId = null
     for (const entry of this.docs.values()) entry.routed = false
     this.announceConnection(false)
-    return true
+    return !this.endedUnanswered
   }
 
   /**

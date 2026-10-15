@@ -96,6 +96,44 @@ describe('SseStreamHub reconnect schedule', () => {
     // Two refusals grow it; the stream that opened and then ended resets it.
     expect(attempts.slice(0, 4)).toEqual([1, 2, 0, 1])
   })
+
+  it('grows the backoff when every subscribe on an opened stream goes unanswered', async () => {
+    // The stream opens and its subscribe fails at the network, which ends
+    // the stream. Counted as a stream that opened, that would reopen it at
+    // the floor delay forever, re-routing every healthy document each time.
+    const attempts: number[] = []
+    const fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/api/sync/subscribe')) throw new TypeError('fetch failed')
+      if (!url.includes('/api/sync/stream')) return new Response('{}', { status: 200 })
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                `event: ready\ndata: ${JSON.stringify({ streamId: 's' })}\n\n`,
+              ),
+            )
+            init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')))
+          },
+        }),
+        { status: 200 },
+      )
+    }
+    const hub = new SseStreamHub({
+      fetch: fetch as typeof globalThis.fetch,
+      baseUrl: 'http://d',
+      retryDelayMs: (attempt) => {
+        attempts.push(attempt)
+        return 0
+      },
+    })
+    hub.subscribe('workspace:w', { onUpdate: () => {}, onMessage: () => {} })
+    await waitFor(() => expect(attempts.length).toBeGreaterThanOrEqual(4))
+    hub.close()
+
+    expect(attempts.slice(0, 4)).toEqual([1, 2, 3, 4])
+  })
 })
 
 describe('SseStreamHub after a stream ends', () => {
