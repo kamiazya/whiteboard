@@ -4,7 +4,7 @@ import {
   daemonStopResultSchema,
 } from '../shared/api-contracts/daemon-stop.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
-import { readProcessStartMs, recordedProcess } from '../shared/process-identity.js'
+import { readProcessStartMs, recordedProcessOf } from '../shared/process-identity.js'
 import { STOP_SIGTERM_WINDOW_MS } from '../shared/stop-timeouts.js'
 import { terminateAndWait } from '../shared/terminate-and-wait.js'
 
@@ -66,12 +66,8 @@ export async function runDaemonStop(
   const { pid } = record
   // A record that outlived its daemon can name a pid another process has
   // since taken; that process is not the daemon and must not be signalled.
-  const identify = () =>
-    recordedProcess(pid, Date.parse(record.startedAt), {
-      isAlive,
-      startMs: options.processStartMs ?? readProcessStartMs,
-    })
-
+  const startMs = options.processStartMs ?? readProcessStartMs
+  const identify = () => recordedProcessOf(record, { isAlive, startMs })
   const identity = identify()
   if (identity !== 'writer') {
     await removeRecord(options.dataDir)

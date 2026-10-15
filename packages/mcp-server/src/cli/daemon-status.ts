@@ -4,7 +4,7 @@ import {
   daemonStatusResultSchema,
 } from '../shared/api-contracts/daemon-status.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
-import { readProcessStartMs, recordedProcess } from '../shared/process-identity.js'
+import { readProcessStartMs, recordedProcessOf } from '../shared/process-identity.js'
 
 export interface DaemonStatusOptions {
   dataDir: string
@@ -14,6 +14,12 @@ export interface DaemonStatusOptions {
   processStartMs?: (pid: number) => number | null
 }
 
+const recordSummary = ({ pid, version, startedAt }: NonNullable<DaemonStatusResult['record']>) => ({
+  pid,
+  version,
+  startedAt,
+})
+
 export async function runDaemonStatus(
   options: DaemonStatusOptions,
 ): Promise<{ result: DaemonStatusResult; exitCode: 0 | 1 }> {
@@ -21,12 +27,6 @@ export async function runDaemonStatus(
   const isAlive = options.isPidAlive ?? defaultIsPidAlive
 
   const parsed = await parse(options.dataDir)
-
-  const recordSummary = ({
-    pid,
-    version,
-    startedAt,
-  }: NonNullable<DaemonStatusResult['record']>) => ({ pid, version, startedAt })
 
   if (parsed.kind === 'missing') {
     return {
@@ -68,12 +68,9 @@ export async function runDaemonStatus(
     }
   }
 
-  // A pid a later process took after the daemon died is alive, and is not
-  // the daemon.
-  const identity = recordedProcess(parsed.record.pid, Date.parse(parsed.record.startedAt), {
-    isAlive,
-    startMs: options.processStartMs ?? readProcessStartMs,
-  })
+  // A pid a later process took after the daemon died is alive, and not it.
+  const startMs = options.processStartMs ?? readProcessStartMs
+  const identity = recordedProcessOf(parsed.record, { isAlive, startMs })
 
   if (identity !== 'writer') {
     return {

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -118,15 +119,22 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
     expect(startHttpServerMock).not.toHaveBeenCalled()
   })
 
-  // A record written before this test process started cannot be this
-  // process's: its pid was taken by a later one, so no daemon is running.
+  // A record written before a process started cannot be that process's: its
+  // pid was taken by a later one, so no daemon is running.
   it.skipIf(readProcessStartMs(process.pid) === null)(
     'starts over a record whose pid a later process took',
     async () => {
+      const later = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)'], {
+        stdio: 'ignore',
+      })
+      await new Promise<void>((resolve, reject) => {
+        later.once('spawn', resolve)
+        later.once('error', reject)
+      })
       loadDaemonRecordMock.mockResolvedValueOnce({
         ...RECORD,
-        pid: process.pid,
-        startedAt: new Date(0).toISOString(),
+        pid: later.pid,
+        startedAt: new Date(Date.now() - 30_000).toISOString(),
       })
       isPidAliveMock.mockReturnValue(true)
       try {
@@ -139,6 +147,7 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
         expect(startHttpServerMock).toHaveBeenCalledTimes(1)
       } finally {
         isPidAliveMock.mockReturnValue(false)
+        later.kill('SIGKILL')
       }
     },
   )

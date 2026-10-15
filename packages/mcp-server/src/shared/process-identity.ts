@@ -25,7 +25,7 @@ const USER_HZ = 100
  * never have started after the record. The slack absorbs `btime`'s
  * whole-second resolution and a small clock step since boot.
  */
-export const START_SLACK_MS = 5_000
+const START_SLACK_MS = 5_000
 
 export interface ProcessIdentitySeams {
   readonly isAlive?: (pid: number) => boolean
@@ -70,4 +70,12 @@ export function recordedProcess(
   const started = startMs(pid)
   if (Number.isNaN(writtenAtMs) || started === null) return 'writer'
   return started <= writtenAtMs + START_SLACK_MS ? 'writer' : 'foreign'
+}
+
+/** `recordedProcess` for a record carrying the ISO time it was written. */
+export function recordedProcessOf(
+  record: { readonly pid: number; readonly startedAt: string },
+  seams: ProcessIdentitySeams = {},
+): 'writer' | 'foreign' | 'dead' {
+  return recordedProcess(record.pid, Date.parse(record.startedAt), seams)
 }
