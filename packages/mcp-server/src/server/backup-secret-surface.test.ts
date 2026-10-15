@@ -48,6 +48,8 @@ const BACKUP_DISPOSITION = {
 
   'daemon-identity.json':
     'never-copied: the Ed25519 private key behind the daemon did:key, the actor its versions name. Decided 2026-09-19 against a real cost — a restored daemon gets a fresh identity, so pairings must be redone and old versions name a former actor. Taken because that is recoverable and a signing key in a backup is not.',
+  'migration.lock':
+    'copied: exists only while a starting process migrates, so a backup rarely meets one. A restored one is judged like any other: the next start replaces it unless the pid it names is a live process that started before the file was written (migration-lock.ts).',
   'storage.json':
     'copied: the database location record. A restore needs it to find the database it just restored.',
   'whiteboard.db':
