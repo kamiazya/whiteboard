@@ -353,7 +353,10 @@ export function useListFollowsRecord(
     let timer: ReturnType<typeof setTimeout> | undefined
     const compare = () => {
       const shape = listedShapeOf(record)
-      const moved = shapeRef.current !== null && shape !== shapeRef.current
+      // The first look refreshes too: the list was read before this record was
+      // bound, so a document the record gained in between would otherwise
+      // become the baseline and never be listed.
+      const moved = shape !== shapeRef.current
       shapeRef.current = shape
       if (moved) refreshRef.current()
     }

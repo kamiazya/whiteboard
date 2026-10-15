@@ -85,7 +85,7 @@ export function useDocumentListRefresh(options: {
     return () => {
       generationRef.current += 1
     }
-  }, [documentId, currentUpdatedAt, listDocuments, workspaceRevision])
+  }, [documentId, currentUpdatedAt, listDocuments, workspaceId, workspaceRevision])
 
   return { documents, enumeratedRef }
 }

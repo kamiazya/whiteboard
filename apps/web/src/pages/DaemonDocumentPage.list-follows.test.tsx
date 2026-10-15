@@ -226,9 +226,17 @@ describe('useListFollowsRecord', () => {
     })
   }
 
+  it('re-reads on its first look, since the list was read before the record was bound', () => {
+    const refresh = vi.fn()
+    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
   it('leaves the list alone for an import that changes no listed document', async () => {
     const refresh = vi.fn()
     renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    refresh.mockClear()
 
     peerWrites(record, (doc) =>
       writeSpatialCanvas(documentContainers(doc, MAIN), {
@@ -247,6 +255,7 @@ describe('useListFollowsRecord', () => {
   it('re-reads once for a burst of imports inside the settle window', async () => {
     const refresh = vi.fn()
     renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    refresh.mockClear()
 
     peerWrites(record, createsPlan)
     peerWrites(record, (doc) => updateWorkspaceDocumentMeta(doc, PLAN, { updatedAt: 5 }))
@@ -261,6 +270,7 @@ describe('useListFollowsRecord', () => {
       ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc }, refresh),
       { initialProps: { doc: record } },
     )
+    refresh.mockClear()
     createsPlan(peer)
     peer.commit()
     const replaced = new LoroDoc()

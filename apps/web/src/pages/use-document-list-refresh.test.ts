@@ -52,6 +52,33 @@ describe('useDocumentListRefresh', () => {
     expect(result.current.documents.map((entry) => entry.documentId)).toEqual(['from-second'])
   })
 
+  it('re-reads, and drops the old answer, when the workspace changes under the same document', async () => {
+    const resolvers: ((list: DocumentSnapshot[]) => void)[] = []
+    const listDocuments = vi.fn(
+      () => new Promise<DocumentSnapshot[]>((resolve) => resolvers.push(resolve)),
+    )
+    const { result, rerender } = renderHook(
+      ({ workspaceId }: { workspaceId: string }) =>
+        useDocumentListRefresh({
+          documentId: 'doc',
+          currentUpdatedAt: null,
+          listDocuments,
+          workspaceId,
+        }),
+      { initialProps: { workspaceId: 'ws-a' } },
+    )
+    await waitFor(() => expect(resolvers.length).toBe(1))
+
+    rerender({ workspaceId: 'ws-b' })
+    await waitFor(() => expect(resolvers.length).toBe(2))
+    await act(async () => {
+      resolvers[1]?.([snapshot('from-b')])
+      resolvers[0]?.([snapshot('from-a')])
+    })
+
+    expect(result.current.documents.map((entry) => entry.documentId)).toEqual(['from-b'])
+  })
+
   it('reports that the list has answered, which "no such path" is told apart by', async () => {
     const listDocuments = vi.fn(async () => [snapshot('only')])
     const { result } = renderHook(() =>

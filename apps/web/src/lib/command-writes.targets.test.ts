@@ -372,6 +372,7 @@ describe('commitToDoc', () => {
 
       expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1)
       expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'a')).toMatchObject({ x: 9, y: 9 })
+      expect(readSpatialCanvas(doc).edges).toEqual([])
     })
 
     it('sends the batch to the reconcile when a member names a node next does not hold', () => {

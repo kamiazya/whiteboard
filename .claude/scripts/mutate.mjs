@@ -134,7 +134,10 @@ function claimStale() {
     }
     return null
   } finally {
-    unlinkSync(claimed)
+    // Best-effort: a failed cleanup must not replace the error that got here.
+    try {
+      unlinkSync(claimed)
+    } catch {}
   }
 }
 
@@ -162,7 +165,11 @@ function acquireLock() {
 // Only this run's own lock is removed: a run that exits before taking it, or
 // after another run replaced it as stale, must not delete someone else's.
 function releaseLock() {
-  if (readHolder(lockPath) === process.pid) unlinkSync(lockPath)
+  // Runs in the exit handler: a lock somebody already removed must not turn a
+  // restored run into a crash that overwrites its exit code.
+  try {
+    if (readHolder(lockPath) === process.pid) unlinkSync(lockPath)
+  } catch {}
 }
 
 const holder = acquireLock()
