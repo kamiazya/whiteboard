@@ -11,6 +11,8 @@ import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  moveWorkspaceNodeToPath,
+  setWorkspaceDocumentName,
   updateWorkspaceDocumentMeta,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -278,6 +280,32 @@ describe('useListFollowsRecord', () => {
 
     peerWrites(record, createsPlan)
     peerWrites(record, (doc) => updateWorkspaceDocumentMeta(doc, PLAN, { updatedAt: 5 }))
+    await settled()
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  // A rename or a move touches neither `updatedAt` nor anything else in the
+  // row, so the name and the path are each the only thing that changed.
+  it('re-reads when a document is renamed elsewhere', async () => {
+    const refresh = vi.fn()
+    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    refresh.mockClear()
+
+    peerWrites(record, (doc) =>
+      setWorkspaceDocumentName(doc, { documentId: MAIN, name: 'Renamed' }),
+    )
+    await settled()
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reads when a document is moved elsewhere', async () => {
+    const refresh = vi.fn()
+    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    refresh.mockClear()
+
+    peerWrites(record, (doc) => moveWorkspaceNodeToPath(doc, 'main', 'archive/main'))
     await settled()
 
     expect(refresh).toHaveBeenCalledTimes(1)
