@@ -165,7 +165,7 @@ const START_SLACK_MS = 5_000
  * @param {{ isAlive?: (pid: number) => boolean, startMs?: (pid: number) => number | null }} [seams]
  * @returns {'daemon' | 'foreign' | 'dead'}
  */
-export function recordedProcess(
+function recordedProcess(
   pid,
   startedAt,
   { isAlive = isPidAlive, startMs = readProcessStartMs } = {},
