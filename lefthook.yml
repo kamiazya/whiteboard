@@ -25,6 +25,15 @@ pre-commit:
 
 pre-push:
   parallel: true
+  # Every command below carries this `env`. pnpm checks node_modules against
+  # the lockfile before each run/exec and by default INSTALLS when it is behind
+  # (unlocked, progress on stdout), so after a merge that moved the lockfile
+  # these parallel commands each installed into one tree, and `prepare`
+  # rewrote the hooks mid-hook: a push that failed naming nothing and passed on
+  # the retry. `error` makes that one `ERR_PNPM_VERIFY_DEPS_BEFORE_RUN … Run
+  # "pnpm install"`. The `pnpm_config_` spelling is the one pnpm 11 reads;
+  # `npm_config_` was measured to be ignored. Guarded by
+  # tools/arch-lint/src/pre-push-stale-tree.test.ts.
   commands:
     # Cheap, and it answers "were the gates below actually enforced on the way
     # here?" — a hook whose exit status was hijacked lets every pre-commit run
@@ -32,8 +41,11 @@ pre-push:
     # the machine.
     git-hooks:
       run: pnpm verify:git-hooks
+      env: &stale-tree-fails
+        pnpm_config_verify_deps_before_run: error
     typecheck:
       run: pnpm -r typecheck
+      env: *stale-tree-fails
     # No test run here, deliberately (user decision, 2026-09-05): full suites
     # are CI's job, and running one at push time was the same work twice —
     # the dev loop already ran the nearest-layer tests for what changed, and
@@ -56,6 +68,7 @@ pre-push:
     # grows with the suite.
     lint:
       run: pnpm lint
+      env: *stale-tree-fails
     # A few seconds (4-4.5s wall, almost all of it vitest's transform), and it
     # is the only check anywhere that notices the mutation lane
     # going stale. The lane covers a LIST of modules, so a new one is simply
@@ -65,6 +78,7 @@ pre-push:
     # the diff that adds it, not for whoever reads the report months later.
     mutation-lane:
       run: pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts
+      env: *stale-tree-fails
     # `file-size-budget` used to be a command of its own here, pinned to a file
     # in `packages/mcp-server`. The guard moved to `tools/arch-lint/src/`,
     # where it belongs by every criterion below, and the command went with it:
@@ -112,5 +126,10 @@ pre-push:
     # here and how it was checked). Three interleaved plain/no-isolate pairs
     # of the whole project, load average 17-27 on 4 cores: CPU time
     # (user + sys) 102.1s -> 54.2s, wall 145.6s -> 65.8s.
+    #
+    # The JSON report beside the default one is for the run that fails once
+    # and passes on the retry: the terminal it failed in is gone by then, and
+    # the report is what is left to read. Under tmp/, which is gitignored.
     arch-lint:
-      run: pnpm vitest run --project arch-lint-node
+      run: pnpm vitest run --project arch-lint-node --reporter=default --reporter=json --outputFile.json=tmp/pre-push/arch-lint.json
+      env: *stale-tree-fails
