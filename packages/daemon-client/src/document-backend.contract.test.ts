@@ -51,6 +51,10 @@ interface Daemon {
    */
   routed: boolean
   refuseStreams: boolean
+  /** Whether the next stream open answers 503. */
+  failNextStream: boolean
+  /** Stream opens taken so far, refused ones included. */
+  streamOpens: number
   /** Whether the keeper commits a write of its own once it has served a snapshot. */
   writeAfterSnapshot: boolean
   /** How the stream fails to carry the workspace, when it does. */
@@ -93,12 +97,35 @@ async function snapshotAnswer(daemon: Daemon): Promise<Response> {
   return new Response(snapshot.slice().buffer as ArrayBuffer, { status: 200 })
 }
 
+/** The daemon's stream route: refused, failed or opened, as the harness has it set. */
+function streamAnswer(daemon: Daemon): Response {
+  daemon.streamOpens += 1
+  if (daemon.failNextStream) {
+    daemon.failNextStream = false
+    return new Response('{"title":"unavailable"}', { status: 503 })
+  }
+  if (daemon.refuseStreams) {
+    return new Response('{"title":"unauthorized"}', { status: 401 })
+  }
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        // A buffering proxy holds the small `ready` frame back, so no
+        // subscribe is ever sent on this stream.
+        if (daemon.unroutable !== 'silent') {
+          controller.enqueue(sseFrame('ready', { streamId: 'contract-stream' }))
+        }
+        daemon.stream = controller
+      },
+    }),
+    { status: 200 },
+  )
+}
+
 function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.includes('/api/sync/stream') && daemon.refuseStreams) {
-      return new Response('{"title":"unauthorized"}', { status: 401 })
-    }
+    if (url.includes('/api/sync/stream')) return streamAnswer(daemon)
     if (url.includes('/snapshot')) return snapshotAnswer(daemon)
     if (url.includes('/update') && daemon.refuseNextWrite !== null) {
       daemon.failNextSnapshot = daemon.refuseNextWrite.thenItsReadFails
@@ -121,21 +148,6 @@ function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
       }
       return new Response('{}', { status: 200 })
     }
-    if (url.includes('/api/sync/stream')) {
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            // A buffering proxy holds the small `ready` frame back, so no
-            // subscribe is ever sent on this stream.
-            if (daemon.unroutable !== 'silent') {
-              controller.enqueue(sseFrame('ready', { streamId: 'contract-stream' }))
-            }
-            daemon.stream = controller
-          },
-        }),
-        { status: 200 },
-      )
-    }
     // A file the canvas does not have. 404 is what the daemon answers.
     if (url.includes('/file/')) return new Response('not found', { status: 404 })
     return new Response('{}', { status: 200 })
@@ -155,13 +167,16 @@ function reproduces(delivered: readonly Uint8Array[], keeperDoc: LoroDoc): boole
   return replica.getText('t').toString() === keeperDoc.getText('t').toString()
 }
 
-function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
-  const daemon: Daemon = {
+/** A daemon with nothing armed. */
+function freshDaemon(snapshotLatencyMs: number): Daemon {
+  return {
     keeper: keeper(),
     sent: [],
     stream: null,
     routed: false,
     refuseStreams: false,
+    failNextStream: false,
+    streamOpens: 0,
     writeAfterSnapshot: false,
     unroutable: null,
     failNextSnapshot: false,
@@ -169,6 +184,10 @@ function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
     snapshotLatencyMs,
     failedReads: 0,
   }
+}
+
+function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
+  const daemon = freshDaemon(snapshotLatencyMs)
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
   return {
     backend,
@@ -180,6 +199,10 @@ function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
     },
     refuseAuth: () => {
       daemon.refuseStreams = true
+    },
+    streamOpens: () => daemon.streamOpens,
+    failsNextStreamOpen: () => {
+      daemon.failNextStream = true
     },
     keeperWrites: (live) => {
       if (live) keeperWrite(daemon)
