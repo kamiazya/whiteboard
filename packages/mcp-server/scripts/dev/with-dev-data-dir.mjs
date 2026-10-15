@@ -58,9 +58,16 @@ async function handOverIfRunning() {
   const daemon = running === null ? null : await assessRecordedDaemon(running)
   if (running === null || !daemon?.running) return
   const answering = daemon.answering ? '' : ' (busy: it did not answer its socket just now)'
+  // Still exit 0 for a built daemon: `pnpm dev` runs this under
+  // `concurrently --kill-others-on-fail`, and a refusal would take Vite down.
+  // What it must not do is call a build the dev daemon, since a source edit
+  // will never reach that process.
   console.error(
-    `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid})${answering} — ` +
-      'to run one in this terminal instead, `pnpm mcp:http:stop` first.',
+    running.launch === 'built'
+      ? `[with-dev-data-dir] the BUILT daemon (pid ${running.pid}, started by \`pnpm mcp:http\`) is running for ${env.WHITEBOARD_DATA_DIR}${answering}; ` +
+          'source edits will not reload it — to run the watch-mode dev daemon instead, `pnpm mcp:http:stop` first.'
+      : `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid})${answering} — ` +
+          'to run one in this terminal instead, `pnpm mcp:http:stop` first.',
   )
   exitReleasingLock(0)
 }
