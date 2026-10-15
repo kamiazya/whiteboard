@@ -21,7 +21,7 @@ import { Readable } from 'node:stream'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect } from 'vitest'
 import { parseDaemonRecord } from '../daemon/daemon-record.js'
-import { daemonRecordSchema } from '../daemon/daemon-record-schema.js'
+import { type DaemonRecordWrite, daemonRecordSchema } from '../daemon/daemon-record-schema.js'
 import { loadDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 import { captureLogsForTests } from './log.js'
@@ -90,7 +90,14 @@ describe('the server-mode record', () => {
 describe('the daemon record', () => {
   // ESRCH on every platform: no pid is this large.
   const DEAD_PID = 999_999_999
-  const recordArb = arbitraryForSchema(daemonRecordSchema)
+  // What a daemon writes always states its launch; a record without one is a
+  // reader's case only (daemon-registry.test.ts plants one directly).
+  const recordArb = fc
+    .tuple(
+      arbitraryForSchema(daemonRecordSchema),
+      fc.constantFrom(...daemonRecordSchema.shape.launch.unwrap().options),
+    )
+    .map(([record, launch]): DaemonRecordWrite => ({ ...record, launch }))
 
   fcTest.prop([recordArb], withDefaults({ numRuns: 100 }))(
     'reads back through both readers as what the daemon wrote',

@@ -58,6 +58,7 @@ describe('prepareDataDir: daemon version skew', () => {
     version: '0.0.0-older',
     startedAt: '2024-01-01T00:00:00.000Z',
     socketPath: '/fake/daemon.sock',
+    launch: 'source' as const,
     ...overrides,
   })
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { describeThrown } from '@kamiazya/whiteboard-model'
-import { type DaemonRecordWrite, daemonLaunchOfModule } from '../daemon/daemon-record-schema.js'
+import { daemonLaunchOfModule } from '../daemon/daemon-record-schema.js'
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { daemonSocketPath } from '../daemon/daemon-socket.js'
 import { describeEnvIssues } from '../shared/env-setting.js'
@@ -251,7 +251,7 @@ export async function main() {
         startedAt: running.getRuntimeStatus().startedAt,
         socketPath: running.socketPath,
         launch: daemonLaunchOfModule(import.meta.url),
-      } satisfies DaemonRecordWrite,
+      },
       dataDir,
     )
   }
