@@ -528,6 +528,15 @@ describe("the liveness verdict against the daemon's own", () => {
             weight: 4,
           },
           { arbitrary: fc.record({ ok: fc.boolean() }) as fc.Arbitrary<unknown>, weight: 1 },
+          // Not a whole runtime status, and a pid that may be no pid at all:
+          // the daemon reads only the pid, as the dev helper does.
+          {
+            arbitrary: fc.record({
+              ok: fc.boolean(),
+              pid: fc.constantFrom(RECORDED_PID, 8, 0, -1, 1.5),
+            }) as fc.Arbitrary<unknown>,
+            weight: 2,
+          },
           { arbitrary: fc.string().map((text) => `not json ${text}` as unknown), weight: 1 },
           { arbitrary: fc.constant(undefined as unknown), weight: 1 },
         ),
