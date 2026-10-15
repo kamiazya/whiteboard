@@ -94,13 +94,14 @@ async function tryCreate(lockPath: string): Promise<boolean> {
 // A data directory this process cannot create a file in cannot hold the lock
 // either; the migrations ran unlocked before the lock existed, so that is what
 // such a directory still gets, with a warning, rather than a refused startup.
+const cannotWriteHere = (err: unknown): boolean =>
+  isErrnoCode(err, 'EACCES') || isErrnoCode(err, 'EPERM') || isErrnoCode(err, 'EROFS')
+
 async function tryCreateOrSkip(lockPath: string): Promise<boolean> {
   try {
     return await tryCreate(lockPath)
   } catch (err) {
-    if (!isErrnoCode(err, 'EACCES') && !isErrnoCode(err, 'EPERM') && !isErrnoCode(err, 'EROFS')) {
-      throw err
-    }
+    if (!cannotWriteHere(err)) throw err
     log.warning({ lockPath, err }, 'cannot create the migration lock; migrating without it')
     return true
   }
@@ -109,13 +110,22 @@ async function tryCreateOrSkip(lockPath: string): Promise<boolean> {
 // Moves a judged-stale lock aside. `rename` succeeds for one of two racing
 // replacers only, and the moved file must still be the one judged — another
 // replacer may have moved that one and created its own in between — so a
-// different inode goes back with `link`, which never overwrites.
-async function replaceStale(lockPath: string, judged: { dev: number; ino: number }): Promise<void> {
+// different inode goes back with `link`, which never overwrites. A directory
+// that refuses the rename cannot take a new lock either, so it migrates
+// unlocked, as a directory that refuses the create does; any other failure is
+// thrown rather than retried at once, which would spin without a deadline.
+async function replaceStale(
+  lockPath: string,
+  judged: { dev: number; ino: number },
+): Promise<'retry' | 'unlocked'> {
   const aside = `${lockPath}.stale-${process.pid}-${Date.now()}`
   try {
     await rename(lockPath, aside)
-  } catch {
-    return
+  } catch (err) {
+    if (isErrnoCode(err, 'ENOENT')) return 'retry'
+    if (!cannotWriteHere(err)) throw err
+    log.warning({ lockPath, err }, 'cannot replace the stale migration lock; migrating without it')
+    return 'unlocked'
   }
   try {
     const moved = await stat(aside)
@@ -125,6 +135,7 @@ async function replaceStale(lockPath: string, judged: { dev: number; ino: number
   } finally {
     await unlink(aside).catch(() => {})
   }
+  return 'retry'
 }
 
 // Only while the lock still names this process, so a holder whose lock was
@@ -137,16 +148,19 @@ async function release(lockPath: string): Promise<void> {
   }
 }
 
-// One look at whoever holds the lock: null when it vanished or was replaced,
-// so the caller retries the create at once; else the live holder's pid.
-async function inspectHolder(lockPath: string): Promise<{ holderPid: number | null } | null> {
+// One look at whoever holds the lock: 'retry' when it vanished or was replaced,
+// so the caller retries the create at once; 'unlocked' when a stale one cannot
+// be moved; else the live holder's pid.
+async function inspectHolder(
+  lockPath: string,
+): Promise<{ holderPid: number | null } | 'retry' | 'unlocked'> {
   let text: string
   let judged: Awaited<ReturnType<typeof stat>>
   try {
     text = await readFile(lockPath, 'utf8')
     judged = await stat(lockPath)
   } catch (err) {
-    if (isErrnoCode(err, 'ENOENT')) return null
+    if (isErrnoCode(err, 'ENOENT')) return 'retry'
     throw err
   }
   const verdict = await judgeHolder(text, judged.mtimeMs)
@@ -155,8 +169,7 @@ async function inspectHolder(lockPath: string): Promise<{ holderPid: number | nu
     { lockPath, holderPid: verdict.holderPid, reason: verdict.reason },
     'replacing a migration lock whose holder is gone',
   )
-  await replaceStale(lockPath, judged)
-  return null
+  return replaceStale(lockPath, judged)
 }
 
 /**
@@ -176,7 +189,8 @@ export async function withMigrationLock<T>(
   let announced = false
   while (!(await tryCreateOrSkip(lockPath))) {
     const holder = await inspectHolder(lockPath)
-    if (holder === null) continue
+    if (holder === 'unlocked') return fn()
+    if (holder === 'retry') continue
     if (Date.now() >= deadline) {
       throw new Error(
         `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for process ` +
