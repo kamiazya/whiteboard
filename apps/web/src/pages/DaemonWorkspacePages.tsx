@@ -19,7 +19,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { LazyPageFallback } from '../components/LazyPageFallback.js'
 import { type WorkspaceRoute, workspaceRoutePath } from '../lib/app-routes.js'
 
-// Lazy so the daemon stack (DaemonBackend, api client) stays out of the entry
+// Lazy so the daemon stack (SseBackend, api client) stays out of the entry
 // chunk — only a session with a daemon pays for it; pure browser sessions
 // never import it, keeping that entry under the bundle-size budget.
 const DaemonDocumentPage = lazy(() =>

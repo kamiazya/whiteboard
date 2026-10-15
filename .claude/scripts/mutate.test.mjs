@@ -5,11 +5,20 @@
 // makes about config regressing without a sound.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { isolatedGitEnv } from './git-test-utils.mjs'
 
 const SCRIPT = join(import.meta.dirname, 'mutate.mjs')
 const ORIGINAL = 'keep me\nthe exact line\nkeep me too\n'
@@ -25,7 +34,10 @@ function withFixture(run) {
   }
 }
 
-const mutate = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' })
+// mutate.mjs runs git to find where its lock goes, so it gets the scratch-repo
+// environment too: a hook's exported GIT_DIR would otherwise answer for it.
+const mutate = (args, env = isolatedGitEnv()) =>
+  spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env })
 
 test('exits 3 and names the needle when the substitution matches nothing', () => {
   withFixture((file) => {
@@ -204,8 +216,19 @@ test('prints where the backup is before the command runs', () => {
 // MUTATED text as its "before", and whichever restored last wrote that back, so
 // the tree stayed mutated with no helper alive. A second run must refuse before
 // it reads anything.
-test('refuses a second run on a file another live run is mutating', async () => {
+async function assertSecondRunRefused({
+  inRepo = false,
+  secondTmpdir = null,
+  secondExtraEnv = null,
+} = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'mutate-guard-'))
+  if (inRepo) {
+    const init = spawnSync('git', ['init', '--quiet', dir], {
+      encoding: 'utf8',
+      env: isolatedGitEnv(),
+    })
+    assert.equal(init.status, 0, init.stderr)
+  }
   const file = join(dir, 'subject.txt')
   const started = join(dir, 'first.started')
   const release = join(dir, 'first.release')
@@ -233,10 +256,25 @@ test('refuses a second run on a file another live run is mutating', async () => 
 
     // A needle the first mutation leaves intact, so only the lock can refuse.
     const mark = `require('node:fs').writeFileSync(${JSON.stringify(secondRan)},'')`
-    const second = mutate([file, 'keep me too', 'other', '--', process.execPath, '-e', mark])
+    const secondEnv =
+      secondTmpdir === null && secondExtraEnv === null
+        ? undefined
+        : isolatedGitEnv({
+            ...(secondTmpdir === null ? {} : { TMPDIR: secondTmpdir }),
+            ...secondExtraEnv?.(),
+          })
+    const second = mutate(
+      [file, 'keep me too', 'other', '--', process.execPath, '-e', mark],
+      secondEnv,
+    )
     assert.equal(second.status, 2, second.stderr)
     assert.match(second.stderr, new RegExp(`pid ${first.pid}\\b`))
     assert.ok(second.stderr.includes(file), second.stderr)
+    if (inRepo) {
+      // The clone's own git dir, not the system-temp fallback.
+      const lockDir = join(realpathSync(dir), '.git', 'mutate-locks')
+      assert.ok(second.stderr.includes(lockDir), second.stderr)
+    }
     assert.equal(existsSync(secondRan), false, 'the refused run still ran its command')
 
     writeFileSync(release, '')
@@ -246,6 +284,42 @@ test('refuses a second run on a file another live run is mutating', async () => 
     // A failed assertion above must not leave the blocked run alive.
     first?.kill('SIGTERM')
     rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+test('refuses a second run on a file another live run is mutating', () => assertSecondRunRefused())
+
+// `os.tmpdir()` follows $TMPDIR, and a private TMPDIR per run is routine here,
+// so a lock under it is a lock per (file, TMPDIR): both runs mutate, and the
+// later restore writes the earlier mutation back.
+for (const inRepo of [true, false]) {
+  test(`refuses a second run under a different TMPDIR (${inRepo ? 'in a git repo' : 'outside one'})`, async () => {
+    const otherTmp = mkdtempSync(join(tmpdir(), 'mutate-other-tmp-'))
+    try {
+      await assertSecondRunRefused({ inRepo, secondTmpdir: otherTmp })
+    } finally {
+      rmSync(otherTmp, { recursive: true, force: true })
+    }
+  })
+}
+
+// A git hook exports GIT_DIR for the repository it runs in, and `rev-parse
+// --git-common-dir` answers from it rather than from the file's own clone. A
+// run inheriting one would claim a lock in another repository.
+test("refuses a second run that inherited another repository's GIT_DIR", async () => {
+  const other = mkdtempSync(join(tmpdir(), 'mutate-other-repo-'))
+  try {
+    const init = spawnSync('git', ['init', '--quiet', other], {
+      encoding: 'utf8',
+      env: isolatedGitEnv(),
+    })
+    assert.equal(init.status, 0, init.stderr)
+    await assertSecondRunRefused({
+      inRepo: true,
+      secondExtraEnv: () => ({ GIT_DIR: join(other, '.git') }),
+    })
+  } finally {
+    rmSync(other, { recursive: true, force: true })
   }
 })
 

@@ -32,6 +32,8 @@ const snapshotHits: string[] = []
 /** Docs whose snapshot fetch answers 503 while listed — the outage case. */
 const failingSnapshots = new Set<string>()
 const updateWrites: { doc: string; body: Uint8Array }[] = []
+/** Every read of a per-document snapshot, which nothing in the worker has a use for. */
+const perDocumentSnapshotHits: string[] = []
 /** Docs whose update write answers 503 while listed — a daemon briefly unable to take writes. */
 const failingWrites = new Set<string>()
 
@@ -57,20 +59,20 @@ const server = setupServer(
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/update`, () =>
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/update`, () =>
     HttpResponse.json({ ok: true }),
   ),
-  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
-    if (failingWrites.has(`${String(params.workspaceId)}/${String(params.path)}`))
+  http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
+    if (failingWrites.has(`workspace:${String(params.workspaceId)}`))
       return HttpResponse.json({ title: 'busy' }, { status: 503 })
     updateWrites.push({
-      doc: `${String(params.workspaceId)}/${String(params.path)}`,
+      doc: `workspace:${String(params.workspaceId)}`,
       body: new Uint8Array(await request.arrayBuffer()),
     })
     return HttpResponse.json({ ok: true })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
-    const doc = `${String(params.workspaceId)}/${String(params.path)}`
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
+    const doc = `workspace:${String(params.workspaceId)}`
     snapshotHits.push(doc)
     if (failingSnapshots.has(doc)) return HttpResponse.json({ title: 'boom' }, { status: 503 })
     const bytes = snapshotByDoc.get(doc)
@@ -80,6 +82,10 @@ const server = setupServer(
       headers: { 'Content-Type': 'application/octet-stream' },
     })
   }),
+  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
+    perDocumentSnapshotHits.push(`${String(params.workspaceId)}/${String(params.path)}`)
+    return HttpResponse.json({ title: 'not this route' }, { status: 500 })
+  }),
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
@@ -88,11 +94,13 @@ afterAll(() => server.close())
 const decode = (encoded: string) => base64ToBytes(encoded) as Uint8Array
 
 let docSeq = 0
-const nextDoc = () => `seed-ws/doc-${++docSeq}`
+const nextDoc = () => `workspace:seed-ws-doc-${++docSeq}`
 
 let port: MessagePort
 /** Every write-state the worker told this port, in order. */
 const writeStates: { doc: string; landed: boolean }[] = []
+/** Documents the worker has told this port are routed. */
+const routedDocs = new Set<string>()
 beforeAll(() => {
   const worker = new SharedWorker(new URL('./sse-shared-worker.ts', import.meta.url), {
     type: 'module',
@@ -103,12 +111,32 @@ beforeAll(() => {
     const data = e.data as { type?: string; doc?: string; landed?: boolean }
     if (data.type === 'write-state' && data.doc !== undefined && data.landed !== undefined)
       writeStates.push({ doc: data.doc, landed: data.landed })
+    const status = e.data as { type?: string; doc?: string; connected?: boolean }
+    if (status.type === 'status' && status.doc !== undefined) {
+      if (status.connected) routedDocs.add(status.doc)
+      else routedDocs.delete(status.doc)
+    }
   })
   port.postMessage({ type: 'init', baseUrl: BASE })
 })
 
 const until = (predicate: () => boolean) =>
   vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 15_000, interval: 25 })
+
+/**
+ * Subscribe, and wait until the worker says the stream carries the document:
+ * a tab reads its state only then, so a case asking sooner would be asking
+ * in an order no tab does.
+ */
+async function subscribed(doc: string): Promise<void> {
+  port.postMessage({ type: 'subscribe', doc })
+  await until(() => routedDocs.has(doc))
+}
+
+function unsubscribe(doc: string): void {
+  routedDocs.delete(doc)
+  port.postMessage({ type: 'unsubscribe', doc })
+}
 
 function requestSnapshot(doc: string): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
@@ -132,7 +160,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     existing.commit()
     snapshotByDoc.set(doc, existing.export({ mode: 'snapshot' }))
 
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     const forked = new LoroDoc()
     forked.import(await requestSnapshot(doc))
     expect(forked.getMap('m').get('history')).toBe('before-the-worker')
@@ -144,7 +172,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     // snapshot on every request would turn each open into the daemon round
     // trip the replica exists to remove.
     const doc = nextDoc()
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     const first = new LoroDoc()
     first.import(await requestSnapshot(doc))
     expect(first.getMap('m').size).toBe(0)
@@ -166,19 +194,19 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     before.commit()
     snapshotByDoc.set(doc, before.export({ mode: 'snapshot' }))
 
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     const first = new LoroDoc()
     first.import(await requestSnapshot(doc))
     expect(first.getMap('m').get('phase')).toBe('before-gap')
 
-    port.postMessage({ type: 'unsubscribe', doc })
+    unsubscribe(doc)
     // The daemon-side write that happens while nobody is subscribed.
     const after = before.fork()
     after.getMap('m').set('written-in-gap', 'yes')
     after.commit()
     snapshotByDoc.set(doc, after.export({ mode: 'snapshot' }))
 
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     const reopened = new LoroDoc()
     reopened.import(await requestSnapshot(doc))
     expect(reopened.getMap('m').get('written-in-gap')).toBe('yes')
@@ -196,7 +224,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     seeded.commit()
     snapshotByDoc.set(doc, seeded.export({ mode: 'snapshot' }))
 
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     await requestSnapshot(doc)
 
     // An independent peer's edit: its ops carry no deps on the seed, so a
@@ -223,6 +251,20 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     expect(delta.getMap('m').get('phase')).toBeUndefined()
   })
 
+  it('subscribing a per-document key makes no snapshot request', async () => {
+    // A per-document subscription carries text alone — binary frames travel
+    // on the workspace key — so a replica of it would cost a snapshot read
+    // at open and at every reconnect, and a resident CRDT nobody reads.
+    const doc = 'seed-ws/plan'
+    await subscribed(doc)
+    // Any seed the subscribe queued runs ahead of this answer on the replica
+    // queue, so by the time it arrives its read has been made or never will.
+    await requestSnapshot(nextDoc())
+
+    expect(perDocumentSnapshotHits).toEqual([])
+    unsubscribe(doc)
+  })
+
   it('retries the seed after a transport failure instead of remembering it', async () => {
     // A 404 is an answer; a 503 or a dropped connection is not. Remembering
     // a failed fetch as "seeded" would hand every later tab an empty
@@ -236,7 +278,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     snapshotByDoc.set(doc, content.export({ mode: 'snapshot' }))
     failingSnapshots.add(doc)
 
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     const during = new LoroDoc()
     during.import(await requestSnapshot(doc))
     expect(during.getMap('m').get('survives')).toBeUndefined()
@@ -261,7 +303,7 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     failingSnapshots.add(doc)
     failingWrites.add(doc)
 
-    port.postMessage({ type: 'subscribe', doc })
+    await subscribed(doc)
     await requestSnapshot(doc)
     const tab = new LoroDoc()
     tab.getMap('m').set('edit', 'before-seed')

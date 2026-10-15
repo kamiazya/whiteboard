@@ -37,8 +37,7 @@ const snapshotDownFor = new Set<string>()
 const writeAttempts = new Map<string, number>()
 const snapshotAttempts = new Map<string, number>()
 
-const docOf = (params: Record<string, unknown>) =>
-  `${String(params.workspaceId)}/${String(params.path)}`
+const docOf = (params: Record<string, unknown>) => `workspace:${String(params.workspaceId)}`
 const bump = (counts: Map<string, number>, doc: string) =>
   counts.set(doc, (counts.get(doc) ?? 0) + 1)
 
@@ -62,13 +61,13 @@ const server = setupServer(
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
     const doc = docOf(params)
     bump(snapshotAttempts, doc)
     if (snapshotDownFor.has(doc)) return new HttpResponse('restarting', { status: 503 })
     return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
   }),
-  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, ({ params }) => {
+  http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, ({ params }) => {
     const doc = docOf(params)
     bump(writeAttempts, doc)
     if (unavailableFor.has(doc)) return new HttpResponse('restarting', { status: 503 })
@@ -86,7 +85,7 @@ afterAll(() => server.close())
 afterEach(() => vi.useRealTimers())
 
 let docSeq = 0
-const nextDoc = () => `backoff-ws/doc-${++docSeq}`
+const nextDoc = () => `workspace:backoff-ws-doc-${++docSeq}`
 
 let port: MessagePort
 beforeAll(() => {

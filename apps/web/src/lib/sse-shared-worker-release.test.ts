@@ -68,8 +68,8 @@ const server = setupServer(
     subscribeBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
-    const doc = `${String(params.workspaceId)}/${String(params.path)}`
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
+    const doc = `workspace:${String(params.workspaceId)}`
     snapshotFetches.set(doc, (snapshotFetches.get(doc) ?? 0) + 1)
     const content = daemonContent.get(doc)
     return content === undefined
@@ -79,8 +79,8 @@ const server = setupServer(
           headers: { 'Content-Type': 'application/octet-stream' },
         })
   }),
-  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
-    const doc = `${String(params.workspaceId)}/${String(params.path)}`
+  http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
+    const doc = `workspace:${String(params.workspaceId)}`
     writeAttempts.set(doc, (writeAttempts.get(doc) ?? 0) + 1)
     if (refuseWrites) return new HttpResponse('restarting', { status: 503 })
     const hold = holdNextWrite
@@ -104,7 +104,7 @@ const until = (predicate: () => boolean) =>
   vi.waitFor(() => expect(predicate()).toBe(true), { timeout: 15_000, interval: 25 })
 
 let docSeq = 0
-const nextDoc = () => `release-ws/doc-${++docSeq}`
+const nextDoc = () => `workspace:release-ws-doc-${++docSeq}`
 
 const streamIdFor = (doc: string): string | undefined => {
   const body = subscribeBodies.find((b) => b.includes(`"subscribe":["${doc}"]`))

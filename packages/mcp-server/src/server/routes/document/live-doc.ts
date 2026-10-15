@@ -45,8 +45,11 @@ async function answeringWriteRefusal(
 // evict-on-failure — lives in server-core's applyDocumentUpdate.
 //
 // No app surface writes through the per-document update: the editors sync the
-// workspace record, and a duplicate is its own route. It stays as the one HTTP
-// way to write ONE document's content by path, which the packaged server-mode
+// workspace record, and a duplicate is its own route. Nor does the sync path
+// read the per-document snapshot — the SharedWorker keeps a replica only for
+// a `workspace:` key; its readers are one-off reads by path (the web app's
+// file adapter and API client). It stays as the one HTTP way to write ONE
+// document's content by path, which the packaged server-mode
 // backup smoke, the sync-update cost measure and the daemon's own route tests
 // drive. Retiring it means moving those onto the workspace-document route
 // first, together with `sse-stream-hub`'s per-document `canvasDocUrl` branch.

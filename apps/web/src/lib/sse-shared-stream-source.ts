@@ -135,10 +135,10 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
     const parsed = sseWorkerEventSchema.safeParse(e.data)
     if (!parsed.success) return
     const evt = parsed.data
-    // Answered ahead of the listener gate below: the backend snapshots BEFORE
-    // it subscribes — the seed must exist before the stream's deltas land on
-    // it — so at reply time the document routinely has no listener yet, and
-    // gating this on one would deadlock every first open.
+    // Answered ahead of the listener gate below: a snapshot answers a
+    // request, not a subscription, and a caller may ask for one with no
+    // listener at all — gating it on one would leave that caller waiting
+    // forever.
     if (evt.type === 'snapshot') {
       resolveSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
       return

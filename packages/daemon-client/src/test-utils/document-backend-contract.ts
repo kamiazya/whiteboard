@@ -64,6 +64,14 @@ export interface DocumentBackendHarness {
    */
   keeperWrites?(live: boolean): void
   /**
+   * Arm the keeper to commit a write of its own the moment it has served its
+   * next snapshot — an agent's tool call landing while a page is still
+   * opening. Like any write it is broadcast only to the streams the daemon
+   * routes this document into at that moment. Omitted, with `caughtUp`, by an
+   * implementation with no stream to be routed.
+   */
+  keeperWritesAfterNextSnapshot?(): void
+  /**
    * Whether the bytes this backend delivered — the snapshot and every
    * update, in delivery order — reproduce the keeper's current state when
    * applied. False for a frame left waiting on history it builds on.
@@ -132,6 +140,7 @@ export function documentBackendContract(
   lifecycleCases(create)
   transportCases(create)
   catchUpCases(create)
+  routingGapCases(create)
   upstreamDeliveryCases(create)
 
   it('never throws on a control message sent before connecting', async () => {
@@ -151,8 +160,9 @@ function lifecycleCases(
 ): void {
   it('seeds the document and reports the connection', async () => {
     // Deliberately no ordering assertion between the two. The implementations
-    // genuinely disagree — the SSE backend fetches the snapshot before it
-    // subscribes, while a store-backed one reports its connection first — and
+    // genuinely disagree — the SSE backend reports its connection after the
+    // snapshot it reads once routed, while a store-backed one reports its
+    // connection first — and
     // the port has never specified which. Pinning one here would silently make the other's behaviour a bug.
     const h = await create()
     const rec = recorder()
@@ -273,6 +283,67 @@ function catchUpCases(
     await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
 
     // And the next live frame applies, rather than waiting on the gap.
+    keeperWrites(true)
+    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    // Merged, never replacing: a caller rebuilds its document from a
+    // snapshot, which would cost the page its undo history and remount the
+    // editor at every reconnect.
+    expect(rec.calls.filter((c) => c === 'snapshot')).toEqual(['snapshot'])
+    h.backend.disconnect()
+    h.cleanup()
+  })
+}
+
+/**
+ * What the keeper wrote between serving the state a caller starts from and
+ * routing the caller's stream. The stream replays nothing, so state read
+ * before the daemon routes the document leaves a write in between in no
+ * frame, and a CRDT holds every later frame back for it while the page reads
+ * connected — at every open, and again at every reconnect.
+ */
+function routingGapCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  it('delivers a keeper write committed after the snapshot but before the subscription', {
+    timeout: 20_000,
+  }, async () => {
+    const h = await create()
+    if (!h.keeperWritesAfterNextSnapshot || !h.keeperWrites || !h.caughtUp) {
+      h.cleanup()
+      return
+    }
+    const { keeperWrites, caughtUp } = h
+    h.keeperWritesAfterNextSnapshot()
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+
+    keeperWrites(true)
+    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    h.backend.disconnect()
+    h.cleanup()
+  })
+
+  // Polled steps behind a production reconnect backoff.
+  it('delivers a keeper write committed after the catch-up snapshot but before the re-subscription', {
+    timeout: 20_000,
+  }, async () => {
+    const h = await create()
+    if (!h.dropTransport || !h.keeperWritesAfterNextSnapshot || !h.keeperWrites || !h.caughtUp) {
+      h.cleanup()
+      return
+    }
+    const { keeperWrites, caughtUp } = h
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
+
+    h.keeperWritesAfterNextSnapshot()
+    h.dropTransport()
+    await vi.waitFor(
+      () => expect(rec.calls.filter((c) => c === 'connected').length).toBeGreaterThan(1),
+      { timeout: 5000 },
+    )
     keeperWrites(true)
     await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
     h.backend.disconnect()

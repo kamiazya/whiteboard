@@ -33,21 +33,43 @@ const BASE = 'http://127.0.0.1:3099'
 
 /** Each case's daemon-side document, by workspace id. */
 const keepers = new Map<string, LoroDoc>()
+/** Workspaces whose keeper commits a write of its own once it has served a snapshot. */
+const writeAfterSnapshot = new Set<string>()
+/**
+ * The keys the open stream carries: added when a subscribe for them is taken,
+ * cleared with the stream, as the daemon's routing is. A frame reaches only
+ * a routed key, and nothing is replayed.
+ */
+const routed = new Set<string>()
+const keeperBroadcasts = new Map<string, (live: boolean) => void>()
 let pushFrame: ((frame: string) => void) | null = null
 let endStream: (() => void) | null = null
 
 const sseFrame = (event: string, data: unknown) =>
   `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 
+/**
+ * The daemon taking a subscribe after the request's own latency, so a read
+ * the client sends beside it is served before the routing exists — the
+ * window a real network leaves open.
+ */
+async function routeAfter(latencyMs: number, docs: readonly string[]): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, latencyMs))
+  if (pushFrame === null) return
+  for (const doc of docs) routed.add(doc)
+}
+
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
     const enc = new TextEncoder()
+    routed.clear()
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(enc.encode(sseFrame('ready', { streamId: 'worker-contract' })))
         pushFrame = (frame) => controller.enqueue(enc.encode(frame))
         endStream = () => {
           pushFrame = null
+          routed.clear()
           controller.close()
         }
       },
@@ -57,12 +79,20 @@ const server = setupServer(
       headers: { 'Content-Type': 'text/event-stream' },
     })
   }),
-  http.post(`${BASE}/api/sync/subscribe`, () => HttpResponse.json({ ok: true })),
+  http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
+    const body = (await request.json()) as { subscribe?: string[]; unsubscribe?: string[] }
+    for (const doc of body.unsubscribe ?? []) routed.delete(doc)
+    await routeAfter(20, body.subscribe ?? [])
+    return HttpResponse.json({ ok: true })
+  }),
   http.post(`${BASE}/api/sync/message`, () => HttpResponse.json({ ok: true })),
   http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
-    const keeper = keepers.get(String(params.workspaceId))
+    const workspaceId = String(params.workspaceId)
+    const keeper = keepers.get(workspaceId)
     if (!keeper) return HttpResponse.json({ title: 'not found' }, { status: 404 })
-    return new HttpResponse(keeper.export({ mode: 'snapshot' }).slice().buffer as ArrayBuffer, {
+    const snapshot = keeper.export({ mode: 'snapshot' })
+    if (writeAfterSnapshot.delete(workspaceId)) keeperBroadcasts.get(workspaceId)?.(true)
+    return new HttpResponse(snapshot.slice().buffer as ArrayBuffer, {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },
     })
@@ -104,7 +134,7 @@ function reproduces(delivered: readonly Uint8Array[], keeper: LoroDoc): boolean 
   return replica.getText('t').toString() === keeper.getText('t').toString()
 }
 
-/** The keeper's own writes, broadcast on the open stream when `live`. */
+/** The keeper's own writes, broadcast on the open stream when `live` and the stream carries them. */
 function keeperWriter(workspaceId: string, keeper: LoroDoc): (live: boolean) => void {
   let broadcast = keeper.oplogVersion()
   let seq = 0
@@ -115,8 +145,9 @@ function keeperWriter(workspaceId: string, keeper: LoroDoc): (live: boolean) => 
     const update = keeper.export({ mode: 'update', from: broadcast })
     broadcast = keeper.oplogVersion()
     if (!live) return
-    const frame = { doc: `workspace:${workspaceId}`, update: bytesToBase64(update) }
-    pushFrame?.(sseFrame('update', frame))
+    const doc = `workspace:${workspaceId}`
+    if (!routed.has(doc)) return
+    pushFrame?.(sseFrame('update', { doc, update: bytesToBase64(update) }))
   }
 }
 
@@ -130,10 +161,8 @@ async function harness(): Promise<DocumentBackendHarness> {
   keeper.getText('t').insert(0, 'seed')
   keeper.commit()
   keepers.set(workspaceId, keeper)
-  // Seeded before the case connects, the way a second tab finds it: the
-  // contract's settle is sized for a connect answered from memory, not for a
-  // daemon round trip through a worker on a loaded machine.
-  await source.snapshot(`workspace:${workspaceId}`)
+  const keeperWrites = keeperWriter(workspaceId, keeper)
+  keeperBroadcasts.set(workspaceId, keeperWrites)
   // The worker's one stream outlives the case that dropped it, and reopens
   // only while something subscribes. A claim of the harness's own, held for
   // the case, brings it back up, so every case starts from a transport that is.
@@ -157,7 +186,10 @@ async function harness(): Promise<DocumentBackendHarness> {
         landed: () => keeper.getMap('tab').get('edit') === workspaceId,
       }
     },
-    keeperWrites: keeperWriter(workspaceId, keeper),
+    keeperWrites,
+    keeperWritesAfterNextSnapshot: () => {
+      writeAfterSnapshot.add(workspaceId)
+    },
     caughtUp: (delivered) => reproduces(delivered, keeper),
     // The worker outlives every case by design; disconnecting releases this
     // case's claims, and its workspace id keeps its traffic apart.

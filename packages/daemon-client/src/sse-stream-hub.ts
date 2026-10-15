@@ -155,17 +155,21 @@ export interface DocListener {
   onUpdate: (bytes: Uint8Array) => void
   onMessage: (raw: string) => void
   /**
-   * Whether a stream is currently carrying this document.
+   * Whether the daemon routes this document into the open stream: `true` only
+   * once it has ANSWERED the subscribe for it on that stream, `false` from the
+   * moment the stream drops or the daemon refuses the document.
    *
    * A subscriber that is only told about frames cannot distinguish "nothing
    * has changed" from "nothing is arriving", so a dropped stream looks exactly
    * like a quiet one and the UI keeps reporting a connection that is gone.
    * Optional because a caller that only applies updates has no use for it.
    *
-   * Nothing is replayed across a drop: `true` after `false` means whatever
-   * was written in between reached no frame, and a subscriber that keeps
-   * state asks `snapshot` again — the worker for its replica, `SseBackend`
-   * for its page.
+   * Routed, not merely open, because the stream replays nothing: a frame
+   * reaches only the streams routed when it is written, and every later
+   * frame builds on it. State read before `true` can miss a write that no
+   * frame will ever carry, so a subscriber that keeps state reads it AFTER
+   * each `true` — the first one to start from, and every one that follows a
+   * drop (`routingTransitions`) to catch up on what the gap took.
    */
   onConnectionChange?: (connected: boolean) => void
   /**
@@ -193,6 +197,51 @@ export interface DocListener {
    * worker, since the page holds no credential of its own to renew.
    */
   onAuthRefused?: () => void
+}
+
+/**
+ * Reads `onConnectionChange` the way a subscriber that keeps state has to:
+ * `first` on the first `true`, when the state to start from can be read;
+ * `resumed` on a `true` that follows a `false` that followed a `true`, when
+ * whatever the gap took has to be read again. A `false` before the first
+ * `true` is not a drop — a subscriber joining before the document is routed
+ * is told `false` first — and a `true` repeated without a `false` between
+ * missed nothing.
+ */
+export function routingTransitions(on: {
+  first?: () => void
+  resumed: () => void
+}): (connected: boolean) => void {
+  let everRouted = false
+  let dropped = false
+  return (connected) => {
+    if (!connected) {
+      dropped = everRouted
+      return
+    }
+    if (!everRouted) {
+      everRouted = true
+      on.first?.()
+      return
+    }
+    if (!dropped) return
+    dropped = false
+    on.resumed()
+  }
+}
+
+/**
+ * One subscribed document. `ready` and `routed` live beside the listeners
+ * rather than in sets of their own so neither can outlive the subscription it
+ * describes: releasing a document is a single delete, with nothing left to
+ * forget.
+ */
+interface DocEntry {
+  listeners: Set<DocListener>
+  /** Declared `client_ready`, which every new stream has to be told again. */
+  ready: boolean
+  /** The daemon has answered a subscribe for it on the stream that is open. */
+  routed: boolean
 }
 
 /** The two answers that mean the credential, not the connection, is the problem. */
@@ -297,27 +346,17 @@ function parseFrame<T extends z.ZodTypeAny>(schema: T, data: string): z.infer<T>
 
 export class SseStreamHub implements SseStreamSource {
   private readonly options: SseStreamHubOptions
-  /**
-   * One record per document. `ready` lives beside the listeners rather than in
-   * a set of its own so it cannot outlive the subscription it describes:
-   * releasing a document is a single delete, with nothing left to forget.
-   */
-  private readonly docs = new Map<string, { listeners: Set<DocListener>; ready: boolean }>()
+  private readonly docs = new Map<string, DocEntry>()
   private abort: AbortController | null = null
   /** Minted by the daemon and delivered on the stream itself, so it exists only
    *  between a stream opening and that stream ending. */
   private streamId: string | null = null
+  /** Counts the streams that have opened, so an answer can tell which one it was asked on. */
+  private streamSeq = 0
   private started = false
   private closed = false
   /** Set by a 401/403; the reconnect loop halts on it for this hub's life. */
   private authRefused = false
-  /**
-   * Documents the daemon refused to follow on the stream that is open — a
-   * workspace the credential no longer enters, or past the stream's limit.
-   * Kept so a subscriber joining later is told the truth rather than the
-   * stream's liveness, and forgotten with the stream it describes.
-   */
-  private readonly unfollowed = new Set<string>()
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryResolve: (() => void) | null = null
 
@@ -333,15 +372,15 @@ export class SseStreamHub implements SseStreamSource {
   subscribe(doc: string, listener: DocListener): () => void {
     let entry = this.docs.get(doc)
     if (!entry) {
-      entry = { listeners: new Set(), ready: false }
+      entry = { listeners: new Set(), ready: false, routed: false }
       this.docs.set(doc, entry)
       void this.follow([doc])
     }
     entry.listeners.add(listener)
-    // Announced on transitions alone, liveness would never reach anyone who
-    // joins a stream that is already open — a second canvas in the same tab
-    // would show an unknown connection for as long as nothing went wrong.
-    listener.onConnectionChange?.(this.streamId !== null && !this.unfollowed.has(doc))
+    // Announced on transitions alone, routing would never reach anyone who
+    // joins a document that is already routed — a second canvas in the same
+    // tab would show an unknown connection for as long as nothing went wrong.
+    listener.onConnectionChange?.(entry.routed)
     void this.start()
 
     return () => {
@@ -353,7 +392,6 @@ export class SseStreamHub implements SseStreamSource {
       // here and keep declaring every reconnected stream ready for a canvas
       // nobody is watching.
       this.docs.delete(doc)
-      this.unfollowed.delete(doc)
       void this.send({ unsubscribe: [doc] })
     }
   }
@@ -455,13 +493,16 @@ export class SseStreamHub implements SseStreamSource {
     }
   }
 
-  private async send(body: Omit<SyncSubscribeRequest, 'streamId'>): Promise<number | null> {
+  private async send(
+    body: Omit<SyncSubscribeRequest, 'streamId'>,
+    streamId = this.streamId,
+  ): Promise<number | null> {
     // Same as sendMessage: with no stream there is nothing to address. The full
     // set is announced when one opens, so an early subscribe is not lost.
-    if (this.streamId === null) return null
+    if (streamId === null) return null
     // Best effort: a dropped subscribe is re-sent when the stream reconnects.
     return await this.post(syncSubscribeApiUrl(), {
-      streamId: this.streamId,
+      streamId,
       ...body,
     } satisfies SyncSubscribeRequest)
   }
@@ -476,8 +517,14 @@ export class SseStreamHub implements SseStreamSource {
    * sync for every unrelated document, and a count past the stream's limit
    * ends it for all of them. Split this way a refusal costs exactly the
    * documents it concerns, and those are told.
+   *
+   * A document's subscribers hear it is routed only from the answer, and only
+   * while the stream it was asked on is still the open one: an answer for a
+   * stream that has since dropped speaks for a routing the daemon forgot.
    */
   private async follow(docs: readonly string[]): Promise<void> {
+    const { streamId, streamSeq } = this
+    if (streamId === null) return
     const byWorkspace = new Map<string, string[]>()
     for (const doc of docs) {
       const workspaceId = workspaceHandleOfSyncKey(doc) ?? ''
@@ -486,10 +533,42 @@ export class SseStreamHub implements SseStreamSource {
     for (const group of byWorkspace.values()) {
       for (let from = 0; from < group.length; from += MAX_DOCS_PER_STREAM) {
         const chunk = group.slice(from, from + MAX_DOCS_PER_STREAM)
-        const status = await this.send({ subscribe: chunk })
-        if (status !== null && (status < 200 || status >= 300)) this.refuse(status, chunk)
+        if (!(await this.followChunk(chunk, streamId, streamSeq))) return
       }
     }
+  }
+
+  /** One subscribe request and what its answer says; `false` once the stream it was asked on is over. */
+  private async followChunk(
+    chunk: readonly string[],
+    streamId: string,
+    streamSeq: number,
+  ): Promise<boolean> {
+    const asked = chunk.map((doc) => this.docs.get(doc))
+    const status = await this.send({ subscribe: [...chunk] }, streamId)
+    if (this.streamId === null || this.streamSeq !== streamSeq) return false
+    if (status === null) {
+      // Unanswered, so whether the daemon routes these is unknown, and their
+      // subscribers would wait on a routing nobody re-asks for. A new stream
+      // re-asks for everything.
+      this.abort?.abort()
+      return false
+    }
+    if (status >= 200 && status < 300) this.announceRouted(chunk, asked)
+    else this.refuse(status, chunk)
+    return true
+  }
+
+  /** Tell each document's subscribers, once, that the daemon now routes it. */
+  private announceRouted(docs: readonly string[], asked: readonly (DocEntry | undefined)[]): void {
+    docs.forEach((doc, i) => {
+      const entry = this.docs.get(doc)
+      // A document released and subscribed again meanwhile is a new entry,
+      // and its own subscribe answers for it.
+      if (entry === undefined || entry !== asked[i] || entry.routed) return
+      entry.routed = true
+      this.announceTo(entry, true)
+    })
   }
 
   /**
@@ -499,8 +578,8 @@ export class SseStreamHub implements SseStreamSource {
    * to its subscriber. The stream itself stays: it still carries the rest.
    */
   private refuse(status: number, docs: readonly string[]): void {
-    for (const doc of docs) this.unfollowed.add(doc)
     const entries = docs.map((doc) => this.docs.get(doc))
+    for (const entry of entries) if (entry) entry.routed = false
     if (isAuthRefusal(status)) {
       this.announceAuthRefused(entries)
       return
@@ -557,6 +636,9 @@ export class SseStreamHub implements SseStreamSource {
     }
 
     const reader = res.body.getReader()
+    // Aborting the request ends a read already waiting only where the body
+    // honours the signal; cancelling the reader ends it everywhere.
+    abort.signal.addEventListener('abort', () => void reader.cancel().catch(() => {}))
     const decoder = new TextDecoder()
     const parse = createSseFrameParser()
     try {
@@ -571,7 +653,7 @@ export class SseStreamHub implements SseStreamSource {
     // The id belongs to the stream that just ended; nothing may be addressed
     // to it until the next one announces its own.
     this.streamId = null
-    this.unfollowed.clear()
+    for (const entry of this.docs.values()) entry.routed = false
     this.announceConnection(false)
     return true
   }
@@ -581,13 +663,14 @@ export class SseStreamHub implements SseStreamSource {
    * against it — the daemon knows nothing about a stream until it opens, and
    * forgets it when it drops, so both the subscriptions registered before this
    * stream existed and the readiness declared against the previous one have to
-   * be repeated.
+   * be repeated. Nothing is announced as connected here: an open stream
+   * carries no document until the daemon has answered the subscribe for it.
    */
   private onStreamReady(data: string): void {
     const payload = parseFrame(syncReadyEventSchema, data)
     if (!payload) return
     this.streamId = payload.streamId
-    this.announceConnection(true)
+    this.streamSeq += 1
 
     const docs = [...this.docs.keys()]
     if (docs.length > 0) void this.follow(docs)

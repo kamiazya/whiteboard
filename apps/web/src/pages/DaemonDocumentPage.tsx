@@ -56,7 +56,7 @@ export interface DaemonDocumentPageProps {
   workspaceId?: string
   path?: string
   // Injectable so tests can avoid real SSE networking; production
-  // callers rely on the default DaemonBackend + createDaemonFetch wiring.
+  // callers rely on the default SseBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
   // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the

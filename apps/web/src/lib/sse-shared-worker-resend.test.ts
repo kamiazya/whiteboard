@@ -34,6 +34,10 @@ let refuseFor: { status: number; body: { error: string; message: string } } | nu
 let failSnapshots = 0
 /** Set per case to hold the next snapshot answer until released. */
 let holdSnapshot: Promise<void> | null = null
+/** What the daemon holds of a document, served by its snapshot route once set. */
+const daemonContent = new Map<string, Uint8Array>()
+/** Every snapshot read the daemon answered, per document. */
+const snapshotReads = new Map<string, number>()
 /** Every write the daemon was sent, accepted or not, per document. */
 const writeAttempts = new Map<string, number>()
 /** Set per case to hold the next accepted write's answer until released. */
@@ -65,7 +69,16 @@ const server = setupServer(
   // Answered rather than left to `bypass`: the worker seeds every subscribed
   // document from this route, and an unhandled request would escape to
   // whatever real daemon is on this port.
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, async () => {
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, async ({ params }) => {
+    const doc = `workspace:${String(params.workspaceId)}`
+    snapshotReads.set(doc, (snapshotReads.get(doc) ?? 0) + 1)
+    const content = daemonContent.get(doc)
+    if (content !== undefined) {
+      return new HttpResponse(content.slice().buffer as ArrayBuffer, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
+    }
     const hold = holdSnapshot
     holdSnapshot = null
     if (hold) await hold
@@ -75,8 +88,8 @@ const server = setupServer(
     }
     return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
   }),
-  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
-    const attempted = `${String(params.workspaceId)}/${String(params.path)}`
+  http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
+    const attempted = `workspace:${String(params.workspaceId)}`
     writeAttempts.set(attempted, (writeAttempts.get(attempted) ?? 0) + 1)
     // A refusal that ANSWERS rather than drops the connection: a 5xx is the
     // shape a restarting daemon actually produces, and it is the one a
@@ -88,7 +101,7 @@ const server = setupServer(
     holdNextWrite = null
     if (hold) await hold
     daemonWrites.push({
-      doc: `${String(params.workspaceId)}/${String(params.path)}`,
+      doc: `workspace:${String(params.workspaceId)}`,
       body: new Uint8Array(await request.arrayBuffer()),
     })
     return HttpResponse.json({ ok: true })
@@ -104,7 +117,7 @@ const until = (predicate: () => boolean) =>
 const settle = () => new Promise((resolve) => setTimeout(resolve, 100))
 
 let docSeq = 0
-const nextDoc = () => `resend-ws/doc-${++docSeq}`
+const nextDoc = () => `workspace:resend-ws-doc-${++docSeq}`
 
 const subscribeIndexFor = (doc: string) =>
   subscribeBodies.findIndex((b) => b.includes(`"subscribe":["${doc}"]`))
@@ -172,6 +185,43 @@ describe('a write the daemon refused', { timeout: 25_000 }, () => {
     expect(received.getMap('m').get('accepted')).toBe('second-edit')
     // The one that matters: the refused edit is in there too.
     expect(received.getMap('m').get('refused')).toBe('first-edit')
+  })
+
+  // Two waits behind real retry backoff (the write chain's, then the stream's).
+  it('is still sent after a reconnect catch-up merged what the daemon took meanwhile', {
+    timeout: 40_000,
+  }, async () => {
+    // The catch-up acknowledges the daemon's state only when the replica held
+    // nothing unacknowledged: the daemon's snapshot says nothing of a tab's
+    // edit still on its way, and acknowledging past it would leave the edit
+    // stored nowhere, with every later write computing nothing outstanding.
+    const doc = nextDoc()
+    port.postMessage({ type: 'subscribe', doc })
+    await until(() => streamIdFor(doc) !== undefined)
+    const first = streamIdFor(doc) as string
+
+    refuseWrites = true
+    pushEdit(doc, 'mine', 'tab-edit')
+    await until(() => (writeAttempts.get(doc) ?? 0) >= 1)
+
+    // Someone else's write the daemon took while the tab's could not land.
+    const daemon = new LoroDoc()
+    daemon.getMap('m').set('gap', 'agent-edit')
+    daemon.commit()
+    daemonContent.set(doc, daemon.export({ mode: 'snapshot' }))
+    const readsBefore = snapshotReads.get(doc) ?? 0
+    endByStream.get(first)?.()
+    await until(() => (snapshotReads.get(doc) ?? 0) > readsBefore)
+    await until(() => events.some((e) => e.type === 'authority-update' && e.doc === doc))
+    refuseWrites = false
+
+    const stored = () => {
+      const received = new LoroDoc()
+      for (const write of daemonWrites.filter((w) => w.doc === doc)) received.import(write.body)
+      return received.getMap('m').get('mine')
+    }
+    // The chain's own retry, with no further edit and no reconnect, carries it.
+    await vi.waitFor(() => expect(stored()).toBe('tab-edit'), { timeout: 20_000, interval: 50 })
   })
 
   it('is flushed when the stream comes back, with no further edit to carry it', async () => {
