@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { NO_ANSWER } from './dev-daemon-socket-lib.mjs'
 import { stopDevDaemon } from './stop-http-dev-daemon-lib.mjs'
 
@@ -34,7 +34,7 @@ function world({
           ? null
           : { pid: daemon, socketPath: '/gone.sock', startedAt: STARTED_AT, launch, token },
       answers: async () => false,
-      request: async (): Promise<{ status: number; text: string }> => {
+      request: async (): Promise<{ status: number; contentType: string; text: string }> => {
         throw new Error('ENOENT')
       },
       startMs: (pid: number) =>
@@ -234,20 +234,22 @@ describe('stopDevDaemon', () => {
     // wedged on its loop, not a pid somebody else has taken: its record stays.
     it('refuses, signalling nothing, when the socket accepts and never answers', async () => {
       const w = world({ wrapper: 50, token: 'tok' })
-      const input = {
-        ...w.input,
-        startMs: stepped,
-        answers: async () => false,
-        request: async (): Promise<{ status: number; contentType: string; text: string }> => {
+      // Each ask of a wedged socket costs its whole timeout, so it is asked once.
+      const answers = vi.fn(async () => false)
+      const request = vi.fn(
+        async (): Promise<{ status: number; contentType: string; text: string }> => {
           throw Object.assign(new Error('no answer within 1500ms'), { code: NO_ANSWER })
         },
-      }
+      )
+      const input = { ...w.input, startMs: stepped, answers, request }
       expect(await stopDevDaemon(input)).toEqual({
         kind: 'unsignallable',
         pid: 100,
         reason: expect.stringContaining('/gone.sock'),
       })
       expect(w.signalled).toEqual([])
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(answers).not.toHaveBeenCalled()
     })
   })
 })
