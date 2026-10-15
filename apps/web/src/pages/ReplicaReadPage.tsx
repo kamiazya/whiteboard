@@ -47,7 +47,6 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
-import { formatRelative } from '../lib/format-relative.js'
 import { type LinkableDocument, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { replicaClipboardImages } from '../lib/replica-clipboard-images.js'
 import { loadReplicaImagesRetrying } from '../lib/replica-images.js'
@@ -74,6 +73,11 @@ import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unloc
 import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { workspaceLabel } from '../lib/workspace-handle.js'
+import {
+  ReplicaOfflineBanner,
+  type ReplicaOfflineBannerProps,
+  refusalLine,
+} from './ReplicaOfflineBanner.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
@@ -115,6 +119,15 @@ function keyInputFor(state: LoadState): ReplicaKeyInput {
   if (state.kind === 'rotated') return 'rotated'
   return 'missing'
 }
+
+const actionPanelBody = (
+  state: 'needs-connection' | 'locked' | 'rotated',
+  lockedLine: string | undefined,
+  refusal: string | undefined,
+) =>
+  [REPLICA_STATE_COPY[state].body, lockedLine, refusal && refusalLine(refusal)]
+    .filter(Boolean)
+    .join(' ')
 
 /**
  * The panel every non-readable state renders: the state's sentence, its one
@@ -493,31 +506,6 @@ function ReplicaSaveFailedNotice({ onRetry }: { onRetry: () => void }) {
   )
 }
 
-interface ReplicaOfflineBannerProps {
-  name: string
-  syncedAt: ReplicaReadPageProps['syncedAt']
-  refusal: ReplicaReadPageProps['refusal']
-}
-
-/** Where the person is: the daemon is away and this is the copy cached here. */
-function ReplicaOfflineBanner({ name, syncedAt, refusal }: ReplicaOfflineBannerProps) {
-  return (
-    <div
-      data-testid="replica-offline-banner"
-      className="border-b bg-amber-500/10 px-4 py-2 text-sm"
-    >
-      <span className="font-medium">{name}</span>
-      {' — the daemon that keeps this workspace is unreachable. '}
-      This is the copy cached in this browser
-      {syncedAt !== undefined && <> (synced {formatRelative(syncedAt, { pastDay: 'absolute' })})</>}
-      . Edits save here and ship to the daemon when it returns.
-      {/* A daemon the record refused is not coming back by itself; the
-          refusal names what is wrong and what to do. */}
-      {refusal !== undefined && <> The daemon could not be reached: {refusal}</>}
-    </div>
-  )
-}
-
 /**
  * The spatial editor measures itself: inside a padded overflow-auto box its
  * h-full slightly overflows, a scrollbar appears, the box shrinks, the
@@ -766,7 +754,7 @@ export function ReplicaReadPage({
       {(pageState === 'needs-connection' || pageState === 'locked' || pageState === 'rotated') && (
         <ReplicaActionPanel
           state={pageState}
-          body={REPLICA_STATE_COPY[pageState].body + (lockedLine ? ` ${lockedLine}` : '')}
+          body={actionPanelBody(pageState, lockedLine, refusal)}
           action={REPLICA_STATE_COPY[pageState].action}
           busy={reconnecting}
           busyLine="Reconnecting…"

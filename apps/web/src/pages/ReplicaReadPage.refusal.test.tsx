@@ -59,6 +59,23 @@ describe('ReplicaReadPage offline banner', () => {
     const banner = await screen.findByTestId('replica-offline-banner')
     expect(banner.textContent).toMatch(/unreachable/i)
     expect(banner.textContent).toContain(refusal)
+    // A refused record is not coming back by itself, so nothing promises it.
+    expect(banner.textContent).not.toMatch(/when it returns/)
+  })
+
+  it("carries the host's refusal where there is no copy to read", async () => {
+    store.record = null
+    const refusal = 'the daemon record /data/daemon.json names pid 7 of another version'
+    render(
+      <ReplicaReadPage
+        workspaceId={DAEMON_WS}
+        daemonBaseUrl={DAEMON}
+        refusal={refusal}
+        onReconnect={() => Promise.resolve()}
+      />,
+    )
+    const region = await screen.findByTestId('replica-state-needs-connection')
+    expect(region.textContent).toContain(refusal)
   })
 
   it('says only the offline sentence when nothing was refused', async () => {
