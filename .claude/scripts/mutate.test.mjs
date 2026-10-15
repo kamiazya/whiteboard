@@ -199,3 +199,81 @@ test('prints where the backup is before the command runs', () => {
     assert.equal(existsSync(backup), false)
   })
 })
+
+// Two runs on one file used to corrupt each other: the second read the first's
+// MUTATED text as its "before", and whichever restored last wrote that back, so
+// the tree stayed mutated with no helper alive. A second run must refuse before
+// it reads anything.
+test('refuses a second run on a file another live run is mutating', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mutate-guard-'))
+  const file = join(dir, 'subject.txt')
+  const started = join(dir, 'first.started')
+  const release = join(dir, 'first.release')
+  const secondRan = join(dir, 'second.ran')
+  writeFileSync(file, ORIGINAL)
+  let first
+  try {
+    // Blocks on a file the test creates, not on a timer.
+    const block = `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},'');const t=setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)})){clearInterval(t)}},20)`
+    first = spawn(
+      process.execPath,
+      [SCRIPT, file, 'the exact line', 'the mutation', '--', process.execPath, '-e', block],
+      { stdio: ['ignore', 'ignore', 'pipe'] },
+    )
+    let firstStderr = ''
+    first.stderr.on('data', (chunk) => {
+      firstStderr += chunk
+    })
+    const firstClosed = new Promise((resolve) => first.on('close', (code) => resolve(code)))
+    const deadline = Date.now() + 10_000
+    while (!existsSync(started)) {
+      assert.ok(Date.now() < deadline, `first run never started\n${firstStderr}`)
+      await sleep(20)
+    }
+
+    // A needle the first mutation leaves intact, so only the lock can refuse.
+    const mark = `require('node:fs').writeFileSync(${JSON.stringify(secondRan)},'')`
+    const second = mutate([file, 'keep me too', 'other', '--', process.execPath, '-e', mark])
+    assert.equal(second.status, 2, second.stderr)
+    assert.match(second.stderr, new RegExp(`pid ${first.pid}\\b`))
+    assert.ok(second.stderr.includes(file), second.stderr)
+    assert.equal(existsSync(secondRan), false, 'the refused run still ran its command')
+
+    writeFileSync(release, '')
+    assert.equal(await firstClosed, 0, firstStderr)
+    assert.equal(readFileSync(file, 'utf8'), ORIGINAL)
+  } finally {
+    // A failed assertion above must not leave the blocked run alive.
+    first?.kill('SIGTERM')
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('replaces a lock left by a run that died without releasing it', () => {
+  withFixture((file) => {
+    const probe = mutate([file, 'the exact line', 'x', '--', process.execPath, '-e', ''])
+    const lockPath = /lock at (\S+)/.exec(probe.stderr)?.[1]
+    assert.ok(lockPath, probe.stderr)
+    assert.equal(existsSync(lockPath), false, 'a finished run left its lock behind')
+
+    // A pid that has exited and been reaped, as a SIGKILLed run's would be.
+    const dead = spawnSync(process.execPath, ['-e', '']).pid
+    writeFileSync(lockPath, String(dead))
+    try {
+      const run = mutate([
+        file,
+        'the exact line',
+        'x',
+        '--',
+        process.execPath,
+        '-e',
+        'process.exit(5)',
+      ])
+      assert.equal(run.status, 5, run.stderr)
+      assert.equal(readFileSync(file, 'utf8'), ORIGINAL)
+      assert.equal(existsSync(lockPath), false, 'the replaced lock was not released')
+    } finally {
+      rmSync(lockPath, { force: true })
+    }
+  })
+})

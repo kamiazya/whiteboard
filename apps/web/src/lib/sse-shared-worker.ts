@@ -223,6 +223,34 @@ function releaseReplicaFeed(baseUrl: string, doc: string): void {
   // first open — or it would be served the pre-gap state for the worker's
   // whole lifetime.
   seededDocs.delete(key)
+  releaseIfUnused(baseUrl, doc)
+}
+
+/**
+ * Drop a document's replica, writer and acknowledged version once nothing
+ * needs them: no port subscribes, no tab edit is waiting on the daemon, and
+ * no rebuild is pending. Held only while used for the same reason the feed
+ * is refcounted — otherwise every document opened since the worker started
+ * stays resident as a whole CRDT with its history.
+ *
+ * A tab edit still in flight or failing keeps everything: its ops live only
+ * in this replica, and releasing it would lose an edit the tab already reads
+ * as handed over. Its acknowledgement asks again. A pending rebuild keeps it
+ * too, or the rebuild would land on a later subscriber as a refusal it never
+ * made. On the replica queue, so a push or rebuild already queued is
+ * accounted for before the decision.
+ */
+function releaseIfUnused(baseUrl: string, doc: string): void {
+  const key = replicaKey(baseUrl, doc)
+  queueReplicaWork(() => {
+    if (replicaFeeds.has(key) || snapshotRetries.has(key) || holdsUnsavedTabEdits(key)) return
+    writers.get(key)?.close()
+    writers.delete(key)
+    replicas.delete(key)
+    ackedVersions.delete(key)
+    unsavedTabEdits.delete(key)
+    seededDocs.delete(key)
+  })
 }
 
 interface PortState {
@@ -250,6 +278,24 @@ const ports = new Map<MessagePort, PortState>()
  * the same replica.
  */
 const ackedVersions = new Map<string, ReplicaVersion>()
+
+/**
+ * The replica version just after the last TAB edit it merged, per
+ * origin+document — what the daemon must acknowledge before the replica may
+ * be released.
+ *
+ * Not the acknowledged version alone: that stays behind every daemon frame
+ * (see above), so "replica ahead of acked" is true of almost every document
+ * and would keep each one forever. Only a tab's edit is held nowhere else.
+ */
+const unsavedTabEdits = new Map<string, ReplicaVersion>()
+
+function holdsUnsavedTabEdits(key: string): boolean {
+  const through = unsavedTabEdits.get(key)
+  if (through === undefined) return false
+  const order = ackedVersions.get(key)?.compare(through)
+  return order !== 0 && order !== 1
+}
 
 /**
  * Each document's writes to the daemon, through the one `WriteChain` a page
@@ -284,6 +330,8 @@ function writerFor(baseUrl: string, doc: string): WriteChain<ReplicaVersion> {
     },
     acknowledge: (at) => {
       ackedVersions.set(key, at)
+      if (!holdsUnsavedTabEdits(key)) unsavedTabEdits.delete(key)
+      if (!replicaFeeds.has(key)) releaseIfUnused(baseUrl, doc)
     },
     push: (bytes) => hubFor(baseUrl).push(doc, bytes),
     onFailing: () => tellWriteState(baseUrl, doc, false),
@@ -360,12 +408,15 @@ function replaceReplica(
     if (bytes !== null && bytes.byteLength > 0) replica.import(bytes)
     replicas.set(key, replica)
     ackedVersions.set(key, replica.version())
+    // The refused edits went with the replica that held them.
+    unsavedTabEdits.delete(key)
     seededDocs.add(key)
     writers.get(key)?.resume()
     for (const [target, state] of ports) {
       if (state.baseUrl !== baseUrl || !state.subscriptions.has(doc)) continue
       postWorkerEvent(target, { type: 'write-refused', doc, refusal })
     }
+    if (!replicaFeeds.has(key)) releaseIfUnused(baseUrl, doc)
   })
 }
 
@@ -418,7 +469,10 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     // version rather than against the delta computed here — those are
     // different questions, and answering them with one value is what silently
     // dropped an edit the daemon refused.
-    if (from !== null) scheduleWrite(baseUrl, doc)
+    if (from !== null) {
+      unsavedTabEdits.set(replicaKey(baseUrl, doc), replica.version())
+      scheduleWrite(baseUrl, doc)
+    }
     // Only what the replica did not already have travels onward. Two things
     // depend on this rather than on it being an optimisation: a tab
     // re-pushing work a sibling already delivered costs no broadcast, and the

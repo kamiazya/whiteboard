@@ -249,22 +249,19 @@ export const KNOWN_EQUIVALENT = {
   // applying each edit and running the file's property, which kills the five
   // non-equivalent mutants on the same two functions.
   //
-  // The other three are `buildUnits`', each equivalent by construction.
+  // The other two are `buildUnits`', each equivalent by construction.
   // `h.id !== g.id` only excludes `g` itself, and for `g` the last conjunct is
   // already `!true || index < index`, false (ids are unique in a canvas).
   // `hIndex < index` -> false makes every twin of an identical pair a root,
   // but the earlier twin is visited first and claims the later one, so the
-  // later is skipped as claimed. And `movableIds` drops locked members, which
-  // only a MOVABLE unit's deltas read — and a unit holding a locked member is
-  // never movable, so the filter is the identity wherever it is read. Each
-  // verified by applying the edit and running tidy's suites, drawing-quality
-  // and server-core's canvas-edit/propose tests, which stay green.
+  // later is skipped as claimed. Each verified by applying the edit and
+  // running tidy's suites, drawing-quality and server-core's
+  // canvas-edit/propose tests, which stay green.
   'src/tidy-units.ts': {
     'EqualityOperator: w > 0 -> w >= 0': 1,
     'LogicalOperator: w > 0 && h > 0 -> w > 0 || h > 0': 1,
     'ConditionalExpression: h.id !== g.id -> true': 1,
     'ConditionalExpression: hIndex < index -> false': 1,
-    'MethodExpression: memberNodes.filter((m) => !locked(m.id)) -> memberNodes': 1,
   },
   // Guards that change no output of `tidyNodes`. A yield anchor list seeded
   // with a string (both of `anchorsToYieldTo`'s arrays) is read only by

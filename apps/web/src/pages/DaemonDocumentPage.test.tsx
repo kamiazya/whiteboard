@@ -545,7 +545,9 @@ describe('DaemonDocumentPage', () => {
       documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
       path: 'untitled',
     })
-    mockListDocuments.mockResolvedValueOnce({
+    // Every list after the create names the new canvas — the page's own
+    // re-read and the one it takes once the record is bound alike.
+    mockListDocuments.mockResolvedValue({
       documents: [
         { path: 'untitled', documentId: 'id-untitled', updatedAt: '2026-01-03', kind: 'spatial' },
       ],

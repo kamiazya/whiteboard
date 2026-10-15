@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  devSpawnLockPath,
   ensureDevDataDirSecured,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
@@ -12,6 +13,16 @@ import {
   resolveTsxWatchSpawn,
   superviseChild,
 } from './with-dev-data-dir-lib.mjs'
+
+// The hook, the wrapper and `pnpm mcp:http` exclude each other only while they
+// name one file, and the docs name it too.
+describe('devSpawnLockPath', () => {
+  it("is the data dir's dev-daemon-spawn.lock", () => {
+    expect(devSpawnLockPath('/repo/.dev-data')).toBe(
+      resolve('/repo/.dev-data', 'dev-daemon-spawn.lock'),
+    )
+  })
+})
 
 describe('resolveDevDataDirEnv', () => {
   const repoRoot = '/repo'

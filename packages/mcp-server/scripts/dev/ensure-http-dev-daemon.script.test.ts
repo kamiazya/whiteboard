@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
-import { resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
+import { devSpawnLockPath, resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 
 const REPO_ROOT = resolveRepoRootFromGit(resolve(import.meta.dirname))
 const HOOK_SCRIPT_PATH = resolve(import.meta.dirname, 'ensure-http-dev-daemon.mjs')
@@ -140,7 +140,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
     const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
     const invokedSentinelDir = join(dataDir, 'invoked-sentinels')
     cleanupSentinelDirs.push(invokedSentinelDir)
-    const lockPath = join(dataDir, 'dev-daemon-spawn.lock')
+    const lockPath = devSpawnLockPath(dataDir)
     const countSpawns = () =>
       existsSync(invokedSentinelDir) ? readdirSync(invokedSentinelDir).length : 0
 

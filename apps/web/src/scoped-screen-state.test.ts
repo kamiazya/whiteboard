@@ -448,6 +448,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: whether this MOUNT has synced the URL once, which picks replace over push — resetting it per document would make every switch a replace and flatten the history it exists to keep',
   enumeratedRef:
     'no subject: whether listDocuments has answered at all, which is about the page’s lifetime rather than one document',
+  revision:
+    'no subject: a count of the WORKSPACE channel’s change notices, which only ever triggers a list re-read; a document switch does not change the workspace it follows',
   lastKnownDocumentIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   previous:

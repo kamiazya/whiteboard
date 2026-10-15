@@ -119,6 +119,17 @@ export function devWrapperPidPath(dataDir) {
 }
 
 /**
+ * The spawn lock the SessionStart hook, this wrapper and `pnpm mcp:http` all
+ * take for a data dir. They exclude each other only while they name the same
+ * file, so it is spelled here alone.
+ *
+ * @param {string} dataDir
+ */
+export function devSpawnLockPath(dataDir) {
+  return resolve(dataDir, 'dev-daemon-spawn.lock')
+}
+
+/**
  * Ties the wrapper's lifetime to its child's: forwards the stop signals to it
  * and ends the wrapper only when the child has. The forwarding listeners are
  * removed before the wrapper re-raises the child's own signal, because a live

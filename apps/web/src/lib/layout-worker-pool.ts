@@ -51,29 +51,42 @@ type LayoutPriority = 'interactive' | 'background' | 'idle'
 /** Highest first. `nextRunnableIndex` walks this order. */
 const PRIORITY_ORDER: readonly LayoutPriority[] = ['interactive', 'background', 'idle']
 
-/**
- * What the pool resolves a request with. A protocol request's reply follows
- * from the request itself; anything else — a test's bare `{ id }` — is only
- * known to echo its id.
- */
-type ReplyTo<R> = R extends WorkRequest ? ResponseFor<R> : { id: number }
+interface PoolControls {
+  /** Abandons a request, whether queued or already in flight. */
+  cancel(id: number): void
+  dispose(): void
+}
 
 /**
- * Generic over the requests it accepts so the scheduling can be exercised
- * with bare `{ id }` fakes, while `sharedLayoutWorkerPool` binds the real
- * fleet to the worker's protocol: a sender the protocol no longer describes
- * is then a compile error at the sender, not a worker reading `undefined`.
+ * The scheduling core, generic over the requests it accepts so the
+ * scheduling can be exercised with bare `{ id }` fakes. All it knows of a
+ * reply is that it echoes the request's id; what else the reply carries is
+ * the worker's protocol, which `sharedLayoutWorkerPool` binds.
  */
-export interface LayoutWorkerPool<Req extends { id: number } = WorkRequest> {
+export interface LayoutWorkerPool<Req extends { id: number }> extends PoolControls {
   /**
    * Resolves with the worker's reply for this request's `id`.
    * Defaults to `interactive`: an unlabelled caller is one that has not
    * thought about it, and quietly deprioritising it is the wrong default.
    */
-  run<R extends Req>(request: R, priority?: LayoutPriority): Promise<ReplyTo<R>>
-  /** Abandons a request, whether queued or already in flight. */
-  cancel(id: number): void
-  dispose(): void
+  run(request: Req, priority?: LayoutPriority): Promise<{ id: number }>
+}
+
+type RequestOfType<T extends WorkRequest['type']> = Extract<WorkRequest, { type: T }>
+
+/**
+ * The fleet as senders see it: keyed on the request's discriminant rather
+ * than on the request's own type, so the literal is checked against the
+ * protocol member it names. A misspelled or renamed field — optional ones
+ * included — is then a compile error at the sender, not a worker reading
+ * `undefined` and degrading to the main thread.
+ */
+export interface ProtocolLayoutWorkerPool extends PoolControls {
+  /** As `LayoutWorkerPool.run`; the reply is narrowed by `type`. */
+  run<T extends WorkRequest['type']>(
+    request: RequestOfType<T>,
+    priority?: LayoutPriority,
+  ): Promise<ResponseFor<RequestOfType<T>>>
 }
 
 /**
@@ -118,7 +131,7 @@ interface Pending<Req> {
   readonly id: number
   readonly request: Req
   readonly priority: LayoutPriority
-  resolve(value: never): void
+  resolve(reply: { id: number }): void
   reject(error: Error): void
 }
 
@@ -182,7 +195,7 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
     // entry away and leave its caller waiting forever.
     if (pending === null || pending.id !== id) return
     slot.busyWith = null
-    ;(pending.resolve as (value: unknown) => void)(data)
+    pending.resolve(data)
     pump()
   }
 
@@ -260,14 +273,14 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
   }
 
   return {
-    run<R extends Req>(request: R, priority: LayoutPriority = 'interactive'): Promise<ReplyTo<R>> {
+    run(request: Req, priority: LayoutPriority = 'interactive'): Promise<{ id: number }> {
       if (disposed) return Promise.reject(new Error('layout worker pool is disposed'))
-      return new Promise<ReplyTo<R>>((resolve, reject) => {
+      return new Promise<{ id: number }>((resolve, reject) => {
         queue.push({
           id: request.id,
           request,
           priority,
-          resolve: resolve as Entry['resolve'],
+          resolve,
           reject,
         })
         pump()
@@ -318,10 +331,29 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
  * a rail, a favicon and a list all want it, and tearing it down when one of
  * them unmounts would make the next one pay the font registration again.
  */
-let shared: LayoutWorkerPool | null = null
+let shared: ProtocolLayoutWorkerPool | null = null
 
-export function sharedLayoutWorkerPool(): LayoutWorkerPool {
-  shared ??= createLayoutWorkerPool<WorkRequest>({
+/**
+ * The one place a reply is trusted to match its request's type: the core
+ * only echoes what the worker posted, and `layout-worker.ts`'s dispatch is
+ * what answers each request type with its own response.
+ */
+function bindToProtocol(core: LayoutWorkerPool<WorkRequest>): ProtocolLayoutWorkerPool {
+  return {
+    run: <T extends WorkRequest['type']>(request: RequestOfType<T>, priority?: LayoutPriority) =>
+      core.run(request, priority) as Promise<ResponseFor<RequestOfType<T>>>,
+    cancel: (id) => core.cancel(id),
+    dispose: () => core.dispose(),
+  }
+}
+
+export function sharedLayoutWorkerPool(): ProtocolLayoutWorkerPool {
+  shared ??= bindToProtocol(createSharedFleet())
+  return shared
+}
+
+function createSharedFleet(): LayoutWorkerPool<WorkRequest> {
+  return createLayoutWorkerPool<WorkRequest>({
     size: defaultPoolSize(
       typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
     ),
@@ -350,7 +382,6 @@ export function sharedLayoutWorkerPool(): LayoutWorkerPool {
       return adapter
     },
   })
-  return shared
 }
 
 let nextRequestId = 1

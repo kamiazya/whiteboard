@@ -63,7 +63,7 @@ async function outlineInPool(
         : { snapshot: source.snapshot }),
       // The persistent tier reads and writes this INSIDE the worker, so a
       // tab icon restored from disk costs the asking thread nothing.
-      ...(cacheKey === undefined ? {} : { cacheKey }),
+      cacheKey,
     },
     'idle',
   )

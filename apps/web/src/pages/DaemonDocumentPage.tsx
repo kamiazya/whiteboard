@@ -46,7 +46,10 @@ import type {
 import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
-import { useDaemonDocumentController } from './use-daemon-document-controller.js'
+import {
+  useDaemonDocumentController,
+  useListFollowsRecord,
+} from './use-daemon-document-controller.js'
 import { useDocumentActions } from './use-document-actions.js'
 
 export interface DaemonDocumentPageProps {
@@ -173,6 +176,7 @@ function useDaemonDocument(
     onAgentActivity: (payload) => reportAgentActivity(payload),
     identity: canvas ?? undefined,
   })
+  useListFollowsRecord(sync.bodyBinding, controller.refreshDocuments)
   const {
     canvas: canvasValue,
     loaded: canvasLoaded,
@@ -255,8 +259,7 @@ function useDaemonDocument(
   // The open document's kind, from the documents list summary (default
   // 'spatial'). It picks which editor DocumentEditorSurface mounts — the
   // page itself does not choose an editor.
-  const documentKind: DocumentKind =
-    controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
+  const documentKind: DocumentKind = currentSummary?.kind ?? 'spatial'
 
   const documentActions = useDocumentActions({
     documentId: currentDocumentId,

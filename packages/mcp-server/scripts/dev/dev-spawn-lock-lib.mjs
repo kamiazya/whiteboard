@@ -198,11 +198,14 @@ function isSameFile(claimPath, judged, fsStat) {
 
 /**
  * Attempts to atomically acquire the spawn lock through `claimExclusiveFile`,
- * judging an existing lock with `isLockStale`. 'held-by-other' leaves a
- * SessionStart hook a well-defined fallback (wait for the daemon).
+ * judging an existing lock with `isLockStale`. 'held' leaves a SessionStart
+ * hook a well-defined fallback (wait for the daemon). `holderPid` is the pid
+ * the lock recorded when it was judged — what a caller names, and what the
+ * wrapper compares with its parent's — so nobody re-reads a file that may
+ * have changed since; null when the claim read no holder or one naming no pid.
  *
  * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync, fsLink?: typeof linkSync }} args
- * @returns {'acquired' | 'held-by-other'}
+ * @returns {{ kind: 'acquired' } | { kind: 'held', holderPid: number | null }}
  */
 export function acquireSpawnLock({
   lockPath,
@@ -240,7 +243,9 @@ export function acquireSpawnLock({
     fsRename,
     fsLink,
   })
-  return result.kind === 'claimed' ? 'acquired' : 'held-by-other'
+  if (result.kind === 'claimed') return { kind: 'acquired' }
+  const holder = parseLockMeta(result.holderText)?.pid
+  return { kind: 'held', holderPid: Number.isInteger(holder) && holder > 0 ? holder : null }
 }
 
 function parseLockMeta(text) {

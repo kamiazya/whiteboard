@@ -43,6 +43,7 @@ import {
   waitForDaemon,
 } from './ensure-http-dev-daemon-lib.mjs'
 import {
+  devSpawnLockPath,
   ensureDevDataDirSecured,
   resolveDevDataDirEnv,
   resolveHookProjectRoot,
@@ -120,7 +121,7 @@ if (fastAssessment.kind === 'healthy') {
 }
 
 ensureDevDataDirSecured(EXPECTED_DATA_DIR)
-const LOCK_PATH = join(EXPECTED_DATA_DIR, 'dev-daemon-spawn.lock')
+const LOCK_PATH = devSpawnLockPath(EXPECTED_DATA_DIR)
 const SPAWN_LOCK_STALE_MS = resolveSpawnLockStaleMs(process.env)
 const lockMeta = {
   pid: process.pid,
@@ -275,7 +276,7 @@ async function runAsLoser() {
       )
       process.exit(0)
     }
-    if (tryAcquireLock() === 'acquired') {
+    if (tryAcquireLock().kind === 'acquired') {
       await runAsWinner()
       return
     }
@@ -284,7 +285,7 @@ async function runAsLoser() {
   failReadyTimeout()
 }
 
-if (tryAcquireLock() === 'acquired') {
+if (tryAcquireLock().kind === 'acquired') {
   await runAsWinner()
 } else {
   await runAsLoser()

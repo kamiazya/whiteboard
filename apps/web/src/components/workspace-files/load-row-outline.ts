@@ -71,10 +71,11 @@ export interface RowOutlineDeps {
 
 /** The shared fleet, at idle priority: nobody is waiting on a 24px icon. */
 async function outlineInPool(
-  request: OutlineSubject & { readonly cacheKey?: string },
+  subject: OutlineSubject,
+  cacheKey: string | undefined,
 ): Promise<RowOutline | null> {
   const reply = await sharedLayoutWorkerPool().run(
-    { type: 'outline', id: nextLayoutRequestId(), ...request },
+    { type: 'outline', id: nextLayoutRequestId(), ...subject, cacheKey },
     'idle',
   )
   if (reply.type !== 'outlined') return null
@@ -85,9 +86,9 @@ async function outlineInPool(
 // the persistent tier lives in the worker, beside the bytes, so that reading
 // it costs nothing on the thread that asked (ADR-0027 decision 5).
 const outlineMarkdownInPool = (body: string, maxWidth: number, cacheKey?: string) =>
-  outlineInPool({ body, maxWidth, ...(cacheKey === undefined ? {} : { cacheKey }) })
+  outlineInPool({ body, maxWidth }, cacheKey)
 const outlineSpatialInPool = (snapshot: Uint8Array, cacheKey?: string) =>
-  outlineInPool({ snapshot, ...(cacheKey === undefined ? {} : { cacheKey }) })
+  outlineInPool({ snapshot }, cacheKey)
 
 /**
  * The kind the pipeline will actually take, which is what the key has to

@@ -232,8 +232,9 @@ export class SseBackend implements DocumentBackend {
     this.unsubscribeText?.()
     this.unsubscribeText = null
     // Closing the writer stops it taking more, not sending what it took
-    // (the port's `disconnect` rule); the owned hub's POSTs do not depend on
-    // the stream closed below.
+    // (the port's `disconnect` rule). It drains through the source it was
+    // built over, and a closed hub still answers `push`: a POST depends on
+    // nothing the close below tears down.
     this.writer?.close()
     this.writer = null
     this.sourceWritesFailing = false
@@ -245,12 +246,8 @@ export class SseBackend implements DocumentBackend {
   }
 
   pushLocalUpdate(bytes: Uint8Array): void | Promise<void> {
-    // Through the source, not straight to the daemon, because the source is
-    // what knows where this document's authority lives. With a SharedWorker,
-    // the worker's replica merges the bytes against everything else it has
-    // seen and writes onward itself — retrying as it goes — so posting here
-    // would write around that replica and re-send state the daemon had just
-    // delivered.
+    // A backend that holds a writer is the only keeper of what it sends, and
+    // keeps sending it until the daemon has taken it.
     if (this.writer !== null) return this.writer.write(bytes)
     const handlers = this.handlers
     if (this.streamSource === undefined) {
@@ -258,6 +255,13 @@ export class SseBackend implements DocumentBackend {
       this.writer = this.ownWriter(handlers)
       return this.writer.write(bytes)
     }
+    // Through the injected source, not straight to the daemon, because the
+    // source is what knows where this document's authority lives. With a
+    // SharedWorker, the worker's replica merges the bytes against everything
+    // else it has seen and writes onward itself — retrying as it goes — so
+    // posting here would write around that replica and re-send state the
+    // daemon had just delivered.
+    //
     // Who retries follows from what the push answers, per `SseStreamSource`'s
     // contract — not from who built the source, since a page may share a hub
     // as readily as a worker.
@@ -294,10 +298,13 @@ export class SseBackend implements DocumentBackend {
 
   private ownWriter(handlers: DocumentBackendHandlers, running?: Promise<void>): QueuedWriter {
     let first = running
+    // Resolved once: a writer still draining after `disconnect()` keeps
+    // posting through the hub it started on, rather than minting a new one on
+    // a backend nothing will close again.
+    const source = this.resolveSource()
     return new QueuedWriter(
       (bytes) => {
-        const attempt =
-          first ?? this.resolveSource().push(this.binaryKey, bytes) ?? Promise.resolve()
+        const attempt = first ?? source.push(this.binaryKey, bytes) ?? Promise.resolve()
         first = undefined
         return attempt
       },

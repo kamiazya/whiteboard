@@ -124,6 +124,30 @@ describe('commandTargetKey', () => {
     ).toBe('proposal:p1')
   })
 
+  // The commit window keeps only the last command per key, so two targets
+  // that share a key lose the earlier edit without a trace.
+  it('keys an edge apart from a node of the same id', () => {
+    expect(
+      commandTargetKey({ kind: 'connect-nodes', edgeId: 'x', fromNode: 'a', toNode: 'b' }),
+    ).not.toBe(commandTargetKey({ kind: 'move-node', id: 'x', x: 0, y: 0 }))
+  })
+
+  it('keys two comments apart by their ids', () => {
+    expect(commandTargetKey({ kind: 'set-comment-resolved', id: 'c1', resolved: true })).not.toBe(
+      commandTargetKey({ kind: 'move-comment', id: 'c2', x: 1, y: 1 }),
+    )
+  })
+
+  it('keys a status change apart from the thread it stamps', () => {
+    const status: EditorCommand = { kind: 'set-thread-status', threadId: 't1', status: 'resolved' }
+    const create: EditorCommand = {
+      kind: 'create-thread',
+      thread: { id: 't1', anchor: { kind: 'document' }, status: 'open', messages: [] },
+    }
+
+    expect(commandTargetKey(status)).not.toBe(commandTargetKey(create))
+  })
+
   it('never dedupes a batch or an unmapped kind against another', () => {
     const batch: EditorCommand = { kind: 'batch', commands: [] }
     const unmapped: EditorCommand = { kind: 'set-edge-routing', style: 'curved' }
@@ -292,6 +316,63 @@ describe('commitToDoc', () => {
       // warning; the move still lands through it.
       expect(appLoggerSpies.warn).not.toHaveBeenCalled()
       expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'a')).toMatchObject({ x: 5, y: 5 })
+    })
+
+    // The editor sends every delete as a batch, so this, not a bare
+    // `delete-node`, is the write a delete actually takes.
+    it('deletes the nodes and edges it names, in one update', () => {
+      const doc = docHolding({
+        nodes: [nodeA, nodeB],
+        edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
+      })
+      const updates = countLocalUpdates(doc)
+
+      commit(doc, {
+        kind: 'batch',
+        commands: [
+          { kind: 'delete-edge', id: 'e' },
+          { kind: 'delete-node', id: 'a' },
+        ],
+      })
+
+      expect(updates()).toBe(1)
+      const stored = readSpatialCanvas(doc)
+      expect(stored.nodes.map((n) => n.id)).toEqual(['b'])
+      expect(stored.edges).toEqual([])
+      expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    })
+
+    it('stores the edge a create-edge member names, as a paste sends it', () => {
+      const doc = docHolding(canvasOf(nodeA, nodeB))
+
+      commit(doc, {
+        kind: 'batch',
+        commands: [
+          { kind: 'create-edge', edge: { id: 'e2', from: { node: 'a' }, to: { node: 'b' } } },
+        ],
+      })
+
+      expect(readSpatialCanvas(doc).edges.map((e) => e.id)).toEqual(['e2'])
+      expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    })
+
+    it('reconciles, rather than dropping, a create-edge member whose edge next does not hold', () => {
+      const doc = docHolding(canvasOf(nodeA, nodeB))
+      const prev = readSpatialCanvas(doc)
+      const move: EditorCommand = { kind: 'move-node', id: 'a', x: 9, y: 9 }
+      const next = applyCommand(prev, move)
+
+      commitToDoc(doc, doc, prev, next, {
+        kind: 'batch',
+        commands: [
+          move,
+          { kind: 'create-edge', edge: { id: 'ghost', from: { node: 'a' }, to: { node: 'b' } } },
+        ],
+      })
+
+      expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1)
+      expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'a')).toMatchObject({ x: 9, y: 9 })
+      expect(readSpatialCanvas(doc).edges).toEqual([])
     })
 
     it('sends the batch to the reconcile when a member names a node next does not hold', () => {

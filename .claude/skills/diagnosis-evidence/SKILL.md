@@ -154,6 +154,17 @@ before the command runs, because SIGKILL cannot be caught: after one, the file
 is still mutated and that path is the way back. The exit code is the
 command's, so an expected-RED run is read by the caller.
 
+**One run per file at a time.** A second run on a file a live run is mutating
+exits 2 naming the holder's pid, the file and the lock path, and never reads the
+file. Without that, two auditors mutating one file on a shared tree corrupted
+each other: the second read the first's mutated text as its "before", the first
+restored, and the second then wrote the first's mutation back — the tree left
+mutated with no helper alive, and the first's result taken against a doubly
+mutated file. The lock sits in the OS temp dir (`mutate-lock-<hash of the
+realpath>`); one whose pid is dead, as after SIGKILL, is replaced on the next
+run. It does NOT refuse a file that differs from HEAD — mutating a dirty tree
+is legitimate.
+
 It exists because the count assertion above is easy to leave out and the
 result is indistinguishable from success. Measured on one session's four
 mutation checks of a new guard: **two had never applied.** The probe spelled a
