@@ -9,7 +9,7 @@ import { z } from 'zod'
 // dev daemon) or a build under dist/ (`pnpm mcp:http`, the packaged install).
 // A watch-mode start that finds a built daemon on its data dir has to say so,
 // because a source edit will never reach that process.
-export const daemonLaunchSchema = z.enum(['built', 'source'])
+const daemonLaunchSchema = z.enum(['built', 'source'])
 export type DaemonLaunch = z.infer<typeof daemonLaunchSchema>
 
 /** The launch of the process whose module is `moduleUrl`: only source runs as `.ts`. */
