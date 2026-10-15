@@ -4,7 +4,6 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { messageOf } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -314,7 +313,10 @@ function useDocumentListReader(
 const LIST_FOLLOW_SETTLE_MS = 250
 
 /** What the list shows of each document the record holds, as one comparable value. */
-function listedShapeOf(record: LoroDoc): string {
+/** The workspace record, named through the adapter so pages never import the CRDT. */
+type WorkspaceRecord = Parameters<typeof readWorkspaceNodes>[0]
+
+function listedShapeOf(record: WorkspaceRecord): string {
   const rows = readWorkspaceNodes(record).flatMap((node) =>
     node.type === 'document'
       ? [[node.meta.documentId, node.path, node.meta.kind, node.meta.name, node.meta.updatedAt]]
@@ -339,7 +341,7 @@ function listedShapeOf(record: LoroDoc): string {
  * a new binding is exactly a snapshot that replaced it.
  */
 export function useListFollowsRecord(
-  binding: { readonly doc: LoroDoc } | null,
+  binding: { readonly doc: WorkspaceRecord } | null,
   refresh: () => void,
 ): void {
   const record = binding?.doc ?? null
