@@ -3,15 +3,12 @@
  * whose chunk fails to load constructs FINE and reports through `onerror`
  * afterwards. The try/catch around the constructor cannot see that, so before
  * this the port was a hole — every subscribe posted into it, nothing answered,
- * and the caller never learned it should have opened its own stream.
+ * and the page went quiet. The source now moves to the page's own stream.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../test-utils/json-response.js'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
-import {
-  createSharedSseStreamSource,
-  sharedStreamFailed,
-  subscribeSharedStreamFailure,
-} from './sse-shared-stream-source.js'
+import { createSharedSseStreamSource as create } from './sse-shared-stream-source.js'
 
 type ErrorHandler = ((event: { message?: string }) => void) | null
 
@@ -37,8 +34,7 @@ beforeEach(() => {
   FakeSharedWorker.instances = []
   globalThis.SharedWorker = FakeSharedWorker as unknown as typeof SharedWorker
 })
-// A worker that failed is remembered against its origin for the module's
-// lifetime, and every case fails its workers on the way out, so each run of
+// A source is cached against its origin for the module's lifetime, and every case fails its workers on the way out, so each run of
 // a case takes origins of its own: a repeated run must not inherit the last
 // run's failure.
 let run = 0
@@ -52,6 +48,51 @@ afterEach(() => {
   globalThis.SharedWorker = original
 })
 
+/**
+ * The page's own daemon, as far as a stream of its own needs one: a stream
+ * that announces itself and then carries whatever the case pushes, a
+ * snapshot route, and a subscribe route that answers.
+ */
+function ownStreamDaemon() {
+  let push: ((frame: string) => void) | null = null
+  const streamOpens: string[] = []
+  const requested: string[] = []
+  const fetch = vi.fn(async (input: string | URL | Request) => {
+    const url = String(input)
+    requested.push(url)
+    if (url.includes('/api/sync/stream')) {
+      streamOpens.push(url)
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            const enc = new TextEncoder()
+            controller.enqueue(enc.encode('event: ready\ndata: {"streamId":"own"}\n\n'))
+            push = (frame) => controller.enqueue(enc.encode(frame))
+          },
+        }),
+      )
+    }
+    if (url.endsWith('/snapshot')) return new Response(new Uint8Array([9]))
+    return jsonResponse({ ok: true })
+  })
+  return {
+    fetch: fetch as unknown as typeof globalThis.fetch,
+    streamOpens,
+    requested: () => requested,
+    pushUpdate: (doc: string, bytes: string) =>
+      push?.(`event: update\ndata: ${JSON.stringify({ doc, update: bytes })}\n\n`),
+    streamOpen: () => push !== null,
+  }
+}
+
+/** A daemon fetch for a case that never reaches the page's own stream: nothing answers. */
+const unanswered = (() => new Promise<Response>(() => {})) as typeof fetch
+
+/** The source for a case that does not care which fetch the page's own stream would use. */
+const createSharedSseStreamSource = (baseUrl: string) => create(baseUrl, unanswered)
+
+const postedAfterFailure = (type: string, before: number) => postedOfType(type).slice(before)
+
 describe('a shared worker that fails to load', () => {
   it('tells its listeners they are disconnected instead of going quiet', () => {
     const source = createSharedSseStreamSource(origin('disconnected'))
@@ -64,36 +105,84 @@ describe('a shared worker that fails to load', () => {
     expect(onConnectionChange).toHaveBeenCalledWith(false)
   })
 
-  it('is remembered, so the next caller for that origin opens its own stream', () => {
-    createSharedSseStreamSource(origin('evicted'))
+  it('is remembered, so the next caller for that origin is served without a worker', async () => {
+    const daemon = ownStreamDaemon()
+    create(origin('evicted'), daemon.fetch)
     expect(FakeSharedWorker.instances).toHaveLength(1)
-    expect(createSharedSseStreamSource(origin('evicted'))).not.toBeNull()
-    expect(FakeSharedWorker.instances).toHaveLength(1)
-
     FakeSharedWorker.instances[0]?.fail()
 
     // A missing chunk or a CSP refusal is the same on every attempt, so a
-    // fresh worker would fail the same way; `null` is the own-stream path.
-    expect(createSharedSseStreamSource(origin('evicted'))).toBeNull()
+    // fresh worker would fail the same way: the origin's source is kept, and
+    // serves from the page's own stream.
+    const again = create(origin('evicted'), unanswered)
     expect(FakeSharedWorker.instances).toHaveLength(1)
-    expect(sharedStreamFailed(origin('evicted'))).toBe(true)
-    expect(sharedStreamFailed(origin('elsewhere'))).toBe(false)
+    again?.subscribe('workspace:w', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    await vi.waitFor(() => expect(daemon.streamOpens).toHaveLength(1))
+    createSharedSseStreamSource(origin('elsewhere'))
+    expect(FakeSharedWorker.instances).toHaveLength(2)
   })
 
-  it('is already forgotten when a listener reconnects on the disconnect it is told', () => {
-    let reopened: ReturnType<typeof createSharedSseStreamSource> | 'not asked' = 'not asked'
-    const source = createSharedSseStreamSource(origin('reconnect'))
-    source?.subscribe('w/doc', {
+  it('hands a listener that resubscribes on the drop the page stream, not the port', async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('reconnect'), daemon.fetch)
+    const onUpdate = vi.fn()
+    let resubscribed = false
+    source?.subscribe('workspace:w', {
       onUpdate: vi.fn(),
       onMessage: vi.fn(),
       onConnectionChange: (connected) => {
-        if (!connected) reopened = createSharedSseStreamSource(origin('reconnect'))
+        if (connected || resubscribed) return
+        resubscribed = true
+        source.subscribe('workspace:w', { onUpdate, onMessage: vi.fn() })
+      },
+    })
+    const posted = postedOfType('subscribe').length
+
+    FakeSharedWorker.instances[0]?.fail()
+    await vi.waitFor(() => expect(daemon.streamOpen()).toBe(true))
+    daemon.pushUpdate('workspace:w', 'AQID')
+
+    await vi.waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
+    expect(postedAfterFailure('subscribe', posted)).toEqual([])
+  })
+
+  it('releases a listener that lets go while it is told of the drop', async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('lets-go'), daemon.fetch)
+    const onUpdate = vi.fn()
+    const kept = vi.fn()
+    source?.subscribe('workspace:w', { onUpdate: kept, onMessage: vi.fn() })
+    const off = source?.subscribe('workspace:w', {
+      onUpdate,
+      onMessage: vi.fn(),
+      onConnectionChange: (connected) => {
+        if (!connected) off?.()
       },
     })
 
     FakeSharedWorker.instances[0]?.fail()
+    await vi.waitFor(() => expect(daemon.streamOpen()).toBe(true))
+    daemon.pushUpdate('workspace:w', 'AQID')
 
-    expect(reopened).toBeNull()
+    await vi.waitFor(() => expect(kept).toHaveBeenCalledTimes(1))
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
+
+  it('releases a moved listener from the page stream when its holder lets go', async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('moved-off'), daemon.fetch)
+    const onUpdate = vi.fn()
+    const kept = vi.fn()
+    source?.subscribe('workspace:w', { onUpdate: kept, onMessage: vi.fn() })
+    const off = source?.subscribe('workspace:w', { onUpdate, onMessage: vi.fn() })
+
+    FakeSharedWorker.instances[0]?.fail()
+    off?.()
+    await vi.waitFor(() => expect(daemon.streamOpen()).toBe(true))
+    daemon.pushUpdate('workspace:w', 'AQID')
+
+    await vi.waitFor(() => expect(kept).toHaveBeenCalledTimes(1))
+    expect(onUpdate).not.toHaveBeenCalled()
   })
 
   it('rejects a snapshot it was still waiting on', async () => {
@@ -105,24 +194,56 @@ describe('a shared worker that fails to load', () => {
     await expect(pending).rejects.toThrow()
   })
 
-  it('rejects every later snapshot at once rather than posting into the dead port', async () => {
-    const source = createSharedSseStreamSource(origin('later-snapshot'))
+  it("answers every later snapshot from the page's own read, not the dead port", async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('later-snapshot'), daemon.fetch)
     FakeSharedWorker.instances[0]?.fail()
 
-    await expect(source?.snapshot('workspace:w')).rejects.toThrow()
+    await expect(source?.snapshot('workspace:w')).resolves.toEqual(new Uint8Array([9]))
     expect(postedOfType('snapshot-request')).toEqual([])
   })
 
-  it('tells whoever follows the failures, once', () => {
-    const told = vi.fn()
-    const stop = subscribeSharedStreamFailure(told)
-    createSharedSseStreamSource(origin('told'))
+  it("sends control messages on the page's own stream once the worker has failed", async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('later-control'), daemon.fetch)
+    source?.subscribe('workspace:w', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    FakeSharedWorker.instances[0]?.fail()
+    await vi.waitFor(() => expect(daemon.streamOpen()).toBe(true))
+
+    source?.sendMessage('workspace:w', { type: 'client_ready' })
+
+    await vi.waitFor(() =>
+      expect(daemon.requested().some((url) => url.endsWith('/api/sync/message'))).toBe(true),
+    )
+    expect(postedOfType('control')).toEqual([])
+  })
+
+  it("writes through the page's own stream once the worker has failed", async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('later-push'), daemon.fetch)
+    FakeSharedWorker.instances[0]?.fail()
+
+    await source?.push('workspace:w', new Uint8Array([1]))
+
+    expect(postedOfType('push')).toEqual([])
+    expect(daemon.requested().some((url) => url.endsWith('/update'))).toBe(true)
+  })
+})
+
+describe('a shared worker that fails under a live listener', () => {
+  // The source falls back inside itself, so a holder that never rebuilds is
+  // not cut off for the page's life.
+  it('keeps delivering to a listener that never rebuilds, through the page', async () => {
+    const daemon = ownStreamDaemon()
+    const source = create(origin('keeps-delivering'), daemon.fetch)
+    const onUpdate = vi.fn()
+    source?.subscribe('workspace:w', { onUpdate, onMessage: vi.fn() })
 
     FakeSharedWorker.instances[0]?.fail()
-    FakeSharedWorker.instances[0]?.fail()
-    stop()
+    await vi.waitFor(() => expect(daemon.streamOpen()).toBe(true))
+    daemon.pushUpdate('workspace:w', 'AQID')
 
-    expect(told).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(onUpdate).toHaveBeenCalledWith(new Uint8Array([1, 2, 3])))
   })
 })
 

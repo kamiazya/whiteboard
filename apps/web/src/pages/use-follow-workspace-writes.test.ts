@@ -124,12 +124,12 @@ describe('useFollowWorkspaceWrites when the shared worker fails to load', () => 
     globalThis.SharedWorker = originalSharedWorker
   })
 
-  it('follows the workspace again through a stream of its own', () => {
+  it('keeps following the workspace, through a stream of its own', () => {
     FailingSharedWorker.instances = []
     globalThis.SharedWorker = FailingSharedWorker as unknown as typeof SharedWorker
     const subscribe = vi.spyOn(SseStreamHub.prototype, 'subscribe').mockReturnValue(() => {})
-    // Held stable, as the page holds it, so nothing but the failure can
-    // re-run the follow.
+    // Held stable, as the page holds it, so nothing re-runs the follow: the
+    // source moves its subscription itself.
     const reload = vi.fn<Reload>(async () => {})
     const daemonBaseUrl = `http://follow-worker-fails-${++failingOrigins}.test`
     renderHook(() =>
