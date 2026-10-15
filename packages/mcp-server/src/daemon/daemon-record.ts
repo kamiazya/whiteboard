@@ -76,8 +76,23 @@ export function describeOccupant(
 ): string {
   if (liveness.state === 'running') return `the daemon it names (pid ${pid}) is still running`
   const where = socketPath === undefined ? '' : ` ${socketPath}`
-  const serving = liveness.servingPid === undefined ? '' : ` as pid ${liveness.servingPid}`
-  return `a daemon answers on its socket${where}${serving}`
+  return `a daemon answers on its socket${where}${asServingPid(liveness)}`
+}
+
+/**
+ * Why a record's own pid is not the daemon serving `socket`, opening a
+ * sentence that refuses to start or reports the process unconfirmed.
+ */
+export function describeUnconfirmed(
+  liveness: Extract<DaemonLiveness, { state: 'unconfirmed' }>,
+  pid: number,
+  socket: string,
+): string {
+  return `A daemon answers on ${socket}${asServingPid(liveness)}, not as pid ${pid}`
+}
+
+function asServingPid(liveness: Extract<DaemonLiveness, { state: 'unconfirmed' }>): string {
+  return liveness.servingPid === undefined ? '' : ` as pid ${liveness.servingPid}`
 }
 
 type ReadOutcome =

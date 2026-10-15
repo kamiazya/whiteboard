@@ -6,6 +6,7 @@ import {
 import {
   type DaemonRecordParseResult,
   describeOccupant,
+  describeUnconfirmed,
   isOccupying,
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
@@ -117,10 +118,7 @@ function processCheck(liveness: DaemonLiveness, pid: number): DaemonDoctorCheck 
       return {
         id: 'daemon.process',
         status: 'error',
-        summary:
-          liveness.servingPid === undefined
-            ? `A daemon answers on the recorded socket, but not as pid ${pid}, which the record names.`
-            : `A daemon answers on the recorded socket as pid ${liveness.servingPid}, not as pid ${pid}, which the record names.`,
+        summary: `${describeUnconfirmed(liveness, pid, 'the recorded socket')}, which the record names.`,
         remediation:
           'Stop the process serving the socket named in daemon.json, then start the daemon: whiteboard daemon run',
       }

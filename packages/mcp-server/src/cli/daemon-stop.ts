@@ -1,4 +1,4 @@
-import { type DaemonLiveness, daemonLiveness } from '../daemon/daemon-liveness.js'
+import { type DaemonLiveness, daemonLiveness, servingPidOf } from '../daemon/daemon-liveness.js'
 import { deleteDaemonRecord, loadDaemonRecord } from '../daemon/daemon-registry.js'
 import {
   type DaemonStopResult,
@@ -53,9 +53,7 @@ function notStopped(
     ok: false,
     ...NOT_STOPPED[liveness.state],
     pid,
-    ...(liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
-      ? { servingPid: liveness.servingPid }
-      : {}),
+    ...servingPidOf(liveness),
   })
 }
 

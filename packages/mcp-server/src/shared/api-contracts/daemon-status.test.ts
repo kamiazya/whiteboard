@@ -121,4 +121,10 @@ describe('daemonStatusResultSchema', () => {
       }),
     ).toThrow(/dataDir/)
   })
+
+  it('describes pidAlive as whether something may still hold the record', () => {
+    expect(daemonStatusResultSchema.shape.pidAlive.unwrap().description).toMatch(
+      /may still hold the record/,
+    )
+  })
 })
