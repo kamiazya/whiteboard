@@ -630,7 +630,7 @@ export function tidyNodes(
     const height = Math.round(rect.h)
     // Defensive twin of the workspace write guard: tidy must
     // never emit a position the doc layer would refuse.
-    if (![x, y, width, height].every(Number.isFinite)) continue
+    if (!isFiniteRect({ x, y, width, height })) continue
     const grew = width !== node.width || height !== node.height
     if (x === node.x && y === node.y && !grew) continue
     moves.push(grew ? { id: node.id, x, y, width, height } : { id: node.id, x, y })
