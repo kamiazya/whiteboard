@@ -20,6 +20,7 @@ import {
   acquireSpawnLock,
   claimPidFile,
   DEFAULT_SPAWN_LOCK_STALE_MS,
+  EMPTY_PID_FILE_GRACE_MS,
   isLockStale,
   readPidFile,
   releasePidFile,
@@ -414,6 +415,27 @@ describe('claimPidFile / releasePidFile (real temp dir)', () => {
     ['unparsable content', 'not-a-pid'],
   ])('replaces a file left by %s', (_label, content) => {
     writeFileSync(pidPath, content)
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => false })).toEqual({
+      kind: 'claimed',
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
+  // A claim is `open('wx')` and then a write, so a racing claimer can read the
+  // file empty in between; taking that for a dead writer steals a live claim.
+  it('holds an empty file still inside the window a claim writes in', () => {
+    writeFileSync(pidPath, '')
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => false })).toEqual({
+      kind: 'held',
+      pid: null,
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('')
+  })
+
+  it('replaces an empty file left by a claimer that died before its write', () => {
+    writeFileSync(pidPath, '')
+    const old = (Date.now() - EMPTY_PID_FILE_GRACE_MS - 1_000) / 1000
+    utimesSync(pidPath, old, old)
     expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => false })).toEqual({
       kind: 'claimed',
     })
