@@ -8,6 +8,7 @@ import { moveLegacyDataDirUnderTenant } from '../../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
 import { getRawDb } from './index.js'
 import { resolveDatabaseLocation } from './location.js'
+import { withMigrationLock } from './migration-lock.js'
 import { runMigrations } from './migrator.js'
 
 const log = getLogger('prepare-data-dir')
@@ -61,11 +62,15 @@ export function prepareDataDir(dataDir: string): Promise<void> {
   const pending = (async () => {
     const db = await getRawDb(dataDir)
     await warnOnDaemonVersionSkew(dataDir)
-    await runMigrations(db, describeDatabase(dataDir))
-    // AFTER the database migrations: 0008 and 0012 rewrite file names under
-    // the pre-tenant layout, so the directories have to still be where those
-    // migrations left them when they run.
-    await moveLegacyDataDirUnderTenant(dataDir, SELF_HOST_TENANT_ID)
+    // Held across processes, not only this one: a second server opening the
+    // same data dir waits here and then finds nothing pending.
+    await withMigrationLock(dataDir, async () => {
+      await runMigrations(db, describeDatabase(dataDir))
+      // AFTER the database migrations: 0008 and 0012 rewrite file names under
+      // the pre-tenant layout, so the directories have to still be where those
+      // migrations left them when they run.
+      await moveLegacyDataDirUnderTenant(dataDir, SELF_HOST_TENANT_ID)
+    })
   })()
   ready.set(dataDir, pending)
   pending.catch(() => {

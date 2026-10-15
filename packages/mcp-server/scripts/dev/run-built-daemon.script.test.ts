@@ -140,11 +140,21 @@ describe('run-built-daemon', () => {
   // first has written its record fails its migrations instead of being told
   // one is already starting. So the launcher holds it from before the spawn
   // until the record names its child — and no longer, or the next start
-  // would wait out a daemon that is already up.
+  // would wait out a daemon that is already up. A record left by a daemon
+  // that died is no sign of this child booting, so one is waiting here.
   it('holds the spawn lock until the daemon record names the child, then lets go', () => {
     const { root } = fakePackage(['0001-init'], ['0001-init'])
     const dataDir = join(root, 'data')
     const observed = join(root, 'boot-observed.json')
+    write(
+      join(dataDir, 'daemon.json'),
+      JSON.stringify({
+        pid: spawnSync(process.execPath, ['-e', '']).pid,
+        socketPath: join(dataDir, 'absent.sock'),
+        token: 't',
+        startedAt: new Date().toISOString(),
+      }),
+    )
     write(
       join(root, 'dist/server/daemon-entry.js'),
       [

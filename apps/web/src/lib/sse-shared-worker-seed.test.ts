@@ -322,4 +322,28 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     for (const write of updateWrites.filter((w) => w.doc === doc)) written.import(write.body)
     expect(written.getMap('m').get('edit')).toBe('before-seed')
   })
+  it('catches up a replica a snapshot request seeded before its feed was routed', async () => {
+    // A tab whose stream has not routed the document reads its state anyway,
+    // which seeds the replica early. A write the daemon takes between that
+    // seed and the routing reaches no frame, so the routing catches up
+    // rather than counting the replica as seeded.
+    const doc = nextDoc()
+    const daemon = new LoroDoc()
+    daemon.getMap('m').set('a', 'seeded-early')
+    daemon.commit()
+    snapshotByDoc.set(doc, daemon.export({ mode: 'snapshot' }))
+    const early = new LoroDoc()
+    early.import(await requestSnapshot(doc))
+    expect(early.getMap('m').get('a')).toBe('seeded-early')
+
+    daemon.getMap('m').set('b', 'in-the-gap')
+    daemon.commit()
+    snapshotByDoc.set(doc, daemon.export({ mode: 'snapshot' }))
+    await subscribed(doc)
+    await until(() => snapshotHits.filter((hit) => hit === doc).length >= 2)
+
+    const later = new LoroDoc()
+    later.import(await requestSnapshot(doc))
+    expect(later.getMap('m').get('b')).toBe('in-the-gap')
+  })
 })

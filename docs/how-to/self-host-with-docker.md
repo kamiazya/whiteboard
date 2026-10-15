@@ -454,7 +454,10 @@ server {
 The browser's live sync is a long-lived event stream (`/api/sync/stream`). The
 server marks it `X-Accel-Buffering: no`, so nginx passes it through as it is
 written rather than holding it in a buffer; a proxy that ignores that header
-needs buffering turned off for that path, or edits arrive in bursts.
+needs buffering turned off for that path. Otherwise the stream's frames are
+held back: a document takes about two seconds to open, is shown as not live
+(reconnecting) while what the proxy holds stays held, and edits made
+elsewhere arrive in bursts. The browser's own edits are still saved.
 
 ## Running several instances
 
@@ -479,8 +482,10 @@ make that visible to the people using them:
    instance. A browser's live sync is one event stream plus requests that say
    what it follows, and the stream lives on the instance that opened it — a
    request that lands on another instance is refused (`404 unknown_stream`,
-   logged as a warning naming sticky sessions), and that browser stops
-   receiving edits. Any affinity your load balancer offers will do:
+   logged as a warning naming sticky sessions). The document still opens,
+   and that browser's own edits are still saved, but it is shown as not
+   live (reconnecting) and edits made anywhere else do not reach it. Any
+   affinity your load balancer offers will do:
 
    ```caddyfile
    reverse_proxy whiteboard-1:3099 whiteboard-2:3099 {

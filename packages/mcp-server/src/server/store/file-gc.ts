@@ -1,5 +1,5 @@
-import { readdir, stat, unlink } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { lstat, readdir, realpath, stat, unlink } from 'node:fs/promises'
+import { basename, extname, join, sep } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
@@ -11,6 +11,7 @@ import {
 import type { z } from 'zod'
 import { isMissingFileError } from '../../shared/errno.js'
 import { getLogger } from '../log.js'
+import { workspaceDir } from '../tenant/data-layout.js'
 import { validateWorkspaceId } from '../validators.js'
 import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { backupIsInProgress } from './backup-in-progress.js'
@@ -41,13 +42,122 @@ const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 // this internal return type derive from it so they cannot drift apart.
 export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 
-function workspaceFilesDir(scope: StoreScope, workspaceId: string): string {
+export class FilesDirNotContainedError extends Error {
+  constructor(public readonly workspaceId: string) {
+    super(
+      `file-gc: refusing to purge ${workspaceId} because its files directory does not resolve inside the data directory`,
+    )
+    this.name = 'FilesDirNotContainedError'
+  }
+}
+
+// Structured response body for the purge-dangling route, beside the error for
+// the same reason as `incompleteFileGcScanErrorBody` below.
+export function filesDirNotContainedErrorBody(
+  error: unknown,
+): { error: 'files_dir_not_contained'; message: string } | null {
+  if (!(error instanceof FilesDirNotContainedError)) return null
+  return { error: 'files_dir_not_contained', message: error.message }
+}
+
+type ContainmentCheck = 'missing' | 'safe' | 'unsafe'
+
+// One lstat+realpath containment check, run on a workspace's top-level
+// directory and on its files/ child (see isWorkspaceDirContained below).
+// `treatNonDirectoryAsMissing` only applies to the files/ child: a files
+// entry that exists but is not a directory can't be an escape vector
+// (realpath of a regular file just resolves in place) and the purge's own
+// readdir() fails loudly on it, so there is nothing to fail closed over here.
+async function checkSubpathContainment(
+  workspaceId: string,
+  targetPath: string,
+  realDataDir: string,
+  label: string,
+  treatNonDirectoryAsMissing = false,
+): Promise<ContainmentCheck> {
+  let stats: Awaited<ReturnType<typeof lstat>>
+  try {
+    stats = await lstat(targetPath)
+  } catch (err) {
+    // Missing is not a containment risk: the purge answers zero purged for a
+    // missing files dir.
+    if (isMissingFileError(err)) return 'missing'
+    log.warning({ workspaceId, err }, `purge refused: could not stat ${label}`)
+    return 'unsafe'
+  }
+  if (stats.isSymbolicLink()) {
+    log.warning({ workspaceId }, `purge refused: symlinked ${label}`)
+    return 'unsafe'
+  }
+  if (treatNonDirectoryAsMissing && !stats.isDirectory()) return 'missing'
+
+  let realTargetPath: string
+  try {
+    realTargetPath = await realpath(targetPath)
+  } catch (err) {
+    log.warning({ workspaceId, err }, `purge refused: could not resolve ${label} realpath`)
+    return 'unsafe'
+  }
+  if (realTargetPath !== realDataDir && !realTargetPath.startsWith(realDataDir + sep)) {
+    log.warning({ workspaceId }, `purge refused: ${label} escapes the data dir`)
+    return 'unsafe'
+  }
+  return 'safe'
+}
+
+// Whether a workspace's directory, and its files/ child, really resolve inside
+// the data dir. The files dir is joined lexically (assertPathWithinDir) and
+// readdir/unlink follow whatever that resolves to, so without this a purge
+// could unlink through a symlink — at the workspace dir, at its files/ child,
+// or at an ANCESTOR such as the workspaces root, which only realpath can see —
+// into a directory outside the data dir. No source of a workspace id is
+// trusted: a DB row can outlive its directory being replaced by a symlink, and
+// a directory found on disk can be re-pointed after it was found.
+async function isWorkspaceDirContained(scope: StoreScope, workspaceId: string): Promise<boolean> {
+  let realDataDir: string
+  try {
+    realDataDir = await realpath(scope.dataDir)
+  } catch (err) {
+    log.warning({ workspaceId, err }, 'purge refused: could not resolve data dir realpath')
+    return false
+  }
+  const entryPath = workspaceDir(scope.dataDir, scope.layout.tenantId, workspaceId)
+  const dirCheck = await checkSubpathContainment(workspaceId, entryPath, realDataDir, 'dir')
+  if (dirCheck !== 'safe') return dirCheck === 'missing'
+
+  const filesPath = scope.layout.workspaceFilesDir(workspaceId)
+  const filesCheck = await checkSubpathContainment(
+    workspaceId,
+    filesPath,
+    realDataDir,
+    'files dir',
+    true,
+  )
+  return filesCheck !== 'unsafe'
+}
+
+/**
+ * The files dir a purge may list and unlink in, or a refusal. Every caller of
+ * the purge — the periodic sweeper and the Storage card's route alike — gets
+ * the containment gate by reaching the files dir only through here, under the
+ * write barrier and immediately before the listing, so no caller can skip it
+ * and none checks it a second time.
+ *
+ * This is not ATOMIC with the unlinks: that would need directory-handle,
+ * no-follow semantics the fs API does not offer. It narrows the window to the
+ * one pass that holds the barrier.
+ */
+async function containedFilesDir(scope: StoreScope, workspaceId: string): Promise<string> {
   validateWorkspaceId(workspaceId)
-  return assertPathWithinDir(
+  const dir = assertPathWithinDir(
     scope.layout.workspaceFilesDir(workspaceId),
     scope.dataDir,
     'files dir',
   )
+  if (!(await isWorkspaceDirContained(scope, workspaceId))) {
+    throw new FilesDirNotContainedError(workspaceId)
+  }
+  return dir
 }
 
 export class IncompleteFileGcScanError extends Error {
@@ -259,16 +369,13 @@ async function unlinkDangling({
  * exactly this reason, and the two were simply written to different
  * conventions.
  *
- * A malformed value falls back to the default rather than aborting: unlike
- * `WHITEBOARD_DATABASE_URL`, a wrong value here cannot make two instances
- * disagree about what the record is, and the default is the safe direction
- * (deleting later than asked, never sooner).
+ * One rule for the value, in storage-env.ts, and startup refuses a malformed
+ * one (collectStorageEnvIssues), so a started server never reaches the
+ * default below: it serves only library and test callers, for whom the
+ * default is the safe direction (deleting later than asked, never sooner).
  */
 function resolveGraceMs(options: PurgeFilesOptions): number {
   if (typeof options.graceMs === 'number') return Math.max(0, options.graceMs)
-  // One definition of the rule, in storage-env.ts, which startup also uses to
-  // refuse a value it cannot understand — so a started server never reaches
-  // the fallback below.
   const parsed = parseFileGcGraceMs(process.env)
   if (parsed.ok && parsed.value !== null) return parsed.value
   return DEFAULT_FILE_GRACE_MS
@@ -323,7 +430,7 @@ export async function purgeDanglingFiles(
     // which is far too expensive to pay for a workspace that has no files
     // directory (or an empty one) — the common case for every workspace
     // the periodic sweeper visits that never had an upload.
-    const dir = workspaceFilesDir(scope, workspaceId)
+    const dir = await containedFilesDir(scope, workspaceId)
     let entries: string[]
     try {
       entries = await readdir(dir)

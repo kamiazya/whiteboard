@@ -152,6 +152,10 @@ export function defaultRetryDelayMs(attempt: number): number {
 }
 
 export interface DocListener {
+  /**
+   * A binary update frame. These travel on `workspace:` keys only; a source
+   * may deliver nothing here for any other key, which carries text alone.
+   */
   onUpdate: (bytes: Uint8Array) => void
   onMessage: (raw: string) => void
   /**
@@ -357,6 +361,13 @@ export class SseStreamHub implements SseStreamSource {
   private closed = false
   /** Set by a 401/403; the reconnect loop halts on it for this hub's life. */
   private authRefused = false
+  /**
+   * Set when the open stream is ended because a subscribe on it went
+   * unanswered. Such a stream does not count as one that opened for the
+   * backoff: a subscribe that keeps failing would otherwise reopen it at the
+   * floor delay forever, re-routing every healthy document each time.
+   */
+  private endedUnanswered = false
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private retryResolve: (() => void) | null = null
 
@@ -455,9 +466,10 @@ export class SseStreamHub implements SseStreamSource {
 
   /**
    * The document's current state, from the daemon. The SSE stream carries
-   * only INCREMENTAL updates from subscription onward — the subscribe route
+   * only INCREMENTAL updates from routing onward — the subscribe route
    * registers routing and seeds nothing — so anything reconstructing a
-   * document needs this once before the stream's deltas mean anything.
+   * document reads this after each routed signal (`routingTransitions`): the
+   * first to start from, and every one after a drop to catch up.
    *
    * `null` for a document the daemon does not know: forking from empty is
    * the same path a first-ever open takes, and conflating that answer with a
@@ -551,6 +563,7 @@ export class SseStreamHub implements SseStreamSource {
       // Unanswered, so whether the daemon routes these is unknown, and their
       // subscribers would wait on a routing nobody re-asks for. A new stream
       // re-asks for everything.
+      this.endedUnanswered = true
       this.abort?.abort()
       return false
     }
@@ -610,11 +623,13 @@ export class SseStreamHub implements SseStreamSource {
     this.started = false
   }
 
-  /** Opens the stream and reads it to its end. Resolves to whether it opened,
-   *  which is what decides between resetting and growing the backoff. */
+  /** Opens the stream and reads it to its end. Resolves to whether it opened
+   *  and was not ended for an unanswered subscribe, which is what decides
+   *  between resetting and growing the backoff. */
   private async readStreamOnce(): Promise<boolean> {
     const abort = new AbortController()
     this.abort = abort
+    this.endedUnanswered = false
 
     let res: Response
     try {
@@ -654,8 +669,8 @@ export class SseStreamHub implements SseStreamSource {
     // to it until the next one announces its own.
     this.streamId = null
     for (const entry of this.docs.values()) entry.routed = false
-    this.announceConnection(false)
-    return true
+    this.announceDropped()
+    return !this.endedUnanswered
   }
 
   /**
@@ -684,11 +699,17 @@ export class SseStreamHub implements SseStreamSource {
     }
   }
 
-  /** A subscriber that throws must not stop the others from being told. */
-  private announceConnection(connected: boolean): void {
-    for (const entry of this.docs.values()) this.announceTo(entry, connected)
+  /**
+   * Tell every document the stream has dropped. There is no "connected"
+   * twin on purpose: an open stream carries no document until the daemon
+   * answers its subscribe, so `true` is announced per document from that
+   * answer (`announceRouted`), never for the stream.
+   */
+  private announceDropped(): void {
+    for (const entry of this.docs.values()) this.announceTo(entry, false)
   }
 
+  /** A subscriber that throws must not stop the others from being told. */
   private announceTo(entry: { listeners: Set<DocListener> } | undefined, connected: boolean): void {
     for (const listener of entry?.listeners ?? []) {
       try {
@@ -699,7 +720,7 @@ export class SseStreamHub implements SseStreamSource {
     }
   }
 
-  /** Same rule as `announceConnection`: one listener's throw stops nobody else. */
+  /** Same rule as `announceTo`: one listener's throw stops nobody else. */
   private announceAuthRefused(
     entries: Iterable<{ listeners: Set<DocListener> } | undefined>,
   ): void {

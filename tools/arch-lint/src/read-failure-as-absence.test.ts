@@ -42,6 +42,10 @@ const LEDGER: Readonly<Record<string, string>> = {
     'degrades-visibly: a shell it cannot read serves the placeholder page, which says the app is missing rather than pretending',
   'packages/mcp-server/src/server/store/db/location-record.ts#readDatabaseLocationRecord':
     'deliberate: backup falls back to the environment and restore to its file-presence check, and restore refuses a mismatch either way',
+  'packages/mcp-server/src/server/store/db/migration-lock.ts#readProcessStartMs':
+    'probe: reads /proc to tell a reused pid from the lock holder, and an unreadable entry only means it cannot tell, so the holder is waited on rather than replaced',
+  'packages/mcp-server/src/server/store/db/migration-lock.ts#release':
+    'fails-safe: a lock it cannot read is left in place, and the next start judges its holder like any other',
   'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#importOneBlob':
     'deliberate: logs a warning and skips the one blob, leaving its source file in place, and nothing deletes it afterwards',
 }

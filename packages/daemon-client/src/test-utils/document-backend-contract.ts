@@ -72,6 +72,15 @@ export interface DocumentBackendHarness {
    */
   keeperWritesAfterNextSnapshot?(): void
   /**
+   * Make the keeper's stream never carry this backend's workspace, while its
+   * snapshot route keeps answering: `refused` answers the subscribe for it
+   * with a refusal (a balancer that sent it to a daemon that does not know
+   * the stream), `silent` leaves it unrouted with nothing said (a buffering
+   * proxy holding the stream back). Called before `connect`. Omitted by an
+   * implementation with no stream to route.
+   */
+  neverRoutes?(how: 'refused' | 'silent'): void
+  /**
    * Whether the bytes this backend delivered — the snapshot and every
    * update, in delivery order — reproduce the keeper's current state when
    * applied. False for a frame left waiting on history it builds on.
@@ -141,6 +150,7 @@ export function documentBackendContract(
   transportCases(create)
   catchUpCases(create)
   routingGapCases(create)
+  unroutedCases(create)
   upstreamDeliveryCases(create)
 
   it('never throws on a control message sent before connecting', async () => {
@@ -349,6 +359,42 @@ function routingGapCases(
     h.backend.disconnect()
     h.cleanup()
   })
+}
+
+/**
+ * A stream that never carries the document. Reading state only once it does
+ * is what keeps a write from falling between the read and the routing — but a
+ * stream that is refused, or held back by something between the page and
+ * the keeper, would then leave the caller with no document at all while the
+ * keeper's snapshot route answers. The caller must still be handed the
+ * keeper's state.
+ */
+function unroutedCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  for (const how of ['refused', 'silent'] as const) {
+    // Polled: the silent case waits out the backend's own bound on routing.
+    it(`a document whose stream is ${how === 'refused' ? 'refused' : 'never routed'} still receives the keeper's state`, {
+      timeout: 20_000,
+    }, async () => {
+      const h = await create()
+      if (!h.neverRoutes || !h.caughtUp) {
+        h.cleanup()
+        return
+      }
+      const { caughtUp } = h
+      h.neverRoutes(how)
+      const rec = recorder()
+      h.backend.connect(rec.handlers)
+
+      await vi.waitFor(() => expect(rec.calls).toContain('snapshot'), { timeout: 10_000 })
+      expect(caughtUp(rec.delivered)).toBe(true)
+      // Not live, and not claimed to be: nothing carries the keeper's writes.
+      expect(rec.calls).not.toContain('connected')
+      h.backend.disconnect()
+      h.cleanup()
+    })
+  }
 }
 
 /** What reaches the keeper of what a caller pushed — while connected, and across teardown. */

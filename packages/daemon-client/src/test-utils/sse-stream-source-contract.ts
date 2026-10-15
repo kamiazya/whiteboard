@@ -244,10 +244,10 @@ export function sseStreamSourceContract(
     const h = await create()
     const doc = nextDoc()
     h.seedDaemonState(doc, LORO_UPDATE)
-    // BEFORE any subscription, because that is the order the backend uses: it
-    // seeds from the snapshot first so the stream's deltas have something to
-    // land on. An implementation that only answers documents it already has
-    // listeners for deadlocks that first open.
+    // With no subscription: a snapshot answers a request, not a
+    // subscription, and a caller may ask with no listener at all — an
+    // implementation that only answers documents it has listeners for would
+    // leave that caller waiting.
     const bytes = await h.source.snapshot(doc)
     expect(bytes).not.toBeNull()
     const reconstructed = new LoroDoc()

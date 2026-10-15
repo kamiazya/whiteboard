@@ -337,6 +337,33 @@ describe('a data dir whose record names a pid that has exited', () => {
     await until(() => existsSync(pidFile) || exited, 'the wrapper to start its child or exit')
     expect(existsSync(pidFile), 'the wrapper exited without starting its child').toBe(true)
   })
+
+  // The record on disk is the dead daemon's until the new one writes its own,
+  // so it cannot end the boot window: a second start let in then would race
+  // this daemon's migrations.
+  it('holds the spawn lock through the boot window instead of reading the stale record as up', async () => {
+    const { cwd } = fakeCheckout({ gated: true })
+    const lockPath = devSpawnLockPath(join(cwd, 'data'))
+    writeFileSync(
+      join(cwd, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: spawnSync(process.execPath, ['-e', '']).pid,
+        socketPath: join(cwd, 'data', 'gone.sock'),
+        token: 't',
+        startedAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    )
+    const wrapper = launchWrapper(cwd)
+    await until(() => children(cwd).length === 1, 'the wrapper to start its watcher', 30_000)
+
+    expect(existsSync(lockPath), 'the lock was let go before the daemon wrote its record').toBe(
+      true,
+    )
+    expect(JSON.parse(readFileSync(lockPath, 'utf8')).pid).toBe(wrapper.process.pid)
+    writeFileSync(join(cwd, 'release'), '')
+    await until(() => !existsSync(lockPath), 'the wrapper to let go once its daemon is up', 30_000)
+    expect(wrapper.exit).toBeNull()
+  })
 })
 
 describe.skipIf(!existsSync('/proc/self/stat'))(

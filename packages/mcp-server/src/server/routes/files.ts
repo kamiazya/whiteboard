@@ -11,6 +11,7 @@ import { isMissingFileError } from '../../shared/errno.js'
 import { writeFileAtomicStaged } from '../atomic-write.js'
 import { corruptStoredData, corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
+  filesDirNotContainedErrorBody,
   type GcVersionReader,
   incompleteFileGcScanErrorBody,
   purgeDanglingFiles,
@@ -63,6 +64,23 @@ function fileHeaders(contentType: string, fileId: string): Record<string, string
     'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
     'Content-Disposition': `attachment; filename="${fileId}.svg"`,
   }
+}
+
+/**
+ * What the purge route answers for each way a purge refuses. 503: a unit the
+ * scan must judge (version, trash bytes, node) could not be read — corrupt or
+ * not, nothing was deleted, and a retry helps only if the failure was
+ * transient; the log names the unit. 500: the workspace record will not
+ * decode, so there is no reference set; or the files directory resolves
+ * outside the data dir, which no retry changes and the log names the hop.
+ */
+function purgeRefusal(
+  err: unknown,
+): { body: { error: string; message: string }; status: 500 | 503 } | null {
+  const incompleteScan = incompleteFileGcScanErrorBody(err)
+  if (incompleteScan) return { body: incompleteScan, status: 503 }
+  const body = filesDirNotContainedErrorBody(err) ?? corruptStoredDataBody(err)
+  return body ? { body, status: 500 } : null
 }
 
 export interface FilesRouterOptions {
@@ -200,14 +218,8 @@ export function createFilesRouter(options: FilesRouterOptions) {
       const result = await purgeDanglingFiles(workspaceId, { versionStore, scope })
       return c.json(result)
     } catch (err) {
-      // 503: a unit the scan must judge (version, trash bytes, node) could
-      // not be read — corrupt or not, nothing was deleted, and a retry helps
-      // only if the failure was transient; the log names the unit. 500: the
-      // workspace record will not decode, so there is no reference set.
-      const incompleteScanBody = incompleteFileGcScanErrorBody(err)
-      if (incompleteScanBody) return c.json(incompleteScanBody, 503)
-      const body = corruptStoredDataBody(err)
-      if (body) return c.json(body, 500)
+      const refusal = purgeRefusal(err)
+      if (refusal) return c.json(refusal.body, refusal.status)
       throw err
     }
   })

@@ -1,15 +1,16 @@
 /**
- * The purge route's two refusals, driven through the real store rather than a
+ * The purge route's refusals, driven through the real store rather than a
  * mocked purge: a saved version whose stored frontiers will not check out is
- * a unit the scan could not judge (503, nothing deleted), and a workspace
- * record that will not decode leaves no reference set at all (500).
+ * a unit the scan could not judge (503, nothing deleted), a workspace record
+ * that will not decode leaves no reference set at all (500), and a files
+ * directory that resolves outside the data dir is never listed (500).
  */
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { workspaceFilesDir } from '../tenant/data-layout.js'
+import { workspaceDir, workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
 let tempDir: string
@@ -103,5 +104,25 @@ describe('POST purge-dangling against the real store', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toMatchObject({ error: 'corrupt_stored_data' })
     expect(await readdir(dir)).toEqual(['drawn.png'])
+  })
+
+  it('answers 500 files_dir_not_contained and unlinks nothing through a symlinked files dir', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'whiteboard-purge-route-outside-'))
+    try {
+      await writeFile(join(outside, 'victim.png'), Buffer.alloc(10, 1))
+      const past = (Date.now() - 2 * 60 * 60 * 1000) / 1000
+      await utimes(join(outside, 'victim.png'), past, past)
+      const dir = workspaceDir(tempDir, SELF_HOST_TENANT_ID, WORKSPACE)
+      await mkdir(dir, { recursive: true })
+      await symlink(outside, join(dir, 'files'), 'dir')
+
+      const res = await purge()
+
+      expect(res.status).toBe(500)
+      await expect(res.json()).resolves.toMatchObject({ error: 'files_dir_not_contained' })
+      expect(await readdir(outside)).toEqual(['victim.png'])
+    } finally {
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })

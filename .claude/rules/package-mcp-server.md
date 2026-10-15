@@ -294,6 +294,12 @@ drives both real processes and waits for the SSE frame with NO request to the
 daemon, since any read would catch the cache up and hide a tail that never
 ran.
 
+The same two processes can also START together, on one data dir. Startup
+migrations are serialized across them by `store/db/migration-lock.ts`
+(`<dataDir>/migration.lock`): the second waits, then finds nothing pending.
+Without it, one process died with a schema error at a random migration step,
+and once re-ran a whole-table rebuild before failing.
+
 ## Log redaction
 
 The root pino instance in `log.ts` redacts a fixed list of field names —

@@ -39,8 +39,10 @@ function inBursts(onMoved: () => void): { soon: () => void; cancel: () => void }
  * record's update frame to any stream following `workspace:<id>`, with no
  * document open, which is all a list that is not showing one document needs.
  *
- * A stream that dropped and came back also calls it: frames sent while it was
- * away are not replayed, so "nothing arrived" says nothing about the list.
+ * The first routing calls it too: the list was read before the stream carried
+ * the workspace, and a write in between reaches no frame. So does a stream
+ * that dropped and came back: frames sent while it was away are not replayed,
+ * so "nothing arrived" says nothing about the list.
  *
  * Answers the unsubscribe, which also cancels a call still waiting out the
  * burst.
@@ -54,7 +56,7 @@ export function followWorkspaceWrites(
   const unsubscribe = source.subscribe(workspaceDocKey(workspaceId), {
     onUpdate: soon,
     onMessage: () => {},
-    onConnectionChange: routingTransitions({ resumed: soon }),
+    onConnectionChange: routingTransitions({ first: soon, resumed: soon }),
   })
   return () => {
     cancel()

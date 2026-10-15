@@ -302,6 +302,44 @@ describe('SseBackend', () => {
     backend.disconnect()
   })
 
+  it('reports no connection when the stream dropped during the opening read', async () => {
+    // The open reports the connection once its snapshot settles, and only if
+    // the document is still routed then: the last word the caller hears must
+    // be the drop, not a connection that ended while the read ran.
+    const listeners: DocListener[] = []
+    let answer: (bytes: Uint8Array) => void = () => {}
+    const source: SseStreamSource = {
+      subscribe: (_doc, listener) => {
+        listeners.push(listener)
+        listener.onConnectionChange?.(false)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    }
+    const calls: string[] = []
+    const backend = new SseBackend('ws-1', 'notes', 'http://127.0.0.1:3099', undefined, source)
+    backend.connect({
+      ...createHandlers().handlers,
+      onSnapshot: () => calls.push('snapshot'),
+      onConnected: () => calls.push('connected'),
+      onDisconnected: () => calls.push('disconnected'),
+    })
+    for (const l of listeners) l.onConnectionChange?.(true)
+    for (const l of listeners) l.onConnectionChange?.(false)
+    answer(new Uint8Array([1]))
+    await vi.waitFor(() => expect(calls).toContain('snapshot'))
+    await flush()
+
+    expect(calls.filter((c) => c !== 'snapshot').at(-1)).toBe('disconnected')
+    expect(calls).not.toContain('connected')
+    backend.disconnect()
+  })
+
   it('routes control messages through an injected stream source', async () => {
     // The shipped configuration injects the SharedWorker-backed source, so the
     // stream — and therefore the streamId the daemon knows — belongs to the

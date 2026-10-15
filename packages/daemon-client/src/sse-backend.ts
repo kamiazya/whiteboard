@@ -23,6 +23,18 @@ import {
 import { parseServerTextMessage } from './sync-frame-text.js'
 import { QueuedWriter } from './write-chain.js'
 
+/**
+ * How long an open waits for the stream to carry the workspace before it
+ * reads the keeper's state anyway. Routing normally takes one subscribe
+ * round trip after the stream's `ready` — milliseconds against the local
+ * daemon, well under a second through a bridge or a remote keeper — so this
+ * sits past that, and short enough that a page behind a proxy that holds the
+ * stream back shows its document before a person reads it as empty. Firing
+ * early costs one read and nothing else: the routing that follows still
+ * catches up on whatever the read missed.
+ */
+export const UNROUTED_OPEN_MS = 2_000
+
 export interface SseTransport {
   fetch: typeof globalThis.fetch
 }
@@ -61,8 +73,20 @@ export class SseBackend implements DocumentBackend {
   private connection = 0
   /** What the source last said of the workspace key's routing. */
   private routed = false
+  /** Whether the opening read has started; once it has, routing catches up instead. */
+  private opening = false
   /** Whether the opening snapshot has settled, before which the open itself reports the connection. */
   private opened = false
+  /** The open's bound on waiting for routing, while it is waiting. */
+  private unroutedTimer: ReturnType<typeof setTimeout> | null = null
+  /**
+   * Reads whose answer REPLACES the caller's copy (the open, a refusal's
+   * resync), numbered as issued, and the newest one delivered: two can be in
+   * flight at once, and an older answer settling last must not replace a
+   * newer one.
+   */
+  private replacingIssued = 0
+  private replacingDelivered = 0
   /** The writes this backend sends itself, when its source keeps no copy of them. */
   private writer: QueuedWriter | null = null
   /** Whether the injected source has said a write failed and not yet that it landed. */
@@ -101,6 +125,7 @@ export class SseBackend implements DocumentBackend {
     this.cancelled = false
     this.connection += 1
     this.routed = false
+    this.opening = false
     this.opened = false
     this.handlers = handlers
     // Subscribe FIRST, with frames held, and read the keeper's state once the
@@ -109,8 +134,16 @@ export class SseBackend implements DocumentBackend {
     // ever carry, and every later frame builds on it. A frame arriving before
     // the snapshot is held for it; one the snapshot already covers imports as
     // nothing.
+    //
+    // A stream that never carries it — refused, or held back by something
+    // between the page and the keeper — must not leave the page with no
+    // document while the keeper's snapshot route answers, so the read also
+    // runs on the first refusal or drop, or once `UNROUTED_OPEN_MS` passes,
+    // and the routing that follows catches up rather than opening again.
     const opening = this.holdFrames()
     const source = this.resolveSource()
+    this.clearUnroutedTimer()
+    this.unroutedTimer = setTimeout(() => void this.open(handlers, opening), UNROUTED_OPEN_MS)
     this.unsubscribe = source.subscribe(this.binaryKey, this.binaryListener(handlers, opening))
     // Text messages stay per document — and ONLY text: no binary frame
     // travels on a per-document key.
@@ -125,7 +158,8 @@ export class SseBackend implements DocumentBackend {
   }
 
   /**
-   * The keeper's state, read once the stream carries the workspace. Through
+   * The keeper's state, read once the stream carries the workspace — or,
+   * when it does not, on a refusal or once `UNROUTED_OPEN_MS` passes. Through
    * the source, not a direct fetch, for the same reason push is: which
    * authority answers is the implementations' difference. The hub asks the
    * daemon; the worker-backed source asks the worker's replica, so a second
@@ -135,18 +169,15 @@ export class SseBackend implements DocumentBackend {
    * connected over a copy it does not have yet.
    */
   private async open(handlers: DocumentBackendHandlers, opening: FrameHold): Promise<void> {
+    if (this.opening || this.cancelled) return
+    this.opening = true
+    this.clearUnroutedTimer()
     const connection = this.connection
     // `null` is "the authority does not know this document" — the caller
     // keeps its own state and the stream fills in from empty, the same path
     // a first-ever open takes. A failed read is not terminal either: the
     // caller keeps whatever document state it already had.
-    await this.fetchKeeperState(
-      handlers,
-      (bytes) => {
-        if (bytes.byteLength > 0) handlers.onSnapshot(bytes)
-      },
-      opening,
-    )
+    await this.fetchKeeperState(handlers, this.replacing(handlers), opening)
     if (this.cancelled || this.connection !== connection) return
     this.opened = true
     if (this.routed) handlers.onConnected()
@@ -155,22 +186,29 @@ export class SseBackend implements DocumentBackend {
   /** What the workspace key's subscription does with each thing the source says. */
   private binaryListener(handlers: DocumentBackendHandlers, opening: FrameHold): DocListener {
     const routing = routingTransitions({
-      first: () => void this.open(handlers, opening),
+      // An open that already read before the routing existed may have
+      // missed a write, which is the gap a catch-up covers.
+      first: () => void (this.opening ? this.catchUp(handlers) : this.open(handlers, opening)),
       resumed: () => void this.catchUp(handlers),
     })
+    // The source says where routing stands as soon as it is subscribed to;
+    // a `false` after that and before any `true` is a refusal or a drop.
+    let joined = false
     return {
       onUpdate: (bytes) => {
         if (this.hold !== null) this.hold.frames.push(bytes)
         else handlers.onRemoteUpdate(bytes)
       },
       // Nothing addresses text to the workspace key; per-document text
-      // arrives on the per-document subscription `run` makes.
+      // arrives on the per-document subscription `connect` makes.
       onMessage: () => {},
       // The stream belongs to the source, so its liveness is the only signal
       // this backend has that updates are still arriving.
       onConnectionChange: (connected) => {
         if (this.cancelled) return
         this.routed = connected
+        if (!connected && joined) void this.open(handlers, opening)
+        joined = true
         routing(connected)
         if (!connected) handlers.onDisconnected?.()
         else if (this.opened) handlers.onConnected()
@@ -214,7 +252,26 @@ export class SseBackend implements DocumentBackend {
   private resync(handlers: DocumentBackendHandlers): Promise<void> {
     // Through `onSnapshot`: the caller drops its copy, which holds the
     // refused ops, for the keeper's.
-    return this.fetchKeeperState(handlers, (bytes) => handlers.onSnapshot(bytes))
+    return this.fetchKeeperState(handlers, this.replacing(handlers, true))
+  }
+
+  /**
+   * Delivery for a read that replaces the caller's copy, numbered when it is
+   * issued: it delivers only when no newer such read has delivered already.
+   * The open skips an empty answer; a resync replaces with whatever it got.
+   */
+  private replacing(handlers: DocumentBackendHandlers, empty = false): (bytes: Uint8Array) => void {
+    const issued = ++this.replacingIssued
+    return (bytes) => {
+      if (issued < this.replacingDelivered || (!empty && bytes.byteLength === 0)) return
+      this.replacingDelivered = issued
+      handlers.onSnapshot(bytes)
+    }
+  }
+
+  private clearUnroutedTimer(): void {
+    if (this.unroutedTimer !== null) clearTimeout(this.unroutedTimer)
+    this.unroutedTimer = null
   }
 
   /**
@@ -225,9 +282,18 @@ export class SseBackend implements DocumentBackend {
    * edits are intact, and an import of what it already has changes nothing.
    */
   private catchUp(handlers: DocumentBackendHandlers): Promise<void> {
-    return this.fetchKeeperState(handlers, (bytes) => {
-      if (bytes.byteLength > 0) handlers.onRemoteUpdate(bytes)
-    })
+    const hold = this.holdFrames()
+    return this.fetchKeeperState(
+      handlers,
+      (bytes) => {
+        if (bytes.byteLength === 0) return
+        // Another read still running may replace the caller's copy when it
+        // settles, and this merge would go with it: it waits with the frames.
+        if (hold.reads > 1) hold.frames.push(bytes)
+        else handlers.onRemoteUpdate(bytes)
+      },
+      hold,
+    )
   }
 
   /** Start holding frames for a read of the keeper's state, sharing a hold already running. */
@@ -301,6 +367,7 @@ export class SseBackend implements DocumentBackend {
     this.connection += 1
     this.handlers = null
     this.hold = null
+    this.clearUnroutedTimer()
     this.unsubscribe?.()
     this.unsubscribe = null
     this.unsubscribeText?.()
