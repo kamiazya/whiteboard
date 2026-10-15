@@ -35,10 +35,21 @@ export class SseBackend implements DocumentBackend {
   private handlers: DocumentBackendHandlers | null = null
   /**
    * Frames that arrived while the keeper's state was being fetched after a
-   * refusal, or `null` when no such fetch is running. Held rather than
-   * applied: they would land on the copy the fetched state replaces.
+   * refusal or a reconnect, or `null` when no such fetch is running. Held
+   * rather than applied: they build on the state being fetched, so they
+   * follow it. Overlapping fetches share the one queue, released only when
+   * the last settles: a snapshot that settles late replaces the caller's
+   * copy, and a frame applied before it would go with it.
    */
   private heldFrames: Uint8Array[] | null = null
+  private keeperFetches = 0
+  /**
+   * Whether a stream this backend was connected through has since dropped.
+   * Only then does a connection mean something may have been missed: the
+   * first one follows the snapshot `run` already fetched.
+   */
+  private streamDropped = false
+  private everConnected = false
   /** The writes this backend sends itself, when its source keeps no copy of them. */
   private writer: QueuedWriter | null = null
   /** Whether the injected source has said a write failed and not yet that it landed. */
@@ -75,6 +86,8 @@ export class SseBackend implements DocumentBackend {
 
   connect(handlers: DocumentBackendHandlers): void {
     this.cancelled = false
+    this.everConnected = false
+    this.streamDropped = false
     this.handlers = handlers
     void this.run(handlers)
   }
@@ -130,8 +143,17 @@ export class SseBackend implements DocumentBackend {
       // this backend has that updates are still arriving.
       onConnectionChange: (connected) => {
         if (this.cancelled) return
-        if (connected) handlers.onConnected()
-        else handlers.onDisconnected?.()
+        if (!connected) {
+          if (this.everConnected) this.streamDropped = true
+          handlers.onDisconnected?.()
+          return
+        }
+        this.everConnected = true
+        if (this.streamDropped) {
+          this.streamDropped = false
+          void this.catchUp(handlers)
+        }
+        handlers.onConnected()
       },
       // A worker-backed source's push returns before the keeper answers, so
       // this is the only word this page gets that a write failed — and, since
@@ -169,18 +191,42 @@ export class SseBackend implements DocumentBackend {
     void this.resync(handlers)
   }
 
-  private async resync(handlers: DocumentBackendHandlers): Promise<void> {
-    const held: Uint8Array[] = []
-    this.heldFrames = held
+  private resync(handlers: DocumentBackendHandlers): Promise<void> {
+    // Through `onSnapshot`: the caller drops its copy, which holds the
+    // refused ops, for the keeper's.
+    return this.fetchKeeperState(handlers, (bytes) => handlers.onSnapshot(bytes))
+  }
+
+  /**
+   * The stream carries only what is written while it is open, so whatever the
+   * keeper took during the gap reaches no frame — and every later frame
+   * builds on it, so a CRDT would hold each one back for history that never
+   * comes. The keeper's state is merged in as an update: the caller's own
+   * edits are intact, and an import of what it already has changes nothing.
+   */
+  private catchUp(handlers: DocumentBackendHandlers): Promise<void> {
+    return this.fetchKeeperState(handlers, (bytes) => {
+      if (bytes.byteLength > 0) handlers.onRemoteUpdate(bytes)
+    })
+  }
+
+  private async fetchKeeperState(
+    handlers: DocumentBackendHandlers,
+    deliver: (bytes: Uint8Array) => void,
+  ): Promise<void> {
+    this.heldFrames ??= []
+    this.keeperFetches += 1
     try {
       const bytes = await this.resolveSource().snapshot(this.binaryKey)
-      if (!this.cancelled && bytes !== null) handlers.onSnapshot(bytes)
+      if (!this.cancelled && bytes !== null) deliver(bytes)
     } catch {
-      // The caller keeps the copy it has; its next write is refused again and
-      // asks again.
+      // The caller keeps the copy it has. After a refusal its next write is
+      // refused again and asks again; after a reconnect the next drop does.
     } finally {
-      if (this.heldFrames === held) this.heldFrames = null
-      if (!this.cancelled) for (const bytes of held) handlers.onRemoteUpdate(bytes)
+      this.keeperFetches -= 1
+      const held = this.keeperFetches === 0 ? this.heldFrames : null
+      if (held !== null) this.heldFrames = null
+      if (!this.cancelled && held) for (const bytes of held) handlers.onRemoteUpdate(bytes)
     }
   }
 

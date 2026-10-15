@@ -11,11 +11,13 @@ import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  moveWorkspaceNodeToPath,
+  setWorkspaceDocumentName,
   updateWorkspaceDocumentMeta,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
@@ -33,6 +35,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
     'listWorkspaces',
     'listDocuments',
+    'getDocumentBacklinks',
   ]),
 )
 
@@ -66,7 +69,7 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 })
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
-const { useListFollowsRecord } = await import('./use-daemon-document-controller.js')
+const { useListFollowsRecord } = await import('./use-follow-workspace-writes.js')
 
 const mainRow: DocumentSummary = {
   path: 'main',
@@ -127,6 +130,10 @@ describe('DaemonDocumentPage document list follows the record', () => {
     vi.mocked(daemonApiClient.listWorkspaces).mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }],
     })
+    vi.mocked(daemonApiClient.getDocumentBacklinks).mockResolvedValue({
+      backlinks: [],
+      unlinkedMentions: [],
+    })
     daemonLists([mainRow])
   })
 
@@ -172,6 +179,20 @@ describe('DaemonDocumentPage document list follows the record', () => {
     await waitFor(() => expect(planLoads(fetch)).toBeGreaterThan(loads))
   })
 
+  it('counts a backlink an agent creates while the document is open', async () => {
+    await openMain()
+    await waitFor(() => screen.getByRole('button', { name: 'Connections (0)' }))
+
+    vi.mocked(daemonApiClient.getDocumentBacklinks).mockResolvedValue({
+      backlinks: [{ documentId: PLAN, path: 'plan', contexts: ['see [[main]]'] }],
+      unlinkedMentions: [],
+    })
+    daemonLists([mainRow, planRow('2026-01-02')])
+    act(() => daemonWrites(createsPlan))
+
+    await waitFor(() => screen.getByRole('button', { name: 'Connections (1)' }))
+  })
+
   it('keeps the newest list when an earlier read answers last', async () => {
     await openMain()
     let answerStale: (value: { documents: DocumentSummary[] }) => void = () => {}
@@ -181,7 +202,7 @@ describe('DaemonDocumentPage document list follows the record', () => {
     const lists = vi.mocked(daemonApiClient.listDocuments).mock.calls.length
     act(() => daemonWrites(createsPlan))
     await waitFor(() =>
-      expect(vi.mocked(daemonApiClient.listDocuments).mock.calls.length).toBe(lists + 1),
+      expect(vi.mocked(daemonApiClient.listDocuments).mock.calls).toHaveLength(lists + 1),
     )
 
     daemonLists([mainRow, planRow('2026-01-03')])
@@ -264,6 +285,32 @@ describe('useListFollowsRecord', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
+  // A rename or a move touches neither `updatedAt` nor anything else in the
+  // row, so the name and the path are each the only thing that changed.
+  it('re-reads when a document is renamed elsewhere', async () => {
+    const refresh = vi.fn()
+    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    refresh.mockClear()
+
+    peerWrites(record, (doc) =>
+      setWorkspaceDocumentName(doc, { documentId: MAIN, name: 'Renamed' }),
+    )
+    await settled()
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reads when a document is moved elsewhere', async () => {
+    const refresh = vi.fn()
+    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    refresh.mockClear()
+
+    peerWrites(record, (doc) => moveWorkspaceNodeToPath(doc, 'main', 'archive/main'))
+    await settled()
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
   it('compares a record a snapshot replaced against the one before it', async () => {
     const refresh = vi.fn()
     const { rerender } = renderHook(
@@ -280,5 +327,21 @@ describe('useListFollowsRecord', () => {
     await settled()
 
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the list alone when a snapshot replaces the record with one showing the same', async () => {
+    const refresh = vi.fn()
+    const { rerender } = renderHook(
+      ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc }, refresh),
+      { initialProps: { doc: record } },
+    )
+    refresh.mockClear()
+    const replaced = new LoroDoc()
+    replaced.import(peer.export({ mode: 'snapshot' }))
+
+    rerender({ doc: replaced })
+    await settled()
+
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

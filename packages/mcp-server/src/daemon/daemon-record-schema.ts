@@ -6,9 +6,11 @@ import { z } from 'zod'
 // CLI-facing parser (daemon-record.ts) — do not hand-write a parallel
 // interface.
 // What the daemon process is running: its TypeScript source (the watch-mode
-// dev daemon) or a build under dist/ (`pnpm mcp:http`, the packaged install).
-// A watch-mode start that finds a built daemon on its data dir has to say so,
-// because a source edit will never reach that process.
+// dev daemon) or a build under dist/ (`pnpm mcp:http`, `whiteboard daemon run`,
+// the packaged install). A watch-mode start that finds a built daemon on its
+// data dir has to say so, because a source edit will never reach that process.
+// The dev scripts spell `'built'` once, as `BUILT_LAUNCH`, held to this enum by
+// dev-daemon-socket-lib.test.ts.
 const daemonLaunchSchema = z.enum(['built', 'source'])
 export type DaemonLaunch = z.infer<typeof daemonLaunchSchema>
 
@@ -24,7 +26,8 @@ export const daemonRecordBaseSchema = z.object({
   // ADR-0050 decision 2: the owner-only socket (a named pipe on Windows) the
   // daemon answers on, and the only place it answers: it listens on no port.
   socketPath: z.string().min(1),
-  // Optional: a record written before the field existed still names a daemon.
+  // Optional for a READER: a daemon still running from before the field
+  // existed still names itself. Every writer supplies it (`DaemonRecordWrite`).
   launch: daemonLaunchSchema.optional(),
 })
 
@@ -37,3 +40,9 @@ export const daemonRecordSchema = daemonRecordBaseSchema.extend({
 
 export type DaemonRecordBase = z.infer<typeof daemonRecordBaseSchema>
 export type DaemonRecord = z.infer<typeof daemonRecordSchema>
+
+/**
+ * What a daemon writes: a record with its launch, which only a reader may find
+ * absent. A writer that left it out would be read as watch-mode source.
+ */
+export type DaemonRecordWrite = DaemonRecord & { launch: DaemonLaunch }

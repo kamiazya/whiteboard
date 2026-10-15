@@ -58,6 +58,7 @@ import {
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
 import { useBrowserRouteSync } from './use-browser-route-sync.js'
+import { connectionsStamp } from './use-connections.js'
 import { useDocumentActions } from './use-document-actions.js'
 import { useDocumentListRefresh } from './use-document-list-refresh.js'
 import { versionsSlot } from './versions-slot.js'
@@ -429,11 +430,13 @@ function useBrowserDocument(
   })
 
   const resolved = browserTerminalAnswer(renderState, backendError, startFresh)
+  const openDocumentId = documentId ?? undefined
   const { connections, linkify } = useBrowserConnections({
     index: store,
     loro: resolvedLoro,
-    documentId: documentId ?? undefined,
+    documentId: openDocumentId,
     path: documentPath,
+    stamp: connectionsStamp(documents, openDocumentId),
   })
   if ('answer' in resolved) return resolved.answer
   const editing = resolved.editing

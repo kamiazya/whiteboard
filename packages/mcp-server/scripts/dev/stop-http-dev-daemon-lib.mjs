@@ -4,11 +4,18 @@
 //
 // The checkout is identified by its data dir, which names exactly one daemon
 // (`daemon.json`) and one wrapper (`dev-wrapper.pid`, written by
-// with-dev-data-dir.mjs). The wrapper is signalled when it is there, because
-// it forwards the signal down to `tsx watch` and the daemon; signalling only
-// the daemon would leave the watcher to restart it on the next file change.
-// All process access is injected so the decision is testable without one.
-import { assessRecordedDaemon, isRecordWriter } from './dev-daemon-socket-lib.mjs'
+// with-dev-data-dir.mjs). The wrapper of a source daemon is signalled when it
+// is there, because it forwards the signal down to `tsx watch` and the daemon;
+// signalling only the daemon would leave the watcher to restart it on the next
+// file change. A wrapper whose daemon is down is stopped on its own, since it
+// would restart one on the next edit. All process access is injected so the
+// decision is testable without one.
+import {
+  assessRecordedDaemon,
+  BUILT_LAUNCH,
+  isPidFileWriter,
+  isRecordWriter,
+} from './dev-daemon-socket-lib.mjs'
 
 /**
  * Whether the record's process is running is `assessRecordedDaemon`'s answer,
@@ -19,8 +26,8 @@ import { assessRecordedDaemon, isRecordWriter } from './dev-daemon-socket-lib.mj
  *
  * @param {{
  *   dataDir: string,
- *   readRecord: (dataDir: string) => { pid: number, socketPath: string, startedAt?: string } | null,
- *   readWrapperPid: (dataDir: string) => number | null,
+ *   readRecord: (dataDir: string) => { pid: number, socketPath: string, startedAt?: string, launch?: string } | null,
+ *   readWrapper: (dataDir: string) => { pid: number, writtenAtMs: number } | null,
  *   isAlive: (pid: number) => boolean,
  *   kill: (pid: number, signal: string) => unknown,
  *   sleep: (ms: number) => Promise<unknown>,
@@ -34,13 +41,13 @@ import { assessRecordedDaemon, isRecordWriter } from './dev-daemon-socket-lib.mj
  *   | { kind: 'stale', pid: number, reason: string }
  *   | { kind: 'unsignallable', pid: number, reason: string }
  *   | { kind: 'stopped', via: 'wrapper' | 'daemon', pid: number }
- *   | { kind: 'timeout', pid: number }
+ *   | { kind: 'timeout', pid: number, signalled: number }
  * >}
  */
 export async function stopDevDaemon({
   dataDir,
   readRecord,
-  readWrapperPid,
+  readWrapper,
   isAlive,
   kill,
   sleep,
@@ -49,8 +56,10 @@ export async function stopDevDaemon({
   timeoutMs = 10_000,
   pollMs = 100,
 }) {
+  const clock = { sleep, timeoutMs, pollMs }
+  const wrapper = readWrapper(dataDir)
   const record = readRecord(dataDir)
-  if (record === null) return { kind: 'none' }
+  if (record === null) return stopOrphanWrapper(wrapper, { isAlive, startMs, kill, clock })
   const daemon = await assessRecordedDaemon(record, { answers, isAlive, startMs })
   if (daemon.process === 'foreign') {
     return {
@@ -66,26 +75,46 @@ export async function stopDevDaemon({
           pid: record.pid,
           reason: `a daemon answers on ${record.socketPath}, but the pid its record names (${record.pid}) is not running`,
         }
-      : { kind: 'none' }
+      : stopOrphanWrapper(wrapper, { isAlive, startMs, kill, clock })
   }
 
-  // A pid file left by a SIGKILLed wrapper can name a pid since reused; a
-  // process that started after the daemon wrote its record cannot be the
-  // wrapper that launched it.
-  const wrapperPid = readWrapperPid(dataDir)
+  // No wrapper launches a build, so a built daemon is its own target. A pid
+  // file left by a SIGKILLed wrapper can name a pid since reused; a process
+  // that started after the daemon wrote its record cannot be the wrapper that
+  // launched it.
   const via =
-    wrapperPid !== null && isRecordWriter(wrapperPid, record.startedAt, { isAlive, startMs })
+    record.launch !== BUILT_LAUNCH &&
+    wrapper !== null &&
+    isRecordWriter(wrapper.pid, record.startedAt, { isAlive, startMs })
       ? 'wrapper'
       : 'daemon'
-  const target = via === 'wrapper' ? /** @type {number} */ (wrapperPid) : record.pid
+  const target = via === 'wrapper' ? /** @type {{ pid: number }} */ (wrapper).pid : record.pid
   kill(target, 'SIGTERM')
 
-  const gone = await settles(() => !isAlive(record.pid) && !isAlive(target), {
-    sleep,
-    timeoutMs,
-    pollMs,
-  })
-  return gone ? { kind: 'stopped', via, pid: target } : { kind: 'timeout', pid: target }
+  const gone = await settles(() => !isAlive(record.pid) && !isAlive(target), clock)
+  if (gone) return { kind: 'stopped', via, pid: target }
+  return { kind: 'timeout', pid: isAlive(target) ? target : record.pid, signalled: target }
+}
+
+/**
+ * With no daemon up, the wrapper the pid file names — if it is still the
+ * process that wrote that file — is stopped; otherwise there is nothing to stop.
+ *
+ * @param {{ pid: number, writtenAtMs: number } | null} wrapper
+ * @param {{ isAlive: (pid: number) => boolean, startMs?: (pid: number) => number | null, kill: (pid: number, signal: string) => unknown, clock: { sleep: (ms: number) => Promise<unknown>, timeoutMs: number, pollMs: number } }} seams
+ */
+async function stopOrphanWrapper(wrapper, { isAlive, startMs, kill, clock }) {
+  if (
+    wrapper === null ||
+    !isPidFileWriter(wrapper.pid, wrapper.writtenAtMs, { isAlive, startMs })
+  ) {
+    return { kind: 'none' }
+  }
+  kill(wrapper.pid, 'SIGTERM')
+  const gone = await settles(() => !isAlive(wrapper.pid), clock)
+  return gone
+    ? { kind: 'stopped', via: 'wrapper', pid: wrapper.pid }
+    : { kind: 'timeout', pid: wrapper.pid, signalled: wrapper.pid }
 }
 
 /**

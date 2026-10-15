@@ -2,10 +2,10 @@
 // `pnpm mcp:http:stop`: stop this checkout's dev daemon (see
 // stop-http-dev-daemon-lib.mjs). Reads the same data dir `pnpm mcp:http:dev`
 // uses — `<repo>/.dev-data`, or WHITEBOARD_DATA_DIR when that is set.
-import { readFileSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import { readPidFile } from './dev-spawn-lock-lib.mjs'
 import { stopDevDaemon } from './stop-http-dev-daemon-lib.mjs'
 import {
   devWrapperPidPath,
@@ -24,19 +24,10 @@ const dataDir = resolveDevDataDirEnv(
   resolveRepoRootFromGit(process.cwd()),
 ).WHITEBOARD_DATA_DIR
 
-function readWrapperPid(dir) {
-  try {
-    const pid = Number(readFileSync(devWrapperPidPath(dir), 'utf8'))
-    return Number.isInteger(pid) && pid > 0 ? pid : null
-  } catch {
-    return null
-  }
-}
-
 const result = await stopDevDaemon({
   dataDir,
   readRecord: readDaemonRecord,
-  readWrapperPid,
+  readWrapper: (dir) => readPidFile(devWrapperPidPath(dir)),
   isAlive: isPidAlive,
   kill: (pid, signal) => process.kill(pid, signal),
   sleep,
@@ -58,6 +49,10 @@ if (result.kind === 'none') {
     `stopped the dev daemon for ${dataDir} (signalled the ${result.via}, pid ${result.pid})`,
   )
 } else {
-  console.error(`pid ${result.pid} was signalled but is still running for ${dataDir}`)
+  console.error(
+    result.pid === result.signalled
+      ? `pid ${result.pid} was signalled but is still running for ${dataDir}`
+      : `signalled pid ${result.signalled}, but the daemon (pid ${result.pid}) is still running for ${dataDir}`,
+  )
   process.exit(1)
 }

@@ -496,10 +496,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,
   'packages/daemon-client/src/replica-session-key.ts#sessionKey': 52,
-  // One case each for a refused credential. A contract suite is one function by
-  // design — every `it` runs against every implementation — so it grows by a
-  // case, never splits.
-  'packages/daemon-client/src/test-utils/document-backend-contract.ts#documentBackendContract': 118,
+  // Grew by a case for a refused credential. Every `it` here runs against
+  // every implementation; splitting it into themed helpers, as
+  // document-backend-contract.ts does, is what retires the entry.
   'packages/daemon-client/src/test-utils/sse-stream-source-contract.ts#sseStreamSourceContract': 212,
   'packages/facet-engine/src/form.ts#normalizePicker': 53,
   'packages/facet-engine/src/registry.ts#createFacetRegistry': 211,

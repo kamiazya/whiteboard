@@ -42,6 +42,12 @@ paths:
   `document-backend-contract` types it implements. The SSE wire itself is
   `sync-sse-contract`, and `sync-frames` / `sync-frame-text` are the text
   frames that stream carries inside its `message` events.
+  A reconnect obliges catch-up: the stream replays nothing across a drop,
+  so after one `SseBackend` re-fetches its source's snapshot and merges it
+  through `onRemoteUpdate` (behind the held-frames fence it shares with
+  resync), and the SharedWorker re-imports the daemon's snapshot into its
+  replica and fans the delta out. `documentBackendContract`'s catch-up case
+  holds it, over the owned hub and the SharedWorker source.
 - The sync write refusal (`api-contracts/sync-write-refusal`): the codes are
   model's `syncWriteRefusalCodeSchema`, which also types server-core's
   `SyncWriteRefusalError.code`, so a code renamed on one side fails typecheck

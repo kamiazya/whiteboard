@@ -1,7 +1,9 @@
 // @vitest-environment node
 // The SSE backend against the shared DocumentBackend contract. The backend
 // over a workspace kept in the browser runs the same cases from apps/web,
-// where its store lives.
+// where its store lives, and so does this backend over the SharedWorker.
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
+import { LoroDoc } from 'loro-crdt'
 import { describe, vi } from 'vitest'
 import { SseBackend } from './sse-backend.js'
 import type { DocumentBackendHarness } from './test-utils/document-backend-contract.js'
@@ -9,32 +11,63 @@ import { documentBackendContract } from './test-utils/document-backend-contract.
 
 const BASE = 'http://127.0.0.1:3099'
 
-/** Records what a backend POSTs upstream and serves the routes it reads. */
-let endStream: (() => void) | null = null
-let refuseStreams = false
+/**
+ * The daemon's side of one harness: a real Loro document it serves snapshots
+ * of and broadcasts the updates of, so "caught up" is a CRDT's answer rather
+ * than a count of frames.
+ */
+function keeper() {
+  const doc = new LoroDoc()
+  doc.getText('t').insert(0, 'seed')
+  doc.commit()
+  let broadcast = doc.oplogVersion()
+  let seq = 0
+  return {
+    doc,
+    /** Commits a change; answers the update bytes since the last broadcast. */
+    write(): Uint8Array {
+      const text = doc.getText('t')
+      text.insert(text.length, `+${++seq}`)
+      doc.commit()
+      const update = doc.export({ mode: 'update', from: broadcast })
+      broadcast = doc.oplogVersion()
+      return update
+    },
+  }
+}
 
-function createFetch(sent: Uint8Array[]) {
+const sseFrame = (event: string, data: unknown) =>
+  new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+
+/** What the fake daemon's routes see and hold, per harness. */
+interface Daemon {
+  keeper: ReturnType<typeof keeper>
+  sent: Uint8Array[]
+  stream: ReadableStreamDefaultController<Uint8Array> | null
+  refuseStreams: boolean
+}
+
+function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.includes('/api/sync/stream') && refuseStreams) {
+    if (url.includes('/api/sync/stream') && daemon.refuseStreams) {
       return new Response('{"title":"unauthorized"}', { status: 401 })
     }
-    if (url.includes('/snapshot')) return new Response(new Uint8Array([1, 1, 1]), { status: 200 })
+    if (url.includes('/snapshot')) {
+      const snapshot = daemon.keeper.doc.export({ mode: 'snapshot' })
+      return new Response(snapshot.slice().buffer as ArrayBuffer, { status: 200 })
+    }
     if (url.includes('/update')) {
       const body = init?.body
-      if (body instanceof ArrayBuffer) sent.push(new Uint8Array(body))
+      if (body instanceof ArrayBuffer) daemon.sent.push(new Uint8Array(body))
       return new Response('{}', { status: 200 })
     }
     if (url.includes('/api/sync/stream')) {
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
-            controller.enqueue(
-              new TextEncoder().encode(
-                `event: ready\ndata: ${JSON.stringify({ streamId: 'contract-stream' })}\n\n`,
-              ),
-            )
-            endStream = () => controller.close()
+            controller.enqueue(sseFrame('ready', { streamId: 'contract-stream' }))
+            daemon.stream = controller
           },
         }),
         { status: 200 },
@@ -46,19 +79,43 @@ function createFetch(sent: Uint8Array[]) {
   }) as unknown as typeof globalThis.fetch
 }
 
-describe('DocumentBackend contract: SseBackend', () => {
-  documentBackendContract((): DocumentBackendHarness => {
-    const sent: Uint8Array[] = []
-    refuseStreams = false
-    const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: createFetch(sent) })
-    return {
-      backend,
-      sentUpdates: () => sent,
-      dropTransport: () => endStream?.(),
-      refuseAuth: () => {
-        refuseStreams = true
-      },
-      cleanup: () => backend.disconnect(),
+/** Whether `delivered`, applied in order to an empty document, reads as the keeper's. */
+function reproduces(delivered: readonly Uint8Array[], keeperDoc: LoroDoc): boolean {
+  const replica = new LoroDoc()
+  for (const bytes of delivered) {
+    try {
+      replica.import(bytes)
+    } catch {
+      // Bytes that are not Loro's say nothing about what was caught up.
     }
-  })
+  }
+  return replica.getText('t').toString() === keeperDoc.getText('t').toString()
+}
+
+function harness(): DocumentBackendHarness {
+  const daemon: Daemon = { keeper: keeper(), sent: [], stream: null, refuseStreams: false }
+  const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
+  return {
+    backend,
+    sentUpdates: () => daemon.sent,
+    dropTransport: () => {
+      daemon.stream?.close()
+      daemon.stream = null
+    },
+    refuseAuth: () => {
+      daemon.refuseStreams = true
+    },
+    keeperWrites: (live) => {
+      const update = daemon.keeper.write()
+      if (!live) return
+      const frame = { doc: 'workspace:ws-1', update: bytesToBase64(update) }
+      daemon.stream?.enqueue(sseFrame('update', frame))
+    },
+    caughtUp: (delivered) => reproduces(delivered, daemon.keeper.doc),
+    cleanup: () => backend.disconnect(),
+  }
+}
+
+describe('DocumentBackend contract: SseBackend', () => {
+  documentBackendContract(harness)
 })

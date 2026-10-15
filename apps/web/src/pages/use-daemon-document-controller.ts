@@ -2,7 +2,6 @@ import type {
   DocumentSummary,
   WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -307,71 +306,4 @@ function useDocumentListReader(
     },
     [daemonFetch, daemonBaseUrl, setDocuments],
   )
-}
-
-/** How long a burst of remote updates settles before the record is compared. */
-const LIST_FOLLOW_SETTLE_MS = 250
-
-/** The workspace record, named through the adapter so pages never import the CRDT. */
-type WorkspaceRecord = Parameters<typeof readWorkspaceNodes>[0]
-
-/** What the list shows of each document the record holds, as one comparable value. */
-function listedShapeOf(record: WorkspaceRecord): string {
-  const rows = readWorkspaceNodes(record).flatMap((node) =>
-    node.type === 'document'
-      ? [[node.meta.documentId, node.path, node.meta.kind, node.meta.name, node.meta.updatedAt]]
-      : [],
-  )
-  return JSON.stringify(rows)
-}
-
-/**
- * Keeps the page's document list following the workspace record it syncs.
- *
- * A document created, renamed, moved, deleted or edited elsewhere — an
- * agent's write, another tab's, another member's — arrives as an import into
- * that record and nowhere else; the list every link, reference and embed on
- * the page resolves against is a separate read, so without this it stays as
- * it was at open. Only an import that changes what the list SHOWS re-reads it,
- * compared after a settle window so a burst of updates costs one walk and one
- * read. A record replaced by a reconnect snapshot is compared against the one
- * before it, since what it carries may have been missed while disconnected.
- *
- * Takes the session's body binding because its `doc` IS the live record, and
- * a new binding is exactly a snapshot that replaced it.
- */
-export function useListFollowsRecord(
-  binding: { readonly doc: WorkspaceRecord } | null,
-  refresh: () => void,
-): void {
-  const record = binding?.doc ?? null
-  const refreshRef = useRef(refresh)
-  refreshRef.current = refresh
-  const shapeRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (record === null) return
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const compare = () => {
-      const shape = listedShapeOf(record)
-      // The first look refreshes too: the list was read before this record was
-      // bound, so a document the record gained in between would otherwise
-      // become the baseline and never be listed.
-      const moved = shape !== shapeRef.current
-      shapeRef.current = shape
-      if (moved) refreshRef.current()
-    }
-    const settle = () => {
-      clearTimeout(timer)
-      timer = setTimeout(compare, LIST_FOLLOW_SETTLE_MS)
-    }
-    if (shapeRef.current === null) compare()
-    else settle()
-    const unsubscribe = record.subscribe((event) => {
-      if (event.by === 'import') settle()
-    })
-    return () => {
-      unsubscribe()
-      clearTimeout(timer)
-    }
-  }, [record])
 }

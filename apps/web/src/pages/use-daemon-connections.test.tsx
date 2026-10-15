@@ -156,6 +156,41 @@ describe('useDaemonConnections', () => {
     await waitFor(() => expect(result.current.connections?.backlinks).toHaveLength(2))
   })
 
+  it('re-reads when the stamp moves, keeping the last answer shown until it lands', async () => {
+    let releaseSecond: ((response: Response) => void) | undefined
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ backlinks: [], unlinkedMentions: [] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            releaseSecond = resolve
+          }),
+      ) as unknown as typeof globalThis.fetch
+
+    const { result, rerender } = renderHook(
+      (props: { stamp: string }) =>
+        useDaemonConnections({
+          daemonFetch: fetchFn,
+          daemonBaseUrl: 'http://d',
+          workspaceId: 'ws-a',
+          documentId: BACKLINK.documentId,
+          path: 'a',
+          stamp: props.stamp,
+        }),
+      { initialProps: { stamp: 'before' } },
+    )
+    await waitFor(() => expect(result.current.connections?.backlinks).toHaveLength(0))
+
+    rerender({ stamp: 'after' })
+    expect(result.current.connections?.backlinks).toHaveLength(0)
+
+    await act(async () => {
+      releaseSecond?.(jsonResponse({ backlinks: [BACKLINK], unlinkedMentions: [] }))
+    })
+    expect(result.current.connections?.backlinks).toHaveLength(1)
+  })
+
   it('a fetch overtaken by a switch never lands on the document that replaced it', async () => {
     // The `cancelled` flag. Without it the departed document's backlinks
     // arrive late and overwrite the arrived one's — the same defect the

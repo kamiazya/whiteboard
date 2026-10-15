@@ -5,7 +5,7 @@
  * syncs — so the list every link, reference and embed resolves against has
  * to re-read on the announcement, not wait for this tab's next edit.
  */
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -55,6 +55,19 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   return { ...actual, SpatialEditor: CapturingSpatialEditor }
 })
 
+/**
+ * What this browser's reference graph answers. Stood in for so the case is
+ * about WHEN the page asks, which is the page's; what the graph answers is
+ * `browser-backlinks.browser.test.tsx`'s.
+ */
+const graph = vi.hoisted(() => ({
+  answer: { backlinks: [] as unknown[], unlinkedMentions: [] as unknown[] },
+}))
+
+vi.mock('../lib/browser-backlinks.js', () => ({
+  browserBacklinksReader: () => async () => graph.answer,
+}))
+
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 describe('BrowserDocumentPage document list follows the workspace', () => {
@@ -62,6 +75,7 @@ describe('BrowserDocumentPage document list follows the workspace', () => {
 
   beforeEach(async () => {
     resetCapturedEditorProps()
+    graph.answer = { backlinks: [], unlinkedMentions: [] }
     store = new BrowserStoreDouble()
     await store.setDefaultDocumentId(MAIN)
     await store.save({
@@ -115,5 +129,26 @@ describe('BrowserDocumentPage document list follows the workspace', () => {
     announceDocumentCreated(getBrowserWorkspaceId(), 'plan')
 
     await waitFor(() => expect(latestEditorProps()?.missingFileRef?.(PLAN)).toBe(false))
+  })
+
+  it('counts a backlink another tab saves while the document is open', async () => {
+    await openMain()
+    await waitFor(() => screen.getByRole('button', { name: 'Connections (0)' }))
+
+    graph.answer = {
+      backlinks: [{ documentId: PLAN, path: 'plan', contexts: ['see [[main]]'] }],
+      unlinkedMentions: [],
+    }
+    await store.save({
+      documentId: PLAN,
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'plan',
+      name: 'Plan',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'markdown' as const,
+    })
+    announceDocumentCreated(getBrowserWorkspaceId(), 'plan')
+
+    await waitFor(() => screen.getByRole('button', { name: 'Connections (1)' }))
   })
 })

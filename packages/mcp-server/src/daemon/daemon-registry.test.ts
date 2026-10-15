@@ -1,8 +1,9 @@
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../shared/test-utils/can-deny-file-read.js'
+import type { DaemonRecordWrite } from './daemon-record-schema.js'
 import {
   deleteDaemonRecord,
   getDaemonRecordPath,
@@ -32,6 +33,7 @@ describe('daemon-registry', () => {
         token: 'secret',
         version: '0.1.0',
         startedAt: '2026-04-23T00:00:00.000Z',
+        launch: 'built',
       },
       dataDir,
     )
@@ -42,7 +44,24 @@ describe('daemon-registry', () => {
       token: 'secret',
       version: '0.1.0',
       startedAt: '2026-04-23T00:00:00.000Z',
+      launch: 'built',
     })
+  })
+
+  it('loads a record written before launch existed, with no launch', async () => {
+    // Written directly: saveDaemonRecord takes no record without its launch,
+    // but a daemon still running from before the field existed left one.
+    const legacy = {
+      pid: 123,
+      socketPath: '/run/user/1000/whiteboard/d.sock',
+      token: 'secret',
+      version: '0.1.0',
+      startedAt: '2026-04-23T00:00:00.000Z',
+    }
+    await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(legacy))
+    const loaded = await loadDaemonRecord(dataDir)
+    expect(loaded).toEqual(legacy)
+    expect(loaded).not.toHaveProperty('launch')
   })
 
   it.skipIf(!CAN_DENY_FILE_READ)(
@@ -58,6 +77,7 @@ describe('daemon-registry', () => {
           token: 'secret',
           version: '0.1.0',
           startedAt: '2026-04-23T00:00:00.000Z',
+          launch: 'source',
         },
         dataDir,
       )
@@ -70,6 +90,12 @@ describe('daemon-registry', () => {
       }
     },
   )
+
+  // The dev wrapper reads a record without `launch` as watch-mode source, so
+  // only a reader may meet one: the writer's own signature refuses it.
+  it('takes only a record that states its launch', () => {
+    expectTypeOf(saveDaemonRecord).parameter(0).toEqualTypeOf<DaemonRecordWrite>()
+  })
 
   it('returns null when there is no daemon.json at all', async () => {
     await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
@@ -145,6 +171,7 @@ describe('daemon-registry', () => {
         token: 'abc',
         version: '0.2.0',
         startedAt: '2026-04-23T00:00:00.000Z',
+        launch: 'source',
       },
       dataDir,
     )
@@ -165,6 +192,7 @@ describe('daemon-registry', () => {
         token: 't',
         version: 'v',
         startedAt: '2026-04-23T00:00:00.000Z',
+        launch: 'source',
       },
       dataDir,
     )

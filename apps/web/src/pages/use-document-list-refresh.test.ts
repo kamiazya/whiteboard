@@ -38,10 +38,10 @@ describe('useDocumentListRefresh', () => {
         }),
       { initialProps: { documentId: 'first' } },
     )
-    await waitFor(() => expect(resolvers.length).toBe(1))
+    await waitFor(() => expect(resolvers).toHaveLength(1))
 
     rerender({ documentId: 'second' })
-    await waitFor(() => expect(resolvers.length).toBe(2))
+    await waitFor(() => expect(resolvers).toHaveLength(2))
 
     // The newer enumeration lands first, then the older one arrives late.
     await act(async () => {
@@ -67,10 +67,10 @@ describe('useDocumentListRefresh', () => {
         }),
       { initialProps: { workspaceId: 'ws-a' } },
     )
-    await waitFor(() => expect(resolvers.length).toBe(1))
+    await waitFor(() => expect(resolvers).toHaveLength(1))
 
     rerender({ workspaceId: 'ws-b' })
-    await waitFor(() => expect(resolvers.length).toBe(2))
+    await waitFor(() => expect(resolvers).toHaveLength(2))
     await act(async () => {
       resolvers[1]?.([snapshot('from-b')])
       resolvers[0]?.([snapshot('from-a')])
@@ -126,7 +126,7 @@ describe('useDocumentListRefresh', () => {
         workspaceId: null,
       }),
     )
-    await waitFor(() => expect(rejecters.length).toBe(1))
+    await waitFor(() => expect(rejecters).toHaveLength(1))
     unmount()
     await act(async () => {
       rejecters[0]?.(new Error('cleared under it'))
@@ -150,9 +150,9 @@ describe('useDocumentListRefresh', () => {
         }),
       { initialProps: { documentId: 'first' } },
     )
-    await waitFor(() => expect(rejecters.length).toBe(1))
+    await waitFor(() => expect(rejecters).toHaveLength(1))
     rerender({ documentId: 'second' })
-    await waitFor(() => expect(rejecters.length).toBe(2))
+    await waitFor(() => expect(rejecters).toHaveLength(2))
     await act(async () => {
       rejecters[0]?.(new Error('late refusal'))
     })

@@ -9,6 +9,7 @@ import { isPidAlive } from '../shared/process-alive.js'
 import { writeFileAtomic } from '../shared/write-file-atomic.js'
 import {
   type DaemonRecord,
+  type DaemonRecordWrite,
   daemonRecordBaseSchema,
   daemonRecordSchema,
 } from './daemon-record-schema.js'
@@ -73,8 +74,13 @@ export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<Daem
   return null
 }
 
+/**
+ * Takes `DaemonRecordWrite`, not `DaemonRecord`: `launch` is optional only so a
+ * reader can still name a daemon that predates it. A record written without it
+ * would announce a build as watch-mode source.
+ */
 export async function saveDaemonRecord(
-  record: DaemonRecord,
+  record: DaemonRecordWrite,
   dataDir: string = DATA_DIR,
 ): Promise<void> {
   await mkdir(dataDir, { recursive: true })

@@ -20,7 +20,9 @@ import {
   acquireSpawnLock,
   claimPidFile,
   DEFAULT_SPAWN_LOCK_STALE_MS,
+  EMPTY_PID_FILE_GRACE_MS,
   isLockStale,
+  readPidFile,
   releasePidFile,
   releaseSpawnLock,
   resolveSpawnLockStaleMs,
@@ -419,6 +421,27 @@ describe('claimPidFile / releasePidFile (real temp dir)', () => {
     expect(readFileSync(pidPath, 'utf8')).toBe('42')
   })
 
+  // A claim is `open('wx')` and then a write, so a racing claimer can read the
+  // file empty in between; taking that for a dead writer steals a live claim.
+  it('holds an empty file still inside the window a claim writes in', () => {
+    writeFileSync(pidPath, '')
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => false })).toEqual({
+      kind: 'held',
+      pid: null,
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('')
+  })
+
+  it('replaces an empty file left by a claimer that died before its write', () => {
+    writeFileSync(pidPath, '')
+    const old = (Date.now() - EMPTY_PID_FILE_GRACE_MS - 1_000) / 1000
+    utimesSync(pidPath, old, old)
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => false })).toEqual({
+      kind: 'claimed',
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
   it('replaces a stale file through a rename claim and leaves no claim copy behind', () => {
     writeFileSync(pidPath, '7')
     const calls: string[] = []
@@ -539,5 +562,20 @@ describe('claimPidFile / releasePidFile (real temp dir)', () => {
 
   it('treats an absent file as already released', () => {
     expect(() => releasePidFile({ pidPath, pid: 42 })).not.toThrow()
+  })
+
+  it('reads back the pid a file names with the time it was written', () => {
+    writeFileSync(pidPath, '7')
+    utimesSync(pidPath, 1_700_000_000, 1_700_000_000)
+    expect(readPidFile(pidPath)).toEqual({ pid: 7, writtenAtMs: 1_700_000_000_000 })
+  })
+
+  it.each([
+    ['absent', null],
+    ['empty', ''],
+    ['naming no pid', 'not-a-pid'],
+  ])('reads a pid file that is %s as none', (_label, content) => {
+    if (content !== null) writeFileSync(pidPath, content)
+    expect(readPidFile(pidPath)).toBeNull()
   })
 })

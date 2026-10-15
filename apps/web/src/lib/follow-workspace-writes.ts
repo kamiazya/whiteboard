@@ -2,12 +2,15 @@ import {
   type SseStreamSource,
   workspaceDocKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { listenToWorkspace } from './workspace-broadcast.js'
 
 /**
  * One agent batch lands as several update frames in a row, and the daemon's
  * own writes echo back too. Reading the list once per burst, not once per
  * frame, is what keeps a busy agent from turning the index into a polling loop.
+ * A document page's record takes the same frames as imports, so it follows
+ * them on the same window.
  */
 const BURST_MS = 100
 
@@ -94,5 +97,61 @@ export function followBrowserWorkspaceWrites(
   return () => {
     cancel()
     end.close()
+  }
+}
+
+/** The workspace record, named through the adapter so pages never import the CRDT. */
+export type WorkspaceRecord = Parameters<typeof readWorkspaceNodes>[0]
+
+/** What a list shows of each document the record holds, as one comparable value. */
+function listedShapeOf(record: WorkspaceRecord): string {
+  const rows = readWorkspaceNodes(record).flatMap((node) =>
+    node.type === 'document'
+      ? [[node.meta.documentId, node.path, node.meta.kind, node.meta.name, node.meta.updatedAt]]
+      : [],
+  )
+  return JSON.stringify(rows)
+}
+
+/**
+ * The twin for a page that already syncs the workspace record itself: calls
+ * `onMoved` after an import changes what a list SHOWS of it — a document
+ * created, renamed, moved, deleted or edited elsewhere — and not for one that
+ * changes only content. Compared once a burst has gone quiet, so a burst
+ * costs one walk and at most one read.
+ *
+ * `seen` is the shape a previous record last showed, so a record that
+ * replaced it (a reconnect's snapshot) is compared against it rather than
+ * taken as the baseline; `null` means none was seen, and the first look then
+ * calls `onMoved` too, since the list was read before the record was bound
+ * and a document gained in between would otherwise never be listed.
+ *
+ * Answers the shape seen last, for the record that replaces this one, and
+ * the unsubscribe, which also cancels a compare still waiting out the burst.
+ */
+export function followRecordWrites(
+  record: WorkspaceRecord,
+  seen: string | null,
+  onMoved: () => void,
+): { readonly seen: () => string | null; readonly stop: () => void } {
+  let last = seen
+  const compare = () => {
+    const shape = listedShapeOf(record)
+    const moved = shape !== last
+    last = shape
+    if (moved) onMoved()
+  }
+  const { soon, cancel } = inBursts(compare)
+  if (last === null) compare()
+  else soon()
+  const unsubscribe = record.subscribe((event) => {
+    if (event.by === 'import') soon()
+  })
+  return {
+    seen: () => last,
+    stop() {
+      cancel()
+      unsubscribe()
+    },
   }
 }

@@ -19,8 +19,8 @@
  */
 import { type RefObject, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import { followBrowserWorkspaceWrites } from '../lib/follow-workspace-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { useFollowOtherTabs } from './use-follow-workspace-writes.js'
 
 // The page's own scope, deliberately: this is that screen's list, and a
 // record that moved scope when the code moved file would read as a new
@@ -33,21 +33,12 @@ export interface DocumentListRefresh {
   readonly enumeratedRef: RefObject<boolean>
 }
 
-/** A count that moves each time the workspace's channel says its record changed. */
-function useWorkspaceRevision(workspaceId: string | null): number {
-  const [revision, setRevision] = useState(0)
-  useEffect(() => {
-    if (workspaceId === null) return
-    return followBrowserWorkspaceWrites(workspaceId, {
-      onMoved: () => setRevision((n) => n + 1),
-      // The record leaving this browser is the sync session's to answer: it
-      // locks the page over a document that is gone, and a re-read here would
-      // only meet the registry's refusal.
-      onRemoved: () => {},
-    })
-  }, [workspaceId])
-  return revision
-}
+/**
+ * The record leaving this browser is the sync session's to answer: it locks
+ * the page over a document that is gone, and a re-read here would only meet
+ * the registry's refusal.
+ */
+const leaveRemovalToTheSession = () => {}
 
 export function useDocumentListRefresh(options: {
   /** The document on screen, or null while none is loaded. */
@@ -60,7 +51,9 @@ export function useDocumentListRefresh(options: {
 }): DocumentListRefresh {
   const { documentId, currentUpdatedAt, listDocuments, workspaceId } = options
   const [documents, setDocuments] = useState<DocumentSnapshot[]>([])
-  const workspaceRevision = useWorkspaceRevision(workspaceId)
+  // A count of the workspace channel's change notices, read only to re-run the list effect.
+  const [revision, setRevision] = useState(0)
+  useFollowOtherTabs(workspaceId, setRevision, leaveRemovalToTheSession)
   const generationRef = useRef(0)
   const enumeratedRef = useRef(false)
 
@@ -85,7 +78,7 @@ export function useDocumentListRefresh(options: {
     return () => {
       generationRef.current += 1
     }
-  }, [documentId, currentUpdatedAt, listDocuments, workspaceId, workspaceRevision])
+  }, [documentId, currentUpdatedAt, listDocuments, workspaceId, revision])
 
   return { documents, enumeratedRef }
 }
