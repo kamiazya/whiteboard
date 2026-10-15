@@ -1045,8 +1045,7 @@ export function createDocumentSyncSession(
   }
 
   function onChange(next: SpatialCanvas, command: EditorCommand): void {
-    // With no document yet there is nowhere to write the edit, so it is not
-    // shown either: ink on the empty placeholder would read as kept work.
+    // No document, nowhere to write: shown ink would read as kept work.
     if (removed || !doc) return
     // Published immediately (not debounced) so a controlled SpatialEditor's
     // own re-render reflects the edit right away; only the Loro write is
