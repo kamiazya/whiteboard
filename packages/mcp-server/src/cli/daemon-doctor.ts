@@ -5,8 +5,8 @@ import {
 } from '../daemon/daemon-liveness.js'
 import {
   type DaemonRecordParseResult,
+  describeOccupant,
   isOccupying,
-  type OccupyingLiveness,
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
 import { describeDaemonVersionSkew } from '../daemon/version-skew.js'
@@ -26,11 +26,26 @@ export interface DaemonDoctorOptions {
   runningVersion?: string
 }
 
-/** Where a daemon whose record cannot be used is still to be found. */
-function stillServing(liveness: OccupyingLiveness, pid: number): string {
-  if (liveness.state === 'running') return `the daemon it names (pid ${pid}) is still running`
-  const serving = liveness.servingPid === undefined ? '' : ` (pid ${liveness.servingPid})`
-  return `a daemon answers on the socket it names${serving}`
+function tokenMissingCheck(
+  parsed: Extract<DaemonRecordParseResult, { kind: 'token-missing' }>,
+): DaemonDoctorCheck {
+  // `daemon run` refuses over a record whose daemon is still there, so a
+  // restart is only the remedy once it is gone.
+  if (isOccupying(parsed.liveness)) {
+    return {
+      id: 'daemon.record',
+      status: 'error',
+      summary: `Daemon record has no token, and ${describeOccupant(parsed.liveness, parsed.record.pid)}.`,
+      remediation:
+        'Stop that daemon with the build that started it (this record cannot reach it), then start the daemon: whiteboard daemon run',
+    }
+  }
+  return {
+    id: 'daemon.record',
+    status: 'error',
+    summary: 'Daemon record is present but has no token.',
+    remediation: 'Restart the daemon: whiteboard daemon run',
+  }
 }
 
 function unusableRecordCheck(
@@ -44,38 +59,34 @@ function unusableRecordCheck(
         summary: 'Daemon record not found.',
         remediation: 'Start the daemon with: whiteboard daemon run',
       }
+    // Nothing is known of the daemon an unread record names, so removing it
+    // could start a second daemon beside one still serving. The cause names
+    // the path it is about, so it goes in `detail`, never the summary.
+    case 'unreadable':
+      return {
+        id: 'daemon.record',
+        status: 'error',
+        summary: 'Daemon record cannot be read.',
+        detail: parsed.error.message,
+        remediation:
+          'Fix what the detail names (the ownership or permissions of the data directory or of daemon.json), then run: whiteboard daemon doctor',
+      }
     case 'malformed':
       return {
         id: 'daemon.record',
         status: 'error',
-        summary: 'Daemon record is malformed.',
+        summary: parsed.message,
         remediation: 'Remove the daemon record and restart: whiteboard daemon run',
       }
     case 'token-missing':
-      // `daemon run` refuses over a record whose daemon is still there, so a
-      // restart is only the remedy once it is gone.
-      if (isOccupying(parsed.liveness)) {
-        return {
-          id: 'daemon.record',
-          status: 'error',
-          summary: `Daemon record has no token, and ${stillServing(parsed.liveness, parsed.record.pid)}.`,
-          remediation:
-            'Stop that daemon with the build that started it (this record cannot reach it), then start the daemon: whiteboard daemon run',
-        }
-      }
-      return {
-        id: 'daemon.record',
-        status: 'error',
-        summary: 'Daemon record is present but has no token.',
-        remediation: 'Restart the daemon: whiteboard daemon run',
-      }
+      return tokenMissingCheck(parsed)
     case 'uninterpretable': {
       const { recorded } = parsed
       const version = recorded.version === undefined ? '' : ` It names version ${recorded.version}.`
       return {
         id: 'daemon.record',
         status: 'error',
-        summary: `Daemon record cannot be interpreted by this version, and ${stillServing(parsed.liveness, recorded.pid)}.${version}`,
+        summary: `Daemon record cannot be interpreted by this version, and ${describeOccupant(parsed.liveness, recorded.pid)}.${version}`,
         remediation:
           'A daemon of another version is likeliest: stop it with that version, then start this one: whiteboard daemon run',
       }

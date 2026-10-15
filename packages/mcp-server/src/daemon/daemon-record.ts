@@ -5,12 +5,14 @@
 // live daemon of another version malformed and advised removing it, while the
 // other refused to start a second daemon beside it.
 
+import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   assertDataDirOwnedByUser,
   DATA_DIR,
   readFileOwnedByUser,
 } from '../shared/data-dir-secure.js'
+import { isErrnoCode, isMissingFileError } from '../shared/errno.js'
 import { type DaemonLiveness, type DaemonLivenessSeams, daemonLiveness } from './daemon-liveness.js'
 import {
   type DaemonRecord,
@@ -37,10 +39,12 @@ export type OccupyingLiveness = Extract<DaemonLiveness, { state: 'running' | 'un
 
 /**
  * - `missing`: no record.
+ * - `unreadable`: the record could not be read at all — the data directory
+ *   or the file failed the ownership check, or the read failed. Nothing is
+ *   known of the daemon it may name, so it is neither absence nor a leftover:
+ *   `error` says what to fix, and `recordFound` whether a file is there.
  * - `malformed`: a record that names no daemon this build can ask about, or
  *   one it cannot interpret whose daemon is gone — a leftover either way.
- *   `unreadable` is set when the file exists but could not be read at all,
- *   which a caller about to start a daemon must not take for absence.
  * - `token-missing`: a record of this build's shape without a token; the
  *   daemon it names may still be serving, which `liveness` says.
  * - `uninterpretable`: a record this build cannot interpret whose daemon is
@@ -50,7 +54,8 @@ export type OccupyingLiveness = Extract<DaemonLiveness, { state: 'running' | 'un
  */
 export type DaemonRecordParseResult =
   | { kind: 'missing' }
-  | { kind: 'malformed'; message: string; unreadable?: Error }
+  | { kind: 'unreadable'; error: Error; recordFound: boolean }
+  | { kind: 'malformed'; message: string }
   | { kind: 'token-missing'; record: DaemonRecordBase; liveness: DaemonLiveness }
   | { kind: 'uninterpretable'; recorded: RecordedDaemon; liveness: OccupyingLiveness }
   | { kind: 'valid'; record: DaemonRecord }
@@ -59,32 +64,57 @@ export function isOccupying(liveness: DaemonLiveness): liveness is OccupyingLive
   return liveness.state === 'running' || liveness.state === 'unconfirmed'
 }
 
+/**
+ * Who still holds a record, for a sentence saying why it is nobody's to
+ * remove. Under `unconfirmed` the recorded pid failed its start-time check,
+ * so the pid that answered on the socket is named instead, where it said one.
+ */
+export function describeOccupant(
+  liveness: OccupyingLiveness,
+  pid: number,
+  socketPath?: string,
+): string {
+  if (liveness.state === 'running') return `the daemon it names (pid ${pid}) is still running`
+  const where = socketPath === undefined ? '' : ` ${socketPath}`
+  const serving = liveness.servingPid === undefined ? '' : ` as pid ${liveness.servingPid}`
+  return `a daemon answers on its socket${where}${serving}`
+}
+
 type ReadOutcome =
   | { kind: 'text'; text: string }
   | Exclude<DaemonRecordParseResult, { kind: 'valid' }>
 
+async function recordExists(recordPath: string): Promise<boolean> {
+  try {
+    await lstat(recordPath)
+    return true
+  } catch (err) {
+    return !isMissingFileError(err) && !isErrnoCode(err, 'ENOTDIR')
+  }
+}
+
 async function readRecordText(dataDir: string): Promise<ReadOutcome> {
+  const recordPath = getDaemonRecordPath(dataDir)
   try {
     assertDataDirOwnedByUser(dataDir)
   } catch (err) {
-    return { kind: 'malformed', message: (err as Error).message, unreadable: err as Error }
+    // The file is not opened in a directory that failed the check; whether
+    // it is there is all a report may say of it.
+    return { kind: 'unreadable', error: err as Error, recordFound: await recordExists(recordPath) }
   }
-  const recordPath = getDaemonRecordPath(dataDir)
   let read: Awaited<ReturnType<typeof readFileOwnedByUser>>
   try {
     read = await readFileOwnedByUser(recordPath)
   } catch (err) {
     return {
-      kind: 'malformed',
-      message: 'Could not read daemon record file.',
-      unreadable: new Error(`the daemon record ${recordPath} exists but cannot be read`, {
-        cause: err,
-      }),
+      kind: 'unreadable',
+      error: new Error(`the daemon record ${recordPath} exists but cannot be read`, { cause: err }),
+      recordFound: true,
     }
   }
   if (read.kind === 'missing') return { kind: 'missing' }
   if (read.kind === 'not-owned') {
-    return { kind: 'malformed', message: read.message, unreadable: new Error(read.message) }
+    return { kind: 'unreadable', error: new Error(read.message), recordFound: true }
   }
   return { kind: 'text', text: read.text }
 }

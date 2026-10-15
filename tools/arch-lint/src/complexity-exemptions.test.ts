@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
+import { toolCommand } from './tool-bin.js'
 
 /**
  * `noExcessiveCognitiveComplexity` is ON for this repository, and the files
@@ -189,13 +190,14 @@ function lintWith(
   configDir: string,
   paths: readonly string[],
 ): { diagnostics?: { category?: string; location?: { path?: string } }[] } {
+  const [biome, ...entry] = toolCommand('@biomejs/biome', 'biome')
   let out: string
+  let err = ''
   try {
     out = execFileSync(
-      'pnpm',
+      biome,
       [
-        'exec',
-        'biome',
+        ...entry,
         'lint',
         `--config-path=${configDir}`,
         '--reporter=json',
@@ -210,7 +212,7 @@ function lintWith(
       {
         cwd: REPO_ROOT,
         encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'ignore'],
+        stdio: ['ignore', 'pipe', 'pipe'],
         maxBuffer: 256 * 1024 * 1024,
       },
     )
@@ -219,6 +221,16 @@ function lintWith(
     // biome exits non-zero whenever it reports anything, which is the expected
     // case here: every listed file should still be over.
     out = (error as { stdout?: string }).stdout ?? ''
+    err = (error as { stderr?: string }).stderr ?? ''
   }
-  return JSON.parse(out)
+  try {
+    return JSON.parse(out)
+  } catch (cause) {
+    // Whatever displaced the report is the diagnosis, and it is usually on
+    // stderr; a bare `Unexpected token` names nothing.
+    throw new Error(
+      `biome lint printed no JSON report.\nstdout: ${out.slice(0, 2000)}\nstderr: ${err.slice(0, 2000)}`,
+      { cause },
+    )
+  }
 }

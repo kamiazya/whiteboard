@@ -3,13 +3,15 @@
  * reads one SSE stream per daemon origin instead of one per canvas.
  *
  * Falls back to `null` where SharedWorker is unavailable (Chrome on Android,
- * and some embedded webviews), and for an origin whose worker failed to load.
- * The caller then lets SseBackend open its own stream — correct, just without
- * the cross-tab sharing.
+ * and some embedded webviews). The caller then lets SseBackend open its own
+ * stream — correct, just without the cross-tab sharing. A worker that fails
+ * to load AFTER construction falls back inside the source instead: see
+ * `retire`.
  */
-import type {
-  DocListener,
-  SseStreamSource,
+import {
+  type DocListener,
+  SseStreamHub,
+  type SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { isBridgeDaemon } from './bridge-address.js'
@@ -19,33 +21,14 @@ import {
   sseWorkerEventSchema,
 } from './sse-shared-worker-protocol.js'
 
-const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
-
 /**
- * Origins whose worker failed to load. Remembered for the page's lifetime
- * because what makes one fail — a chunk missing from the deploy, a CSP
- * refusal — fails a fresh worker the same way, so this origin takes the
- * own-stream path from then on.
+ * One source per origin, kept for the page's lifetime — including one whose
+ * worker failed to load. What makes a worker fail (a chunk missing from the
+ * deploy, a CSP refusal) fails a fresh worker the same way, so a failed
+ * origin's source stays cached and keeps serving through the page's own
+ * stream rather than trying another worker.
  */
-const failedOrigins = new Set<string>()
-const failureListeners = new Set<() => void>()
-
-/** Whether this origin's worker failed, so a caller built on it should rebuild. */
-export function sharedStreamFailed(baseUrl: string): boolean {
-  return failedOrigins.has(baseUrl)
-}
-
-/**
- * Told when a worker fails. Its source is dead from then on — every listener
- * cut off, every read rejected — so a caller holding one rebuilds, and the
- * rebuild opens its own stream.
- */
-export function subscribeSharedStreamFailure(listener: () => void): () => void {
-  failureListeners.add(listener)
-  return () => {
-    failureListeners.delete(listener)
-  }
-}
+const sources = new Map<string, SseStreamSource>()
 
 /** One tab waiting on a snapshot: answered with the state, or told the read failed. */
 interface SnapshotWaiter {
@@ -81,14 +64,24 @@ function answerSnapshot(
 }
 
 /**
+ * One listener's subscription: what letting go of it does. That changes when
+ * the worker fails, from releasing the worker's claim to releasing the page's
+ * own stream, and the closure `subscribe` returned calls whichever it is.
+ */
+interface Claim {
+  leave: () => void
+}
+
+/**
  * The ONE inbound channel. Every byte a tab applies has been through the
  * worker's replica — ordered and deduplicated against the daemon's frames and
  * every sibling tab's pushes — so all tabs observe the same sequence.
  */
 function deliverToListeners(
-  set: ReadonlySet<DocListener>,
+  claims: ReadonlyMap<DocListener, Claim>,
   evt: Exclude<ReturnType<typeof sseWorkerEventSchema.parse>, { type: 'snapshot' }>,
 ): void {
+  const set = [...claims.keys()]
   if (evt.type === 'authority-update') {
     const bytes = base64ToBytes(evt.update)
     if (bytes === null) return
@@ -112,7 +105,7 @@ function deliverToListeners(
 
 /** What the worker says of the writes a tab handed it. */
 function deliverWriteNews(
-  set: ReadonlySet<DocListener>,
+  set: readonly DocListener[],
   evt: Extract<SseWorkerEvent, { type: 'write-state' | 'write-refused' }>,
 ): void {
   if (evt.type === 'write-state') {
@@ -123,45 +116,60 @@ function deliverWriteNews(
 }
 
 /**
- * What a worker that failed to load leaves behind. Whoever is watching is told
- * they are not connected — the UI reads this to stop claiming a live daemon —
- * and a read waiting on the port rejects, as the contract says a read that
- * cannot be served does. The origin is remembered, and whoever follows
- * failures is told so it can rebuild.
+ * What a worker that failed to load leaves behind. A read waiting on the port
+ * rejects, as the contract says a read that cannot be served does. Every
+ * listener moves to the page's own stream, whose subscribe tells it at once
+ * that it is not routed — the drop it would see from any stream — and later
+ * that it is routed again. A holder therefore recovers the way it recovers
+ * from any drop, and none has to know a worker was ever involved.
  */
 function retire(
   baseUrl: string,
-  listeners: Map<string, Set<DocListener>>,
+  listeners: Map<string, Map<DocListener, Claim>>,
   snapshotWaiters: Map<string, Set<SnapshotWaiter>>,
+  own: SseStreamHub,
 ): void {
-  // Forgotten before anyone is told, so a listener that reconnects on the
-  // news is handed its own stream rather than this dead worker.
-  sources.delete(baseUrl)
-  failedOrigins.add(baseUrl)
-  for (const set of listeners.values()) {
-    for (const listener of set) listener.onConnectionChange?.(false)
-  }
-  listeners.clear()
   const failed = workerFailed(baseUrl)
   for (const waiters of snapshotWaiters.values()) {
     for (const waiter of waiters) waiter.reject(failed)
   }
   snapshotWaiters.clear()
-  for (const listener of failureListeners) listener()
+  const live = [...listeners].flatMap(([doc, claims]) =>
+    [...claims].map((c) => [doc, ...c] as const),
+  )
+  listeners.clear()
+  for (const [doc, listener, claim] of live) {
+    // The subscribe below tells the listener it is not routed before it
+    // returns, and a listener may let go right there.
+    let leftEarly = false
+    claim.leave = () => {
+      leftEarly = true
+    }
+    const leave = own.subscribe(doc, listener)
+    if (leftEarly) leave()
+    else claim.leave = leave
+  }
 }
 
 const workerFailed = (baseUrl: string) =>
   new Error(`the shared worker for ${baseUrl} failed to load`)
 
-export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | null {
+/**
+ * `fetch` is the page's daemon fetch, which the page's own stream reads
+ * through if the worker fails to load. The first caller's is the one kept,
+ * since the source is shared by every caller for the origin.
+ */
+export function createSharedSseStreamSource(
+  baseUrl: string,
+  fetch: typeof globalThis.fetch,
+): SseStreamSource | null {
   if (typeof SharedWorker === 'undefined') return null
   // A worker has no `chrome.runtime`, so it cannot reach a daemon through the
   // extension (ADR-0050); the page opens that stream itself.
   if (isBridgeDaemon(baseUrl)) return null
-  if (failedOrigins.has(baseUrl)) return null
 
   const cached = sources.get(baseUrl)
-  if (cached) return cached.source
+  if (cached) return cached
 
   let worker: SharedWorker
   try {
@@ -173,7 +181,7 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
     return null
   }
 
-  const listeners = new Map<string, Set<DocListener>>()
+  const listeners = new Map<string, Map<DocListener, Claim>>()
   /**
    * Tabs waiting on a snapshot, keyed by doc. Keyed rather than queued
    * because the worker's reply carries the doc and nothing else — two
@@ -184,14 +192,13 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
   const snapshotWaiters = new Map<string, Set<SnapshotWaiter>>()
   const port = worker.port
 
-  let dead = false
+  /** The page's own stream, once the worker has failed; every call goes to it from then on. */
+  let own: SseStreamHub | null = null
 
   // A module worker that fails to LOAD does not throw above — construction
   // succeeds and the failure arrives here instead. Without this the port is a
-  // hole: every subscribe posts into it, nothing ever answers, and the caller
-  // never learns it should have opened its own stream. That is a silent hang,
-  // which is strictly worse than the missing cross-tab sharing the null return
-  // degrades to.
+  // hole: every subscribe posts into it, nothing ever answers, and the page
+  // goes quiet with nothing to say why.
   //
   // Verified as reachable-in-principle rather than observed: `type: 'module'`
   // shared workers load in Chromium, WebKit and Firefox (see
@@ -199,9 +206,12 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
   // missing chunk or a CSP refusal. It stays because a source of truth behind
   // this worker would make a silent hole much more expensive than it is now.
   worker.onerror = () => {
-    if (dead) return
-    dead = true
-    retire(baseUrl, listeners, snapshotWaiters)
+    if (own !== null) return
+    // Set before any listener hears of the drop, so whatever it asks of this
+    // source in answer — a snapshot, a fresh subscribe — reaches the page's
+    // stream rather than the dead port.
+    own = new SseStreamHub({ fetch, baseUrl })
+    retire(baseUrl, listeners, snapshotWaiters, own)
   }
   port.onmessage = (e: MessageEvent) => {
     const parsed = sseWorkerEventSchema.safeParse(e.data)
@@ -215,36 +225,42 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
       answerSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
       return
     }
-    const set = listeners.get(evt.doc)
-    if (set) deliverToListeners(set, evt)
+    const claims = listeners.get(evt.doc)
+    if (claims) deliverToListeners(claims, evt)
   }
   port.start()
   postWorkerRequest(port, { type: 'init', baseUrl })
 
+  /** Lets go of one listener's claim on the worker. */
+  const leaveWorker = (doc: string, listener: DocListener) => {
+    const current = listeners.get(doc)
+    if (!current?.delete(listener)) return
+    if (current.size > 0) return
+    listeners.delete(doc)
+    postWorkerRequest(port, { type: 'unsubscribe', doc })
+  }
+
   const source: SseStreamSource = {
     subscribe(doc, listener) {
-      let set = listeners.get(doc)
-      if (!set) {
-        set = new Set()
-        listeners.set(doc, set)
+      if (own !== null) return own.subscribe(doc, listener)
+      let claims = listeners.get(doc)
+      if (!claims) {
+        claims = new Map()
+        listeners.set(doc, claims)
         // The worker refcounts across tabs; this port refcounts within the tab,
         // so it announces a document once however many documents here want it.
         postWorkerRequest(port, { type: 'subscribe', doc })
       }
-      set.add(listener)
-      return () => {
-        const current = listeners.get(doc)
-        if (!current) return
-        current.delete(listener)
-        if (current.size > 0) return
-        listeners.delete(doc)
-        postWorkerRequest(port, { type: 'unsubscribe', doc })
-      }
+      const claim = claims.get(listener) ?? { leave: () => leaveWorker(doc, listener) }
+      claims.set(listener, claim)
+      return () => claim.leave()
     },
     sendMessage(doc, message) {
+      if (own !== null) return own.sendMessage(doc, message)
       postWorkerRequest(port, { type: 'control', doc, message })
     },
     push(doc, update) {
+      if (own !== null) return own.push(doc, update)
       // To the worker's replica, not to the daemon. The replica merges this
       // against everything it already has — the other tabs' work and the
       // daemon's — and is what carries the result onward in both directions,
@@ -253,13 +269,13 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
       postWorkerRequest(port, { type: 'push', doc, update: bytesToBase64(update) })
     },
     snapshot(doc) {
+      if (own !== null) return own.snapshot(doc)
       // From the worker's replica, not the daemon: the worker seeds itself
       // once per document and every later tab is answered from memory. The
       // worker replies even for a document nobody has (an empty snapshot),
       // and with no bytes when its own read of the daemon failed, which
       // rejects — so this settles rather than racing a timeout. `null` is
       // reserved for the hub implementation's 404, which has a daemon to ask.
-      if (dead) return Promise.reject(workerFailed(baseUrl))
       return new Promise((resolve, reject) => {
         let waiters = snapshotWaiters.get(doc)
         if (!waiters) {
@@ -279,6 +295,6 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
     listeners.clear()
   })
 
-  sources.set(baseUrl, { source, port })
+  sources.set(baseUrl, source)
   return source
 }

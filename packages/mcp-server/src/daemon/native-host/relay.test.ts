@@ -314,6 +314,23 @@ describe('runNativeHost', () => {
     ])
   })
 
+  // The record reader refuses, naming the file and the remedy, where "no
+  // daemon" would send the person to start one beside a daemon still serving.
+  it("carries the daemon record's refusal to the page in place of 'no daemon'", async () => {
+    const refusal =
+      'the daemon record /data/daemon.json cannot be interpreted by this version, but names pid 7, which is running.'
+    const page = connectPage(async () => {
+      throw new Error(refusal)
+    })
+    page.send({ type: 'request', id: 'r5', method: 'GET', path: '/api/runtime/ping', headers: {} })
+    await page.until((m) => m.length > 0)
+    expect(page.received).toEqual([
+      { type: 'error', id: 'r5', reason: 'daemon-unreachable', message: refusal },
+    ])
+    page.close()
+    await page.done
+  })
+
   // The page is untrusted: a frame node's http client would throw on must be
   // answered, not take the host down for every request after it.
   it.each([

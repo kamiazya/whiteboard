@@ -10,7 +10,7 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer, type Server } from 'node:net'
+import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -103,6 +103,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   const cleanupDirs: string[] = []
   let cleanupResponder: (() => Promise<void>) | undefined
   let cleanupServer: Server | undefined
+  let cleanupHeld: Socket[] = []
 
   afterEach(async () => {
     for (const pid of cleanupPids.splice(0)) killQuietly(pid)
@@ -111,6 +112,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       await cleanupResponder()
       cleanupResponder = undefined
     }
+    for (const socket of cleanupHeld.splice(0)) socket.destroy()
     if (cleanupServer) {
       const server = cleanupServer
       cleanupServer = undefined
@@ -309,6 +311,41 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       expect(stderr).toContain(`pid ${process.pid}`)
       expect(stderr).toContain('MCP tools will be unavailable')
     },
+  )
+
+  // The record's pid started after its record, so only the socket can say
+  // whether a daemon holds it; one taking connections and never answering
+  // does, and a daemon spawned beside it would die on the socket it serves.
+  itPosix(
+    'starts no daemon beside a socket that takes connections and never answers',
+    async () => {
+      const { token, dataDir, countSpawns, env } = await prepareHookRun()
+      const socketPath = join(dataDir, 'wedged.sock')
+      const held: Socket[] = []
+      const wedged = createServer((socket) => held.push(socket))
+      await new Promise<void>((listening) => wedged.listen(socketPath, () => listening()))
+      cleanupServer = wedged
+      cleanupHeld = held
+      writeFileSync(
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({
+          pid: process.pid,
+          token,
+          socketPath,
+          startedAt: '2000-01-01T00:00:00.000Z',
+        }),
+      )
+
+      const { exitCode, stderr } = await runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '800',
+      })
+
+      expect(exitCode).not.toBe(0)
+      expect(countSpawns()).toBe(0)
+      expect(stderr).toContain('no second daemon was started')
+    },
+    30_000,
   )
 
   itPosix('refuses a running daemon that was started with a different token', async () => {

@@ -3,7 +3,11 @@ import {
   type DaemonLivenessSeams,
   daemonLiveness,
 } from '../daemon/daemon-liveness.js'
-import { type DaemonRecordParseResult, parseDaemonRecord } from '../daemon/daemon-record.js'
+import {
+  type DaemonRecordParseResult,
+  isOccupying,
+  parseDaemonRecord,
+} from '../daemon/daemon-record.js'
 import {
   type DaemonStatusResult,
   daemonStatusResultSchema,
@@ -40,7 +44,7 @@ type StatusFields = Omit<DaemonStatusResult, 'schemaVersion' | 'ok' | 'recordFou
 
 /** What a record no daemon can be asked through says, `recordFound` aside. */
 function unusableRecord(
-  parsed: Exclude<DaemonRecordParseResult, { kind: 'valid' | 'missing' }>,
+  parsed: Exclude<DaemonRecordParseResult, { kind: 'valid' | 'missing' | 'unreadable' }>,
 ): StatusFields {
   switch (parsed.kind) {
     case 'malformed':
@@ -49,7 +53,9 @@ function unusableRecord(
       return {
         reason: 'record-token-missing',
         recordFresh: false,
-        pidAlive: parsed.liveness.state !== 'dead',
+        // Alive as the other readers judge it: a pid another process took
+        // is not the daemon, and stop and run go ahead over it.
+        pidAlive: isOccupying(parsed.liveness),
         ...servingPidOf(parsed.liveness),
         record: recordSummary(parsed.record),
       }
@@ -88,6 +94,9 @@ export async function runDaemonStatus(
 
   if (parsed.kind === 'missing') {
     return answer(1, false, { reason: 'record-not-found', recordFresh: false })
+  }
+  if (parsed.kind === 'unreadable') {
+    return answer(1, parsed.recordFound, { reason: 'record-unreadable', recordFresh: false })
   }
   if (parsed.kind !== 'valid') return answer(1, true, unusableRecord(parsed))
 

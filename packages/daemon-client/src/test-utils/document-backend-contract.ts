@@ -98,6 +98,13 @@ export interface DocumentBackendHarness {
    */
   refusesNextWrite?(thenItsReadFails: boolean): void
   /**
+   * How many of the keeper's reads have been answered with a failure so far,
+   * so a case can tell when a failing read has actually reached the backend
+   * rather than guessing at how long that takes. Omitted with
+   * `refusesNextWrite`.
+   */
+  failedReads?(): number
+  /**
    * Whether the bytes this backend delivered — the snapshot and every
    * update, in delivery order — reproduce the keeper's current state when
    * applied. False for a frame left waiting on history it builds on.
@@ -158,14 +165,32 @@ function recorder(): Recorded {
   }
 }
 
-/** Long enough for any in-flight async connect work to land if it is going to. */
+/**
+ * A window for a wrong delivery to arrive in, for a case asserting none does.
+ * Never a wait for something the case then expects: how long a correct
+ * delivery takes is the implementation's and the machine's, and over the
+ * SharedWorker a loaded run has measured it past this window.
+ */
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100))
+
+/** A ceiling on a delivery the case requires, not a delay: it returns as soon as the delivery is there. */
+const DELIVERY_TIMEOUT_MS = 5000
+
+const called = (rec: Recorded, ...calls: string[]): Promise<void> =>
+  vi.waitFor(
+    () => {
+      for (const call of calls) expect(rec.calls).toContain(call)
+    },
+    { timeout: DELIVERY_TIMEOUT_MS },
+  )
 
 export function documentBackendContract(
   create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
 ): void {
   lifecycleCases(create)
+  teardownCases(create)
   transportCases(create)
+  authCases(create)
   catchUpCases(create)
   routingGapCases(create)
   unroutedCases(create)
@@ -184,7 +209,7 @@ export function documentBackendContract(
   })
 }
 
-/** Connecting, and tearing down mid-connect. */
+/** Connecting. */
 function lifecycleCases(
   create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
 ): void {
@@ -198,14 +223,17 @@ function lifecycleCases(
     const rec = recorder()
 
     h.backend.connect(rec.handlers)
-    await settle()
 
-    expect(rec.calls).toContain('snapshot')
-    expect(rec.calls).toContain('connected')
+    await called(rec, 'snapshot', 'connected')
     h.backend.disconnect()
     h.cleanup()
   })
+}
 
+/** Tearing down mid-connect. */
+function teardownCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
   it('delivers nothing more once disconnect has returned', async () => {
     // Connecting does asynchronous work in every implementation, so a teardown
     // can always land mid-flight. Seeding a document the caller has abandoned
@@ -216,15 +244,25 @@ function lifecycleCases(
     // been delivered to a caller that was still listening, and forbidding that
     // would make a legitimate design (the backend over a workspace kept in the
     // browser reports its connection immediately) fail for no reason.
+    //
+    // A control connection, opened alongside and left up, is what makes the
+    // absence mean something: its own seeding has landed, so the abandoned
+    // connect's identical work had the same time to deliver, however slow
+    // the machine is running.
     const h = await create()
+    const control = await create()
     const rec = recorder()
+    const controlRec = recorder()
 
     h.backend.connect(rec.handlers)
+    control.backend.connect(controlRec.handlers)
     h.backend.disconnect()
     const atDisconnect = [...rec.calls]
-    await settle()
+    await called(controlRec, 'snapshot', 'connected')
 
     expect(rec.calls).toEqual(atDisconnect)
+    control.backend.disconnect()
+    control.cleanup()
     h.cleanup()
   })
 }
@@ -243,17 +281,23 @@ function transportCases(
     }
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await settle()
-    expect(rec.calls).toContain('connected')
+    await called(rec, 'connected')
+    const before = rec.calls.length
 
     h.dropTransport()
-    await settle()
 
-    expect(rec.calls).toContain('disconnected')
+    // Counted from the drop: a backend may report itself disconnected before
+    // it first connects, which says nothing about noticing this drop.
+    await vi.waitFor(() => expect(rec.calls.slice(before)).toContain('disconnected'), {
+      timeout: DELIVERY_TIMEOUT_MS,
+    })
     h.backend.disconnect()
     h.cleanup()
   })
+}
 
+/** What a caller is told when the keeper refuses its credential. */
+function authCases(create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>): void {
   it('reports a refused credential as an auth error, not as a disconnect', async () => {
     // The page's "Sync off" state hangs off this callback alone. A backend
     // that answers a 401 with `onDisconnected` and keeps retrying leaves the
@@ -265,8 +309,7 @@ function transportCases(
     }
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await settle()
-    expect(rec.calls).toContain('connected')
+    await called(rec, 'connected')
 
     h.refuseAuth()
     h.dropTransport()
@@ -458,6 +501,22 @@ function failedOpenCases(
 }
 
 /**
+ * Resolves once the keeper has answered one more read with a failure than it
+ * had when this was called, when the harness can say — so a window after it
+ * covers what the backend does with that answer on a machine of any speed.
+ */
+function failedReadCounter(h: DocumentBackendHarness): () => Promise<void> {
+  const failedReads = h.failedReads
+  if (failedReads === undefined) return async () => {}
+  const before = failedReads()
+  return async () => {
+    await vi.waitFor(() => expect(failedReads()).toBe(before + 1), {
+      timeout: DELIVERY_TIMEOUT_MS,
+    })
+  }
+}
+
+/**
  * A refused write sends the caller to the keeper's state, and that read can
  * fail like any other. The caller's copy is all it has then: replacing it
  * with nothing, or counting the failure as a replacement that happened, loses
@@ -486,10 +545,12 @@ function failedResyncCases(
     }
     const refusals = () => rec.calls.filter((c) => c === 'writeRefused').length
     const before = [...rec.delivered]
+    const failedReadAnswered = failedReadCounter(h)
 
     refusesNextWrite(true)
     push()
     await vi.waitFor(() => expect(refusals()).toBe(1), { timeout: 5000 })
+    await failedReadAnswered()
     await settle()
     expect(rec.delivered).toEqual(before)
 
@@ -501,6 +562,10 @@ function failedResyncCases(
       () => expect(rec.calls.filter((c) => c === 'snapshot')).toEqual(['snapshot', 'snapshot']),
       { timeout: 5000 },
     )
+    // Asked again at the end, so a delivery the failure caused later than the
+    // window above is caught too: the replacing snapshot is the only one since.
+    expect(rec.delivered.slice(0, before.length)).toEqual(before)
+    expect(rec.delivered).toHaveLength(before.length + 1)
     h.backend.disconnect()
     h.cleanup()
   })
@@ -516,14 +581,16 @@ function upstreamDeliveryCases(
       h.cleanup()
       return
     }
+    const sentUpdates = h.sentUpdates
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await settle()
+    await called(rec, 'connected')
 
     await h.backend.pushLocalUpdate(new Uint8Array([4, 5, 6]))
-    await settle()
 
-    expect(h.sentUpdates()).toContainEqual(new Uint8Array([4, 5, 6]))
+    await vi.waitFor(() => expect(sentUpdates()).toContainEqual(new Uint8Array([4, 5, 6])), {
+      timeout: DELIVERY_TIMEOUT_MS,
+    })
     h.backend.disconnect()
     h.cleanup()
   })
@@ -536,7 +603,8 @@ function upstreamDeliveryCases(
     const h = await create()
     const rec = recorder()
     h.backend.connect(rec.handlers)
-    await settle()
+    // The edit is built against the delivered snapshot, as a caller's is.
+    await called(rec, 'snapshot', 'connected')
     const edit = h.localEdit?.(rec.snapshot()) ?? sentBytes(h)
     if (edit === null) {
       h.backend.disconnect()

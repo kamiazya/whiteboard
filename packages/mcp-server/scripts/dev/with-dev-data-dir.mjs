@@ -54,7 +54,8 @@ if (!hadExplicitDataDirOverride) {
 // pid file `pnpm mcp:http:stop` signals and then sit under `tsx watch` holding
 // nothing. A running daemon is handed over to rather than refused, so `pnpm dev`
 // and `pnpm mcp:debug:http` keep their other half beside the SessionStart
-// hook's daemon. "Running" is the one predicate the hook and the stop share.
+// hook's daemon. "Running" is `assessRecordedDaemon`'s, the one answer the
+// hook and the stop share.
 async function handOverIfRunning() {
   const running = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
   const daemon = running === null ? null : await assessRecordedDaemon(running)

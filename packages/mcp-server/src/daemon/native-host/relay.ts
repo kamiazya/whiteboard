@@ -21,7 +21,7 @@ import { BRIDGE_PROTOCOL_VERSION } from '@kamiazya/whiteboard-daemon-client/exte
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { encodeNativeMessage, readNativeMessages } from './native-messaging.js'
 
-interface DaemonEndpoint {
+export interface DaemonEndpoint {
   socketPath: string
   token: string
 }
@@ -29,7 +29,11 @@ interface DaemonEndpoint {
 interface NativeHostOptions {
   input: Readable
   output: Writable
-  /** Read per request: a restarted daemon has a new token. */
+  /**
+   * Read per request: a restarted daemon has a new token. `null` is "no
+   * daemon is running"; a rejection is a refusal whose message the page shows
+   * the person, so it may name a path but never carries the token.
+   */
   resolveDaemon: () => Promise<DaemonEndpoint | null>
 }
 
@@ -130,16 +134,14 @@ interface RelayContext extends NativeHostOptions {
 
 async function relayRequest(message: Request, context: RelayContext): Promise<void> {
   const { id } = message
-  const daemon = await context.resolveDaemon()
+  const daemon = await context.resolveDaemon().then(
+    (endpoint) => endpoint ?? 'no daemon is running',
+    (err: unknown) => (err instanceof Error ? err.message : 'the daemon record could not be read'),
+  )
   if (context.signal.aborted) return
-  if (daemon === null) {
+  if (typeof daemon === 'string') {
     context.settled()
-    context.send({
-      type: 'error',
-      id,
-      reason: 'daemon-unreachable',
-      message: 'no daemon is running',
-    })
+    context.send({ type: 'error', id, reason: 'daemon-unreachable', message: daemon })
     return
   }
   const headers = {

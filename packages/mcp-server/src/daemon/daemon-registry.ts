@@ -3,26 +3,15 @@ import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { writeFileAtomic } from '../shared/write-file-atomic.js'
 import type { DaemonLivenessSeams } from './daemon-liveness.js'
 import {
+  describeOccupant,
   getDaemonRecordPath,
   isOccupying,
-  type OccupyingLiveness,
   parseDaemonRecord,
 } from './daemon-record.js'
 import type { DaemonRecord, DaemonRecordWrite } from './daemon-record-schema.js'
 
 export { DAEMON_RECORD_FILENAME, getDaemonRecordPath } from './daemon-record.js'
 export type { DaemonRecord } from './daemon-record-schema.js'
-
-/** Who still holds the record, in the words a refusal names them with. */
-function occupant(
-  liveness: OccupyingLiveness,
-  pid: number,
-  socketPath: string | undefined,
-): string {
-  if (liveness.state === 'running') return `names pid ${pid}, which is running`
-  const serving = liveness.servingPid === undefined ? '' : ` as pid ${liveness.servingPid}`
-  return `a daemon answers on its socket ${socketPath}${serving}`
-}
 
 /**
  * The running daemon's record, or `null` when there is none — a projection of
@@ -57,14 +46,15 @@ export async function loadDaemonRecord(
       return parsed.record
     case 'missing':
       return null
+    case 'unreadable':
+      throw parsed.error
     case 'malformed':
-      if (parsed.unreadable !== undefined) throw parsed.unreadable
       return null
     case 'token-missing': {
       const { liveness, record } = parsed
       if (!isOccupying(liveness)) return null
       throw new Error(
-        `the daemon record ${path} carries no token, but ${occupant(liveness, record.pid, record.socketPath)}. ` +
+        `the daemon record ${path} carries no token, but ${describeOccupant(liveness, record.pid, record.socketPath)}. ` +
           'Stop that daemon with the build that started it; if it is not a daemon, remove the file.',
       )
     }
@@ -73,7 +63,7 @@ export async function loadDaemonRecord(
       const unlessNotADaemon =
         liveness.state === 'running' ? '; if it is not a daemon, remove the file' : ''
       throw new Error(
-        `the daemon record ${path} cannot be interpreted by this version, but ${occupant(liveness, recorded.pid, recorded.socketPath)}. ` +
+        `the daemon record ${path} cannot be interpreted by this version, but ${describeOccupant(liveness, recorded.pid, recorded.socketPath)}. ` +
           `If that is a whiteboard daemon of another version, stop it with that version${unlessNotADaemon}.`,
       )
     }

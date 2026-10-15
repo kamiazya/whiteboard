@@ -14,6 +14,11 @@ export default defineProject({
     // the repo, so the gate failed on its own budget rather than on a
     // finding. A ceiling sized on those numbers, not a delay.
     testTimeout: 60_000,
+    // Hooks clean up what those guards build — trees of temp git repos — and
+    // inherited vitest's 10s default while the tests got the ceiling above:
+    // under push load one `afterAll` rmSync timed out, and the run read
+    // "1 file failed, every test passed", which looks like a flake.
+    hookTimeout: 60_000,
     // `fsModuleCache` is deliberately not set. It persists the TRANSFORM step
     // only, and vitest's own breakdown for this project puts transform at 1-4%
     // of the run (import 68-79%, tests 20-30%) — so the most it can return is

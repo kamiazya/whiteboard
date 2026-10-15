@@ -9,8 +9,8 @@
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
-import { loadDaemonRecord } from '../daemon/daemon-registry.js'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { resolveDaemonEndpoint } from '../daemon/native-host/daemon-endpoint.js'
 import {
   installNativeHost,
   type ManifestDir,
@@ -75,10 +75,7 @@ async function runHost(): Promise<number> {
     await runNativeHost({
       input: process.stdin,
       output: process.stdout,
-      resolveDaemon: async () => {
-        const record = await loadDaemonRecord(dataDir).catch(() => null)
-        return record?.socketPath ? { socketPath: record.socketPath, token: record.token } : null
-      },
+      resolveDaemon: () => resolveDaemonEndpoint(dataDir),
     })
   } finally {
     release()

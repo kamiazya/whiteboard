@@ -7,6 +7,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
+import { createBridgeFetch } from './extension-bridge-fetch.js'
+import type { BridgePort } from './extension-bridge-port.js'
 import { CONNECT_TIMEOUT_MS, connectThroughExtension } from './extension-connection.js'
 
 describe('connectThroughExtension', () => {
@@ -24,6 +26,52 @@ describe('connectThroughExtension', () => {
     ['the daemon answers badly', async () => new Response('', { status: 502 })],
   ])('connects nothing when %s', async (_why, answer) => {
     expect(await connectThroughExtension(vi.fn<typeof fetch>(answer))).toEqual({ status: 'none' })
+  })
+
+  // The native host answers `daemon-unreachable` with what the daemon record
+  // said, and the bridge rejects with that text after the reason. A refusal
+  // naming a live daemon of another version must reach the person, or they
+  // are sent to start a daemon the CLI then refuses to start.
+  it("carries the host's refusal when the daemon record refuses", async () => {
+    const refusal =
+      'the daemon record /data/daemon.json cannot be interpreted by this version, but names pid 4242, which is running'
+    const fetchFn = vi.fn<typeof fetch>(async () =>
+      Promise.reject(new TypeError(`daemon-unreachable: ${refusal}`)),
+    )
+    expect(await connectThroughExtension(fetchFn)).toEqual({ status: 'none', refusal })
+  })
+
+  // The refusal is read from the text the bridge builds, so this goes through
+  // the real bridge: a change to how it words a host error must fail here.
+  it('reads the refusal from what the real bridge rejects with', async () => {
+    const refusal = 'the daemon record /data/daemon.json is not owned by this user'
+    const listeners: Array<(message: unknown) => void> = []
+    const port: BridgePort = {
+      onMessage: { addListener: (l) => void listeners.push(l) },
+      onDisconnect: { addListener: () => {} },
+      postMessage: (m) => {
+        if (m.type !== 'request') return
+        const frame = { type: 'error', id: m.id, reason: 'daemon-unreachable', message: refusal }
+        queueMicrotask(() => {
+          for (const l of listeners) l(frame)
+        })
+      },
+      disconnect: () => {},
+    }
+    expect(await connectThroughExtension(createBridgeFetch(() => port))).toEqual({
+      status: 'none',
+      refusal,
+    })
+  })
+
+  it.each([
+    ['no daemon is running', new TypeError('daemon-unreachable: no daemon is running')],
+    ['another kind of bridge error', new TypeError('stream-failed: socket closed at /tmp/x')],
+    ['a plain network error', new TypeError('the whiteboard extension is not available')],
+    ['an empty refusal', new TypeError('daemon-unreachable: ')],
+  ])('carries no refusal for %s', async (_why, err) => {
+    const fetchFn = vi.fn<typeof fetch>(async () => Promise.reject(err))
+    expect(await connectThroughExtension(fetchFn)).toEqual({ status: 'none' })
   })
 
   // The app shows "Connecting…" until this answers, so a host that never

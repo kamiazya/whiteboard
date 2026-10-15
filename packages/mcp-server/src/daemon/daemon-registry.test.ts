@@ -161,7 +161,7 @@ describe('daemon-registry', () => {
       }),
     )
     await expect(loadDaemonRecord(dataDir)).rejects.toThrow(
-      new RegExp(`daemon record .* pid ${process.pid}`),
+      new RegExp(`daemon record .* \\(pid ${process.pid}\\) is still running`),
     )
   })
 
@@ -187,7 +187,7 @@ describe('daemon-registry', () => {
     )
     await expect(
       loadDaemonRecord(dataDir, { isAlive: () => true, startMs: () => null }),
-    ).rejects.toThrow(new RegExp(`pid ${DEAD_PID}, which is running`))
+    ).rejects.toThrow(new RegExp(`\\(pid ${DEAD_PID}\\) is still running`))
   })
 
   // A record dated before its pid's process started was written by a daemon

@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { answeringDaemonSocket } from '../../../daemon/_test-daemon-socket.js'
 import { saveDaemonRecord } from '../../../daemon/daemon-registry.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
 import { readProcessStartMs } from '../../../shared/process-identity.js'
@@ -53,6 +54,8 @@ describe('prepareDataDir', () => {
 })
 
 describe('prepareDataDir: daemon version skew', () => {
+  // Never this process nor its parent: the pid a socket names, not the record.
+  const SERVING_PID = 2_147_483_645
   // The parent process is a live neighbour that started before this record.
   const record = (overrides: { pid?: number; version?: string; startedAt?: string }) => ({
     pid: process.ppid,
@@ -145,6 +148,38 @@ describe('prepareDataDir: daemon version skew', () => {
       capture.restore()
     }
   })
+
+  // A record dated before its pid's process started is asked of its socket;
+  // a daemon answering there as another pid is still something serving the
+  // data dir, whose schema an in-process migration would change.
+  it.skipIf(readProcessStartMs(process.ppid) === null)(
+    'warns, naming the pid that answered, when a daemon of another version serves the socket as another pid',
+    async () => {
+      const daemon = await answeringDaemonSocket(SERVING_PID, 'tok')
+      await saveDaemonRecord(
+        {
+          ...record({ startedAt: '2024-01-01T00:00:00.000Z' }),
+          socketPath: daemon.socketPath,
+        },
+        tempDir,
+      )
+      const capture = captureLogsForTests('warning')
+      try {
+        await prepareDataDir(tempDir)
+        const warnings = capture.records.filter((r) => r.data?.recordedVersion !== undefined)
+        expect(warnings).toEqual([
+          expect.objectContaining({
+            data: expect.objectContaining({
+              recordedVersion: '0.0.0-older',
+              servingPid: SERVING_PID,
+            }),
+          }),
+        ])
+      } finally {
+        capture.restore()
+      }
+    },
+  )
 
   it('still migrates when the versions differ', async () => {
     await skewWarnings({})

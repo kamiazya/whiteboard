@@ -15,7 +15,7 @@
 // on that ambiguous path alone, so the plain path costs no connection.
 
 import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
-import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { z } from 'zod'
 import { type ProcessIdentitySeams, recordedProcess } from '../shared/process-identity.js'
 import type { RecordedDaemon } from './daemon-record-schema.js'
 import {
@@ -50,6 +50,14 @@ export interface DaemonLivenessSeams extends ProcessIdentitySeams {
 }
 
 /**
+ * All of the runtime status this asks for. Only the pid decides, so a daemon
+ * of another version whose status this build's full contract would refuse is
+ * still recognised when it names the recorded pid; and a pid no process can
+ * have is no pid at all, so it never becomes a `servingPid`.
+ */
+const answeredPidSchema = z.object({ pid: z.number().int().positive() })
+
+/**
  * Long enough for a daemon busy on a large write to answer, short enough that
  * a command run against a socket nobody serves does not appear to hang.
  */
@@ -77,7 +85,7 @@ export async function daemonLiveness(
     // Only a connection nobody accepted means nothing serves the socket.
     return err instanceof DaemonNoAnswerError ? { state: 'unconfirmed' } : { state: 'pid-reused' }
   }
-  const status = runtimeStatusResponseSchema.safeParse(answer.body)
+  const status = answeredPidSchema.safeParse(answer.body)
   if (answer.status !== 200 || !status.success) return { state: 'unconfirmed' }
   if (status.data.pid === record.pid) return { state: 'running' }
   return { state: 'unconfirmed', servingPid: status.data.pid }

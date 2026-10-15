@@ -9,11 +9,13 @@ import { testSocketPath } from '../shared/test-utils/socket-fetch.js'
 /**
  * A real listener on a fresh socket that answers the daemon's runtime status
  * as a daemon with `pid` would, admitting only `token`. Closed when the
- * calling test finishes, so it must be called from inside a test.
+ * calling test finishes, so it must be called from inside a test. `body`
+ * replaces that status with an answer outside the contract.
  */
 export async function answeringDaemonSocket(
   pid: number,
   token: string,
+  { body }: { body?: unknown } = {},
 ): Promise<{ socketPath: string; asked: string[] }> {
   const socketPath = testSocketPath()
   const asked: string[] = []
@@ -36,7 +38,9 @@ export async function answeringDaemonSocket(
       res.writeHead(401, { 'content-type': 'application/json' }).end('{"error":"unauthorized"}')
       return
     }
-    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(status))
+    res
+      .writeHead(200, { 'content-type': 'application/json' })
+      .end(JSON.stringify(body === undefined ? status : body))
   })
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)

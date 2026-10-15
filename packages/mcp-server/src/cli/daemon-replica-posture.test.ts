@@ -138,6 +138,25 @@ describe('whiteboard daemon rotate-replica-key', () => {
     expect(asked.map((req) => req.method)).toEqual(['GET'])
   })
 
+  // The recorded pid failed its start-time check, so the record cannot say
+  // who is there; the pid that answered on the socket can.
+  it('names the pid serving the socket of a record it cannot interpret, not the recorded one', async () => {
+    const { result } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'ws-1',
+      parseRecord: async () => ({
+        kind: 'uninterpretable',
+        recorded: { pid: record.pid, socketPath: record.socketPath },
+        liveness: { state: 'unconfirmed', servingPid: 5150 },
+      }),
+    })
+    expect(result).toMatchObject({
+      reason: 'daemon-not-running',
+      message: expect.stringContaining('pid 5150'),
+    })
+    expect(result).not.toMatchObject({ message: expect.stringContaining(`pid ${record.pid}`) })
+  })
+
   it("reports the daemon's refusal with its status and reason, exit 1", async () => {
     const daemon = daemonAnswering(404, {
       error: 'workspace_not_found',

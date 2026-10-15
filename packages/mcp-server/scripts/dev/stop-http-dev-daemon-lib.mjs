@@ -16,18 +16,17 @@ import {
   isPidFileWriter,
   isRecordWriter,
   readProcessStartMs,
-  recordedDaemonLiveness,
 } from './dev-daemon-socket-lib.mjs'
 
 /**
- * Whether the record's process is running is `assessRecordedDaemon`'s answer,
- * the one the wrapper and the SessionStart hook use too; only a pid it takes
- * for the daemon is ever signalled. A pid whose start time says it is not the
- * daemon is judged as the daemon itself judges it (`recordedDaemonLiveness`):
- * the socket confirming the pid makes it the daemon, a socket answering as
- * anything else, or taking the connection and never answering, is a refusal,
- * and a refused connection makes the record stale — signalling
- * a pid some other process has taken would stop a stranger.
+ * Whether the record's daemon is running is `assessRecordedDaemon`'s answer,
+ * the one the wrapper and the SessionStart hook use too, and only a pid its
+ * liveness verdict confirms is ever signalled. A pid whose start time says it
+ * is not the daemon is judged as the daemon itself judges it: the socket
+ * confirming the pid makes it the daemon, a socket answering as anything
+ * else, or taking the connection and never answering, is a refusal, and a
+ * refused connection makes the record stale — signalling a pid some other
+ * process has taken would stop a stranger.
  *
  * @param {{
  *   dataDir: string,
@@ -37,7 +36,7 @@ import {
  *   kill: (pid: number, signal: string) => unknown,
  *   sleep: (ms: number) => Promise<unknown>,
  *   answers?: (record: { socketPath: string }) => Promise<boolean>,
- *   request?: Parameters<typeof recordedDaemonLiveness>[1]['request'],
+ *   request?: NonNullable<Parameters<typeof assessRecordedDaemon>[1]>['request'],
  *   startMs?: (pid: number) => number | null,
  *   timeoutMs?: number,
  *   pollMs?: number,
@@ -67,9 +66,9 @@ export async function stopDevDaemon({
   const wrapper = readWrapper(dataDir)
   const record = readRecord(dataDir)
   if (record === null) return stopOrphanWrapper(wrapper, { isAlive, startMs, kill, clock })
-  const daemon = await assessRecordedDaemon(record, { answers, isAlive, startMs })
+  const daemon = await assessRecordedDaemon(record, { answers, isAlive, startMs, request })
   if (daemon.process === 'foreign') {
-    const refusal = await unconfirmedForeign(record, { isAlive, startMs, request })
+    const refusal = unconfirmedForeign(record, daemon.liveness)
     if (refusal !== null) return refusal
   }
   if (daemon.process === 'dead') {
@@ -93,14 +92,13 @@ export async function stopDevDaemon({
 
 /**
  * For a pid whose start time says it is not the daemon: null when its socket
- * confirms it is anyway, else why it is not signalled.
+ * confirmed it is anyway, else why it is not signalled.
  *
- * @param {{ pid: number, socketPath: string, startedAt?: string, token?: string }} record
- * @param {Parameters<typeof recordedDaemonLiveness>[1]} seams
- * @returns {Promise<null | { kind: 'stale' | 'unsignallable', pid: number, reason: string }>}
+ * @param {{ pid: number, socketPath: string, startedAt?: string }} record
+ * @param {'running' | 'unconfirmed' | 'pid-reused' | 'dead'} liveness
+ * @returns {null | { kind: 'stale' | 'unsignallable', pid: number, reason: string }}
  */
-async function unconfirmedForeign(record, seams) {
-  const liveness = await recordedDaemonLiveness(record, seams)
+function unconfirmedForeign(record, liveness) {
   if (liveness === 'running') return null
   if (liveness === 'unconfirmed') {
     return {

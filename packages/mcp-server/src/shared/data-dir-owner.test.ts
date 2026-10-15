@@ -48,8 +48,8 @@ describe.skipIf(!ROOT_IS_SOMEONE_ELSES)('a data dir another user owns', () => {
   it('is reported rather than parsed by status and doctor', async () => {
     const parsed = await parseDaemonRecord('/')
     expect(parsed).toMatchObject({
-      kind: 'malformed',
-      message: expect.stringMatching(/not this user/),
+      kind: 'unreadable',
+      error: expect.objectContaining({ message: expect.stringMatching(/not this user/) }),
     })
   })
 
@@ -75,7 +75,7 @@ describe('the record file itself', () => {
     async () => {
       await symlink('/etc/hostname', join(dir, 'daemon.json'))
       await expect(loadDaemonRecord(dir)).rejects.toThrow(/symlink/)
-      expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
+      expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'unreadable', recordFound: true })
     },
   )
 
@@ -86,7 +86,7 @@ describe('the record file itself', () => {
     await writeFile(elsewhere, '{}')
     await symlink(elsewhere, join(dir, 'daemon.json'))
     await expect(loadDaemonRecord(dir)).rejects.toThrow(/symlink/)
-    expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'malformed' })
+    expect(await parseDaemonRecord(dir)).toMatchObject({ kind: 'unreadable', recordFound: true })
   })
 
   // A hard link is how a file this user owns could sit in a directory

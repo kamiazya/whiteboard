@@ -323,9 +323,15 @@ clock moves `btime` and not a process's start ticks. A socket naming the
 recorded pid is the writer; one that answers otherwise, or accepts the
 connection and stays silent past the ask's timeout, is `unconfirmed` — only
 a connection nobody accepts is `pid-reused` — and `daemon stop` then refuses
-without signalling or deleting the record. The dev scripts' stop
-(`packages/mcp-server/scripts/dev/dev-daemon-socket-lib.mjs`'s `recordedDaemonLiveness`) is a
-bare-node copy held to it by a parity property.
+without signalling or deleting the record. A `daemon.json` that cannot be READ
+(the data dir's ownership or mode, a read error, a file not owned by the user)
+is its own `unreadable` verdict — status `record-unreadable`, doctor naming the
+cause — and is never advised removed. The dev scripts
+(`packages/mcp-server/scripts/dev/dev-daemon-socket-lib.mjs`'s `recordedDaemonLiveness`) keep a
+bare-node copy held to it by a parity property; `assessRecordedDaemon`, the one
+"is it running" answer the dev stop, wrapper and SessionStart hook share, is that
+verdict's projection (running or unconfirmed, or a socket that answers) and is
+held to `isOccupying` by the same property.
 
 ## Log redaction
 
