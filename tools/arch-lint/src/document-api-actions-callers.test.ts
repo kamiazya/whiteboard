@@ -12,7 +12,7 @@
  * A caller is a call whose LAST argument is the action's string literal, in a
  * production file that names `documentApiUrl`. That reads `documentApiUrl(ws,
  * path, 'snapshot')` and a wrapper that fixes the action
- * (`canvasDocUrl(base, doc, 'update')`) alike, and it does not read the
+ * (`documentRouteUrl(base, doc, 'update')`) alike, and it does not read the
  * server's own `onDocumentAction(app, 'get', 'snapshot', …)`, which is a
  * registration and not a use. The source is read as an AST, so prose naming a
  * call is not one.
@@ -169,7 +169,9 @@ describe('what the scan counts as a call', () => {
 
   it('reads a wrapper that fixes the action, in a file that names the builder', () => {
     expect([
-      ...callsWithAction(`import { documentApiUrl } from 'x'\ncanvasDocUrl(base, doc, 'update')`),
+      ...callsWithAction(
+        `import { documentApiUrl } from 'x'\ndocumentRouteUrl(base, doc, 'update')`,
+      ),
     ]).toEqual(['update'])
   })
 

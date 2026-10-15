@@ -5,7 +5,7 @@ import {
 } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import {
-  canvasSnapshotUrl,
+  documentSnapshotUrl,
   documentSyncKey,
   documentUpdateUrl,
   workspaceHandleOfSyncKey,
@@ -41,7 +41,7 @@ describe('a per-document sync key names the workspace it was built from', () => 
       expect(documentUpdateUrl('http://d', key)).toMatch(
         new RegExp(`^http://d/api/w/${handle}/document/.+/update$`),
       )
-      expect(canvasSnapshotUrl('http://d', key)).toMatch(
+      expect(documentSnapshotUrl('http://d', key)).toMatch(
         new RegExp(`^http://d/api/w/${handle}/document/.+/snapshot$`),
       )
     },

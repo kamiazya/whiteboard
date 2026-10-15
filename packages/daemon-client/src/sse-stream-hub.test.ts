@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import {
-  canvasSnapshotUrl,
+  documentSnapshotUrl,
   documentSyncKey,
   documentUpdateUrl,
   parseSseEvent,
@@ -477,7 +477,7 @@ describe('doc-key URL mapping', () => {
     expect(documentUpdateUrl('http://d', 'workspace:ws-1')).toBe(
       'http://d/api/w/ws-1/workspace-document/update',
     )
-    expect(canvasSnapshotUrl('http://d', 'workspace:ws-1')).toBe(
+    expect(documentSnapshotUrl('http://d', 'workspace:ws-1')).toBe(
       'http://d/api/w/ws-1/workspace-document/snapshot',
     )
   })
@@ -518,7 +518,7 @@ describe('workspaceHandleOfSyncKey', () => {
 
   it('refuses a handle with no path behind it, and builds no snapshot URL for it', () => {
     expect(workspaceHandleOfSyncKey('ws-1/')).toBeNull()
-    expect(canvasSnapshotUrl('http://d', 'ws-1/')).toBeNull()
+    expect(documentSnapshotUrl('http://d', 'ws-1/')).toBeNull()
   })
 })
 

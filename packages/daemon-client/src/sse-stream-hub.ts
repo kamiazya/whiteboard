@@ -317,7 +317,7 @@ export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
 }
 
 /** The snapshot twin of `documentUpdateUrl`, splitting on the same first slash. */
-export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
+export function documentSnapshotUrl(baseUrl: string, doc: string): string | null {
   return documentRouteUrl(baseUrl, doc, 'snapshot')
 }
 
@@ -484,7 +484,7 @@ export class SseStreamHub implements SseStreamSource {
    * one. Everything else non-ok throws, same reasoning as `push`.
    */
   async snapshot(doc: string): Promise<Uint8Array | null> {
-    const url = canvasSnapshotUrl(this.options.baseUrl, doc)
+    const url = documentSnapshotUrl(this.options.baseUrl, doc)
     if (url === null) throw new Error(`not a document key: ${doc}`)
     const res = await this.options.fetch(url)
     if (res.status === 404) return null
