@@ -18,7 +18,7 @@ import {
   releaseSpawnLock,
   resolveSpawnLockStaleMs,
 } from './dev-spawn-lock-lib.mjs'
-import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
+import { resolveReadyTimeoutMs, waitForDaemon } from './ensure-http-dev-daemon-lib.mjs'
 import {
   devSpawnLockPath,
   devWrapperPidPath,
@@ -179,12 +179,17 @@ superviseChild(child, {
 // lock after the hook's ready budget, and the pid file still keeps a second
 // watcher out.
 if (ownsLock) {
-  const bootStartedAt = Date.now()
-  const bootBudgetMs = resolveReadyTimeoutMs(process.env)
-  while (ownsLock && Date.now() - bootStartedAt < bootBudgetMs) {
-    const record = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
-    if (record !== null && (await assessRecordedDaemon(record)).running) break
-    await sleep(LOCK_POLL_MS)
-  }
+  await waitForDaemon({
+    // The daemon is `tsx watch`'s child, this wrapper's grandchild, so its pid
+    // is unknowable here: booted means some recorded daemon is running.
+    isUp: async () => {
+      const record = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
+      return record !== null && (await assessRecordedDaemon(record)).running
+    },
+    gaveUp: () => !ownsLock,
+    sleep,
+    timeoutMs: resolveReadyTimeoutMs(process.env),
+    pollIntervalMs: LOCK_POLL_MS,
+  })
   releaseLock()
 }
