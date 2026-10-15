@@ -12,9 +12,17 @@
  * persisted — the input bytes never travel anywhere to be observed. The
  * contract's send case skips, and the effect-based equivalent lives in the
  * browser-mode suite ("a pushed edit lands on the document tree node").
+ * `localEdit` is that effect in the contract's terms: a node written against
+ * the delivered snapshot, landed once the store holds it.
  */
 import type { DocumentBackendHarness } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'
 import { documentBackendContract } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'
+import {
+  documentContainers,
+  readSpatialCanvas,
+  writeSpatialNode,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, vi } from 'vitest'
@@ -89,6 +97,27 @@ describe('DocumentBackend contract: BrowserBackend', () => {
       docs,
       legacy,
     )
-    return { backend, cleanup: () => backend.disconnect() }
+    return {
+      backend,
+      localEdit: (snapshot) => {
+        const doc = new LoroDoc()
+        if (snapshot !== null) doc.import(snapshot)
+        const from = doc.version()
+        writeSpatialNode(
+          documentContainers(doc, DOC_ID),
+          textNode({ id: 'n-last', x: 0, y: 0, width: 80, height: 40, text: 'last' }),
+        )
+        return {
+          bytes: doc.export({ mode: 'update', from }),
+          landed: async () => {
+            const stored = await docs.open(DOC_ID)
+            if (stored === null) return false
+            const canvas = readSpatialCanvas(documentContainers(stored, DOC_ID))
+            return canvas.nodes.some((n) => n.id === 'n-last')
+          },
+        }
+      },
+      cleanup: () => backend.disconnect(),
+    }
   })
 })

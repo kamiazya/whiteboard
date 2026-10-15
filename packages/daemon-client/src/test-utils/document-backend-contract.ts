@@ -48,20 +48,47 @@ export interface DocumentBackendHarness {
    * browser).
    */
   refuseAuth?(): void
+  /**
+   * An update a caller of this port would push, built against the snapshot
+   * the backend delivered, and how to tell the keeper took it. For an
+   * implementation whose upstream is not a byte relay; one with
+   * `sentUpdates` needs none, since the bytes it sent are the evidence.
+   */
+  localEdit?(snapshot: Uint8Array | null): LocalEdit
   cleanup(): void
+}
+
+interface LocalEdit {
+  bytes: Uint8Array
+  landed(): boolean | Promise<boolean>
+}
+
+/** The byte-relay form of `localEdit`: arbitrary bytes, landed once sent. */
+function sentBytes(h: DocumentBackendHarness): LocalEdit | null {
+  const sent = h.sentUpdates
+  if (sent === undefined) return null
+  const bytes = new Uint8Array([4, 5, 6])
+  return { bytes, landed: () => sent().some((b) => b.join() === bytes.join()) }
 }
 
 interface Recorded {
   handlers: DocumentBackendHandlers
   calls: string[]
+  /** The first snapshot delivered, or `null` before one was. */
+  snapshot(): Uint8Array | null
 }
 
 function recorder(): Recorded {
   const calls: string[] = []
+  let snapshot: Uint8Array | null = null
   return {
     calls,
+    snapshot: () => snapshot,
     handlers: {
-      onSnapshot: () => calls.push('snapshot'),
+      onSnapshot: (bytes) => {
+        snapshot ??= bytes
+        calls.push('snapshot')
+      },
       onRemoteUpdate: () => calls.push('update'),
       onConnected: () => calls.push('connected'),
       onDisconnected: () => calls.push('disconnected'),
@@ -166,6 +193,23 @@ export function documentBackendContract(
     h.cleanup()
   })
 
+  upstreamDeliveryCases(create)
+
+  it('never throws on a control message sent before connecting', async () => {
+    // The editor can report readiness while the transport is still coming
+    // up, or after it dropped. Every implementation either queues or
+    // ignores; none may throw into the caller.
+    const h = await create()
+
+    expect(() => h.backend.sendClientReady()).not.toThrow()
+    h.cleanup()
+  })
+}
+
+/** What reaches the keeper of what a caller pushed — while connected, and across teardown. */
+function upstreamDeliveryCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
   it('sends a local update upstream', async () => {
     const h = await create()
     if (!h.sentUpdates) {
@@ -184,13 +228,26 @@ export function documentBackendContract(
     h.cleanup()
   })
 
-  it('never throws on a control message sent before connecting', async () => {
-    // The editor can report readiness while the transport is still coming
-    // up, or after it dropped. Every implementation either queues or
-    // ignores; none may throw into the caller.
+  it('still delivers an update it accepted before disconnect', async () => {
+    // Teardown follows the last edit closely — a document switch disposes
+    // the session the moment the edit is handed over — so a backend that
+    // dropped what it had already accepted would lose exactly that edit,
+    // with no page left to say it was not saved.
     const h = await create()
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await settle()
+    const edit = h.localEdit?.(rec.snapshot()) ?? sentBytes(h)
+    if (edit === null) {
+      h.backend.disconnect()
+      h.cleanup()
+      return
+    }
 
-    expect(() => h.backend.sendClientReady()).not.toThrow()
+    void Promise.resolve(h.backend.pushLocalUpdate(edit.bytes)).catch(() => {})
+    h.backend.disconnect()
+
+    await vi.waitFor(async () => expect(await edit.landed()).toBe(true))
     h.cleanup()
   })
 }

@@ -197,6 +197,42 @@ describe('SseBackend pushing straight to the daemon', () => {
   })
 })
 
+describe('SseBackend disconnecting with writes outstanding', () => {
+  // A document switch disconnects the moment the last edit is handed over,
+  // often while the one before it is still on the wire: the queued edit is
+  // the person's last, and no page is left to say it was not saved.
+  it('sends a write queued behind one in flight', async () => {
+    let answerFirst: () => void = () => {}
+    const posted: number[][] = []
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/snapshot')) return new Response(new Uint8Array([1]), { status: 200 })
+      if (url.includes('/api/sync/stream'))
+        return new Response(new ReadableStream(), { status: 200 })
+      if (url.includes('/update') && init?.method === 'POST') {
+        posted.push([...new Uint8Array(init.body as ArrayBuffer)])
+        if (posted.length === 1) await new Promise<void>((r) => (answerFirst = r))
+      }
+      return new Response('{}', { status: 200 })
+    })
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, {
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    })
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+
+    const first = backend.pushLocalUpdate(new Uint8Array([1]))
+    await vi.waitFor(() => expect(posted).toEqual([[1]]))
+    const last = backend.pushLocalUpdate(new Uint8Array([2]))
+    backend.disconnect()
+    answerFirst()
+
+    await Promise.all([first, last])
+    expect(posted).toEqual([[1], [2]])
+  })
+})
+
 describe('SseBackend through an injected source that writes straight to the daemon', () => {
   // Who retries is decided by what the source's push answers, not by whether
   // a source was injected: a hub shared by the page leaves this backend

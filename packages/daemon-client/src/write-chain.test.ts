@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SyncWriteRefusedError } from './api-contracts/sync-write-refusal.js'
 import { flush } from './test-utils/flush.js'
 import {
+  QueuedWriter,
   retryAfterMsOf,
   retryDelayMs,
   SyncWriteFailedError,
@@ -141,5 +142,85 @@ describe('WriteChain', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     expect(pushes).toBe(1)
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('QueuedWriter.close', () => {
+  /** A push that answers only when the test says, recording every body it was given. */
+  function heldPush() {
+    const sent: number[][] = []
+    const answers: { ok: () => void; fail: (err: Error) => void }[] = []
+    const push = (bytes: Uint8Array) =>
+      new Promise<void>((ok, fail) => {
+        sent.push([...bytes])
+        answers.push({ ok, fail })
+      })
+    return { push, sent, answers }
+  }
+  const hooks = { onFailing: () => {}, onLanded: () => {}, onRefused: () => {} }
+
+  it('still sends what it took before closing, in order', async () => {
+    const p = heldPush()
+    const writer = new QueuedWriter(p.push, hooks)
+    const first = writer.write(new Uint8Array([1]))
+    const second = writer.write(new Uint8Array([2]))
+    await flush()
+    writer.close()
+    p.answers[0]?.ok()
+    await flush()
+    p.answers[1]?.ok()
+    await Promise.all([first, second])
+    expect(p.sent).toEqual([[1], [2]])
+  })
+
+  it('takes nothing more once closed', async () => {
+    const writer = new QueuedWriter(heldPush().push, hooks)
+    writer.close()
+    await expect(writer.write(new Uint8Array([1]))).rejects.toThrow('writer closed')
+  })
+
+  it('drops a write waiting for a retry when it closes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const p = heldPush()
+    const writer = new QueuedWriter(p.push, hooks)
+    const pushed = writer.write(new Uint8Array([1]))
+    await vi.advanceTimersByTimeAsync(0)
+    p.answers[0]?.fail(new SyncWriteFailedError(503, null))
+    await vi.advanceTimersByTimeAsync(0)
+    writer.close()
+    await expect(pushed).rejects.toThrow('writer closed')
+    await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+    expect(p.sent).toEqual([[1]])
+  })
+
+  it('sends nothing again after a failure once closed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const p = heldPush()
+    const writer = new QueuedWriter(p.push, hooks)
+    const first = writer.write(new Uint8Array([1]))
+    const second = writer.write(new Uint8Array([2]))
+    await vi.advanceTimersByTimeAsync(0)
+    writer.close()
+    p.answers[0]?.fail(new SyncWriteFailedError(503, null))
+    await expect(first).rejects.toThrow('writer closed')
+    await expect(second).rejects.toThrow('writer closed')
+    await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+    expect(p.sent).toEqual([[1]])
+  })
+
+  it('gives up on a write the daemon never answers, at the retry ceiling', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const p = heldPush()
+    const writer = new QueuedWriter(p.push, hooks)
+    let dropped: unknown = null
+    writer.write(new Uint8Array([1])).catch((err: unknown) => {
+      dropped = err
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    writer.close()
+    await vi.advanceTimersByTimeAsync(retryDelayMs(10) - 1)
+    expect(dropped).toBeNull()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(dropped).toBeInstanceOf(Error)
   })
 })

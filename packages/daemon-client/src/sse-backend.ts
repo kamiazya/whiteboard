@@ -231,6 +231,9 @@ export class SseBackend implements DocumentBackend {
     this.unsubscribe = null
     this.unsubscribeText?.()
     this.unsubscribeText = null
+    // Closing the writer stops it taking more, not sending what it took
+    // (the port's `disconnect` rule); the owned hub's POSTs do not depend on
+    // the stream closed below.
     this.writer?.close()
     this.writer = null
     this.sourceWritesFailing = false

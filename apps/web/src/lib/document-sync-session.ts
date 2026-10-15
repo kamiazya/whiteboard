@@ -985,11 +985,11 @@ export function createDocumentSyncSession(
   // commitChain) to have actually invoked backend.pushLocalUpdate, then
   // resolves so dispose() can safely close the transport. Does NOT wait for
   // that pushLocalUpdate call's own promise to settle — only for the call to
-  // have happened, since a real transport call already puts bytes on a
-  // still-open connection regardless of how long its ack takes, and waiting
-  // for an ack could block teardown indefinitely. Bounded by
-  // DISPOSE_DRAIN_TIMEOUT_MS so a stuck commitChain cannot leave
-  // disconnect() pending forever.
+  // have happened, since DocumentBackend's `disconnect` contract delivers an
+  // update accepted before it (a backend may still be queueing it behind an
+  // earlier write), and waiting for an ack could block teardown
+  // indefinitely. Bounded by DISPOSE_DRAIN_TIMEOUT_MS so a stuck commitChain
+  // cannot leave disconnect() pending forever.
   async function drainBeforePushHasFired(): Promise<void> {
     const chainAtDispose = commitChain
     let timeoutId: ReturnType<typeof setTimeout> | undefined
