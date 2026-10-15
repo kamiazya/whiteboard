@@ -47,11 +47,9 @@ import type { DocumentPageModel } from './document-page-model.js'
 import { connectionsStamp } from './use-connections.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
-import {
-  useDaemonDocumentController,
-  useListFollowsRecord,
-} from './use-daemon-document-controller.js'
+import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 import { useDocumentActions } from './use-document-actions.js'
+import { useListFollowsRecord } from './use-follow-workspace-writes.js'
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string

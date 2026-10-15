@@ -67,7 +67,7 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
 })
 
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
-const { useListFollowsRecord } = await import('./use-daemon-document-controller.js')
+const { useListFollowsRecord } = await import('./use-follow-workspace-writes.js')
 
 const mainRow: DocumentSummary = {
   path: 'main',
@@ -299,5 +299,21 @@ describe('useListFollowsRecord', () => {
     await settled()
 
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the list alone when a snapshot replaces the record with one showing the same', async () => {
+    const refresh = vi.fn()
+    const { rerender } = renderHook(
+      ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc }, refresh),
+      { initialProps: { doc: record } },
+    )
+    refresh.mockClear()
+    const replaced = new LoroDoc()
+    replaced.import(peer.export({ mode: 'snapshot' }))
+
+    rerender({ doc: replaced })
+    await settled()
+
+    expect(refresh).not.toHaveBeenCalled()
   })
 })

@@ -2,8 +2,14 @@ import type {
   DocListener,
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { followBrowserWorkspaceWrites, followWorkspaceWrites } from './follow-workspace-writes.js'
+import {
+  followBrowserWorkspaceWrites,
+  followRecordWrites,
+  followWorkspaceWrites,
+} from './follow-workspace-writes.js'
 import type { WorkspaceBroadcast } from './workspace-broadcast.js'
 
 beforeEach(() => {
@@ -144,5 +150,56 @@ describe('followBrowserWorkspaceWrites', () => {
     vi.advanceTimersByTime(1000)
     expect(f.onMoved).not.toHaveBeenCalled()
     expect(f.close).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('followRecordWrites', () => {
+  const MAIN = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const PLAN = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
+
+  /** A record that follows a peer, and the peer's next write imported into it. */
+  function followedRecord() {
+    const peer = new LoroDoc()
+    createWorkspaceDocumentAtPath(peer, { path: 'main', documentId: MAIN, kind: 'spatial' })
+    peer.commit()
+    const record = new LoroDoc()
+    record.import(peer.export({ mode: 'snapshot' }))
+    return {
+      record,
+      peerCreatesPlan() {
+        const from = peer.oplogVersion()
+        createWorkspaceDocumentAtPath(peer, { path: 'plan', documentId: PLAN, kind: 'markdown' })
+        peer.commit()
+        record.import(peer.export({ mode: 'update', from }))
+      },
+    }
+  }
+
+  it('answers the shape it saw last, so a replacing record is not taken as the baseline', () => {
+    const { record } = followedRecord()
+    const first = followRecordWrites(record, null, vi.fn())
+    const seen = first.seen()
+    first.stop()
+    const onMoved = vi.fn()
+
+    followRecordWrites(record, seen, onMoved)
+    vi.runOnlyPendingTimers()
+
+    expect(seen).not.toBeNull()
+    expect(onMoved).not.toHaveBeenCalled()
+  })
+
+  it('cancels a compare still waiting out a burst when it is stopped', async () => {
+    const { record, peerCreatesPlan } = followedRecord()
+    const onMoved = vi.fn()
+    const follow = followRecordWrites(record, null, onMoved)
+    onMoved.mockClear()
+
+    peerCreatesPlan()
+    await Promise.resolve()
+    follow.stop()
+    vi.runOnlyPendingTimers()
+
+    expect(onMoved).not.toHaveBeenCalled()
   })
 })

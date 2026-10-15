@@ -31,7 +31,6 @@ import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { documentLabel } from '../lib/document-label.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { followBrowserWorkspaceWrites } from '../lib/follow-workspace-writes.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { NEW_CANVAS_SHORTCUT } from '../lib/new-canvas-shortcut.js'
@@ -41,6 +40,7 @@ import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
 import { deleteRequestsFor, type PendingDelete } from './pending-delete.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
+import { useFollowOtherTabs } from './use-follow-workspace-writes.js'
 
 export interface BrowserIndexPageProps {
   /** Defaults to the shared production index; injected by tests. */
@@ -261,25 +261,6 @@ function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
     props.revision,
     props.filesRevision,
   ])
-}
-
-/**
- * Every other tab writes to this record too, and a mount that only followed
- * its own writes never listed another tab's create or rename. Bumps the same
- * revision this page's own writes do, so the panel re-reads with the list.
- */
-function useFollowOtherTabs(
-  workspaceId: string | null,
-  setFilesRevision: (next: (revision: number) => number) => void,
-  onRemoved: (workspaceId: string) => void,
-): void {
-  useEffect(() => {
-    if (workspaceId === null) return
-    return followBrowserWorkspaceWrites(workspaceId, {
-      onMoved: () => setFilesRevision((n) => n + 1),
-      onRemoved: () => onRemoved(workspaceId),
-    })
-  }, [workspaceId, setFilesRevision, onRemoved])
 }
 
 /**
