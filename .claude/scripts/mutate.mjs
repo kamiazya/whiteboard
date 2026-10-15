@@ -89,10 +89,18 @@ const lockPath = resolveLockPath(realpathSync(file))
 
 function resolveLockPath(realFile) {
   const key = createHash('sha256').update(realFile).digest('hex').slice(0, 16)
+  // Without the variables that select a repository: a git hook exports
+  // GIT_DIR for the one it runs in, and rev-parse would answer from that
+  // rather than from the clone the file is in.
+  const selectsRepository =
+    /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE)$/
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !selectsRepository.test(name)),
+  )
   const git = spawnSync(
     'git',
     ['-C', dirname(realFile), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', env },
   )
   const commonDir = git.status === 0 ? git.stdout.trim() : ''
   if (commonDir !== '') {

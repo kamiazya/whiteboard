@@ -216,7 +216,11 @@ test('prints where the backup is before the command runs', () => {
 // MUTATED text as its "before", and whichever restored last wrote that back, so
 // the tree stayed mutated with no helper alive. A second run must refuse before
 // it reads anything.
-async function assertSecondRunRefused({ inRepo = false, secondTmpdir = null } = {}) {
+async function assertSecondRunRefused({
+  inRepo = false,
+  secondTmpdir = null,
+  secondExtraEnv = null,
+} = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'mutate-guard-'))
   if (inRepo) {
     const init = spawnSync('git', ['init', '--quiet', dir], {
@@ -252,7 +256,13 @@ async function assertSecondRunRefused({ inRepo = false, secondTmpdir = null } = 
 
     // A needle the first mutation leaves intact, so only the lock can refuse.
     const mark = `require('node:fs').writeFileSync(${JSON.stringify(secondRan)},'')`
-    const secondEnv = secondTmpdir === null ? undefined : isolatedGitEnv({ TMPDIR: secondTmpdir })
+    const secondEnv =
+      secondTmpdir === null && secondExtraEnv === null
+        ? undefined
+        : isolatedGitEnv({
+            ...(secondTmpdir === null ? {} : { TMPDIR: secondTmpdir }),
+            ...secondExtraEnv?.(),
+          })
     const second = mutate(
       [file, 'keep me too', 'other', '--', process.execPath, '-e', mark],
       secondEnv,
@@ -292,6 +302,26 @@ for (const inRepo of [true, false]) {
     }
   })
 }
+
+// A git hook exports GIT_DIR for the repository it runs in, and `rev-parse
+// --git-common-dir` answers from it rather than from the file's own clone. A
+// run inheriting one would claim a lock in another repository.
+test("refuses a second run that inherited another repository's GIT_DIR", async () => {
+  const other = mkdtempSync(join(tmpdir(), 'mutate-other-repo-'))
+  try {
+    const init = spawnSync('git', ['init', '--quiet', other], {
+      encoding: 'utf8',
+      env: isolatedGitEnv(),
+    })
+    assert.equal(init.status, 0, init.stderr)
+    await assertSecondRunRefused({
+      inRepo: true,
+      secondExtraEnv: () => ({ GIT_DIR: join(other, '.git') }),
+    })
+  } finally {
+    rmSync(other, { recursive: true, force: true })
+  }
+})
 
 test('replaces a lock left by a run that died without releasing it', () => {
   withFixture((file) => {
