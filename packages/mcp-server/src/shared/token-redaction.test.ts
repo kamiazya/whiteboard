@@ -53,9 +53,11 @@ describe('token redaction: sentinel never reaches a log record', () => {
 
   it('SseBackend (incl. a refused stream) does not log the sentinel', async () => {
     const capture = captureLogsForTests()
-    // The keeper refuses every request, so the snapshot and the stream both
-    // take their failure paths — the ones a careless log line would sit on.
+    // The keeper refuses every request, so the stream takes its failure path —
+    // the one a careless log line would sit on. No snapshot is asked for: the
+    // backend reads state only once the stream carries the document.
     const refused = vi.fn(async () => new Response('denied', { status: 401 }))
+    const onAuthError = vi.fn()
     globalThis.fetch = refused as unknown as typeof fetch
     try {
       const backend = new SseBackend('ws-id', 'path', 'http://localhost/')
@@ -67,10 +69,11 @@ describe('token redaction: sentinel never reaches a log record', () => {
         onRestoreComplete: () => {},
         onViewportRequest: () => {},
         onConnected: () => {},
-        onAuthError: () => {},
+        onAuthError,
       })
-      // Both requests made and refused: the failure paths have run.
-      await vi.waitFor(() => expect(refused.mock.calls.length).toBeGreaterThanOrEqual(2))
+      // The refusal reported: the failure path has run.
+      await vi.waitFor(() => expect(onAuthError).toHaveBeenCalled())
+      expect(refused).toHaveBeenCalled()
       backend.disconnect()
       expect(recordsContainSentinel(capture.records)).toBe(false)
     } finally {
