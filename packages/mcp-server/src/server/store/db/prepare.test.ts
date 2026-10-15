@@ -129,6 +129,23 @@ describe('prepareDataDir: daemon version skew', () => {
     }
   })
 
+  it('warns for a live daemon of another version whose record has no token', async () => {
+    const { token: _token, ...tokenless } = record({})
+    await writeFile(join(tempDir, 'daemon.json'), JSON.stringify(tokenless))
+    const capture = captureLogsForTests('warning')
+    try {
+      await prepareDataDir(tempDir)
+      const warnings = capture.records.filter((r) => r.data?.recordedVersion !== undefined)
+      expect(warnings).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ recordedVersion: '0.0.0-older' }),
+        }),
+      ])
+    } finally {
+      capture.restore()
+    }
+  })
+
   it('still migrates when the versions differ', async () => {
     await skewWarnings({})
     const db = await getDb(tempDir)

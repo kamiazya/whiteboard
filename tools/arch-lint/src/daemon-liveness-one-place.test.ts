@@ -23,8 +23,9 @@
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { importBindingsOf, parseSource } from './ast-helpers.js'
+import { importBindingsOf, parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -67,20 +68,52 @@ const LEDGER: Readonly<Record<string, { imports: readonly string[]; why: string 
   },
 }
 
-/** The lower-level liveness answers `source` imports, by their exported names. */
+/**
+ * The lower-level liveness answers `source` reaches: an imported name, a
+ * dynamic `import()` of a module that exports one, or a bare signal 0 —
+ * `process.kill(pid, 0)` is the check every reader once reached for, and needs
+ * no import at all.
+ */
 function lowerAnswers(fileName: string, source: string): string[] {
-  const bindings = importBindingsOf(parseSource(fileName, source))
-  return LOWER_ANSWERS.flatMap(({ module, names }) =>
-    bindings
-      .filter((binding) => module.test(binding.spec))
-      .flatMap((binding) =>
-        binding.kind === 'namespace'
-          ? ['* (namespace)']
-          : names.has(binding.imported)
-            ? [binding.imported]
-            : [],
-      ),
+  const file = parseSource(fileName, source)
+  const imported = importBindingsOf(file).flatMap((binding) =>
+    LOWER_ANSWERS.filter(({ module }) => module.test(binding.spec)).flatMap(({ names }) =>
+      binding.kind === 'namespace'
+        ? ['* (namespace)']
+        : names.has(binding.imported)
+          ? [binding.imported]
+          : [],
+    ),
   )
+  const reached: string[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const [first, second] = node.arguments
+      if (
+        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        first !== undefined &&
+        ts.isStringLiteralLike(first) &&
+        LOWER_ANSWERS.some(({ module }) => module.test(first.text))
+      ) {
+        reached.push(`import(${first.text})`)
+      }
+      const callee = unwrapExpression(node.expression)
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === 'kill' &&
+        ts.isIdentifier(callee.expression) &&
+        callee.expression.text === 'process' &&
+        second !== undefined &&
+        ts.isNumericLiteral(unwrapExpression(second)) &&
+        Number((unwrapExpression(second) as ts.NumericLiteral).text) === 0
+      ) {
+        reached.push('process.kill(_, 0)')
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return [...imported, ...reached]
 }
 
 function readsRecord(fileName: string, source: string): boolean {
@@ -133,6 +166,18 @@ describe("a daemon record's liveness is judged in one place", () => {
     expect(
       lowerAnswers('f.ts', "import { readProcessStartMs } from '../shared/process-identity.js'"),
     ).toEqual([])
+  })
+
+  it('recognises a bare signal 0 and a dynamic import of a lower answer', () => {
+    expect(lowerAnswers('f.ts', 'process.kill(record.pid, 0)')).toEqual(['process.kill(_, 0)'])
+    expect(lowerAnswers('f.ts', "void import('../shared/process-alive.js')")).toEqual([
+      'import(../shared/process-alive.js)',
+    ])
+    expect(lowerAnswers('f.ts', "const m = import('../shared/process-identity.js')")).toEqual([
+      'import(../shared/process-identity.js)',
+    ])
+    expect(lowerAnswers('f.ts', "process.kill(pid, 'SIGTERM')")).toEqual([])
+    expect(lowerAnswers('f.ts', "void import('./daemon-run.js')")).toEqual([])
   })
 
   it('every ledger entry is a reader that still imports what it records', () => {

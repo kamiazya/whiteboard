@@ -21,41 +21,66 @@ export interface DaemonAnswer {
   readonly body: unknown
 }
 
+/**
+ * The socket accepted the connection and then gave no complete answer — in
+ * time, or at all. Unlike a refused connection, this says something is
+ * serving there: a daemon too busy to answer is still a daemon.
+ */
+export class DaemonNoAnswerError extends Error {
+  override readonly name = 'DaemonNoAnswerError'
+}
+
+function headersFor(req: DaemonRequest, payload: string | undefined) {
+  return {
+    ...(req.record.token === undefined ? {} : { authorization: `Bearer ${req.record.token}` }),
+    accept: 'application/json',
+    ...(payload === undefined
+      ? {}
+      : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }),
+  }
+}
+
+/** The JSON body, or the raw text when it is not JSON. */
+function bodyOf(text: string): unknown {
+  try {
+    return text === '' ? undefined : JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
 export function requestDaemon(req: DaemonRequest): Promise<DaemonAnswer> {
   return new Promise((resolve, reject) => {
+    let connected = false
+    const fail = (err: Error) =>
+      reject(connected ? new DaemonNoAnswerError(err.message, { cause: err }) : err)
     const payload = req.body === undefined ? undefined : JSON.stringify(req.body)
     const outgoing = httpRequest(
       {
         socketPath: req.record.socketPath,
         method: req.method,
         path: req.path,
-        headers: {
-          ...(req.record.token === undefined
-            ? {}
-            : { authorization: `Bearer ${req.record.token}` }),
-          accept: 'application/json',
-          ...(payload === undefined
-            ? {}
-            : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }),
-        },
+        headers: headersFor(req, payload),
       },
       (res) => {
         const chunks: Buffer[] = []
         res.on('data', (chunk: Buffer) => chunks.push(chunk))
-        res.on('error', reject)
+        res.on('error', fail)
         res.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8')
-          let body: unknown = text
-          try {
-            body = text === '' ? undefined : JSON.parse(text)
-          } catch {
-            // Not JSON: reported as the text it was.
-          }
+          const body = bodyOf(Buffer.concat(chunks).toString('utf8'))
           resolve({ status: res.statusCode ?? 0, body })
         })
       },
     )
-    outgoing.on('error', reject)
+    outgoing.on('socket', (socket) => {
+      // A kept-alive socket is handed over already connected.
+      if (!socket.connecting) connected = true
+      else
+        socket.once('connect', () => {
+          connected = true
+        })
+    })
+    outgoing.on('error', fail)
     if (req.timeoutMs !== undefined) {
       const ms = req.timeoutMs
       outgoing.setTimeout(ms, () => outgoing.destroy(new Error(`no answer within ${ms}ms`)))

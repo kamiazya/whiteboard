@@ -188,6 +188,8 @@ describe('runDaemonStatus: valid record, its pid taken by a later process', () =
       recordFresh: false,
       pidAlive: true,
     })
+    expect(result).not.toHaveProperty('pingOk')
+    expect(result).not.toHaveProperty('servingPid')
   })
 })
 

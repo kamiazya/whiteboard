@@ -91,9 +91,10 @@ export async function runDaemonStop(
   const judge = () => daemonLiveness(record, seams)
   const liveness = await judge()
   if (liveness.state !== 'running') {
-    // An unconfirmed daemon answers on the record's socket but not as this
-    // pid: something is serving, so the record is not a leftover to drop, and
-    // the pid is not known to be what is serving, so it is not signalled.
+    // An unconfirmed daemon serves the record's socket without confirming
+    // this pid — answering as another, or accepting and staying silent:
+    // something is serving, so the record is not a leftover to drop, and the
+    // pid is not known to be what is serving, so it is not signalled.
     if (liveness.state !== 'unconfirmed') await removeRecord(options.dataDir)
     return { result: notStopped(liveness, pid), exitCode: 1 }
   }

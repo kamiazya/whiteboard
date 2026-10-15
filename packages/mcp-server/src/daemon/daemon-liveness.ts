@@ -18,7 +18,12 @@ import { runtimeStatusApiUrl } from '@kamiazya/whiteboard-daemon-client/api-cont
 import { runtimeStatusResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { type ProcessIdentitySeams, recordedProcess } from '../shared/process-identity.js'
 import type { RecordedDaemon } from './daemon-record-schema.js'
-import { type DaemonAnswer, type DaemonRequest, requestDaemon } from './daemon-request.js'
+import {
+  type DaemonAnswer,
+  DaemonNoAnswerError,
+  type DaemonRequest,
+  requestDaemon,
+} from './daemon-request.js'
 
 /**
  * - `running`: the pid is the process that wrote the record.
@@ -29,7 +34,9 @@ import { type DaemonAnswer, type DaemonRequest, requestDaemon } from './daemon-r
  *   named, when it was a runtime status at all: a person has to find that
  *   process to stop it, and the record cannot tell them.
  * - `pid-reused`: the pid is alive, started after the record, and nothing
- *   answers on the record's socket.
+ *   accepts a connection on the record's socket. A socket that accepts and
+ *   then stays silent past the ask's timeout is `unconfirmed`: something is
+ *   serving it, and a daemon busy on a large write is the likeliest thing.
  * - `dead`: no process has the pid.
  */
 export type DaemonLiveness =
@@ -66,8 +73,9 @@ export async function daemonLiveness(
       path: runtimeStatusApiUrl(),
       timeoutMs: SOCKET_ASK_TIMEOUT_MS,
     })
-  } catch {
-    return { state: 'pid-reused' }
+  } catch (err) {
+    // Only a connection nobody accepted means nothing serves the socket.
+    return err instanceof DaemonNoAnswerError ? { state: 'unconfirmed' } : { state: 'pid-reused' }
   }
   const status = runtimeStatusResponseSchema.safeParse(answer.body)
   if (answer.status !== 200 || !status.success) return { state: 'unconfirmed' }

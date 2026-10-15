@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { answeringDaemonSocket } from '../daemon/_test-daemon-socket.js'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 
@@ -157,6 +158,33 @@ describe('runDaemonDoctor: valid record, its pid taken by a later process', () =
     expect(processCheck?.status).toBe('error')
     expect(processCheck?.summary).toMatch(/another process/)
     expect(processCheck?.remediation).toMatch(/daemon run/)
+    expect(result).toMatchObject({ ok: false, status: 'error' })
+    expect(exitCode).toBe(1)
+  })
+})
+
+// A forward clock step makes a live daemon read as having started after its
+// record; its socket is asked, and here answers as another pid.
+describe('runDaemonDoctor: a socket that answers as another pid', () => {
+  it('reports the process check in error, naming the pid that answered, and exits 1', async () => {
+    const daemon = await answeringDaemonSocket(validRecord.pid + 1, validRecord.token)
+    const { result, exitCode } = await runDaemonDoctor({
+      dataDir: '/fake',
+      parseRecord: async () => ({
+        kind: 'valid',
+        record: { ...validRecord, socketPath: daemon.socketPath },
+      }),
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(validRecord.startedAt) + 6_000,
+      runningVersion: validRecord.version,
+    })
+    expect(result.checks).toContainEqual({
+      id: 'daemon.process',
+      status: 'error',
+      summary: `A daemon answers on the recorded socket as pid ${validRecord.pid + 1}, not as pid ${validRecord.pid}, which the record names.`,
+      remediation:
+        'Stop the process serving the socket named in daemon.json, then start the daemon: whiteboard daemon run',
+    })
     expect(result).toMatchObject({ ok: false, status: 'error' })
     expect(exitCode).toBe(1)
   })
