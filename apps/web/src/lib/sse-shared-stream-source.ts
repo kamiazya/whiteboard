@@ -184,8 +184,9 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
       // From the worker's replica, not the daemon: the worker seeds itself
       // once per document and every later tab is answered from memory. The
       // worker replies even for a document nobody has (an empty snapshot),
-      // so this resolves rather than racing a timeout — `null` is reserved
-      // for the hub implementation's 404, which has a daemon to ask.
+      // and with no bytes when its own read of the daemon failed, so this
+      // resolves rather than racing a timeout — `null` is reserved for the
+      // hub implementation's 404, which has a daemon to ask.
       return new Promise((resolve) => {
         let waiters = snapshotWaiters.get(doc)
         if (!waiters) {

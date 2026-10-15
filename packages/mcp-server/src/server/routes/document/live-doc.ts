@@ -52,7 +52,7 @@ async function answeringWriteRefusal(
 // document's content by path, which the packaged server-mode
 // backup smoke, the sync-update cost measure and the daemon's own route tests
 // drive. Retiring it means moving those onto the workspace-document route
-// first, together with `sse-stream-hub`'s per-document `canvasDocUrl` branch.
+// first, together with `sse-stream-hub`'s per-document `documentRouteUrl` branch.
 export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
   const deps = options.serverDeps

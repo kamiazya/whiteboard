@@ -3,9 +3,9 @@
  *
  * These payloads cross a process boundary — the daemon serializes them, a
  * browser tab (or a SharedWorker) parses them — so they are Zod schemas rather
- * than hand-written shapes on each side. Living in `shared/` is what lets the
- * route that emits them and the hub that consumes them use the same
- * declaration; the hub cannot import from `server/`.
+ * than hand-written shapes on each side. Living in daemon-client, which both
+ * the daemon's route and the browser's hub import, is what lets the two ends
+ * use the same declaration.
  */
 import { z } from 'zod'
 import { clientTextMessageSchema } from './sync-frames.js'
