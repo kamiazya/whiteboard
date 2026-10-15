@@ -15,7 +15,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
@@ -33,6 +33,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
   (await import('../test-utils/daemon-page-harness.js')).daemonApiClientMock(importOriginal, [
     'listWorkspaces',
     'listDocuments',
+    'getDocumentBacklinks',
   ]),
 )
 
@@ -127,6 +128,10 @@ describe('DaemonDocumentPage document list follows the record', () => {
     vi.mocked(daemonApiClient.listWorkspaces).mockResolvedValue({
       workspaces: [{ workspaceId: 'w1' }],
     })
+    vi.mocked(daemonApiClient.getDocumentBacklinks).mockResolvedValue({
+      backlinks: [],
+      unlinkedMentions: [],
+    })
     daemonLists([mainRow])
   })
 
@@ -170,6 +175,20 @@ describe('DaemonDocumentPage document list follows the record', () => {
     act(() => daemonWrites((record) => updateWorkspaceDocumentMeta(record, PLAN, { updatedAt: 2 })))
 
     await waitFor(() => expect(planLoads(fetch)).toBeGreaterThan(loads))
+  })
+
+  it('counts a backlink an agent creates while the document is open', async () => {
+    await openMain()
+    await waitFor(() => screen.getByRole('button', { name: 'Connections (0)' }))
+
+    vi.mocked(daemonApiClient.getDocumentBacklinks).mockResolvedValue({
+      backlinks: [{ documentId: PLAN, path: 'plan', contexts: ['see [[main]]'] }],
+      unlinkedMentions: [],
+    })
+    daemonLists([mainRow, planRow('2026-01-02')])
+    act(() => daemonWrites(createsPlan))
+
+    await waitFor(() => screen.getByRole('button', { name: 'Connections (1)' }))
   })
 
   it('keeps the newest list when an earlier read answers last', async () => {

@@ -44,6 +44,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { connectionsStamp } from './use-connections.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
 import {
@@ -315,13 +316,13 @@ function useDaemonDocument(
   // one invisible for good.
   const threadWrite: CommentsRailWrite = spatialThreadWrite(() => canvasValueRef.current, onChange)
 
-  // Backlinks for the Connections chip, keyed on the CURRENT document's id.
   const { connections, refresh: refreshConnections } = useDaemonConnections({
     daemonFetch,
     daemonBaseUrl,
     workspaceId: controller.workspaceId,
     documentId: currentDocumentId,
     path: controller.path,
+    stamp: connectionsStamp(controller.documents, currentDocumentId),
   })
   const loadReference = useCallback<ReferenceLoader>(
     async (target, documentId) => {

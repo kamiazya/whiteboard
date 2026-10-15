@@ -17,11 +17,14 @@ export function useBrowserConnections({
   loro,
   documentId,
   path,
+  stamp,
 }: {
   readonly index: DocumentIndex
   readonly loro: LoroStoreLike
   readonly documentId: string | undefined
   readonly path: string | null
+  /** The followed list's `connectionsStamp`; a change re-reads. */
+  readonly stamp?: string
 }): UseConnectionsResult & {
   /** Turn one mention row's occurrences into links to the open document. */
   readonly linkify: (mention: ConnectionsBacklink) => void
@@ -29,7 +32,7 @@ export function useBrowserConnections({
   // One reader — and so one facts cache — for as long as the page keeps its
   // index and store, which is across every document it switches between.
   const read = useMemo(() => browserBacklinksReader(index, loro), [index, loro])
-  const connections = useConnections({ read, documentId, path })
+  const connections = useConnections({ read, documentId, path, stamp })
   const { refresh } = connections
   // A failed link is swallowed on purpose, as on the daemon: the panel keeps
   // showing the mention, and the next open retries. The re-read after a

@@ -23,6 +23,8 @@ export interface UseDaemonConnectionsOptions {
   readonly documentId: string | undefined
   /** The screen's scope: a change clears what is shown before the fetch runs. */
   readonly path: string | null
+  /** The followed list's `connectionsStamp`; a change re-reads. */
+  readonly stamp?: string
 }
 
 export function useDaemonConnections({
@@ -31,6 +33,7 @@ export function useDaemonConnections({
   workspaceId,
   documentId,
   path,
+  stamp,
 }: UseDaemonConnectionsOptions): UseConnectionsResult {
   const read = useMemo(
     () =>
@@ -39,5 +42,5 @@ export function useDaemonConnections({
         : (id: string) => getDocumentBacklinks(daemonFetch, daemonBaseUrl, workspaceId, id),
     [daemonFetch, daemonBaseUrl, workspaceId],
   )
-  return useConnections({ read, documentId, path })
+  return useConnections({ read, documentId, path, stamp })
 }

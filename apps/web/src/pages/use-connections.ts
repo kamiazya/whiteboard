@@ -34,6 +34,38 @@ export interface UseConnectionsOptions {
   readonly documentId: string | undefined
   /** The screen's scope: a change clears what is shown before the read runs. */
   readonly path: string | null
+  /**
+   * What the workspace looked like when this answer was asked for, as one
+   * comparable value (`connectionsStamp`). A change re-reads and keeps what
+   * is shown until the answer lands: a link another writer added or removed
+   * reaches the page as a moved list, and nothing else here would ask again.
+   */
+  readonly stamp?: string
+}
+
+/**
+ * The listed documents a document's connections can depend on, as one value:
+ * every other document's identity, place, name and clock, and the open one's
+ * place and name. The open document's own clock is left out because its own
+ * edits change nothing that links to it, and on the browser keeper the list
+ * re-reads on every one of them.
+ */
+export function connectionsStamp(
+  documents: readonly {
+    readonly documentId?: string
+    readonly path: string
+    readonly name?: string | null
+    readonly updatedAt?: string
+  }[],
+  documentId: string | undefined,
+): string {
+  return JSON.stringify(
+    documents.map((row) =>
+      row.documentId === documentId
+        ? [row.documentId, row.path, row.name]
+        : [row.documentId, row.path, row.name, row.updatedAt],
+    ),
+  )
 }
 
 export interface UseConnectionsResult {
@@ -42,10 +74,31 @@ export interface UseConnectionsResult {
   readonly refresh: () => void
 }
 
+/** One read, handed to `landed` unless cancelled first. Answers the cancel. */
+function askOnce(
+  read: (documentId: string) => Promise<Connections>,
+  documentId: string,
+  landed: (answer: Connections) => void,
+): () => void {
+  let cancelled = false
+  read(documentId)
+    .then((answer) => {
+      if (!cancelled) landed(answer)
+    })
+    .catch(() => {
+      // The chip simply stays disabled; connections are never worth an
+      // error surface of their own on a page that otherwise works.
+    })
+  return () => {
+    cancelled = true
+  }
+}
+
 export function useConnections({
   read,
   documentId,
   path,
+  stamp,
 }: UseConnectionsOptions): UseConnectionsResult {
   const [connections, setConnections] = useState<Connections | null>(null)
   const [connectionsRefresh, setConnectionsRefresh] = useState(0)
@@ -57,34 +110,29 @@ export function useConnections({
   // it just cleared.
   const pathScope = useRef(0)
 
-  // SCOPE RESET — see scoped-screen-state.test.ts.
+  // SCOPE RESET — see scoped-screen-state.test.ts. A different document or a
+  // different keeper's answer clears too; a refresh or a moved stamp is the
+  // SAME question asked again, so it keeps the last answer up meanwhile.
   useEffect(() => {
+    void read
+    void documentId
     pathScope.current += 1
     setConnections(null)
-  }, [path])
+  }, [path, read, documentId])
 
-  // `connectionsRefresh` is read so a refresh re-runs the effect.
+  // `connectionsRefresh` and `stamp` are read so either re-runs the effect.
   useEffect(() => {
     void connectionsRefresh
-    setConnections(null)
+    void stamp
     if (documentId === undefined || read === null) return
     // NOT keyed on the path: after a switch the id lags, so re-running here
     // would re-read the DEPARTED document and show it under the arrived one.
     // The scope is checked at apply time instead.
     const requestedIn = pathScope.current
-    let cancelled = false
-    read(documentId)
-      .then((answer) => {
-        if (!cancelled && pathScope.current === requestedIn) setConnections(answer)
-      })
-      .catch(() => {
-        // The chip simply stays disabled; connections are never worth an
-        // error surface of their own on a page that otherwise works.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [read, documentId, connectionsRefresh])
+    return askOnce(read, documentId, (answer) => {
+      if (pathScope.current === requestedIn) setConnections(answer)
+    })
+  }, [read, documentId, connectionsRefresh, stamp])
 
   const refresh = useCallback(() => {
     setConnectionsRefresh((n) => n + 1)
