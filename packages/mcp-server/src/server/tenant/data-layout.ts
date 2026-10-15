@@ -2,6 +2,7 @@ import { mkdir, readdir, rename, stat } from 'node:fs/promises'
 import { dirname, join, relative, sep } from 'node:path'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
 import { getLogger } from '../log.js'
+import { SEARCH_MODELS_DIRNAME } from '../search/model-cache-dir.js'
 import type { DataLayout } from './data-layout-seam.js'
 
 const log = getLogger('data-layout')
@@ -194,7 +195,7 @@ export function storeAreaOf(dataDir: string, path: string): StoreArea | null {
   return parts[1] === EXPORTS_DIRNAME ? 'exports' : null
 }
 
-const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, 'models'])
+const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, SEARCH_MODELS_DIRNAME])
 
 /**
  * Moves a data directory written before tenants existed under `tenantId`:

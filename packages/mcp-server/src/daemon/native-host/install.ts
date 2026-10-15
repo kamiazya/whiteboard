@@ -21,6 +21,12 @@ import {
 import { z } from 'zod'
 
 /**
+ * Under the data dir: the launcher on every platform, and on Windows the
+ * manifests too. Both name this machine's paths, so install rewrites them.
+ */
+export const NATIVE_HOST_DIRNAME = 'native-host'
+
+/**
  * One place a manifest was written. A schema because it is also part of what
  * `whiteboard native-host install --json` prints (cli/operator-json.ts).
  */
@@ -99,7 +105,7 @@ export function nativeHostManifestDirs(
     return Object.entries(WINDOWS_REGISTRY).map(([browser, { engine, key }]) => ({
       browser,
       engine,
-      dir: join(dataDir, 'native-host', browser),
+      dir: join(dataDir, NATIVE_HOST_DIRNAME, browser),
       registryKey: key,
     }))
   }
@@ -147,7 +153,7 @@ async function writeLauncher(options: InstallOptions): Promise<string> {
   const windows = (options.platform ?? process.platform) === 'win32'
   const launcher = join(
     options.dataDir,
-    'native-host',
+    NATIVE_HOST_DIRNAME,
     windows ? 'whiteboard-native-host.cmd' : 'whiteboard-native-host',
   )
   const command = [options.launcher.execPath, ...options.launcher.execArgv, options.launcher.entry]
