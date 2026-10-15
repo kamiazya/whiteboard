@@ -188,7 +188,7 @@ describe('with-dev-data-dir.mjs forwards stop signals to the dev server it runs'
 
 describe("pnpm mcp:http:stop stops this checkout's dev daemon through the wrapper", () => {
   it('ends the wrapper and the child, and leaves no pid file behind', async () => {
-    const { exited, childPid, cwd } = await startWrapper()
+    const { wrapper, exited, childPid, cwd } = await startWrapper()
     const pidPath = join(cwd, 'data', 'dev-wrapper.pid')
     expect(existsSync(pidPath)).toBe(true)
 
@@ -196,7 +196,12 @@ describe("pnpm mcp:http:stop stops this checkout's dev daemon through the wrappe
     // event loop cannot reap it, so it would read as still running.
     const stop = await runStop(cwd)
     expect(stop.status, stop.stderr).toBe(0)
-    expect(stop.stdout).toMatch(/stopped the dev daemon/)
+    // Named, not inferred from the wrapper exiting: here the daemon's death
+    // also ends the wrapper, so a stop that signalled only the daemon would
+    // pass every other assertion while being unable to end an orphaned wrapper.
+    expect(stop.stdout).toContain(
+      `stopped the dev daemon for ${join(cwd, 'data')} (signalled the wrapper, pid ${wrapper.pid})`,
+    )
 
     await exited
     await until(() => !alive(childPid), 'the child to die')
