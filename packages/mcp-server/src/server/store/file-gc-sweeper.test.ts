@@ -781,6 +781,31 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     }
   })
 
+  it('skips a DB-listed workspace when the workspaces root itself points outside the data dir', async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-root-outside-'))
+    try {
+      await mkdir(join(outsideDir, 'evil_root_ws', 'files'), { recursive: true })
+      // An ANCESTOR of the workspace dir is the symlink, so the workspace dir
+      // itself lstat()s as a plain directory: only the realpath containment
+      // check can see that it resolves outside the data dir.
+      await mkdir(join(wsRoot(), '..'), { recursive: true })
+      await symlink(outsideDir, wsRoot(), 'dir')
+
+      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+      const sweeper = createFileGcSweeper({
+        listWorkspaces: async () => [{ workspaceId: 'evil_root_ws' }],
+        discoverFsWorkspaces: async () => [],
+        purge,
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purge).not.toHaveBeenCalled()
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
+  })
+
   it('skips the blobs dir when it only holds canvas snapshots (no files/ child)', async () => {
     // document-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/document/...
     // -- no files/ child of its own -- so the shared discovery containment
