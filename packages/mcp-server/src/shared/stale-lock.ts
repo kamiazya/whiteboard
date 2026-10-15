@@ -1,11 +1,9 @@
+// When a cross-process lock's holder is gone, judged once for every lock the
+// server takes (`daemon.lock`, `migration.lock`). Each lock keeps its own file
+// protocol; what counts as stale is decided here.
+
 import { hostname } from 'node:os'
 import { type ProcessIdentitySeams, recordedProcess } from './process-identity.js'
-
-/**
- * When a cross-process lock's holder is gone, judged once for every lock the
- * server takes (`daemon.lock`, `migration.lock`). Each lock keeps its own file
- * protocol; what counts as stale is decided here.
- */
 
 /**
  * A lock is created and then written, in two calls, so a racing opener can
