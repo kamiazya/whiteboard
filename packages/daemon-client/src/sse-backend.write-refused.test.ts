@@ -9,7 +9,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
-import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
+import { type DocListener, SseStreamHub, type SseStreamSource } from './sse-stream-hub.js'
+import { retryDelayMs } from './write-chain.js'
 
 const BASE = 'http://127.0.0.1:3099'
 const REFUSAL_BODY = {
@@ -193,6 +194,37 @@ describe('SseBackend pushing straight to the daemon', () => {
     backend.disconnect()
     await expect(pushed).rejects.toThrow('writer closed')
     expect(daemon.taken).toEqual([])
+  })
+})
+
+describe('SseBackend through an injected source that writes straight to the daemon', () => {
+  // Who retries is decided by what the source's push answers, not by whether
+  // a source was injected: a hub shared by the page leaves this backend
+  // holding the only copy of a write the daemon did not take.
+  it('sends a write the daemon answered 503 again until it lands', async () => {
+    const daemon = daemonAnswering(503, { error: 'busy', message: 'later' }, 1)
+    const r = handlersRecording()
+    const hub = new SseStreamHub({ fetch: daemon.transport.fetch, baseUrl: BASE })
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, hub)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const pushed = backend.pushLocalUpdate(new Uint8Array([4, 5]))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(r.writeStates).toEqual(['storage-failure'])
+      expect(daemon.attempts()).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+      await pushed
+      expect(daemon.attempts()).toBe(2)
+      expect(daemon.taken).toEqual([[4, 5]])
+      expect(r.writeStates).toEqual(['storage-failure', 'landed'])
+    } finally {
+      vi.useRealTimers()
+      backend.disconnect()
+      hub.close()
+    }
   })
 })
 
