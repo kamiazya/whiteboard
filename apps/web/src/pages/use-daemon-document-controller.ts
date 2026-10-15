@@ -2,8 +2,11 @@ import type {
   DocumentSummary,
   WorkspaceSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { messageOf } from '@kamiazya/whiteboard-model'
+import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAppLogger } from '../lib/app-logger.js'
 import {
   createDocument as createDocumentApi,
   deleteDocument as deleteDocumentApi,
@@ -12,6 +15,9 @@ import {
   listWorkspaces as listWorkspacesApi,
 } from '../lib/daemon-api-client.js'
 import { type MembershipRefusalState, membershipRefusal } from '../lib/membership-refusal.js'
+
+// `app-logger` takes (message, data) — the opposite order to the server's pino seam.
+const log = getAppLogger('daemon-document-page')
 
 export interface UseDaemonDocumentControllerOptions {
   daemonBaseUrl: string
@@ -64,6 +70,11 @@ export interface DaemonDocumentController {
   refusal: MembershipRefusalState | null
   /** Re-runs the resolve. */
   retry: () => void
+  /**
+   * Re-reads the document list. What `useListFollowsRecord` calls when the
+   * workspace record changes under the page; a failure keeps the last list.
+   */
+  refreshDocuments: () => void
 }
 
 const DAEMON_REQUEST_FAILED = 'The daemon request failed.'
@@ -186,6 +197,12 @@ export function useDaemonDocumentController(
     // real dependency, bumped by retry().
   }, [attempt])
 
+  const relist = useDocumentListReader(daemonFetch, daemonBaseUrl, setDocuments)
+  const refreshDocuments = useCallback(() => {
+    if (workspaceId === null) return
+    relist(workspaceId).catch((err: unknown) => log.warn('listDocuments failed', { err }))
+  }, [relist, workspaceId])
+
   const switchDocument = useCallback((nextPath: string) => {
     setPath(nextPath)
   }, [])
@@ -203,12 +220,7 @@ export function useDaemonDocumentController(
           newPath,
           'spatial',
         )
-        const { documents: refreshed } = await listDocuments(
-          daemonFetch,
-          daemonBaseUrl,
-          workspaceId,
-        )
-        setDocuments(refreshed)
+        await relist(workspaceId)
         setPath(created.path)
       } catch (err) {
         setCreateError(messageOf(err, DAEMON_REQUEST_FAILED))
@@ -216,12 +228,10 @@ export function useDaemonDocumentController(
         // already stale (another client took the path) — without a refresh, a retry re-derives
         // the SAME losing path from the same stale list and collides forever. Best-effort:
         // leaving the previous (possibly stale) list is no worse than not trying.
-        await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
-          .then(({ documents: refreshed }) => setDocuments(refreshed))
-          .catch(() => {})
+        await relist(workspaceId).catch(() => {})
       }
     },
-    [daemonFetch, daemonBaseUrl, workspaceId],
+    [daemonFetch, daemonBaseUrl, workspaceId, relist],
   )
 
   const duplicateDocument = useCallback(async (): Promise<void> => {
@@ -237,22 +247,20 @@ export function useDaemonDocumentController(
     // Same two steps `createDocument` ends with, and the same order: the list
     // is refreshed BEFORE the path moves, so the page never points at a
     // document its own switcher does not hold yet.
-    const { documents: refreshed } = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
-    setDocuments(refreshed)
+    await relist(workspaceId)
     setPath(copy.path)
-  }, [daemonFetch, daemonBaseUrl, workspaceId, path])
+  }, [daemonFetch, daemonBaseUrl, workspaceId, path, relist])
 
   const deleteDocument = useCallback(async (): Promise<void> => {
     if (workspaceId === null || path === null) {
       throw new Error('No document is open to delete.')
     }
     await deleteDocumentApi(daemonFetch, daemonBaseUrl, workspaceId, path)
-    const { documents: refreshed } = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
-    setDocuments(refreshed)
+    const refreshed = await relist(workspaceId)
     // Whatever is left, or nothing — the page's empty state is what answers
     // an emptied workspace, and it already does (`replaceEditor`).
     setPath(refreshed[0]?.path ?? null)
-  }, [daemonFetch, daemonBaseUrl, workspaceId, path])
+  }, [daemonFetch, daemonBaseUrl, workspaceId, path, relist])
 
   return {
     loading,
@@ -268,5 +276,97 @@ export function useDaemonDocumentController(
     createError,
     refusal,
     retry,
+    refreshDocuments,
   }
+}
+
+/**
+ * Every read of the list after the mount resolve, behind one generation: a
+ * slower earlier read never commits over a later one, and nothing commits
+ * once the page is gone. The FETCHED list is answered either way, since a
+ * caller that just deleted needs it to pick what to show next; only the
+ * newest read is what the page holds.
+ */
+function useDocumentListReader(
+  daemonFetch: typeof fetch,
+  daemonBaseUrl: string,
+  setDocuments: (documents: DocumentSummary[]) => void,
+): (workspaceId: string) => Promise<DocumentSummary[]> {
+  const generationRef = useRef(0)
+  useEffect(
+    () => () => {
+      generationRef.current += 1
+    },
+    [],
+  )
+  return useCallback(
+    async (workspaceId: string) => {
+      const generation = ++generationRef.current
+      const { documents } = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
+      if (generation === generationRef.current) setDocuments(documents)
+      return documents
+    },
+    [daemonFetch, daemonBaseUrl, setDocuments],
+  )
+}
+
+/** How long a burst of remote updates settles before the record is compared. */
+const LIST_FOLLOW_SETTLE_MS = 250
+
+/** What the list shows of each document the record holds, as one comparable value. */
+function listedShapeOf(record: LoroDoc): string {
+  const rows = readWorkspaceNodes(record).flatMap((node) =>
+    node.type === 'document'
+      ? [[node.meta.documentId, node.path, node.meta.kind, node.meta.name, node.meta.updatedAt]]
+      : [],
+  )
+  return JSON.stringify(rows)
+}
+
+/**
+ * Keeps the page's document list following the workspace record it syncs.
+ *
+ * A document created, renamed, moved, deleted or edited elsewhere — an
+ * agent's write, another tab's, another member's — arrives as an import into
+ * that record and nowhere else; the list every link, reference and embed on
+ * the page resolves against is a separate read, so without this it stays as
+ * it was at open. Only an import that changes what the list SHOWS re-reads it,
+ * compared after a settle window so a burst of updates costs one walk and one
+ * read. A record replaced by a reconnect snapshot is compared against the one
+ * before it, since what it carries may have been missed while disconnected.
+ *
+ * Takes the session's body binding because its `doc` IS the live record, and
+ * a new binding is exactly a snapshot that replaced it.
+ */
+export function useListFollowsRecord(
+  binding: { readonly doc: LoroDoc } | null,
+  refresh: () => void,
+): void {
+  const record = binding?.doc ?? null
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+  const shapeRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (record === null) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const compare = () => {
+      const shape = listedShapeOf(record)
+      const moved = shapeRef.current !== null && shape !== shapeRef.current
+      shapeRef.current = shape
+      if (moved) refreshRef.current()
+    }
+    const settle = () => {
+      clearTimeout(timer)
+      timer = setTimeout(compare, LIST_FOLLOW_SETTLE_MS)
+    }
+    if (shapeRef.current === null) compare()
+    else settle()
+    const unsubscribe = record.subscribe((event) => {
+      if (event.by === 'import') settle()
+    })
+    return () => {
+      unsubscribe()
+      clearTimeout(timer)
+    }
+  }, [record])
 }

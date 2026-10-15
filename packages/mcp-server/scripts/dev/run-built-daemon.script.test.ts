@@ -12,6 +12,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { devSpawnLockPath } from './with-dev-data-dir-lib.mjs'
 
 const HERE = import.meta.dirname
 
@@ -107,7 +108,7 @@ describe('run-built-daemon', () => {
   it('refuses while another dev daemon is starting under the spawn lock', () => {
     const { root, started } = fakePackage(['0001-init'], ['0001-init'])
     write(
-      join(root, 'data', 'dev-daemon-spawn.lock'),
+      devSpawnLockPath(join(root, 'data')),
       JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }),
     )
     const result = runLauncher(root)
@@ -123,6 +124,6 @@ describe('run-built-daemon', () => {
     expect(result.stderr).toBe('')
     expect(result.status).toBe(0)
     expect(existsSync(started)).toBe(true)
-    expect(existsSync(join(root, 'data', 'dev-daemon-spawn.lock'))).toBe(false)
+    expect(existsSync(devSpawnLockPath(join(root, 'data')))).toBe(false)
   })
 })

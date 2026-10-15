@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
+import { devSpawnLockPath, resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 
 const REPO_ROOT = resolveRepoRootFromGit(resolve(import.meta.dirname))
 const STOP_SCRIPT = resolve(import.meta.dirname, 'stop-http-dev-daemon.mjs')
@@ -115,7 +115,7 @@ describe('dev daemon scripts refuse what they do not recognise', () => {
         expect(result.status, `${result.stdout}${result.stderr}`).toBe(expectedStatus)
         expect(`${result.stdout}${result.stderr}`).toMatch(/usage: ensure-http-dev-daemon/)
         expect(existsSync(spawnedDir), `${flag} spawned the dev daemon`).toBe(false)
-        expect(existsSync(join(dataDir, 'dev-daemon-spawn.lock'))).toBe(false)
+        expect(existsSync(devSpawnLockPath(dataDir))).toBe(false)
       })
     }
   })

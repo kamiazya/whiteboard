@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { daemonRecordBaseSchema, daemonRecordSchema } from './daemon-record-schema.js'
+import {
+  daemonLaunchOfModule,
+  daemonRecordBaseSchema,
+  daemonRecordSchema,
+} from './daemon-record-schema.js'
 
 describe('daemonRecordSchema', () => {
   it('parses a well-formed record', () => {
@@ -118,5 +122,36 @@ describe('daemonRecordSchema', () => {
     })
 
     expect(result.success).toBe(true)
+  })
+})
+
+describe('the daemon record launch field', () => {
+  const record = {
+    pid: 123,
+    socketPath: '/run/user/1000/whiteboard/d.sock',
+    token: 'secret',
+    version: '0.1.0',
+    startedAt: '2026-04-23T00:00:00.000Z',
+  }
+
+  it('parses a record written before the field existed', () => {
+    expect(daemonRecordSchema.parse(record)).toEqual(record)
+  })
+
+  it('keeps a recorded launch', () => {
+    expect(daemonRecordSchema.parse({ ...record, launch: 'built' }).launch).toBe('built')
+  })
+
+  it('rejects a launch it does not know', () => {
+    expect(daemonRecordSchema.safeParse({ ...record, launch: 'watch' }).success).toBe(false)
+  })
+
+  it('reads a TypeScript module as source and a built one as built', () => {
+    expect(daemonLaunchOfModule('file:///repo/packages/mcp-server/src/server/index.ts')).toBe(
+      'source',
+    )
+    expect(daemonLaunchOfModule('file:///repo/packages/mcp-server/dist/server/index.js')).toBe(
+      'built',
+    )
   })
 })

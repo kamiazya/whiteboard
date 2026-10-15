@@ -132,6 +132,20 @@ describe('server/index main() listens on its socket alone', () => {
       stdoutSpy.mockRestore()
     }
   })
+
+  it('records that it runs from source, so a watch-mode start can tell it from a build', async () => {
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      expect(saveDaemonRecordMock).toHaveBeenCalledWith(
+        expect.objectContaining({ launch: 'source' }),
+        expect.any(String),
+      )
+    } finally {
+      stdoutSpy.mockRestore()
+    }
+  })
 })
 
 describe('server/index main() storage settings startup gate', () => {

@@ -20,6 +20,7 @@ import {
 } from './dev-spawn-lock-lib.mjs'
 import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
 import {
+  devSpawnLockPath,
   ensureDevDataDirSecured,
   resolveDevDataDirEnv,
   resolveRepoRootFromGit,
@@ -79,15 +80,15 @@ mkdirSync(dataDir, { recursive: true })
 // the caller asked for the BUILT artifact, and reusing watch-mode source would
 // silently check the wrong one. The spawn lock is the hook's and the wrapper's,
 // held from this check until the record appears, as theirs is.
-const lockPath = join(dataDir, 'dev-daemon-spawn.lock')
-const locked = acquireSpawnLock({
+const lockPath = devSpawnLockPath(dataDir)
+const lock = acquireSpawnLock({
   lockPath,
   meta: { pid: process.pid, startedAt: new Date().toISOString() },
   staleAfterMs: resolveSpawnLockStaleMs(process.env),
   isPidAlive,
 })
-if (locked !== 'acquired') {
-  refuse(`another dev daemon is starting for ${dataDir} (pid ${lockHolderPid()} holds ${lockPath})`)
+if (lock.kind === 'held') {
+  refuse(`another dev daemon is starting for ${dataDir} (pid ${lock.holderPid} holds ${lockPath})`)
 }
 const running = readDaemonRecord(dataDir)
 if (running !== null && (await assessRecordedDaemon(running)).running) {
@@ -121,12 +122,4 @@ function refuse(reason) {
     `[mcp:http] ${reason}; not starting the built daemon beside it. \`pnpm mcp:http:stop\` first.\n`,
   )
   process.exit(1)
-}
-
-function lockHolderPid() {
-  try {
-    return JSON.parse(readFileSync(lockPath, 'utf8'))?.pid ?? null
-  } catch {
-    return null
-  }
 }

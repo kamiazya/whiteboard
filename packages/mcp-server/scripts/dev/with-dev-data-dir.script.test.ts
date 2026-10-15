@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
+import { devSpawnLockPath } from './with-dev-data-dir-lib.mjs'
 
 const WRAPPER = resolve(import.meta.dirname, 'with-dev-data-dir.mjs')
 const STOP = resolve(import.meta.dirname, 'stop-http-dev-daemon.mjs')
@@ -261,6 +262,36 @@ describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running',
     expect(second.stderr).toMatch(/reusing the dev daemon/)
     expect(existsSync(pidFile)).toBe(false)
   })
+
+  // A built daemon runs dist/, so handing a watch-mode start over to it as if
+  // it were the dev daemon leaves every source edit without effect.
+  it('names a running BUILT daemon as such, and says source edits will not reload it', async () => {
+    const { cwd, pidFile } = fakeCheckout()
+    const socketPath = join(cwd, 'data', 'daemon.sock')
+    const responder = await startFakeMcpResponder({ socketPath, token: 't' })
+    cleanups.push(() => void responder.close())
+    writeFileSync(
+      join(cwd, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: process.pid,
+        socketPath,
+        token: 't',
+        startedAt: new Date().toISOString(),
+        launch: 'built',
+      }),
+    )
+
+    const second = await runWrapper(cwd)
+
+    expect(second.status, second.stderr).toBe(0)
+    expect(second.stderr).toMatch(
+      new RegExp(`the BUILT daemon \\(pid ${process.pid}, started by \`pnpm mcp:http\`\\)`),
+    )
+    expect(second.stderr).toMatch(/source edits will not reload it/)
+    expect(second.stderr).toMatch(/`pnpm mcp:http:stop` first/)
+    expect(second.stderr).not.toMatch(/reusing the dev daemon/)
+    expect(existsSync(pidFile)).toBe(false)
+  })
 })
 
 // A daemon killed outright leaves its record behind. Nothing holds the socket,
@@ -442,7 +473,7 @@ describe("with-dev-data-dir.mjs and another wrapper's pid file", () => {
 describe('with-dev-data-dir.mjs started by the holder of the spawn lock', () => {
   it('starts its watcher under the lock its parent holds', async () => {
     const { cwd } = fakeCheckout()
-    const lockPath = join(cwd, 'data', 'dev-daemon-spawn.lock')
+    const lockPath = devSpawnLockPath(join(cwd, 'data'))
     writeFileSync(lockPath, JSON.stringify({ pid: process.pid }))
 
     launchWrapper(cwd)
