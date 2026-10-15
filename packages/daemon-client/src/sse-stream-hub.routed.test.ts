@@ -63,8 +63,8 @@ describe('SseStreamHub routing', () => {
     // Taken as routing, the page reads its state on it, and the real routing
     // on the next stream is never announced.
     const held: (() => void)[] = []
-    let endStream: (() => void) | null = null
-    let openSecond: (() => void) | null = null
+    // Held in an object: tsc narrows a `let` assigned only in a closure to `null`.
+    const gate: { endStream?: () => void; openSecond?: () => void } = {}
     let streams = 0
     const fetch = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
@@ -74,13 +74,13 @@ describe('SseStreamHub routing', () => {
       }
       if (!url.includes('/api/sync/stream')) return new Response('{}', { status: 200 })
       const id = `gap-${++streams}`
-      if (streams === 2) await new Promise<void>((open) => (openSecond = open))
+      if (streams === 2) await new Promise<void>((open) => (gate.openSecond = open))
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
             const ready = `event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`
             controller.enqueue(new TextEncoder().encode(ready))
-            endStream = () => controller.close()
+            gate.endStream = () => controller.close()
           },
         }),
         { status: 200 },
@@ -93,14 +93,14 @@ describe('SseStreamHub routing', () => {
     })
     const states = watch(hub, 'workspace:a')
     await vi.waitFor(() => expect(held).toHaveLength(1))
-    endStream?.()
-    await vi.waitFor(() => expect(openSecond).not.toBeNull())
+    gate.endStream?.()
+    await vi.waitFor(() => expect(gate.openSecond).toBeDefined())
 
     held.shift()?.()
     await flush()
     expect(states).not.toContain(true)
 
-    openSecond?.()
+    gate.openSecond?.()
     await vi.waitFor(() => expect(held).toHaveLength(1))
     held.shift()?.()
     await vi.waitFor(() => expect(states.at(-1)).toBe(true))
