@@ -14,6 +14,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   closeSync,
+  linkSync,
   openSync,
   readFileSync,
   renameSync,
@@ -96,7 +97,7 @@ function createLockFileExclusive(lockPath, content, { fsOpen, fsWrite, fsClose }
  * names the holder; it is null when no holder was read, or when the one read
  * is no longer the one in place (the steal was lost after the rename).
  *
- * @param {{ path: string, content: string, nowMs: number, isHolderGone: (holder: { text: string | null, mtimeMs: number }) => boolean, fsOpen: typeof openSync, fsWrite: (fd: number, data: string) => unknown, fsClose: typeof closeSync, fsReadFile: typeof readFileSync, fsStat: typeof statSync, fsUnlink: typeof unlinkSync, fsRename: typeof renameSync }} args
+ * @param {{ path: string, content: string, nowMs: number, isHolderGone: (holder: { text: string | null, mtimeMs: number }) => boolean, fsOpen: typeof openSync, fsWrite: (fd: number, data: string) => unknown, fsClose: typeof closeSync, fsReadFile: typeof readFileSync, fsStat: typeof statSync, fsUnlink: typeof unlinkSync, fsRename: typeof renameSync, fsLink: typeof linkSync }} args
  * @returns {{ kind: 'claimed' } | { kind: 'held', holderText: string | null }}
  */
 function claimExclusiveFile({
@@ -111,6 +112,7 @@ function claimExclusiveFile({
   fsStat,
   fsUnlink,
   fsRename,
+  fsLink,
 }) {
   const create = () => createLockFileExclusive(path, content, { fsOpen, fsWrite, fsClose })
   try {
@@ -148,6 +150,26 @@ function claimExclusiveFile({
     return { kind: 'held', holderText: text }
   }
 
+  // The rename moves whatever sits at `path` NOW. Another stealer may have
+  // moved the judged file away and created its own in between, so the moved
+  // file must still be the one judged — rename keeps mtime, a fresh create
+  // does not. If it is not, it goes back with link(), which never overwrites.
+  if (movedMtimeMs(claimPath, fsStat) !== mtimeMs) {
+    let moved = null
+    try {
+      moved = fsReadFile(claimPath, 'utf8')
+      fsLink(claimPath, path)
+    } catch {
+      /* Absent, or a third file is in place already — that one holds. */
+    }
+    try {
+      fsUnlink(claimPath)
+    } catch {
+      /* Best-effort cleanup of the private copy. */
+    }
+    return { kind: 'held', holderText: moved }
+  }
+
   try {
     create()
     return { kind: 'claimed' }
@@ -162,12 +184,20 @@ function claimExclusiveFile({
   }
 }
 
+function movedMtimeMs(claimPath, fsStat) {
+  try {
+    return fsStat(claimPath).mtimeMs
+  } catch {
+    return null
+  }
+}
+
 /**
  * Attempts to atomically acquire the spawn lock through `claimExclusiveFile`,
  * judging an existing lock with `isLockStale`. 'held-by-other' leaves a
  * SessionStart hook a well-defined fallback (wait for the daemon).
  *
- * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
+ * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync, fsLink?: typeof linkSync }} args
  * @returns {'acquired' | 'held-by-other'}
  */
 export function acquireSpawnLock({
@@ -183,6 +213,7 @@ export function acquireSpawnLock({
   fsStat = statSync,
   fsUnlink = unlinkSync,
   fsRename = renameSync,
+  fsLink = linkSync,
 }) {
   const result = claimExclusiveFile({
     path: lockPath,
@@ -203,6 +234,7 @@ export function acquireSpawnLock({
     fsStat,
     fsUnlink,
     fsRename,
+    fsLink,
   })
   return result.kind === 'claimed' ? 'acquired' : 'held-by-other'
 }
@@ -250,7 +282,7 @@ export function releaseSpawnLock({
  * it from an unrelated process that has since taken its pid. An unreadable
  * file is held, while one naming no pid is replaced.
  *
- * @param {{ pidPath: string, pid: number, isWriterAlive: (pid: number, writtenAtMs: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
+ * @param {{ pidPath: string, pid: number, isWriterAlive: (pid: number, writtenAtMs: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync, fsLink?: typeof linkSync }} args
  * @returns {{ kind: 'claimed' } | { kind: 'held', pid: number | null }}
  */
 export function claimPidFile({
@@ -264,6 +296,7 @@ export function claimPidFile({
   fsStat = statSync,
   fsUnlink = unlinkSync,
   fsRename = renameSync,
+  fsLink = linkSync,
 }) {
   const result = claimExclusiveFile({
     path: pidPath,
@@ -281,6 +314,7 @@ export function claimPidFile({
     fsStat,
     fsUnlink,
     fsRename,
+    fsLink,
   })
   if (result.kind === 'claimed') return result
   return { kind: 'held', pid: result.holderText === null ? null : parsePid(result.holderText) }

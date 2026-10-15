@@ -9,6 +9,7 @@ import {
   rmSync,
   type statSync,
   unlinkSync as unlinkSyncReal,
+  utimesSync,
   writeFileSync,
   writeSync as writeSyncReal,
 } from 'node:fs'
@@ -190,6 +191,33 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
 
     expect(loser).toBe('held-by-other')
     expect(readFileSync(lockPath, 'utf8')).toBe(winnerContent)
+  })
+
+  it('puts back a newer holder a stealer moved by mistake, and stays held-by-other', () => {
+    acquireSpawnLock({
+      lockPath,
+      meta: { pid: 999_999 },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false,
+    })
+    utimesSync(lockPath, new Date(0), new Date(0))
+    const fresh = JSON.stringify({ pid: 777 })
+    const result = acquireSpawnLock({
+      lockPath,
+      meta: { pid: process.pid },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false,
+      // Between this stealer's judgement and its rename, another stealer took
+      // the stale file away and created its own: the rename moves THAT one.
+      fsRename: (from, to) => {
+        renameSyncReal(from, `${String(from)}.other-stealer`)
+        writeFileSync(from, fresh)
+        renameSyncReal(from, to)
+      },
+    })
+    expect(result).toBe('held-by-other')
+    expect(readFileSync(lockPath, 'utf8')).toBe(fresh)
+    expect(readdirSync(dir).filter((name) => name.includes('.stale-'))).toEqual([])
   })
 
   it('steals via an atomic rename() claim rather than a bare unlink+create', () => {
