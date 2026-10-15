@@ -141,8 +141,10 @@ async function renderMarkdownInPool(
       id: nextLayoutRequestId(),
       body,
       maxWidth,
-      ...(cacheKey === undefined ? {} : { cacheKey }),
-      ...embeds,
+      cacheKey,
+      references: embeds?.references,
+      theme: embeds?.theme,
+      tagLibrary: embeds?.tagLibrary,
     },
     'background',
   )
@@ -163,10 +165,11 @@ async function renderSpatialInPool(
       snapshot,
       theme,
       tagLibrary,
-      ...(cacheKey === undefined ? {} : { cacheKey }),
+      cacheKey,
+      references,
       // A thumbnail has no viewport for a level-of-detail gate to read, and
       // a miniature of a board is the board with its embeds drawn.
-      ...(references === undefined ? {} : { references, expandAllFileNodes: true as const }),
+      expandAllFileNodes: references === undefined ? undefined : true,
     },
     'background',
   )

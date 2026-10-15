@@ -2,15 +2,10 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
   createLayoutWorkerPool,
   defaultPoolSize,
-  type LayoutWorkerPool,
   type PoolWorker,
   sharedLayoutWorkerPool,
 } from './layout-worker-pool.js'
-import type {
-  MarkdownRailResponse,
-  OutlineResponse,
-  WorkRequest,
-} from './layout-worker-protocol.js'
+import type { MarkdownRailResponse, OutlineResponse } from './layout-worker-protocol.js'
 
 /**
  * A worker whose replies the test releases by hand, so "how many ran at
@@ -446,23 +441,29 @@ describe('createLayoutWorkerPool', () => {
 
 // The binding is the guard: a sender the protocol no longer describes has to
 // fail to compile at the sender, since the worker reading `undefined` only
-// degrades to the main thread and nothing at runtime goes red.
+// degrades to the main thread and nothing at runtime goes red. The calls sit
+// in closures nobody invokes: only their types are under test, and invoking
+// one would start a real worker.
 describe('a pool bound to the worker protocol', () => {
   it('types each reply by its request and refuses a request the worker cannot read', () => {
-    const pool = createLayoutWorkerPool<WorkRequest>({
-      size: 1,
-      createWorker: fakeWorkerFactory().create,
-    })
-    const rail = pool.run({ type: 'markdown-rail', id: 1, body: '# a', maxWidth: 320 })
-    const outline = pool.run({ type: 'outline', id: 2, body: '# a', maxWidth: 320 })
-    expectTypeOf(rail).resolves.toEqualTypeOf<MarkdownRailResponse>()
-    expectTypeOf(outline).resolves.toEqualTypeOf<OutlineResponse>()
-    // @ts-expect-error a rail request without its width is not one the worker reads
-    ignore(pool.run({ type: 'markdown-rail', id: 3, body: '# a' }))
-    ignore(rail)
-    ignore(outline)
-    pool.dispose()
-    expectTypeOf(sharedLayoutWorkerPool).returns.toEqualTypeOf<LayoutWorkerPool<WorkRequest>>()
+    const rail = () =>
+      sharedLayoutWorkerPool().run({ type: 'markdown-rail', id: 1, body: '# a', maxWidth: 320 })
+    const outline = () =>
+      sharedLayoutWorkerPool().run({ type: 'outline', id: 2, body: '# a', maxWidth: 320 })
+    expectTypeOf(rail).returns.resolves.toEqualTypeOf<MarkdownRailResponse>()
+    expectTypeOf(outline).returns.resolves.toEqualTypeOf<OutlineResponse>()
+    const widthless = () =>
+      // @ts-expect-error a rail request without its width is not one the worker reads
+      sharedLayoutWorkerPool().run({ type: 'markdown-rail', id: 3, body: '# a' })
+    const misspelled = () =>
+      sharedLayoutWorkerPool().run({
+        type: 'outline',
+        id: 4,
+        snapshot: new Uint8Array(),
+        // @ts-expect-error an optional key the protocol does not declare is dropped by the worker
+        cacheKy: 'k',
+      })
+    expect([rail, outline, widthless, misspelled]).toHaveLength(4)
   })
 })
 
