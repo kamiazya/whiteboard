@@ -39,7 +39,6 @@ let subscribeBodies: string[] = []
 let messageBodies: string[] = []
 let updateWrites: {
   workspaceId: string
-  path: string
   auth: string | null
   body: Uint8Array
 }[] = []
@@ -85,23 +84,22 @@ const server = setupServer(
     messageBodies.push(await request.text())
     return HttpResponse.json({ ok: true })
   }),
-  // The daemon's own update route, which the worker writes a tab's work to.
-  // Addressed by workspace and path rather than by the document key the rest
-  // of the worker routes on — the key IS `${workspaceId}/${path}`, which is
-  // what lets the worker reconstruct this URL at all.
-  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
+  // The workspace record's update route, which the worker writes a tab's work
+  // to. Addressed by workspace rather than by the key the rest of the worker
+  // routes on — the key IS `workspace:${workspaceId}`, which is what lets the
+  // worker reconstruct this URL at all.
+  http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
     updateWrites.push({
       workspaceId: String(params.workspaceId),
-      path: String(params.path),
       auth: request.headers.get('Authorization'),
       body: new Uint8Array(await request.arrayBuffer()),
     })
     return HttpResponse.json({ ok: true })
   }),
-  // The worker seeds every subscribed document's replica from this route.
+  // The worker seeds every subscribed workspace's replica from this route.
   // Answered (with "unknown") rather than left unhandled: `bypass` would let
   // the request escape to whatever real daemon is listening on this port.
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, () =>
+  http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, () =>
     HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
   ),
 )
@@ -122,7 +120,7 @@ afterEach(() => server.resetHandlers())
 // alive and can still emit a late subscribe. Unique document ids per test keep
 // one test's traffic from being read as another's.
 let docSeq = 0
-const nextDoc = () => `w/doc-${++docSeq}`
+const nextDoc = () => `workspace:w-doc-${++docSeq}`
 
 const decode = (encoded: string) => base64ToBytes(encoded) as Uint8Array
 
@@ -310,7 +308,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     const listener = (e: MessageEvent) => {
       const data = e.data as { type?: string; doc?: string }
       if (data.type === 'status') return
-      if (data.doc !== doc && data.doc !== 'w/other') return
+      if (data.doc !== doc && data.doc !== 'workspace:w-other') return
       seen.push(e.data)
     }
     port.addEventListener('message', listener)
@@ -325,7 +323,7 @@ describe('sse-shared-worker', { timeout: WAIT_MS + 10_000 }, () => {
     // would make the negative half pass with the addressing broken.
     pushTo(
       doc,
-      `event: update\ndata: ${JSON.stringify({ doc: 'w/other', update: bytesToBase64(loroUpdate('leak', 'wrong-doc')) })}\n\n`,
+      `event: update\ndata: ${JSON.stringify({ doc: 'workspace:w-other', update: bytesToBase64(loroUpdate('leak', 'wrong-doc')) })}\n\n`,
     )
     await settle()
     expect(seen).toEqual([])
@@ -524,9 +522,9 @@ describe('authority replica', () => {
     await until(() => updateWrites.length >= 1)
     const write = updateWrites[0]
     if (!write) throw new Error('no write')
-    // The document key is `${workspaceId}/${path}`, so the worker addressing
-    // the route correctly is the whole reason it can own this write at all.
-    expect(`${write.workspaceId}/${write.path}`).toBe(doc)
+    // The key is `workspace:${workspaceId}`, so the worker addressing the
+    // route correctly is the whole reason it can own this write at all.
+    expect(`workspace:${write.workspaceId}`).toBe(doc)
     // The worker holds no daemon credential, so the write carries none.
     // `daemon-auth-seam.test.ts` scans the source for a header being set; only
     // an actual request proves none reaches the wire.

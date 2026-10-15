@@ -85,6 +85,12 @@ export interface SseStreamSourceHarness {
  */
 let seq = 0
 const nextDoc = (): string => `contract-ws/doc-${++seq}`
+/**
+ * A workspace key per invocation, for the cases about update frames: binary
+ * frames travel on a workspace key alone, and the worker-backed source keeps
+ * a replica — what it delivers frames through — for no other kind of key.
+ */
+const nextWorkspaceDoc = (): string => `workspace:contract-ws-${++seq}`
 
 const until = (predicate: () => boolean): Promise<void> =>
   vi.waitFor(() => expect(predicate()).toBe(true)) as unknown as Promise<void>
@@ -140,7 +146,7 @@ export function sseStreamSourceContract(
     // the replica drops a frame it cannot merge, so garbage bytes would make
     // this case pass or fail on frame policy rather than on delivery.
     const h = await create()
-    const doc = nextDoc()
+    const doc = nextWorkspaceDoc()
     const { updates } = await subscribed(h, doc)
 
     h.pushUpdate(doc, LORO_UPDATE)
@@ -156,8 +162,8 @@ export function sseStreamSourceContract(
     // One stream serves many documents, so every frame carries its doc key.
     // Without this an edit to one canvas would be applied to another.
     const h = await create()
-    const doc = nextDoc()
-    const other = nextDoc()
+    const doc = nextWorkspaceDoc()
+    const other = nextWorkspaceDoc()
     const { updates } = await subscribed(h, doc)
 
     // Valid Loro bytes: a replica-backed source drops garbage regardless of
@@ -303,7 +309,7 @@ export function sseStreamSourceContract(
 
   it('stops delivering to a listener that unsubscribed', async () => {
     const h = await create()
-    const doc = nextDoc()
+    const doc = nextWorkspaceDoc()
     const { updates, off } = await subscribed(h, doc)
 
     off()
@@ -321,7 +327,7 @@ export function sseStreamSourceContract(
     // Refcounting is per document, not per listener: releasing one canvas view
     // must not silence a second one watching the same document.
     const h = await create()
-    const doc = nextDoc()
+    const doc = nextWorkspaceDoc()
     const first = await subscribed(h, doc)
     const second = collect(h.source, doc)
 

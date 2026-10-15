@@ -13,6 +13,23 @@ import { type DocListener, SseStreamHub, type SseStreamSource } from './sse-stre
 import { retryDelayMs } from './write-chain.js'
 
 const BASE = 'http://127.0.0.1:3099'
+
+/**
+ * A stream that opens and stays open. The backend reads the keeper's state
+ * only once the stream carries the document, so a stream that never says
+ * `ready` would leave every case waiting on a snapshot that never comes.
+ */
+function openStream(): Response {
+  const ready = new TextEncoder().encode('event: ready\ndata: {"streamId":"s-1"}\n\n')
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(ready)
+      },
+    }),
+    { status: 200 },
+  )
+}
 const REFUSAL_BODY = {
   error: 'markdown_too_large',
   message: 'This update would make a document body 300000 characters long',
@@ -53,7 +70,7 @@ function daemonAnswering(status: number, body: unknown, failFirst = Number.POSIT
       snapshotCount += 1
       return new Response(new Uint8Array([snapshotCount]), { status: 200 })
     }
-    if (url.includes('/api/sync/stream')) return new Response(new ReadableStream(), { status: 200 })
+    if (url.includes('/api/sync/stream')) return openStream()
     if (url.includes('/update') && init?.method === 'POST') {
       updatePosts += 1
       if (updatePosts > failFirst) {
@@ -136,8 +153,7 @@ describe('SseBackend pushing straight to the daemon', () => {
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/snapshot')) return new Response(new Uint8Array([1]), { status: 200 })
-      if (url.includes('/api/sync/stream'))
-        return new Response(new ReadableStream(), { status: 200 })
+      if (url.includes('/api/sync/stream')) return openStream()
       if (url.includes('/update') && init?.method === 'POST') {
         posts += 1
         if (posts === 1) return new Response('{}', { status: 503, headers: { 'Retry-After': '5' } })
@@ -241,8 +257,7 @@ describe('SseBackend disconnecting with writes outstanding', () => {
     const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/snapshot')) return new Response(new Uint8Array([1]), { status: 200 })
-      if (url.includes('/api/sync/stream'))
-        return new Response(new ReadableStream(), { status: 200 })
+      if (url.includes('/api/sync/stream')) return openStream()
       if (url.includes('/update') && init?.method === 'POST') {
         posted.push([...new Uint8Array(init.body as ArrayBuffer)])
         if (posted.length === 1) await new Promise<void>((r) => (answerFirst = r))
@@ -306,7 +321,10 @@ describe('SseBackend through an injected source whose push the daemon refuses', 
     let snapshots = 0
     const refusal = { code: 'node_text_too_large', message: 'too long' } as const
     const source: SseStreamSource = {
-      subscribe: () => () => {},
+      subscribe: (_doc, listener) => {
+        listener.onConnectionChange?.(true)
+        return () => {}
+      },
       sendMessage: () => {},
       push: () => Promise.reject(new SyncWriteRefusedError(413, refusal)),
       snapshot: () => {
@@ -335,6 +353,7 @@ describe('SseBackend through a source that writes onward itself', () => {
     const source: SseStreamSource = {
       subscribe: (_doc, listener) => {
         listeners.push(listener)
+        listener.onConnectionChange?.(true)
         return () => {}
       },
       sendMessage: () => {},
@@ -394,15 +413,17 @@ describe('SseBackend through a source that writes onward itself', () => {
     // reaches a copy the earlier read's snapshot is about to replace.
     const listeners: DocListener[] = []
     const pending: ((bytes: Uint8Array) => void)[] = []
+    let reads = 0
     const source: SseStreamSource = {
       subscribe: (_doc, listener) => {
         listeners.push(listener)
+        listener.onConnectionChange?.(true)
         return () => {}
       },
       sendMessage: () => {},
       push: () => {},
       snapshot: () =>
-        pending.length === 0 && listeners.length === 0
+        ++reads === 1
           ? Promise.resolve(new Uint8Array([1]))
           : new Promise((resolve) => {
               pending.push(resolve)
@@ -431,6 +452,53 @@ describe('SseBackend through a source that writes onward itself', () => {
 
     await vi.waitFor(() =>
       expect(order).toEqual(['snapshot 1', 'snapshot 3', 'snapshot 2', 'update 9']),
+    )
+    backend.disconnect()
+  })
+
+  it('keeps a frame an earlier keeper-state read holds when a later read starts', async () => {
+    // The frame arrives between the two reads starting. A later read that
+    // started a fresh queue would drop it: the earlier read's snapshot then
+    // replaces the copy last, and the frame that followed it is gone.
+    const listeners: DocListener[] = []
+    const pending: ((bytes: Uint8Array) => void)[] = []
+    let reads = 0
+    const source: SseStreamSource = {
+      subscribe: (_doc, listener) => {
+        listeners.push(listener)
+        listener.onConnectionChange?.(true)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () =>
+        ++reads === 1
+          ? Promise.resolve(new Uint8Array([1]))
+          : new Promise((resolve) => {
+              pending.push(resolve)
+            }),
+    }
+    const order: string[] = []
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, source)
+    backend.connect({
+      ...r.handlers,
+      onSnapshot: (b) => order.push(`snapshot ${b[0]}`),
+      onRemoteUpdate: (b) => order.push(`update ${b[0]}`),
+    })
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1']))
+
+    const refusal = { code: 'node_text_too_large', message: 'too long' } as const
+    for (const l of listeners) l.onWriteRefused?.(refusal)
+    await vi.waitFor(() => expect(pending).toHaveLength(1))
+    for (const l of listeners) l.onUpdate(new Uint8Array([8]))
+    for (const l of listeners) l.onWriteRefused?.(refusal)
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+    pending[1]?.(new Uint8Array([3]))
+    pending[0]?.(new Uint8Array([2]))
+
+    await vi.waitFor(() =>
+      expect(order).toEqual(['snapshot 1', 'snapshot 3', 'snapshot 2', 'update 8']),
     )
     backend.disconnect()
   })

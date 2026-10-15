@@ -14,12 +14,27 @@ import { apiFetch } from './api-client.js'
 import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
-import { documentSyncKey, SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
+import {
+  documentSyncKey,
+  routingTransitions,
+  SseStreamHub,
+  workspaceDocKey,
+} from './sse-stream-hub.js'
 import { parseServerTextMessage } from './sync-frame-text.js'
 import { QueuedWriter } from './write-chain.js'
 
 export interface SseTransport {
   fetch: typeof globalThis.fetch
+}
+
+/**
+ * Frames held while the keeper's state is being read, and how many reads
+ * are still running. One per connection: a read that settles after a
+ * disconnect finds a different hold, or none, and releases nothing.
+ */
+interface FrameHold {
+  frames: Uint8Array[]
+  reads: number
 }
 
 export class SseBackend implements DocumentBackend {
@@ -34,22 +49,20 @@ export class SseBackend implements DocumentBackend {
   private unsubscribeText: (() => void) | null = null
   private handlers: DocumentBackendHandlers | null = null
   /**
-   * Frames that arrived while the keeper's state was being fetched after a
-   * refusal or a reconnect, or `null` when no such fetch is running. Held
-   * rather than applied: they build on the state being fetched, so they
-   * follow it. Overlapping fetches share the one queue, released only when
-   * the last settles: a snapshot that settles late replaces the caller's
-   * copy, and a frame applied before it would go with it.
+   * Frames that arrived while the keeper's state was being read — at open,
+   * after a refusal or after a reconnect — or `null` when no read is running.
+   * Held rather than applied: they build on the state being read, so they
+   * follow it. Overlapping reads share the one hold, released only when the
+   * last settles: a snapshot that settles late replaces the caller's copy,
+   * and a frame applied before it would go with it.
    */
-  private heldFrames: Uint8Array[] | null = null
-  private keeperFetches = 0
-  /**
-   * Whether a stream this backend was connected through has since dropped.
-   * Only then does a connection mean something may have been missed: the
-   * first one follows the snapshot `run` already fetched.
-   */
-  private streamDropped = false
-  private everConnected = false
+  private hold: FrameHold | null = null
+  /** Bumped by every connect and disconnect, so an open settling late can tell it is stale. */
+  private connection = 0
+  /** What the source last said of the workspace key's routing. */
+  private routed = false
+  /** Whether the opening snapshot has settled, before which the open itself reports the connection. */
+  private opened = false
   /** The writes this backend sends itself, when its source keeps no copy of them. */
   private writer: QueuedWriter | null = null
   /** Whether the injected source has said a write failed and not yet that it landed. */
@@ -62,7 +75,7 @@ export class SseBackend implements DocumentBackend {
    * retired). Text messages (version_created, viewport, restore events)
    * keep flowing on the per-document key — they are addressed per path.
    * The caller scopes its sync session to the open document
-   * (`contentDocumentId`), same contract as DaemonBackend.
+   * (`contentDocumentId`).
    */
   private readonly binaryKey: string
 
@@ -86,37 +99,19 @@ export class SseBackend implements DocumentBackend {
 
   connect(handlers: DocumentBackendHandlers): void {
     this.cancelled = false
-    this.everConnected = false
-    this.streamDropped = false
+    this.connection += 1
+    this.routed = false
+    this.opened = false
     this.handlers = handlers
-    void this.run(handlers)
-  }
-
-  private async run(handlers: DocumentBackendHandlers): Promise<void> {
-    // Snapshot first: the stream carries only incremental updates, so a client
-    // that started reading before seeding would apply deltas to an empty doc.
-    // Through the source, not a direct fetch, for the same reason push is:
-    // which authority answers is the implementations' difference. The hub
-    // asks the daemon; the
-    // worker-backed source asks the worker's replica, so a second tab opens
-    // without a daemon round trip and off this thread.
-    try {
-      const bytes = await this.resolveSource().snapshot(this.binaryKey)
-      if (this.cancelled) return
-      // `null` is "the authority does not know this document" — the caller
-      // keeps its own state and the stream fills in from empty, the same
-      // path a first-ever open takes.
-      if (bytes !== null && bytes.byteLength > 0) {
-        handlers.onSnapshot(bytes)
-      }
-    } catch {
-      // A failed snapshot is not terminal: the stream may still connect and the
-      // caller keeps whatever document state it already had.
-    }
-    if (this.cancelled) return
-
+    // Subscribe FIRST, with frames held, and read the keeper's state once the
+    // source says the stream carries the workspace: the stream replays
+    // nothing, so a snapshot read before that can miss a write no frame will
+    // ever carry, and every later frame builds on it. A frame arriving before
+    // the snapshot is held for it; one the snapshot already covers imports as
+    // nothing.
+    const opening = this.holdFrames()
     const source = this.resolveSource()
-    this.unsubscribe = source.subscribe(this.binaryKey, this.binaryListener(handlers))
+    this.unsubscribe = source.subscribe(this.binaryKey, this.binaryListener(handlers, opening))
     // Text messages stay per document — and ONLY text: no binary frame
     // travels on a per-document key.
     this.unsubscribeText = source.subscribe(this.docKey, {
@@ -129,11 +124,43 @@ export class SseBackend implements DocumentBackend {
     // connection — and the session sends client_ready per report.
   }
 
+  /**
+   * The keeper's state, read once the stream carries the workspace. Through
+   * the source, not a direct fetch, for the same reason push is: which
+   * authority answers is the implementations' difference. The hub asks the
+   * daemon; the worker-backed source asks the worker's replica, so a second
+   * tab opens without a daemon round trip and off this thread.
+   *
+   * The connection is reported after it, so a caller is never told it is
+   * connected over a copy it does not have yet.
+   */
+  private async open(handlers: DocumentBackendHandlers, opening: FrameHold): Promise<void> {
+    const connection = this.connection
+    // `null` is "the authority does not know this document" — the caller
+    // keeps its own state and the stream fills in from empty, the same path
+    // a first-ever open takes. A failed read is not terminal either: the
+    // caller keeps whatever document state it already had.
+    await this.fetchKeeperState(
+      handlers,
+      (bytes) => {
+        if (bytes.byteLength > 0) handlers.onSnapshot(bytes)
+      },
+      opening,
+    )
+    if (this.cancelled || this.connection !== connection) return
+    this.opened = true
+    if (this.routed) handlers.onConnected()
+  }
+
   /** What the workspace key's subscription does with each thing the source says. */
-  private binaryListener(handlers: DocumentBackendHandlers): DocListener {
+  private binaryListener(handlers: DocumentBackendHandlers, opening: FrameHold): DocListener {
+    const routing = routingTransitions({
+      first: () => void this.open(handlers, opening),
+      resumed: () => void this.catchUp(handlers),
+    })
     return {
       onUpdate: (bytes) => {
-        if (this.heldFrames !== null) this.heldFrames.push(bytes)
+        if (this.hold !== null) this.hold.frames.push(bytes)
         else handlers.onRemoteUpdate(bytes)
       },
       // Nothing addresses text to the workspace key; per-document text
@@ -143,17 +170,10 @@ export class SseBackend implements DocumentBackend {
       // this backend has that updates are still arriving.
       onConnectionChange: (connected) => {
         if (this.cancelled) return
-        if (!connected) {
-          if (this.everConnected) this.streamDropped = true
-          handlers.onDisconnected?.()
-          return
-        }
-        this.everConnected = true
-        if (this.streamDropped) {
-          this.streamDropped = false
-          void this.catchUp(handlers)
-        }
-        handlers.onConnected()
+        this.routed = connected
+        routing(connected)
+        if (!connected) handlers.onDisconnected?.()
+        else if (this.opened) handlers.onConnected()
       },
       // A worker-backed source's push returns before the keeper answers, so
       // this is the only word this page gets that a write failed — and, since
@@ -210,23 +230,30 @@ export class SseBackend implements DocumentBackend {
     })
   }
 
+  /** Start holding frames for a read of the keeper's state, sharing a hold already running. */
+  private holdFrames(): FrameHold {
+    this.hold ??= { frames: [], reads: 0 }
+    this.hold.reads += 1
+    return this.hold
+  }
+
   private async fetchKeeperState(
     handlers: DocumentBackendHandlers,
     deliver: (bytes: Uint8Array) => void,
+    hold: FrameHold = this.holdFrames(),
   ): Promise<void> {
-    this.heldFrames ??= []
-    this.keeperFetches += 1
     try {
       const bytes = await this.resolveSource().snapshot(this.binaryKey)
-      if (!this.cancelled && bytes !== null) deliver(bytes)
+      if (this.hold === hold && bytes !== null) deliver(bytes)
     } catch {
       // The caller keeps the copy it has. After a refusal its next write is
       // refused again and asks again; after a reconnect the next drop does.
     } finally {
-      this.keeperFetches -= 1
-      const held = this.keeperFetches === 0 ? this.heldFrames : null
-      if (held !== null) this.heldFrames = null
-      if (!this.cancelled && held) for (const bytes of held) handlers.onRemoteUpdate(bytes)
+      hold.reads -= 1
+      if (hold.reads === 0 && this.hold === hold) {
+        this.hold = null
+        for (const bytes of hold.frames) handlers.onRemoteUpdate(bytes)
+      }
     }
   }
 
@@ -271,8 +298,9 @@ export class SseBackend implements DocumentBackend {
 
   disconnect(): void {
     this.cancelled = true
+    this.connection += 1
     this.handlers = null
-    this.heldFrames = null
+    this.hold = null
     this.unsubscribe?.()
     this.unsubscribe = null
     this.unsubscribeText?.()

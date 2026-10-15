@@ -11,7 +11,11 @@
  * `worker-src 'self'`, which rejects a blob: worker.
  */
 import type { SyncWriteRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
-import { SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import {
+  routingTransitions,
+  SseStreamHub,
+  workspaceIdOfSyncKey,
+} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { retryDelayMs, WriteChain } from '@kamiazya/whiteboard-daemon-client/write-chain'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-fetch.js'
@@ -118,7 +122,10 @@ function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['Loro
 
 /**
  * The replica's own hub subscription, one per origin+document, refcounted by
- * the ports interested in it.
+ * the ports interested in it. Only a `workspace:` key has one: it is the only
+ * key binary frames travel on, so a replica of a per-document key — whose
+ * subscription carries text alone — would be a snapshot read and a resident
+ * CRDT that nothing ever reads.
  *
  * It is separate from the ports' subscriptions because the replica belongs to
  * the WORKER, not to any tab: feeding it from each port's own listener meant
@@ -141,7 +148,9 @@ const replicaFeeds = new Map<string, { off: () => void; ports: number }>()
  * worker booted, and a snapshot answered from it silently omits everything
  * older. The seed is one snapshot fetch per origin+document per worker
  * lifetime, done HERE so no tab pays it on the main thread and every later
- * tab is answered from memory.
+ * tab is answered from memory. A feed seeds once the hub says the stream
+ * carries the document, not before: a write the daemon took between an
+ * earlier read and the routing would reach no frame.
  *
  * A daemon that answers 404 counts as seeded: empty IS that document's
  * state, and re-asking on every request would reintroduce the round trip
@@ -232,23 +241,19 @@ function retainReplicaFeed(hub: SseStreamHub, baseUrl: string, doc: string): voi
     existing.ports += 1
     return
   }
-  ensureSeeded(baseUrl, doc)
-  let live = false
-  let dropped = false
+  const routing = routingTransitions({
+    // A replica a snapshot request seeded before the routing existed may
+    // already miss a write, so it catches up rather than counting as seeded.
+    first: () => (seededDocs.has(key) ? catchUp(baseUrl, doc) : ensureSeeded(baseUrl, doc)),
+    resumed: () => catchUp(baseUrl, doc),
+  })
   const off = hub.subscribe(doc, {
     // `null`: the daemon is the source, so nobody is excluded from the fan-out.
     onUpdate: (bytes) => ingest(baseUrl, doc, bytes, null),
     onMessage: () => {},
     onConnectionChange: (connected) => {
-      if (!connected) {
-        dropped = live
-        return
-      }
-      live = true
-      if (dropped) {
-        dropped = false
-        catchUp(baseUrl, doc)
-      }
+      routing(connected)
+      if (!connected) return
       // The stream coming back is the only signal a daemon that refused a
       // write is ready to take it, and the tab that made that edit may never
       // touch the canvas again — so without this the recovery would wait for a
@@ -586,10 +591,10 @@ function handleSnapshotRequest(
   msg: RequestOf<'snapshot-request'>,
   state: PortState,
 ): void {
-  // Seed first: a request can arrive before any subscribe (the backend
-  // snapshots, then subscribes), and the replica queue serialises the seed
-  // ahead of the answer below, so the reply carries the document's real
-  // pre-existing state rather than only what this worker has seen.
+  // Seed first: a request can arrive for a document no feed has seeded, and
+  // the replica queue serialises the seed ahead of the answer below, so the
+  // reply carries the document's real pre-existing state rather than only
+  // what this worker has seen.
   ensureSeeded(state.baseUrl, msg.doc)
   queueReplicaWork(() => {
     // An empty snapshot for a document the daemon does not know is the right
@@ -608,7 +613,7 @@ function handleSubscribe(
   hub: SseStreamHub,
 ): void {
   if (state.subscriptions.has(msg.doc)) return
-  retainReplicaFeed(hub, state.baseUrl, msg.doc)
+  if (workspaceIdOfSyncKey(msg.doc) !== null) retainReplicaFeed(hub, state.baseUrl, msg.doc)
   const off = hub.subscribe(msg.doc, {
     // No raw relay: a daemon frame reaches this port as an
     // `authority-update`, after the replica has ordered and deduplicated it
