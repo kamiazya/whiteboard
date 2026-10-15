@@ -13,7 +13,6 @@
 
 import { useEffect, useState } from 'react'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../lib/layout-worker-pool.js'
-import type { MarkdownRailResponse } from '../lib/layout-worker-protocol.js'
 import type { RailBlock } from '../lib/rail-geometry.js'
 
 export interface MarkdownOutline {
@@ -55,7 +54,7 @@ export function useMarkdownOutline(
     const id = nextLayoutRequestId()
     let live = true
     pool
-      .run<MarkdownRailResponse>({ type: 'markdown-rail', id, body, maxWidth }, 'background')
+      .run({ type: 'markdown-rail', id, body, maxWidth }, 'background')
       .then((reply) => {
         if (live && reply.type === 'markdown-rail-done') {
           setOutline({ blocks: reply.blocks, anchors: reply.anchors, forBody: body })

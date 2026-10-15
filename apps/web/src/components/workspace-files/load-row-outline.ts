@@ -30,7 +30,7 @@ import { unhandledKind } from '../../lib/exhaustive.js'
 import type { FaviconRect } from '../../lib/favicon.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
-import type { OutlineResponse } from '../../lib/layout-worker-protocol.js'
+import type { OutlineSubject } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, outlineKeyOf } from '../../lib/render-key.js'
 import { ROW_LAYOUT_WIDTH } from './row-layout-width.js'
@@ -70,8 +70,10 @@ export interface RowOutlineDeps {
 }
 
 /** The shared fleet, at idle priority: nobody is waiting on a 24px icon. */
-async function outlineInPool(request: Record<string, unknown>): Promise<RowOutline | null> {
-  const reply = await sharedLayoutWorkerPool().run<OutlineResponse>(
+async function outlineInPool(
+  request: OutlineSubject & { readonly cacheKey?: string },
+): Promise<RowOutline | null> {
+  const reply = await sharedLayoutWorkerPool().run(
     { type: 'outline', id: nextLayoutRequestId(), ...request },
     'idle',
   )

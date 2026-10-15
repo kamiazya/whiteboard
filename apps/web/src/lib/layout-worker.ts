@@ -54,6 +54,7 @@ import {
   type OutlineResponse,
   type RegisterFaceRequest,
   type WorkerFailure,
+  type WorkRequest,
 } from './layout-worker-protocol.js'
 import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
 import { namesAReference } from './names-a-reference.js'
@@ -347,9 +348,6 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
     fail(request.id, error)
   }
 }
-
-/** Every request that asks for WORK, as opposed to changing what a later one measures with. */
-type WorkRequest = LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest
 
 self.onmessage = async (event: MessageEvent<WorkRequest | RegisterFaceRequest>) => {
   const request = event.data

@@ -12,7 +12,6 @@ import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from './layout-worker-pool.js'
-import type { LayoutResponse } from './layout-worker-protocol.js'
 
 const IMAGE_ONLY: SpatialCanvas = {
   nodes: [
@@ -35,7 +34,7 @@ function snapshotOf(value: SpatialCanvas): Uint8Array {
 }
 
 it('draws an image-only board for a Files row without its asset id', async () => {
-  const reply = await sharedLayoutWorkerPool().run<LayoutResponse>({
+  const reply = await sharedLayoutWorkerPool().run({
     type: 'layout',
     id: nextLayoutRequestId(),
     snapshot: snapshotOf(IMAGE_ONLY),

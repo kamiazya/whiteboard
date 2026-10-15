@@ -262,7 +262,7 @@ export type MarkdownRenderResponse =
  * blocks somewhere else. The two spatial arms are a map over boxes the
  * document already declares.
  */
-type OutlineSubject =
+export type OutlineSubject =
   | { readonly canvas: SpatialCanvas; readonly snapshot?: undefined; readonly body?: undefined }
   | { readonly snapshot: Uint8Array; readonly canvas?: undefined; readonly body?: undefined }
   | {
@@ -368,6 +368,27 @@ export type LayoutResponse =
       readonly referencesOmitted?: true
     }
   | WorkerFailure
+
+/** Every request that asks for WORK, as opposed to changing what a later one measures with. */
+export type WorkRequest =
+  | LayoutRequest
+  | MarkdownRailRequest
+  | MarkdownRenderRequest
+  | OutlineRequest
+
+type ResponseByType = {
+  readonly layout: LayoutResponse
+  readonly 'markdown-rail': MarkdownRailResponse
+  readonly 'markdown-render': MarkdownRenderResponse
+  readonly outline: OutlineResponse
+}
+
+/**
+ * The reply a work request is answered with, keyed by its `type`. Declared
+ * beside the requests so a sender's reply type follows from what it sent,
+ * rather than being a type argument it picks — which is a cast on the reply.
+ */
+export type ResponseFor<R extends WorkRequest> = ResponseByType[R['type']]
 
 /**
  * Why a worker refused. `font-degraded` is the one worth distinguishing: it

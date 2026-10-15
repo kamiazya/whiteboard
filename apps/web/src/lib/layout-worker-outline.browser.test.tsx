@@ -17,7 +17,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from './layout-worker-pool.js'
-import type { OutlineResponse } from './layout-worker-protocol.js'
+import type { OutlineResponse, OutlineSubject } from './layout-worker-protocol.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -33,8 +33,8 @@ function snapshotOf(value: SpatialCanvas): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-function ask(request: Record<string, unknown>): Promise<OutlineResponse> {
-  return sharedLayoutWorkerPool().run<OutlineResponse>(
+function ask(request: OutlineSubject): Promise<OutlineResponse> {
+  return sharedLayoutWorkerPool().run(
     { type: 'outline', id: nextLayoutRequestId(), ...request },
     'idle',
   )
