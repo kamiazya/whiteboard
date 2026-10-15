@@ -12,7 +12,12 @@ import { bridgeFetch } from './bridge-loader.js'
 /** What asking for the daemon through the extension answered. */
 export type ExtensionConnection =
   | { status: 'connected'; daemonBaseUrl: string }
-  | { status: 'none' }
+  /**
+   * `refusal` is what the daemon record said when the native host would not
+   * relay — another version's daemon still running, a record this user cannot
+   * read — and is absent when nothing more specific than "no daemon" is known.
+   */
+  | { status: 'none'; refusal?: string }
 
 /**
  * How long a reconnection waits: the app says "Connecting…" until it answers.
@@ -30,10 +35,29 @@ export async function connectThroughExtension(
       signal: giveUp.signal,
     })
     if (res.ok) return { status: 'connected', daemonBaseUrl: BRIDGE_DAEMON_BASE_URL }
-  } catch {
-    // No extension, no host, no daemon behind it, or no answer in time.
+  } catch (err) {
+    // No extension, no host, no daemon behind it, or no answer in time — or a
+    // daemon record the host refused, whose words are the person's next step.
+    const refusal = daemonRecordRefusal(err)
+    if (refusal !== null) return { status: 'none', refusal }
   } finally {
     clearTimeout(timer)
   }
   return { status: 'none' }
+}
+
+/**
+ * The bridge rejects a host `error` frame as `TypeError('<reason>: <message>')`
+ * (extension-bridge-fetch.ts). Only `daemon-unreachable` carries a message
+ * meant for the person; any other kind's text is a transport detail and stays
+ * behind the generic line, as does the host's plain "no daemon is running",
+ * which the generic line already says better.
+ */
+const DAEMON_UNREACHABLE = 'daemon-unreachable: '
+const NO_DAEMON = 'no daemon is running'
+
+function daemonRecordRefusal(err: unknown): string | null {
+  if (!(err instanceof TypeError) || !err.message.startsWith(DAEMON_UNREACHABLE)) return null
+  const message = err.message.slice(DAEMON_UNREACHABLE.length).trim()
+  return message === '' || message === NO_DAEMON ? null : message
 }

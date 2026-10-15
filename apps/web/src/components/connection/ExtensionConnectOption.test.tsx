@@ -124,4 +124,25 @@ describe('ExtensionConnectOption', () => {
     expect(reopen).not.toHaveBeenCalled()
     expect(settingsStore.load().storage.daemonBaseUrl).toBeUndefined()
   })
+
+  // A refusal from the daemon record names what is actually wrong — another
+  // version's daemon still running, a record this user cannot read — and
+  // "start one" is the advice that command then refuses.
+  it("shows the host's refusal in place of how to start a daemon", async () => {
+    const refusal =
+      'the daemon record /data/daemon.json cannot be interpreted by this version, but names pid 4242, which is running'
+    render(
+      <ExtensionConnectOption
+        settingsStore={createUserSettingsStore()}
+        hello={async () => MATCHING_HELLO}
+        connect={async () => ({ status: 'none', refusal })}
+        reopen={vi.fn()}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /connect through the extension/i }))
+
+    await vi.waitFor(() => expect(screen.getByRole('status').textContent).toContain(refusal))
+    expect(screen.getByRole('status').textContent).not.toMatch(/start one/i)
+    expect(screen.getByRole('status').querySelector('code')).toBeNull()
+  })
 })
