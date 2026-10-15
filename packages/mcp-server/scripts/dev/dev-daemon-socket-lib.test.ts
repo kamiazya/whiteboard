@@ -11,6 +11,7 @@ import { fc, fcTest, withDefaults } from '../../src/shared/test-utils/fast-check
 import {
   assessRecordedDaemon,
   isPidAlive,
+  isRecordWriter,
   readDaemonRecord,
   readProcessStartMs,
   requestDaemon,
@@ -249,5 +250,26 @@ describe('requestDaemon', () => {
     } finally {
       await stream.close()
     }
+  })
+})
+
+describe('isRecordWriter', () => {
+  const writtenAt = '2026-01-01T00:00:10.000Z'
+  const writtenAtMs = Date.parse(writtenAt)
+
+  it('answers true for a live process that started before the record was written', () => {
+    expect(
+      isRecordWriter(7, writtenAt, { isAlive: () => true, startMs: () => writtenAtMs - 1_000 }),
+    ).toBe(true)
+  })
+
+  it('answers false for a live process that took the pid after the record was written', () => {
+    expect(
+      isRecordWriter(7, writtenAt, { isAlive: () => true, startMs: () => writtenAtMs + 60_000 }),
+    ).toBe(false)
+  })
+
+  it('answers false for a dead pid', () => {
+    expect(isRecordWriter(7, writtenAt, { isAlive: () => false, startMs: () => 0 })).toBe(false)
   })
 })

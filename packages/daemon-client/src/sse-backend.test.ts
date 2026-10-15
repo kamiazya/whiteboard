@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
+import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { flush } from './test-utils/flush.js'
 
 function sseFrame(event: string, data: string): string {
@@ -376,6 +377,73 @@ describe('SseBackend through a source whose push returns before the write lands'
     for (const l of listeners) l.onWriteState?.(true)
     await flush()
     expect(settled).toBe(true)
+    backend.disconnect()
+  })
+
+  /** A backend over a source that writes onward itself, its listeners exposed. */
+  function overWritingSource() {
+    const listeners: DocListener[] = []
+    const source: SseStreamSource = {
+      subscribe: (_doc, listener) => {
+        listeners.push(listener)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () => Promise.resolve(null),
+    }
+    const backend = new SseBackend(
+      'ws-1',
+      'canvas-a',
+      'http://127.0.0.1:3099',
+      createFakeTransport([]).transport,
+      source,
+    )
+    return { backend, listeners }
+  }
+
+  // The source resumes from a clean account after a refusal and announces no
+  // landing, so a write still waiting for one would wait for good — and every
+  // later write would be held behind a failure that is over.
+  it('settles a write handed over during a failure when the keeper refuses, holding none after', async () => {
+    const { handlers } = createHandlers()
+    const { backend, listeners } = overWritingSource()
+    backend.connect(handlers)
+    await flush()
+    for (const l of listeners) l.onWriteState?.(false)
+    let settled = false
+    void Promise.resolve(backend.pushLocalUpdate(new Uint8Array([2]))).then(() => {
+      settled = true
+    })
+    await flush()
+    expect(settled).toBe(false)
+
+    for (const l of listeners) l.onWriteRefused?.({ code: null, message: 'too big' })
+    await flush()
+    expect(settled).toBe(true)
+    expect(backend.pushLocalUpdate(new Uint8Array([3]))).toBeUndefined()
+    backend.disconnect()
+  })
+
+  it('drops a handed-over write still waiting on disconnect, and holds none once reconnected', async () => {
+    const { handlers } = createHandlers()
+    const { backend, listeners } = overWritingSource()
+    backend.connect(handlers)
+    await flush()
+    for (const l of listeners) l.onWriteState?.(false)
+    const outcome = Promise.resolve(backend.pushLocalUpdate(new Uint8Array([2]))).then(
+      () => 'landed',
+      (err: Error) => err.message,
+    )
+    backend.disconnect()
+    expect(await outcome).toBe('backend disconnected')
+
+    // The failure belonged to the connection that ended: connected again, a
+    // source with nothing failing says nothing, so a stale account would hold
+    // every write for a landing nobody will announce.
+    backend.connect(handlers)
+    await flush()
+    expect(backend.pushLocalUpdate(new Uint8Array([3]))).toBeUndefined()
     backend.disconnect()
   })
 })

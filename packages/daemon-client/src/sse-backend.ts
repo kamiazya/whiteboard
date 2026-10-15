@@ -11,7 +11,7 @@
  */
 
 import { apiFetch } from './api-client.js'
-import { type SyncWriteRefusal, SyncWriteRefusedError } from './api-contracts/sync-write-refusal.js'
+import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
 import { documentSyncKey, SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
@@ -39,7 +39,7 @@ export class SseBackend implements DocumentBackend {
    * applied: they would land on the copy the fetched state replaces.
    */
   private heldFrames: Uint8Array[] | null = null
-  /** The writes this backend sends itself, when no worker sends them for it. */
+  /** The writes this backend sends itself, when its source keeps no copy of them. */
   private writer: QueuedWriter | null = null
   /** Whether the injected source has said a write failed and not yet that it landed. */
   private sourceWritesFailing = false
@@ -185,9 +185,10 @@ export class SseBackend implements DocumentBackend {
   }
 
   /**
-   * The stream this backend talks through. An injected source is the
-   * SharedWorker-backed one, shared across tabs; otherwise this backend owns a
-   * hub of its own and is responsible for closing it.
+   * The stream this backend talks through. An injected source is shared —
+   * the SharedWorker-backed one across tabs, or a page's own hub — and owned
+   * by whoever injected it; otherwise this backend owns a hub of its own and
+   * is responsible for closing it.
    */
   private resolveSource(): SseStreamSource {
     if (this.streamSource) return this.streamSource
@@ -230,6 +231,9 @@ export class SseBackend implements DocumentBackend {
     this.unsubscribe = null
     this.unsubscribeText?.()
     this.unsubscribeText = null
+    // Closing the writer stops it taking more, not sending what it took
+    // (the port's `disconnect` rule); the owned hub's POSTs do not depend on
+    // the stream closed below.
     this.writer?.close()
     this.writer = null
     this.sourceWritesFailing = false
@@ -247,23 +251,24 @@ export class SseBackend implements DocumentBackend {
     // seen and writes onward itself — retrying as it goes — so posting here
     // would write around that replica and re-send state the daemon had just
     // delivered.
-    if (this.streamSource) {
-      const pushed = this.streamSource.push(this.binaryKey, bytes)
-      if (pushed === undefined) return this.landingOfSourceWrites()
-      const handlers = this.handlers
-      // A refusal of the bytes themselves cannot be retried into landing, so
-      // it is answered here by taking the keeper's state.
-      return pushed.catch((err: unknown) => {
-        if (!(err instanceof SyncWriteRefusedError) || handlers === null) throw err
-        this.writeRefused(err.refusal, handlers)
-      })
-    }
-    // With no worker in front, this backend is the only thing that will ever
-    // send this write again, so it keeps it until the daemon has taken it —
-    // the same guarantee the worker gives, from the same `WriteChain`.
+    if (this.writer !== null) return this.writer.write(bytes)
     const handlers = this.handlers
-    if (handlers === null) return
-    this.writer ??= this.ownWriter(handlers)
+    if (this.streamSource === undefined) {
+      if (handlers === null) return
+      this.writer = this.ownWriter(handlers)
+      return this.writer.write(bytes)
+    }
+    // Who retries follows from what the push answers, per `SseStreamSource`'s
+    // contract — not from who built the source, since a page may share a hub
+    // as readily as a worker.
+    const pushed = this.streamSource.push(this.binaryKey, bytes)
+    if (pushed === undefined) return this.landingOfSourceWrites()
+    if (handlers === null) return pushed
+    // A promise says the source keeps no copy: from here this backend is the
+    // only thing that will ever send this write again, so it keeps it until
+    // the daemon has taken it — the same guarantee the worker gives, from the
+    // same `WriteChain`. The attempt already running is the writer's first.
+    this.writer = this.ownWriter(handlers, pushed)
     return this.writer.write(bytes)
   }
 
@@ -287,9 +292,15 @@ export class SseBackend implements DocumentBackend {
     }
   }
 
-  private ownWriter(handlers: DocumentBackendHandlers): QueuedWriter {
+  private ownWriter(handlers: DocumentBackendHandlers, running?: Promise<void>): QueuedWriter {
+    let first = running
     return new QueuedWriter(
-      (bytes) => this.resolveSource().push(this.binaryKey, bytes) ?? Promise.resolve(),
+      (bytes) => {
+        const attempt =
+          first ?? this.resolveSource().push(this.binaryKey, bytes) ?? Promise.resolve()
+        first = undefined
+        return attempt
+      },
       {
         onFailing: () => {
           if (!this.cancelled) handlers.onError?.('storage-failure')

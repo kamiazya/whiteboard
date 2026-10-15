@@ -8,7 +8,7 @@
 // it forwards the signal down to `tsx watch` and the daemon; signalling only
 // the daemon would leave the watcher to restart it on the next file change.
 // All process access is injected so the decision is testable without one.
-import { assessRecordedDaemon, recordedProcess } from './dev-daemon-socket-lib.mjs'
+import { assessRecordedDaemon, isRecordWriter } from './dev-daemon-socket-lib.mjs'
 
 /**
  * Whether the record's process is running is `assessRecordedDaemon`'s answer,
@@ -74,8 +74,7 @@ export async function stopDevDaemon({
   // wrapper that launched it.
   const wrapperPid = readWrapperPid(dataDir)
   const via =
-    wrapperPid !== null &&
-    recordedProcess(wrapperPid, record.startedAt, { isAlive, startMs }) === 'daemon'
+    wrapperPid !== null && isRecordWriter(wrapperPid, record.startedAt, { isAlive, startMs })
       ? 'wrapper'
       : 'daemon'
   const target = via === 'wrapper' ? /** @type {number} */ (wrapperPid) : record.pid

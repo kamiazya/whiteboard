@@ -148,7 +148,8 @@ export class WriteChain<Mark> {
     // an unsaved edit until the page closed with it.
     this.failures += 1
     if (this.failures === 1) this.options.onFailing()
-    if (this.retry !== null) return
+    // `onFailing` may have closed the chain, and a closed chain arms nothing.
+    if (this.closed || this.retry !== null) return
     const retryAfter = err instanceof SyncWriteFailedError ? err.retryAfterMs : null
     this.retry = setTimeout(
       () => {
@@ -190,6 +191,8 @@ export interface QueuedWriterHooks {
 export class QueuedWriter {
   private readonly queue: QueuedUpdate[] = []
   private readonly chain: WriteChain<QueuedUpdate>
+  private closing = false
+  private closeBound: ReturnType<typeof setTimeout> | null = null
 
   constructor(push: (bytes: Uint8Array) => Promise<void>, hooks: QueuedWriterHooks) {
     this.chain = new WriteChain<QueuedUpdate>({
@@ -201,9 +204,14 @@ export class QueuedWriter {
         if (this.queue[0] !== mark) return
         this.queue.shift()
         mark.landed()
+        this.closeIfDrained()
       },
       push,
-      onFailing: () => hooks.onFailing(),
+      onFailing: () => {
+        // Closing sends what it took once; a retry would outlive the writer.
+        if (this.closing) this.drop()
+        else hooks.onFailing()
+      },
       onLanded: () => hooks.onLanded(),
       onRefused: (refusal) => {
         // Every update queued behind the refused one is built on it, so none
@@ -213,20 +221,53 @@ export class QueuedWriter {
         for (const queued of this.queue.splice(0)) queued.landed()
         this.chain.resume()
         hooks.onRefused(refusal)
+        this.closeIfDrained()
       },
     })
   }
 
   write(bytes: Uint8Array): Promise<void> {
+    if (this.closing) return Promise.reject(new Error('writer closed'))
     return new Promise<void>((landed, dropped) => {
       this.queue.push({ bytes, landed, dropped })
       this.chain.schedule()
     })
   }
 
-  /** Writes still queued are dropped with the writer, and say so. */
+  /**
+   * Takes nothing more, and still sends what it already took — a teardown
+   * follows the last edit closely, so dropping the queue would drop exactly
+   * that edit, with no page left to say it was not saved. Bounded, since the
+   * edit is held in memory only: a write already waiting for a retry is
+   * dropped now, a failure from here on drops what is left, and so does a
+   * daemon that has not answered by the retry ceiling. A dropped write
+   * rejects, and says so.
+   */
   close(): void {
-    this.chain.close()
+    if (this.closing) return
+    this.closing = true
+    if (this.chain.failing) {
+      this.drop()
+      return
+    }
+    if (this.closeIfDrained()) return
+    this.closeBound = setTimeout(() => this.drop(), WRITE_RETRY_MAX_MS)
+  }
+
+  private closeIfDrained(): boolean {
+    if (!this.closing || this.queue.length > 0) return false
+    this.stop()
+    return true
+  }
+
+  private drop(): void {
+    this.stop()
     for (const queued of this.queue.splice(0)) queued.dropped(new Error('writer closed'))
+  }
+
+  private stop(): void {
+    this.chain.close()
+    if (this.closeBound !== null) clearTimeout(this.closeBound)
+    this.closeBound = null
   }
 }

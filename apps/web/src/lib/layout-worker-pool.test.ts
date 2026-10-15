@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { createLayoutWorkerPool, defaultPoolSize, type PoolWorker } from './layout-worker-pool.js'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import {
+  createLayoutWorkerPool,
+  defaultPoolSize,
+  type LayoutWorkerPool,
+  type PoolWorker,
+  sharedLayoutWorkerPool,
+} from './layout-worker-pool.js'
+import type {
+  MarkdownRailResponse,
+  OutlineResponse,
+  WorkRequest,
+} from './layout-worker-protocol.js'
 
 /**
  * A worker whose replies the test releases by hand, so "how many ran at
@@ -430,6 +441,28 @@ describe('createLayoutWorkerPool', () => {
 
     await expect(running).rejects.toThrow(/disposed/i)
     await expect(queued).rejects.toThrow(/disposed/i)
+  })
+})
+
+// The binding is the guard: a sender the protocol no longer describes has to
+// fail to compile at the sender, since the worker reading `undefined` only
+// degrades to the main thread and nothing at runtime goes red.
+describe('a pool bound to the worker protocol', () => {
+  it('types each reply by its request and refuses a request the worker cannot read', () => {
+    const pool = createLayoutWorkerPool<WorkRequest>({
+      size: 1,
+      createWorker: fakeWorkerFactory().create,
+    })
+    const rail = pool.run({ type: 'markdown-rail', id: 1, body: '# a', maxWidth: 320 })
+    const outline = pool.run({ type: 'outline', id: 2, body: '# a', maxWidth: 320 })
+    expectTypeOf(rail).resolves.toEqualTypeOf<MarkdownRailResponse>()
+    expectTypeOf(outline).resolves.toEqualTypeOf<OutlineResponse>()
+    // @ts-expect-error a rail request without its width is not one the worker reads
+    ignore(pool.run({ type: 'markdown-rail', id: 3, body: '# a' }))
+    ignore(rail)
+    ignore(outline)
+    pool.dispose()
+    expectTypeOf(sharedLayoutWorkerPool).returns.toEqualTypeOf<LayoutWorkerPool<WorkRequest>>()
   })
 })
 

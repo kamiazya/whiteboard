@@ -165,7 +165,7 @@ const START_SLACK_MS = 5_000
  * @param {{ isAlive?: (pid: number) => boolean, startMs?: (pid: number) => number | null }} [seams]
  * @returns {'daemon' | 'foreign' | 'dead'}
  */
-export function recordedProcess(
+function recordedProcess(
   pid,
   startedAt,
   { isAlive = isPidAlive, startMs = readProcessStartMs } = {},
@@ -175,6 +175,21 @@ export function recordedProcess(
   const started = startMs(pid)
   if (Number.isNaN(recordedAt) || started === null) return 'daemon'
   return started <= recordedAt + START_SLACK_MS ? 'daemon' : 'foreign'
+}
+
+/**
+ * Whether `pid` is still the process that wrote a record at `writtenAt`:
+ * `recordedProcess`'s answer for a caller whose record was written by
+ * something other than the daemon (the dev wrapper's pid file), so its call
+ * site does not have to read as "is this process the daemon".
+ *
+ * @param {number} pid
+ * @param {string | undefined} writtenAt
+ * @param {{ isAlive?: (pid: number) => boolean, startMs?: (pid: number) => number | null }} [seams]
+ * @returns {boolean}
+ */
+export function isRecordWriter(pid, writtenAt, seams) {
+  return recordedProcess(pid, writtenAt, seams) === 'daemon'
 }
 
 /**

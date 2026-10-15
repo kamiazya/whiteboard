@@ -30,17 +30,11 @@ import { compareCodeUnit, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry, resolveCanvasTheme } from '@kamiazya/whiteboard-plugin-visual'
 import { getAppLogger } from './app-logger.js'
 import { fetchFontFile, listFonts } from './daemon-api-client.js'
+import type { RegisterFaceRequest } from './layout-worker-protocol.js'
 
 const log = getAppLogger('theme-fonts')
 
 export interface ThemeFace {
-  readonly family: string
-  readonly bytes: ArrayBuffer
-}
-
-/** What a worker receives for each face this realm holds. */
-export interface RegisterFaceMessage {
-  readonly type: 'register-face'
   readonly family: string
   readonly bytes: ArrayBuffer
 }
@@ -229,7 +223,7 @@ export function editingFontFamilyFor(
  * detach, for a worker being retired.
  */
 export function attachThemeFaces(worker: {
-  postMessage(message: RegisterFaceMessage): void
+  postMessage(message: RegisterFaceRequest): void
 }): () => void {
   const post = (family: string, bytes: ArrayBuffer) =>
     worker.postMessage({ type: 'register-face', family, bytes })

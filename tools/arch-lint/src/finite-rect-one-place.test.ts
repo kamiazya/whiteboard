@@ -33,6 +33,29 @@ const FIXTURES: readonly { readonly source: string; readonly spells: boolean }[]
     spells: true,
   },
   { source: '[next.x, next.y, next.width, next.height].every(Number.isFinite)', spells: true },
+  // The De Morgan form, the natural early return.
+  {
+    source:
+      'if (!Number.isFinite(r.x) || !Number.isFinite(r.y) || !Number.isFinite(r.width) || !Number.isFinite(r.height)) return',
+    spells: true,
+  },
+  { source: '[r.x, r.y, r.width, r.height].some((v) => !Number.isFinite(v))', spells: true },
+  { source: '[r.x, r.y, r.width, r.height].every((v) => Number.isFinite(v))', spells: true },
+  {
+    source: '[r.x, r.y, r.width, r.height].every(function (v) { return isFinite(v) })',
+    spells: true,
+  },
+  // A box destructured or rounded into locals first is the same check.
+  {
+    source:
+      'const { x, y, width, height } = r\nconst ok = [x, y, width, height].every(Number.isFinite)',
+    spells: true,
+  },
+  {
+    source:
+      'const ok = Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(width) && Number.isFinite(height)',
+    spells: true,
+  },
   // The scene's `{x, y, w, h}` box is another shape with its own predicate.
   {
     source:
@@ -49,6 +72,24 @@ const FIXTURES: readonly { readonly source: string; readonly spells: boolean }[]
   { source: '[p.x, p.y].every(Number.isFinite)', spells: false },
   { source: `// ${FOUR}\nconst x = 1`, spells: false },
   { source: 'isFiniteRect(box)', spells: false },
+  // A neighbouring rule in each new shape: SOME coordinate finite, every
+  // coordinate NON-finite, a disjunction of positives, a conjunction of
+  // negations, a callback testing something other than its argument, and
+  // the scene box's locals.
+  { source: '[r.x, r.y, r.width, r.height].some(Number.isFinite)', spells: false },
+  { source: '[r.x, r.y, r.width, r.height].every((v) => !Number.isFinite(v))', spells: false },
+  { source: '[r.x, r.y, r.width, r.height].every((v) => Number.isFinite(u))', spells: false },
+  {
+    source:
+      'Number.isFinite(r.x) || Number.isFinite(r.y) || Number.isFinite(r.width) || Number.isFinite(r.height)',
+    spells: false,
+  },
+  {
+    source:
+      '!Number.isFinite(r.x) && !Number.isFinite(r.y) && !Number.isFinite(r.width) && !Number.isFinite(r.height)',
+    spells: false,
+  },
+  { source: '[x, y, w, h].every(Number.isFinite)', spells: false },
 ]
 
 const files: string[] = []
@@ -70,6 +111,9 @@ describe('the finite-rect check is written in one place', () => {
     expect(finiteRectChecks('f.ts', `const a = (${FOUR}) && ready`)).toHaveLength(1)
     expect(finiteRectChecks('f.ts', `const a = ((${FOUR}) as boolean)`)).toHaveLength(1)
     expect(finiteRectChecks('f.ts', `const a = ${FOUR}\nconst b = ${FOUR}`)).toHaveLength(2)
+    const NOT_FOUR =
+      '!Number.isFinite(r.x) || !Number.isFinite(r.y) || !Number.isFinite(r.width) || !Number.isFinite(r.height)'
+    expect(finiteRectChecks('f.ts', `const a = (${NOT_FOUR}) || failed`)).toHaveLength(1)
   })
 
   it('scans a tree worth scanning, and finds the model spelling it', () => {

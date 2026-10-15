@@ -69,7 +69,7 @@ function askOneWorker(
 }
 
 it('lays out a canvas from its snapshot bytes, decoding inside the worker', async () => {
-  const reply = await sharedLayoutWorkerPool().run<LayoutResponse>({
+  const reply = await sharedLayoutWorkerPool().run({
     type: 'layout',
     id: nextLayoutRequestId(),
     snapshot: snapshotOf(canvas),
@@ -120,7 +120,7 @@ it('answers failed for bytes that will not decode, and the same worker serves th
 // exporting a snapshot just to post it would be strictly worse for that
 // caller. Both shapes have to keep working.
 it('still lays out a canvas passed directly, for the editor that already holds one', async () => {
-  const reply = await sharedLayoutWorkerPool().run<LayoutResponse>({
+  const reply = await sharedLayoutWorkerPool().run({
     type: 'layout',
     id: nextLayoutRequestId(),
     canvas,

@@ -14,6 +14,7 @@
 import { randomUUID } from 'node:crypto'
 import {
   closeSync,
+  linkSync,
   openSync,
   readFileSync,
   renameSync,
@@ -72,28 +73,135 @@ function createLockFileExclusive(lockPath, content, { fsOpen, fsWrite, fsClose }
 }
 
 /**
- * Attempts to atomically acquire the spawn lock. Acquisition is a single
- * `open(lockPath, 'wx')` — an existence check followed by a create would
- * reopen the exact race this lock exists to close.
+ * Creates `path` holding `content` exclusively, replacing an existing file
+ * only when `isHolderGone` says whoever wrote it is gone. Creation is a single
+ * `open(path, 'wx')` — an existence check followed by a create would reopen
+ * the exact race an exclusive file exists to close.
  *
- * On EEXIST, reads and stat's the existing lock; if `isLockStale` says the
- * holder is gone, claims it via an atomic `rename()` of the stale file to a
- * private per-attempt path, then retries the exclusive create exactly once
- * (a second EEXIST means another process won the steal race — returns
- * 'held-by-other' rather than looping unbounded). The rename is the
- * mutual-exclusion point for two racing stealers: `rename()` only succeeds
- * for the first caller — a second `rename()` of the same source path fails
- * with ENOENT once the first has already moved it away — so at most one
- * stealer ever proceeds to (re)create the lock. A bare `unlink()` here
- * would NOT provide this guarantee: it removes whatever currently sits at
- * `lockPath` unconditionally, so a second stealer's unlink could silently
- * delete a lock a faster stealer had already recreated, letting both
- * believe they hold it. Any unexpected fs error anywhere on this path also
- * degrades to 'held-by-other', so a caller always has a well-defined
- * fallback (wait for the daemon) instead of a thrown exception killing a
- * SessionStart hook.
+ * On EEXIST, reads and stat's the existing file; if the holder is gone,
+ * claims it via an atomic `rename()` of the stale file to a private
+ * per-attempt path, then retries the exclusive create exactly once (a second
+ * EEXIST means another process won the steal race — 'held' rather than
+ * looping unbounded). The rename is the mutual-exclusion point for two racing
+ * stealers: `rename()` only succeeds for the first caller — a second
+ * `rename()` of the same source path fails with ENOENT once the first has
+ * already moved it away — so at most one stealer ever proceeds to (re)create
+ * the file. A bare `unlink()` here would NOT provide this guarantee: it
+ * removes whatever currently sits at `path` unconditionally, so a second
+ * stealer's unlink could silently delete a file a faster stealer had already
+ * recreated, letting both believe they hold it. Any unexpected fs error
+ * anywhere on this path also degrades to 'held', so a caller always has a
+ * well-defined fallback instead of a thrown exception.
  *
- * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
+ * `holderText` is the existing file's content as read, for a caller that
+ * names the holder; it is null when no holder was read, or when the one read
+ * is no longer the one in place (the steal was lost after the rename).
+ *
+ * @param {{ path: string, content: string, nowMs: number, isHolderGone: (holder: { text: string | null, mtimeMs: number }) => boolean, fsOpen: typeof openSync, fsWrite: (fd: number, data: string) => unknown, fsClose: typeof closeSync, fsReadFile: typeof readFileSync, fsStat: typeof statSync, fsUnlink: typeof unlinkSync, fsRename: typeof renameSync, fsLink: typeof linkSync }} args
+ * @returns {{ kind: 'claimed' } | { kind: 'held', holderText: string | null }}
+ */
+function claimExclusiveFile({
+  path,
+  content,
+  nowMs,
+  isHolderGone,
+  fsOpen,
+  fsWrite,
+  fsClose,
+  fsReadFile,
+  fsStat,
+  fsUnlink,
+  fsRename,
+  fsLink,
+}) {
+  const create = () => createLockFileExclusive(path, content, { fsOpen, fsWrite, fsClose })
+  try {
+    create()
+    return { kind: 'claimed' }
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err)?.code !== 'EEXIST') {
+      return { kind: 'held', holderText: null }
+    }
+  }
+
+  let text = null
+  try {
+    text = fsReadFile(path, 'utf8')
+  } catch {
+    /* Absent or unreadable — the caller's predicate decides what that means. */
+  }
+
+  let judged
+  try {
+    judged = fsStat(path)
+  } catch {
+    return { kind: 'held', holderText: text }
+  }
+
+  const mtimeMs = judged.mtimeMs
+  if (!isHolderGone({ text, mtimeMs })) return { kind: 'held', holderText: text }
+
+  const claimPath = `${path}.stale-${process.pid}-${nowMs}-${randomUUID()}`
+  try {
+    fsRename(path, claimPath)
+  } catch {
+    // Another stealer already won the atomic claim (or the file vanished
+    // for some other reason) — nothing was moved, so there is nothing of
+    // ours to clean up.
+    return { kind: 'held', holderText: text }
+  }
+
+  // The rename moves whatever sits at `path` NOW. Another stealer may have
+  // moved the judged file away and created its own in between, so the moved
+  // file must still be the one judged: rename keeps the inode, a fresh create
+  // gets a new one (mtime is checked too, but alone it is no identity — two
+  // files can share a timestamp). If it is not, it goes back with link(),
+  // which never overwrites.
+  if (!isSameFile(claimPath, judged, fsStat)) {
+    let moved = null
+    try {
+      moved = fsReadFile(claimPath, 'utf8')
+      fsLink(claimPath, path)
+    } catch {
+      /* Absent, or a third file is in place already — that one holds. */
+    }
+    try {
+      fsUnlink(claimPath)
+    } catch {
+      /* Best-effort cleanup of the private copy. */
+    }
+    return { kind: 'held', holderText: moved }
+  }
+
+  try {
+    create()
+    return { kind: 'claimed' }
+  } catch {
+    return { kind: 'held', holderText: null }
+  } finally {
+    try {
+      fsUnlink(claimPath)
+    } catch {
+      /* Best-effort cleanup of the claimed stale file's private copy. */
+    }
+  }
+}
+
+function isSameFile(claimPath, judged, fsStat) {
+  try {
+    const moved = fsStat(claimPath)
+    return moved.dev === judged.dev && moved.ino === judged.ino && moved.mtimeMs === judged.mtimeMs
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Attempts to atomically acquire the spawn lock through `claimExclusiveFile`,
+ * judging an existing lock with `isLockStale`. 'held-by-other' leaves a
+ * SessionStart hook a well-defined fallback (wait for the daemon).
+ *
+ * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync, fsLink?: typeof linkSync }} args
  * @returns {'acquired' | 'held-by-other'}
  */
 export function acquireSpawnLock({
@@ -109,58 +217,39 @@ export function acquireSpawnLock({
   fsStat = statSync,
   fsUnlink = unlinkSync,
   fsRename = renameSync,
+  fsLink = linkSync,
 }) {
-  const content = JSON.stringify(meta)
-  const writers = { fsOpen, fsWrite, fsClose }
+  const result = claimExclusiveFile({
+    path: lockPath,
+    content: JSON.stringify(meta),
+    nowMs,
+    isHolderGone: ({ text, mtimeMs }) =>
+      isLockStale({
+        meta: parseLockMeta(text),
+        lockMtimeMs: mtimeMs,
+        nowMs,
+        staleAfterMs,
+        isPidAlive,
+      }),
+    fsOpen,
+    fsWrite,
+    fsClose,
+    fsReadFile,
+    fsStat,
+    fsUnlink,
+    fsRename,
+    fsLink,
+  })
+  return result.kind === 'claimed' ? 'acquired' : 'held-by-other'
+}
 
+function parseLockMeta(text) {
+  if (text === null) return null
   try {
-    createLockFileExclusive(lockPath, content, writers)
-    return 'acquired'
-  } catch (err) {
-    if (/** @type {NodeJS.ErrnoException} */ (err)?.code !== 'EEXIST') {
-      return 'held-by-other'
-    }
-  }
-
-  let existingMeta = null
-  try {
-    existingMeta = JSON.parse(fsReadFile(lockPath, 'utf8'))
+    return JSON.parse(text)
   } catch {
-    /* Absent or unparsable metadata — fall through to the age check. */
-  }
-
-  let lockMtimeMs
-  try {
-    lockMtimeMs = fsStat(lockPath).mtimeMs
-  } catch {
-    return 'held-by-other'
-  }
-
-  if (!isLockStale({ meta: existingMeta, lockMtimeMs, nowMs, staleAfterMs, isPidAlive })) {
-    return 'held-by-other'
-  }
-
-  const claimPath = `${lockPath}.stale-${process.pid}-${nowMs}-${randomUUID()}`
-  try {
-    fsRename(lockPath, claimPath)
-  } catch {
-    // Another stealer already won the atomic claim (or the file vanished
-    // for some other reason) — no lock was moved, so there is nothing of
-    // ours to clean up.
-    return 'held-by-other'
-  }
-
-  try {
-    createLockFileExclusive(lockPath, content, writers)
-    return 'acquired'
-  } catch {
-    return 'held-by-other'
-  } finally {
-    try {
-      fsUnlink(claimPath)
-    } catch {
-      /* Best-effort cleanup of the claimed stale lock's private copy. */
-    }
+    /* Unparsable metadata — `isLockStale` falls through to the age check. */
+    return null
   }
 }
 
@@ -190,14 +279,14 @@ export function releaseSpawnLock({
 
 /**
  * Claims the wrapper's pid file (`dev-wrapper.pid`, the pid `pnpm
- * mcp:http:stop` signals) with an exclusive create, so a second wrapper can
- * never overwrite the first one's. A file whose writer is gone — a wrapper
- * killed outright leaves one behind — is replaced through the same rename
- * claim `acquireSpawnLock` uses. `isWriterAlive` decides with the file's
- * mtime, so a caller can tell the wrapper that wrote it from an unrelated
- * process that has since taken its pid.
+ * mcp:http:stop` signals) through `claimExclusiveFile`, so a second wrapper
+ * can never overwrite the first one's. A file whose writer is gone — a
+ * wrapper killed outright leaves one behind — is replaced. `isWriterAlive`
+ * decides with the file's mtime, so a caller can tell the wrapper that wrote
+ * it from an unrelated process that has since taken its pid. An unreadable
+ * file is held, while one naming no pid is replaced.
  *
- * @param {{ pidPath: string, pid: number, isWriterAlive: (pid: number, writtenAtMs: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
+ * @param {{ pidPath: string, pid: number, isWriterAlive: (pid: number, writtenAtMs: number) => boolean, fsOpen?: typeof openSync, fsWrite?: (fd: number, data: string) => unknown, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync, fsLink?: typeof linkSync }} args
  * @returns {{ kind: 'claimed' } | { kind: 'held', pid: number | null }}
  */
 export function claimPidFile({
@@ -211,46 +300,33 @@ export function claimPidFile({
   fsStat = statSync,
   fsUnlink = unlinkSync,
   fsRename = renameSync,
+  fsLink = linkSync,
 }) {
-  const writers = { fsOpen, fsWrite, fsClose }
-  const create = () => createLockFileExclusive(pidPath, String(pid), writers)
-  try {
-    create()
-    return { kind: 'claimed' }
-  } catch (err) {
-    if (/** @type {NodeJS.ErrnoException} */ (err)?.code !== 'EEXIST')
-      return { kind: 'held', pid: null }
-  }
+  const result = claimExclusiveFile({
+    path: pidPath,
+    content: String(pid),
+    nowMs: Date.now(),
+    isHolderGone: ({ text, mtimeMs }) => {
+      if (text === null) return false
+      const holder = parsePid(text)
+      return holder === null || !isWriterAlive(holder, mtimeMs)
+    },
+    fsOpen,
+    fsWrite,
+    fsClose,
+    fsReadFile,
+    fsStat,
+    fsUnlink,
+    fsRename,
+    fsLink,
+  })
+  if (result.kind === 'claimed') return result
+  return { kind: 'held', pid: result.holderText === null ? null : parsePid(result.holderText) }
+}
 
-  let holder = null
-  let writtenAtMs = 0
-  try {
-    const parsed = Number(fsReadFile(pidPath, 'utf8'))
-    holder = Number.isInteger(parsed) && parsed > 0 ? parsed : null
-    writtenAtMs = fsStat(pidPath).mtimeMs
-  } catch {
-    return { kind: 'held', pid: holder }
-  }
-  if (holder !== null && isWriterAlive(holder, writtenAtMs)) return { kind: 'held', pid: holder }
-
-  const claimPath = `${pidPath}.stale-${process.pid}-${Date.now()}-${randomUUID()}`
-  try {
-    fsRename(pidPath, claimPath)
-  } catch {
-    return { kind: 'held', pid: holder }
-  }
-  try {
-    create()
-    return { kind: 'claimed' }
-  } catch {
-    return { kind: 'held', pid: null }
-  } finally {
-    try {
-      fsUnlink(claimPath)
-    } catch {
-      /* Best-effort cleanup of the claimed stale file's private copy. */
-    }
-  }
+function parsePid(text) {
+  const parsed = Number(text)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
 /**

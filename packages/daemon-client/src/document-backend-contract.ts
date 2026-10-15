@@ -130,6 +130,12 @@ export interface DocumentBackend {
   /**
    * Tear down the transport. Called on unmount / canvas-key change.
    * Must be idempotent.
+   *
+   * An update `pushLocalUpdate` accepted before this is still delivered:
+   * teardown follows the last edit closely — a document switch disconnects
+   * the moment that edit is handed over — and no page is left to say it was
+   * not saved. Only the inbound half stops at once. An implementation may
+   * bound how long it keeps trying, since the update is held in memory only.
    */
   disconnect(): void
 

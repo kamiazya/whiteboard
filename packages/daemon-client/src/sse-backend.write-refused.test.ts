@@ -6,10 +6,11 @@
  * unsaved — the page has to take the keeper's state instead, and be told why.
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
+import { type SyncWriteRefusal, SyncWriteRefusedError } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
-import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
+import { type DocListener, SseStreamHub, type SseStreamSource } from './sse-stream-hub.js'
+import { retryDelayMs } from './write-chain.js'
 
 const BASE = 'http://127.0.0.1:3099'
 const REFUSAL_BODY = {
@@ -193,6 +194,136 @@ describe('SseBackend pushing straight to the daemon', () => {
     backend.disconnect()
     await expect(pushed).rejects.toThrow('writer closed')
     expect(daemon.taken).toEqual([])
+  })
+})
+
+describe('SseBackend disconnected while its own write is failing', () => {
+  // The page that would read either signal is gone, and a retry outliving the
+  // backend would send an edit the session has already been told was dropped.
+  it('sends nothing again and reports nothing more', async () => {
+    const daemon = daemonAnswering(503, { error: 'busy', message: 'later' }, 1)
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, daemon.transport)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      let outcome = 'pending'
+      void Promise.resolve(backend.pushLocalUpdate(new Uint8Array([4]))).then(
+        () => {
+          outcome = 'landed'
+        },
+        (err: Error) => {
+          outcome = err.message
+        },
+      )
+      await vi.advanceTimersByTimeAsync(0)
+      expect(r.writeStates).toEqual(['storage-failure'])
+      backend.disconnect()
+
+      await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+      expect(daemon.attempts()).toBe(1)
+      expect(outcome).toBe('writer closed')
+      expect(r.writeStates).toEqual(['storage-failure'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('SseBackend disconnecting with writes outstanding', () => {
+  // A document switch disconnects the moment the last edit is handed over,
+  // often while the one before it is still on the wire: the queued edit is
+  // the person's last, and no page is left to say it was not saved.
+  it('sends a write queued behind one in flight', async () => {
+    let answerFirst: () => void = () => {}
+    const posted: number[][] = []
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/snapshot')) return new Response(new Uint8Array([1]), { status: 200 })
+      if (url.includes('/api/sync/stream'))
+        return new Response(new ReadableStream(), { status: 200 })
+      if (url.includes('/update') && init?.method === 'POST') {
+        posted.push([...new Uint8Array(init.body as ArrayBuffer)])
+        if (posted.length === 1) await new Promise<void>((r) => (answerFirst = r))
+      }
+      return new Response('{}', { status: 200 })
+    })
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, {
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    })
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+
+    const first = backend.pushLocalUpdate(new Uint8Array([1]))
+    await vi.waitFor(() => expect(posted).toEqual([[1]]))
+    const last = backend.pushLocalUpdate(new Uint8Array([2]))
+    backend.disconnect()
+    answerFirst()
+
+    await Promise.all([first, last])
+    expect(posted).toEqual([[1], [2]])
+  })
+})
+
+describe('SseBackend through an injected source that writes straight to the daemon', () => {
+  // Who retries is decided by what the source's push answers, not by whether
+  // a source was injected: a hub shared by the page leaves this backend
+  // holding the only copy of a write the daemon did not take.
+  it('sends a write the daemon answered 503 again until it lands', async () => {
+    const daemon = daemonAnswering(503, { error: 'busy', message: 'later' }, 1)
+    const r = handlersRecording()
+    const hub = new SseStreamHub({ fetch: daemon.transport.fetch, baseUrl: BASE })
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, hub)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const pushed = backend.pushLocalUpdate(new Uint8Array([4, 5]))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(r.writeStates).toEqual(['storage-failure'])
+      expect(daemon.attempts()).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(retryDelayMs(1))
+      await pushed
+      expect(daemon.attempts()).toBe(2)
+      expect(daemon.taken).toEqual([[4, 5]])
+      expect(r.writeStates).toEqual(['storage-failure', 'landed'])
+    } finally {
+      vi.useRealTimers()
+      backend.disconnect()
+      hub.close()
+    }
+  })
+})
+
+describe('SseBackend through an injected source whose push the daemon refuses', () => {
+  // The refused bytes will be refused every time, so the page is told why and
+  // continues from the keeper's state — the write settles rather than
+  // rejecting, which would put the session in error over a recovery.
+  it('settles the write, reports the refusal, and takes the keeper state', async () => {
+    let snapshots = 0
+    const refusal = { code: 'node_text_too_large', message: 'too long' } as const
+    const source: SseStreamSource = {
+      subscribe: () => () => {},
+      sendMessage: () => {},
+      push: () => Promise.reject(new SyncWriteRefusedError(413, refusal)),
+      snapshot: () => {
+        snapshots += 1
+        return Promise.resolve(new Uint8Array([snapshots]))
+      },
+    }
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, source)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toEqual([[1]]))
+
+    await expect(backend.pushLocalUpdate(new Uint8Array([4]))).resolves.toBeUndefined()
+    expect(r.refusals).toEqual([refusal])
+    await vi.waitFor(() => expect(r.snapshots).toEqual([[1], [2]]))
+    expect(r.writeStates).toEqual([])
+    backend.disconnect()
   })
 })
 

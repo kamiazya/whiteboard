@@ -8,9 +8,17 @@ import { spawn } from 'node:child_process'
 // Built or not, it is a DEV daemon, so it keeps the checkout's `.dev-data`
 // exactly as `mcp:http:dev` does — the installed release's `~/.whiteboard`
 // is no place for a build of unreleased migrations.
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { assessRecordedDaemon, isPidAlive, readDaemonRecord } from './dev-daemon-socket-lib.mjs'
+import {
+  acquireSpawnLock,
+  releaseSpawnLock,
+  resolveSpawnLockStaleMs,
+} from './dev-spawn-lock-lib.mjs'
+import { resolveReadyTimeoutMs } from './ensure-http-dev-daemon-lib.mjs'
 import {
   ensureDevDataDirSecured,
   resolveDevDataDirEnv,
@@ -61,5 +69,64 @@ function builtFilesShip(dir, text) {
 const hadExplicitDataDirOverride = Boolean(process.env.WHITEBOARD_DATA_DIR)
 const env = resolveDevDataDirEnv(process.env, resolveRepoRootFromGit(packageRoot))
 if (!hadExplicitDataDirOverride) ensureDevDataDirSecured(env.WHITEBOARD_DATA_DIR)
+const dataDir = env.WHITEBOARD_DATA_DIR
+mkdirSync(dataDir, { recursive: true })
+
+// The SessionStart hook keeps a source dev daemon on this same data dir. A
+// second daemon cannot take its socket — and one starting inside the other's
+// boot window fails its migrations instead, reading like a corrupt store — so
+// both cases are refused by name before spawning. Refused, not handed over to:
+// the caller asked for the BUILT artifact, and reusing watch-mode source would
+// silently check the wrong one. The spawn lock is the hook's and the wrapper's,
+// held from this check until the record appears, as theirs is.
+const lockPath = join(dataDir, 'dev-daemon-spawn.lock')
+const locked = acquireSpawnLock({
+  lockPath,
+  meta: { pid: process.pid, startedAt: new Date().toISOString() },
+  staleAfterMs: resolveSpawnLockStaleMs(process.env),
+  isPidAlive,
+})
+if (locked !== 'acquired') {
+  refuse(`another dev daemon is starting for ${dataDir} (pid ${lockHolderPid()} holds ${lockPath})`)
+}
+const running = readDaemonRecord(dataDir)
+if (running !== null && (await assessRecordedDaemon(running)).running) {
+  refuse(`the dev daemon (pid ${running.pid}) is running for ${dataDir}`)
+}
+
 const child = spawn(process.execPath, [entry, '--token=whiteboard-dev'], { stdio: 'inherit', env })
-child.on('exit', (code) => process.exit(code ?? 1))
+let childExited = false
+child.on('exit', (code) => {
+  childExited = true
+  releaseLock()
+  process.exit(code ?? 1)
+})
+
+const bootStartedAt = Date.now()
+const bootBudgetMs = resolveReadyTimeoutMs(process.env)
+while (!childExited && Date.now() - bootStartedAt < bootBudgetMs) {
+  const record = readDaemonRecord(dataDir)
+  if (record?.pid === child.pid) break
+  await sleep(200)
+}
+releaseLock()
+
+function releaseLock() {
+  releaseSpawnLock({ lockPath, ownerPid: process.pid })
+}
+
+function refuse(reason) {
+  releaseLock()
+  process.stderr.write(
+    `[mcp:http] ${reason}; not starting the built daemon beside it. \`pnpm mcp:http:stop\` first.\n`,
+  )
+  process.exit(1)
+}
+
+function lockHolderPid() {
+  try {
+    return JSON.parse(readFileSync(lockPath, 'utf8'))?.pid ?? null
+  } catch {
+    return null
+  }
+}

@@ -48,7 +48,6 @@ import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
-import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import { namesAReference } from '../../lib/names-a-reference.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, type RenderKey, renderKeyOf, tagLibraryKey } from '../../lib/render-key.js'
@@ -136,7 +135,7 @@ async function renderMarkdownInPool(
   cacheKey?: string,
   embeds?: MarkdownEmbeds,
 ): Promise<RowPicture | null> {
-  const reply = await sharedLayoutWorkerPool().run<MarkdownRenderResponse>(
+  const reply = await sharedLayoutWorkerPool().run(
     {
       type: 'markdown-render',
       id: nextLayoutRequestId(),
@@ -157,7 +156,7 @@ async function renderSpatialInPool(
   cacheKey?: string,
   references?: ReferenceWire,
 ): Promise<RowPicture | null> {
-  const reply = await sharedLayoutWorkerPool().run<LayoutResponse>(
+  const reply = await sharedLayoutWorkerPool().run(
     {
       type: 'layout',
       id: nextLayoutRequestId(),

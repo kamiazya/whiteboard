@@ -23,7 +23,7 @@ const COSTLY_BODY = Array.from(
 ).join('\n')
 
 function askMarkdown(cacheKey?: string): Promise<MarkdownRenderResponse> {
-  return sharedLayoutWorkerPool().run<MarkdownRenderResponse>(
+  return sharedLayoutWorkerPool().run(
     {
       type: 'markdown-render',
       id: nextLayoutRequestId(),

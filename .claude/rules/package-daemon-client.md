@@ -51,9 +51,15 @@ paths:
   snapshot. The daemon's `sync-update-body-limit.test.ts` reads every refusal
   through it, so the two cannot drift.
   A non-permanent failure (5xx, 408, 429, a dropped request) is retried by
-  `write-chain`'s `WriteChain` — the ONE chain both the SharedWorker and a page
-  owning its hub (`SseBackend`'s `QueuedWriter`) write through — so the
-  delivery guarantee cannot differ by which `SseStreamSource` a page got.
+  `write-chain`'s `WriteChain`, the ONE chain both the SharedWorker and a page
+  owning its hub (`SseBackend`'s `QueuedWriter`) write through. Who retries
+  follows from what a source's `push` answers, not from which source a page
+  got: `undefined` means the source writes onward and owns the retry (the
+  SharedWorker); a promise means the caller holds the only copy and
+  `SseBackend` sends it through the chain until it lands. An update accepted
+  before `disconnect()` is still delivered (`DocumentBackend.disconnect`),
+  bounded by the retry ceiling; a write already waiting for a retry at
+  teardown is dropped.
   `Retry-After` is a floor under the backoff but never past its 30 s ceiling,
   on purpose: an unsent edit lives only in memory, and waiting longer than the
   ceiling is waiting with it at risk (`retryDelayMs`).

@@ -108,11 +108,14 @@ export interface SseStreamSource {
    * would be writing around the replica that is meant to be authoritative,
    * and would re-send state the daemon had just delivered.
    *
-   * A returned promise REJECTS when the authority did not take the bytes, so
-   * a caller holding the only copy can keep holding it. The worker-backed
-   * implementation resolves immediately instead — it has handed the bytes to
-   * the replica, which owns the retry from there, and a tab that waited on
-   * the daemon would be waiting on the wrong thing.
+   * The ANSWER says who owns the retry, and a caller branches on it rather
+   * than on which implementation it was handed. A returned promise means the
+   * source keeps no copy: it REJECTS when the authority did not take the
+   * bytes, and the caller, holding the only copy, sends them again. The
+   * worker-backed implementation answers `undefined` instead — it has handed
+   * the bytes to the replica, which owns the retry from there and reports
+   * through `onWriteState`, and a tab that waited on the daemon would be
+   * waiting on the wrong thing.
    */
   push(doc: string, update: Uint8Array): void | Promise<void>
   /**

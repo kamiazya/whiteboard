@@ -35,7 +35,6 @@ import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { DOCUMENT_SYNC_CHANGED_EVENT } from '../lib/document-sync-types.js'
 import type { FaviconRect } from '../lib/favicon.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../lib/layout-worker-pool.js'
-import type { OutlineResponse } from '../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../lib/render-broker.js'
 import { cacheKeyFor, outlineKeyOf } from '../lib/render-key.js'
 
@@ -55,7 +54,7 @@ async function outlineInPool(
   source: DocumentOutlineSource,
   cacheKey?: string,
 ): Promise<readonly FaviconRect[] | null> {
-  const reply = await sharedLayoutWorkerPool().run<OutlineResponse>(
+  const reply = await sharedLayoutWorkerPool().run(
     {
       type: 'outline',
       id: nextLayoutRequestId(),

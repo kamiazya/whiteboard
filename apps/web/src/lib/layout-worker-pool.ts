@@ -18,6 +18,7 @@
  * actually on screen.
  */
 
+import type { ResponseFor, WorkRequest } from './layout-worker-protocol.js'
 import { attachThemeFaces } from './theme-fonts.js'
 
 /** The part of `Worker` this pool uses; a test supplies its own. */
@@ -50,16 +51,26 @@ type LayoutPriority = 'interactive' | 'background' | 'idle'
 /** Highest first. `nextRunnableIndex` walks this order. */
 const PRIORITY_ORDER: readonly LayoutPriority[] = ['interactive', 'background', 'idle']
 
-export interface LayoutWorkerPool {
+/**
+ * What the pool resolves a request with. A protocol request's reply follows
+ * from the request itself; anything else — a test's bare `{ id }` — is only
+ * known to echo its id.
+ */
+type ReplyTo<R> = R extends WorkRequest ? ResponseFor<R> : { id: number }
+
+/**
+ * Generic over the requests it accepts so the scheduling can be exercised
+ * with bare `{ id }` fakes, while `sharedLayoutWorkerPool` binds the real
+ * fleet to the worker's protocol: a sender the protocol no longer describes
+ * is then a compile error at the sender, not a worker reading `undefined`.
+ */
+export interface LayoutWorkerPool<Req extends { id: number } = WorkRequest> {
   /**
    * Resolves with the worker's reply for this request's `id`.
    * Defaults to `interactive`: an unlabelled caller is one that has not
    * thought about it, and quietly deprioritising it is the wrong default.
    */
-  run<T extends { id: number }>(
-    request: { id: number } & Record<string, unknown>,
-    priority?: LayoutPriority,
-  ): Promise<T>
+  run<R extends Req>(request: R, priority?: LayoutPriority): Promise<ReplyTo<R>>
   /** Abandons a request, whether queued or already in flight. */
   cancel(id: number): void
   dispose(): void
@@ -103,18 +114,18 @@ export function defaultPoolSize(hardwareConcurrency: number | undefined): number
   return Math.max(1, Math.min(4, Math.floor(hardwareConcurrency) - 1))
 }
 
-interface Pending {
+interface Pending<Req> {
   readonly id: number
-  readonly request: { id: number } & Record<string, unknown>
+  readonly request: Req
   readonly priority: LayoutPriority
   resolve(value: never): void
   reject(error: Error): void
 }
 
-interface Slot {
+interface Slot<Req> {
   readonly worker: PoolWorker
   /** The request this worker is holding, or null when it is free. */
-  busyWith: Pending | null
+  busyWith: Pending<Req> | null
 }
 
 /**
@@ -149,18 +160,20 @@ function deferrableSlotCap(size: number): number {
  */
 const IDLE_SLOT_CAP = 1
 
-export function createLayoutWorkerPool(options: {
+export function createLayoutWorkerPool<Req extends { id: number }>(options: {
   size: number
   createWorker: () => PoolWorker
-}): LayoutWorkerPool {
+}): LayoutWorkerPool<Req> {
+  type Entry = Pending<Req>
+  type Held = Slot<Req>
   // A non-finite or non-positive size would otherwise mean "spawn forever"
   // or "never dispatch"; both are worse than one worker.
   const size = Number.isFinite(options.size) ? Math.max(1, Math.floor(options.size)) : 1
-  const slots: Slot[] = []
-  const queue: Pending[] = []
+  const slots: Held[] = []
+  const queue: Entry[] = []
   let disposed = false
 
-  const settle = (slot: Slot, id: number, data: { id: number }) => {
+  const settle = (slot: Held, id: number, data: { id: number }) => {
     const pending = slot.busyWith
     // A reply for something this slot is no longer holding — a cancelled
     // request the worker finished anyway. Dropping it is the whole handling:
@@ -173,9 +186,9 @@ export function createLayoutWorkerPool(options: {
     pump()
   }
 
-  const spawn = (): Slot => {
+  const spawn = (): Held => {
     const worker = options.createWorker()
-    const slot: Slot = { worker, busyWith: null }
+    const slot: Held = { worker, busyWith: null }
     worker.onmessage = (event) => settle(slot, event.data.id, event.data)
     if ('onerror' in worker) {
       worker.onerror = () => {
@@ -199,7 +212,7 @@ export function createLayoutWorkerPool(options: {
 
   // Workers are created only as concurrency demands one, so a pool nobody
   // uses costs nothing and a list of two rows never starts four workers.
-  const freeSlot = (): Slot | undefined =>
+  const freeSlot = (): Held | undefined =>
     slots.find((slot) => slot.busyWith === null) ?? (slots.length < size ? spawn() : undefined)
 
   const inFlightAt = (priority: LayoutPriority): number =>
@@ -247,17 +260,14 @@ export function createLayoutWorkerPool(options: {
   }
 
   return {
-    run<T extends { id: number }>(
-      request: { id: number } & Record<string, unknown>,
-      priority: LayoutPriority = 'interactive',
-    ): Promise<T> {
+    run<R extends Req>(request: R, priority: LayoutPriority = 'interactive'): Promise<ReplyTo<R>> {
       if (disposed) return Promise.reject(new Error('layout worker pool is disposed'))
-      return new Promise<T>((resolve, reject) => {
+      return new Promise<ReplyTo<R>>((resolve, reject) => {
         queue.push({
           id: request.id,
           request,
           priority,
-          resolve: resolve as Pending['resolve'],
+          resolve: resolve as Entry['resolve'],
           reject,
         })
         pump()
@@ -311,7 +321,7 @@ export function createLayoutWorkerPool(options: {
 let shared: LayoutWorkerPool | null = null
 
 export function sharedLayoutWorkerPool(): LayoutWorkerPool {
-  shared ??= createLayoutWorkerPool({
+  shared ??= createLayoutWorkerPool<WorkRequest>({
     size: defaultPoolSize(
       typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
     ),
