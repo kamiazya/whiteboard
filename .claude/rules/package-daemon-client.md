@@ -59,7 +59,10 @@ paths:
   `SseBackend` sends it through the chain until it lands. An update accepted
   before `disconnect()` is still delivered (`DocumentBackend.disconnect`),
   bounded by the retry ceiling; a write already waiting for a retry at
-  teardown is dropped.
+  teardown is dropped. The drain goes through the source the writer was
+  built over; nothing after `disconnect()` resolves a new one. The
+  SharedWorker drops a document's replica, writer and acknowledged version
+  once no tab subscribes and no tab edit is unacknowledged.
   `Retry-After` is a floor under the backoff but never past its 30 s ceiling,
   on purpose: an unsent edit lives only in memory, and waiting longer than the
   ceiling is waiting with it at risk (`retryDelayMs`).
