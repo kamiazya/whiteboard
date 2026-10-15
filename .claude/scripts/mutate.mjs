@@ -26,10 +26,11 @@
 //
 // One run per file at a time: a second run on a file another live run holds
 // exits 2 naming the holder (see the lock below).
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -37,7 +38,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { constants as osConstants, tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { isPidFileWriter } from '../../packages/mcp-server/scripts/dev/dev-daemon-socket-lib.mjs'
 import {
   claimPidFile,
@@ -69,8 +70,14 @@ if (oldText === '') {
 // Two runs on one file corrupt each other without this: the second reads the
 // first's MUTATED text as its `before`, and whichever restores last writes that
 // back, leaving the tree mutated with no helper alive. So the lock is taken
-// before `before` is read. It lives outside the repo tree, so no `git status`
-// sees it, keyed by the file's realpath, so two spellings of one path share it.
+// before `before` is read. It is keyed by the file's realpath, so two spellings
+// of one path share it, and it lives where $TMPDIR cannot move it: under
+// `os.tmpdir()` two runs with different TMPDIRs each took their own lock on one
+// file and corrupted it exactly as above, and a private TMPDIR per run is
+// routine. Inside a git clone it sits in the common git dir — one place for
+// every worktree of the clone, and never seen by `git status`. Outside any
+// clone it falls back to the system temp dir, which on POSIX is `/tmp`
+// whatever $TMPDIR says.
 //
 // The lock is a pid file claimed the way the dev wrapper claims its own
 // (`claimPidFile`): created exclusively, and a holder that is gone (SIGKILL,
@@ -78,10 +85,23 @@ if (oldText === '') {
 // through a rename claim that two racing claimers cannot both win. Importing it
 // does not stop this helper mutating that lib: the import is evaluated before
 // the substitution is written.
-const lockPath = join(
-  tmpdir(),
-  `mutate-lock-${createHash('sha256').update(realpathSync(file)).digest('hex').slice(0, 16)}`,
-)
+const lockPath = resolveLockPath(realpathSync(file))
+
+function resolveLockPath(realFile) {
+  const key = createHash('sha256').update(realFile).digest('hex').slice(0, 16)
+  const git = spawnSync(
+    'git',
+    ['-C', dirname(realFile), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { encoding: 'utf8' },
+  )
+  const commonDir = git.status === 0 ? git.stdout.trim() : ''
+  if (commonDir !== '') {
+    const lockDir = join(commonDir, 'mutate-locks')
+    mkdirSync(lockDir, { recursive: true })
+    return join(lockDir, key)
+  }
+  return join(process.platform === 'win32' ? tmpdir() : '/tmp', `mutate-lock-${key}`)
+}
 
 const claim = claimPidFile({ pidPath: lockPath, pid: process.pid, isWriterAlive: isPidFileWriter })
 if (claim.kind === 'held') {
