@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { withMkdirLock } from './mkdir-lock.js'
@@ -10,11 +10,12 @@ import { withMkdirLock } from './mkdir-lock.js'
 // lock seeded with it always reads as held by a dead process.
 const DEAD_PID = 2 ** 31 - 1
 
+// The owner this build writes: its pid, when it took the lock, and its host.
 async function seedOwnedLock(lockDirPath: string, pid: number): Promise<void> {
   await mkdir(lockDirPath, { recursive: false })
   await writeFile(
     join(lockDirPath, 'owner.json'),
-    JSON.stringify({ pid, startedAt: new Date().toISOString() }),
+    JSON.stringify({ pid, startedAt: new Date().toISOString(), host: hostname() }),
   )
 }
 
@@ -67,6 +68,42 @@ describe('withMkdirLock', () => {
     )
 
     expect(ran).toBe(true)
+  })
+
+  // An owner written by a build that recorded no host is judged by its pid alone.
+  it('reclaims a dead lock whose owner names no host', async () => {
+    await mkdir(lockPath)
+    await writeFile(
+      join(lockPath, 'owner.json'),
+      JSON.stringify({ pid: DEAD_PID, startedAt: new Date().toISOString() }),
+    )
+    let ran = false
+    await withMkdirLock(
+      lockPath,
+      async () => {
+        ran = true
+      },
+      { retryDelayMs: 5, timeoutMs: 2_000 },
+    )
+    expect(ran).toBe(true)
+  })
+
+  it('records its host while it holds the lock', async () => {
+    const owner = await withMkdirLock(lockPath, async () =>
+      JSON.parse(await readFile(join(lockPath, 'owner.json'), 'utf8')),
+    )
+    expect(owner.host).toBe(hostname())
+  })
+
+  // EISDIR stands for any read failure other than absence (EACCES, EIO): it
+  // says nothing about the holder, so the lock stays held past the grace.
+  it('waits out a lock whose owner cannot be read, however old', async () => {
+    await mkdir(join(lockPath, 'owner.json'), { recursive: true })
+    const longAgo = new Date(Date.now() - 60_000)
+    await utimes(lockPath, longAgo, longAgo)
+    await expect(
+      withMkdirLock(lockPath, async () => {}, { retryDelayMs: 5, timeoutMs: 100 }),
+    ).rejects.toThrow(/Lock timeout/)
   })
 
   it('never overlaps critical sections when several waiters race to reclaim a dead lock', async () => {
@@ -209,6 +246,7 @@ describe('withMkdirLock', () => {
           JSON.stringify({
             pid: child.pid,
             startedAt: new Date(Date.now() - 30_000).toISOString(),
+            host: hostname(),
           }),
         )
         let ran = false

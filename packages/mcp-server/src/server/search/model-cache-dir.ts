@@ -1,5 +1,7 @@
 import { join } from 'node:path'
 
+export const SEARCH_MODELS_DIRNAME = 'models'
+
 /**
  * Beside the daemon's other data rather than inside node_modules, which is
  * where transformers.js would otherwise put it — under pnpm that is the
@@ -13,5 +15,5 @@ import { join } from 'node:path'
  * daemon never looks in.
  */
 export function searchModelCacheDir(dataDir: string): string {
-  return join(dataDir, 'models')
+  return join(dataDir, SEARCH_MODELS_DIRNAME)
 }
