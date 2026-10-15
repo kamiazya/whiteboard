@@ -6,10 +6,11 @@
 import { spawnSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
+import { toolCommand } from './tool-bin.js'
 
 const SCRIPT = join(REPO_ROOT, 'tools/checks/src/browser-trace.mjs')
 
@@ -160,21 +161,39 @@ describe('browser-trace runs the file it is pointed at', () => {
 // only: it runs at pre-push, and each is a config load of the four browser
 // projects, 11-28s measured at a load average of 15-25 — near enough the
 // project's 60s ceiling under a `git push`'s load that it carries its own.
+//
+// The script asks through `pnpm exec vitest`; this asks vitest's own entry with
+// the same arguments, because pnpm's pre-exec dependency check installs into a
+// stale tree (`no-pnpm-spawn.test.ts`). The `pnpm` on this call's PATH is a stub
+// that fails, so a call that reached pnpm anyway fails here rather than passing.
 describe('browser-trace against the real vitest list', { timeout: 150_000 }, () => {
+  const stubBin = mkdtempSync(join(tmpdir(), 'browser-trace-no-pnpm-'))
+  writeFileSync(join(stubBin, 'pnpm'), '#!/bin/sh\necho "pnpm was spawned" >&2\nexit 97\n')
+  chmodSync(join(stubBin, 'pnpm'), 0o755)
+  afterAll(() => rmSync(stubBin, { recursive: true, force: true }))
+
   function realList(argv: readonly string[]) {
     const runs: string[][] = []
     const errors: string[] = []
+    const [node, ...vitest] = toolCommand('vitest', 'vitest')
     const code = main({
       argv,
       repoRoot: REPO_ROOT,
-      env: { ...process.env } as Record<string, string>,
+      env: { ...process.env, PATH: `${stubBin}${delimiter}${process.env.PATH ?? ''}` } as Record<
+        string,
+        string
+      >,
       stderr: { write: (chunk) => errors.push(chunk) > 0 },
-      spawn: (cmd, args, opts) => {
+      spawn: (_cmd, args, opts) => {
         if (!isListCall(args)) {
           runs.push(args)
           return { status: 0 }
         }
-        return spawnSync(cmd, args, { ...opts, encoding: 'utf8', timeout: 120_000 })
+        return spawnSync(node, [...vitest, ...args.slice(2)], {
+          ...opts,
+          encoding: 'utf8',
+          timeout: 120_000,
+        })
       },
     })
     return { code, runs, stderr: errors.join('') }

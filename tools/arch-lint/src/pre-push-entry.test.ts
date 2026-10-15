@@ -21,6 +21,7 @@
  * block pinned to a command of its own. That command named one file in a
  * project that runs whole, so the copy went when the guard moved here.
  */
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -63,6 +64,24 @@ describe('the architecture scans run before a push', () => {
         /^pnpm vitest run\b/.test(command) && /--project\s+arch-lint-node\b/.test(command),
     )
     expect(runsThisProject).toHaveLength(1)
+  })
+
+  /**
+   * A failure at push scrolls past in a terminal nobody kept, and a run that
+   * fails once and passes on the retry leaves nothing else to read. The JSON
+   * report outlives the run, and it has to land somewhere git ignores, or the
+   * next push carries it.
+   */
+  it('keeps a machine-readable report of the run in an ignored path', () => {
+    const command = prePushCommands().find((c) => /--project\s+arch-lint-node\b/.test(c)) ?? ''
+    expect(command).toMatch(/--reporter[= ]default\b/)
+    expect(command).toMatch(/--reporter[= ]json\b/)
+    const report = /--outputFile(?:\.json)?[= ](\S+)/.exec(command)?.[1]
+    expect(report, 'name the report with --outputFile.json=<path>').toBeDefined()
+    const ignored = spawnSync('git', ['check-ignore', '--no-index', '-q', report ?? ''], {
+      cwd: REPO_ROOT,
+    })
+    expect(ignored.status, `${report} is not gitignored`).toBe(0)
   })
 
   /**
