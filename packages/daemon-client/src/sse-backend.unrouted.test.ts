@@ -297,27 +297,6 @@ describe('SseBackend opening a document its stream does not carry', () => {
     backend.disconnect()
   })
 
-  it('reads again after an opening read answered empty', async () => {
-    // A SharedWorker whose own read of the keeper failed answers empty, never
-    // an empty document a scoped caller would report as corrupt.
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const s = heldSource()
-    const r = recording()
-    const backend = new SseBackend('ws-1', 'canvas-a', BASE, undefined, s.source)
-    backend.connect(r.handlers)
-    s.routing(true)
-    s.pending[0]?.(new Uint8Array())
-    await flush()
-    expect(r.order).toEqual(['disconnected'])
-
-    await vi.advanceTimersByTimeAsync(UNROUTED_OPEN_MS)
-    s.pending[1]?.(new Uint8Array([5]))
-    await flush()
-
-    expect(r.order).toEqual(['disconnected', 'snapshot 5', 'connected'])
-    backend.disconnect()
-  })
-
   it('does not read again once the keeper said it does not know the document', async () => {
     // `null` is an answer, not a failure: asking again answers the same.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })

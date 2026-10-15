@@ -179,8 +179,8 @@ export class SseBackend implements DocumentBackend {
    *
    * Until a read has delivered, the open stays a REPLACING read: the caller
    * has no copy, so a catch-up merged into it would land nowhere. A read that
-   * failed, or answered empty, opens nothing — the next routing, drop or the
-   * retry armed here opens again.
+   * failed opens nothing — the next routing, drop or the retry armed here
+   * opens again.
    */
   private async open(handlers: DocumentBackendHandlers): Promise<void> {
     if (this.openStarted || this.cancelled) return
@@ -191,11 +191,11 @@ export class SseBackend implements DocumentBackend {
     const connection = this.connection
     const answer = await this.fetchKeeperState(handlers, this.replacing(handlers), hold)
     if (this.cancelled || this.connection !== connection) return
-    // A failed read (`undefined`) or no bytes opens nothing. `null` is
-    // different: the keeper saying it does not know the document, which
-    // asking again would only repeat, so the open is over and the caller
-    // keeps whatever state it has.
-    if (answer === undefined || answer?.byteLength === 0) {
+    // A failed read (`undefined`) opens nothing. `null` is different: the
+    // keeper saying it does not know the document, which asking again would
+    // only repeat, so the open is over and the caller keeps whatever state
+    // it has.
+    if (answer === undefined) {
       this.openStarted = false
       // ponytail: a fixed interval, so a keeper away for long is read every
       // `UNROUTED_OPEN_MS`; back off if that load ever matters.
@@ -278,21 +278,18 @@ export class SseBackend implements DocumentBackend {
   private resync(handlers: DocumentBackendHandlers): Promise<void> {
     // Through `onSnapshot`: the caller drops its copy, which holds the
     // refused ops, for the keeper's.
-    return this.fetchKeeperState(handlers, this.replacing(handlers, true)).then(() => {})
+    return this.fetchKeeperState(handlers, this.replacing(handlers)).then(() => {})
   }
 
   /**
    * Delivery for a read that replaces the caller's copy, numbered when it is
    * issued: it delivers only when no newer such read has delivered already.
-   * The open skips an empty answer; a resync replaces with whatever it got.
+   * A read that failed delivers nothing, so it outdates nothing either.
    */
-  private replacing(
-    handlers: DocumentBackendHandlers,
-    acceptEmpty = false,
-  ): (bytes: Uint8Array) => void {
+  private replacing(handlers: DocumentBackendHandlers): (bytes: Uint8Array) => void {
     const issued = ++this.replacingIssued
     return (bytes) => {
-      if (issued < this.replacingDelivered || (!acceptEmpty && bytes.byteLength === 0)) return
+      if (issued < this.replacingDelivered) return
       this.replacingDelivered = issued
       handlers.onSnapshot(bytes)
     }
@@ -315,7 +312,6 @@ export class SseBackend implements DocumentBackend {
     await this.fetchKeeperState(
       handlers,
       (bytes) => {
-        if (bytes.byteLength === 0) return
         // Another read still running may replace the caller's copy when it
         // settles, and this merge would go with it: it waits with the frames.
         if (hold.reads > 1) hold.frames.push(bytes)

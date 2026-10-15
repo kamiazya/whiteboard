@@ -20,20 +20,37 @@ import {
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
 
-/** Hands a worker's snapshot reply to everyone waiting on that document. */
-function resolveSnapshot(
-  snapshotWaiters: Map<string, Set<(bytes: Uint8Array) => void>>,
+/** One tab waiting on a snapshot: answered with the state, or told the read failed. */
+interface SnapshotWaiter {
+  resolve(bytes: Uint8Array): void
+  reject(reason: Error): void
+}
+
+/**
+ * Hands a worker's snapshot reply to everyone waiting on that document. No
+ * bytes at all is the worker saying its own read of the daemon failed, and it
+ * reaches the waiters as a rejection — how the hub reports a failed read — so
+ * a caller has one way to learn a read failed whichever source it holds.
+ */
+function answerSnapshot(
+  snapshotWaiters: Map<string, Set<SnapshotWaiter>>,
   doc: string,
   snapshot: string,
 ): void {
   const waiters = snapshotWaiters.get(doc)
   if (!waiters) return
+  if (snapshot === '') {
+    snapshotWaiters.delete(doc)
+    const failed = new Error(`the worker could not read the document: ${doc}`)
+    for (const waiter of waiters) waiter.reject(failed)
+    return
+  }
   const bytes = base64ToBytes(snapshot)
   // Left waiting rather than resolved with nothing: the worker's next
   // snapshot for this document can still answer them.
   if (bytes === null) return
   snapshotWaiters.delete(doc)
-  for (const resolve of waiters) resolve(bytes)
+  for (const waiter of waiters) waiter.resolve(bytes)
 }
 
 /**
@@ -105,7 +122,7 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
    * replica holds when it answers, which is exactly what they would have
    * gotten asking separately.
    */
-  const snapshotWaiters = new Map<string, Set<(bytes: Uint8Array) => void>>()
+  const snapshotWaiters = new Map<string, Set<SnapshotWaiter>>()
   const port = worker.port
 
   // A module worker that fails to LOAD does not throw above — construction
@@ -140,7 +157,7 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
     // listener at all — gating it on one would leave that caller waiting
     // forever.
     if (evt.type === 'snapshot') {
-      resolveSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
+      answerSnapshot(snapshotWaiters, evt.doc, evt.snapshot)
       return
     }
     const set = listeners.get(evt.doc)
@@ -184,16 +201,16 @@ export function createSharedSseStreamSource(baseUrl: string): SseStreamSource | 
       // From the worker's replica, not the daemon: the worker seeds itself
       // once per document and every later tab is answered from memory. The
       // worker replies even for a document nobody has (an empty snapshot),
-      // and with no bytes when its own read of the daemon failed, so this
-      // resolves rather than racing a timeout — `null` is reserved for the
-      // hub implementation's 404, which has a daemon to ask.
-      return new Promise((resolve) => {
+      // and with no bytes when its own read of the daemon failed, which
+      // rejects — so this settles rather than racing a timeout. `null` is
+      // reserved for the hub implementation's 404, which has a daemon to ask.
+      return new Promise((resolve, reject) => {
         let waiters = snapshotWaiters.get(doc)
         if (!waiters) {
           waiters = new Set()
           snapshotWaiters.set(doc, waiters)
         }
-        waiters.add(resolve)
+        waiters.add({ resolve, reject })
         postWorkerRequest(port, { type: 'snapshot-request', doc })
       })
     },

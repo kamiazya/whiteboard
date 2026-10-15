@@ -184,6 +184,29 @@ describe('a snapshot reply that is not base64', () => {
   })
 })
 
+describe('a snapshot reply with no bytes', () => {
+  // The worker's own read of the daemon failed. Resolved, the caller would
+  // take it as the document's state — and Loro refuses zero bytes — so it is
+  // the same failed read the hub implementation reports by throwing.
+  it('rejects every waiter, and the next request is answered', async () => {
+    const source = createSharedSseStreamSource('http://empty-snapshot.test')
+    const first = source?.snapshot('w/doc')
+    const second = source?.snapshot('w/doc')
+    const reply = (snapshot: string) =>
+      FakeSharedWorker.instances[0]?.port.onmessage?.({
+        data: { type: 'snapshot', doc: 'w/doc', snapshot },
+      } as MessageEvent)
+
+    reply('')
+    await expect(first).rejects.toThrow(/worker could not read the document/)
+    await expect(second).rejects.toThrow(/worker could not read the document/)
+
+    const third = source?.snapshot('w/doc')
+    reply('AQID')
+    await expect(third).resolves.toEqual(new Uint8Array([1, 2, 3]))
+  })
+})
+
 describe('an event the worker protocol does not describe', () => {
   it('is dropped without reaching a listener or throwing', () => {
     const source = createSharedSseStreamSource('http://malformed.test')

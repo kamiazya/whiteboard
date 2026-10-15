@@ -10,6 +10,27 @@ import { sseStreamSourceContract } from './test-utils/sse-stream-source-contract
 
 const BASE = 'http://d'
 
+/**
+ * The daemon's canvas snapshot route: the state seeded for a document, 404
+ * for one it does not know, 503 once for a read set to fail. `null` for a URL
+ * that is not this route.
+ */
+function snapshotRoute() {
+  const state = new Map<string, Uint8Array>()
+  const failing = new Set<string>()
+  const answer = (url: string): Response | null => {
+    const match = /\/api\/w\/([^/]+)\/document\/(.+)\/snapshot$/.exec(url)
+    if (!match) return null
+    const [, workspaceId, path] = match
+    const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(path as string)}`
+    if (failing.delete(doc)) return new Response('{"title":"unavailable"}', { status: 503 })
+    const bytes = state.get(doc)
+    if (!bytes) return new Response('{"title":"Canvas not found"}', { status: 404 })
+    return new Response(bytes.slice().buffer as ArrayBuffer, { status: 200 })
+  }
+  return { state, failing, answer }
+}
+
 /** A daemon stand-in: mints a stream id, records the POSTs, pushes frames. */
 function createHarness(): SseStreamSourceHarness {
   let streamSeq = 0
@@ -17,7 +38,7 @@ function createHarness(): SseStreamSourceHarness {
   const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
   const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
   const daemonWrites: { doc: string; body: Uint8Array }[] = []
-  const daemonState = new Map<string, Uint8Array>()
+  const snapshots = snapshotRoute()
   let push: ((frame: string) => void) | null = null
   let endStream: (() => void) | null = null
   let refuseStreams = false
@@ -47,14 +68,8 @@ function createHarness(): SseStreamSourceHarness {
     }
     // The canvas update route, which is where a push lands. Matched before the
     // JSON parse below: its body is raw update bytes, not JSON.
-    const canvasSnapshot = /\/api\/w\/([^/]+)\/document\/(.+)\/snapshot$/.exec(url)
-    if (canvasSnapshot) {
-      const [, workspaceId, path] = canvasSnapshot
-      const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(path as string)}`
-      const bytes = daemonState.get(doc)
-      if (!bytes) return new Response('{"title":"Canvas not found"}', { status: 404 })
-      return new Response(bytes.slice().buffer as ArrayBuffer, { status: 200 })
-    }
+    const snapshot = snapshots.answer(url)
+    if (snapshot !== null) return snapshot
     const canvasUpdate = /\/api\/w\/([^/]+)\/document\/(.+)\/update$/.exec(url)
     if (canvasUpdate) {
       const [, workspaceId, path] = canvasUpdate
@@ -88,7 +103,8 @@ function createHarness(): SseStreamSourceHarness {
     controlMessages: () => controlMessages,
     openedStreamIds: () => openedStreamIds,
     daemonWrites: () => daemonWrites,
-    seedDaemonState: (doc, bytes) => daemonState.set(doc, bytes),
+    seedDaemonState: (doc, bytes) => snapshots.state.set(doc, bytes),
+    failsNextRead: (doc) => snapshots.failing.add(doc),
     ready: async () => {
       await vi.waitFor(() => {
         if (push === null) throw new Error('stream not open')
