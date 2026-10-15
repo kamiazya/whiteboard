@@ -37,9 +37,12 @@ export class SseBackend implements DocumentBackend {
    * Frames that arrived while the keeper's state was being fetched after a
    * refusal or a reconnect, or `null` when no such fetch is running. Held
    * rather than applied: they build on the state being fetched, so they
-   * follow it.
+   * follow it. Overlapping fetches share the one queue, released only when
+   * the last settles: a snapshot that settles late replaces the caller's
+   * copy, and a frame applied before it would go with it.
    */
   private heldFrames: Uint8Array[] | null = null
+  private keeperFetches = 0
   /**
    * Whether a stream this backend was connected through has since dropped.
    * Only then does a connection mean something may have been missed: the
@@ -211,8 +214,8 @@ export class SseBackend implements DocumentBackend {
     handlers: DocumentBackendHandlers,
     deliver: (bytes: Uint8Array) => void,
   ): Promise<void> {
-    const held: Uint8Array[] = []
-    this.heldFrames = held
+    this.heldFrames ??= []
+    this.keeperFetches += 1
     try {
       const bytes = await this.resolveSource().snapshot(this.binaryKey)
       if (!this.cancelled && bytes !== null) deliver(bytes)
@@ -220,8 +223,10 @@ export class SseBackend implements DocumentBackend {
       // The caller keeps the copy it has. After a refusal its next write is
       // refused again and asks again; after a reconnect the next drop does.
     } finally {
-      if (this.heldFrames === held) this.heldFrames = null
-      if (!this.cancelled) for (const bytes of held) handlers.onRemoteUpdate(bytes)
+      this.keeperFetches -= 1
+      const held = this.keeperFetches === 0 ? this.heldFrames : null
+      if (held !== null) this.heldFrames = null
+      if (!this.cancelled && held) for (const bytes of held) handlers.onRemoteUpdate(bytes)
     }
   }
 

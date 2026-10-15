@@ -389,6 +389,52 @@ describe('SseBackend through a source that writes onward itself', () => {
     backend.disconnect()
   })
 
+  it('holds a frame until every overlapping keeper-state read has settled', async () => {
+    // Two reads in flight, the later settling first: a frame released then
+    // reaches a copy the earlier read's snapshot is about to replace.
+    const listeners: DocListener[] = []
+    const pending: ((bytes: Uint8Array) => void)[] = []
+    const source: SseStreamSource = {
+      subscribe: (_doc, listener) => {
+        listeners.push(listener)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () =>
+        pending.length === 0 && listeners.length === 0
+          ? Promise.resolve(new Uint8Array([1]))
+          : new Promise((resolve) => {
+              pending.push(resolve)
+            }),
+    }
+    const order: string[] = []
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, undefined, source)
+    backend.connect({
+      ...r.handlers,
+      onSnapshot: (b) => order.push(`snapshot ${b[0]}`),
+      onRemoteUpdate: (b) => order.push(`update ${b[0]}`),
+    })
+    await vi.waitFor(() => expect(listeners.length).toBeGreaterThan(0))
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1']))
+
+    const refusal = { code: 'node_text_too_large', message: 'too long' } as const
+    for (const l of listeners) l.onWriteRefused?.(refusal)
+    for (const l of listeners) l.onWriteRefused?.(refusal)
+    await vi.waitFor(() => expect(pending).toHaveLength(2))
+
+    pending[1]?.(new Uint8Array([3]))
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1', 'snapshot 3']))
+    for (const l of listeners) l.onUpdate([9] as unknown as Uint8Array)
+    pending[0]?.(new Uint8Array([2]))
+
+    await vi.waitFor(() =>
+      expect(order).toEqual(['snapshot 1', 'snapshot 3', 'snapshot 2', 'update 9']),
+    )
+    backend.disconnect()
+  })
+
   it('treats a refusal whose body is cut mid-read as the network, sending the bytes again', async () => {
     const cut = () =>
       new ReadableStream<Uint8Array>({
