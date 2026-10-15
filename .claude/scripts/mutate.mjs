@@ -23,8 +23,22 @@
 // restore for an UNTRACKED file, and a whole-file overwrite the wrong one
 // when the tree already had other edits. SIGKILL cannot be caught: the backup
 // path is printed before the command runs for that case.
+//
+// One run per file at a time: a second run on a file another live run holds
+// exits 2 naming the holder (see `acquireLock`).
 import { spawn } from 'node:child_process'
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import {
+  copyFileSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { constants as osConstants, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
@@ -49,6 +63,121 @@ if (oldText === '') {
   console.error('mutate: <old> is empty, which would rewrite the file between every character')
   process.exit(2)
 }
+
+// Two runs on one file corrupt each other without this: the second reads the
+// first's MUTATED text as its `before`, and whichever restores last writes that
+// back, leaving the tree mutated with no helper alive. So the lock is taken
+// before `before` is read. It lives outside the repo tree, so no `git status`
+// sees it, keyed by the file's realpath, so two spellings of one path share it.
+//
+// The lock's content is the holder's pid, and it is created complete: written
+// to a private name and `link`ed into place, which fails EEXIST atomically, so
+// no reader ever sees an empty lock. A holder whose pid is dead (SIGKILL, which
+// cannot release) left a stale lock, claimed by RENAMING it to a private name
+// rather than unlinking it: two claimers that both saw the dead pid cannot then
+// delete each other's fresh lock, because whoever renames second gets either
+// ENOENT or a LIVE pid, and a live one is linked straight back. The residue is
+// a three-way race inside that window, which a by-hand helper does not meet.
+const lockPath = join(
+  tmpdir(),
+  `mutate-lock-${createHash('sha256').update(realpathSync(file)).digest('hex').slice(0, 16)}`,
+)
+const token = String(process.pid)
+
+// A pid that is not a positive integer is a damaged lock, never a holder —
+// and `kill(0, 0)` would answer for this whole process group.
+function isAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (err) {
+    return err.code === 'EPERM'
+  }
+}
+
+function readHolder(path) {
+  try {
+    return Number(readFileSync(path, 'utf8'))
+  } catch (err) {
+    if (err.code === 'ENOENT') return null
+    throw err
+  }
+}
+
+function tryLink(draft) {
+  try {
+    linkSync(draft, lockPath)
+    return true
+  } catch (err) {
+    if (err.code !== 'EEXIST') throw err
+    return false
+  }
+}
+
+// Moves a dead holder's lock out of the way. Answers the pid of a LIVE holder
+// when another claimer replaced the stale lock between our read and our
+// rename — what we took is theirs, so it goes straight back.
+function claimStale() {
+  const claimed = `${lockPath}.stale.${randomUUID()}`
+  try {
+    renameSync(lockPath, claimed)
+  } catch (err) {
+    if (err.code === 'ENOENT') return null
+    throw err
+  }
+  const taken = readHolder(claimed)
+  try {
+    if (taken !== null && isAlive(taken)) {
+      linkSync(claimed, lockPath)
+      return taken
+    }
+    return null
+  } finally {
+    unlinkSync(claimed)
+  }
+}
+
+// Answers null once the lock is ours, or the pid of the live run holding it.
+// It never exits itself: `process.exit` would skip the `finally` that removes
+// the draft.
+function acquireLock() {
+  const draft = `${lockPath}.${token}.${randomUUID()}`
+  writeFileSync(draft, token)
+  try {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (tryLink(draft)) return null
+      const holder = readHolder(lockPath)
+      if (holder === null) continue
+      if (isAlive(holder)) return holder
+      const live = claimStale()
+      if (live !== null) return live
+    }
+    throw new Error(`could not take the lock at ${lockPath}`)
+  } finally {
+    rmSync(draft, { force: true })
+  }
+}
+
+// Only this run's own lock is removed: a run that exits before taking it, or
+// after another run replaced it as stale, must not delete someone else's.
+function releaseLock() {
+  if (readHolder(lockPath) === process.pid) unlinkSync(lockPath)
+}
+
+const holder = acquireLock()
+if (holder !== null) {
+  console.error(
+    `mutate: ${file} is being mutated by another run (pid ${holder}); refusing to start.\n` +
+      `  Its restore would race this one's. Wait for it, or if pid ${holder} is not a\n` +
+      `  mutate run, remove the lock at ${lockPath}`,
+  )
+  process.exit(2)
+}
+// 'exit' also fires on `process.exit` from the signal handlers and on an
+// uncaught throw, so every path out of here after this line releases.
+process.on('exit', releaseLock)
+console.error(`mutate: lock at ${lockPath}`)
 
 const before = readFileSync(file, 'utf8')
 const occurrences = before.split(oldText).length - 1
