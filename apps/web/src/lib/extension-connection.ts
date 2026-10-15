@@ -6,8 +6,11 @@
  * a daemon that answers.
  */
 import { runtimePingApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/daemon-urls'
+import type { HostToPage } from '@kamiazya/whiteboard-daemon-client/extension-bridge'
 import { BRIDGE_DAEMON_BASE_URL } from './bridge-address.js'
 import { bridgeFetch } from './bridge-loader.js'
+
+type HostErrorReason = Extract<HostToPage, { type: 'error' }>['reason']
 
 /** What asking for the daemon through the extension answered. */
 export type ExtensionConnection =
@@ -48,16 +51,15 @@ export async function connectThroughExtension(
 
 /**
  * The bridge rejects a host `error` frame as `TypeError('<reason>: <message>')`
- * (extension-bridge-fetch.ts). Only `daemon-unreachable` carries a message
- * meant for the person; any other kind's text is a transport detail and stays
- * behind the generic line, as does the host's plain "no daemon is running",
- * which the generic line already says better.
+ * (extension-bridge-fetch.ts). Only `daemon-record-refused` carries a message
+ * meant for the person; every other reason — "no daemon is running", a socket
+ * that answered an errno — stays behind the generic line, which says what to
+ * do better than its text does.
  */
-const DAEMON_UNREACHABLE = 'daemon-unreachable: '
-const NO_DAEMON = 'no daemon is running'
+const RECORD_REFUSED = `${'daemon-record-refused' satisfies HostErrorReason}: `
 
 function daemonRecordRefusal(err: unknown): string | null {
-  if (!(err instanceof TypeError) || !err.message.startsWith(DAEMON_UNREACHABLE)) return null
-  const message = err.message.slice(DAEMON_UNREACHABLE.length).trim()
-  return message === '' || message === NO_DAEMON ? null : message
+  if (!(err instanceof TypeError) || !err.message.startsWith(RECORD_REFUSED)) return null
+  const message = err.message.slice(RECORD_REFUSED.length).trim()
+  return message === '' ? null : message
 }

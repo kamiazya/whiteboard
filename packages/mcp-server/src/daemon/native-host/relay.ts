@@ -134,14 +134,20 @@ interface RelayContext extends NativeHostOptions {
 
 async function relayRequest(message: Request, context: RelayContext): Promise<void> {
   const { id } = message
+  // A refusal is the record reader's sentence for the person; "no daemon" and
+  // a failed connect are not, and must not arrive under the refusal's reason.
   const daemon = await context.resolveDaemon().then(
-    (endpoint) => endpoint ?? 'no daemon is running',
-    (err: unknown) => (err instanceof Error ? err.message : 'the daemon record could not be read'),
+    (endpoint) =>
+      endpoint ?? { reason: 'daemon-unreachable' as const, message: 'no daemon is running' },
+    (err: unknown) => ({
+      reason: 'daemon-record-refused' as const,
+      message: err instanceof Error ? err.message : 'the daemon record could not be read',
+    }),
   )
   if (context.signal.aborted) return
-  if (typeof daemon === 'string') {
+  if ('reason' in daemon) {
     context.settled()
-    context.send({ type: 'error', id, reason: 'daemon-unreachable', message: daemon })
+    context.send({ type: 'error', id, ...daemon })
     return
   }
   const headers = {

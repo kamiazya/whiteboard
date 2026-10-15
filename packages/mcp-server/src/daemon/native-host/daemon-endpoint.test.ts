@@ -24,4 +24,34 @@ describe('resolveDaemonEndpoint', () => {
     await symlink(target, getDaemonRecordPath(dataDir))
     await expect(resolveDaemonEndpoint(dataDir)).rejects.toThrow(getDaemonRecordPath(dataDir))
   })
+
+  // A daemon that crashed, was killed or lost its machine leaves its record
+  // behind; relaying to its socket would answer a socket error where the
+  // person needs "start one".
+  async function writeRecord(dir: string, startedAt: string): Promise<string> {
+    const socketPath = join(dir, 'gone.sock')
+    const record = { pid: process.pid, version: '0.0.0', startedAt, socketPath, token: 't' }
+    await writeFile(getDaemonRecordPath(dir), JSON.stringify(record))
+    return socketPath
+  }
+
+  it('answers null for a valid record whose daemon is dead', async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+    await writeRecord(dataDir, new Date().toISOString())
+    await expect(resolveDaemonEndpoint(dataDir, { isAlive: () => false })).resolves.toBeNull()
+  })
+
+  it('answers null for a valid record whose pid another process took', async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+    await writeRecord(dataDir, new Date().toISOString())
+    const seams = { isAlive: () => true, startMs: () => Date.now() + 60_000 }
+    await expect(resolveDaemonEndpoint(dataDir, seams)).resolves.toBeNull()
+  })
+
+  it('relays to a valid record whose daemon is still running', async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+    const socketPath = await writeRecord(dataDir, new Date().toISOString())
+    const seams = { isAlive: () => true, startMs: () => Date.now() - 60_000 }
+    await expect(resolveDaemonEndpoint(dataDir, seams)).resolves.toEqual({ socketPath, token: 't' })
+  })
 })
