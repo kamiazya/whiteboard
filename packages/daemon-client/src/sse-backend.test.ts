@@ -217,6 +217,45 @@ describe('SseBackend', () => {
     backend.disconnect()
   })
 
+  it('drains writes queued at disconnect through the hub it started on, minting none', async () => {
+    // Disconnect stops the writer taking more, not sending what it took. The
+    // drain must reach the daemon through the hub the writer was built over:
+    // a hub built afterwards would sit on a backend nothing will close again.
+    const posts: number[][] = []
+    const held: { releaseFirst?: () => void } = {}
+    const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push([...new Uint8Array(init.body as ArrayBuffer)])
+        if (posts.length === 1) {
+          await new Promise<void>((resolve) => {
+            held.releaseFirst = resolve
+          })
+        }
+        return new Response(null, { status: 200 })
+      }
+      return new Response(new Uint8Array(), { status: 200 })
+    })
+    const { handlers } = createHandlers()
+    const backend = new SseBackend('ws-1', 'canvas-a', 'http://127.0.0.1:3099', {
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    })
+    const ownedHub = () => (backend as unknown as { ownedHub: unknown }).ownedHub
+
+    backend.connect(handlers)
+    await flush()
+    const first = backend.pushLocalUpdate(new Uint8Array([1]))
+    const second = backend.pushLocalUpdate(new Uint8Array([2]))
+    await vi.waitFor(() => expect(held.releaseFirst).toBeDefined())
+
+    backend.disconnect()
+    expect(ownedHub()).toBeNull()
+    held.releaseFirst?.()
+    await Promise.all([first, second])
+
+    expect(posts).toEqual([[1], [2]])
+    expect(ownedHub()).toBeNull()
+  })
+
   it('reports client_ready over the HTTP control channel', async () => {
     const fake = createFakeTransport([])
     const { handlers } = createHandlers()
