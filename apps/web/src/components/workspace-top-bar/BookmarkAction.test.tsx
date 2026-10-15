@@ -20,8 +20,10 @@ import { BookmarkAction } from './BookmarkAction.js'
 
 afterEach(() => cleanup())
 
-function renderAction(props: Partial<Parameters<typeof BookmarkAction>[0]> = {}) {
-  return render(
+type ActionProps = Partial<Parameters<typeof BookmarkAction>[0]>
+
+function actionUi(props: ActionProps = {}) {
+  return (
     <TooltipProvider>
       <BookmarkAction
         saving={props.saving ?? false}
@@ -29,9 +31,16 @@ function renderAction(props: Partial<Parameters<typeof BookmarkAction>[0]> = {})
         armed={props.armed ?? 0}
         onSave={props.onSave ?? (() => {})}
       />
-    </TooltipProvider>,
+    </TooltipProvider>
   )
 }
+
+function renderAction(props: ActionProps = {}) {
+  return render(actionUi(props))
+}
+
+const openField = () => fireEvent.click(screen.getByTestId('bookmark-action'))
+const nameField = () => screen.getByRole('textbox', { name: 'Name this point' }) as HTMLInputElement
 
 describe('BookmarkAction', () => {
   it('is an icon with a name and no visible text', () => {
@@ -113,5 +122,66 @@ describe('BookmarkAction', () => {
     )
     expect(screen.queryByRole('textbox', { name: 'Name this point' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Bookmark this point' })).toBeTruthy()
+  })
+
+  it('puts the caret in the field it opens, from a press and from the shortcut', () => {
+    // Otherwise the name typed next lands on the canvas as its shortcuts.
+    const view = renderAction()
+    openField()
+    expect(document.activeElement).toBe(nameField())
+    fireEvent.keyDown(nameField(), { key: 'Escape' })
+    view.rerender(actionUi({ armed: 1 }))
+    expect(document.activeElement).toBe(nameField())
+  })
+
+  it('does not bring an abandoned name back when the field reopens', () => {
+    renderAction()
+    openField()
+    fireEvent.change(nameField(), { target: { value: 'half typed' } })
+    fireEvent.keyDown(nameField(), { key: 'Escape' })
+    openField()
+    expect(nameField().value).toBe('')
+  })
+
+  it('does not bring a saved name back when the field reopens', () => {
+    renderAction()
+    openField()
+    fireEvent.change(nameField(), { target: { value: 'first' } })
+    fireEvent.keyDown(nameField(), { key: 'Enter' })
+    openField()
+    expect(nameField().value).toBe('')
+  })
+
+  it('saves the name without its surrounding spaces', () => {
+    const onSave = vi.fn()
+    renderAction({ onSave })
+    openField()
+    fireEvent.change(nameField(), { target: { value: '  before  ' } })
+    fireEvent.keyDown(nameField(), { key: 'Enter' })
+    expect(onSave).toHaveBeenCalledExactlyOnceWith('before')
+  })
+
+  it('opens nothing on a press while a bookmark is being saved, and says it is busy', () => {
+    renderAction({ saving: true })
+    openField()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    const button = screen.getByRole('button', { name: 'Saving a bookmark…' })
+    expect(button.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('drops a draft armed on the departed document when the page resets the arm', () => {
+    const view = renderAction({ armed: 1 })
+    fireEvent.change(nameField(), { target: { value: 'for the old document' } })
+    view.rerender(actionUi({ armed: 0 }))
+    view.rerender(actionUi({ armed: 1 }))
+    expect(nameField().value).toBe('')
+  })
+
+  it('says a failure aloud and a success politely', () => {
+    const view = renderAction({ outcome: 'failed' })
+    expect(screen.getByRole('alert').textContent).toBe('Save failed')
+    view.rerender(actionUi({ outcome: 'saved' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('Bookmark saved')
   })
 })

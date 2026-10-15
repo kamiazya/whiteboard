@@ -61,7 +61,7 @@ it('a real double-click on a file node follows the reference', async () => {
   const opened: string[] = []
   const { Host } = makeEditorHost({
     initial: withFileNode,
-    editorProps: { fileRefOptions: OPTIONS, onOpenFileRef: (file) => opened.push(file) },
+    editorProps: { fileRefOptions: OPTIONS, onOpenDocument: (file) => opened.push(file) },
   })
   const { container } = render(<Host />)
 
@@ -73,7 +73,7 @@ it('the file context menu offers Open canvas and Change target retargets via the
   const opened: string[] = []
   const { Host, latest } = makeEditorHost({
     initial: withFileNode,
-    editorProps: { fileRefOptions: OPTIONS, onOpenFileRef: (file) => opened.push(file) },
+    editorProps: { fileRefOptions: OPTIONS, onOpenDocument: (file) => opened.push(file) },
   })
   const { container } = render(<Host />)
 
@@ -115,7 +115,7 @@ it('a missing reference renders a quiet missing label and hides the follow affor
           onChange={(next) => setCanvas(next)}
           theme="light"
           fileRefOptions={OPTIONS}
-          onOpenFileRef={(file) => opened.push(file)}
+          onOpenDocument={(file) => opened.push(file)}
           missingFileRef={(file) => file === 'gone-id'}
         />
       </div>

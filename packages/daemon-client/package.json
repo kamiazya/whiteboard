@@ -118,6 +118,10 @@
       "types": "./src/sse-stream-hub.ts",
       "import": "./src/sse-stream-hub.ts"
     },
+    "./write-chain": {
+      "types": "./src/write-chain.ts",
+      "import": "./src/write-chain.ts"
+    },
     "./sync-sse-contract": {
       "types": "./src/sync-sse-contract.ts",
       "import": "./src/sync-sse-contract.ts"

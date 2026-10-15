@@ -1,10 +1,12 @@
 import {
   closeSync as closeSyncReal,
+  existsSync,
   mkdtempSync,
   openSync as openSyncReal,
   readFileSync,
   renameSync as renameSyncReal,
   rmSync,
+  writeFileSync,
   writeSync as writeSyncReal,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -12,8 +14,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   acquireSpawnLock,
+  claimPidFile,
   DEFAULT_SPAWN_LOCK_STALE_MS,
   isLockStale,
+  releasePidFile,
   releaseSpawnLock,
   resolveSpawnLockStaleMs,
 } from './dev-spawn-lock-lib.mjs'
@@ -291,5 +295,73 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
 
   it('is a no-op (never throws) when the lock file is already gone', () => {
     expect(() => releaseSpawnLock({ lockPath, ownerPid: process.pid })).not.toThrow()
+  })
+})
+
+describe('claimPidFile / releasePidFile (real temp dir)', () => {
+  let dir: string
+  let pidPath: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'dev-wrapper-pid-'))
+    pidPath = join(dir, 'dev-wrapper.pid')
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('creates the file holding the bare pid when none exists', () => {
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => true })).toEqual({
+      kind: 'claimed',
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
+  it('leaves a file whose writer is alive untouched, and names that writer', () => {
+    writeFileSync(pidPath, '7')
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: (pid) => pid === 7 })).toEqual({
+      kind: 'held',
+      pid: 7,
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('7')
+  })
+
+  it('asks about the writer with the time the file was written', () => {
+    writeFileSync(pidPath, '7')
+    const seen: number[] = []
+    claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: (_pid, writtenAtMs) => {
+        seen.push(writtenAtMs)
+        return true
+      },
+    })
+    expect(seen).toHaveLength(1)
+    expect(Math.abs((seen[0] as number) - Date.now())).toBeLessThan(60_000)
+  })
+
+  it.each([
+    ['a dead writer', '7'],
+    ['unparsable content', 'not-a-pid'],
+  ])('replaces a file left by %s', (_label, content) => {
+    writeFileSync(pidPath, content)
+    expect(claimPidFile({ pidPath, pid: 42, isWriterAlive: () => false })).toEqual({
+      kind: 'claimed',
+    })
+    expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
+  it('removes the file only while it names the releasing pid', () => {
+    writeFileSync(pidPath, '7')
+    releasePidFile({ pidPath, pid: 42 })
+    expect(readFileSync(pidPath, 'utf8')).toBe('7')
+    releasePidFile({ pidPath, pid: 7 })
+    expect(existsSync(pidPath)).toBe(false)
+  })
+
+  it('treats an absent file as already released', () => {
+    expect(() => releasePidFile({ pidPath, pid: 42 })).not.toThrow()
   })
 })

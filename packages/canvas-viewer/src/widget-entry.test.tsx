@@ -383,7 +383,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
 
     await importFreshWidgetEntry()
     // The tool-result fires synchronously right after import, before
-    // connect() has resolved — committedCanvasId is already set when
+    // connect() has resolved — `committed` is already set when
     // connect() (and thus the `if (connected)` branch) resolves next.
     const scene = {
       nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }],
@@ -398,8 +398,8 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    // This is the `if (committedCanvasId !== undefined) refreshControl.show()`
-    // branch reflected in widget-entry.ts, not rememberCanvasId's own
+    // This is the `if (committed !== undefined) { refreshControl.show() … }`
+    // branch reflected in widget-entry.ts, not commitResult's own
     // `refreshControl?.show()` call (the control did not exist yet when the
     // tool-result arrived).
     const button = queryRefreshButton()

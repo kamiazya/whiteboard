@@ -19,12 +19,14 @@ import { ReplicaReadPage } from './ReplicaReadPage.js'
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
 const DOC_LINKER = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const DOC_PLAN = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
+const DOC_BOARD = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
 const UNKNOWN = '01ARZ3NDEKTSV4RRFFQ69G5FB9'
 
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
   onOpenDocument: undefined as ((documentId: string) => void) | undefined,
   linkTargets: undefined as readonly LinkTarget[] | undefined,
+  canvasOpener: undefined as ((file: string) => void) | undefined,
 }))
 
 vi.mock('../lib/browser-workspace-docs.js', () => ({
@@ -46,6 +48,13 @@ vi.mock('../components/markdown-editor/MarkdownEditor.js', () => ({
   },
 }))
 
+vi.mock('../components/spatial-editor/SpatialEditor.js', () => ({
+  SpatialEditor: (props: { onOpenDocument?: (file: string) => void }) => {
+    store.canvasOpener = props.onOpenDocument
+    return <div data-testid="spatial-editor" />
+  },
+}))
+
 function seedRecord(): LoroDoc {
   const record = new LoroDoc()
   createWorkspaceDocumentAtPath(record, {
@@ -56,6 +65,7 @@ function seedRecord(): LoroDoc {
   writeMarkdownBody(documentContainers(record, DOC_LINKER), 'see [[plan]]')
   createWorkspaceDocumentAtPath(record, { path: 'plan', documentId: DOC_PLAN, kind: 'markdown' })
   writeMarkdownBody(documentContainers(record, DOC_PLAN), 'the plan')
+  createWorkspaceDocumentAtPath(record, { path: 'board', documentId: DOC_BOARD, kind: 'spatial' })
   record.commit()
   return record
 }
@@ -77,6 +87,7 @@ describe('ReplicaReadPage following a link', () => {
     cleanup()
     store.onOpenDocument = undefined
     store.linkTargets = undefined
+    store.canvasOpener = undefined
   })
 
   it('opens the linked document from the replica in place', async () => {
@@ -89,7 +100,7 @@ describe('ReplicaReadPage following a link', () => {
   it('offers the link picker every other document, never the open one', async () => {
     store.record = seedRecord()
     await openLinker()
-    expect(store.linkTargets?.map((target) => target.id)).toEqual([DOC_PLAN])
+    expect(store.linkTargets?.map((target) => target.id)).toEqual([DOC_PLAN, DOC_BOARD])
   })
 
   it('opens nothing for an id the replica does not hold', async () => {
@@ -98,5 +109,40 @@ describe('ReplicaReadPage following a link', () => {
     expect(store.onOpenDocument).toBeTypeOf('function')
     act(() => store.onOpenDocument?.(UNKNOWN))
     expect(screen.getByTestId('markdown-editor').textContent).toBe('see [[plan]]')
+  })
+
+  describe('from a canvas', () => {
+    async function openBoard(): Promise<void> {
+      store.record = seedRecord()
+      render(
+        <ReplicaReadPage
+          workspaceId={DAEMON_WS}
+          daemonBaseUrl="http://127.0.0.1:3099"
+          onReconnect={() => Promise.resolve()}
+        />,
+      )
+      fireEvent.click(await screen.findByText('board'))
+      await screen.findByTestId('spatial-editor')
+      expect(store.canvasOpener).toBeTypeOf('function')
+    }
+
+    it('opens a document a node names by id', async () => {
+      await openBoard()
+      act(() => store.canvasOpener?.(DOC_PLAN))
+      expect((await screen.findByText('the plan')).dataset.testid).toBe('markdown-editor')
+    })
+
+    it('opens a document a node names by path', async () => {
+      await openBoard()
+      act(() => store.canvasOpener?.('plan'))
+      expect((await screen.findByText('the plan')).dataset.testid).toBe('markdown-editor')
+    })
+
+    it('opens nothing for a file the replica does not hold', async () => {
+      await openBoard()
+      act(() => store.canvasOpener?.('missing'))
+      act(() => store.canvasOpener?.(UNKNOWN))
+      expect(screen.getByTestId('spatial-editor')).toBeDefined()
+    })
   })
 })

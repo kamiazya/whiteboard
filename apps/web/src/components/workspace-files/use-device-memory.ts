@@ -55,7 +55,7 @@ export interface DeviceMemory {
    * "nothing changed".
    */
   changed: ReadonlySet<string> | undefined
-  /** Record an open. Stable identity: the panel hands it to four children. */
+  /** Record an open. Stable identity: the panel's `usePanelOpener` lists it in its callbacks' deps. */
   remember: (entry: WorkspaceDocumentEntry) => void
   /** SCOPE RESET — see scoped-screen-state.test.ts */
   reset: () => void

@@ -186,6 +186,24 @@ describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
     resetEmbedIndexForTests()
   })
 
+  // The name is the embed card's heading; without it the card falls back to
+  // the raw reference.
+  it('answers an embedded note with its workspace name and its body', async () => {
+    const entry = await seedLegacyRow({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'notes/spec',
+      kind: 'markdown',
+      name: 'The Spec',
+    })
+    const doc = new Loro()
+    doc.getText('body').insert(0, 'spec body')
+    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+
+    const loaded = await BROWSER_FILE_ADAPTER.loadDocument(entry.documentId)
+    expect(loaded?.name).toBe('The Spec')
+    expect(loaded?.body).toBe('spec body')
+  })
+
   it('re-throws a store read that FAILED, so the canvas seam asks again', async () => {
     // The canvas's embeds read through this door, not `loadBrowserReference`,
     // and the contract is the same: `undefined` is cached as terminal.

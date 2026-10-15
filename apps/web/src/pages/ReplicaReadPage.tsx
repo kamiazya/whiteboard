@@ -324,8 +324,12 @@ function useReplicaLinkTables(
   const markdownLinks = useMemo(
     () => ({
       linkTargets: linkTargets(linkable, { excludeDocumentId }),
-      onOpenDocument: (documentId: string) => {
-        const target = linkable.find((entry) => entry.documentId === documentId)
+      // A wiki link names its target by id; a canvas file node by path on a
+      // daemon record and by id elsewhere, so the one opener tries both.
+      onOpenDocument: (reference: string) => {
+        const target =
+          linkable.find((entry) => entry.documentId === reference) ??
+          linkable.find((entry) => entry.path === reference)
         if (target !== undefined) setSelectedPath(target.path)
       },
     }),
@@ -574,12 +578,12 @@ function ReplicaReader({
               key={selected?.documentId}
               canvas={spatialDraft}
               onChange={onSpatialChange}
-              // Editing-forward: the palette still offers the hand tool,
-              // but an offline visit that came here to fix something
-              // should not need a tool switch first.
+              // Editing-forward: an offline visit that came here to fix
+              // something should not need a switch off the hand tool first.
               defaultTool="select"
               className="h-full"
               references={references}
+              onOpenDocument={markdownLinks.onOpenDocument}
               tagLibrary={tagLibrary}
               tagSuggestions={tagsInUse}
               facetRegistry={facetRegistry}

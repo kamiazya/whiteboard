@@ -69,7 +69,7 @@ export interface DocumentBackendHandlers {
   /**
    * Every write this backend had outstanding has now reached the keeper,
    * after an `onError('storage-failure')`. Optional because only a backend
-   * that retries on its own — the SharedWorker-backed SSE one — can say it;
+   * that retries on its own — `SseBackend`, over either source — can say it;
    * elsewhere a later push resolving is what clears the failure.
    */
   onWritesLanded?: () => void

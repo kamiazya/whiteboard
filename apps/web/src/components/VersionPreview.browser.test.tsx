@@ -1,6 +1,6 @@
 // The version preview's real-browser claims. None survives jsdom: the palette
 // one needs canvas-render's SVG injected and measured for real, and the
-// navigation ones are pointer sequences against a live layout box.
+// navigation ones are pointer and wheel sequences against a live layout box.
 
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -22,9 +22,11 @@ const past: PastDocument = {
 
 const SURFACE_PX = 400
 
-function mount(theme: 'light' | 'dark') {
+function mount(theme: 'light' | 'dark', offsetPx = 0) {
   return render(
-    <div style={{ width: `${SURFACE_PX}px`, height: `${SURFACE_PX}px` }}>
+    <div
+      style={{ width: `${SURFACE_PX}px`, height: `${SURFACE_PX}px`, marginLeft: `${offsetPx}px` }}
+    >
       <VersionPreview past={past} theme={theme} />
     </div>,
   )
@@ -55,6 +57,26 @@ function pointer(
     )
 }
 
+/**
+ * A wheel over the surface, `at` in the surface's own pixels. Answers whether
+ * the event was left uncancelled — false means the handler refused the
+ * browser's default.
+ */
+function wheel(init: WheelEventInit & { readonly at?: readonly [number, number] }): boolean {
+  const surface = page.getByTestId('document-preview').element()
+  const rect = surface.getBoundingClientRect()
+  const [x, y] = init.at ?? [100, 100]
+  return surface.dispatchEvent(
+    new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + x,
+      clientY: rect.top + y,
+      ...init,
+    }),
+  )
+}
+
 /** One finger, +60/+40 — the pan every navigation test below starts from. */
 function drag(): void {
   pointer('pointerdown', 1, 200, 200)
@@ -69,6 +91,29 @@ const transformOf = (container: HTMLElement): string =>
 /** Scale factor read back out of that transform; NaN if it carries none. */
 const scaleOf = (container: HTMLElement): number =>
   Number(/scale\(([^)]+)\)/.exec(transformOf(container))?.[1] ?? Number.NaN)
+
+/** The viewport read back out of the transform, as numbers. */
+function viewOf(container: HTMLElement): { zoom: number; x: number; y: number } {
+  const transform = transformOf(container)
+  const m = /scale\(([^)]+)\) translate\(([-\d.e]+)px, ([-\d.e]+)px\)/.exec(transform)
+  if (m === null) throw new Error(`no viewport transform in ${JSON.stringify(transform)}`)
+  return { zoom: Number(m[1]), x: Number(m[2]), y: Number(m[3]) }
+}
+
+/**
+ * Mounts and waits out the first ResizeObserver reflow, so coordinates taken
+ * from the layout box are the ones the gesture lands on.
+ */
+async function mountSettled(offsetPx = 0): Promise<HTMLElement> {
+  const { container } = mount('light', offsetPx)
+  await expect
+    .poll(() => container.querySelector('svg')?.getAttribute('width'))
+    .toBe(String(SURFACE_PX))
+  return container
+}
+
+const fitControl = (container: HTMLElement): Element | null =>
+  container.querySelector('[data-testid="preview-fit-view"]')
 
 describe('VersionPreview', () => {
   it('draws a past canvas in the theme the app is in', async () => {
@@ -222,5 +267,102 @@ describe('the preview view control', () => {
     expect(fit?.textContent?.trim()).toBe('')
     // The retired vocabulary is gone rather than merely hidden.
     expect(container.textContent).not.toContain('Reset view')
+  })
+})
+
+/**
+ * Wheel and trackpad are the desktop way round a past state, and every claim
+ * here is one a refactor can break while the drag and pinch tests stay green.
+ */
+describe('the preview under a wheel', () => {
+  // The listener is native and non-passive for exactly this: a default left
+  // standing makes Ctrl/Cmd+wheel zoom the whole page.
+  it('pans a plain wheel against the scroll and refuses the page its default', async () => {
+    const container = await mountSettled()
+    expect(wheel({ deltaX: 10, deltaY: 30 })).toBe(false)
+    await expect.poll(() => viewOf(container)).toEqual({ zoom: 1, x: -10, y: -30 })
+  })
+
+  it('zooms in under Ctrl+wheel up, holding the picture point under the pointer', async () => {
+    const container = await mountSettled()
+    expect(wheel({ deltaY: -100, ctrlKey: true, at: [100, 100] })).toBe(false)
+    await expect.poll(() => viewOf(container).zoom).toBeCloseTo(1.1, 5)
+    // The point under (100, 100) stays there: translate = -(100 - 100 / 1.1).
+    expect(viewOf(container).x).toBeCloseTo(-(100 - 100 / 1.1), 3)
+    expect(viewOf(container).y).toBeCloseTo(-(100 - 100 / 1.1), 3)
+  })
+
+  it('zooms out under Ctrl+wheel down, and zooms under Cmd+wheel the way it does under Ctrl', async () => {
+    const container = await mountSettled()
+    wheel({ deltaY: 100, ctrlKey: true })
+    await expect.poll(() => viewOf(container).zoom).toBeCloseTo(1 / 1.1, 5)
+    wheel({ deltaY: -100, metaKey: true })
+    await expect.poll(() => viewOf(container).zoom).toBeCloseTo(1, 5)
+  })
+
+  it('offers the way back after a zoom alone, and after a sideways pan alone', async () => {
+    const zoomed = await mountSettled()
+    expect(fitControl(zoomed)).toBeNull()
+    // Zooming about the origin leaves the translation at zero.
+    wheel({ deltaY: -100, ctrlKey: true, at: [0, 0] })
+    await expect.poll(() => viewOf(zoomed).zoom).toBeCloseTo(1.1, 5)
+    expect(viewOf(zoomed).x).toBeCloseTo(0, 5)
+    await expect.poll(() => fitControl(zoomed)).not.toBeNull()
+    cleanup()
+
+    const panned = await mountSettled()
+    wheel({ deltaX: 25, deltaY: 0 })
+    await expect.poll(() => viewOf(panned)).toEqual({ zoom: 1, x: -25, y: 0 })
+    await expect.poll(() => fitControl(panned)).not.toBeNull()
+  })
+})
+
+describe('the preview under pointer presses', () => {
+  // Each claim is asserted through what the NEXT real drag arrives at, so it
+  // is something that comes true rather than a wait to see nothing happen.
+  it('does not pan under a right-button drag', async () => {
+    const container = await mountSettled()
+    pointer('pointerdown', 1, 200, 200, { pointerType: 'mouse', button: 2, buttons: 2 })
+    pointer('pointermove', 1, 260, 240, { pointerType: 'mouse', buttons: 2 })
+    pointer('pointerup', 1, 260, 240, { pointerType: 'mouse', button: 2 })
+    pointer('pointerdown', 1, 260, 240, { pointerType: 'mouse', buttons: 1 })
+    pointer('pointermove', 1, 280, 260, { pointerType: 'mouse', buttons: 1 })
+    await expect.poll(() => viewOf(container)).toEqual({ zoom: 1, x: 20, y: 20 })
+  })
+
+  for (const end of ['pointerup', 'pointercancel'] as const) {
+    it(`ends a touch drag on ${end}, so the next finger pans instead of pinching`, async () => {
+      const container = await mountSettled()
+      pointer('pointerdown', 1, 200, 200, { pointerType: 'touch' })
+      pointer('pointermove', 1, 220, 220, { pointerType: 'touch' })
+      pointer(end, 1, 220, 220, { pointerType: 'touch' })
+      pointer('pointerdown', 2, 100, 100, { pointerType: 'touch' })
+      pointer('pointermove', 2, 110, 110, { pointerType: 'touch' })
+      await expect.poll(() => viewOf(container)).toEqual({ zoom: 1, x: 30, y: 30 })
+    })
+  }
+
+  // The anchor is in the surface's own pixels; reading it in client pixels
+  // drifts the zoom by the surface's page offset.
+  it('holds the picture point under a pinch midpoint wherever the surface sits on the page', async () => {
+    const container = await mountSettled(60)
+    const left = page.getByTestId('document-preview').element().getBoundingClientRect().left
+    expect(left).toBeGreaterThan(50)
+    pointer('pointerdown', 1, 180, 200)
+    pointer('pointerdown', 2, 220, 200)
+    pointer('pointermove', 1, 160, 200)
+    pointer('pointermove', 2, 240, 200)
+    await expect.poll(() => viewOf(container).zoom).toBeCloseTo(2, 5)
+    expect(viewOf(container).x).toBeCloseTo(-(200 - left) / 2, 3)
+  })
+
+  it('pans with a two-finger drag that keeps its spread', async () => {
+    const container = await mountSettled()
+    pointer('pointerdown', 1, 180, 200)
+    pointer('pointerdown', 2, 220, 200)
+    pointer('pointermove', 2, 260, 200)
+    pointer('pointermove', 1, 220, 200)
+    await expect.poll(() => viewOf(container).x).toBeCloseTo(40, 3)
+    expect(viewOf(container).zoom).toBeCloseTo(1, 5)
   })
 })

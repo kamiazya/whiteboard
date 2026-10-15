@@ -10,7 +10,6 @@ import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
-import { flush } from './test-utils/flush.js'
 
 const BASE = 'http://127.0.0.1:3099'
 const REFUSAL_BODY = {
@@ -22,6 +21,7 @@ function handlersRecording() {
   const snapshots: number[][] = []
   const updates: number[][] = []
   const refusals: SyncWriteRefusal[] = []
+  const writeStates: string[] = []
   const handlers = {
     onSnapshot: (b: Uint8Array) => snapshots.push([...b]),
     onRemoteUpdate: (b: Uint8Array) => updates.push([...b]),
@@ -31,13 +31,21 @@ function handlersRecording() {
     onRestoreComplete: () => {},
     onViewportRequest: () => {},
     onWriteRefused: (refusal: SyncWriteRefusal) => refusals.push(refusal),
+    onError: (reason: string) => writeStates.push(reason),
+    onWritesLanded: () => writeStates.push('landed'),
   } satisfies DocumentBackendHandlers
-  return { handlers, snapshots, updates, refusals }
+  return { handlers, snapshots, updates, refusals, writeStates }
 }
 
-/** The daemon, answering each update POST with `status` and `body` (a function builds a raw body). */
-function daemonAnswering(status: number, body: unknown) {
+/**
+ * The daemon, answering update POSTs with `status` and `body` (a function
+ * builds a raw body) — every one, or only the first `failFirst`, after which
+ * it takes them. `taken` holds each accepted body's bytes, in order.
+ */
+function daemonAnswering(status: number, body: unknown, failFirst = Number.POSITIVE_INFINITY) {
   let snapshotCount = 0
+  let updatePosts = 0
+  const taken: number[][] = []
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : String(input)
     if (url.includes('/snapshot')) {
@@ -46,12 +54,21 @@ function daemonAnswering(status: number, body: unknown) {
     }
     if (url.includes('/api/sync/stream')) return new Response(new ReadableStream(), { status: 200 })
     if (url.includes('/update') && init?.method === 'POST') {
+      updatePosts += 1
+      if (updatePosts > failFirst) {
+        taken.push([...new Uint8Array(init.body as ArrayBuffer)])
+        return new Response('{}', { status: 200 })
+      }
       const raw = typeof body === 'function' ? (body as () => BodyInit)() : JSON.stringify(body)
       return new Response(raw, { status })
     }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   })
-  return { transport: { fetch: fetch as unknown as typeof globalThis.fetch } }
+  return {
+    transport: { fetch: fetch as unknown as typeof globalThis.fetch },
+    taken,
+    attempts: () => updatePosts,
+  }
 }
 
 describe('SseBackend pushing straight to the daemon', () => {
@@ -85,20 +102,97 @@ describe('SseBackend pushing straight to the daemon', () => {
     backend.disconnect()
   })
 
-  it.each([503, 429])('leaves a %i to the caller as a write to retry', async (status) => {
-    const daemon = daemonAnswering(status, { error: 'busy', message: 'later' })
+  it.each([
+    503, 429,
+  ])('sends a write the daemon answered %i again until it lands', async (status) => {
+    const daemon = daemonAnswering(status, { error: 'busy', message: 'later' }, 1)
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, daemon.transport)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const pushed = backend.pushLocalUpdate(new Uint8Array([4, 5]))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(r.writeStates).toEqual(['storage-failure'])
+      expect(daemon.taken).toEqual([])
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await pushed
+      expect(daemon.taken).toEqual([[4, 5]])
+      expect(r.writeStates).toEqual(['storage-failure', 'landed'])
+      // Never taken for a refusal of the bytes: nothing is dropped.
+      expect(r.refusals).toEqual([])
+      expect(r.snapshots).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+      backend.disconnect()
+    }
+  })
+
+  it('waits as long as the daemon asked before sending again', async () => {
+    let posts = 0
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/snapshot')) return new Response(new Uint8Array([1]), { status: 200 })
+      if (url.includes('/api/sync/stream'))
+        return new Response(new ReadableStream(), { status: 200 })
+      if (url.includes('/update') && init?.method === 'POST') {
+        posts += 1
+        if (posts === 1) return new Response('{}', { status: 503, headers: { 'Retry-After': '5' } })
+      }
+      return new Response('{}', { status: 200 })
+    })
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, {
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    })
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      void backend.pushLocalUpdate(new Uint8Array([4, 5]))
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(posts).toBe(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(posts).toBe(2)
+      expect(r.writeStates).toEqual(['storage-failure', 'landed'])
+    } finally {
+      vi.useRealTimers()
+      backend.disconnect()
+    }
+  })
+
+  it('sends the writes queued behind a failed one in order, after it', async () => {
+    const daemon = daemonAnswering(503, { error: 'busy', message: 'later' }, 1)
     const r = handlersRecording()
     const backend = new SseBackend('ws-1', 'notes', BASE, daemon.transport)
     backend.connect(r.handlers)
     await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
 
-    await expect(backend.pushLocalUpdate(new Uint8Array([4, 5]))).rejects.toThrow(
-      `update refused: ${status}`,
-    )
-    await flush()
-    expect(r.refusals).toEqual([])
-    expect(r.snapshots).toHaveLength(1)
+    const first = backend.pushLocalUpdate(new Uint8Array([1]))
+    const second = backend.pushLocalUpdate(new Uint8Array([2]))
+    await Promise.all([first, second])
+
+    // The second write carried the first: a write that lands never skips one
+    // still outstanding before it.
+    expect(daemon.taken).toEqual([[1], [2]])
+    expect(r.writeStates).toEqual(['storage-failure', 'landed'])
     backend.disconnect()
+  })
+
+  it('drops the writes still queued when it disconnects, rather than settling them as landed', async () => {
+    const daemon = daemonAnswering(503, { error: 'busy', message: 'later' })
+    const r = handlersRecording()
+    const backend = new SseBackend('ws-1', 'notes', BASE, daemon.transport)
+    backend.connect(r.handlers)
+    await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
+
+    const pushed = backend.pushLocalUpdate(new Uint8Array([4, 5]))
+    await vi.waitFor(() => expect(r.writeStates).toEqual(['storage-failure']))
+    backend.disconnect()
+    await expect(pushed).rejects.toThrow('writer closed')
+    expect(daemon.taken).toEqual([])
   })
 })
 
@@ -164,7 +258,7 @@ describe('SseBackend through a source that writes onward itself', () => {
     backend.disconnect()
   })
 
-  it('leaves a refusal whose body is cut mid-read to the caller as the network, keeping the bytes', async () => {
+  it('treats a refusal whose body is cut mid-read as the network, sending the bytes again', async () => {
     const cut = () =>
       new ReadableStream<Uint8Array>({
         start(controller) {
@@ -172,18 +266,23 @@ describe('SseBackend through a source that writes onward itself', () => {
           controller.error(new TypeError('network error'))
         },
       })
-    const daemon = daemonAnswering(413, cut)
+    const daemon = daemonAnswering(413, cut, 1)
     const r = handlersRecording()
     const backend = new SseBackend('ws-1', 'notes', BASE, daemon.transport)
     backend.connect(r.handlers)
     await vi.waitFor(() => expect(r.snapshots).toHaveLength(1))
-
-    await expect(backend.pushLocalUpdate(new Uint8Array([4, 5]))).rejects.toMatchObject({
-      name: 'FetchFailedError',
-    })
-    await flush()
-    expect(r.refusals).toEqual([])
-    expect(r.snapshots).toHaveLength(1)
-    backend.disconnect()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const pushed = backend.pushLocalUpdate(new Uint8Array([4, 5]))
+      await vi.advanceTimersByTimeAsync(1000)
+      await pushed
+      expect(r.refusals).toEqual([])
+      expect(r.snapshots).toHaveLength(1)
+      expect(daemon.taken).toEqual([[4, 5]])
+      expect(r.writeStates).toEqual(['storage-failure', 'landed'])
+    } finally {
+      vi.useRealTimers()
+      backend.disconnect()
+    }
   })
 })

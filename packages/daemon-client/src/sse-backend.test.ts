@@ -340,6 +340,44 @@ describe('SseBackend through a source whose push returns before the write lands'
     expect(landed).toBe(1)
     backend.disconnect()
   })
+  it('settles a write handed over while one is failing only once the source says it landed', async () => {
+    const fake = createFakeTransport([])
+    const { handlers } = createHandlers()
+    const listeners: { onWriteState?: (landed: boolean) => void }[] = []
+    const source = {
+      subscribe: (_doc: string, listener: { onWriteState?: (landed: boolean) => void }) => {
+        listeners.push(listener)
+        return () => {}
+      },
+      sendMessage: () => {},
+      push: () => {},
+      snapshot: () => Promise.resolve(null),
+    }
+    const backend = new SseBackend(
+      'ws-1',
+      'canvas-a',
+      'http://127.0.0.1:3099',
+      fake.transport,
+      source,
+    )
+    backend.connect(handlers)
+    await flush()
+    // Nothing failing: handed over is all a page can wait for.
+    expect(backend.pushLocalUpdate(new Uint8Array([1]))).toBeUndefined()
+
+    for (const l of listeners) l.onWriteState?.(false)
+    let settled = false
+    void Promise.resolve(backend.pushLocalUpdate(new Uint8Array([2]))).then(() => {
+      settled = true
+    })
+    await flush()
+    expect(settled).toBe(false)
+
+    for (const l of listeners) l.onWriteState?.(true)
+    await flush()
+    expect(settled).toBe(true)
+    backend.disconnect()
+  })
 })
 
 describe('SseBackend workspace granularity', () => {

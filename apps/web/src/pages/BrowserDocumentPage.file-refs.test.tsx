@@ -94,7 +94,7 @@ describe('BrowserDocumentPage file references', () => {
     const router = await mountPage(await seededStore())
     const before = router.state.location.key
     await act(async () => {
-      latestEditorProps()?.onOpenFileRef?.('01ARZ3NDEKTSV4RRFFQ69G5FZZ')
+      latestEditorProps()?.onOpenDocument?.('01ARZ3NDEKTSV4RRFFQ69G5FZZ')
     })
     // On the KEY, not the pathname: navigating to an id-shaped URL and then
     // having the URL→document effect repair it lands back on this same

@@ -13,7 +13,7 @@
  *
  * Both seams driven here are real props of the editor rather than test
  * hooks: `onOpenInEditor` is how a node's body is opened, and
- * `onOpenFileRef` is how following a file-node reference switches document.
+ * `onOpenDocument` is how following a file-node reference switches document.
  */
 
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
@@ -38,15 +38,15 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
 )
 
 let openInEditor: ((nodeId: string, text: string) => void) | null = null
-let openFileRef: ((file: string) => void) | null = null
+let openDocument: ((file: string) => void) | null = null
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: (props: {
     canvas: SpatialCanvas
     onOpenInEditor?: (nodeId: string, text: string) => void
-    onOpenFileRef?: (file: string) => void
+    onOpenDocument?: (file: string) => void
   }) => {
     openInEditor = props.onOpenInEditor ?? null
-    openFileRef = props.onOpenFileRef ?? null
+    openDocument = props.onOpenDocument ?? null
     return null
   },
 }))
@@ -109,7 +109,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
     vi.unstubAllGlobals()
     vi.clearAllMocks()
     openInEditor = null
-    openFileRef = null
+    openDocument = null
   })
 
   it('following a file reference closes a surface opened on the document being left', async () => {
@@ -124,7 +124,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
       )
     })
     await waitFor(() => expect(openInEditor).not.toBeNull())
-    await waitFor(() => expect(openFileRef).not.toBeNull())
+    await waitFor(() => expect(openDocument).not.toBeNull())
 
     await act(async () => {
       openInEditor?.('n1', 'typed against a node in doc-a')
@@ -136,7 +136,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
 
     // The switch this page makes by itself: the props never move.
     await act(async () => {
-      openFileRef?.('id-b')
+      openDocument?.('id-b')
     })
     // Bounded well inside the per-test budget on purpose: the reset happens
     // during RENDER, so the surface is gone by the commit that follows the
@@ -164,7 +164,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
         />,
       )
     })
-    await waitFor(() => expect(openFileRef).not.toBeNull())
+    await waitFor(() => expect(openDocument).not.toBeNull())
 
     // ⌘S opens the history panel with the naming field armed; naming + Enter
     // performs the save this badge reports.
@@ -182,7 +182,7 @@ describe('the body surface does not outlive its document (daemon)', () => {
     // which panel the inspector slot shows is how the reader looks, not what
     // at — so the badge has to clear on its own rather than with a panel.
     await act(async () => {
-      openFileRef?.('id-b')
+      openDocument?.('id-b')
     })
     await waitFor(() =>
       expect(

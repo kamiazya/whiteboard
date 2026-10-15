@@ -12,7 +12,7 @@ import {
   type SpatialPresetKey,
   withDeclaredColours,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { isFiniteRect, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveNodeSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import type { NodeBox } from './geometry.js'
@@ -40,15 +40,6 @@ function finiteSpan(span: number): number {
   return Number.isFinite(span) ? Math.max(MIN_EXTENT, span) : MIN_EXTENT
 }
 
-function finite(box: MinimapBox): boolean {
-  return (
-    Number.isFinite(box.x) &&
-    Number.isFinite(box.y) &&
-    Number.isFinite(box.width) &&
-    Number.isFinite(box.height)
-  )
-}
-
 /**
  * The transform placing `content` AND `viewportRect` inside a `size` box.
  *
@@ -66,7 +57,7 @@ export function fitMinimap(
   size: { readonly width: number; readonly height: number },
   padding: number,
 ): MinimapFit {
-  const boxes = [...content, viewportRect].filter(finite)
+  const boxes = [...content, viewportRect].filter(isFiniteRect)
   const safePadding =
     Number.isFinite(padding) && padding > 0
       ? // Padding that would consume the whole box is treated as none: a

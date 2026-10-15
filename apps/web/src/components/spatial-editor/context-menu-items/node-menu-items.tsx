@@ -15,7 +15,6 @@ import {
   frameBackgroundStyle,
   isFrame,
   nodeFile,
-  nodeSubpath,
   nodeText,
   nodeUrl,
   type SpatialCanvas,
@@ -88,7 +87,7 @@ export interface NodeMenuItemsInput {
   readonly reorderSelection: CanvasCommands['reorderSelection']
   readonly groupSelection: CanvasCommands['groupSelection']
   readonly openLinkNode: CanvasCommands['openLinkNode']
-  readonly onOpenFileRef: CanvasCommands['onOpenFileRef']
+  readonly onOpenDocument: CanvasCommands['onOpenDocument']
   readonly onAddImage: CanvasCommands['onAddImage']
   readonly onToggleNodeLock: CanvasCommands['onToggleNodeLock']
   readonly setGroupLabelEditId: CanvasCommands['setGroupLabelEditId']
@@ -203,19 +202,25 @@ function pushMultiSelectionBands(verbs: ContextMenuItem[], input: NodeMenuItemsI
  * id is a dead end.
  */
 function pushReferenceBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput): void {
-  const { node, isImageFileRef, missingFileRef, fileRefOptions, onOpenFileRef, setDocumentPicker } =
-    input
+  const {
+    node,
+    isImageFileRef,
+    missingFileRef,
+    fileRefOptions,
+    onOpenDocument,
+    setDocumentPicker,
+  } = input
   const fileRef = nodeFile(node)
   if (fileRef !== undefined && isImageFileRef?.(fileRef) !== true) {
     // A missing target makes Open a dead end (worse: the daemon's
     // path routes lazily create, so following would mint an empty
     // canvas under the dangling ref). Change target stays — it is
     // the repair affordance.
-    if (onOpenFileRef !== undefined && missingFileRef?.(fileRef) !== true) {
+    if (onOpenDocument !== undefined && missingFileRef?.(fileRef) !== true) {
       verbs.push({
         label: 'Open canvas',
         icon: <ExternalLink />,
-        onSelect: () => onOpenFileRef(fileRef, nodeSubpath(node)),
+        onSelect: () => onOpenDocument(fileRef),
       })
     }
     if (fileRefOptions !== undefined) {

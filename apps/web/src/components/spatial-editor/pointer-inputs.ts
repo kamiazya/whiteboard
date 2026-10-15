@@ -79,7 +79,7 @@ export interface EditorPointerInputs {
   readonly createId: (() => string) | undefined
   readonly isImageFileRef: ((file: string) => boolean) | undefined
   readonly missingFileRef: ((file: string) => boolean) | undefined
-  readonly onOpenFileRef: ((file: string, subpath?: string) => void) | undefined
+  readonly onOpenDocument: ((file: string) => void) | undefined
   // declared LATER in the component body — the handlers call them at
   // event time, so the forward reference was fine there and becomes an
   // ordinary input here.
