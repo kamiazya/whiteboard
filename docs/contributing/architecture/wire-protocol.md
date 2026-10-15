@@ -172,8 +172,12 @@ policy to its own frames:
   the page can answer in a shape the page has no schema for; the request the
   frame carries an `id` for fails with a message that names the version
   difference and is cancelled at the host, rather than waiting for ever. An
-  `error` frame's `reason` is only displayed, so an unknown reason reads as
-  `stream-failed` and the host's own `message` still reaches the person.
+  `error` frame's `reason` reads an unknown member as `stream-failed`. The page
+  acts on one reason: `daemon-record-refused` carries the daemon record's own
+  sentence for the person, which the connect option and the offline replica
+  banner show. Every other reason's `message` is a transport detail and stays
+  behind the generic "start one" line, which is also what an older page shows
+  for a reason it does not know.
 
 ## Why this matters
 
