@@ -142,8 +142,9 @@ function upwardEdges(files: readonly SourceFile[]): string[] {
  * the tenant data layout sits under the stores, which sit under the modules
  * that read them, so a store reaching `security/` — or a tenant module reaching
  * back into `store/` — passed every other guard. `search`, `observability` and
- * `release` have no edge to another mechanics directory in either direction,
- * so they are filed at the bottom, where they may import nothing above them.
+ * `release` import no other mechanics directory (the tenant data layout reads
+ * search's model-directory name, an edge within the bottom rank), so they are
+ * filed at the bottom, where they may import nothing above them.
  */
 const MECHANICS_ORDER: readonly (readonly string[])[] = [
   ['tenant', 'search', 'observability', 'release'],
