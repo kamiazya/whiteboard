@@ -8,6 +8,7 @@ import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { daemonLiveness } from '../../src/daemon/daemon-liveness.js'
 import { daemonRecordSchema } from '../../src/daemon/daemon-record-schema.js'
+import { DaemonNoAnswerError } from '../../src/daemon/daemon-request.js'
 import { isPidAlive as daemonIsPidAlive } from '../../src/shared/process-alive.js'
 import {
   readProcessStartMs as daemonReadProcessStartMs,
@@ -449,13 +450,15 @@ describe("the liveness verdict against the daemon's own", () => {
             if (reply.kind === 'refused') {
               throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })
             }
-            if (reply.kind === 'wedged') throw new Error('no answer within 1500ms')
+            if (reply.kind === 'wedged') throw new DaemonNoAnswerError('no answer within 1500ms')
             return presented === token ? reply : { status: 401, body: {} }
           }
-          const daemonSide = await daemonLiveness(record, {
-            ...identity,
-            request: async (req) => answer(req.record.token),
-          })
+          const daemonSide = (
+            await daemonLiveness(record, {
+              ...identity,
+              request: async (req) => answer(req.record.token),
+            })
+          ).state
           const devSide = await recordedDaemonLiveness(record, {
             ...identity,
             request: async (_record, req) => {
@@ -469,18 +472,8 @@ describe("the liveness verdict against the daemon's own", () => {
               return { status, contentType: 'application/json', text }
             },
           })
-          if (reply.kind === 'wedged') {
-            // The daemon's request helper does not yet tell a wedged socket
-            // from a refused one, so its verdict there reads 'pid-reused'
-            // where the agreed answer is 'unconfirmed'. Once it does, this
-            // branch becomes the plain comparison below, with the daemon
-            // side's fake rejecting the way that helper does on a timeout.
-            const asked = daemonSide === 'pid-reused' && socketPath !== undefined
-            expect(devSide).toBe(asked ? 'unconfirmed' : daemonSide)
-            if (devSide === 'unconfirmed') wedgedUnconfirmed += 1
-          } else {
-            expect(devSide).toBe(daemonSide)
-          }
+          expect(devSide).toBe(daemonSide)
+          if (reply.kind === 'wedged' && devSide === 'unconfirmed') wedgedUnconfirmed += 1
           seen.add(devSide)
           if (daemonSide === 'running' && offset !== null && offset > 5_000) {
             confirmedBySocket += 1
