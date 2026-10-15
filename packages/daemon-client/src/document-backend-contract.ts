@@ -57,6 +57,13 @@ export interface DocumentBackendHandlers {
   /**
    * Transport (re)connected. Called on every successful open — both the initial
    * connection and every subsequent reconnect after a close/error cycle.
+   *
+   * A reconnect obliges the BACKEND to catch up: a stream carries only what
+   * is written while it is open, so what the keeper took during the gap
+   * reaches no frame, and every later frame builds on it. The backend asks the
+   * keeper for its state again and delivers it through `onRemoteUpdate` — a
+   * merge, so the caller's own edits survive — with frames arriving meanwhile
+   * delivered after it. The caller only pushes on this signal; it never pulls.
    */
   onConnected: () => void
   /**

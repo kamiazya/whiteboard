@@ -55,6 +55,20 @@ export interface DocumentBackendHarness {
    * `sentUpdates` needs none, since the bytes it sent are the evidence.
    */
   localEdit?(snapshot: Uint8Array | null): LocalEdit
+  /**
+   * The keeper changing the document on its own — an agent's tool call,
+   * another device. `live` says whether this backend's transport is up to
+   * carry the change as a frame; without it the change reaches only the
+   * keeper's own store. Omitted, with `caughtUp`, by an implementation with
+   * no transport to miss a frame on.
+   */
+  keeperWrites?(live: boolean): void
+  /**
+   * Whether the bytes this backend delivered — the snapshot and every
+   * update, in delivery order — reproduce the keeper's current state when
+   * applied. False for a frame left waiting on history it builds on.
+   */
+  caughtUp?(delivered: readonly Uint8Array[]): boolean
   cleanup(): void
 }
 
@@ -74,22 +88,30 @@ function sentBytes(h: DocumentBackendHarness): LocalEdit | null {
 interface Recorded {
   handlers: DocumentBackendHandlers
   calls: string[]
+  /** Every snapshot and update delivered, in order. */
+  delivered: Uint8Array[]
   /** The first snapshot delivered, or `null` before one was. */
   snapshot(): Uint8Array | null
 }
 
 function recorder(): Recorded {
   const calls: string[] = []
+  const delivered: Uint8Array[] = []
   let snapshot: Uint8Array | null = null
   return {
     calls,
+    delivered,
     snapshot: () => snapshot,
     handlers: {
       onSnapshot: (bytes) => {
         snapshot ??= bytes
+        delivered.push(bytes)
         calls.push('snapshot')
       },
-      onRemoteUpdate: () => calls.push('update'),
+      onRemoteUpdate: (bytes) => {
+        delivered.push(bytes)
+        calls.push('update')
+      },
       onConnected: () => calls.push('connected'),
       onDisconnected: () => calls.push('disconnected'),
       onVersionCreated: () => calls.push('version'),
@@ -105,6 +127,26 @@ function recorder(): Recorded {
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 100))
 
 export function documentBackendContract(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  lifecycleCases(create)
+  transportCases(create)
+  catchUpCases(create)
+  upstreamDeliveryCases(create)
+
+  it('never throws on a control message sent before connecting', async () => {
+    // The editor can report readiness while the transport is still coming
+    // up, or after it dropped. Every implementation either queues or
+    // ignores; none may throw into the caller.
+    const h = await create()
+
+    expect(() => h.backend.sendClientReady()).not.toThrow()
+    h.cleanup()
+  })
+}
+
+/** Connecting, and tearing down mid-connect. */
+function lifecycleCases(
   create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
 ): void {
   it('seeds the document and reports the connection', async () => {
@@ -145,7 +187,12 @@ export function documentBackendContract(
     expect(rec.calls).toEqual(atDisconnect)
     h.cleanup()
   })
+}
 
+/** What a caller is told when its backend's transport drops. */
+function transportCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
   it('reports a disconnect when its transport drops', async () => {
     // Without it the caller cannot tell a quiet connection from a dead one,
     // and the UI keeps reporting sync that is not happening.
@@ -192,16 +239,43 @@ export function documentBackendContract(
     h.backend.disconnect()
     h.cleanup()
   })
+}
 
-  upstreamDeliveryCases(create)
-
-  it('never throws on a control message sent before connecting', async () => {
-    // The editor can report readiness while the transport is still coming
-    // up, or after it dropped. Every implementation either queues or
-    // ignores; none may throw into the caller.
+/** What the keeper wrote while the caller's stream was down. */
+function catchUpCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  // Three polled steps behind a production reconnect backoff.
+  it('delivers what the keeper wrote while the stream was down, after it reconnects', {
+    timeout: 20_000,
+  }, async () => {
+    // A stream carries only what is written while it is open, so the keeper's
+    // writes during the gap reach no frame. Unless the backend asks for them
+    // on reconnect, they never arrive — and every later frame builds on them,
+    // so a CRDT holds each one back waiting for history it will never get,
+    // while the page reads connected.
     const h = await create()
+    if (!h.dropTransport || !h.keeperWrites || !h.caughtUp) {
+      h.cleanup()
+      return
+    }
+    const { keeperWrites, caughtUp } = h
+    const rec = recorder()
+    h.backend.connect(rec.handlers)
+    await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 5000 })
 
-    expect(() => h.backend.sendClientReady()).not.toThrow()
+    h.dropTransport()
+    keeperWrites(false)
+    await vi.waitFor(
+      () => expect(rec.calls.filter((c) => c === 'connected').length).toBeGreaterThan(1),
+      { timeout: 5000 },
+    )
+    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+
+    // And the next live frame applies, rather than waiting on the gap.
+    keeperWrites(true)
+    await vi.waitFor(() => expect(caughtUp(rec.delivered)).toBe(true), { timeout: 5000 })
+    h.backend.disconnect()
     h.cleanup()
   })
 }
