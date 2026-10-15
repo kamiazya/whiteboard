@@ -33,7 +33,13 @@ function fakePackage(sourceMigrations: string[], builtMigrations: string[]) {
   const root = mkdtempSync(join(tmpdir(), 'wb-run-built-daemon-'))
   cleanups.push(() => rmSync(root, { recursive: true, force: true }))
   execFileSync('git', ['init', '-q', root])
-  for (const script of ['run-built-daemon.mjs', 'with-dev-data-dir-lib.mjs']) {
+  for (const script of [
+    'run-built-daemon.mjs',
+    'with-dev-data-dir-lib.mjs',
+    'dev-daemon-socket-lib.mjs',
+    'dev-spawn-lock-lib.mjs',
+    'ensure-http-dev-daemon-lib.mjs',
+  ]) {
     mkdirSync(join(root, 'scripts/dev'), { recursive: true })
     copyFileSync(join(HERE, script), join(root, 'scripts/dev', script))
   }
@@ -76,11 +82,47 @@ describe('run-built-daemon', () => {
     expect(existsSync(started)).toBe(false)
   })
 
+  // The SessionStart hook keeps a source dev daemon on the same `.dev-data`.
+  // The built one cannot take its socket, and handing over to it would test
+  // watch-mode source instead of the artifact asked for — so it refuses, by name.
+  it('refuses while a dev daemon is running, naming pnpm mcp:http:stop', () => {
+    const { root, started } = fakePackage(['0001-init'], ['0001-init'])
+    write(
+      join(root, 'data', 'daemon.json'),
+      JSON.stringify({
+        pid: process.pid,
+        socketPath: join(root, 'data', 'absent.sock'),
+        token: 't',
+        startedAt: new Date().toISOString(),
+      }),
+    )
+    const result = runLauncher(root)
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(`pid ${process.pid}`)
+    expect(result.stderr).toContain(join(root, 'data'))
+    expect(result.stderr).toContain('pnpm mcp:http:stop')
+    expect(existsSync(started)).toBe(false)
+  })
+
+  it('refuses while another dev daemon is starting under the spawn lock', () => {
+    const { root, started } = fakePackage(['0001-init'], ['0001-init'])
+    write(
+      join(root, 'data', 'dev-daemon-spawn.lock'),
+      JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }),
+    )
+    const result = runLauncher(root)
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(`pid ${process.pid}`)
+    expect(result.stderr).toContain('pnpm mcp:http:stop')
+    expect(existsSync(started)).toBe(false)
+  })
+
   it('starts a build that ships every source migration', () => {
     const { root, started } = fakePackage(['0001-init', '0002-later'], ['0001-init', '0002-later'])
     const result = runLauncher(root)
     expect(result.stderr).toBe('')
     expect(result.status).toBe(0)
     expect(existsSync(started)).toBe(true)
+    expect(existsSync(join(root, 'data', 'dev-daemon-spawn.lock'))).toBe(false)
   })
 })
