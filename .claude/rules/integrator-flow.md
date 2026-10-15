@@ -23,6 +23,10 @@ git add pnpm-lock.yaml && git commit --no-edit
 pnpm install --frozen-lockfile      # must pass before pushing
 ```
 
+A CLEAN merge that moved the lockfile needs `pnpm install` before pushing too:
+pre-push refuses a tree behind its lockfile (`ERR_PNPM_VERIFY_DEPS_BEFORE_RUN`)
+rather than letting its parallel commands each install into it.
+
 Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "two copies of the same version" type-identity errors, the branch is usually stale — merge current main first before deeper archaeology.
 
 ## The merge gate shows the comments before you decide

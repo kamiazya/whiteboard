@@ -138,7 +138,7 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 
-// The contract allows each connect a short settle, which a cold worker still
+// The contract polls each connect against a ceiling, which a cold worker still
 // loading loro's WASM does not meet. Its replica answering, and a stream open
 // for it, are the warm worker every later case meets anyway.
 beforeAll(async () => {
