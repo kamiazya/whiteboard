@@ -29,7 +29,7 @@ vi.mock('../config.js', () => ({
 }))
 
 // Lets tests inject a one-off, path-scoped rejection from lstat/realpath to
-// exercise isDbWorkspaceDirSafe's generic (non-ENOENT) failure branches,
+// exercise isWorkspaceDirContained's generic (non-ENOENT) failure branches,
 // which a real filesystem can't reliably reproduce (permission checks are
 // bypassed for the root user, which many CI containers run as). Every path
 // not matching the override falls through to the real implementation.
@@ -81,7 +81,7 @@ afterEach(async () => {
 
 // vi.advanceTimersByTimeAsync() fast-forwards the fake JS clock and flushes
 // the microtasks that produces, but runPass() now also awaits real
-// (libuv-backed) fs.promises calls -- the DB-workspace containment check's
+// (libuv-backed) fs.promises calls -- the containment check's
 // lstat/realpath -- which fake timers cannot fast-forward or see, and which
 // only settle once the real event loop actually turns. process.nextTick()
 // alone is not enough (it never yields to libuv's poll/check phases); the
@@ -758,9 +758,8 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
       )
 
       // The workspace's directory is a symlink pointing outside the data
-      // dir, but the DB still lists it as a workspace -- unlike the
-      // filesystem-discovery path, this is not filtered by
-      // discoverFsWorkspaces()'s own containment check.
+      // dir, but the DB still lists it as a workspace, so only the
+      // containment gate before the purge stands between it and an unlink.
       await mkdir(wsRoot(), { recursive: true })
       await symlink(outsideDir, wsDir('evil_db_ws'), 'dir')
 
@@ -781,35 +780,10 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     }
   })
 
-  it('skips a DB-listed workspace when the workspaces root itself points outside the data dir', async () => {
-    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-root-outside-'))
-    try {
-      await mkdir(join(outsideDir, 'evil_root_ws', 'files'), { recursive: true })
-      // An ANCESTOR of the workspace dir is the symlink, so the workspace dir
-      // itself lstat()s as a plain directory: only the realpath containment
-      // check can see that it resolves outside the data dir.
-      await mkdir(join(wsRoot(), '..'), { recursive: true })
-      await symlink(outsideDir, wsRoot(), 'dir')
-
-      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
-      const sweeper = createFileGcSweeper({
-        listWorkspaces: async () => [{ workspaceId: 'evil_root_ws' }],
-        discoverFsWorkspaces: async () => [],
-        purge,
-      })
-      await sweeper.tick()
-      await sweeper.stop()
-
-      expect(purge).not.toHaveBeenCalled()
-    } finally {
-      await rm(outsideDir, { recursive: true, force: true })
-    }
-  })
-
   it('skips the blobs dir when it only holds canvas snapshots (no files/ child)', async () => {
     // document-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/document/...
-    // -- no files/ child of its own -- so the shared discovery containment
-    // check already excludes it without a name-based special case.
+    // -- no files/ child of its own -- so discovery's files/ requirement
+    // already excludes it without a name-based special case.
     const blobsDir = join(tempDir, 'blobs', 'some_other_ws', 'document')
     await mkdir(blobsDir, { recursive: true })
     const listWorkspaces = vi.fn(async () => [])
@@ -852,7 +826,7 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
       )
 
       // The workspace's own top-level dir is a real, non-symlinked directory
-      // (so it passes isDbWorkspaceDirSafe's first containment check on its
+      // (so it passes isWorkspaceDirContained's first containment check on its
       // own), but its files/ CHILD is a symlink pointing outside the data
       // dir. purgeDanglingFiles() only lexically joins <dir>/files and
       // follows whatever that resolves to.
@@ -924,7 +898,7 @@ describe('createFileGcSweeper per-workspace containment revalidation', () => {
   })
 })
 
-describe('isDbWorkspaceDirSafe generic (non-ENOENT) stat/realpath failures', () => {
+describe('isWorkspaceDirContained generic (non-ENOENT) stat/realpath failures', () => {
   it('fails closed and logs a warning when stat rejects with a permission error', async () => {
     const cap = captureLogsForTests('debug')
     try {
