@@ -134,6 +134,53 @@ describe('SseStreamHub reconnect schedule', () => {
 
     expect(attempts.slice(0, 4)).toEqual([1, 2, 3, 4])
   })
+
+  it('starts the backoff over for a healthy stream after an unanswered one', async () => {
+    // Whether a subscribe went unanswered is a fact about ONE stream: carried
+    // over, a single lost subscribe would grow the wait after every later
+    // healthy stream that ends, as a daemon restart ends one.
+    const attempts: number[] = []
+    let subscribes = 0
+    const ends: (() => void)[] = []
+    const fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/api/sync/subscribe')) {
+        subscribes += 1
+        if (subscribes === 1) throw new TypeError('fetch failed')
+        return new Response('{}', { status: 200 })
+      }
+      if (!url.includes('/api/sync/stream')) return new Response('{}', { status: 200 })
+      const streamId = `s${ends.length}`
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(`event: ready\ndata: ${JSON.stringify({ streamId })}\n\n`),
+            )
+            init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')))
+            ends.push(() => controller.close())
+          },
+        }),
+        { status: 200 },
+      )
+    }
+    const hub = new SseStreamHub({
+      fetch: fetch as typeof globalThis.fetch,
+      baseUrl: 'http://d',
+      retryDelayMs: (attempt) => {
+        attempts.push(attempt)
+        return 0
+      },
+    })
+    hub.subscribe('workspace:w', { onUpdate: () => {}, onMessage: () => {} })
+    await waitFor(() => expect(subscribes).toBe(2))
+    await waitFor(() => expect(ends.length).toBe(2))
+    ends[1]?.()
+    await waitFor(() => expect(attempts.length).toBeGreaterThanOrEqual(2))
+    hub.close()
+
+    expect(attempts.slice(0, 2)).toEqual([1, 0])
+  })
 })
 
 describe('SseStreamHub after a stream ends', () => {

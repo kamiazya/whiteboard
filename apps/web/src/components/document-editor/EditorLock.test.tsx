@@ -18,6 +18,8 @@ describe('EditorLock before the document has arrived', () => {
 
     expect(screen.getByRole('button', { name: 'draw' }).closest('[inert]')).not.toBeNull()
     expect(screen.getByRole('status').textContent).toMatch(/Opening this document/)
+    // Shown, not only announced: a sighted person sees why nothing takes input.
+    expect(screen.getByRole('status').className).not.toMatch(/\bsr-only\b/)
   })
 
   it('takes input once it has', () => {
