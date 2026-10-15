@@ -52,7 +52,10 @@ paths:
   (`routingTransitions`). A stream that never routes the document (a refusal
   or drop before the first routing, or `UNROUTED_OPEN_MS` without one) still
   gets the snapshot read, and the routing that follows catches up instead of
-  opening again; reads that replace the copy are numbered, so an older answer
+  opening again — once that read has delivered: a failed or empty one leaves
+  the document unopened and is retried as a replacing read (every
+  `UNROUTED_OPEN_MS`, and on the next routing or drop), and `onConnected`
+  only ever follows a delivered snapshot; reads that replace the copy are numbered, so an older answer
   never replaces a newer one. The SharedWorker seeds or catches up its replica on
   the same signals, and keeps a replica only for `workspace:` keys.
   `documentBackendContract`'s catch-up and routing-gap cases hold it, over

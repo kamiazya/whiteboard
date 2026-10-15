@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runDaemonStatus } from './daemon-status.js'
 
-// All tests inject parseRecord and isPidAlive — no filesystem or process access.
+// All tests inject parseRecord, isPidAlive and processStartMs — no filesystem or process access.
 
 const validRecord = {
   pid: 12345,
@@ -127,6 +127,7 @@ describe('runDaemonStatus: valid record, process alive', () => {
       dataDir: '/fake',
       parseRecord: async () => ({ kind: 'valid', record: validRecord }),
       isPidAlive: () => true,
+      processStartMs: () => null,
     })
     expect(exitCode).toBe(0)
     expect(result.ok).toBe(true)
@@ -137,6 +138,7 @@ describe('runDaemonStatus: valid record, process alive', () => {
       dataDir: '/fake',
       parseRecord: async () => ({ kind: 'valid', record: validRecord }),
       isPidAlive: () => true,
+      processStartMs: () => null,
     })
     expect(result.reason).toBeNull()
     expect(result.recordFresh).toBe(true)
@@ -148,11 +150,25 @@ describe('runDaemonStatus: valid record, process alive', () => {
       dataDir: '/fake',
       parseRecord: async () => ({ kind: 'valid', record: validRecord }),
       isPidAlive: () => true,
+      processStartMs: () => null,
     })
     expect(result.record).toEqual({
       pid: validRecord.pid,
       version: validRecord.version,
       startedAt: validRecord.startedAt,
     })
+  })
+})
+
+describe('runDaemonStatus: valid record, its pid taken by a later process', () => {
+  it('reports the daemon not running', async () => {
+    const { result, exitCode } = await runDaemonStatus({
+      dataDir: '/fake',
+      parseRecord: async () => ({ kind: 'valid', record: validRecord }),
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(validRecord.startedAt) + 60_000,
+    })
+    expect(exitCode).toBe(1)
+    expect(result).toMatchObject({ ok: false, reason: 'pid-reused', recordFresh: false })
   })
 })

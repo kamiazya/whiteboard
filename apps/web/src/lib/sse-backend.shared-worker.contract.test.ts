@@ -49,6 +49,12 @@ const keeperBroadcasts = new Map<string, (live: boolean) => void>()
  * by holding the stream back.
  */
 const unroutable = new Map<string, 'refused' | 'silent'>()
+/**
+ * Snapshot reads still to answer 503, by workspace — a daemon restarting
+ * under the worker's seed. An open costs the keeper two reads when the first
+ * fails: the worker's feed seeds on routing, and the tab's request seeds again.
+ */
+const failingSnapshots = new Map<string, number>()
 /** Answers the subscribes `silent` is holding, so none outlives its case. */
 const heldSubscribes = new Map<string, () => void>()
 let pushFrame: ((frame: string) => void) | null = null
@@ -105,6 +111,11 @@ const server = setupServer(
   http.post(`${BASE}/api/sync/message`, () => HttpResponse.json({ ok: true })),
   http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
     const workspaceId = String(params.workspaceId)
+    const failing = failingSnapshots.get(workspaceId) ?? 0
+    if (failing > 0) {
+      failingSnapshots.set(workspaceId, failing - 1)
+      return HttpResponse.json({ title: 'unavailable' }, { status: 503 })
+    }
     const keeper = keepers.get(workspaceId)
     if (!keeper) return HttpResponse.json({ title: 'not found' }, { status: 404 })
     const snapshot = keeper.export({ mode: 'snapshot' })
@@ -170,14 +181,20 @@ function keeperWriter(workspaceId: string, keeper: LoroDoc): (live: boolean) => 
 
 let caseSeq = 0
 
-async function harness(): Promise<DocumentBackendHarness> {
-  const source = createSharedSseStreamSource(BASE)
-  if (!source) throw new Error('SharedWorker unavailable')
-  const workspaceId = `worker-contract-${++caseSeq}`
+/** A case's daemon-side document, with content to tell a real snapshot from an empty one. */
+function seededKeeper(workspaceId: string): LoroDoc {
   const keeper = new LoroDoc()
   keeper.getText('t').insert(0, 'seed')
   keeper.commit()
   keepers.set(workspaceId, keeper)
+  return keeper
+}
+
+async function harness(): Promise<DocumentBackendHarness> {
+  const source = createSharedSseStreamSource(BASE)
+  if (!source) throw new Error('SharedWorker unavailable')
+  const workspaceId = `worker-contract-${++caseSeq}`
+  const keeper = seededKeeper(workspaceId)
   const keeperWrites = keeperWriter(workspaceId, keeper)
   keeperBroadcasts.set(workspaceId, keeperWrites)
   // The worker's one stream outlives the case that dropped it, and reopens
@@ -209,6 +226,9 @@ async function harness(): Promise<DocumentBackendHarness> {
     },
     neverRoutes: (how) => {
       unroutable.set(`workspace:${workspaceId}`, how)
+    },
+    failsOpeningRead: () => {
+      failingSnapshots.set(workspaceId, 2)
     },
     caughtUp: (delivered) => reproduces(delivered, keeper),
     // The worker outlives every case by design; disconnecting releases this

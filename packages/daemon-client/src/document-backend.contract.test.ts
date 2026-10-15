@@ -55,6 +55,8 @@ interface Daemon {
   writeAfterSnapshot: boolean
   /** How the stream fails to carry the workspace, when it does. */
   unroutable: 'refused' | 'silent' | null
+  /** Whether the next snapshot read answers 503. */
+  failNextSnapshot: boolean
 }
 
 const WORKSPACE_KEY = 'workspace:ws-1'
@@ -67,20 +69,27 @@ function keeperWrite(daemon: Daemon): void {
   daemon.stream?.enqueue(sseFrame('update', frame))
 }
 
+/** The daemon's snapshot route: the keeper's state, unless it is set to fail this read. */
+function snapshotAnswer(daemon: Daemon): Response {
+  if (daemon.failNextSnapshot) {
+    daemon.failNextSnapshot = false
+    return new Response('{"title":"unavailable"}', { status: 503 })
+  }
+  const snapshot = daemon.keeper.doc.export({ mode: 'snapshot' })
+  if (daemon.writeAfterSnapshot) {
+    daemon.writeAfterSnapshot = false
+    keeperWrite(daemon)
+  }
+  return new Response(snapshot.slice().buffer as ArrayBuffer, { status: 200 })
+}
+
 function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     if (url.includes('/api/sync/stream') && daemon.refuseStreams) {
       return new Response('{"title":"unauthorized"}', { status: 401 })
     }
-    if (url.includes('/snapshot')) {
-      const snapshot = daemon.keeper.doc.export({ mode: 'snapshot' })
-      if (daemon.writeAfterSnapshot) {
-        daemon.writeAfterSnapshot = false
-        keeperWrite(daemon)
-      }
-      return new Response(snapshot.slice().buffer as ArrayBuffer, { status: 200 })
-    }
+    if (url.includes('/snapshot')) return snapshotAnswer(daemon)
     if (url.includes('/update')) {
       const body = init?.body
       if (body instanceof ArrayBuffer) daemon.sent.push(new Uint8Array(body))
@@ -139,6 +148,7 @@ function harness(): DocumentBackendHarness {
     refuseStreams: false,
     writeAfterSnapshot: false,
     unroutable: null,
+    failNextSnapshot: false,
   }
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
   return {
@@ -161,6 +171,9 @@ function harness(): DocumentBackendHarness {
     },
     neverRoutes: (how) => {
       daemon.unroutable = how
+    },
+    failsOpeningRead: () => {
+      daemon.failNextSnapshot = true
     },
     caughtUp: (delivered) => reproduces(delivered, daemon.keeper.doc),
     cleanup: () => backend.disconnect(),

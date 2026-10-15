@@ -297,7 +297,11 @@ ran.
 The same two processes can also START together, on one data dir. Startup
 migrations are serialized across them by `store/db/migration-lock.ts`
 (`<dataDir>/migration.lock`): the second waits, then finds nothing pending.
-Without it, one process died with a schema error at a random migration step,
+Whether a lock's holder is gone — `daemon.lock`'s and `migration.lock`'s
+alike — is judged once, in `shared/stale-lock.ts`: unwritten past a grace,
+dead, pid reused (`shared/process-identity.ts`, which `daemon stop`/`run`/
+`status` also ask before trusting `daemon.json`'s pid), or recorded on another
+host and therefore never judged by pid, only waited out. Without the lock, one process died with a schema error at a random migration step,
 and once re-ran a whole-table rebuild before failing.
 
 ## Log redaction

@@ -8,24 +8,18 @@
 import { link, open, readFile, rename, stat, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { isErrnoCode } from '../../../shared/errno.js'
-import { isPidAlive } from '../../../shared/process-alive.js'
+import {
+  describeHolder,
+  type HolderJudgement,
+  judgeLockHolder,
+  lockHolderHost,
+  sameLockFile,
+} from '../../../shared/stale-lock.js'
 import { getLogger } from '../../log.js'
 
 const log = getLogger('migration-lock')
 
 export const MIGRATION_LOCK_FILENAME = 'migration.lock'
-
-// The create and the pid write are two calls, so a racing opener can read the
-// file between them; past this an empty file was left by a holder that died there.
-const EMPTY_LOCK_GRACE_MS = 5_000
-
-// A holder writes the lock after it started, so its process cannot have started
-// after the lock's mtime. The slack absorbs `btime`'s whole-second resolution.
-const START_SLACK_MS = 5_000
-
-// Linux's USER_HZ, the unit of /proc/<pid>/stat's start time, is 100 on every
-// architecture the kernel ships (it is fixed for the userspace ABI).
-const USER_HZ = 100
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const DEFAULT_POLL_MS = 50
@@ -35,44 +29,18 @@ export interface MigrationLockOptions {
   readonly pollMs?: number
 }
 
-// When `pid` started, from /proc. Null where /proc is absent (macOS, Windows):
-// the caller then cannot tell a reused pid and keeps treating it as the holder,
-// which costs a wait rather than a second migrator.
-async function readProcessStartMs(pid: number): Promise<number | null> {
-  try {
-    const procStat = await readFile(`/proc/${pid}/stat`, 'utf8')
-    // The command name is parenthesised and may hold spaces and parentheses,
-    // so fields are counted from the LAST `)`: field 3 follows it.
-    const fields = procStat.slice(procStat.lastIndexOf(')') + 2).split(' ')
-    const startTicks = Number(fields[22 - 3])
-    const btime = /^btime (\d+)$/m.exec(await readFile('/proc/stat', 'utf8'))
-    if (!Number.isFinite(startTicks) || btime === null) return null
-    return Number(btime[1]) * 1000 + (startTicks * 1000) / USER_HZ
-  } catch {
-    return null
-  }
-}
+// The lock's text: the holder's pid, then the host whose pid namespace issued
+// it. A lock with no second line is judged by its pid alone.
+const ownLockText = (): string => `${process.pid}\n${lockHolderHost()}`
 
-type Judgement =
-  | { readonly kind: 'held'; readonly holderPid: number | null }
-  | { readonly kind: 'gone'; readonly holderPid: number | null; readonly reason: string }
-
-async function judgeHolder(text: string, mtimeMs: number): Promise<Judgement> {
-  if (text === '') {
-    return Date.now() - mtimeMs > EMPTY_LOCK_GRACE_MS
-      ? { kind: 'gone', holderPid: null, reason: 'empty lock file' }
-      : { kind: 'held', holderPid: null }
-  }
-  const pid = Number(text)
-  if (!Number.isInteger(pid) || pid <= 0) {
-    return { kind: 'gone', holderPid: null, reason: 'lock file names no pid' }
-  }
-  if (!isPidAlive(pid)) return { kind: 'gone', holderPid: pid, reason: 'holder exited' }
-  const started = await readProcessStartMs(pid)
-  if (started !== null && started > mtimeMs + START_SLACK_MS) {
-    return { kind: 'gone', holderPid: pid, reason: 'holder pid reused by a later process' }
-  }
-  return { kind: 'held', holderPid: pid }
+function judgeLockText(text: string, mtimeMs: number): HolderJudgement {
+  if (text === '') return judgeLockHolder('unwritten', mtimeMs)
+  const [pidLine = '', host] = text.split('\n')
+  const pid = Number(pidLine)
+  return judgeLockHolder(
+    { pid: Number.isInteger(pid) ? pid : null, ...(host ? { host } : {}) },
+    mtimeMs,
+  )
 }
 
 async function tryCreate(lockPath: string): Promise<boolean> {
@@ -84,7 +52,7 @@ async function tryCreate(lockPath: string): Promise<boolean> {
     throw err
   }
   try {
-    await handle.writeFile(String(process.pid))
+    await handle.writeFile(ownLockText())
   } finally {
     await handle.close()
   }
@@ -116,7 +84,7 @@ async function tryCreateOrSkip(lockPath: string): Promise<boolean> {
 // thrown rather than retried at once, which would spin without a deadline.
 async function replaceStale(
   lockPath: string,
-  judged: { dev: number; ino: number },
+  judged: { dev: number; ino: number; mtimeMs: number },
 ): Promise<'retry' | 'unlocked'> {
   const aside = `${lockPath}.stale-${process.pid}-${Date.now()}`
   try {
@@ -129,7 +97,7 @@ async function replaceStale(
   }
   try {
     const moved = await stat(aside)
-    if (moved.dev !== judged.dev || moved.ino !== judged.ino) {
+    if (!sameLockFile(moved, judged)) {
       await link(aside, lockPath).catch(() => {})
     }
   } finally {
@@ -138,11 +106,11 @@ async function replaceStale(
   return 'retry'
 }
 
-// Only while the lock still names this process, so a holder whose lock was
-// replaced never deletes its successor's.
+// Only while the lock still names this process — pid and host both — so a
+// holder whose lock was replaced never deletes its successor's.
 async function release(lockPath: string): Promise<void> {
   try {
-    if ((await readFile(lockPath, 'utf8')) === String(process.pid)) await unlink(lockPath)
+    if ((await readFile(lockPath, 'utf8')) === ownLockText()) await unlink(lockPath)
   } catch {
     // Absent or unremovable: the stale-holder check is the backstop.
   }
@@ -153,7 +121,7 @@ async function release(lockPath: string): Promise<void> {
 // be moved; else the live holder's pid.
 async function inspectHolder(
   lockPath: string,
-): Promise<{ holderPid: number | null } | 'retry' | 'unlocked'> {
+): Promise<{ holderPid: number | null; host?: string } | 'retry' | 'unlocked'> {
   let text: string
   let judged: Awaited<ReturnType<typeof stat>>
   try {
@@ -163,8 +131,8 @@ async function inspectHolder(
     if (isErrnoCode(err, 'ENOENT')) return 'retry'
     throw err
   }
-  const verdict = await judgeHolder(text, judged.mtimeMs)
-  if (verdict.kind === 'held') return { holderPid: verdict.holderPid }
+  const verdict = judgeLockText(text, judged.mtimeMs)
+  if (verdict.kind === 'held') return verdict
   log.warning(
     { lockPath, holderPid: verdict.holderPid, reason: verdict.reason },
     'replacing a migration lock whose holder is gone',
@@ -193,15 +161,22 @@ export async function withMigrationLock<T>(
     if (holder === 'retry') continue
     if (Date.now() >= deadline) {
       throw new Error(
-        `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for process ` +
-          `${holder.holderPid ?? '(unknown)'} to finish migrating the data directory ${dataDir}. ` +
+        `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ${describeHolder(holder)} ` +
+          `to finish migrating the data directory ${dataDir}. ` +
           `If no whiteboard process is running on it, remove ${lockPath} and restart.`,
       )
     }
+    // At the default log level: a caller that gives up before the deadline
+    // (a launcher's own startup bound) must find why this process is waiting.
     if (!announced) {
       announced = true
-      log.info(
-        { lockPath, holderPid: holder.holderPid },
+      log.warning(
+        {
+          lockPath,
+          holderPid: holder.holderPid,
+          holderHost: holder.host,
+          deadline: new Date(deadline).toISOString(),
+        },
         'waiting for another process to finish migrating this data directory',
       )
     }

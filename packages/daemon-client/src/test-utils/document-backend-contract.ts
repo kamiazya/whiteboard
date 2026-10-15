@@ -81,6 +81,14 @@ export interface DocumentBackendHarness {
    */
   neverRoutes?(how: 'refused' | 'silent'): void
   /**
+   * Make the keeper fail the read this backend's open makes of the document
+   * — a daemon restarting, a proxy's passing 5xx — while everything else
+   * answers, and answer the reads after it. Called before `connect`. Omitted
+   * by an implementation whose state is not read from a keeper that can be
+   * away.
+   */
+  failsOpeningRead?(): void
+  /**
    * Whether the bytes this backend delivered — the snapshot and every
    * update, in delivery order — reproduce the keeper's current state when
    * applied. False for a frame left waiting on history it builds on.
@@ -151,6 +159,7 @@ export function documentBackendContract(
   catchUpCases(create)
   routingGapCases(create)
   unroutedCases(create)
+  failedOpenCases(create)
   upstreamDeliveryCases(create)
 
   it('never throws on a control message sent before connecting', async () => {
@@ -391,6 +400,46 @@ function unroutedCases(
       expect(caughtUp(rec.delivered)).toBe(true)
       // Not live, and not claimed to be: nothing carries the keeper's writes.
       expect(rec.calls).not.toContain('connected')
+      h.backend.disconnect()
+      h.cleanup()
+    })
+  }
+}
+
+/**
+ * An opening read that fails. The caller has no copy yet, so nothing the
+ * backend MERGES can reach it: the keeper's state has to arrive as the
+ * snapshot it starts from, and the connection must not be claimed over
+ * nothing — a page told it is connected while it holds no document stays on
+ * its loading state for good.
+ */
+function failedOpenCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  for (const dropped of [false, true]) {
+    // Polled: the retry waits out the backend's own bound, and a drop its reconnect backoff.
+    it(`a document whose opening read fails${dropped ? ', then drops,' : ''} still receives the keeper's state through onSnapshot, not after connected`, {
+      timeout: 20_000,
+    }, async () => {
+      const h = await create()
+      if (!h.failsOpeningRead || !h.caughtUp) {
+        h.cleanup()
+        return
+      }
+      const { caughtUp } = h
+      h.failsOpeningRead()
+      const rec = recorder()
+      h.backend.connect(rec.handlers)
+      if (dropped) {
+        await settle()
+        h.dropTransport?.()
+      }
+
+      await vi.waitFor(() => expect(rec.calls).toContain('snapshot'), { timeout: 10_000 })
+      expect(rec.calls.slice(0, rec.calls.indexOf('snapshot'))).not.toContain('connected')
+      const snapshot = rec.snapshot()
+      expect(snapshot !== null && caughtUp([snapshot])).toBe(true)
+      await vi.waitFor(() => expect(rec.calls).toContain('connected'), { timeout: 10_000 })
       h.backend.disconnect()
       h.cleanup()
     })

@@ -126,7 +126,8 @@ export interface SseStreamSource {
    * hub asks the daemon; the worker-backed source asks the worker's replica,
    * which is what lets a second tab open a document without any daemon round
    * trip. `null` means the authority does not know the document — fork from
-   * empty, the same path a first-ever open takes.
+   * empty, the same path a first-ever open takes. No bytes at all mean it
+   * could not read the document just now, and the caller asks again.
    */
   snapshot(doc: string): Promise<Uint8Array | null>
 }
@@ -293,7 +294,7 @@ export function workspaceIdOfSyncKey(doc: string): string | null {
  * directly; a per-document key is `${handle}/${path}`, split on the first
  * slash (a path may contain more, a handle never does). What comes back is
  * the HANDLE the client wrote, which a daemon resolves to an id before it
- * keys anything by it. `null` for a malformed key — `canvasDocUrl` refuses
+ * keys anything by it. `null` for a malformed key — `documentRouteUrl` refuses
  * through this same split.
  */
 export function workspaceHandleOfSyncKey(doc: string): string | null {
@@ -312,15 +313,19 @@ export function workspaceHandleOfSyncKey(doc: string): string | null {
  * addresses the workspace-document routes instead.
  */
 export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
-  return canvasDocUrl(baseUrl, doc, 'update')
+  return documentRouteUrl(baseUrl, doc, 'update')
 }
 
 /** The snapshot twin of `documentUpdateUrl`, splitting on the same first slash. */
-export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
-  return canvasDocUrl(baseUrl, doc, 'snapshot')
+export function documentSnapshotUrl(baseUrl: string, doc: string): string | null {
+  return documentRouteUrl(baseUrl, doc, 'snapshot')
 }
 
-function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot'): string | null {
+function documentRouteUrl(
+  baseUrl: string,
+  doc: string,
+  action: 'update' | 'snapshot',
+): string | null {
   const base = baseUrl.replace(/\/$/, '')
   const workspaceId = workspaceHandleOfSyncKey(doc)
   if (workspaceId === null) return null
@@ -468,8 +473,10 @@ export class SseStreamHub implements SseStreamSource {
    * The document's current state, from the daemon. The SSE stream carries
    * only INCREMENTAL updates from routing onward — the subscribe route
    * registers routing and seeds nothing — so anything reconstructing a
-   * document reads this after each routed signal (`routingTransitions`): the
-   * first to start from, and every one after a drop to catch up.
+   * document reads this to start from once the stream carries it
+   * (`routingTransitions`'s first signal), or sooner when routing is refused,
+   * drops or has not come within `SseBackend`'s `UNROUTED_OPEN_MS` — and
+   * again after each later routed signal, to catch up on the gap.
    *
    * `null` for a document the daemon does not know: forking from empty is
    * the same path a first-ever open takes, and conflating that answer with a
@@ -477,7 +484,7 @@ export class SseStreamHub implements SseStreamSource {
    * one. Everything else non-ok throws, same reasoning as `push`.
    */
   async snapshot(doc: string): Promise<Uint8Array | null> {
-    const url = canvasSnapshotUrl(this.options.baseUrl, doc)
+    const url = documentSnapshotUrl(this.options.baseUrl, doc)
     if (url === null) throw new Error(`not a document key: ${doc}`)
     const res = await this.options.fetch(url)
     if (res.status === 404) return null
