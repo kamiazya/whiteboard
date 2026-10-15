@@ -35,7 +35,7 @@ import type { WithheldReason } from '@kamiazya/whiteboard-daemon-client/replica-
 import { type FacetRegistry, withWorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import { imageRefId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import { Button } from '../components/ui/button.js'
@@ -455,9 +455,14 @@ interface ReplicaReaderProps {
  *
  * Mounted with the readable page alone: that is where edits are made, and
  * the only state the "Offline copy" word is true of.
+ *
+ * A layout effect, so the store changes in the same commit that shows or
+ * removes the notice. A passive effect runs in a later task, and in between
+ * the notice is on screen while every tab-wide reader still answers "nothing
+ * held" — a reload or a close taken then drops the edits the notice is about.
  */
 function PublishReplicaSaveHealth({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     setShellConnection({ state: { keeper: 'replica', storage: failed ? 'failed' : 'ok' } })
     return () => setShellConnection(null)
   }, [failed])
