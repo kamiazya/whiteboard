@@ -299,10 +299,23 @@ migrations are serialized across them by `store/db/migration-lock.ts`
 (`<dataDir>/migration.lock`): the second waits, then finds nothing pending.
 Whether a lock's holder is gone — `daemon.lock`'s and `migration.lock`'s
 alike — is judged once, in `shared/stale-lock.ts`: unwritten past a grace,
-dead, pid reused (`shared/process-identity.ts`, which `daemon stop`/`run`/
-`status` also ask before trusting `daemon.json`'s pid), or recorded on another
+dead, pid reused (`shared/process-identity.ts`), or recorded on another
 host and therefore never judged by pid, only waited out. Without the lock, one process died with a schema error at a random migration step,
 and once re-ran a whole-table rebuild before failing.
+
+Whether the daemon a `daemon.json` names is still running is answered once,
+by `daemon/daemon-liveness.ts`'s `daemonLiveness` (`running | unconfirmed |
+pid-reused | dead`). `daemon stop`/`run`/`status`/`doctor`, the
+replica-posture commands, the startup version-skew warning and the
+registry's refusal of an uninterpretable record all ask it;
+`tools/arch-lint`'s `daemon-liveness-one-place.test.ts` fails a reader that
+imports `isPidAlive` or `recordedProcess` instead. Start time decides on the
+plain path; only when it says the pid started after the record is the
+record's socket asked (`/api/runtime/status` under the record's token),
+because a stepped wall clock moves `btime` and not a process's start ticks.
+A socket naming the recorded pid is the writer; one that answers otherwise
+is `unconfirmed`, and `daemon stop` then refuses without signalling or
+deleting the record.
 
 ## Log redaction
 

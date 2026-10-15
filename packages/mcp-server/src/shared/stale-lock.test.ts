@@ -1,3 +1,4 @@
+import { hostname } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { judgeLockHolder, sameLockFile, UNWRITTEN_LOCK_GRACE_MS } from './stale-lock.js'
 
@@ -53,6 +54,13 @@ describe('judgeLockHolder', () => {
     expect(judgeLockHolder({ pid: 1, host: HERE }, WRITTEN_AT, seams(null, false)).kind).toBe(
       'gone',
     )
+  })
+
+  // Every lock this build writes names its host, so a crash-left one must
+  // read as this machine's when no host is injected.
+  it('judges a holder recorded on this machine by its pid by default', () => {
+    const dead = { isAlive: () => false, startMs: () => null }
+    expect(judgeLockHolder({ pid: 7, host: hostname() }, WRITTEN_AT, dead).kind).toBe('gone')
   })
 })
 

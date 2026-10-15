@@ -27,6 +27,7 @@ let streamOpens = 0
 const openedStreamIds: string[] = []
 const daemonWrites: { doc: string; body: Uint8Array }[] = []
 const daemonState = new Map<string, Uint8Array>()
+const failingReads = new Set<string>()
 const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
 const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
 let pushFrame: ((frame: string) => void) | null = null
@@ -59,6 +60,9 @@ const server = setupServer(
   // first touch of a document. Pre-existing content lives here.
   http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
     const doc = `${String(params.workspaceId)}/${String(params.path)}`
+    if (failingReads.delete(doc)) {
+      return HttpResponse.json({ title: 'unavailable' }, { status: 503 })
+    }
     const bytes = daemonState.get(doc)
     if (!bytes) return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
     return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
@@ -115,6 +119,7 @@ function createHarness(): SseStreamSourceHarness {
     openedStreamIds: () => openedStreamIds,
     daemonWrites: () => daemonWrites,
     seedDaemonState: (doc, bytes) => daemonState.set(doc, bytes),
+    failsNextRead: (doc) => failingReads.add(doc),
     ready: async () => {
       await vi.waitFor(() => {
         if (pushFrame === null) throw new Error('stream not open')

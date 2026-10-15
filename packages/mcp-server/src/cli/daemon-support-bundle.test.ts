@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { readProcessStartMs } from '../shared/process-identity.js'
 import { captureStdio } from '../shared/test-utils/capture-stdio.js'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
 import { main } from './dispatcher.js'
@@ -177,6 +178,45 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
     const manifest = JSON.parse(await readFile(join(outputDir, 'manifest.json'), 'utf-8'))
     expect(manifest.packageVersion).toBe(PACKAGE_VERSION)
   })
+
+  // A record dated before its pid's process started names a daemon that died;
+  // status and doctor have to say so alike, or one bundle contradicts itself.
+  it.skipIf(readProcessStartMs(process.pid) === null)(
+    'status and doctor agree that a record whose pid a later process took names no daemon',
+    async () => {
+      const dataDir = join(root, 'data-reused')
+      const outputDir = join(root, 'bundle-reused')
+      await mkdir(dataDir, { recursive: true })
+      await writeFile(
+        join(dataDir, 'daemon.json'),
+        JSON.stringify({
+          pid: process.pid,
+          token: 'tok',
+          version: '0.0.4',
+          startedAt: '2024-01-01T00:00:00.000Z',
+          socketPath: join(root, 'nobody.sock'),
+        }),
+        { mode: 0o600 },
+      )
+
+      const outcome = await runDaemonSupportBundle({
+        dataDir,
+        outputDir,
+        now: () => FIXED_TS,
+        packageVersion: '0.0.4',
+        platform: { os: 'linux', nodeVersion: 'v24.0.0' },
+      })
+      expect(outcome.exitCode).toBe(0)
+
+      const status = JSON.parse(await readFile(join(outputDir, 'status.json'), 'utf-8'))
+      const doctor = JSON.parse(await readFile(join(outputDir, 'doctor.json'), 'utf-8'))
+      expect(status).toMatchObject({ ok: false, reason: 'pid-reused' })
+      expect(doctor.ok).toBe(false)
+      expect(doctor.checks).toContainEqual(
+        expect.objectContaining({ id: 'daemon.process', status: 'error' }),
+      )
+    },
+  )
 
   it("writes the status contract's fields and nothing beside them", async () => {
     const outputDir = join(root, 'cli-status-out')

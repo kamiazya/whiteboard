@@ -126,8 +126,10 @@ export interface SseStreamSource {
    * hub asks the daemon; the worker-backed source asks the worker's replica,
    * which is what lets a second tab open a document without any daemon round
    * trip. `null` means the authority does not know the document — fork from
-   * empty, the same path a first-ever open takes. No bytes at all mean it
-   * could not read the document just now, and the caller asks again.
+   * empty, the same path a first-ever open takes. A read the authority could
+   * not serve just now REJECTS, from every implementation, and the caller
+   * asks again: it is never answered with bytes the caller would take for
+   * the document's state.
    */
   snapshot(doc: string): Promise<Uint8Array | null>
 }

@@ -69,6 +69,12 @@ const BACKUP_DISPOSITION = {
   exports: 'copied: files a person asked to have written out, under the workspace id.',
   fonts:
     'copied: installed fonts the export measurer reads; a restore without them would render with fallbacks.',
+  models:
+    'never-copied: the ~113 MB search model cache, re-downloadable. Losing it costs semantic ranking only — the daemon loads weights offline and never fetches, so search stays lexical until `whiteboard search fetch-model` is run again.',
+  'native-host':
+    'never-copied: the launcher names the data dir and node binary it was installed for (and on Windows the manifests the registry points at). A restore always lands in a fresh dir, so a copy would relay the extension to the old one; `whiteboard native-host install` rewrites it.',
+  'server-mode.json':
+    "copied: server mode's own backup keeps it in the archive on purpose, and `restoreServerModeDataDir` deletes it from the restored tree so a fresh `whiteboard server run` writes its own (server-mode-backup-restore.ts).",
 
   'blobs.json':
     'not-in-data-dir: the blob manifest inside a backup MIRROR directory, written by backup-blob-mirror.ts.',
@@ -77,14 +83,19 @@ const BACKUP_DISPOSITION = {
 /**
  * Every `…FILENAME = '<name>'` and `…DIRNAME = '<name>'` constant this package
  * declares: the copy is recursive, so a directory is copied whole as readily as
- * a file.
+ * a file. A name spelled inline as `join(<…dataDir>, '<name>')` is read too,
+ * because that spelling is how the model cache, the server-mode record and the
+ * native-host directory each escaped this ledger.
  */
+const DECLARED_NAME = /(?:^|\s)[A-Z_]*(?:FILENAME|DIRNAME)\s*=\s*'([^']+)'/gm
+const INLINE_DATA_DIR_NAME = /join\(\s*[A-Za-z_.]*[dD]ataDir[A-Za-z]*\s*,\s*'([^']+)'/g
+
 async function scanDeclaredFilenames(): Promise<Set<string>> {
   const found = new Set<string>()
   for (const file of productionSourceFiles(PACKAGE_SRC, { extensions: ['.ts'] })) {
     const source = await readFile(file, 'utf8')
-    for (const match of source.matchAll(/(?:^|\s)[A-Z_]*(?:FILENAME|DIRNAME)\s*=\s*'([^']+)'/gm)) {
-      found.add(match[1] as string)
+    for (const pattern of [DECLARED_NAME, INLINE_DATA_DIR_NAME]) {
+      for (const match of source.matchAll(pattern)) found.add(match[1] as string)
     }
   }
   return found

@@ -52,8 +52,9 @@ paths:
   (`routingTransitions`). A stream that never routes the document (a refusal
   or drop before the first routing, or `UNROUTED_OPEN_MS` without one) still
   gets the snapshot read, and the routing that follows catches up instead of
-  opening again — once that read has delivered: a failed or empty one leaves
-  the document unopened and is retried as a replacing read (every
+  opening again — once that read has delivered: a failed one (a rejected
+  `snapshot()` — every source rejects a read it could not serve, never
+  answers zero bytes) leaves the document unopened and is retried as a replacing read (every
   `UNROUTED_OPEN_MS`, and on the next routing or drop), and `onConnected`
   only ever follows a delivered snapshot; reads that replace the copy are numbered, so an older answer
   never replaces a newer one. The SharedWorker seeds or catches up its replica on

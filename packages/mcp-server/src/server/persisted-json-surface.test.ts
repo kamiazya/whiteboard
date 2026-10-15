@@ -113,13 +113,6 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
       'operator line before it is written, and operator-json-sink.test.ts holds that). Nothing ' +
       'is stored: the smoke IS the round trip, from the published artifact end',
   ),
-  'cli/daemon-replica-posture.ts': notModelled(
-    "the running daemon's HTTP answer to a rotate or a tier change, parsed through the same " +
-      'daemon-client contract the routes emit with (replica-key.ts calls .parse on the way out). ' +
-      'daemon-replica-posture.test.ts drives the command over an injected transport, and ' +
-      'packaged-daemon-replica-key-smoke.mjs reads the real answer from a real daemon — the ' +
-      'round trip, from both ends',
-  ),
 
   // Not persistence. Classified rather than filtered out, because what
   // covers each is a different lane and naming it is the useful half.

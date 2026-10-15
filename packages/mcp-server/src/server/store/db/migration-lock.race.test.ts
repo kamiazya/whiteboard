@@ -3,7 +3,7 @@
 // `open` and `rename`; each replays the other opener's real steps.
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../log.js'
@@ -73,7 +73,7 @@ beforeEach(async () => {
   logs = captureLogsForTests('warning')
   const { pid } = spawnSync(process.execPath, ['-e', ''])
   if (pid === undefined) throw new Error('could not spawn a process to take a pid from')
-  await writeFile(lockPath, String(pid))
+  await writeFile(lockPath, `${pid}\n${hostname()}`)
   // Older than any successor's write, so a successor's mtime always differs.
   const longAgo = new Date(Date.now() - 60_000)
   await utimes(lockPath, longAgo, longAgo)
@@ -116,11 +116,11 @@ describe('racing openers of one stale migration lock', () => {
     'replaced-keeping-aside',
     'replaced-same-inode',
   ] as const)("puts the other opener's fresh lock back and waits for it (%s)", async (other) => {
-    plan.successorText = String(await liveProcessPid())
+    plan.successorText = `${await liveProcessPid()}\n${hostname()}`
     plan.other = other
     const work = vi.fn(async () => {})
     await expect(withMigrationLock(dataDir, work, { timeoutMs: 300, pollMs: 10 })).rejects.toThrow(
-      `waiting for process ${plan.successorText}`,
+      `waiting for process ${plan.successorText.split('\n')[0]}`,
     )
     expect(work).not.toHaveBeenCalled()
     expect(await readFile(lockPath, 'utf8')).toBe(plan.successorText)

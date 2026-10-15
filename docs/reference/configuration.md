@@ -181,7 +181,7 @@ A data directory holds, at its top level, what belongs to the keeper rather than
 - `daemon.json` — the running daemon's record (socket and token); owner-only
 - `daemon-identity.json` and `macaroon-root-key.json` — the daemon's signing identity and the key its credentials are minted from; owner-only
 - `fonts/` — fonts installed through the app
-- `models/` — the semantic-search model weights, once `whiteboard search fetch-model` has downloaded them
+- `models/` — the semantic-search model weights, once `whiteboard search fetch-model` has downloaded them; left out of every backup, so run it again after a restore
 
 A workspace's uploaded images sit under the tenant that owns them — on a local daemon there is one. The documents themselves, their versions and the index are rows in `whiteboard.db`, not files:
 

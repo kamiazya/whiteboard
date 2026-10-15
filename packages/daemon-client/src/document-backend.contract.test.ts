@@ -57,6 +57,8 @@ interface Daemon {
   unroutable: 'refused' | 'silent' | null
   /** Whether the next snapshot read answers 503. */
   failNextSnapshot: boolean
+  /** Whether the next update is refused for what its bytes would do, and whether the read after it fails. */
+  refuseNextWrite: { thenItsReadFails: boolean } | null
 }
 
 const WORKSPACE_KEY = 'workspace:ws-1'
@@ -90,6 +92,12 @@ function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
       return new Response('{"title":"unauthorized"}', { status: 401 })
     }
     if (url.includes('/snapshot')) return snapshotAnswer(daemon)
+    if (url.includes('/update') && daemon.refuseNextWrite !== null) {
+      daemon.failNextSnapshot = daemon.refuseNextWrite.thenItsReadFails
+      daemon.refuseNextWrite = null
+      const refusal = { error: 'markdown_too_large', message: 'This update is too large' }
+      return new Response(JSON.stringify(refusal), { status: 413 })
+    }
     if (url.includes('/update')) {
       const body = init?.body
       if (body instanceof ArrayBuffer) daemon.sent.push(new Uint8Array(body))
@@ -149,6 +157,7 @@ function harness(): DocumentBackendHarness {
     writeAfterSnapshot: false,
     unroutable: null,
     failNextSnapshot: false,
+    refuseNextWrite: null,
   }
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
   return {
@@ -174,6 +183,9 @@ function harness(): DocumentBackendHarness {
     },
     failsOpeningRead: () => {
       daemon.failNextSnapshot = true
+    },
+    refusesNextWrite: (thenItsReadFails) => {
+      daemon.refuseNextWrite = { thenItsReadFails }
     },
     caughtUp: (delivered) => reproduces(delivered, daemon.keeper.doc),
     cleanup: () => backend.disconnect(),

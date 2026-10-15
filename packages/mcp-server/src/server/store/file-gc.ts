@@ -396,8 +396,11 @@ function resolveGraceMs(options: PurgeFilesOptions): number {
  * through, and the write barrier does not stop a filesystem re-point.
  *
  * Both narrow the window to the span between this check and the unlinks
- * rather than closing it, which is what a fence over a filesystem can do —
- * the grace period covers what is left.
+ * rather than closing it, which is what a fence over a filesystem can do.
+ * What is left differs between them: for a record that moved, the grace
+ * period still spares a file uploaded in that span; for a re-pointed files
+ * dir nothing does, and every file older than the grace is unlinked through
+ * it (see `containedFilesDir`).
  */
 async function fenceAfterScan(
   scope: StoreScope,

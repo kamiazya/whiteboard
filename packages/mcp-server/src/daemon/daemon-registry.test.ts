@@ -2,7 +2,9 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
+import { readProcessStartMs } from '../shared/process-identity.js'
 import { CAN_DENY_FILE_READ } from '../shared/test-utils/can-deny-file-read.js'
+import { answeringDaemonSocket } from './_test-daemon-socket.js'
 import type { DaemonRecordWrite } from './daemon-record-schema.js'
 import {
   deleteDaemonRecord,
@@ -162,6 +164,44 @@ describe('daemon-registry', () => {
       new RegExp(`daemon record .* pid ${process.pid}`),
     )
   })
+
+  // A record dated before its pid's process started was written by a daemon
+  // that died: the pid now belongs to whatever took it, and nothing answers
+  // on the record's socket.
+  it.skipIf(readProcessStartMs(process.pid) === null)(
+    'returns null for a record it cannot interpret whose pid a later process took',
+    async () => {
+      await writeFile(
+        getDaemonRecordPath(dataDir),
+        JSON.stringify({
+          pid: process.pid,
+          socketPath: join(dataDir, 'nobody.sock'),
+          startedAt: '2024-01-01T00:00:00.000Z',
+          token: 7,
+          version: '9.0.0',
+        }),
+      )
+      await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
+    },
+  )
+
+  it.skipIf(readProcessStartMs(process.pid) === null)(
+    'throws for a record it cannot interpret while a daemon answers on its socket',
+    async () => {
+      const daemon = await answeringDaemonSocket(process.pid + 1, 'tok')
+      await writeFile(
+        getDaemonRecordPath(dataDir),
+        JSON.stringify({
+          pid: process.pid,
+          socketPath: daemon.socketPath,
+          startedAt: '2024-01-01T00:00:00.000Z',
+          token: 7,
+          version: '9.0.0',
+        }),
+      )
+      await expect(loadDaemonRecord(dataDir)).rejects.toThrow(/answers on its socket/)
+    },
+  )
 
   it('writes atomically via a temp file that does not remain afterwards', async () => {
     await saveDaemonRecord(

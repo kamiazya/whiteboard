@@ -33,6 +33,7 @@ vi.mock('../server/http-server.js', () => ({
 }))
 
 const { runDaemonRun } = await import('./daemon-run.js')
+const { answeringDaemonSocket } = await import('../daemon/_test-daemon-socket.js')
 const { LOCAL_DAEMON_TAIL_INTERVAL_MS, resolveWorkspaceTailIntervalMs } = await import(
   '../server/store/workspace-tail.js'
 )
@@ -145,6 +146,45 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
         })
         expect(outcome.kind).toBe('running')
         expect(startHttpServerMock).toHaveBeenCalledTimes(1)
+      } finally {
+        isPidAliveMock.mockReturnValue(false)
+        later.kill('SIGKILL')
+      }
+    },
+  )
+
+  // A forward wall-clock step makes a live daemon read as having started
+  // after its own record; its socket, naming the recorded pid, says otherwise.
+  it.skipIf(readProcessStartMs(process.pid) === null)(
+    'refuses over a daemon whose socket names the recorded pid, whatever its start time says',
+    async () => {
+      const later = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1 << 30)'], {
+        stdio: 'ignore',
+      })
+      await new Promise<void>((resolve, reject) => {
+        later.once('spawn', resolve)
+        later.once('error', reject)
+      })
+      const pid = later.pid as number
+      const daemon = await answeringDaemonSocket(pid, 'tok')
+      loadDaemonRecordMock.mockResolvedValueOnce({
+        pid,
+        socketPath: daemon.socketPath,
+        token: 'tok',
+        startedAt: new Date(Date.now() - 30_000).toISOString(),
+      })
+      isPidAliveMock.mockReturnValue(true)
+      try {
+        const outcome = await runDaemonRun({
+          tokenStdin: false,
+          dataDir: '/tmp/whiteboard-test',
+          env: {},
+        })
+        expect(outcome).toEqual({
+          kind: 'refused',
+          message: expect.stringContaining('whiteboard daemon stop'),
+        })
+        expect(startHttpServerMock).not.toHaveBeenCalled()
       } finally {
         isPidAliveMock.mockReturnValue(false)
         later.kill('SIGKILL')

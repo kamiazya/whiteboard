@@ -47,6 +47,9 @@ async function liveUnrelatedPid(): Promise<number> {
   return child.pid
 }
 
+// The text this build writes: the holder's pid, then the host it ran on.
+const lockText = (pid: number): string => `${pid}\n${hostname()}`
+
 async function backdate(path: string, ms: number): Promise<void> {
   const when = new Date(Date.now() - ms)
   await utimes(path, when, when)
@@ -70,7 +73,7 @@ describe('withMigrationLock', () => {
 
   it('replaces a lock whose holder has exited', async () => {
     const holder = deadPid()
-    await writeFile(lockPath, String(holder))
+    await writeFile(lockPath, lockText(holder))
     let ran = false
     await withMigrationLock(dataDir, async () => {
       ran = true
@@ -83,11 +86,21 @@ describe('withMigrationLock', () => {
     )
   })
 
+  // A lock left by a build that recorded no host is judged by its pid alone.
+  it('replaces a lock naming only the pid of a holder that has exited', async () => {
+    await writeFile(lockPath, String(deadPid()))
+    let ran = false
+    await withMigrationLock(dataDir, async () => {
+      ran = true
+    })
+    expect(ran).toBe(true)
+  })
+
   it.skipIf(!CAN_READ_PROCESS_START)(
     'replaces a lock whose pid a later process has taken',
     async () => {
       const reused = await liveUnrelatedPid()
-      await writeFile(lockPath, String(reused))
+      await writeFile(lockPath, lockText(reused))
       // Seconds, not hours: a host up for less than the backdate (a CI
       // runner) would start every process after it, and prove nothing.
       await backdate(lockPath, 30_000)
@@ -113,7 +126,7 @@ describe('withMigrationLock', () => {
 
   it('waits out a live holder, then names it when the bound passes', async () => {
     const holder = await liveUnrelatedPid()
-    await writeFile(lockPath, String(holder))
+    await writeFile(lockPath, lockText(holder))
     let ran = false
     await expect(
       withMigrationLock(
@@ -125,7 +138,7 @@ describe('withMigrationLock', () => {
       ),
     ).rejects.toThrow(`waiting for process ${holder} to finish migrating`)
     expect(ran).toBe(false)
-    expect(await readFile(lockPath, 'utf8')).toBe(String(holder))
+    expect(await readFile(lockPath, 'utf8')).toBe(lockText(holder))
   })
 
   it('treats an empty lock as a holder still writing its pid, within the grace', async () => {

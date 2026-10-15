@@ -669,6 +669,13 @@ reach the shared database skips the pass rather than assuming it is alone.
   | `macaroon-root-key.json` | the secret a scoped token would chain from | generates a fresh key; nothing mints scoped tokens today ([ADR-0043](../contributing/adr/0043-authority-as-keys.md)), so nothing is lost |
   | `daemon-identity.json` | the daemon's Ed25519 private key and the source of its `did:key` | generates a fresh identity — see the warning below |
 
+  Two directories are left out for size and portability rather than secrecy:
+
+  | excluded | what it holds | what a restore does instead |
+  |---|---|---|
+  | `models/` | downloaded semantic-search weights (about 113 MB) | search stays lexical until `whiteboard search fetch-model` is run again |
+  | `native-host/` | the browser-extension launcher (and, on Windows, its manifests), which names this data directory | run `whiteboard native-host install` again against the restored directory |
+
   **A restored deployment is a new identity.** Because the identity key is
   excluded, the restored daemon's `did:key` differs from the original's:
   version attestations signed by the old identity no longer verify against

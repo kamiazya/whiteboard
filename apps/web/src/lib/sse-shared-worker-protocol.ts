@@ -58,7 +58,8 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // empty snapshot rather than an error, since forking from empty and letting
   // the daemon fill it in is the same path a first-ever open takes. While the
   // worker's own read of the daemon has failed it answers an empty STRING (no
-  // bytes), which the tab takes as "ask again" rather than as the document.
+  // bytes), which the tab's source reports as a failed read — a rejection,
+  // as the hub reports one — never as the document.
   z.object({ type: z.literal('snapshot'), doc: z.string(), snapshot: z.string() }),
   // Authority state a fork has not seen yet. Distinct from `update` (a raw
   // daemon frame relayed verbatim): this one has been through the replica, so

@@ -40,8 +40,10 @@ export const serverModeRecordSchema = z.object({
 
 export type ServerModeRecord = z.infer<typeof serverModeRecordSchema>
 
+const SERVER_MODE_RECORD_FILENAME = 'server-mode.json'
+
 export function getServerModeRecordPath(dataDir: string): string {
-  return join(dataDir, 'server-mode.json')
+  return join(dataDir, SERVER_MODE_RECORD_FILENAME)
 }
 
 export type ServerModeRecordReadResult =

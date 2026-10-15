@@ -17,6 +17,10 @@
  * (`sse-shared-stream-source.contract.test.ts`). No `sentUpdates` either: the
  * worker merges a push into its replica before writing onward, so arbitrary
  * bytes never reach the daemon — `localEdit` is a real Loro edit instead.
+ * No `refusesNextWrite`: the worker announces a refusal only once it has
+ * rebuilt its replica from the daemon, so the read a refusal sends a tab to
+ * make is answered from that replica and cannot fail; how the source reports
+ * a failed read is the SseStreamSource contract's.
  */
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import type { DocumentBackendHarness } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'

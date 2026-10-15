@@ -1,9 +1,11 @@
 import { cp, lstat, mkdir, readdir } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
+import { NATIVE_HOST_DIRNAME } from '../daemon/native-host/install.js'
 import { isMissingFileError } from '../shared/errno.js'
 import { canonicalizeWithMissingTail, isWithinAllowedRoots } from '../shared/path-containment.js'
 import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
+import { SEARCH_MODELS_DIRNAME } from './search/model-cache-dir.js'
 import { DAEMON_IDENTITY_FILENAME } from './security/daemon-identity.js'
 import { MACAROON_ROOT_KEY_FILENAME } from './security/macaroon-root-key.js'
 import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
@@ -227,6 +229,13 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
  *   and it is a feature rather than a list entry.
  * - The in-progress marker is this command's own bookkeeping, and a copy of
  *   it in a restored data directory claims a backup is running there.
+ * - The search model cache is ~113 MB of downloaded weights, copied into
+ *   every backup times retention otherwise. Losing it costs semantic ranking
+ *   only: the daemon never downloads, so search stays lexical until
+ *   `whiteboard search fetch-model` is run again.
+ * - The native-host launcher names the data directory and node binary it was
+ *   installed for, and a restore always lands in a fresh directory, so a copy
+ *   would relay the extension to the old one. `native-host install` rewrites it.
  *
  * This list is the exclusion; `backup-secret-surface.test.ts` is what makes
  * a file ADDED to the data dir answer for itself, because the copy is
@@ -240,6 +249,8 @@ const NEVER_COPIED = [
   MACAROON_ROOT_KEY_FILENAME,
   DAEMON_IDENTITY_FILENAME,
   BACKUP_MARKER_FILENAME,
+  SEARCH_MODELS_DIRNAME,
+  NATIVE_HOST_DIRNAME,
 ]
 
 /**

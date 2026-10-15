@@ -240,6 +240,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/mcp-server/src/shared/process-identity.ts#readProcessStartMs':
+    "production reaches it as recordedProcess's default; exported so the dev scripts' bare-node copy is held to it, and so a test needing /proc start times can probe for them and skip where the platform has none",
   'packages/mcp-server/src/server/store/backup-guarded-blob-store.ts#BackupGuardedBlobStore':
     'production reaches it through daemonBlobStore; exported so the conformance suite and the store module test can name the class the port ledger holds them to',
   'packages/ports/src/document-path-tree.ts#planSubtreeMove':
