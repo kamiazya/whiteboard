@@ -10,6 +10,7 @@ import {
   isPidAlive,
   isPidFileWriter,
   readDaemonRecord,
+  recordedPidLabel,
 } from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
@@ -60,16 +61,17 @@ async function handOverIfRunning() {
   const running = readDaemonRecord(env.WHITEBOARD_DATA_DIR)
   const daemon = running === null ? null : await assessRecordedDaemon(running)
   if (running === null || !daemon?.running) return
-  const answering = daemon.answering ? '' : ' (busy: it did not answer its socket just now)'
+  const answering = daemon.answering ? '' : ` (busy: it ${daemon.silence})`
+  const pidLabel = recordedPidLabel(running, daemon)
   // Still exit 0 for a built daemon: `pnpm dev` runs this under
   // `concurrently --kill-others-on-fail`, and a refusal would take Vite down.
   // What it must not do is call a build the dev daemon, since a source edit
   // will never reach that process.
   console.error(
     running.launch === BUILT_LAUNCH
-      ? `[with-dev-data-dir] the BUILT daemon (pid ${running.pid}, running a build, not this checkout's source) is running for ${env.WHITEBOARD_DATA_DIR}${answering}; ` +
+      ? `[with-dev-data-dir] the BUILT daemon (${pidLabel}, running a build, not this checkout's source) is running for ${env.WHITEBOARD_DATA_DIR}${answering}; ` +
           'source edits will not reload it — to run the watch-mode dev daemon instead, `pnpm mcp:http:stop` first.'
-      : `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid})${answering} — ` +
+      : `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (${pidLabel})${answering} — ` +
           'to run one in this terminal instead, `pnpm mcp:http:stop` first.',
   )
   exitReleasingLock(0)

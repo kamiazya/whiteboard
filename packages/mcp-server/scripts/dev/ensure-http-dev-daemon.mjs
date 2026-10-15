@@ -26,8 +26,8 @@ import {
   answersPing,
   assessRecordedDaemon,
   isPidAlive,
-  PING_TIMEOUT_MS,
   readDaemonRecord,
+  recordedPidLabel,
 } from './dev-daemon-socket-lib.mjs'
 import {
   acquireSpawnLock,
@@ -104,7 +104,7 @@ async function assessDaemon() {
   if (!daemon.answering) {
     return {
       kind: 'busy',
-      message: `daemon pid ${record.pid} is running but did not answer its socket within ${PING_TIMEOUT_MS}ms`,
+      message: `daemon (${recordedPidLabel(record, daemon)}) is running but ${daemon.silence}`,
     }
   }
   return { kind: 'healthy', message: `daemon pid ${record.pid} already answering on its socket` }

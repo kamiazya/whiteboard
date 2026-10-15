@@ -177,13 +177,20 @@ describe('assessRecordedDaemon', () => {
       answering: false,
       process: 'daemon',
       liveness: 'running',
+      silence: 'did not answer /api/runtime/ping within 3000ms',
     })
   })
 
   it('is not running when the recorded pid started after the record was written', async () => {
     expect(
       await assessRecordedDaemon(record, seams({ startMs: () => recordedAt + 60_000 })),
-    ).toEqual({ running: false, answering: false, process: 'foreign', liveness: 'pid-reused' })
+    ).toEqual({
+      running: false,
+      answering: false,
+      process: 'foreign',
+      liveness: 'pid-reused',
+      silence: 'refused /api/runtime/status',
+    })
   })
 
   it('is not running when the recorded pid is gone', async () => {
@@ -192,6 +199,7 @@ describe('assessRecordedDaemon', () => {
       answering: false,
       process: 'dead',
       liveness: 'dead',
+      silence: 'did not answer /api/runtime/ping within 3000ms',
     })
   })
 
@@ -245,6 +253,7 @@ describe('assessRecordedDaemon', () => {
           answering: false,
           process: 'foreign',
           liveness: 'pid-reused',
+          silence: 'refused /api/runtime/status',
         })
         const current = { ...stale, startedAt: new Date(Date.now() + 1_000).toISOString() }
         expect((await assessRecordedDaemon(current)).process).toBe('daemon')
@@ -347,6 +356,10 @@ describe('a socket that says nothing', () => {
       const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
       const record = { pid: 42, startedAt, socketPath, token: 't' }
       expect(await recordedDaemonLiveness(record, late)).toBe('unconfirmed')
+      // Taken and closed is not a timeout, so no wait is named for it.
+      expect((await assessRecordedDaemon(record, late)).silence).toBe(
+        'took the connection to /api/runtime/status and dropped it',
+      )
     } finally {
       await new Promise<void>((closed) => server.close(() => closed()))
     }
@@ -426,10 +439,13 @@ describe('a socket that says nothing', () => {
     const daemon = await wedged()
     try {
       const record = { pid: 42, startedAt, socketPath: daemon.socketPath, token: 't' }
+      // The status ask is the one that went unanswered, so its own wait is
+      // the one named — no ping was sent.
       expect(await assessRecordedDaemon(record, late)).toMatchObject({
         running: true,
         answering: false,
         process: 'foreign',
+        silence: 'did not answer /api/runtime/status within 1500ms',
       })
     } finally {
       await daemon.close()
