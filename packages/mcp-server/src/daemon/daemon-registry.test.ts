@@ -165,6 +165,31 @@ describe('daemon-registry', () => {
     )
   })
 
+  it('throws for a record with no token whose process is running, blaming the token', async () => {
+    await writeFile(
+      getDaemonRecordPath(dataDir),
+      JSON.stringify({
+        pid: process.pid,
+        socketPath: '/run/user/1000/whiteboard/d.sock',
+        version: '0.1.0',
+        startedAt: new Date().toISOString(),
+      }),
+    )
+    const refused = loadDaemonRecord(dataDir)
+    await expect(refused).rejects.toThrow(/carries no token/)
+    await expect(refused).rejects.not.toThrow(/this version/)
+  })
+
+  it("asks liveness through the caller's seams", async () => {
+    await writeFile(
+      getDaemonRecordPath(dataDir),
+      JSON.stringify({ pid: DEAD_PID, socketPath: '/run/x.sock', token: 7, version: '9.0.0' }),
+    )
+    await expect(
+      loadDaemonRecord(dataDir, { isAlive: () => true, startMs: () => null }),
+    ).rejects.toThrow(new RegExp(`pid ${DEAD_PID}, which is running`))
+  })
+
   // A record dated before its pid's process started was written by a daemon
   // that died: the pid now belongs to whatever took it, and nothing answers
   // on the record's socket.

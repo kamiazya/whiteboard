@@ -7,7 +7,10 @@ import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 const { loadDaemonRecordMock } = vi.hoisted(() => ({
   loadDaemonRecordMock:
     vi.fn<
-      () => Promise<null | {
+      (
+        dataDir: string,
+        seams?: unknown,
+      ) => Promise<null | {
         pid: number
         port: number
         version: string
@@ -397,9 +400,31 @@ describe('runDaemonStop: a live daemon after the wall clock stepped forward', ()
     const { result, exitCode } = await runDaemonStop(
       baseOpts({ isPidAlive: () => true, processStartMs: steppedStart, killFn, removeRecord }),
     )
-    expect(result).toMatchObject({ ok: false, action: 'refused', reason: 'identity-unconfirmed' })
+    expect(result).toEqual({
+      schemaVersion: 1,
+      ok: false,
+      action: 'refused',
+      reason: 'identity-unconfirmed',
+      pid: fakeRecord.pid,
+      servingPid: fakeRecord.pid + 1,
+    })
     expect(killFn).not.toHaveBeenCalled()
     expect(removeRecord).not.toHaveBeenCalled()
     expect(exitCode).toBe(1)
+  })
+})
+
+// The record is read through the same liveness question the stop then asks,
+// so a test's process seams must reach the read as well.
+describe('runDaemonStop: reading the record', () => {
+  it("passes the caller's process seams to the record's reader", async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(null)
+    const isPidAlive = () => false
+    const processStartMs = () => null
+    await runDaemonStop(baseOpts({ isPidAlive, processStartMs }))
+    expect(loadDaemonRecordMock).toHaveBeenCalledWith('/fake', {
+      isAlive: isPidAlive,
+      startMs: processStartMs,
+    })
   })
 })

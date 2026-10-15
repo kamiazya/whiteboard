@@ -44,12 +44,18 @@ const NOT_STOPPED = {
   dead: { action: 'not-running', reason: 'process-not-running' },
 } as const
 
-function notStopped(liveness: Exclude<DaemonLiveness, 'running'>, pid: number): DaemonStopResult {
+function notStopped(
+  liveness: Exclude<DaemonLiveness, { state: 'running' }>,
+  pid: number,
+): DaemonStopResult {
   return daemonStopResultSchema.parse({
     schemaVersion: 1,
     ok: false,
-    ...NOT_STOPPED[liveness],
+    ...NOT_STOPPED[liveness.state],
     pid,
+    ...(liveness.state === 'unconfirmed' && liveness.servingPid !== undefined
+      ? { servingPid: liveness.servingPid }
+      : {}),
   })
 }
 
@@ -63,7 +69,8 @@ export async function runDaemonStop(
   const killWaitMs = options.killWaitMs ?? DEFAULT_KILL_WAIT_MS
   const removeRecord = options.removeRecord ?? deleteDaemonRecord
 
-  const record = await loadDaemonRecord(options.dataDir)
+  const seams = { isAlive: options.isPidAlive, startMs: options.processStartMs }
+  const record = await loadDaemonRecord(options.dataDir, seams)
 
   if (record === null) {
     return {
@@ -81,14 +88,14 @@ export async function runDaemonStop(
   const { pid } = record
   // A record that outlived its daemon can name a pid another process has
   // since taken; that process is not the daemon and must not be signalled.
-  const judge = () =>
-    daemonLiveness(record, { isAlive: options.isPidAlive, startMs: options.processStartMs })
+  const judge = () => daemonLiveness(record, seams)
   const liveness = await judge()
-  if (liveness !== 'running') {
-    // An unconfirmed daemon answers on the record's socket but not as this
-    // pid: something is serving, so the record is not a leftover to drop, and
-    // the pid is not known to be what is serving, so it is not signalled.
-    if (liveness !== 'unconfirmed') await removeRecord(options.dataDir)
+  if (liveness.state !== 'running') {
+    // An unconfirmed daemon serves the record's socket without confirming
+    // this pid — answering as another, or accepting and staying silent:
+    // something is serving, so the record is not a leftover to drop, and the
+    // pid is not known to be what is serving, so it is not signalled.
+    if (liveness.state !== 'unconfirmed') await removeRecord(options.dataDir)
     return { result: notStopped(liveness, pid), exitCode: 1 }
   }
 
@@ -100,7 +107,7 @@ export async function runDaemonStop(
     timeoutMs: stopTimeoutMs,
     pollMs: POLL_INTERVAL_MS,
     killWaitMs,
-    confirmKill: async () => (await judge()) === 'running',
+    confirmKill: async () => (await judge()).state === 'running',
   })
   if (stopped.kind === 'signal-failed') {
     return {

@@ -114,6 +114,30 @@ describe('whiteboard daemon rotate-replica-key', () => {
     expect(asked.map((req) => req.method)).toEqual(['GET'])
   })
 
+  // Whatever serves the socket as another pid is not known to be the daemon the
+  // record's token belongs to, so the token is never posted to it.
+  it('refuses, posting nothing, when the socket answers as another pid', async () => {
+    const asked: DaemonRequest[] = []
+    const { result, exitCode } = await runDaemonRotateReplicaKey({
+      dataDir: '/data',
+      workspaceId: 'ws-1',
+      parseRecord: async () => running,
+      isPidAlive: () => true,
+      processStartMs: () => Date.parse(record.startedAt) + 6_000,
+      request: async (req) => {
+        asked.push(req)
+        return { status: 200, body: { pid: record.pid + 1 } }
+      },
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'daemon-not-running',
+      message: expect.stringMatching(/answers on the recorded socket, but not as pid 4242/),
+    })
+    expect(exitCode).toBe(1)
+    expect(asked.map((req) => req.method)).toEqual(['GET'])
+  })
+
   it("reports the daemon's refusal with its status and reason, exit 1", async () => {
     const daemon = daemonAnswering(404, {
       error: 'workspace_not_found',
