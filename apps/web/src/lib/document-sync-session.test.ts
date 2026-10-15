@@ -87,8 +87,8 @@ type FakeBackendControl = {
   handlers: DocumentBackendHandlers | null
   disconnectCalled: boolean
   pushLocalUpdateCalls: Uint8Array[]
-  /** Models a transport that is down: pushes are accepted and discarded,
-   *  which is what DaemonBackend does when its socket is not OPEN. */
+  /** Models a transport that loses pushes: each is accepted and discarded,
+   *  which the session's full-state resend on `onConnected` exists for. */
   transportDown: boolean
   /** When set, every push parks until `releasePushes()` — a slow store. */
   holdPushes: boolean
