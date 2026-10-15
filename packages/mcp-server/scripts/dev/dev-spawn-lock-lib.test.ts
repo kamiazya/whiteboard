@@ -21,6 +21,7 @@ import {
   claimPidFile,
   DEFAULT_SPAWN_LOCK_STALE_MS,
   isLockStale,
+  readPidFile,
   releasePidFile,
   releaseSpawnLock,
   resolveSpawnLockStaleMs,
@@ -539,5 +540,20 @@ describe('claimPidFile / releasePidFile (real temp dir)', () => {
 
   it('treats an absent file as already released', () => {
     expect(() => releasePidFile({ pidPath, pid: 42 })).not.toThrow()
+  })
+
+  it('reads back the pid a file names with the time it was written', () => {
+    writeFileSync(pidPath, '7')
+    utimesSync(pidPath, 1_700_000_000, 1_700_000_000)
+    expect(readPidFile(pidPath)).toEqual({ pid: 7, writtenAtMs: 1_700_000_000_000 })
+  })
+
+  it.each([
+    ['absent', null],
+    ['empty', ''],
+    ['naming no pid', 'not-a-pid'],
+  ])('reads a pid file that is %s as none', (_label, content) => {
+    if (content !== null) writeFileSync(pidPath, content)
+    expect(readPidFile(pidPath)).toBeNull()
   })
 })

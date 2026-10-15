@@ -202,6 +202,20 @@ export function isRecordWriter(pid, writtenAt, seams) {
 }
 
 /**
+ * Whether `pid` is still the process that wrote a pid file last modified at
+ * `writtenAtMs`: the judgement `claimPidFile` is given for `dev-wrapper.pid`,
+ * and the one every script deciding "is a dev wrapper running" uses.
+ *
+ * @param {number} pid
+ * @param {number} writtenAtMs
+ * @param {{ isAlive?: (pid: number) => boolean, startMs?: (pid: number) => number | null }} [seams]
+ * @returns {boolean}
+ */
+export function isPidFileWriter(pid, writtenAtMs, seams) {
+  return isRecordWriter(pid, new Date(writtenAtMs).toISOString(), seams)
+}
+
+/**
  * The one answer to "is this checkout's daemon running", shared by the
  * wrapper's refusal to start a second one, `pnpm mcp:http:stop` and the
  * SessionStart hook: its socket answers, or the pid its record names is alive

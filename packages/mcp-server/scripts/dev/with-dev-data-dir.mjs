@@ -8,7 +8,7 @@ import {
   assessRecordedDaemon,
   BUILT_LAUNCH,
   isPidAlive,
-  isRecordWriter,
+  isPidFileWriter,
   readDaemonRecord,
 } from './dev-daemon-socket-lib.mjs'
 import {
@@ -139,7 +139,7 @@ mkdirSync(dirname(pidPath), { recursive: true })
 const pidFile = claimPidFile({
   pidPath,
   pid: process.pid,
-  isWriterAlive: (pid, writtenAtMs) => isRecordWriter(pid, new Date(writtenAtMs).toISOString()),
+  isWriterAlive: (pid, writtenAtMs) => isPidFileWriter(pid, writtenAtMs),
 })
 if (pidFile.kind === 'held') {
   console.error(

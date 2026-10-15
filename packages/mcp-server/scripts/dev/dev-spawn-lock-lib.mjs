@@ -335,6 +335,25 @@ function parsePid(text) {
 }
 
 /**
+ * The pid a pid file names and when it was written, or null when it is absent
+ * or names no pid — what a caller judging its writer, as `claimPidFile` does,
+ * needs. Never throws.
+ *
+ * @param {string} pidPath
+ * @param {{ fsReadFile?: typeof readFileSync, fsStat?: typeof statSync }} [seams]
+ * @returns {{ pid: number, writtenAtMs: number } | null}
+ */
+export function readPidFile(pidPath, { fsReadFile = readFileSync, fsStat = statSync } = {}) {
+  try {
+    const writtenAtMs = fsStat(pidPath).mtimeMs
+    const pid = parsePid(fsReadFile(pidPath, 'utf8'))
+    return pid === null ? null : { pid, writtenAtMs }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Removes the pid file only while it still names `pid`, so a wrapper never
  * deletes the file another wrapper has since claimed. Never throws.
  *
