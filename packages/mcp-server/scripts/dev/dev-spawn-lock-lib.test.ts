@@ -3,9 +3,12 @@ import {
   existsSync,
   mkdtempSync,
   openSync as openSyncReal,
+  readdirSync,
   readFileSync,
   renameSync as renameSyncReal,
   rmSync,
+  type statSync,
+  unlinkSync as unlinkSyncReal,
   writeFileSync,
   writeSync as writeSyncReal,
 } from 'node:fs'
@@ -351,6 +354,116 @@ describe('claimPidFile / releasePidFile (real temp dir)', () => {
       kind: 'claimed',
     })
     expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
+  it('replaces a stale file through a rename claim and leaves no claim copy behind', () => {
+    writeFileSync(pidPath, '7')
+    const calls: string[] = []
+    const result = claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: () => false,
+      fsRename: (from, to) => {
+        calls.push('rename')
+        renameSyncReal(from, to)
+      },
+      fsUnlink: (path) => {
+        calls.push(String(path).includes('.stale-') ? 'unlink claim copy' : 'unlink pid file')
+        unlinkSyncReal(path)
+      },
+    })
+    expect(result).toEqual({ kind: 'claimed' })
+    expect(calls).toEqual(['rename', 'unlink claim copy'])
+    expect(readdirSync(dir)).toEqual(['dev-wrapper.pid'])
+    expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
+  it('a stealer losing the rename claim leaves the winner file alone and names it', () => {
+    writeFileSync(pidPath, '7')
+    // ENOENT from rename() is what a second stealer sees once the first has
+    // already moved the stale file away.
+    const enoent = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    const result = claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: () => false,
+      fsRename: () => {
+        throw enoent
+      },
+    })
+    expect(result).toEqual({ kind: 'held', pid: 7 })
+    expect(readFileSync(pidPath, 'utf8')).toBe('7')
+  })
+
+  it.each([
+    ['0'],
+    ['-3'],
+    ['1.5'],
+    ['abc'],
+  ])('replaces a file naming %s without asking whether it is alive', (content) => {
+    writeFileSync(pidPath, content)
+    const asked: number[] = []
+    const result = claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: (pid) => {
+        asked.push(pid)
+        return true
+      },
+    })
+    expect(asked).toEqual([])
+    expect(result).toEqual({ kind: 'claimed' })
+    expect(readFileSync(pidPath, 'utf8')).toBe('42')
+  })
+
+  it('a create error other than EEXIST is held without reading the existing file', () => {
+    writeFileSync(pidPath, '7')
+    const eacces = Object.assign(new Error('EACCES'), { code: 'EACCES' })
+    let read = false
+    const result = claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: () => false,
+      fsOpen: () => {
+        throw eacces
+      },
+      fsReadFile: ((path: string, encoding: BufferEncoding) => {
+        read = true
+        return readFileSync(path, encoding)
+      }) as typeof readFileSync,
+    })
+    expect(result).toEqual({ kind: 'held', pid: null })
+    expect(read).toBe(false)
+    expect(readFileSync(pidPath, 'utf8')).toBe('7')
+  })
+
+  it('an unreadable pid file counts as held, not as free', () => {
+    writeFileSync(pidPath, '7')
+    const eacces = Object.assign(new Error('EACCES'), { code: 'EACCES' })
+    const result = claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: () => false,
+      fsReadFile: (() => {
+        throw eacces
+      }) as typeof readFileSync,
+    })
+    expect(result).toEqual({ kind: 'held', pid: null })
+    expect(readFileSync(pidPath, 'utf8')).toBe('7')
+  })
+
+  it('a pid file whose stat fails is held, not stolen', () => {
+    writeFileSync(pidPath, '7')
+    const result = claimPidFile({
+      pidPath,
+      pid: 42,
+      isWriterAlive: () => false,
+      fsStat: (() => {
+        throw Object.assign(new Error('EIO'), { code: 'EIO' })
+      }) as typeof statSync,
+    })
+    expect(result).toEqual({ kind: 'held', pid: 7 })
+    expect(readFileSync(pidPath, 'utf8')).toBe('7')
   })
 
   it('removes the file only while it names the releasing pid', () => {
