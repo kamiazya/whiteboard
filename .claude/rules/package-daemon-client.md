@@ -49,7 +49,11 @@ paths:
   document on the open stream, so `SseBackend` subscribes first (frames
   held), reads the snapshot on the first routed signal and catches up —
   merging through `onRemoteUpdate` — on every later one
-  (`routingTransitions`); the SharedWorker seeds or catches up its replica on
+  (`routingTransitions`). A stream that never routes the document (a refusal
+  or drop before the first routing, or `UNROUTED_OPEN_MS` without one) still
+  gets the snapshot read, and the routing that follows catches up instead of
+  opening again; reads that replace the copy are numbered, so an older answer
+  never replaces a newer one. The SharedWorker seeds or catches up its replica on
   the same signals, and keeps a replica only for `workspace:` keys.
   `documentBackendContract`'s catch-up and routing-gap cases hold it, over
   the owned hub and the SharedWorker source.
