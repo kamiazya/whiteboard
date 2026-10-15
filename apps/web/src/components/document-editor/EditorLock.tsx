@@ -1,21 +1,27 @@
-import { History, Trash2 } from 'lucide-react'
+import { History, LoaderCircle, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { UseDocumentSyncResult } from '../../hooks/useDocumentSync.js'
 
 export interface EditorLockProps {
-  /** What the session says about the document: a restore in flight, or a delete. */
-  readonly sync: Pick<UseDocumentSyncResult, 'restoreInProgress' | 'restoreLabel' | 'backendError'>
+  /** What the session says about the document: not arrived yet, a restore in flight, or a delete. */
+  readonly sync: Pick<
+    UseDocumentSyncResult,
+    'loaded' | 'restoreInProgress' | 'restoreLabel' | 'backendError'
+  >
   /** The way back to the workspace, offered once the document is gone. */
   readonly onLeave: (() => void) | undefined
   readonly children: ReactNode
 }
 
 /**
- * The editor's frame while its document cannot take edits: the daemon is
- * restoring a version of it, or it was deleted somewhere else — by an agent,
- * another tab, another member. The first ends on its own; the second does
- * not, since the session has stopped writing and nothing typed could be kept,
- * so its notice stays and offers the way out.
+ * The editor's frame while its document cannot take edits: it has not
+ * arrived yet, the daemon is restoring a version of it, or it was deleted
+ * somewhere else — by an agent, another tab, another member. The first two
+ * end on their own; the last does not, since the session has stopped writing
+ * and nothing typed could be kept, so its notice stays and offers the way out.
+ * Before the document arrives the session refuses edits — there is nowhere to
+ * write them — so the editor says it is opening rather than offering an empty
+ * canvas that ignores what is drawn on it.
  *
  * `inert` is what makes the editor read-only: it blocks pointer and keyboard
  * input and takes the subtree out of focus order for every editor at once,
@@ -25,6 +31,7 @@ export interface EditorLockProps {
 export function EditorLock({ sync, onLeave, children }: EditorLockProps) {
   const restoring = sync.restoreInProgress
   const removed = documentRemoved(sync)
+  const opening = !sync.loaded && !removed
   return (
     <div className="relative h-full min-h-0 min-w-0">
       <div
@@ -37,13 +44,21 @@ export function EditorLock({ sync, onLeave, children }: EditorLockProps) {
         role="status"
         aria-live="polite"
         className={
-          restoring || removed
+          restoring || removed || opening
             ? 'absolute top-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-background px-3 py-1.5 text-sm shadow-lg'
             : 'sr-only'
         }
       >
         {removed ? (
           <RemovedNotice onLeave={onLeave} />
+        ) : opening ? (
+          <>
+            <LoaderCircle
+              aria-hidden="true"
+              className="size-3.5 animate-spin text-muted-foreground"
+            />
+            <span data-testid="document-opening-notice">Opening this document…</span>
+          </>
         ) : (
           restoring && (
             <>
@@ -53,7 +68,7 @@ export function EditorLock({ sync, onLeave, children }: EditorLockProps) {
           )
         )}
       </div>
-      <div className="h-full min-h-0 min-w-0" inert={restoring || removed}>
+      <div className="h-full min-h-0 min-w-0" inert={restoring || removed || opening}>
         {children}
       </div>
     </div>

@@ -53,6 +53,8 @@ interface Daemon {
   refuseStreams: boolean
   /** Whether the keeper commits a write of its own once it has served a snapshot. */
   writeAfterSnapshot: boolean
+  /** How the stream fails to carry the workspace, when it does. */
+  unroutable: 'refused' | 'silent' | null
 }
 
 const WORKSPACE_KEY = 'workspace:ws-1'
@@ -86,14 +88,23 @@ function daemonFetch(daemon: Daemon): typeof globalThis.fetch {
     }
     if (url.includes('/api/sync/subscribe')) {
       const body = JSON.parse(String(init?.body)) as { subscribe?: string[] }
-      if (body.subscribe?.includes(WORKSPACE_KEY)) daemon.routed = true
+      if (body.subscribe?.includes(WORKSPACE_KEY)) {
+        if (daemon.unroutable === 'refused') {
+          return new Response('{"error":"unknown_stream"}', { status: 404 })
+        }
+        daemon.routed = true
+      }
       return new Response('{}', { status: 200 })
     }
     if (url.includes('/api/sync/stream')) {
       return new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
-            controller.enqueue(sseFrame('ready', { streamId: 'contract-stream' }))
+            // A buffering proxy holds the small `ready` frame back, so no
+            // subscribe is ever sent on this stream.
+            if (daemon.unroutable !== 'silent') {
+              controller.enqueue(sseFrame('ready', { streamId: 'contract-stream' }))
+            }
             daemon.stream = controller
           },
         }),
@@ -127,6 +138,7 @@ function harness(): DocumentBackendHarness {
     routed: false,
     refuseStreams: false,
     writeAfterSnapshot: false,
+    unroutable: null,
   }
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
   return {
@@ -146,6 +158,9 @@ function harness(): DocumentBackendHarness {
     },
     keeperWritesAfterNextSnapshot: () => {
       daemon.writeAfterSnapshot = true
+    },
+    neverRoutes: (how) => {
+      daemon.unroutable = how
     },
     caughtUp: (delivered) => reproduces(delivered, daemon.keeper.doc),
     cleanup: () => backend.disconnect(),

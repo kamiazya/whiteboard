@@ -28,8 +28,9 @@ export type SyncReadyEvent = z.infer<typeof syncReadyEventSchema>
 export const syncUpdateEventSchema = z.object({
   doc: z.string().min(1),
   // SSE frames are text, so Loro update bytes travel base64-encoded. Only
-  // incremental updates go through here — the initial snapshot is served as
-  // binary by GET /api/w/:workspaceId/document/<path>/snapshot, so the largest
+  // incremental updates go through here, and only on `workspace:` keys — the
+  // state a page starts from is served as binary by
+  // GET /api/w/:workspaceId/workspace-document/snapshot, so the largest
   // payload never pays the base64 inflation.
   update: z.string(),
 })
@@ -68,7 +69,9 @@ export const MAX_DOCS_PER_STREAM = 256
 export const syncSubscribeRequestSchema = z
   .object({
     streamId: z.string().min(1),
-    // Doc keys are `${workspaceId}/${path}`, matching the connection registry.
+    // Doc keys are `workspace:<id>` (the workspace document, the only key
+    // binary frames travel on) or `${workspaceId}/${path}` (one document's
+    // text messages), matching the connection registry.
     subscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
     unsubscribe: z.array(z.string().min(1)).max(MAX_DOCS_PER_STREAM).optional(),
   })
@@ -78,9 +81,11 @@ export type SyncSubscribeRequest = z.infer<typeof syncSubscribeRequestSchema>
 
 /**
  * What a subscribe answers: the documents the stream now follows. The browser
- * hub deliberately ignores the body (a dropped subscribe is re-sent on
- * reconnect), so the reader that keeps this honest is the route's own test,
- * which parses the real answer through it.
+ * hub reads the answer's STATUS as the routing signal — a 2xx routes the
+ * documents asked for, anything else refuses them, and a subscribe with no
+ * answer at all ends the stream so the next one re-asks — and ignores the
+ * body, so the reader that keeps this honest is the route's own test, which
+ * parses the real answer through it.
  */
 export const syncSubscribeResponseSchema = z
   .object({
