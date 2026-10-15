@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { isolatedGitEnv } from './git-test-utils.mjs'
 
 const SCRIPT = join(import.meta.dirname, 'mutate.mjs')
 const ORIGINAL = 'keep me\nthe exact line\nkeep me too\n'
@@ -33,7 +34,9 @@ function withFixture(run) {
   }
 }
 
-const mutate = (args, env = process.env) =>
+// mutate.mjs runs git to find where its lock goes, so it gets the scratch-repo
+// environment too: a hook's exported GIT_DIR would otherwise answer for it.
+const mutate = (args, env = isolatedGitEnv()) =>
   spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', env })
 
 test('exits 3 and names the needle when the substitution matches nothing', () => {
@@ -216,7 +219,10 @@ test('prints where the backup is before the command runs', () => {
 async function assertSecondRunRefused({ inRepo = false, secondTmpdir = null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'mutate-guard-'))
   if (inRepo) {
-    const init = spawnSync('git', ['init', '--quiet', dir], { encoding: 'utf8' })
+    const init = spawnSync('git', ['init', '--quiet', dir], {
+      encoding: 'utf8',
+      env: isolatedGitEnv(),
+    })
     assert.equal(init.status, 0, init.stderr)
   }
   const file = join(dir, 'subject.txt')
@@ -246,7 +252,7 @@ async function assertSecondRunRefused({ inRepo = false, secondTmpdir = null } = 
 
     // A needle the first mutation leaves intact, so only the lock can refuse.
     const mark = `require('node:fs').writeFileSync(${JSON.stringify(secondRan)},'')`
-    const secondEnv = secondTmpdir === null ? undefined : { ...process.env, TMPDIR: secondTmpdir }
+    const secondEnv = secondTmpdir === null ? undefined : isolatedGitEnv({ TMPDIR: secondTmpdir })
     const second = mutate(
       [file, 'keep me too', 'other', '--', process.execPath, '-e', mark],
       secondEnv,
