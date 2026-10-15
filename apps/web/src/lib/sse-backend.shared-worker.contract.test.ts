@@ -134,6 +134,14 @@ async function harness(): Promise<DocumentBackendHarness> {
   // contract's settle is sized for a connect answered from memory, not for a
   // daemon round trip through a worker on a loaded machine.
   await source.snapshot(`workspace:${workspaceId}`)
+  // The worker's one stream outlives the case that dropped it, and reopens
+  // only while something subscribes. A claim of the harness's own, held for
+  // the case, brings it back up, so every case starts from a transport that is.
+  const holdStream = source.subscribe(`workspace:${workspaceId}-stream`, {
+    onUpdate: () => {},
+    onMessage: () => {},
+  })
+  await vi.waitFor(() => expect(pushFrame).not.toBeNull(), { timeout: 15_000 })
   const backend = new SseBackend(workspaceId, 'canvas-a', BASE, undefined, source)
   return {
     backend,
@@ -153,7 +161,10 @@ async function harness(): Promise<DocumentBackendHarness> {
     caughtUp: (delivered) => reproduces(delivered, keeper),
     // The worker outlives every case by design; disconnecting releases this
     // case's claims, and its workspace id keeps its traffic apart.
-    cleanup: () => backend.disconnect(),
+    cleanup: () => {
+      backend.disconnect()
+      holdStream()
+    },
   }
 }
 
