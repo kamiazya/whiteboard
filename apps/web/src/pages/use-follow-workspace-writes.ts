@@ -8,6 +8,7 @@ import {
   type WorkspaceRecord,
 } from '../lib/follow-workspace-writes.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
+import { useSharedStreamFailed } from './use-shared-stream-failed.js'
 
 interface Connection {
   readonly daemonFetch: typeof globalThis.fetch
@@ -43,6 +44,9 @@ export function useFollowWorkspaceWrites(
   reload: (workspaceId: string, isStale: () => boolean) => Promise<void>,
 ): void {
   const { daemonFetch, daemonBaseUrl, streamSource } = connection
+  // A worker that failed to load has dropped every subscription it held, so
+  // the follow starts again, and `openStream` then opens a hub of its own.
+  const sharedStreamFailed = useSharedStreamFailed(daemonBaseUrl)
   useEffect(() => {
     if (workspaceId === null) return
     let stale = false
@@ -55,7 +59,7 @@ export function useFollowWorkspaceWrites(
       stop()
       close()
     }
-  }, [workspaceId, reload, daemonFetch, daemonBaseUrl, streamSource])
+  }, [workspaceId, reload, daemonFetch, daemonBaseUrl, streamSource, sharedStreamFailed])
 }
 
 /**

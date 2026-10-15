@@ -16,6 +16,7 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
+import { useSharedStreamFailed } from './use-shared-stream-failed.js'
 
 /** What a parent may substitute for the connection this hook would build. */
 type CreateDaemonBackend = (
@@ -81,6 +82,9 @@ export function useDaemonDocumentBackend({
   documents,
 }: DaemonDocumentBackendOptions): DaemonDocumentBackendState {
   const [authError, setAuthError] = useState(false)
+  // A backend on a worker that failed to load is cut off for good, so the
+  // failure keys the connection: it rebuilds, on a stream of its own.
+  const deadWorker = useSharedStreamFailed(daemonBaseUrl)
 
   // The injected factory is held in a ref rather than carried in the backend
   // memo's dependencies: it customises HOW a connection is built, it does not
@@ -135,7 +139,7 @@ export function useDaemonDocumentBackend({
       daemonFetch,
       contentDocumentId: workspaceSyncDocumentId,
     })
-  }, [workspaceId, path, loading, daemonFetch, daemonBaseUrl, workspaceSyncDocumentId])
+  }, [workspaceId, path, loading, daemonFetch, daemonBaseUrl, workspaceSyncDocumentId, deadWorker])
   const backend = backendState?.backend ?? null
 
   // A rejected session belongs to one backend identity — switching to a new
