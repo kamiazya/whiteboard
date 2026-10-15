@@ -86,6 +86,30 @@ describe('applyCanvasChange', () => {
     expect(removed.edges).toEqual([])
   })
 
+  // The edge twin of 'patches the named line only': with a single edge on the
+  // board, patching every edge and patching the named one read the same.
+  it('patches the named edge only', () => {
+    const two: SpatialCanvas = {
+      ...BOARD,
+      edges: [
+        { ...EDGE, id: 'e1' },
+        { ...EDGE, id: 'e2' },
+      ],
+    }
+    const out = applyCanvasChange(two, {
+      id: 'edge:e1',
+      status: 'open',
+      op: 'edge.patch',
+      edgeId: 'e1',
+      patch: { label: 'to' },
+      assumed: {},
+    })
+    expect(out.edges).toEqual([
+      { ...EDGE, id: 'e1', label: 'to' },
+      { ...EDGE, id: 'e2' },
+    ])
+  })
+
   // Adoption must be idempotent: two people pressing Adopt on the same
   // change, or one pressing it twice, is an ordinary race.
   it('is idempotent', () => {
@@ -161,6 +185,20 @@ describe('canvasChangeConflicts', () => {
     ).toBe(true)
   })
 
+  // A collision on ANY patched field is one: a two-field proposal whose
+  // anchor kept one field and lost the other would overwrite somebody's edit.
+  it('sees a conflict when one of several patched fields moved', () => {
+    const both: SpatialProposedChange = {
+      ...PATCH_A,
+      patch: { x: 400, y: 400 },
+      assumed: { x: 0, y: 0 },
+    }
+    expect(canvasChangeConflicts(both, BOARD)).toBe(false)
+    expect(canvasChangeConflicts(both, { ...BOARD, nodes: [{ ...NODE_A, x: 50 }, NODE_B] })).toBe(
+      true,
+    )
+  })
+
   it('sees a conflict when the element the change is about is gone', () => {
     expect(canvasChangeConflicts(PATCH_A, { nodes: [NODE_B], edges: [] })).toBe(true)
   })
@@ -191,6 +229,21 @@ describe('canvasChangeConflicts', () => {
     expect(canvasChangeConflicts(remove, BOARD)).toBe(false)
     expect(
       canvasChangeConflicts(remove, { ...BOARD, nodes: [withNodeText(NODE_A, 'edited'), NODE_B] }),
+    ).toBe(true)
+  })
+
+  // The prior is compared over the fields EITHER side has, so a node that
+  // gained a field since the proposal was read is a different node.
+  it('sees a conflict when a removal would delete a node that gained a field', () => {
+    const remove: SpatialProposedChange = {
+      id: 'node:a',
+      status: 'open',
+      op: 'node.remove',
+      nodeId: 'a',
+      assumed: NODE_A,
+    }
+    expect(
+      canvasChangeConflicts(remove, { ...BOARD, nodes: [{ ...NODE_A, color: '5' }, NODE_B] }),
     ).toBe(true)
   })
 })
@@ -310,6 +363,46 @@ describe('ink lines and edges in a proposal', () => {
     expect(canvasChangeConflicts(removeLine('l1', inkLine('l1')), c)).toBe(false)
     expect(canvasChangeConflicts(removeLine('l1', inkLine('l1', { color: '3' })), c)).toBe(true)
     expect(canvasChangeConflicts(removeLine('gone', inkLine('gone')), c)).toBe(true)
+  })
+
+  const patchEdge = (edgeId: string, patch: Partial<CanvasEdge>): SpatialProposedChange => ({
+    id: `edge:${edgeId}`,
+    status: 'open',
+    op: 'edge.patch',
+    edgeId,
+    patch,
+    assumed: {},
+  })
+
+  it('flags an edge patch when any field it sets moved', () => {
+    const c: SpatialCanvas = { ...BOARD, edges: [link('e1'), link('e2')] }
+    const relabel = patchEdge('e1', { label: 'x', color: '2' })
+    expect(canvasChangeConflicts(relabel, c)).toBe(false)
+    expect(
+      canvasChangeConflicts(relabel, {
+        ...c,
+        edges: [link('e1', { label: 'someone' }), link('e2')],
+      }),
+    ).toBe(true)
+  })
+
+  it('flags a patch of an edge that is gone', () => {
+    expect(canvasChangeConflicts(patchEdge('gone', { label: 'x' }), BOARD)).toBe(true)
+  })
+
+  it('flags a line patch when the field it sets moved', () => {
+    const recolour: SpatialProposedChange = {
+      id: 'line:l1',
+      status: 'open',
+      op: 'line.patch',
+      lineId: 'l1',
+      patch: { color: '1' },
+      assumed: {},
+    }
+    expect(canvasChangeConflicts(recolour, { ...BOARD, lines: [inkLine('l1')] })).toBe(false)
+    expect(
+      canvasChangeConflicts(recolour, { ...BOARD, lines: [inkLine('l1', { color: '4' })] }),
+    ).toBe(true)
   })
 
   it('flags a patch of a line that is gone', () => {
