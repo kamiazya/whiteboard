@@ -81,14 +81,18 @@ export function describeOccupant(
 
 /**
  * Why a record's own pid is not the daemon serving `socket`, opening a
- * sentence that refuses to start or reports the process unconfirmed.
+ * sentence that refuses to start or reports the process unconfirmed. Only a
+ * socket that named a pid is said to answer: one that stayed silent, or
+ * answered without naming one, merely holds the socket.
  */
 export function describeUnconfirmed(
   liveness: Extract<DaemonLiveness, { state: 'unconfirmed' }>,
   pid: number,
   socket: string,
 ): string {
-  return `A daemon answers on ${socket}${asServingPid(liveness)}, not as pid ${pid}`
+  return liveness.servingPid === undefined
+    ? `A process holds ${socket} but did not confirm it is pid ${pid}`
+    : `A daemon answers on ${socket}${asServingPid(liveness)}, not as pid ${pid}`
 }
 
 function asServingPid(liveness: Extract<DaemonLiveness, { state: 'unconfirmed' }>): string {

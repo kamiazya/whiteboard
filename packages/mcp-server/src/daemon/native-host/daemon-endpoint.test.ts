@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { getDaemonRecordPath } from '../daemon-registry.js'
+import { DaemonNoAnswerError } from '../daemon-request.js'
 import { resolveDaemonEndpoint } from './daemon-endpoint.js'
 
 describe('resolveDaemonEndpoint', () => {
@@ -46,6 +47,36 @@ describe('resolveDaemonEndpoint', () => {
     await writeRecord(dataDir, new Date().toISOString())
     const seams = { isAlive: () => true, startMs: () => Date.now() + 60_000 }
     await expect(resolveDaemonEndpoint(dataDir, seams)).resolves.toBeNull()
+  })
+
+  // Relaying under the record's token to whatever holds the socket would send a
+  // request to a daemon the record does not describe.
+  it('refuses a record whose socket answers as another pid, naming that pid', async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+    await writeRecord(dataDir, new Date().toISOString())
+    const seams = {
+      isAlive: () => true,
+      startMs: () => Date.now() + 60_000,
+      request: async () => ({ status: 200, body: { pid: process.pid + 1 } }),
+    }
+    await expect(resolveDaemonEndpoint(dataDir, seams)).rejects.toThrow(
+      `as pid ${process.pid + 1}, not as pid ${process.pid}`,
+    )
+  })
+
+  it('refuses a record whose socket takes the connection and stays silent', async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'wb-native-host-'))
+    await writeRecord(dataDir, new Date().toISOString())
+    const seams = {
+      isAlive: () => true,
+      startMs: () => Date.now() + 60_000,
+      request: async () => {
+        throw new DaemonNoAnswerError('no answer within 1500ms')
+      },
+    }
+    await expect(resolveDaemonEndpoint(dataDir, seams)).rejects.toThrow(
+      getDaemonRecordPath(dataDir),
+    )
   })
 
   it('relays to a valid record whose daemon is still running', async () => {

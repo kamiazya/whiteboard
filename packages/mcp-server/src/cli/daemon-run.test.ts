@@ -238,7 +238,7 @@ describe('runDaemonRun refuses to start over a daemon that is still running', ()
       })
       expect(outcome).toEqual({
         kind: 'refused',
-        message: `A daemon answers on ${daemon.socketPath}, not as pid ${process.ppid}, which daemon.json names. Stop the process serving that socket first.`,
+        message: `A process holds ${daemon.socketPath} but did not confirm it is pid ${process.ppid}, which daemon.json names. Stop the process serving that socket first.`,
       })
       expect(startHttpServerMock).not.toHaveBeenCalled()
     },

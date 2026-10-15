@@ -209,7 +209,7 @@ describe('describeUnconfirmed', () => {
 
   it('says only that the recorded pid was not confirmed where the answer named none', () => {
     expect(describeUnconfirmed({ state: 'unconfirmed' }, 5, 'the recorded socket')).toBe(
-      'A daemon answers on the recorded socket, not as pid 5',
+      'A process holds the recorded socket but did not confirm it is pid 5',
     )
   })
 
