@@ -100,7 +100,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }))
 afterAll(() => server.close())
 
 function createHarness(): SseStreamSourceHarness {
-  const source = createSharedSseStreamSource(BASE)
+  const source = createSharedSseStreamSource(BASE, fetch)
   if (!source) throw new Error('SharedWorker unavailable')
 
   return {

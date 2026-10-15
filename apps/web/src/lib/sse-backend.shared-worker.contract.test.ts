@@ -142,7 +142,7 @@ afterAll(() => server.close())
 // loading loro's WASM does not meet. Its replica answering, and a stream open
 // for it, are the warm worker every later case meets anyway.
 beforeAll(async () => {
-  const source = createSharedSseStreamSource(BASE)
+  const source = createSharedSseStreamSource(BASE, fetch)
   if (!source) throw new Error('SharedWorker unavailable')
   const off = source.subscribe('workspace:worker-contract-warmup', {
     onUpdate: () => {},
@@ -195,7 +195,7 @@ function seededKeeper(workspaceId: string): LoroDoc {
 }
 
 async function harness(): Promise<DocumentBackendHarness> {
-  const source = createSharedSseStreamSource(BASE)
+  const source = createSharedSseStreamSource(BASE, fetch)
   if (!source) throw new Error('SharedWorker unavailable')
   const workspaceId = `worker-contract-${++caseSeq}`
   const keeper = seededKeeper(workspaceId)

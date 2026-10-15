@@ -159,7 +159,7 @@ describe('useDaemonDocumentBackend when the shared worker fails to load', () => 
     globalThis.SharedWorker = originalSharedWorker
   })
 
-  it('rebuilds on its own stream, and the page opens from its own read', async () => {
+  it('keeps its connection, and the page opens from its own read', async () => {
     vi.useFakeTimers()
     FailingSharedWorker.instances = []
     globalThis.SharedWorker = FailingSharedWorker as unknown as typeof SharedWorker
@@ -175,21 +175,17 @@ describe('useDaemonDocumentBackend when the shared worker fails to load', () => 
       useDaemonDocumentBackend(options({ daemonBaseUrl: daemonBaseUrl, daemonFetch })),
     )
     const onTheWorker = result.current.backend
-    onTheWorker?.connect(snapshotHandlers(() => {}))
+    const onSnapshot = vi.fn()
+    onTheWorker?.connect(snapshotHandlers(onSnapshot))
     expect(FailingSharedWorker.instances).toHaveLength(1)
 
     act(() => FailingSharedWorker.instances[0]?.fail())
-
-    const rebuilt = result.current.backend
-    expect(rebuilt).not.toBeNull()
-    expect(rebuilt).not.toBe(onTheWorker)
-    onTheWorker?.disconnect()
-    const onSnapshot = vi.fn()
-    rebuilt?.connect(snapshotHandlers(onSnapshot))
+    // The source falls back inside itself, so the page has nothing to rebuild.
+    expect(result.current.backend).toBe(onTheWorker)
     await act(() => vi.advanceTimersByTimeAsync(UNROUTED_OPEN_MS))
 
     expect(onSnapshot).toHaveBeenCalledWith(new Uint8Array([7]))
     expect(FailingSharedWorker.instances).toHaveLength(1)
-    rebuilt?.disconnect()
+    onTheWorker?.disconnect()
   })
 })
