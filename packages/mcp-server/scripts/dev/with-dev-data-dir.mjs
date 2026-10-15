@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import {
   assessRecordedDaemon,
+  BUILT_LAUNCH,
   isPidAlive,
   isRecordWriter,
   readDaemonRecord,
@@ -64,8 +65,8 @@ async function handOverIfRunning() {
   // What it must not do is call a build the dev daemon, since a source edit
   // will never reach that process.
   console.error(
-    running.launch === 'built'
-      ? `[with-dev-data-dir] the BUILT daemon (pid ${running.pid}, started by \`pnpm mcp:http\`) is running for ${env.WHITEBOARD_DATA_DIR}${answering}; ` +
+    running.launch === BUILT_LAUNCH
+      ? `[with-dev-data-dir] the BUILT daemon (pid ${running.pid}, running a build, not this checkout's source) is running for ${env.WHITEBOARD_DATA_DIR}${answering}; ` +
           'source edits will not reload it — to run the watch-mode dev daemon instead, `pnpm mcp:http:stop` first.'
       : `[with-dev-data-dir] reusing the dev daemon already running for ${env.WHITEBOARD_DATA_DIR} (pid ${running.pid})${answering} — ` +
           'to run one in this terminal instead, `pnpm mcp:http:stop` first.',

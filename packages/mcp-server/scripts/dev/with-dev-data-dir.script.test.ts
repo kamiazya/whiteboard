@@ -18,6 +18,8 @@ import {
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { DaemonRecord } from '../../src/daemon/daemon-record-schema.js'
+import { BUILT_LAUNCH } from './dev-daemon-socket-lib.mjs'
 import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
 import { devSpawnLockPath } from './with-dev-data-dir-lib.mjs'
 
@@ -277,15 +279,18 @@ describe('a second with-dev-data-dir.mjs on a data dir whose daemon is running',
         socketPath,
         token: 't',
         startedAt: new Date().toISOString(),
-        launch: 'built',
-      }),
+        version: '0.0.0-test',
+        launch: BUILT_LAUNCH,
+      } satisfies DaemonRecord),
     )
 
     const second = await runWrapper(cwd)
 
     expect(second.status, second.stderr).toBe(0)
     expect(second.stderr).toMatch(
-      new RegExp(`the BUILT daemon \\(pid ${process.pid}, started by \`pnpm mcp:http\`\\)`),
+      new RegExp(
+        `the BUILT daemon \\(pid ${process.pid}, running a build, not this checkout's source\\)`,
+      ),
     )
     expect(second.stderr).toMatch(/source edits will not reload it/)
     expect(second.stderr).toMatch(/`pnpm mcp:http:stop` first/)

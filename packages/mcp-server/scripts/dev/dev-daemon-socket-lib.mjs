@@ -8,18 +8,27 @@ import { request } from 'node:http'
 import { join } from 'node:path'
 
 /**
+ * The record's `launch` for a daemon running a build (dist/) rather than
+ * watch-mode source: `daemonRecordSchema`'s member, spelled here once.
+ */
+export const BUILT_LAUNCH = 'built'
+
+/**
  * The daemon record in `dataDir`, or null while no daemon has written one — or
  * wrote one this script cannot use. Read on every use rather than once: a watch
  * restart rewrites it, and a stopped daemon deletes it.
  *
- * Only the fields these scripts act on are checked: the socket to talk to and
- * the pid to stop. They mirror `daemonRecordSchema` (src/daemon), which these
- * scripts cannot import because they run under bare `node` before any build;
- * `dev-daemon-socket-lib.test.ts` holds the two together. The record has no
- * port: the daemon listens on no port (ADR-0050).
+ * Only the fields these scripts cannot act without are checked: the socket to
+ * talk to and the pid to stop. The rest are passed through as written —
+ * `startedAt` to tell the daemon from a process that took its pid, `launch` to
+ * tell a build from watch-mode source (absent: source). They mirror
+ * `daemonRecordSchema` (src/daemon), which these scripts cannot import because
+ * they run under bare `node` before any build; `dev-daemon-socket-lib.test.ts`
+ * holds the two together. The record has no port: the daemon listens on no
+ * port (ADR-0050).
  *
  * @param {string} dataDir
- * @returns {{ pid: number, socketPath: string, token?: string, startedAt?: string } | null}
+ * @returns {{ pid: number, socketPath: string, token?: string, version?: string, startedAt?: string, launch?: string } | null}
  */
 export function readDaemonRecord(dataDir) {
   try {

@@ -8,6 +8,7 @@
 
 import { nanoid } from 'nanoid'
 import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
+import { type DaemonRecordWrite, daemonLaunchOfModule } from '../daemon/daemon-record-schema.js'
 import {
   deleteDaemonRecord,
   loadDaemonRecord,
@@ -244,7 +245,8 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
         version: PACKAGE_VERSION,
         startedAt,
         socketPath: running.socketPath,
-      },
+        launch: daemonLaunchOfModule(import.meta.url),
+      } satisfies DaemonRecordWrite,
       dataDir,
     )
 
