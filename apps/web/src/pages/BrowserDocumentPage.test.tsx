@@ -20,10 +20,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // unused by name on purpose — being in the module graph is the fix.
 import '../components/workspace-top-bar/WorkspaceTopBar.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
+import { nothingHeldInTab } from '../lib/nothing-held-in-tab.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-harness.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
@@ -528,6 +530,42 @@ describe('BrowserDocumentPage', () => {
     // over facts `document-sync-session.test.ts` pins (a refused push ->
     // degraded).
     expect(getShellConnection()?.state).toEqual({ keeper: 'browser', storage: 'ok' })
+  })
+
+  it('holds the tab in the same commit that shows a refused rename', async () => {
+    vi.useRealTimers()
+    const base = new BrowserStoreDouble()
+    await base.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
+    await base.save(snap)
+    base.index.setDocumentName = async () => {
+      throw new Error('idb write failed')
+    }
+    // Read from the observer, the earliest anything outside React can look:
+    // waiting for `findByRole` lets the passive effects land first and so
+    // cannot see an alert shown while the tab is not yet held.
+    let heldAtAlert: boolean | undefined
+    const observer = new MutationObserver(() => {
+      if (heldAtAlert !== undefined || document.querySelector('[role="alert"]') === null) return
+      heldAtAlert = !nothingHeldInTab()
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    try {
+      renderInRouter(
+        <BrowserDocumentPage
+          loro={base.loro}
+          store={base.index}
+          pointer={base.pointer}
+          clock={base.clock}
+        />,
+      )
+      const title = await screen.findByRole('textbox', { name: /title/i })
+      fireEvent.change(title, { target: { value: 'Renamed while the store is down' } })
+      await screen.findByRole('alert')
+      await expectLoggedFailure('a rename could not be saved')
+      expect(heldAtAlert).toBe(true)
+    } finally {
+      observer.disconnect()
+    }
   })
 
   it('makes no network requests during load or cleanup', async () => {

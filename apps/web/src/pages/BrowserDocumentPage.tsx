@@ -1,5 +1,13 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { refusalMessage } from '../components/workspace-files/use-rename-document.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
@@ -369,8 +377,13 @@ function useBrowserDocument(
   // that browser is keeping it (`storage`). The last landed write goes with
   // it, for the popover to answer "is it saved" on asking. Cleared on
   // unmount so an index page makes no claim of its own.
+  //
+  // A layout effect, so the claim changes in the same commit as anything the
+  // page draws from the same writes — a refused rename's notice among them.
+  // A passive effect runs in a later task, and in between the notice is on
+  // screen while every tab-wide reader still answers "nothing held".
   const lastWrittenAt = writes.lastSavedAt
-  useEffect(() => {
+  useLayoutEffect(() => {
     setShellConnection({ state: { keeper: 'browser', storage: storageHealth }, lastWrittenAt })
     return () => setShellConnection(null)
   }, [storageHealth, lastWrittenAt])
