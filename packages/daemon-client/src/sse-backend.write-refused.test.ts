@@ -10,6 +10,7 @@ import { type SyncWriteRefusal, SyncWriteRefusedError } from './api-contracts/sy
 import type { DocumentBackendHandlers } from './document-backend-contract.js'
 import { SseBackend } from './sse-backend.js'
 import { type DocListener, SseStreamHub, type SseStreamSource } from './sse-stream-hub.js'
+import { flush } from './test-utils/flush.js'
 import { retryDelayMs } from './write-chain.js'
 
 const BASE = 'http://127.0.0.1:3099'
@@ -448,11 +449,13 @@ describe('SseBackend through a source that writes onward itself', () => {
     pending[1]?.(new Uint8Array([3]))
     await vi.waitFor(() => expect(order).toEqual(['snapshot 1', 'snapshot 3']))
     for (const l of listeners) l.onUpdate([9] as unknown as Uint8Array)
+    await flush()
+    expect(order).toEqual(['snapshot 1', 'snapshot 3'])
     pending[0]?.(new Uint8Array([2]))
 
-    await vi.waitFor(() =>
-      expect(order).toEqual(['snapshot 1', 'snapshot 3', 'snapshot 2', 'update 9']),
-    )
+    // The earlier read's answer is older than the copy it would replace, so
+    // it is dropped; the frame follows once both have settled.
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1', 'snapshot 3', 'update 9']))
     backend.disconnect()
   })
 
@@ -497,9 +500,7 @@ describe('SseBackend through a source that writes onward itself', () => {
     pending[1]?.(new Uint8Array([3]))
     pending[0]?.(new Uint8Array([2]))
 
-    await vi.waitFor(() =>
-      expect(order).toEqual(['snapshot 1', 'snapshot 3', 'snapshot 2', 'update 8']),
-    )
+    await vi.waitFor(() => expect(order).toEqual(['snapshot 1', 'snapshot 3', 'update 8']))
     backend.disconnect()
   })
 

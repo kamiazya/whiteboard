@@ -42,6 +42,15 @@ const writeAfterSnapshot = new Set<string>()
  */
 const routed = new Set<string>()
 const keeperBroadcasts = new Map<string, (live: boolean) => void>()
+/**
+ * Workspace keys the daemon will not route, and how: `refused` answers the
+ * subscribe 404, `silent` never answers it. The stream is the worker's and
+ * shared by every case, so a case is made unroutable by its subscribe, not
+ * by holding the stream back.
+ */
+const unroutable = new Map<string, 'refused' | 'silent'>()
+/** Answers the subscribes `silent` is holding, so none outlives its case. */
+const heldSubscribes = new Map<string, () => void>()
 let pushFrame: ((frame: string) => void) | null = null
 let endStream: (() => void) | null = null
 
@@ -82,6 +91,14 @@ const server = setupServer(
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
     const body = (await request.json()) as { subscribe?: string[]; unsubscribe?: string[] }
     for (const doc of body.unsubscribe ?? []) routed.delete(doc)
+    const refusing = (body.subscribe ?? []).find((doc) => unroutable.has(doc))
+    if (refusing !== undefined && unroutable.get(refusing) === 'refused') {
+      return HttpResponse.json({ error: 'unknown_stream' }, { status: 404 })
+    }
+    if (refusing !== undefined) {
+      await new Promise<void>((resolve) => heldSubscribes.set(refusing, resolve))
+      return HttpResponse.json({ error: 'unknown_stream' }, { status: 404 })
+    }
     await routeAfter(20, body.subscribe ?? [])
     return HttpResponse.json({ ok: true })
   }),
@@ -190,12 +207,16 @@ async function harness(): Promise<DocumentBackendHarness> {
     keeperWritesAfterNextSnapshot: () => {
       writeAfterSnapshot.add(workspaceId)
     },
+    neverRoutes: (how) => {
+      unroutable.set(`workspace:${workspaceId}`, how)
+    },
     caughtUp: (delivered) => reproduces(delivered, keeper),
     // The worker outlives every case by design; disconnecting releases this
     // case's claims, and its workspace id keeps its traffic apart.
     cleanup: () => {
       backend.disconnect()
       holdStream()
+      heldSubscribes.get(`workspace:${workspaceId}`)?.()
     },
   }
 }
