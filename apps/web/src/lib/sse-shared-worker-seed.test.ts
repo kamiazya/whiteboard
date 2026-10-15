@@ -26,6 +26,8 @@ const BASE = 'http://127.0.0.1:3099'
 let streamSeq = 0
 const subscribeBodies: string[] = []
 const pushByStream = new Map<string, (frame: string) => void>()
+/** Ends a stream as a dropped connection does, so the worker reconnects and routes again. */
+const dropByStream = new Map<string, () => void>()
 /** Pre-existing content per doc key, served by the daemon's snapshot route. */
 const snapshotByDoc = new Map<string, Uint8Array>()
 const snapshotHits: string[] = []
@@ -48,6 +50,7 @@ const server = setupServer(
           enc.encode(`event: ready\ndata: ${JSON.stringify({ streamId: id })}\n\n`),
         )
         pushByStream.set(id, (f) => controller.enqueue(enc.encode(f)))
+        dropByStream.set(id, () => controller.error(new Error('dropped')))
       },
     })
     return new HttpResponse(stream, {
@@ -346,5 +349,33 @@ describe('worker replica seeding', { timeout: 25_000 }, () => {
     const later = new LoroDoc()
     later.import(await requestSnapshot(doc))
     expect(later.getMap('m').get('b')).toBe('in-the-gap')
+  })
+
+  it('counts a catch-up after a failed seed as the seed, so the next request reads nothing again', async () => {
+    // The seed failed while the stream first routed the document; the routing
+    // after a reconnect catches the replica up with the daemon's state. That
+    // IS the seed, so a tab asking next is answered from the replica rather
+    // than by one more read of the daemon.
+    const doc = nextDoc()
+    const content = new LoroDoc()
+    content.getMap('m').set('a', 'after-the-outage')
+    content.commit()
+    snapshotByDoc.set(doc, content.export({ mode: 'snapshot' }))
+    failingSnapshots.add(doc)
+    await subscribed(doc)
+    await until(() => snapshotHits.includes(doc))
+
+    failingSnapshots.delete(doc)
+    const hitsBefore = snapshotHits.filter((hit) => hit === doc).length
+    for (const drop of dropByStream.values()) drop()
+    dropByStream.clear()
+    await until(() => snapshotHits.filter((hit) => hit === doc).length > hitsBefore)
+    await until(() => routedDocs.has(doc))
+    const caughtUp = snapshotHits.filter((hit) => hit === doc).length
+
+    const answer = new LoroDoc()
+    answer.import(await requestSnapshot(doc))
+    expect(answer.getMap('m').get('a')).toBe('after-the-outage')
+    expect(snapshotHits.filter((hit) => hit === doc)).toHaveLength(caughtUp)
   })
 })

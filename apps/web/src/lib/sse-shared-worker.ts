@@ -219,6 +219,10 @@ function catchUp(baseUrl: string, doc: string): void {
     } catch {
       return
     }
+    // The daemon's state is in the replica now, which is what a seed is: a
+    // catch-up after a failed seed must not leave the next request reading it
+    // again.
+    seededDocs.add(key)
     // Acknowledged on the same terms as the seed: only when the replica held
     // nothing unacknowledged, since the daemon's state says nothing of a
     // tab's edit still on its way.
