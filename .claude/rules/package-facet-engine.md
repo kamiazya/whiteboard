@@ -20,10 +20,9 @@ paths:
   plugin declared and the next its schema's own fields, from one
   registration. Two vessels ask now — `DerivedFacetForm`, and the settings
   row for a facet whose EFFECTIVE value only the app can resolve.
-- The bundled `visual` plugin and its facet schemas, plus resolvers
-  (`resolveCanvasEdgeStyle`, `resolveNodeShape`: facet first, legacy
-  fallback where one exists). Both are adopted by canvas-render's layout
-  defaults and the editor — user-reachable, no longer foundation-only.
+- NOT the bundled `visual` plugin: it, its facet schemas and its resolvers
+  (`resolveCanvasEdgeStyle`, `resolveNodeShape`) live in `plugin-visual`
+  (`package-plugin-visual.md`), which this engine does not import.
 - The contribution RESOLUTION layer (`contributions.ts`): the closed
   `ContributionPoint` set (`inspector.node`, `inspector.edge`,
   `canvasSettings`), and `resolveFacetContributions` answering "what
