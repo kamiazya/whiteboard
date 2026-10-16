@@ -30,6 +30,7 @@ import { register } from 'tsx/esm/api'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
+import { closeLiveChildren, killLiveChildren, trackChild } from './lib/live-children.mjs'
 import { facetLine } from './lib/report-line.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS, tagLibrary } from './tasks.mjs'
@@ -76,6 +77,9 @@ const DRY_RUN = flags.has('--dry-run')
 const MAX_TURNS = arg('max-turns', '15')
 const MAX_BUDGET_USD = arg('max-budget-usd', '1')
 const TASK_TIMEOUT_MS = 240_000
+// Past the MCP transport's own close (stdin end, then SIGTERM, then SIGKILL at
+// about 4s); the exit hook kills whatever is still running after it.
+const CLOSE_ON_SIGNAL_MS = 6_000
 
 const tasks = ONLY === undefined ? TASKS : TASKS.filter((t) => t.name.includes(ONLY))
 if (tasks.length === 0) {
@@ -235,9 +239,20 @@ const template = join(scratch, 'template')
 // rather than `finally`: it also runs on each `process.exit` below and on an
 // uncaught throw. A signal does not emit `exit` by itself, so SIGINT/SIGTERM
 // are turned into one — and the lane is long enough that interrupting it once
-// the needed answer has printed is the common way it ends.
-process.once('exit', () => rmSync(scratch, { recursive: true, force: true }))
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => process.exit(130))
+// the needed answer has printed is the common way it ends. The children are
+// closed first (lib/live-children.mjs says why); a second signal stops waiting.
+process.once('exit', () => {
+  killLiveChildren()
+  rmSync(scratch, { recursive: true, force: true })
+})
+let interrupted = false
+const interrupt = async () => {
+  if (interrupted) process.exit(130)
+  interrupted = true
+  await closeLiveChildren(CLOSE_ON_SIGNAL_MS)
+  process.exit(130)
+}
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, interrupt)
 
 console.log('[eval] seeding the fixture workspace')
 const seeded = await connectWhiteboard(template)
@@ -299,6 +314,16 @@ const normalise = (s) =>
 function runClaude(args, cwd) {
   return new Promise((resolvePromise) => {
     const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    const ended = new Promise((resolveEnded) => child.once('close', resolveEnded))
+    // SIGTERM rather than a kill, so the CLI can stop the server it started.
+    const forget = trackChild({
+      close: async () => {
+        child.kill('SIGTERM')
+        await ended
+      },
+      pid: () => child.pid,
+    })
+    child.once('close', forget)
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (c) => {

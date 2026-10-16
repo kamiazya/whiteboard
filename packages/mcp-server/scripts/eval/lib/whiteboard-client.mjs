@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { trackChild } from './live-children.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const LAUNCHER = resolve(here, 'server-launcher.mjs')
@@ -32,6 +33,8 @@ export async function connectWhiteboard(dataDir) {
     stderr: 'pipe',
   })
   const client = new Client({ name: 'tool-surface-eval', version: '0.0.0' })
+  // Tracked before connecting: a signal can land while the server starts.
+  const forget = trackChild({ close: () => client.close(), pid: () => transport.pid })
   await client.connect(transport)
   return {
     async call(name, args) {
@@ -44,6 +47,7 @@ export async function connectWhiteboard(dataDir) {
     },
     async close() {
       await client.close()
+      forget()
     },
   }
 }
