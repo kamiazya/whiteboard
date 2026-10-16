@@ -12,14 +12,10 @@
 //     to delete;
 //   - the editor's dark palette already exists and is contrast-tested
 //     (see spatial-palette.ts), so it has to survive regardless;
-//   - the viewer and export call sites both pin `mode: 'light'`, preserving
-//     the pre-existing invariant that a user's UI theme can never change
-//     exported bytes.
-// Not fixed here: `headless-renderer`'s `theme: 'dark'` option still only
-// changes the document background, so a dark export pairs a dark
-// background with light node chrome — changing that is a behavior decision
-// (export gaining a dark chrome variant), not a convergence one, and is
-// outside what this resolver converges.
+//   - no call site reads the user's ambient UI theme: the MCP scene and
+//     digest pin `mode: 'light'`, while the viewer and the daemon export
+//     take the mode as an explicit argument defaulting to light, so a
+//     user's UI theme can never change exported bytes.
 import type { CanvasColor, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind } from '@kamiazya/whiteboard-model'
 import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
