@@ -60,12 +60,14 @@ describe('the browser page tab icon', () => {
     expect(quiet).not.toBe(offline)
     await waitFor(() => expect(iconHref()).toBe(quiet), { timeout: 5000 })
     expect(badge.set).not.toHaveBeenCalled()
+    // Found before the store is refused: the title renders from a read, and
+    // once every transaction throws it would never appear.
+    const title = await screen.findByRole('textbox', { name: /title/i }, { timeout: 5000 })
     const transaction = IDBDatabase.prototype.transaction
     IDBDatabase.prototype.transaction = () => {
       throw new Error('storage refused the write (induced)')
     }
     try {
-      const title = await screen.findByRole('textbox', { name: /title/i })
       fireEvent.change(title, { target: { value: 'Renamed while the store is down' } })
       fireEvent.keyDown(title, { key: 'Enter' })
       fireEvent.blur(title)
