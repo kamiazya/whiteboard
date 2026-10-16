@@ -1,6 +1,6 @@
 ---
 name: zod-schema-discipline
-description: How to keep Zod as the single source of truth for any contract that crosses a process boundary in the whiteboard repo (MCP tool input/output, Hono routes, persisted JSON, websocket/daemon payloads). Use when adding or editing an MCP tool, a route response, or a persisted-JSON parser, or when fixing a schema-vs-runtime drift. Covers the create_frame bug pattern and the mutation-check recipe.
+description: How to keep Zod as the single source of truth for any contract that crosses a process boundary in the whiteboard repo (MCP tool input/output, Hono routes, persisted JSON, daemon payloads and sync frames). Use when adding or editing an MCP tool, a route response, or a persisted-JSON parser, or when fixing a schema-vs-runtime drift. Covers the create_frame bug pattern and the mutation-check recipe.
 ---
 
 # Zod Schema Discipline

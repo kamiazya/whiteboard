@@ -22,6 +22,12 @@
  * the page holds no token and syncs over `fetch`, so a sentence about a bearer
  * token in the query, an authorized fetch or a `ws://` socket describes a
  * design that is gone.
+ *
+ * The dev-tooling prose under `.claude/` is scanned for the socket alone: its
+ * skills and review criteria are what every agent reads before writing a test
+ * or judging a diff, and a criterion naming a WebSocket frame handler points a
+ * reviewer at a handler kind that cannot exist while the SSE stream goes
+ * unnamed.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -84,6 +90,26 @@ const SOURCE_SUBJECT_IS_THE_ABSENCE: Readonly<Record<string, string>> = {
     "recounts what a removed component's own suite covered, to explain how a dead file looked alive",
 }
 
+const CLAUDE_SURFACE = (path: string): boolean =>
+  path.startsWith('.claude/') && path.endsWith('.md')
+
+const RETIRED_IN_CLAUDE = [{ name: 'websocket', pattern: /\bweb[\s-]?sockets?\b/i }] as const
+
+/**
+ * Dev-tooling prose that names the socket as history or as the absence. Keyed
+ * by file and phrase.
+ */
+const CLAUDE_SUBJECT_IS_THE_ABSENCE: Readonly<Record<string, string>> = {
+  '.claude/rules/vocabulary.md#websocket':
+    'the vocabulary rule has to spell the word to say "there is no WebSocket and no subprotocol to name"',
+  '.claude/rules/package-history.md#websocket':
+    'past tense: what the daemon used to mix its history mechanics with before the package existed',
+  '.claude/rules/package-daemon-client.md#websocket':
+    '"ADR-0050 retired the WebSocket", said of the one backend that replaced it',
+  '.claude/skills/whiteboard-mcp-smoke/SKILL.md#websocket':
+    '"the only transport since the WebSocket client went", naming the SSE backend',
+}
+
 const surface = trackedFiles(REPO_ROOT).filter(SURFACE)
 const read = (file: string): string => readFileSync(join(REPO_ROOT, file), 'utf-8')
 
@@ -98,6 +124,14 @@ const sourceFound = trackedFiles(REPO_ROOT)
       ({ name }) => `${file}#${name}`,
     ),
   )
+
+const claudeSurface = trackedFiles(REPO_ROOT).filter(CLAUDE_SURFACE)
+
+const claudeFound = claudeSurface.flatMap((file) =>
+  RETIRED_IN_CLAUDE.filter(({ pattern }) => pattern.test(read(file))).map(
+    ({ name }) => `${file}#${name}`,
+  ),
+)
 
 describe('prose does not describe the retired transport or the pairing flow', () => {
   it('scans a real prose surface, with the diagram and both READMEs in it', () => {
@@ -166,5 +200,37 @@ describe('client source does not describe the retired credential or socket', () 
     ['a secure socket', 'wss://daemon.example'],
   ])('matches the phrase it exists for: %s', (_where, phrase) => {
     expect(RETIRED_IN_SOURCE.some(({ pattern }) => pattern.test(phrase))).toBe(true)
+  })
+})
+
+describe('dev-tooling prose does not describe the retired socket', () => {
+  it('scans the skills, review criteria, agents and rules', () => {
+    expect(claudeSurface.length).toBeGreaterThan(50)
+    expect(claudeSurface).toEqual(
+      expect.arrayContaining([
+        '.claude/skills/test-layer-selection/SKILL.md',
+        '.claude/skills/review-gate/resources/background-work.md',
+        '.claude/rules/vocabulary.md',
+      ]),
+    )
+    expect(claudeSurface.some((file) => file.startsWith('.claude/agents/'))).toBe(true)
+  })
+
+  it('finds no retired phrase outside the recorded absences', () => {
+    expect(claudeFound.filter((entry) => !(entry in CLAUDE_SUBJECT_IS_THE_ABSENCE))).toEqual([])
+  })
+
+  it('holds no exemption for prose that no longer says the word', () => {
+    expect(
+      Object.keys(CLAUDE_SUBJECT_IS_THE_ABSENCE).filter((entry) => !claudeFound.includes(entry)),
+    ).toEqual([])
+  })
+
+  it.each([
+    ['a layer row', 'server composition, websocket timing, persistence order'],
+    ['a criterion', 'a route handler, a WebSocket frame handler, an MCP tool'],
+    ['a hyphenated plural', 'web-sockets reconnecting'],
+  ])('matches the phrase it exists for: %s', (_where, phrase) => {
+    expect(RETIRED_IN_CLAUDE.some(({ pattern }) => pattern.test(phrase))).toBe(true)
   })
 })

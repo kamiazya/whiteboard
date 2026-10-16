@@ -48,8 +48,8 @@ Check:
 
 ### 2. Nothing newly blocks the serving loop
 
-Applies when the diff adds work to a path the daemon runs: a route handler, a
-WebSocket frame handler, an MCP tool, or a background worker declared
+Applies when the diff adds work to a path the daemon runs: a route handler, an
+SSE sync-stream handler (`routes/sync-sse.ts`), an MCP tool, or a background worker declared
 `in-process`.
 
 Check:

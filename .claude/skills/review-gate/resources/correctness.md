@@ -42,7 +42,7 @@ Check:
 
 Check:
 - Does the diff assume a particular resolution order for parallel
-  promises, websocket messages, or persistence writes that isn't actually
+  promises, sync frames, or persistence writes that isn't actually
   guaranteed?
 
 ### 7. Cross-feature semantic invariants

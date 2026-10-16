@@ -48,7 +48,7 @@ Each dimension's detailed criteria lives in `.claude/skills/audit-triage/resourc
 
 The launching session is not limited to the resource pack. For a run scoped
 to something the standing dimensions don't cover well (e.g. "audit only the
-websocket reconnection logic" or "audit the release-please config"),
+SSE sync-stream reconnection logic" or "audit the release-please config"),
 synthesize a target-specific `{name, content}` dimension on the fly — same
 `# <Name>` + `## Criteria` + numbered-checks shape as a `resources/*.md`
 file — and pass it in `args.dimensions` alongside (or instead of) the base
