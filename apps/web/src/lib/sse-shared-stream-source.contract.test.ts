@@ -30,6 +30,7 @@ const daemonState = new Map<string, Uint8Array>()
 const failingReads = new Set<string>()
 const subscribeBodies: { subscribe?: string[]; unsubscribe?: string[] }[] = []
 const refusedDocs = new Set<string>()
+const refusedPushes = new Set<string>()
 const controlMessages: { streamId: string; doc: string; message: unknown }[] = []
 let pushFrame: ((frame: string) => void) | null = null
 let endStream: (() => void) | null = null
@@ -89,10 +90,9 @@ const server = setupServer(
   // has merged it. Addressed by workspace and path, which the worker
   // reconstructs from the document key it routes everything else by.
   http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
-    daemonWrites.push({
-      doc: `${String(params.workspaceId)}/${String(params.path)}`,
-      body: new Uint8Array(await request.arrayBuffer()),
-    })
+    const doc = `${String(params.workspaceId)}/${String(params.path)}`
+    if (refusedPushes.has(doc)) return HttpResponse.json({ title: 'forbidden' }, { status: 403 })
+    daemonWrites.push({ doc, body: new Uint8Array(await request.arrayBuffer()) })
     return HttpResponse.json({ ok: true })
   }),
   http.post(`${BASE}/api/sync/message`, async ({ request }) => {
@@ -135,6 +135,7 @@ function createHarness(): SseStreamSourceHarness {
     // keep one case's traffic from being read as another's.
     dropStream: () => endStream?.(),
     refuseSubscribe: (doc) => refusedDocs.add(doc),
+    refusePush: (doc) => refusedPushes.add(doc),
     cleanup: () => {},
   }
 }

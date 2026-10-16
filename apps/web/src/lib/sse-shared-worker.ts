@@ -633,8 +633,8 @@ function handleSubscribe(
     onConnectionChange: (connected) => {
       postWorkerEvent(port, { type: 'status', doc: msg.doc, connected })
     },
-    onAuthRefused: () => {
-      postWorkerEvent(port, { type: 'auth-refused', doc: msg.doc })
+    onAuthRefused: (cause) => {
+      postWorkerEvent(port, { type: 'auth-refused', doc: msg.doc, cause })
     },
   })
   state.subscriptions.set(msg.doc, off)

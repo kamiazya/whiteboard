@@ -87,6 +87,12 @@ export interface SseStreamSourceHarness {
    * stream outlives the case can offer it.
    */
   refuseSubscribe(doc: string): void
+  /**
+   * Make the daemon refuse the credential for any push to `doc`, while the
+   * stream and the subscribe still answer — a credential that may read the
+   * document but not write it.
+   */
+  refusePush(doc: string): void
   cleanup(): void
 }
 
@@ -420,7 +426,14 @@ function joinerCases(create: () => SseStreamSourceHarness | Promise<SseStreamSou
     offSecond()
     h.cleanup()
   })
+  refusedJoinerCases(create)
+  pushRefusalJoinerCases(create)
+}
 
+/** A refusal of the credential is state a joiner is owed, for as long as it holds. */
+function refusedJoinerCases(
+  create: () => SseStreamSourceHarness | Promise<SseStreamSourceHarness>,
+): void {
   it('tells a listener joining a refused document it was refused, at once', async () => {
     const h = await create()
     const doc = nextIsolatedDoc()
@@ -432,6 +445,69 @@ function joinerCases(create: () => SseStreamSourceHarness | Promise<SseStreamSou
     const offSecond = h.source.subscribe(doc, listenerOf({ onAuthRefused: () => refused.second++ }))
 
     expect(refused.second).toBe(1)
+    offFirst()
+    offSecond()
+    h.cleanup()
+  })
+
+  // A drop is not a recovery: the stream that comes back still asks nothing
+  // for a refused document, so its refusal still describes it.
+  it('still tells a listener joining a refused document after the stream dropped', async () => {
+    const h = await create()
+    const doc = nextIsolatedDoc()
+    h.refuseSubscribe(doc)
+    let refusedFirst = 0
+    const firstStates: boolean[] = []
+    const offFirst = h.source.subscribe(
+      doc,
+      listenerOf({
+        onAuthRefused: () => refusedFirst++,
+        onConnectionChange: (connected) => firstStates.push(connected),
+      }),
+    )
+    await until(() => refusedFirst === 1)
+    const heardBefore = firstStates.length
+    h.dropStream()
+    await until(() => firstStates.length > heardBefore)
+
+    let refusedSecond = 0
+    const offSecond = h.source.subscribe(doc, listenerOf({ onAuthRefused: () => refusedSecond++ }))
+
+    expect(refusedSecond).toBe(1)
+    offFirst()
+    offSecond()
+    h.cleanup()
+  })
+}
+
+/** A refused push is announced to whoever holds the document, and to nobody later. */
+function pushRefusalJoinerCases(
+  create: () => SseStreamSourceHarness | Promise<SseStreamSourceHarness>,
+): void {
+  // A refused push is news, not state: writing needs a scope reading does
+  // not, so the credential may still follow the document, and a view that
+  // joins afterwards has nothing to be told until its own push is refused.
+  it('does not tell a listener joining after a refused push that it was refused', async () => {
+    const h = await create()
+    const doc = nextIsolatedDoc()
+    h.refusePush(doc)
+    const refused = { first: 0, second: 0 }
+    const firstStates: boolean[] = []
+    const offFirst = h.source.subscribe(
+      doc,
+      listenerOf({
+        onAuthRefused: () => refused.first++,
+        onConnectionChange: (connected) => firstStates.push(connected),
+      }),
+    )
+    await until(() => firstStates.includes(true))
+    void Promise.resolve(h.source.push(doc, LORO_UPDATE)).catch(() => {})
+    await until(() => refused.first === 1)
+
+    const offSecond = h.source.subscribe(doc, listenerOf({ onAuthRefused: () => refused.second++ }))
+    await settle()
+
+    expect(refused.second).toBe(0)
     offFirst()
     offSecond()
     h.cleanup()

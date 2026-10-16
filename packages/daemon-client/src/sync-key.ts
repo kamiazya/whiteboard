@@ -10,9 +10,10 @@ import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/documen
 
 /**
  * The workspace-granularity doc key: one subscription for the whole
- * workspace document. Unambiguous against `${workspaceId}/${path}` keys
- * because a workspace id contains no ':' and no '/', so no per-document
- * key ever starts with this prefix without a slash following it.
+ * workspace document. Unambiguous against `${handle}/${path}` keys
+ * because a handle — a workspace segment or a canonical id (ADR-0019) —
+ * contains no ':' and no '/', so no per-document key ever starts with this
+ * prefix.
  */
 const WORKSPACE_DOC_KEY_PREFIX = 'workspace:'
 
@@ -61,10 +62,10 @@ export function workspaceHandleOfSyncKey(doc: string): string | null {
 /**
  * The daemon's update route for a doc key.
  *
- * A per-document key IS `${workspaceId}/${path}`, which is the only reason
+ * A per-document key IS `${handle}/${path}`, which is the only reason
  * anything holding just the key can address this route (first slash only: a
- * path may contain more, a workspace id never does). A `workspace:` key
- * addresses the workspace-document routes instead.
+ * path may contain more, a handle never does). A `workspace:` key addresses
+ * the workspace-document routes instead.
  */
 export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
   return documentRouteUrl(baseUrl, doc, 'update')
@@ -81,11 +82,11 @@ function documentRouteUrl(
   action: 'update' | 'snapshot',
 ): string | null {
   const base = baseUrl.replace(/\/$/, '')
-  const workspaceId = workspaceHandleOfSyncKey(doc)
-  if (workspaceId === null) return null
+  const handle = workspaceHandleOfSyncKey(doc)
+  if (handle === null) return null
   if (workspaceIdOfSyncKey(doc) !== null) {
-    return `${base}${workspaceDocumentApiUrl(workspaceId, action)}`
+    return `${base}${workspaceDocumentApiUrl(handle, action)}`
   }
   // Raw halves: documentApiUrl encodes per segment itself.
-  return `${base}${documentApiUrl(workspaceId, doc.slice(workspaceId.length + 1), action)}`
+  return `${base}${documentApiUrl(handle, doc.slice(handle.length + 1), action)}`
 }

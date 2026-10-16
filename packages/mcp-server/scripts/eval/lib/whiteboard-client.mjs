@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { trackChild } from './live-children.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const LAUNCHER = resolve(here, 'server-launcher.mjs')
@@ -32,7 +33,16 @@ export async function connectWhiteboard(dataDir) {
     stderr: 'pipe',
   })
   const client = new Client({ name: 'tool-surface-eval', version: '0.0.0' })
+  // Tracked before connecting: a signal can land while the server starts.
+  // The pid is kept past the transport's own close, which forgets it even when
+  // that close ended in a SIGKILL nobody waited out.
+  let startedPid = null
+  const forget = trackChild({
+    close: () => client.close(),
+    pid: () => transport.pid ?? startedPid,
+  })
   await client.connect(transport)
+  startedPid = transport.pid
   return {
     async call(name, args) {
       const result = await client.callTool({ name, arguments: args })
@@ -44,6 +54,7 @@ export async function connectWhiteboard(dataDir) {
     },
     async close() {
       await client.close()
+      forget()
     },
   }
 }

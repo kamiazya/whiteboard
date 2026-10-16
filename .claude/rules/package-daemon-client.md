@@ -66,8 +66,12 @@ paths:
   a refused document is told at once. A refusal of the stream open itself
   follows the same rule: a document subscribing to a stream-refused hub is
   told at once, and once every subscription is released the next subscribe
-  opens the stream again. The sync wire key grammar and the document route
-  URLs are `sync-key.ts` (`./sync-key`), not the hub.
+  opens the stream again. `onAuthRefused` carries its cause
+  (`authRefusalCauseSchema`: stream, subscribe or push); a refused push is
+  only announced, never state a joiner is told, and a stream refusal is
+  recorded only for the subscribers its open was asked for — one subscribing
+  after the last release, even while that open is pending, gets its own. The sync wire key grammar and
+  the document route URLs are `sync-key.ts` (`./sync-key`), not the hub.
 - The sync write refusal (`api-contracts/sync-write-refusal`): the codes are
   model's `syncWriteRefusalCodeSchema`, which also types server-core's
   `SyncWriteRefusalError.code`, so a code renamed on one side fails typecheck
@@ -97,7 +101,8 @@ paths:
   bridge the hosted page reaches a daemon through, the read plane and the
   replica session key helpers (ADR-0042).
 - `test-utils/`: the backend contract suites apps/web runs against its own
-  implementations (`document-backend-contract`, `sse-stream-source-contract`).
+  implementations (`document-backend-contract`, `sse-stream-source-contract`); the document contract is split across `document-backend-*.ts`, and its
+  ceilings scan globs that pattern.
 
 ## What does NOT belong here
 

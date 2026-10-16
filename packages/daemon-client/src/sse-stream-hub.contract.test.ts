@@ -50,6 +50,7 @@ function createHarness(): SseStreamSourceHarness {
   let endStream: (() => void) | null = null
   let refuseStreams = false
   const refusedDocs = new Set<string>()
+  const refusedPushes = new Set<string>()
 
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -80,11 +81,10 @@ function createHarness(): SseStreamSourceHarness {
     if (snapshot !== null) return snapshot
     const canvasUpdate = /\/api\/w\/([^/]+)\/document\/(.+)\/update$/.exec(url)
     if (canvasUpdate) {
-      const [, workspaceId, path] = canvasUpdate
-      daemonWrites.push({
-        doc: `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(path as string)}`,
-        body: new Uint8Array(init?.body as ArrayBuffer),
-      })
+      const [, handle, path] = canvasUpdate
+      const doc = `${decodeURIComponent(handle as string)}/${decodeURIComponent(path as string)}`
+      if (refusedPushes.has(doc)) return forbidden()
+      daemonWrites.push({ doc, body: new Uint8Array(init?.body as ArrayBuffer) })
       return new Response('{}', { status: 200 })
     }
     const body = init?.body ? JSON.parse(String(init.body)) : {}
@@ -124,6 +124,7 @@ function createHarness(): SseStreamSourceHarness {
       refuseStreams = true
     },
     refuseSubscribe: (doc) => refusedDocs.add(doc),
+    refusePush: (doc) => refusedPushes.add(doc),
     cleanup: () => hub.close(),
   }
 }

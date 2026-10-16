@@ -210,6 +210,11 @@ describe('assessRecordedDaemon', () => {
       'answered /api/runtime/ping with HTTP 503',
     ],
     [
+      'a client error, as another version or a foreign server answers',
+      async () => ({ status: 404, contentType: 'text/plain', text: '' }),
+      'answered /api/runtime/ping with HTTP 404',
+    ],
+    [
       'a connection taken and then closed',
       async (): Promise<never> => {
         throw Object.assign(new Error('socket hang up'), { code: NO_ANSWER })

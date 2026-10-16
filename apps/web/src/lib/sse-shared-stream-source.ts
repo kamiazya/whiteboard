@@ -9,6 +9,7 @@
  * `retire`.
  */
 import {
+  type AuthRefusalCause,
   type DocListener,
   SseStreamHub,
   type SseStreamSource,
@@ -80,20 +81,21 @@ interface Claim {
  */
 interface Relayed {
   connected?: boolean
-  authRefused: boolean
+  /** The refusal a joiner is told of; never `push`, which is news rather than state. */
+  authRefused: Exclude<AuthRefusalCause, 'push'> | null
   /** Only a failing write is state; one that landed is news nobody joining needs. */
   writeFailing: boolean
 }
 
 /** Records what `evt` says of its document, for a listener that joins later. */
 function remember(relayed: Map<string, Relayed>, evt: WorkerNews): void {
-  const prior = relayed.get(evt.doc) ?? { authRefused: false, writeFailing: false }
+  const prior = relayed.get(evt.doc) ?? { authRefused: null, writeFailing: false }
   if (evt.type === 'status') {
     // Routed again means served again: a refusal before it no longer describes the document.
-    const authRefused = evt.connected ? false : prior.authRefused
+    const authRefused = evt.connected ? null : prior.authRefused
     relayed.set(evt.doc, { ...prior, connected: evt.connected, authRefused })
-  } else if (evt.type === 'auth-refused') {
-    relayed.set(evt.doc, { ...prior, authRefused: true })
+  } else if (evt.type === 'auth-refused' && evt.cause !== 'push') {
+    relayed.set(evt.doc, { ...prior, authRefused: evt.cause })
   } else if (evt.type === 'write-state') {
     relayed.set(evt.doc, { ...prior, writeFailing: !evt.landed })
   }
@@ -102,9 +104,9 @@ function remember(relayed: Map<string, Relayed>, evt: WorkerNews): void {
 /** Tells a joining listener the state everyone already holding the document was told. */
 function announceTo(listener: DocListener, state: Relayed | undefined): void {
   if (!state) return
-  const { connected } = state
+  const { connected, authRefused } = state
   if (connected !== undefined) tellEach([listener], (l) => l.onConnectionChange?.(connected))
-  if (state.authRefused) tellEach([listener], (l) => l.onAuthRefused?.())
+  if (authRefused !== null) tellEach([listener], (l) => l.onAuthRefused?.(authRefused))
   if (state.writeFailing) tellEach([listener], (l) => l.onWriteState?.(false))
 }
 
@@ -147,7 +149,7 @@ function deliverToListeners(claims: ReadonlyMap<DocListener, Claim>, evt: Worker
     return
   }
   if (evt.type === 'auth-refused') {
-    tellEach(set, (l) => l.onAuthRefused?.())
+    tellEach(set, (l) => l.onAuthRefused?.(evt.cause))
     return
   }
   tellEach(set, (l) => l.onMessage(evt.raw))

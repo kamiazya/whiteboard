@@ -13,7 +13,7 @@
  */
 
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
-import type { z } from 'zod'
+import { z } from 'zod'
 import {
   syncMessageApiUrl,
   syncStreamApiUrl,
@@ -38,6 +38,14 @@ import {
   syncUpdateEventSchema,
 } from './sync-sse-contract.js'
 import { retryAfterMsOf, SyncWriteFailedError } from './write-chain.js'
+
+/**
+ * Which request the daemon refused the credential on. A Zod enum rather than
+ * a bare union because it crosses a port: the SharedWorker relays it, and
+ * whether a listener joining later is told depends on it.
+ */
+export const authRefusalCauseSchema = z.enum(['stream', 'subscribe', 'push'])
+export type AuthRefusalCause = z.infer<typeof authRefusalCauseSchema>
 
 /** A source of per-document sync frames. Implemented by SseStreamHub directly,
  *  and by a SharedWorker-backed proxy so the sharing spans tabs. */
@@ -152,14 +160,25 @@ export interface DocListener {
    */
   onWriteRefused?: (refusal: SyncWriteRefusal) => void
   /**
-   * The daemon refused the credential this stream carries — a 401 or 403 on
-   * the stream itself, or on a push for this document. Not a dropped
-   * connection: the hub stops reconnecting, because retrying a refused
-   * credential is the same answer every backoff step while the page reads
-   * the silence as "reconnecting". The one way out is a fresh page or
-   * worker, since the page holds no credential of its own to renew.
+   * The daemon refused the credential, on one of three requests, named by
+   * `cause`. Not a dropped connection: retrying a refused credential is the
+   * same answer every backoff step while the page reads the silence as
+   * "reconnecting".
+   *
+   * - `stream`: the stream open answered 401/403. The hub stops reconnecting
+   *   while anything is subscribed, and a document subscribing meanwhile is
+   *   told at once.
+   * - `subscribe`: the daemon would not route this document. No later stream
+   *   asks for it again, and a listener joining it is told at once.
+   * - `push`: a write to this document was refused. Announced to the current
+   *   listeners only, never remembered: writing needs a scope reading does
+   *   not, so the credential may still follow the document.
+   *
+   * Releasing the document — every subscription of it for `subscribe`, every
+   * subscription of the source for `stream` — and subscribing again asks the
+   * daemon again, so a renewed credential recovers without a fresh page.
    */
-  onAuthRefused?: () => void
+  onAuthRefused?: (cause: AuthRefusalCause) => void
 }
 
 /**
@@ -249,6 +268,9 @@ export class SseStreamHub implements SseStreamSource {
    * asks again — a hub can outlive every page that heard the refusal.
    */
   private streamRefused = false
+  /** Bumped when the last subscription is released, so an answer to an open
+   *  asked for an earlier set of subscribers can tell it describes nobody now. */
+  private lifetime = 0
   /**
    * Set when the open stream is ended because a subscribe on it went
    * unanswered. Such a stream does not count as one that opened for the
@@ -281,7 +303,8 @@ export class SseStreamHub implements SseStreamSource {
     // tab would show an unknown connection for as long as nothing went wrong.
     const joiner = { listeners: new Set([listener]) }
     this.announceTo(joiner, entry.routed)
-    if (entry.authRefused || this.streamRefused) this.announceAuthRefused([joiner])
+    if (this.streamRefused) this.announceAuthRefused([joiner], 'stream')
+    else if (entry.authRefused) this.announceAuthRefused([joiner], 'subscribe')
     void this.start()
 
     return () => {
@@ -293,7 +316,10 @@ export class SseStreamHub implements SseStreamSource {
       // here and keep declaring every reconnected stream ready for a canvas
       // nobody is watching.
       this.docs.delete(doc)
-      if (this.docs.size === 0) this.streamRefused = false
+      if (this.docs.size === 0) {
+        this.streamRefused = false
+        this.lifetime += 1
+      }
       void this.send({ unsubscribe: [doc] })
     }
   }
@@ -343,7 +369,7 @@ export class SseStreamHub implements SseStreamSource {
     // Announced, never marked on the entry: writing needs a scope reading does
     // not, so a credential refused every push may still follow the document,
     // and a later stream must keep asking for it.
-    if (isAuthRefusal(res.status)) this.announceAuthRefused([this.docs.get(doc)])
+    if (isAuthRefusal(res.status)) this.announceAuthRefused([this.docs.get(doc)], 'push')
     // A refusal of the BYTES is told apart from the rest, with the keeper's
     // reason: sending them again gets the same answer, so a caller that
     // retried it would keep every later edit built on them unsaved forever.
@@ -435,8 +461,8 @@ export class SseStreamHub implements SseStreamSource {
     if (streamId === null) return
     const byWorkspace = new Map<string, string[]>()
     for (const doc of docs) {
-      const workspaceId = workspaceHandleOfSyncKey(doc) ?? ''
-      byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), doc])
+      const handle = workspaceHandleOfSyncKey(doc) ?? ''
+      byWorkspace.set(handle, [...(byWorkspace.get(handle) ?? []), doc])
     }
     for (const group of byWorkspace.values()) {
       for (let from = 0; from < group.length; from += MAX_DOCS_PER_STREAM) {
@@ -490,7 +516,7 @@ export class SseStreamHub implements SseStreamSource {
       entry.authRefused = isAuthRefusal(status)
     }
     if (isAuthRefusal(status)) {
-      this.announceAuthRefused(entries)
+      this.announceAuthRefused(entries, 'subscribe')
       return
     }
     for (const entry of entries) this.announceTo(entry, false)
@@ -526,6 +552,7 @@ export class SseStreamHub implements SseStreamSource {
     const abort = new AbortController()
     this.abort = abort
     this.endedUnanswered = false
+    const lifetime = this.lifetime
 
     let res: Response
     try {
@@ -539,9 +566,12 @@ export class SseStreamHub implements SseStreamSource {
       // An unconsumed body holds the connection open under undici, and the
       // reconnect loop would repeat that on every failed attempt.
       void res.body?.cancel().catch(() => {})
-      if (isAuthRefusal(res.status)) {
+      // Only for the lifetime that asked: past the last release it describes
+      // nobody, and kept it would refuse the next subscriber — even one that
+      // joined while it was pending — without the daemon being asked again.
+      if (isAuthRefusal(res.status) && lifetime === this.lifetime) {
         this.streamRefused = true
-        this.announceAuthRefused(this.docs.values())
+        this.announceAuthRefused(this.docs.values(), 'stream')
       }
       return false
     }
@@ -620,11 +650,12 @@ export class SseStreamHub implements SseStreamSource {
   /** Same rule as `announceTo`: one listener's throw stops nobody else. */
   private announceAuthRefused(
     entries: Iterable<{ listeners: Set<DocListener> } | undefined>,
+    cause: AuthRefusalCause,
   ): void {
     for (const entry of entries) {
       for (const listener of entry?.listeners ?? []) {
         try {
-          listener.onAuthRefused?.()
+          listener.onAuthRefused?.(cause)
         } catch {
           // A listener's own failure is not this hub's to propagate.
         }

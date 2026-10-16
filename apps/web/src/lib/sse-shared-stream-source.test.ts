@@ -294,10 +294,10 @@ describe("the worker's word that the daemon refused the session", () => {
     source?.subscribe('w/other', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: other })
 
     FakeSharedWorker.instances[0]?.port.onmessage?.({
-      data: { type: 'auth-refused', doc: 'w/doc' },
+      data: { type: 'auth-refused', doc: 'w/doc', cause: 'subscribe' },
     } as MessageEvent)
 
-    expect(mine).toHaveBeenCalledTimes(1)
+    expect(mine.mock.calls).toEqual([['subscribe']])
     expect(other).not.toHaveBeenCalled()
   })
 })
@@ -437,7 +437,7 @@ describe('a listener joining a document in this tab', () => {
   it('is not told of a refusal the document has since recovered from', () => {
     const source = createSharedSseStreamSource(origin('joiner-recovered'))
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
-    tell({ type: 'auth-refused', doc: 'w/doc' })
+    tell({ type: 'auth-refused', doc: 'w/doc', cause: 'subscribe' })
     tell({ type: 'status', doc: 'w/doc', connected: true })
 
     const refused = vi.fn()
@@ -460,5 +460,28 @@ describe('a listener joining a document in this tab', () => {
     const onConnectionChange = vi.fn()
     source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onConnectionChange })
     expect(onConnectionChange).not.toHaveBeenCalled()
+  })
+  // Releasing and subscribing again is how a refused document is retried, so
+  // news that arrives for it in between must not answer the retry.
+  it('is not told of a refusal that arrived after the tab let the document go', () => {
+    const source = createSharedSseStreamSource(origin('joiner-late-news'))
+    const off = source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    off?.()
+    tell({ type: 'auth-refused', doc: 'w/doc', cause: 'subscribe' })
+
+    const refused = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: refused })
+    expect(refused).not.toHaveBeenCalled()
+  })
+
+  it('starts from nothing after the page is hidden', () => {
+    const source = createSharedSseStreamSource(origin('joiner-pagehide'))
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn() })
+    tell({ type: 'auth-refused', doc: 'w/doc', cause: 'subscribe' })
+    globalThis.dispatchEvent(new Event('pagehide'))
+
+    const refused = vi.fn()
+    source?.subscribe('w/doc', { onUpdate: vi.fn(), onMessage: vi.fn(), onAuthRefused: refused })
+    expect(refused).not.toHaveBeenCalled()
   })
 })
