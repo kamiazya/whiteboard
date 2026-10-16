@@ -93,9 +93,10 @@ measurement before and after any change to this function.
 ## Tests
 
 - Vitest project: `search-node`.
-- The tf-monotonicity property (more occurrences never lower a score) is
-  the one algebraic invariant BM25 offers cheaply; the rest are examples,
-  including the CJK bigram shape and the snippet window.
+- The tf-monotonicity property (more occurrences never lower a score) and
+  query normalisation (a repeated or space-padded query answers as the bare
+  one, `full-text.property.test.ts`) are the algebraic invariants; the rest
+  are examples, including the CJK bigram shape and the snippet window.
 
 ## Common mistakes (append as review finds them)
 
