@@ -124,10 +124,8 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/daemon-client/src/extension-bridge.ts#windowFromPageSchema',
   'packages/daemon-client/src/read-plane.ts#deriveDocumentKeyBytes',
   'packages/daemon-client/src/replica-session-key.ts#sessionKey',
+  'packages/daemon-client/src/sse-frames.ts#parseSseEvent',
   'packages/daemon-client/src/sse-stream-hub.ts#defaultRetryDelayMs',
-  'packages/daemon-client/src/sse-stream-hub.ts#documentSnapshotUrl',
-  'packages/daemon-client/src/sse-stream-hub.ts#documentUpdateUrl',
-  'packages/daemon-client/src/sse-stream-hub.ts#parseSseEvent',
   'packages/daemon-client/src/sync-sse-contract.ts#syncSubscribeResponseSchema',
   'packages/facet-engine/src/registry.ts#AssetKind',
   'packages/loro-adapter/src/thread-marks.ts#threadStyleKey',
@@ -351,7 +349,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 157
+const DEBT_CEILING = 155
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18

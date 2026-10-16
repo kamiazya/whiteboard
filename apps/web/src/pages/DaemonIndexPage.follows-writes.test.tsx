@@ -10,7 +10,7 @@ import type {
   DocListener,
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
-import { workspaceDocKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { workspaceDocKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import { cleanup, render, screen } from '@testing-library/react'
 import { act } from 'react'
 import { MemoryRouter } from 'react-router-dom'

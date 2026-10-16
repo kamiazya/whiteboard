@@ -19,7 +19,6 @@ import {
   syncStreamApiUrl,
   syncSubscribeApiUrl,
 } from './api-contracts/daemon-urls.js'
-import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
 import { refusalReasonOf } from './api-contracts/refusal-reason.js'
 import {
   isPermanentWriteRefusal,
@@ -27,7 +26,9 @@ import {
   SyncWriteRefusedError,
   syncWriteRefusalOf,
 } from './api-contracts/sync-write-refusal.js'
+import { createSseFrameParser } from './sse-frames.js'
 import type { ClientTextMessage } from './sync-frames.js'
+import { documentSnapshotUrl, documentUpdateUrl, workspaceHandleOfSyncKey } from './sync-key.js'
 import {
   MAX_DOCS_PER_STREAM,
   type SyncClientMessageRequest,
@@ -37,51 +38,6 @@ import {
   syncUpdateEventSchema,
 } from './sync-sse-contract.js'
 import { retryAfterMsOf, SyncWriteFailedError } from './write-chain.js'
-
-interface SseEvent {
-  event: string
-  data: string
-}
-
-/**
- * One SSE frame — the text between two blank lines — as an event. `null` for
- * a frame carrying no `data:` line at all, which is what a comment or a bare
- * keep-alive is: something arrived, and there is nothing to deliver.
- *
- * Exported for its own test and for nothing else. Measured: every consumer in
- * `dispatch` re-validates through `parseFrame`, so dropping this rule changes
- * nothing a hub-level test can observe — a mutation of it survives the whole
- * suite. The rule is still the right one (an empty event is not an event),
- * and testing it where it lives is the only way to hold it.
- */
-export function parseSseEvent(part: string): SseEvent | null {
-  let event = 'message'
-  const dataLines: string[] = []
-  for (const line of part.split('\n')) {
-    if (line.startsWith('event:')) event = line.slice(6).trim()
-    // Per the SSE grammar a single event may carry several data: lines,
-    // which concatenate with newlines.
-    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
-  }
-  return dataLines.length > 0 ? { event, data: dataLines.join('\n') } : null
-}
-
-/**
- * Split a raw SSE byte stream into events. Separate from the reader loop so a
- * frame arriving split across chunk boundaries — the normal case on a real
- * network — is a testable concern rather than an emergent one. The trailing
- * part is held back rather than parsed: with no blank line after it, it is
- * the start of a frame the next chunk finishes.
- */
-function createSseFrameParser(): (chunk: string) => SseEvent[] {
-  let buffer = ''
-  return (chunk: string) => {
-    buffer += chunk
-    const parts = buffer.split('\n\n')
-    buffer = parts.pop() ?? ''
-    return parts.map(parseSseEvent).filter((event): event is SseEvent => event !== null)
-  }
-}
 
 /** A source of per-document sync frames. Implemented by SseStreamHub directly,
  *  and by a SharedWorker-backed proxy so the sharing spans tabs. */
@@ -259,88 +215,6 @@ function isAuthRefusal(status: number): boolean {
 }
 
 /**
- * The workspace-granularity doc key: one subscription for the whole
- * workspace document. Unambiguous against `${workspaceId}/${path}` keys
- * because a workspace id contains no ':' and no '/', so no per-document
- * key ever starts with this prefix without a slash following it.
- */
-const WORKSPACE_DOC_KEY_PREFIX = 'workspace:'
-
-export function workspaceDocKey(workspaceId: string): string {
-  return `${WORKSPACE_DOC_KEY_PREFIX}${workspaceId}`
-}
-
-/**
- * The per-document sync key: `${handle}/${path}`, the grammar
- * `workspaceHandleOfSyncKey` splits on the first slash. The daemon's stream
- * registry, the client backend and the page's identity key all spell it
- * through here, so a change to the join reaches the parser it must agree with.
- */
-export function documentSyncKey(handle: string, path: string): string {
-  return `${handle}/${path}`
-}
-
-/**
- * The workspace id a workspace-granularity sync key names, or `null` for any
- * other key — a per-document key, the bare prefix, or the STORED key shape
- * (`workspace-tree:<id>`, ports' `docRefKey`, a different grammar).
- */
-export function workspaceIdOfSyncKey(doc: string): string | null {
-  if (!doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) return null
-  const workspaceId = doc.slice(WORKSPACE_DOC_KEY_PREFIX.length)
-  return workspaceId.length === 0 ? null : workspaceId
-}
-
-/**
- * The workspace a sync key addresses, for a caller that needs it rather than
- * the route — the daemon's membership gate, in particular, decides once per
- * workspace rather than per document key. A `workspace:` key names it
- * directly; a per-document key is `${handle}/${path}`, split on the first
- * slash (a path may contain more, a handle never does). What comes back is
- * the HANDLE the client wrote, which a daemon resolves to an id before it
- * keys anything by it. `null` for a malformed key — `documentRouteUrl` refuses
- * through this same split.
- */
-export function workspaceHandleOfSyncKey(doc: string): string | null {
-  if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) return workspaceIdOfSyncKey(doc)
-  const slash = doc.indexOf('/')
-  if (slash <= 0 || slash === doc.length - 1) return null
-  return doc.slice(0, slash)
-}
-
-/**
- * The daemon's update route for a doc key.
- *
- * A per-document key IS `${workspaceId}/${path}`, which is the only reason
- * anything holding just the key can address this route (first slash only: a
- * path may contain more, a workspace id never does). A `workspace:` key
- * addresses the workspace-document routes instead.
- */
-export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
-  return documentRouteUrl(baseUrl, doc, 'update')
-}
-
-/** The snapshot twin of `documentUpdateUrl`, splitting on the same first slash. */
-export function documentSnapshotUrl(baseUrl: string, doc: string): string | null {
-  return documentRouteUrl(baseUrl, doc, 'snapshot')
-}
-
-function documentRouteUrl(
-  baseUrl: string,
-  doc: string,
-  action: 'update' | 'snapshot',
-): string | null {
-  const base = baseUrl.replace(/\/$/, '')
-  const workspaceId = workspaceHandleOfSyncKey(doc)
-  if (workspaceId === null) return null
-  if (workspaceIdOfSyncKey(doc) !== null) {
-    return `${base}${workspaceDocumentApiUrl(workspaceId, action)}`
-  }
-  // Raw halves: documentApiUrl encodes per segment itself.
-  return `${base}${documentApiUrl(workspaceId, doc.slice(workspaceId.length + 1), action)}`
-}
-
-/**
  * Parse one frame's `data` against its contract. A malformed frame is dropped
  * rather than thrown on: the daemon is the only producer, so a mismatch is a
  * version skew, and losing one frame is recoverable where aborting the whole
@@ -369,7 +243,7 @@ export class SseStreamHub implements SseStreamSource {
   private started = false
   private closed = false
   /** Set by a 401/403; the reconnect loop halts on it for this hub's life. */
-  private authRefused = false
+  private streamRefused = false
   /**
    * Set when the open stream is ended because a subscribe on it went
    * unanswered. Such a stream does not count as one that opened for the
@@ -622,14 +496,14 @@ export class SseStreamHub implements SseStreamSource {
    * nothing, so the canvas looks connected while it diverges.
    */
   private async start(): Promise<void> {
-    if (this.started || this.closed || this.authRefused) return
+    if (this.started || this.closed || this.streamRefused) return
     this.started = true
     const delayFor = this.options.retryDelayMs ?? defaultRetryDelayMs
 
     let attempt = 0
-    while (!this.closed && !this.authRefused && this.docs.size > 0) {
+    while (!this.closed && !this.streamRefused && this.docs.size > 0) {
       const connected = await this.readStreamOnce()
-      if (this.closed || this.authRefused || this.docs.size === 0) break
+      if (this.closed || this.streamRefused || this.docs.size === 0) break
       attempt = connected ? 0 : attempt + 1
       await this.wait(delayFor(attempt))
     }
@@ -657,7 +531,7 @@ export class SseStreamHub implements SseStreamSource {
       // reconnect loop would repeat that on every failed attempt.
       void res.body?.cancel().catch(() => {})
       if (isAuthRefusal(res.status)) {
-        this.authRefused = true
+        this.streamRefused = true
         this.announceAuthRefused(this.docs.values())
       }
       return false

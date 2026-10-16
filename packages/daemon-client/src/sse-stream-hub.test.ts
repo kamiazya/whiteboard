@@ -1,15 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import { parseSseEvent } from './sse-frames.js'
+import { SseStreamHub } from './sse-stream-hub.js'
 import {
   documentSnapshotUrl,
   documentSyncKey,
   documentUpdateUrl,
-  parseSseEvent,
-  SseStreamHub,
   workspaceDocKey,
   workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
-} from './sse-stream-hub.js'
+} from './sync-key.js'
 import { flush } from './test-utils/flush.js'
 
 function createFake() {

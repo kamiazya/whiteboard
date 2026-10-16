@@ -6,12 +6,12 @@
 // move their viewport", "how many pages have this document open" — so a
 // caller names what it means and never which transport carries it.
 import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { documentSyncKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type {
   AgentActivityMessage,
   ServerTextMessage,
   ViewportRequestParams,
 } from '@kamiazya/whiteboard-daemon-client/sync-frames'
+import { documentSyncKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import {
   sseBroadcastText,
   sseBroadcastTextToReady,
