@@ -23,7 +23,6 @@ import { mkdir, open, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import {
-  answersPing,
   assessRecordedDaemon,
   isPidAlive,
   readDaemonRecord,
@@ -90,7 +89,7 @@ function info(message) {
 async function assessDaemon() {
   const record = readDaemonRecord(EXPECTED_DATA_DIR)
   if (record === null) return { kind: 'free' }
-  const daemon = await assessRecordedDaemon(record, { answers: answersPing })
+  const daemon = await assessRecordedDaemon(record)
   if (!daemon.running) return { kind: 'free' }
   // The ping is unauthenticated. A daemon started with another token (say,
   // `whiteboard daemon start` against this data dir) would refuse every
