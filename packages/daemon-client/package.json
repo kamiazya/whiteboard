@@ -122,6 +122,10 @@
       "types": "./src/write-chain.ts",
       "import": "./src/write-chain.ts"
     },
+    "./sync-key": {
+      "types": "./src/sync-key.ts",
+      "import": "./src/sync-key.ts"
+    },
     "./sync-sse-contract": {
       "types": "./src/sync-sse-contract.ts",
       "import": "./src/sync-sse-contract.ts"

@@ -12,7 +12,7 @@ import {
   workspaceDocKey,
   workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
-} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+} from '@kamiazya/whiteboard-daemon-client/sync-key'
 import {
   MAX_DOCS_PER_STREAM,
   type SyncReadyEvent,

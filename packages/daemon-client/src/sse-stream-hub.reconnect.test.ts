@@ -292,4 +292,45 @@ describe('stream connect refusals', () => {
     expect(d.opened()).toBe(0)
     hub.close()
   })
+
+  // A hub can outlive every page that opened it — the SharedWorker keeps one
+  // per origin — so a refusal of the stream has to reach whoever subscribes
+  // later, and must not outlast everyone who heard it.
+  it('tells a document subscribing after a refused stream open, without asking again', async () => {
+    const d = statusDaemon([401, 'open'])
+    const hub = new SseStreamHub({ fetch: d.fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const first = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: first })
+    await vi.waitFor(() => expect(first).toHaveBeenCalledTimes(1))
+    const joiner = vi.fn()
+    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: joiner })
+    expect(joiner).toHaveBeenCalledTimes(1)
+    // A second listener on the document that already heard it: only the
+    // newcomer is told, not the listener told at the refusal.
+    const sameDoc = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: sameDoc })
+    expect(sameDoc).toHaveBeenCalledTimes(1)
+    expect(first).toHaveBeenCalledTimes(1)
+    // Someone still holds the refusal, so the halt holds too.
+    expect(d.requests()).toBe(1)
+    hub.close()
+  })
+
+  it('opens the stream again once every document that heard the refusal is released', async () => {
+    const d = statusDaemon([401, 'open'])
+    const hub = new SseStreamHub({ fetch: d.fetch, baseUrl: 'http://d', retryDelayMs: () => 0 })
+    const refused = vi.fn()
+    const release = hub.subscribe('w/a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onAuthRefused: refused,
+    })
+    await vi.waitFor(() => expect(refused).toHaveBeenCalledTimes(1))
+    release()
+    const again = vi.fn()
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: again })
+    await vi.waitFor(() => expect(d.opened()).toBe(1))
+    expect(again).not.toHaveBeenCalled()
+    hub.close()
+  })
 })

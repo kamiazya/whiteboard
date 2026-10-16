@@ -186,6 +186,8 @@ function freshDaemon(snapshotLatencyMs: number): Daemon {
   }
 }
 
+let otherSeq = 0
+
 function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
   const daemon = freshDaemon(snapshotLatencyMs)
   const backend = new SseBackend('ws-1', 'canvas-a', BASE, { fetch: daemonFetch(daemon) })
@@ -200,8 +202,16 @@ function harness(snapshotLatencyMs = 0): DocumentBackendHarness {
     refuseAuth: () => {
       daemon.refuseStreams = true
     },
-    streamOpens: () => daemon.streamOpens,
-    failsNextStreamOpen: () => {
+    refuseStream: () => {
+      daemon.refuseStreams = true
+      return () => {
+        daemon.refuseStreams = false
+      }
+    },
+    anotherBackend: () =>
+      new SseBackend(`ws-other-${++otherSeq}`, 'canvas-b', BASE, { fetch: daemonFetch(daemon) }),
+    keeperAsks: () => daemon.streamOpens,
+    failsNextKeeperAsk: () => {
       daemon.failNextStream = true
     },
     keeperWrites: (live) => {

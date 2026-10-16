@@ -51,18 +51,35 @@ export interface DocumentBackendHarness {
    */
   refuseAuth?(): void
   /**
-   * How many times this backend has opened its stream to the keeper, refused
-   * opens included — so a case can tell a backend that stopped from one
-   * still retrying. Omitted, with `failsNextStreamOpen`, by an implementation
-   * with no stream.
+   * Make the keeper refuse the stream open itself for the credential, until
+   * the returned function is called — the credential renewed, as a sign-in
+   * does. Unlike `refuseAuth` it refuses the transport every backend on it
+   * shares, so a harness whose stream is shared must not keep a claim of its
+   * own on it from here on. Omitted, with `anotherBackend`, by an
+   * implementation with no stream.
    */
-  streamOpens?(): number
+  refuseStream?(): () => void
   /**
-   * Make the keeper answer this backend's next stream open with a failure
-   * that is not a refused credential (a daemon restarting), and the opens
-   * after it normally.
+   * A further backend on the same keeper and transport, for a document no
+   * backend has open — another page opening another document. Each call is a
+   * new document, and the case that asks for one disconnects it.
    */
-  failsNextStreamOpen?(): void
+  anotherBackend?(): DocumentBackend
+  /**
+   * How many times this backend has asked the keeper for its document,
+   * refused asks included — so a case can tell a backend that stopped from
+   * one still retrying. On a stream of its own an ask is a stream open; on a
+   * stream shared with other backends it is the document's subscribe, since
+   * there being asked for again IS the reconnect. Omitted, with
+   * `failsNextKeeperAsk`, by an implementation with no stream.
+   */
+  keeperAsks?(): number
+  /**
+   * Make the keeper fail this backend's next ask with a failure that is not
+   * a refused credential (a daemon restarting), and answer the asks after it
+   * normally.
+   */
+  failsNextKeeperAsk?(): void
   /**
    * An update a caller of this port would push, built against the snapshot
    * the backend delivered, and how to tell the keeper took it. For an
@@ -223,6 +240,7 @@ export function documentBackendContract(
   teardownCases(create)
   transportCases(create)
   authCases(create)
+  streamRefusalCases(create)
   catchUpCases(create)
   routingGapCases(create)
   unroutedCases(create)
@@ -330,7 +348,7 @@ function transportCases(
 
 /**
  * Resolves once a control backend, dropped with a failure that is NOT a
- * refused credential when `drop` is called, has opened its stream twice more:
+ * refused credential when `drop` is called, has asked the keeper twice more:
  * the reconnect, then the retry its backoff schedules. A backend dropped just
  * before it that kept retrying after a refusal has had the same schedule to
  * make its own retry in, however slow the machine is running.
@@ -339,23 +357,23 @@ async function backoffClock(
   create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
 ): Promise<{ drop(): void; retried(): Promise<void>; cleanup(): void } | null> {
   const control = await create()
-  const { streamOpens, failsNextStreamOpen, dropTransport } = control
-  if (!streamOpens || !failsNextStreamOpen || !dropTransport) {
+  const { keeperAsks, failsNextKeeperAsk, dropTransport } = control
+  if (!keeperAsks || !failsNextKeeperAsk || !dropTransport) {
     control.cleanup()
     return null
   }
   const rec = recorder()
   control.backend.connect(rec.handlers)
   await called(rec, 'connected')
-  let before = streamOpens()
+  let before = keeperAsks()
   return {
     drop: () => {
-      before = streamOpens()
-      failsNextStreamOpen()
+      before = keeperAsks()
+      failsNextKeeperAsk()
       dropTransport()
     },
     retried: () =>
-      vi.waitFor(() => expect(streamOpens()).toBeGreaterThanOrEqual(before + 2), {
+      vi.waitFor(() => expect(keeperAsks()).toBeGreaterThanOrEqual(before + 2), {
         timeout: DELIVERY_TIMEOUT_MS,
       }),
     cleanup: () => {
@@ -383,7 +401,7 @@ function authCases(create: () => DocumentBackendHarness | Promise<DocumentBacken
     // its next attempt, a backoff later and past any fixed window, so a
     // control's own retry is what says that attempt would have come by now.
     const clock = await backoffClock(create)
-    const opensBefore = h.streamOpens?.()
+    const asksBefore = h.keeperAsks?.()
 
     h.refuseAuth()
     h.dropTransport()
@@ -396,9 +414,52 @@ function authCases(create: () => DocumentBackendHarness | Promise<DocumentBacken
 
     expect(rec.calls.filter((c) => c === 'authError')).toEqual(['authError'])
     // The refused reconnect, and no attempt after it.
-    if (opensBefore !== undefined) expect(h.streamOpens?.()).toBe(opensBefore + 1)
+    if (asksBefore !== undefined) expect(h.keeperAsks?.()).toBe(asksBefore + 1)
     clock?.cleanup()
     h.backend.disconnect()
+    h.cleanup()
+  })
+}
+
+/** What a caller is told when the keeper refuses the stream open itself. */
+function streamRefusalCases(
+  create: () => DocumentBackendHarness | Promise<DocumentBackendHarness>,
+): void {
+  it('reports a refused stream to a backend opened later, and asks again once every backend is released', {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    // A transport can outlive every page that heard its refusal — the
+    // SharedWorker keeps one per origin — so a page opened later that hears
+    // nothing reads "offline" instead of "sign in again", and pages opened
+    // after every one of them was released and the credential renewed must
+    // not inherit the halt.
+    const h = await create()
+    if (!h.refuseStream || !h.dropTransport || !h.anotherBackend) {
+      h.cleanup()
+      return
+    }
+    const first = recorder()
+    h.backend.connect(first.handlers)
+    await called(first, 'connected')
+    const renew = h.refuseStream()
+    h.dropTransport()
+    await called(first, 'authError')
+
+    const joiner = h.anotherBackend()
+    const joined = recorder()
+    joiner.connect(joined.handlers)
+    await called(joined, 'authError')
+
+    renew()
+    h.backend.disconnect()
+    joiner.disconnect()
+    const reopened = h.anotherBackend()
+    const again = recorder()
+    reopened.connect(again.handlers)
+    await vi.waitFor(() => expect(again.calls).toContain('connected'), {
+      timeout: BOUNDED_OPEN_TIMEOUT_MS,
+    })
+    reopened.disconnect()
     h.cleanup()
   })
 }

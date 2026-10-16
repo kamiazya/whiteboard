@@ -11,7 +11,7 @@ import {
   documentSyncKey,
   workspaceDocKey,
   workspaceIdOfSyncKey,
-} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+} from '@kamiazya/whiteboard-daemon-client/sync-key'
 import type {
   SyncMessageEvent,
   SyncUpdateEvent,

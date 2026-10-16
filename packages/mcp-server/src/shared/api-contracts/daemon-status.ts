@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
-// Wire contract for `whiteboard daemon status --json`. Transcribes the
-// pre-existing DaemonStatusResult interface (cli/daemon-status.ts) field for
-// field — this is a binding increment, not a rename, so no field name,
-// optionality, or value set changes here.
+// Wire contract for `whiteboard daemon status --json`, which people script
+// against, and the shape the support bundle's status section is built from.
+// The command parses its result through this before writing it, so `.strict()`
+// turns a field it produces without declaring here into a failure of the
+// command rather than an undocumented key in its output; a change to the
+// shape is a change to this schema, versioned by `schemaVersion`.
 export const daemonStatusResultSchema = z
   .object({
     schemaVersion: z.literal(1),

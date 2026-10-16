@@ -3,7 +3,7 @@
  * executable half of that.
  *
  * A page follows a workspace's record as `workspace:<id>` and a document as
- * `<handle>/<path>`; `sse-stream-hub.ts` in daemon-client builds and parses
+ * `<handle>/<path>`; `sync-key.ts` in daemon-client builds and parses
  * both (`workspaceDocKey` and `documentSyncKey` build, the `*OfSyncKey`
  * functions parse). That grammar is not the STORED key (`workspace-tree:<id>`, ports'
  * `docRefKey` — see `doc-ref-key-one-place.test.ts`): the two answer
@@ -27,7 +27,7 @@ import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-ro
 import { walkSourceFiles } from './source-scan.js'
 
 /** Where the one spelling lives. Exempt by construction: it IS the place. */
-const DECLARATION_SITE = 'packages/daemon-client/src/sse-stream-hub.ts'
+const DECLARATION_SITE = 'packages/daemon-client/src/sync-key.ts'
 
 /**
  * One piece of a string built by hand: text the code wrote, or a hole whose

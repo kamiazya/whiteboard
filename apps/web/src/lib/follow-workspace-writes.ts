@@ -1,8 +1,8 @@
 import {
   routingTransitions,
   type SseStreamSource,
-  workspaceDocKey,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { workspaceDocKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { listenToWorkspace } from './workspace-broadcast.js'
 

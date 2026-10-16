@@ -1,15 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
+import { parseSseEvent } from './sse-frames.js'
+import { SseStreamHub } from './sse-stream-hub.js'
 import {
   documentSnapshotUrl,
   documentSyncKey,
   documentUpdateUrl,
-  parseSseEvent,
-  SseStreamHub,
   workspaceDocKey,
   workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
-} from './sse-stream-hub.js'
+} from './sync-key.js'
 import { flush } from './test-utils/flush.js'
 
 function createFake() {
@@ -448,12 +448,35 @@ describe('SseStreamHub', () => {
       })
 
       it('tells a listener joining the refused document, without asking again', async () => {
-        const { hub, goneAsks } = await refusedOnce()
+        const { hub, refused, goneAsks } = await refusedOnce()
         const joined = vi.fn()
         hub.subscribe('gone/b', { ...quiet, onAuthRefused: joined })
 
         expect(joined).toHaveBeenCalledTimes(1)
+        // The refusal is the joiner's news alone; whoever already heard it is not told again.
+        expect(refused).toHaveBeenCalledTimes(1)
         expect(goneAsks()).toBe(1)
+        hub.close()
+      })
+
+      it('declares readiness on a reconnect only for the documents it asks for again', async () => {
+        // The new stream never carries the refused document, so its readiness
+        // would address a routing that does not exist, under the credential
+        // that was just refused.
+        const { fake, hub, live } = await refusedOnce()
+        hub.sendMessage('gone/b', { type: 'client_ready' })
+        hub.sendMessage('live/a', { type: 'client_ready' })
+        fake.endStream()
+        await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(2))
+        const replayed = () =>
+          fake
+            .messageBodies()
+            .map((b) => JSON.parse(b) as { streamId: string; doc: string })
+            .filter((m) => m.streamId === 'server-2')
+            .map((m) => m.doc)
+        await vi.waitFor(() => expect(replayed()).toContain('live/a'))
+
+        expect(replayed()).not.toContain('gone/b')
         hub.close()
       })
 
@@ -482,6 +505,33 @@ describe('SseStreamHub', () => {
       const late: boolean[] = []
       hub.subscribe('full/b', { ...quiet, onConnectionChange: (c) => late.push(c) })
       expect(late).toEqual([false])
+      hub.close()
+    })
+
+    // 404 is a stream the daemon no longer knows (a restart race), 400 a
+    // request past its limit: neither is the credential, so the next stream
+    // asks again and nobody is told the session was refused.
+    it.each([
+      404, 400,
+    ])('asks again on the next stream after a %i refusal, never calling it the credential', async (status) => {
+      const { fake, fetch, asked } = refusing('full', status)
+      const hub = new SseStreamHub({ fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+      const refused = vi.fn()
+      const live: boolean[] = []
+      hub.subscribe('full/b', { ...quiet, onAuthRefused: refused })
+      hub.subscribe('live/a', { ...quiet, onConnectionChange: (c) => live.push(c) })
+      await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(1))
+      const joined = vi.fn()
+      hub.subscribe('full/b', { ...quiet, onAuthRefused: joined })
+      fake.endStream()
+      // `full/b` is asked before `live/a`, so `live/a` routed on the new
+      // stream means the re-ask for `full/b` has already been sent.
+      await vi.waitFor(() => expect(live.filter(Boolean)).toHaveLength(2))
+      await flush()
+
+      expect(asked.filter((docs) => docs.includes('full/b'))).toHaveLength(2)
+      expect(refused).not.toHaveBeenCalled()
+      expect(joined).not.toHaveBeenCalled()
       hub.close()
     })
 
@@ -516,6 +566,23 @@ describe('SseStreamHub', () => {
 
     expect(refused).toHaveBeenCalledTimes(1)
     expect(other).not.toHaveBeenCalled()
+    hub.close()
+  })
+
+  it('still asks for a document on a reconnect after a push for it was refused', async () => {
+    // Reading and writing are separate scopes: a credential holding only the
+    // read one is refused every push and still entitled to the stream, so a
+    // refused push must not stop the document being followed.
+    const fake = createFake()
+    const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
+    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: () => {} })
+    const asks = () => fake.subscribeBodies().filter((b) => b.includes('"subscribe":["w/a"]'))
+    await vi.waitFor(() => expect(asks()).toHaveLength(1))
+    fake.refuse({ update: 403 })
+    await expect(hub.push('w/a', new Uint8Array([1]))).rejects.toThrow('403')
+
+    fake.endStream()
+    await vi.waitFor(() => expect(asks()).toHaveLength(2))
     hub.close()
   })
 

@@ -10,7 +10,7 @@ import {
   documentUpdateUrl,
   workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
-} from './sse-stream-hub.js'
+} from './sync-key.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 // A handle is a workspace segment or a canonical id (ADR-0019); neither

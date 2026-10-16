@@ -11,11 +11,8 @@
  * `worker-src 'self'`, which rejects a blob: worker.
  */
 import type { SyncWriteRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
-import {
-  routingTransitions,
-  SseStreamHub,
-  workspaceIdOfSyncKey,
-} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { routingTransitions, SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { workspaceIdOfSyncKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import { retryDelayMs, WriteChain } from '@kamiazya/whiteboard-daemon-client/write-chain'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-fetch.js'

@@ -10,7 +10,7 @@
  */
 
 import type { Extension } from '@codemirror/state'
-import { documentSyncKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { documentSyncKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import type { ReactNode } from 'react'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'

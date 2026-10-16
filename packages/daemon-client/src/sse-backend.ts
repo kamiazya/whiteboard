@@ -14,13 +14,9 @@ import { apiFetch } from './api-client.js'
 import type { SyncWriteRefusal } from './api-contracts/sync-write-refusal.js'
 import type { DocumentBackend, DocumentBackendHandlers } from './document-backend-contract.js'
 import type { DocListener, SseStreamSource } from './sse-stream-hub.js'
-import {
-  documentSyncKey,
-  routingTransitions,
-  SseStreamHub,
-  workspaceDocKey,
-} from './sse-stream-hub.js'
+import { routingTransitions, SseStreamHub } from './sse-stream-hub.js'
 import { parseServerTextMessage } from './sync-frame-text.js'
+import { documentSyncKey, workspaceDocKey } from './sync-key.js'
 import { QueuedWriter } from './write-chain.js'
 
 /**

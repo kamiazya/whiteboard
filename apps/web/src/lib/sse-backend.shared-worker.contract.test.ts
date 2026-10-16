@@ -13,15 +13,15 @@
  *
  * `refuseAuth` refuses the case's workspace on its subscribe, as the daemon
  * refuses a workspace the credential may not enter, rather than on the
- * stream: a stream refused ends the worker's stream for the origin for the
- * worker's life, which would end it for every later case here — that path is
- * the SseStreamSource contract's (`sse-shared-stream-source.contract.test.ts`).
- * For the same reason `streamOpens` counts the case's own subscribes, not
+ * stream: a stream refused halts the worker's stream for the origin until
+ * every claim on it is released, which the other cases' reconnects would
+ * otherwise trip over. For the same reason `keeperAsks` counts the case's own subscribes, not
  * stream opens: on a shared stream, being asked for again IS a backend's
  * reconnect, and a refused workspace must not be asked for again on the
- * reopens other cases cause. `failsNextStreamOpen` fails that subscribe as a
+ * reopens other cases cause. `failsNextKeeperAsk` fails that subscribe as a
  * dropped request, which the hub answers by reopening the stream after its
- * backoff. No `sentUpdates`: the
+ * backoff. `refuseStream` is the stream-level refusal, and lets go of the
+ * harness's own claim so that release can happen. No `sentUpdates`: the
  * worker merges a push into its replica before writing onward, so arbitrary
  * bytes never reach the daemon — `localEdit` is a real Loro edit instead.
  * No `refusesNextWrite`: the worker announces a refusal only once it has
@@ -30,6 +30,7 @@
  * a failed read is the SseStreamSource contract's.
  */
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
+import type { SseStreamSource } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type { DocumentBackendHarness } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'
 import { documentBackendContract } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
@@ -74,6 +75,8 @@ const subscribesAsked = new Map<string, number>()
 const failNextSubscribe = new Set<string>()
 /** Answers the subscribes `silent` is holding, so none outlives its case. */
 const heldSubscribes = new Map<string, () => void>()
+/** Whether the daemon refuses the stream open itself for the credential. */
+let refuseStreams = false
 let pushFrame: ((frame: string) => void) | null = null
 let endStream: (() => void) | null = null
 
@@ -93,6 +96,7 @@ async function routeAfter(latencyMs: number, docs: readonly string[]): Promise<v
 
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
+    if (refuseStreams) return HttpResponse.json({ title: 'unauthorized' }, { status: 401 })
     const enc = new TextEncoder()
     routed.clear()
     const stream = new ReadableStream<Uint8Array>({
@@ -230,6 +234,45 @@ function tabEdit(workspaceId: string, keeper: LoroDoc, snapshot: Uint8Array | nu
   }
 }
 
+/**
+ * The harness's own claim on the worker's one stream, released at most once.
+ * The stream outlives the case that dropped it and reopens only while
+ * something subscribes, so holding a claim for the case brings it back up and
+ * every case starts from a transport that is.
+ */
+function holdStreamFor(source: SseStreamSource, workspaceId: string): () => void {
+  const claim = source.subscribe(`workspace:${workspaceId}-stream`, {
+    onUpdate: () => {},
+    onMessage: () => {},
+  })
+  let held = true
+  return () => {
+    if (held) claim()
+    held = false
+  }
+}
+
+/**
+ * The stream is refused for every claim on it, and a refused stream is asked
+ * for again only once all of them are released, so the harness's hold goes.
+ */
+function refuseStream(releaseHold: () => void): () => void {
+  refuseStreams = true
+  releaseHold()
+  return () => {
+    refuseStreams = false
+  }
+}
+
+let otherSeq = 0
+
+/** A backend for a further document of its own, through the same worker. */
+function anotherBackend(workspaceId: string, source: SseStreamSource): SseBackend {
+  const other = `${workspaceId}-other-${++otherSeq}`
+  seededKeeper(other)
+  return new SseBackend(other, 'canvas-b', BASE, undefined, source)
+}
+
 async function harness(): Promise<DocumentBackendHarness> {
   const source = createSharedSseStreamSource(BASE, fetch)
   if (!source) throw new Error('SharedWorker unavailable')
@@ -237,13 +280,7 @@ async function harness(): Promise<DocumentBackendHarness> {
   const keeper = seededKeeper(workspaceId)
   const keeperWrites = keeperWriter(workspaceId, keeper)
   keeperBroadcasts.set(workspaceId, keeperWrites)
-  // The worker's one stream outlives the case that dropped it, and reopens
-  // only while something subscribes. A claim of the harness's own, held for
-  // the case, brings it back up, so every case starts from a transport that is.
-  const holdStream = source.subscribe(`workspace:${workspaceId}-stream`, {
-    onUpdate: () => {},
-    onMessage: () => {},
-  })
+  const holdStream = holdStreamFor(source, workspaceId)
   await vi.waitFor(() => expect(pushFrame).not.toBeNull(), { timeout: 15_000 })
   const backend = new SseBackend(workspaceId, 'canvas-a', BASE, undefined, source)
   return {
@@ -252,8 +289,10 @@ async function harness(): Promise<DocumentBackendHarness> {
     refuseAuth: () => {
       authRefused.add(`workspace:${workspaceId}`)
     },
-    streamOpens: () => subscribesAsked.get(`workspace:${workspaceId}`) ?? 0,
-    failsNextStreamOpen: () => {
+    refuseStream: () => refuseStream(holdStream),
+    anotherBackend: () => anotherBackend(workspaceId, source),
+    keeperAsks: () => subscribesAsked.get(`workspace:${workspaceId}`) ?? 0,
+    failsNextKeeperAsk: () => {
       failNextSubscribe.add(`workspace:${workspaceId}`)
     },
     localEdit: (snapshot) => tabEdit(workspaceId, keeper, snapshot),
@@ -271,6 +310,7 @@ async function harness(): Promise<DocumentBackendHarness> {
     // The worker outlives every case by design; disconnecting releases this
     // case's claims, and its workspace id keeps its traffic apart.
     cleanup: () => {
+      refuseStreams = false
       backend.disconnect()
       holdStream()
       heldSubscribes.get(`workspace:${workspaceId}`)?.()

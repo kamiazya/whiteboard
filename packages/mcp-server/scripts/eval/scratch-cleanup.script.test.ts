@@ -14,7 +14,11 @@ const EVAL = resolve(import.meta.dirname, 'mcp-tool-surface-eval.mjs')
 let privateTmp: string | undefined
 
 afterEach(() => {
-  if (privateTmp !== undefined) rmSync(privateTmp, { recursive: true, force: true })
+  // The interrupted child can still be releasing files in the dir when its
+  // exit event fires, so a single pass can meet ENOTEMPTY on the final rmdir.
+  if (privateTmp !== undefined) {
+    rmSync(privateTmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+  }
   privateTmp = undefined
 })
 

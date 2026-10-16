@@ -38,7 +38,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { importBindingsOf, parseSource, unwrapExpression } from './ast-helpers.js'
+import { importBindingsOf, importedBindings, parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -60,9 +60,38 @@ const RECORD_SCHEMAS = new Set([
   'recordedDaemonSchema',
 ])
 
-/** The record schemas `source` imports, by their exported names. */
+/**
+ * The guarded names `file` forwards from a module `isModule` accepts:
+ * `export { name as alias } from`, and `export *` / `export * as ns`, which
+ * forward every name without spelling one. A forward binds nothing in the
+ * file, so an import scan reads it as clean — while whoever imports through
+ * it holds the guarded answer under a module this guard never names.
+ */
+function forwards(
+  file: ts.SourceFile,
+  isModule: (spec: string) => boolean,
+  names: ReadonlySet<string>,
+): string[] {
+  const named = [...importedBindings(file, isModule, names).reexports].map(
+    (alias) => `export as ${alias}`,
+  )
+  const whole = file.statements.flatMap((statement) =>
+    ts.isExportDeclaration(statement) &&
+    !statement.isTypeOnly &&
+    (statement.exportClause === undefined || ts.isNamespaceExport(statement.exportClause)) &&
+    statement.moduleSpecifier !== undefined &&
+    ts.isStringLiteralLike(statement.moduleSpecifier) &&
+    isModule(statement.moduleSpecifier.text)
+      ? [`export * from ${statement.moduleSpecifier.text}`]
+      : [],
+  )
+  return [...named, ...whole]
+}
+
+/** The record schemas `source` imports or forwards, by their exported names. */
 function recordSchemas(fileName: string, source: string): string[] {
-  return importBindingsOf(parseSource(fileName, source))
+  const file = parseSource(fileName, source)
+  const imported = importBindingsOf(file)
     .filter((binding) => RECORD_SCHEMA_MODULE.test(binding.spec))
     .flatMap((binding) =>
       binding.kind === 'namespace'
@@ -71,6 +100,7 @@ function recordSchemas(fileName: string, source: string): string[] {
           ? [binding.imported]
           : [],
     )
+  return [...imported, ...forwards(file, (spec) => RECORD_SCHEMA_MODULE.test(spec), RECORD_SCHEMAS)]
 }
 
 const SERVING_PID_READERS = new Set([ONE_PLACE, ONE_READER])
@@ -113,7 +143,9 @@ const RE_ASK_LEDGER: Readonly<Record<string, string>> = {
     "re-asks before SIGKILL: the reader's answer predates the SIGTERM window, and the pid can change hands inside it",
 }
 
-/** Where `source` reaches `daemonLiveness`: by name, alias, namespace or dynamic import. */
+const ASKS = new Set(['daemonLiveness'])
+
+/** Where `source` reaches `daemonLiveness`: by name, alias, namespace, dynamic import or a forward. */
 function livenessAsks(fileName: string, source: string): string[] {
   const file = parseSource(fileName, source)
   const imported = importBindingsOf(file)
@@ -140,12 +172,19 @@ function livenessAsks(fileName: string, source: string): string[] {
     ts.forEachChild(node, visit)
   }
   visit(file)
-  return [...imported, ...dynamic]
+  return [...imported, ...dynamic, ...forwards(file, (spec) => LIVENESS_MODULE.test(spec), ASKS)]
+}
+
+/** The lower-level liveness answers `source` forwards to whoever imports it. */
+function forwardedLowerAnswers(file: ts.SourceFile): string[] {
+  return LOWER_ANSWERS.flatMap(({ module, names }) =>
+    forwards(file, (spec) => module.test(spec), names),
+  )
 }
 
 /**
  * The lower-level liveness answers `source` reaches: an imported name, a
- * dynamic `import()` of a module that exports one, or a bare signal 0 —
+ * forward, a dynamic `import()` of a module that exports one, or a bare signal 0 —
  * `process.kill(pid, 0)` is the check every reader once reached for, and needs
  * no import at all.
  */
@@ -188,7 +227,7 @@ function lowerAnswers(fileName: string, source: string): string[] {
     ts.forEachChild(node, visit)
   }
   visit(file)
-  return [...imported, ...reached]
+  return [...imported, ...forwardedLowerAnswers(file), ...reached]
 }
 
 function readsRecord(fileName: string, source: string): boolean {
@@ -203,6 +242,51 @@ const sourceOf = (rel: string) => readFileSync(join(REPO_ROOT, rel), 'utf8')
 const readers = files
   .map(relOf)
   .filter((rel) => rel.endsWith('/daemon-registry.ts') || readsRecord(rel, sourceOf(rel)))
+
+/** Relative path -> source, for every scanned file; a self-test plants into a copy. */
+type Sources = ReadonlyMap<string, string>
+const realSources: Sources = new Map(files.map(relOf).map((rel) => [rel, sourceOf(rel)]))
+const planted = (plants: Record<string, string>): Sources => {
+  const copy = new Map(realSources)
+  for (const [rel, source] of Object.entries(plants)) copy.set(rel, (copy.get(rel) ?? '') + source)
+  return copy
+}
+
+/**
+ * A forward is never exempt, the one place's own reader included: whoever
+ * imports through it reaches the guarded name without importing its module,
+ * which is the one thing every scan here reads.
+ */
+const isForward = (hit: string) => hit.startsWith('export ')
+
+/** Every module asking `daemonLiveness` that is not the one reader or a ledgered re-ask. */
+function askersIn(sources: Sources): string[] {
+  return [...sources].flatMap(([rel, source]) => {
+    if (rel === ONE_PLACE) return []
+    const exempt = rel === ONE_READER || RE_ASK_LEDGER[rel] !== undefined
+    return livenessAsks(rel, source)
+      .filter((hit) => !exempt || isForward(hit))
+      .map((hit) => `${rel}: ${hit}`)
+  })
+}
+
+/** Every module, reader or not, that forwards a lower-level answer. */
+function lowerForwardersIn(sources: Sources): string[] {
+  return [...sources].flatMap(([rel, source]) =>
+    lowerAnswers(rel, source)
+      .filter(isForward)
+      .map((hit) => `${rel}: ${hit}`),
+  )
+}
+
+/** Every module reaching a record schema other than the one reader's own import. */
+function parsersIn(sources: Sources): string[] {
+  return [...sources].flatMap(([rel, source]) =>
+    recordSchemas(rel, source)
+      .filter((hit) => rel !== ONE_READER || isForward(hit))
+      .map((hit) => `${rel}: ${hit}`),
+  )
+}
 
 describe("a daemon record's liveness is judged in one place", () => {
   it('scans the readers worth scanning', () => {
@@ -225,6 +309,10 @@ describe("a daemon record's liveness is judged in one place", () => {
     expect(
       hits,
       "ask `daemonLiveness`: a bare signal 0 calls a pid another process took 'running', and start time alone calls a daemon a stepped clock moved 'reused'",
+    ).toEqual([])
+    expect(
+      lowerForwardersIn(realSources),
+      'import the answer from its own module: a forward hands it to readers this scan cannot see',
     ).toEqual([])
   })
 
@@ -268,12 +356,8 @@ describe("a daemon record's liveness is judged in one place", () => {
 
   it('only the one reader asks whether the daemon a record names is running', () => {
     expect(livenessAsks(ONE_READER, sourceOf(ONE_READER))).toEqual(['daemonLiveness'])
-    const askers = files
-      .map(relOf)
-      .filter((rel) => rel !== ONE_READER && rel !== ONE_PLACE && RE_ASK_LEDGER[rel] === undefined)
-      .flatMap((rel) => livenessAsks(rel, sourceOf(rel)).map((name) => `${rel}: ${name}`))
     expect(
-      askers,
+      askersIn(realSources),
       'switch on the `liveness` `parseDaemonRecord` / `loadDaemonRecord` hand you: a reader that asks for itself is one that can forget to',
     ).toEqual([])
   })
@@ -303,16 +387,55 @@ describe("a daemon record's liveness is judged in one place", () => {
     ).toEqual([])
   })
 
+  it('recognises daemonLiveness forwarded by name, alias or export *', () => {
+    expect(
+      livenessAsks('f.ts', "export { daemonLiveness as askLiveness } from './daemon-liveness.js'"),
+    ).toEqual(['export as askLiveness'])
+    expect(livenessAsks('f.ts', "export * from './daemon-liveness.js'")).toEqual([
+      'export * from ./daemon-liveness.js',
+    ])
+    expect(livenessAsks('f.ts', "export * as l from './daemon-liveness.js'")).toEqual([
+      'export * from ./daemon-liveness.js',
+    ])
+    expect(
+      livenessAsks(
+        'f.ts',
+        "export { servingPidOf, type DaemonLiveness } from './daemon-liveness.js'",
+      ),
+    ).toEqual([])
+    expect(
+      lowerAnswers('f.ts', "export { isPidAlive as alive } from '../shared/process-alive.js'"),
+    ).toEqual(['export as alive'])
+    expect(
+      recordSchemas('f.ts', "export { daemonRecordSchema } from './daemon-record-schema.js'"),
+    ).toEqual(['export as daemonRecordSchema'])
+  })
+
+  it('counts a forward through the one reader or a new barrel as asking', () => {
+    const forward = "\nexport { daemonLiveness as askLiveness } from './daemon-liveness.js'\n"
+    expect(askersIn(planted({ [ONE_READER]: forward }))).toEqual([
+      `${ONE_READER}: export as askLiveness`,
+    ])
+    const barrel = 'packages/mcp-server/src/daemon/liveness-ask.ts'
+    expect(
+      askersIn(planted({ [barrel]: "export { daemonLiveness } from './daemon-liveness.js'\n" })),
+    ).toEqual([`${barrel}: export as daemonLiveness`])
+    expect(
+      lowerForwardersIn(
+        planted({ [barrel]: "export { recordedProcess } from '../shared/process-identity.js'\n" }),
+      ),
+    ).toEqual([`${barrel}: export as recordedProcess`])
+    expect(
+      parsersIn(planted({ [ONE_READER]: "\nexport * from './daemon-record-schema.js'\n" })),
+    ).toEqual([`${ONE_READER}: export * from ./daemon-record-schema.js`])
+  })
+
   it('only the one reader parses daemon.json against its schemas', () => {
     expect(recordSchemas(ONE_READER, sourceOf(ONE_READER)).sort()).toEqual(
       [...RECORD_SCHEMAS].sort(),
     )
-    const parsers = files
-      .map(relOf)
-      .filter((rel) => rel !== ONE_READER)
-      .flatMap((rel) => recordSchemas(rel, sourceOf(rel)).map((name) => `${rel}: ${name}`))
     expect(
-      parsers,
+      parsersIn(realSources),
       'read daemon.json through `parseDaemonRecord` (or `loadDaemonRecord`, its projection): a second parser reaches a second verdict',
     ).toEqual([])
   })
