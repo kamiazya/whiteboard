@@ -11,12 +11,30 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { fontsDir as installedFontsDir } from '../tenant/data-layout.js'
 import { renderSpatialCanvasToPng } from './headless-renderer.js'
 import { installedFontFiles } from './installed-fonts.js'
 import { undrawableCharacters } from './undrawable-characters.js'
+
+// A real directory lists in whatever order its filesystem keeps — on ext4 a
+// hash order that can happen to come out sorted — so a test reading one
+// cannot tell a sort from luck. While set, `readdir` answers in DESCENDING
+// order instead: a legal directory order, and the one a missing sort cannot
+// pass.
+const listing = vi.hoisted(() => ({ reversed: false }))
+vi.mock('node:fs/promises', async (original) => {
+  const real = await original<typeof import('node:fs/promises')>()
+  return {
+    ...real,
+    readdir: (async (...args: Parameters<typeof real.readdir>) => {
+      const entries: unknown[] = await real.readdir(...args)
+      const names = entries.filter((entry): entry is string => typeof entry === 'string')
+      return listing.reversed && names.length === entries.length ? names.sort().reverse() : entries
+    }) as typeof real.readdir,
+  }
+})
 
 let dataDir: string
 let fontsDir: string
@@ -26,6 +44,7 @@ beforeEach(() => {
   fontsDir = installedFontsDir(dataDir)
 })
 afterEach(() => {
+  listing.reversed = false
   rmSync(dataDir, { recursive: true, force: true })
 })
 
@@ -45,6 +64,7 @@ describe('installedFontFiles', () => {
     for (const name of ['zeta.ttf', 'alpha.otf', 'beta.ttc']) {
       await writeFile(join(fontsDir, name), 'not really a font')
     }
+    listing.reversed = true
 
     expect(await installedFontFiles(fontsDir)).toEqual([
       join(fontsDir, 'alpha.otf'),

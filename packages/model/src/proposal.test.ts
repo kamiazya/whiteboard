@@ -44,11 +44,35 @@ describe('proposedChangeSchema', () => {
   // a field the change does not touch would fire decision 5's conflict check
   // on someone else's edit — the "only a REAL collision" rule, made
   // mechanical rather than left to whoever writes the producer.
-  it('rejects a prior declared for a field the change does not touch', () => {
-    const parsed = proposedChangeSchema.safeParse(
-      change({ patch: { x: 40 }, assumed: { x: 10, y: 99 } }),
-    )
-    expect(parsed.success).toBe(false)
+  // Each patch arm carries its own refinement, so each is pinned separately.
+  it.each([
+    { op: 'node.patch', idKey: 'nodeId', patch: { x: 40 }, prior: { x: 10 }, extra: { y: 99 } },
+    {
+      op: 'edge.patch',
+      idKey: 'edgeId',
+      patch: { label: 'b' },
+      prior: { label: 'a' },
+      extra: { color: '2' },
+    },
+    {
+      op: 'line.patch',
+      idKey: 'lineId',
+      patch: { label: 'b' },
+      prior: { label: 'a' },
+      extra: { color: '2' },
+    },
+  ])('$op rejects a prior declared for a field the change does not touch', ({
+    op,
+    idKey,
+    patch,
+    prior,
+    extra,
+  }) => {
+    const base = { id: 'c1', status: 'open', op, [idKey]: 'e1', patch }
+    expect(proposedChangeSchema.safeParse({ ...base, assumed: prior }).success).toBe(true)
+    expect(
+      proposedChangeSchema.safeParse({ ...base, assumed: { ...prior, ...extra } }).success,
+    ).toBe(false)
   })
 
   it('rejects an unknown verb', () => {

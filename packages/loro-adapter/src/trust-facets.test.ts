@@ -69,6 +69,20 @@ describe('the trust family has a bucket of its own (ADR-0016 decision 4)', () =>
     expect(readTrustFacets(doc)).toEqual({ generated: GENERATED })
   })
 
+  // A LoroMap key is a CRDT string, so `__proto__` stores and enumerates like
+  // any other, and this map arrives over sync or import. Looked up on a
+  // plain-object schema table it would answer `Object.prototype` — truthy,
+  // with no `safeParse` — and every trust read of the document would throw.
+  it('ignores a `__proto__` key in the trust map instead of throwing', () => {
+    const doc = markdownDoc()
+    doc.getMap('trust').set('__proto__', { polluted: true })
+    doc.getMap('trust').set('generated', { ...GENERATED })
+    doc.commit()
+
+    expect(readTrustFacets(doc)).toEqual({ generated: GENERATED })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
   it('answers undefined when every field is corrupt, rather than an empty family', () => {
     const doc = markdownDoc()
     writeTrustFacets(doc, { generated: GENERATED })
