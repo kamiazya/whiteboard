@@ -272,9 +272,9 @@ function ShellBar({
   // Published by whichever page holds a live document session; `null` on an
   // index or settings page, which has none to describe.
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
-  // Sync off — a rejected session, or one that never opened — has reconnecting
-  // as its only way out, so it counts as disconnected for the attention dot.
-  // A transient reconnect does not: it recovers on its own.
+  // Sync off — a rejected session, or one that never opened — does not recover
+  // on its own, so it counts as disconnected for the attention dot. A
+  // transient reconnect does: it is not counted.
   const nudge = useSettingsNudge(daemon && !(connection !== null && isSyncOff(connection.state)))
   const daemonBaseUrl = connection?.daemonBaseUrl
   const {
