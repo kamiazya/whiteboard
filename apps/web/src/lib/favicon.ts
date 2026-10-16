@@ -64,7 +64,7 @@ export function resolveRectColor(color: string | undefined): string {
 // backend reported failed (it reports both outcomes, so a later landed write
 // clears it); a refused append to the offline replica. A refused browser
 // write and a rejected daemon session are `offline`. The app badge is not
-// read off this table (`updateAppBadge` takes the connection state itself).
+// read off this table (`asksForReturn` takes the connection state itself).
 const BROWSER_STATUS: Record<StorageHealth, FaviconStatus> = {
   ok: 'quiet',
   stuck: 'unsaved',
