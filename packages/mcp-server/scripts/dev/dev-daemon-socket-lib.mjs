@@ -343,7 +343,13 @@ async function judgeLiveness(
     }
   }
   const confirmed = answer.status === 200 && statusPid(answer.text) === record.pid
-  return { liveness: confirmed ? 'running' : 'unconfirmed', process: identity, answered: true }
+  const liveness = confirmed ? 'running' : 'unconfirmed'
+  // A refusal is no more an answer here than it is to the ping.
+  if (answer.status !== 200) {
+    const silence = `answered ${STATUS_PATH} with HTTP ${answer.status}`
+    return { liveness, process: identity, answered: false, silence }
+  }
+  return { liveness, process: identity, answered: true }
 }
 
 /**

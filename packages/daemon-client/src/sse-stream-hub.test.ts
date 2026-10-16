@@ -456,6 +456,18 @@ describe('SseStreamHub', () => {
         expect(goneAsks()).toBe(1)
         hub.close()
       })
+
+      it('hands a joiner its unsubscribe even when its refusal listener throws', async () => {
+        const { hub } = await refusedOnce()
+        const throwing = vi.fn(() => {
+          throw new Error('listener failed')
+        })
+        const unsubscribe = hub.subscribe('gone/b', { ...quiet, onAuthRefused: throwing })
+
+        expect(throwing).toHaveBeenCalledTimes(1)
+        expect(unsubscribe).toBeTypeOf('function')
+        hub.close()
+      })
     })
 
     it('says a document is not live when the daemon would not follow it, for a late subscriber too', async () => {

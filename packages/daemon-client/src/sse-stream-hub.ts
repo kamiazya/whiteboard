@@ -400,8 +400,9 @@ export class SseStreamHub implements SseStreamSource {
     // Announced on transitions alone, routing would never reach anyone who
     // joins a document that is already routed — a second canvas in the same
     // tab would show an unknown connection for as long as nothing went wrong.
-    listener.onConnectionChange?.(entry.routed)
-    if (entry.authRefused) listener.onAuthRefused?.()
+    const joiner = { listeners: new Set([listener]) }
+    this.announceTo(joiner, entry.routed)
+    if (entry.authRefused) this.announceAuthRefused([joiner])
     void this.start()
 
     return () => {

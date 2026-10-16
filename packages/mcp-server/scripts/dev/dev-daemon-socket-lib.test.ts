@@ -344,6 +344,27 @@ describe('a running daemon whose ping fails', () => {
       await new Promise<void>((closed) => server.close(() => closed()))
     }
   })
+
+  // A late-starting pid is judged by the status ask, and a refusal there is
+  // no more an answer than a refused ping: the hook must not call it healthy.
+  it('names the status the status ask was answered with', async () => {
+    const socketPath = join(dataDirWith(null), 'unready-status.sock')
+    const server = createServer((_req, res) => res.writeHead(503).end())
+    await new Promise<void>((listening) => server.listen(socketPath, () => listening()))
+    const startedAt = '2026-01-01T00:00:00.000Z'
+    const late = { isAlive: () => true, startMs: () => Date.parse(startedAt) + 60_000 }
+    try {
+      const record = { pid: 42, startedAt, socketPath, token: 't' }
+      expect(await assessRecordedDaemon(record, late)).toMatchObject({
+        running: true,
+        answering: false,
+        liveness: 'unconfirmed',
+        silence: `answered ${STATUS_PATH} with HTTP 503`,
+      })
+    } finally {
+      await new Promise<void>((closed) => server.close(() => closed()))
+    }
+  })
 })
 
 describe('requestDaemon', () => {
