@@ -148,15 +148,34 @@ const SCRIPT_SKIPPED_DIRS: ReadonlySet<string> = new Set([
 /**
  * Every plain-Node script (`.mjs`, `.cjs`, `.js`, tests included), as sorted
  * repo-relative paths. The one list the script guards share — the entry-module
- * check, the serve-dist check and the `.mjs` size ledger — so a script cannot
+ * check, the serve-dist check and the size ledger's `.mjs` half — so a script cannot
  * sit inside one guard's roots and outside another's; each guard narrows it by
  * its own filter. Kept as separate lists, the size ledger's roots left every
  * app's `scripts/`, `tools/*.mjs` and `.claude/scripts` outside the budget.
  */
 export function scriptFiles(): string[] {
+  return walkScriptRoots((path) => /\.(mjs|cjs|js)$/.test(path))
+}
+
+/**
+ * Every TypeScript file under the script trees that no `SCAN_ROOTS` tree
+ * holds — a package's `scripts/`, its root-level configs and tests, the
+ * dev tooling's fixtures — declaration files aside, tests included. The
+ * size ledgers read `SCAN_ROOTS` for TypeScript and `scriptFiles()` for
+ * plain Node, so without this list a `.ts` script sat in neither and grew
+ * past the budget unwatched.
+ */
+export function scriptTypeScriptFiles(): string[] {
+  const sourceRoots = SCAN_ROOTS.map((root) => `${root.replaceAll('\\', '/')}/`)
+  return walkScriptRoots(
+    (path) => /\.(m|c)?tsx?$/.test(path) && !/\.d\.(m|c)?ts$/.test(path),
+  ).filter((path) => !sourceRoots.some((root) => path.startsWith(root)))
+}
+
+function walkScriptRoots(include: (absolutePath: string) => boolean): string[] {
   return SCRIPT_ROOTS.flatMap((root) =>
     walk(join(REPO_ROOT, root), {
-      include: (path) => /\.(mjs|cjs|js)$/.test(path) && !isExcludedPath(path),
+      include: (path) => include(path) && !isExcludedPath(path),
       skip: (_path, name) => SCRIPT_SKIPPED_DIRS.has(name),
     }),
   )
