@@ -1,3 +1,4 @@
+import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { ColumnType, Generated, Kysely } from 'kysely'
 
 // Unix milliseconds.
@@ -161,7 +162,7 @@ interface WorkspaceMembershipsTable {
   profileId: string
   createdAt: Timestamp
   // ADR-0049 decision 1. Written on every insert; nullable only at the column.
-  role: 'owner' | 'member'
+  role: WorkspaceRole
 }
 
 // ADR-0049 decision 2: administrators a tenant has appointed.
