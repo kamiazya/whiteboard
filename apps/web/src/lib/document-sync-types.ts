@@ -48,7 +48,8 @@ export interface UseDocumentSyncOptions {
   // page can show a presence chip and outline what moved.
   onAgentActivity?: (payload: Omit<AgentActivityPayload, 'type'>) => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
-  // transition when the keeper refuses the credential, so a daemon-backed
+  // transition when the keeper refuses the credential on the stream or a
+  // subscription (a refused push is a write that did not land), so a daemon-backed
   // page can report "Sync off" instead of the generic error state.
   onAuthError?: () => void
   // When set, drives the window-event contract the outline listens for:
