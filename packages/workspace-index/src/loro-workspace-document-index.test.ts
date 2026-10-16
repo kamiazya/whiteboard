@@ -258,6 +258,30 @@ describe('LoroWorkspaceDocumentIndex folders', () => {
     expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
   })
 
+  // Two levels deep, emptying `a/b` is what empties `a`: a prune that walks
+  // once visits `a` while it still holds `b` and leaves it standing.
+  it('frees every ancestor folder a nested delete emptied', async () => {
+    const index = await makeIndex()
+    await index.createDocument({ workspaceId: WS, path: 'a/b/c', kind: 'markdown' })
+    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+    await index.deleteDocument({ workspaceId: WS, path: 'a/b/c' })
+
+    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
+  })
+
+  it('frees every ancestor folder a nested move emptied', async () => {
+    const index = await makeIndex()
+    await index.createDocument({ workspaceId: WS, path: 'a/b/c', kind: 'markdown' })
+    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+    await index.moveDocument({ workspaceId: WS, from: 'a/b/c', to: 'c' })
+
+    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a', 'c'])
+  })
+
   it('refuses to move one of two siblings onto the folder they share, and changes nothing', async () => {
     const index = await makeIndex()
     await index.createDocument({ workspaceId: WS, path: 'a/x', kind: 'markdown' })
