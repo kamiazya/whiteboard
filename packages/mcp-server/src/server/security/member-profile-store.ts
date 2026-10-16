@@ -44,6 +44,7 @@
  * read — there is nothing here to degrade.
  */
 
+import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { inTenantTransaction, type TenantScoped } from '../store/db/tenant-database.js'
@@ -95,8 +96,6 @@ interface EnsureProfileInput {
   displayName: string
 }
 
-type MembershipRole = 'owner' | 'member'
-
 export interface MemberProfileStore {
   /** This tenant's user for whoever `binding` resolves to; null when the
    *  binding names no account, an account with no user here, or a user an
@@ -112,7 +111,7 @@ export interface MemberProfileStore {
   addMember(workspaceId: string, profileId: string): Promise<void>
   isWorkspaceMember(workspaceId: string, profileId: string): Promise<MembershipStatus>
   /** This user's role in the workspace, or null when they are not a member. */
-  membershipRole(workspaceId: string, profileId: string): Promise<MembershipRole | null>
+  membershipRole(workspaceId: string, profileId: string): Promise<WorkspaceRole | null>
   /** True once this workspace has ever had a member — never reverts on removal. */
   membersOnly(workspaceId: string): Promise<boolean>
 }

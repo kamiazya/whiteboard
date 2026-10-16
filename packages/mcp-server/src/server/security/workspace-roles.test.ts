@@ -5,16 +5,21 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
-import { Kysely } from 'kysely'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Kysely, type Selectable } from 'kysely'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { DB_FILENAME } from '../store/db/index.js'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import { tenantDatabase } from '../store/db/tenant-database.js'
 import { createIsolatedDb } from '../store/db/test-helpers.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { createMemberProfileStore, type MemberProfileStore } from './member-profile-store.js'
-import { createWorkspaceRoles, type WorkspaceRoles } from './workspace-roles.js'
+import {
+  createWorkspaceRoles,
+  type WorkspaceMember,
+  type WorkspaceRoles,
+} from './workspace-roles.js'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -140,5 +145,20 @@ describe('createWorkspaceRoles — two connections at once', () => {
       await first.dispose()
       await rm(fileRoot, { recursive: true, force: true })
     }
+  })
+})
+
+// The people list answers through the contract's schema, so a role the server
+// can hold that the contract lacks type-checks and fails only at runtime, as a
+// 500. Every server spelling of the role is therefore the contract's type.
+describe('the workspace role the server holds', () => {
+  it('is the people contract’s role, in the store, the member store and the row', () => {
+    expectTypeOf<WorkspaceMember['role']>().toEqualTypeOf<WorkspaceRole>()
+    expectTypeOf<
+      Awaited<ReturnType<MemberProfileStore['membershipRole']>>
+    >().toEqualTypeOf<WorkspaceRole | null>()
+    expectTypeOf<
+      Selectable<DatabaseSchema['workspaceMemberships']>['role']
+    >().toEqualTypeOf<WorkspaceRole>()
   })
 })
