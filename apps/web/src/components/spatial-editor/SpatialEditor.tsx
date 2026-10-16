@@ -1438,6 +1438,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               duplicateSelection,
               reorderSelection,
               groupSelection,
+              frameSelection,
               createNodeAt,
               createGroupAtViewportCenter,
               openLinkNode,

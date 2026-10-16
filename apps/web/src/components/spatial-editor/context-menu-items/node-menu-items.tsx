@@ -43,6 +43,7 @@ import {
   LockOpen,
   MessageSquarePlus,
   Pencil,
+  ScanSearch,
   Scissors,
   SendToBack,
   Sparkles,
@@ -86,6 +87,7 @@ export interface NodeMenuItemsInput {
   readonly duplicateSelection: CanvasCommands['duplicateSelection']
   readonly reorderSelection: CanvasCommands['reorderSelection']
   readonly groupSelection: CanvasCommands['groupSelection']
+  readonly frameSelection: CanvasCommands['frameSelection']
   readonly openLinkNode: CanvasCommands['openLinkNode']
   readonly onOpenDocument: CanvasCommands['onOpenDocument']
   readonly onAddImage: CanvasCommands['onAddImage']
@@ -230,6 +232,22 @@ function pushReferenceBands(verbs: ContextMenuItem[], input: NodeMenuItemsInput)
         onSelect: () => setDocumentPicker({ mode: 'retarget', nodeId: node.id }),
       })
     }
+  }
+}
+
+/**
+ * The pointer path to Shift+2. The right-click already made this node the
+ * primary selection, so the frame takes in the whole multi-selection.
+ */
+function zoomToSelectionItem(
+  frameSelection: NodeMenuItemsInput['frameSelection'],
+): ContextMenuItem {
+  return {
+    label: 'Zoom to selection',
+    icon: <ScanSearch />,
+    onSelect: () => {
+      frameSelection()
+    },
   }
 }
 
@@ -485,7 +503,7 @@ export function nodeMenuItems(input: NodeMenuItemsInput): ContextMenuItem[] {
       onSelect: () => onToggleNodeLock?.(node.id, true),
     })
   }
-  verbs.push(commentOnThis)
+  verbs.push(zoomToSelectionItem(input.frameSelection), commentOnThis)
   return [
     ...properties,
     // Extensions come after every core row, behind their own fence.

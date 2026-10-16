@@ -1,7 +1,7 @@
-// Zoom to fit / zoom to selection (editor-completeness slice 7): surface
-// the viewport framing the editor could already compute. Shift+1 frames
-// everything, Shift+2 frames the selection; the hand-mode dock's framing
-// button is the touch path.
+// Zoom to fit / zoom to selection: surface the viewport framing the editor
+// could already compute. Shift+1 frames everything, Shift+2 frames the
+// selection; the hand-mode dock's framing button is fit-all's touch path, and
+// the node menu's "Zoom to selection" is Shift+2's.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -97,4 +97,34 @@ it("hand mode's dock button frames the content as the touch path", () => {
   expect(button).not.toBeNull()
   fireEvent.click(button)
   expect(zoomOf(container)).toBeLessThan(1)
+})
+
+const transformOf = (container: HTMLElement) =>
+  (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
+
+it("the node menu's Zoom to selection frames the viewport exactly as Shift+2", () => {
+  const { Host } = makeEditorHost({ initial })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+
+  fireEvent.keyDown(root, { code: 'Digit1', key: '!', shiftKey: true })
+  const fitAll = transformOf(container)
+  const first = nodeBoxes(container)[0]
+  const cx = r.left + (first.left + first.right) / 2
+  const cy = r.top + (first.top + first.bottom) / 2
+  fireEvent.pointerDown(root, { button: 0, pointerId: 1, clientX: cx, clientY: cy })
+  fireEvent.pointerUp(root, { pointerId: 1, clientX: cx, clientY: cy })
+  fireEvent.contextMenu(root, { clientX: cx, clientY: cy, button: 2 })
+  const item = [...container.querySelectorAll('[data-testid="context-menu"] button')].find(
+    (button) => button.textContent === 'Zoom to selection',
+  ) as HTMLElement | undefined
+  expect(item, 'no Zoom to selection entry in the node menu').toBeTruthy()
+  fireEvent.click(item as HTMLElement)
+  const fromMenu = transformOf(container)
+  expect(fromMenu).not.toBe(fitAll)
+
+  fireEvent.keyDown(root, { code: 'Digit1', key: '!', shiftKey: true })
+  fireEvent.keyDown(root, { code: 'Digit2', key: '@', shiftKey: true })
+  expect(fromMenu).toBe(transformOf(container))
 })
