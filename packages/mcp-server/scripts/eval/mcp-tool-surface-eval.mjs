@@ -30,7 +30,7 @@ import { register } from 'tsx/esm/api'
 import { parseScriptArgs } from '../../../../.claude/scripts/script-flags.mjs'
 import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
-import { closeLiveChildren, killLiveChildren, trackChild } from './lib/live-children.mjs'
+import { killLiveChildren, stopLiveChildren, trackChild } from './lib/live-children.mjs'
 import { facetLine } from './lib/report-line.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS, tagLibrary } from './tasks.mjs'
@@ -240,7 +240,7 @@ const template = join(scratch, 'template')
 // uncaught throw. A signal does not emit `exit` by itself, so SIGINT/SIGTERM
 // are turned into one — and the lane is long enough that interrupting it once
 // the needed answer has printed is the common way it ends. The children are
-// closed first (lib/live-children.mjs says why); a second signal stops waiting.
+// stopped first (lib/live-children.mjs says why); a second signal stops waiting.
 process.once('exit', () => {
   killLiveChildren()
   rmSync(scratch, { recursive: true, force: true })
@@ -249,7 +249,7 @@ let interrupted = false
 const interrupt = async () => {
   if (interrupted) process.exit(130)
   interrupted = true
-  await closeLiveChildren(CLOSE_ON_SIGNAL_MS)
+  await stopLiveChildren(CLOSE_ON_SIGNAL_MS)
   process.exit(130)
 }
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, interrupt)

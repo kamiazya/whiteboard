@@ -3,8 +3,9 @@
 // (which runs a server of its own). `process.exit` ends only the eval, so a
 // child still running at a signal is orphaned and writes the data dir —
 // identity file included — back after the exit hook removed it. A signal
-// therefore closes them first, and the exit hook kills whatever a hung close
-// left behind before it removes anything.
+// therefore stops them first — a close, then a kill of whatever ignored it,
+// waited out — and the exit hook still kills anything left before it removes
+// anything, for the exits no signal began.
 
 /** @typedef {{ close: () => Promise<void>, pid: () => number | null | undefined }} LiveChild */
 
@@ -21,7 +22,7 @@ export function trackChild(child) {
 }
 
 /** Closes every live child gracefully, giving up after `timeoutMs`. */
-export async function closeLiveChildren(timeoutMs) {
+async function closeLiveChildren(timeoutMs) {
   let timer
   const bound = new Promise((resolve) => {
     timer = setTimeout(resolve, timeoutMs)
@@ -40,5 +41,39 @@ export function killLiveChildren() {
     } catch {
       // Already gone.
     }
+  }
+}
+
+const isRunning = (pid) => {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Closes every live child, then kills what the close left running and waits —
+ * up to `killWaitMs` — for each to be gone. A SIGKILL is only queued when
+ * `process.kill` returns, and a write the child is already making still lands,
+ * so removing the scratch on the strength of the signal alone races it. A
+ * child confirmed gone is forgotten, so the exit hook never signals a pid the
+ * system has since handed to another process.
+ */
+export async function stopLiveChildren(closeMs, killWaitMs = 2_000) {
+  await closeLiveChildren(closeMs)
+  killLiveChildren()
+  const deadline = Date.now() + killWaitMs
+  for (const child of [...live]) {
+    const pid = child.pid()
+    if (typeof pid !== 'number') continue
+    // Polled rather than awaited on an event: a tracked child is known by its
+    // pid alone. A dead direct child stays visible until the event loop reaps
+    // it, which these yields give it the chance to do.
+    while (isRunning(pid) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    if (!isRunning(pid)) live.delete(child)
   }
 }
