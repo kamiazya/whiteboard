@@ -1,5 +1,6 @@
-import { cp, lstat, mkdir, readdir, stat } from 'node:fs/promises'
-import { dirname, join, resolve, sep } from 'node:path'
+import type { Stats } from 'node:fs'
+import { cp, lstat, mkdir, readdir, readlink, stat } from 'node:fs/promises'
+import { dirname, join, parse, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { NATIVE_HOST_DIRNAME } from '../daemon/native-host/install.js'
 import { isMissingFileError } from '../shared/errno.js'
@@ -65,56 +66,108 @@ export interface BackupRestoreOptions {
   excludeBlobs?: boolean
 }
 
-// Walk every existing path component of `p` from the deepest toward the root.
-// Returns true when the path's own final component is a symbolic link, or an
-// ancestor is one that someone other than root or this user could have placed.
-// Used by CLI callers to fail-closed before passing paths to the helper, so a
-// planted ancestor symlink (e.g. `<shared>/link → /outside`) cannot redirect
-// writes outside the operator's intended storage zone.
+// Resolve `p` one component at a time, the way the kernel would, and return
+// true when the path's own final component is a symbolic link, or any link the
+// resolution passes through is one someone other than root or this user could
+// have placed. `inspectOutputPath` and `isSafeSourcePath` fail closed on it, so
+// a planted link (e.g. `<shared>/link → /outside`) cannot redirect a read or
+// write outside the operator's intended storage zone.
 //
-// An ancestor link is not refused outright because operating systems ship them
-// where nobody else can write: macOS's `/tmp → /private/tmp` and
+// Each link is judged by the REAL directory holding it, not the one the path
+// spells: a link reached through another link's target sits wherever that
+// target resolved to, so a trusted `~/out → <shared>/planted` must not vouch
+// for the planted link behind it.
+//
+// An intermediate link is not refused outright because operating systems ship
+// them where nobody else can write: macOS's `/tmp → /private/tmp` and
 // `/var → /private/var` sit in a root-owned `/` that no one else may write, so
 // refusing every link would refuse the temp directory itself.
-async function hasAncestorSymlink(p: string): Promise<boolean> {
+async function hasUntrustedSymlink(p: string): Promise<boolean> {
   const target = resolve(p)
-  let current = target
-  while (true) {
-    const parent = dirname(current)
-    if (parent === current) break // reached filesystem root
-    try {
-      const st = await lstat(current)
-      if (st.isSymbolicLink() && (current === target || !(await isTrustedLinkParent(parent)))) {
-        return true
-      }
-    } catch (err) {
-      if (!isMissingFileError(err)) throw err
-      // Component does not exist yet; check its parent.
+  const { root } = parse(target)
+  let real = root
+  const pending = pathComponents(target.slice(root.length))
+  let hops = 0
+  while (pending.length > 0) {
+    const name = pending.shift() as string
+    if (name === '..') {
+      real = dirname(real)
+      continue
     }
-    current = parent
+    const candidate = join(real, name)
+    const st = await lstatIfPresent(candidate)
+    // Nothing below a missing component exists either, so no link remains.
+    if (st === undefined) return false
+    if (!st.isSymbolicLink()) {
+      real = candidate
+      continue
+    }
+    // Only the original final component can leave `pending` empty: a link
+    // anywhere above it still has that component queued behind its target.
+    if (pending.length === 0 || !(await isTrustedLinkParent(real))) return true
+    hops += 1
+    if (hops > MAX_SYMLINK_HOPS) return true
+    const linkTarget = await readlink(candidate)
+    const targetRoot = parse(linkTarget).root
+    if (targetRoot) real = targetRoot
+    pending.unshift(...pathComponents(linkTarget.slice(targetRoot.length)))
   }
   return false
 }
 
-// Whether only root or this user could have created an entry in `dir`: it is
-// owned by one of them and neither group- nor other-writable. A sticky bit
-// does not help — in a sticky `/tmp` anyone may still add a NEW link. Where
-// there are no POSIX owners to ask (Windows: `process.getuid` is absent) no
-// directory is trusted, so every symlink in the path is refused there.
+// `..` is kept as a component rather than collapsed lexically: it climbs from
+// wherever the walk has REALLY reached, which a link before it may have moved.
+function pathComponents(p: string): string[] {
+  return p.split(sep).filter((name) => name !== '' && name !== '.')
+}
+
+async function lstatIfPresent(p: string): Promise<Stats | undefined> {
+  try {
+    return await lstat(p)
+  } catch (err) {
+    if (isMissingFileError(err)) return undefined
+    throw err
+  }
+}
+
+// Linux's own limit (`MAXSYMLINKS`), past which the kernel answers ELOOP; a
+// chain that long, or a loop, is refused rather than followed.
+const MAX_SYMLINK_HOPS = 40
+
 async function isTrustedLinkParent(dir: string): Promise<boolean> {
-  const uid = process.getuid?.()
-  if (uid === undefined) return false
-  const st = await stat(dir)
-  return (st.uid === 0 || st.uid === uid) && (st.mode & 0o022) === 0
+  const currentUid = process.getuid?.()
+  if (currentUid === undefined) return false
+  return trustsLinkParent(await stat(dir), currentUid)
+}
+
+/**
+ * Whether only root or the user `currentUid` could have created an entry in
+ * a directory with this owner and mode: it is owned by one of them and
+ * neither group- nor other-writable. A sticky bit does not help — in a sticky
+ * `/tmp` anyone may still add a NEW link. Where there are no POSIX owners to
+ * ask (`currentUid` undefined: Windows has no `process.getuid`) no directory
+ * is trusted, so every symlink in the path is refused there.
+ *
+ * Pure, so the owner half can be checked by a process that cannot stage a
+ * directory another user owns.
+ */
+export function trustsLinkParent(
+  dir: { readonly uid: number; readonly mode: number },
+  currentUid: number | undefined,
+): boolean {
+  if (currentUid === undefined) return false
+  return (dir.uid === 0 || dir.uid === currentUid) && (dir.mode & 0o022) === 0
 }
 
 export type OutputPathState = 'missing' | 'present' | 'unsafe'
 
 /**
  * Judge a path a command is about to WRITE to, before any byte moves. A
- * symlinked ancestor (`<safe>/link -> /outside`) would redirect the write
- * outside the operator's intended storage zone, so it is refused rather than
- * followed.
+ * symlinked ancestor (`<shared>/link -> /outside`) would redirect the write
+ * outside the operator's intended storage zone, so one that someone other
+ * than root or this user could have placed is refused — including one reached
+ * through an earlier link's target; a link in a directory only they can write
+ * (macOS's `/tmp -> /private/tmp`) is followed.
  *
  * What the final component may be is the one thing callers differ on: a
  * backup or restore target refuses a symlink or plain file and lets anything
@@ -129,7 +182,7 @@ export async function inspectOutputPath(
   p: string,
   options: { requireDirectory: boolean },
 ): Promise<OutputPathState> {
-  if (await hasAncestorSymlink(p)) return 'unsafe'
+  if (await hasUntrustedSymlink(p)) return 'unsafe'
   let st: Awaited<ReturnType<typeof lstat>>
   try {
     st = await lstat(p)
@@ -148,7 +201,7 @@ export async function inspectOutputPath(
  */
 export async function isSafeSourcePath(p: string): Promise<boolean> {
   try {
-    return !(await hasAncestorSymlink(p))
+    return !(await hasUntrustedSymlink(p))
   } catch {
     return false
   }

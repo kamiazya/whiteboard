@@ -416,7 +416,7 @@ It is **release-candidate adjacent**: deliberately kept out of `check:release-ca
 
 ### Security review map
 
-Which gate enforces each hosted-app security property (entry points for `security-reviewer`):
+Which gate enforces each hosted-app security property (entry points for the `security-scanner` lane `review.workflow.mjs` spawns):
 
 | Property | Enforced by |
 |---|---|

@@ -487,7 +487,7 @@ export class FileVersionStore implements VersionStore {
     if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
       .selectFrom('versions')
-      .select(['id', 'auto', 'createdAt'])
+      .select(['id', 'auto', 'restoredFrom'])
       .where('workspaceId', '=', workspaceId)
       .where('documentId', '=', documentId)
       .orderBy('createdAt', 'asc')
@@ -497,7 +497,7 @@ export class FileVersionStore implements VersionStore {
     // Which rows go is the mechanic's call (@kamiazya/whiteboard-history);
     // the rows and the delete are this store's.
     const toDelete = sandwichedAutoVersionIds(
-      rows.map((row) => ({ id: row.id, auto: row.auto === 1 })),
+      rows.map((row) => ({ id: row.id, auto: row.auto === 1, restoredFrom: row.restoredFrom })),
     )
     if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
     await db

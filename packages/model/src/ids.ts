@@ -67,9 +67,10 @@ export const CONTAINER_NAME_MAX_CHARS = 1024
 export const CONTAINER_NAME_LIMIT_PHRASE = `the ${CONTAINER_NAME_MAX_CHARS}-character limit for the name of one container; a thread or a proposal is named by its id`
 
 /**
- * Legacy workspace identifier shape, retained for the live data both
- * keepers already hold on disk today (the daemon's `workspaces.id` column,
- * the browser's hard-coded `'local'`). This codifies the contract already
+ * Legacy workspace identifier shape, retained for the live ids the daemon
+ * still holds in its `workspaces.id` column (`'default'` and nanoid-minted
+ * strings). The browser keeper no longer needs it: its IndexedDB upgrade
+ * re-keys the old hard-coded `'local'` onto a canonical ULID. This codifies the contract already
  * enforced at runtime by mcp-server's `validateWorkspaceId`, which imports
  * `WORKSPACE_ID_PATTERN` from here (`/^[a-zA-Z0-9_-]+$/`, non-empty): workspace ids are used directly as
  * path segments and cache/index keys, so `.`/`/`/whitespace/non-ASCII must
@@ -79,8 +80,8 @@ export const CONTAINER_NAME_LIMIT_PHRASE = `the ${CONTAINER_NAME_MAX_CHARS}-char
  * separate schemas below (`workspaceCanonicalIdSchema` / `workspaceSegmentSchema`
  * / `workspaceDisplayNameSchema`), mirroring the document layer's id / path /
  * displayName split. This schema's shape is untouched by that decision —
- * re-keying live data onto the new canonical-id shape is a later, migration-
- * driven slice, not this one.
+ * it can tighten only once the daemon's live ids are re-keyed onto the
+ * canonical-id shape, as the browser's already are.
  */
 export const WORKSPACE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
 

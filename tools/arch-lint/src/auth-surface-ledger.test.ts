@@ -39,16 +39,13 @@ type SurfacePolicy =
 
 const AUTH_SURFACES = {
   'packages/mcp-server/src/server/routes/auth.ts':
-    'resolver: /api/*. Full authority passes without consulting the registry; every narrower grant goes through `grantCoversRoute`, which fails closed on an undeclared route and refuses `daemon-token-only` outright.',
+    'resolver: /api/*. Full authority passes without consulting the registry; every narrower grant goes through `grantCoversRoute`, which fails closed on an undeclared route and refuses `daemon-token-only` outright — the bar `/api/debug` sits at, judged by KIND because a dump of live document state is not something a narrow credential gets, however wide its scope set.',
 
   'packages/mcp-server/src/server/routes/runtime.ts':
     'resolver: /api/runtime/*. STRICTER than /api/* on purpose — a narrow credential reaches only routes declaring `runtime:read`, whatever scopes it holds, so a grant carrying `runtime:admin` still cannot reach shutdown.',
 
   'packages/mcp-server/src/server/security/mcp-auth.ts':
     'resolver: /mcp in local-daemon mode. Full authority passes; a macaroon passes iff it carries `mcp:call`, the same scope server-mode enforces on this route. A verified credential this surface will not admit gets 403 without a challenge.',
-
-  'packages/mcp-server/src/server/routes/debug.ts':
-    'resolver: /api/debug, mounted only when the debug endpoint is enabled. Judged by KIND — a dump of live document state is not something a narrow credential gets, however wide its scope set.',
 
   'packages/mcp-server/src/server/security/server-mode-middleware.ts':
     'own-strategy: server-mode validates a JWT against an external IdP, so there is no credential this daemon issued to resolve. Folding it into the resolver is a separate increment with its own review; what it shares today is the scope vocabulary and the route-scope registry.',
@@ -108,9 +105,11 @@ describe('every auth surface answers for itself', () => {
   // the local daemon off loopback TCP and its browser-facing surfaces (the
   // websocket, its ticket, and the replica-key route's passkey binding) went;
   // six once the scan stopped keying on a receiver's name and saw
-  // `security/mcp-http.ts`, the middleware that forwards to `mcp-auth.ts`.
-  it('holds the surface count at six', () => {
-    expect(scan().surfaces).toHaveLength(6)
+  // `security/mcp-http.ts`, the middleware that forwards to `mcp-auth.ts`;
+  // five once `routes/debug.ts`'s own kind check became the registry's
+  // `daemon-token-only` decision, enforced by `routes/auth.ts`.
+  it('holds the surface count at five', () => {
+    expect(scan().surfaces).toHaveLength(5)
   })
 })
 

@@ -133,12 +133,11 @@ export function versionsBackendContract(
       await h.backend.restore(h.workspaceId, h.path, saved.id)
       const after = await h.backend.list(h.workspaceId, h.path)
 
-      // A restore is a MERGE — the result is a descendant of both the state
-      // you were on and the one you went back to — so it leaves a point, and
-      // that point says where it came from. Without it the history reads as a
-      // straight line through a place two branches joined.
+      // A restore is a MERGE, a descendant of the state you were on and the
+      // one you went back to, so it leaves a point saying where it came from.
+      // The system recorded it, so it is automatic on every keeper alike.
       expect(after.length).toBe(before.length + 1)
-      expect(after[0]?.restoredFrom).toBe(saved.id)
+      expect(after[0]).toMatchObject({ restoredFrom: saved.id, auto: true })
     } finally {
       await h.cleanup()
     }

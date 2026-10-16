@@ -76,8 +76,29 @@ describe('markdown annotation projection', () => {
       expect(found).not.toBeNull()
       return found as HTMLElement
     })
-    marker.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
-    expect(onSelectThread).toHaveBeenCalledWith('t1')
+    await userEvent.click(marker)
+    // Once: a pointer press is a `mousedown` AND a `click`, and only one of
+    // them may open the conversation.
+    expect(onSelectThread.mock.calls).toEqual([['t1']])
+  })
+
+  it('opens the conversation from the keyboard, because the marker is a real button', async () => {
+    const onSelectThread = vi.fn()
+    const utils = mount({ threads: [thread('t1', 'due on Friday')], onSelectThread })
+    const marker = await waitFor(() => {
+      const found = utils.container.querySelector<HTMLElement>('.cm-annotation-gutter-marker')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    // Reachable by tab, so it has to answer what a tab-reached button answers
+    // to. Enter and Space synthesize a `click`, never a `mousedown`.
+    expect(marker.tabIndex).toBe(0)
+    marker.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(onSelectThread.mock.calls).toEqual([['t1']])
+    marker.focus()
+    await userEvent.keyboard(' ')
+    expect(onSelectThread.mock.calls).toEqual([['t1'], ['t1']])
   })
 
   const marked = (utils: { container: HTMLElement }) =>

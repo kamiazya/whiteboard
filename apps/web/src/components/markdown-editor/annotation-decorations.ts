@@ -39,6 +39,7 @@ import {
 } from '@codemirror/view'
 import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
 import { type LivePassage, resolveTextAnchor } from '../../lib/text-anchor.js'
+import { bucketByLine, buttonGutterHandlers } from './line-button-gutter.js'
 
 /** Where one conversation sits in the body as it stands right now. */
 export interface PlacedThread {
@@ -272,14 +273,11 @@ export function annotationDecorations(handlers: AnnotationHandlers = {}): Extens
     // The line's state, separate from the dot that sits on it — see
     // `ResolvedLineMarker`.
     gutterLineClass.compute([annotationField], (state) => {
-      const { placed } = state.field(annotationField)
+      const resolved = state
+        .field(annotationField)
+        .placed.filter((one) => one.status === 'resolved')
       const builder = new RangeSetBuilder<GutterMarker>()
-      const lines = new Set<number>()
-      for (const one of placed) {
-        if (one.status !== 'resolved') continue
-        lines.add(state.doc.lineAt(one.from).from)
-      }
-      for (const lineStart of [...lines].sort((a, b) => a - b)) {
+      for (const [lineStart] of bucketByLine(state.doc, resolved)) {
         builder.add(lineStart, lineStart, RESOLVED_LINE_MARKER)
       }
       return builder.finish()
@@ -294,16 +292,8 @@ export function annotationDecorations(handlers: AnnotationHandlers = {}): Extens
         // placement is about WHERE a passage is, and how many messages it
         // holds is not a property of that.
         const messageCounts = new Map(threads.map((one) => [one.id, one.messages.length]))
-        const perLine = new Map<number, PlacedThread[]>()
-        for (const one of placed) {
-          const lineStart = view.state.doc.lineAt(one.from).from
-          const bucket = perLine.get(lineStart)
-          if (bucket === undefined) perLine.set(lineStart, [one])
-          else bucket.push(one)
-        }
         const builder = new RangeSetBuilder<GutterMarker>()
-        for (const lineStart of [...perLine.keys()].sort((a, b) => a - b)) {
-          const bucket = perLine.get(lineStart) as PlacedThread[]
+        for (const [lineStart, bucket] of bucketByLine(view.state.doc, placed)) {
           // The line speaks for the conversation a reader is looking at when
           // one of its threads is selected, and otherwise for the first —
           // which is the one a press will open.
@@ -322,21 +312,14 @@ export function annotationDecorations(handlers: AnnotationHandlers = {}): Extens
         }
         return builder.finish()
       },
-      domEventHandlers: {
-        mousedown: (_view, _line, event) => {
-          const target = event.target
-          const threadId =
-            target instanceof HTMLElement
-              ? (target.closest<HTMLElement>('[data-thread-id]')?.dataset.threadId ?? null)
-              : null
-          if (threadId === null) return false
-          handlers.onSelectThread?.(threadId)
-          // Swallowed so the press does not also move the caret to this line:
-          // opening a conversation is not an edit, and a reader who lands
-          // back in the text loses the caret they had.
-          return true
-        },
-      },
+      // Opening a conversation is not an edit, so the press holds the caret
+      // where it was: a reader who lands back in the text keeps their place.
+      domEventHandlers: buttonGutterHandlers('.cm-annotation-gutter-marker', (marker) => {
+        const { threadId } = marker.dataset
+        if (threadId === undefined) return false
+        handlers.onSelectThread?.(threadId)
+        return true
+      }),
     }),
   ]
 }

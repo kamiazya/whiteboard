@@ -102,6 +102,9 @@ every tool. There is no zoom percentage anywhere: what you can ask for is
 to see everything, or to get closer to something, and the magnification
 between those two is not a number you have to manage.
 
+Zooming to the selection sits in a node's right-click menu as **Zoom to
+selection**; it frames every selected node, not only the one you pressed.
+
 ## History
 
 | Shortcut | Action |

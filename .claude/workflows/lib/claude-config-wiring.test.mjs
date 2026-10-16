@@ -143,6 +143,18 @@ test('the Simplify phase runs a repo-owned agent, not a foreign plugin agent', (
   )
 })
 
+// The test above holds dev-loop alone. A simplify phase added to any other workflow takes its
+// agentType from whatever the skills and agents recommend, so no `.claude/` file may name the
+// plugin agent's type at all. This file spells it to forbid it, and is the one exemption.
+test('no .claude file names the plugin code-simplifier agent type', () => {
+  const self = path.relative(repoRoot, fileURLToPath(import.meta.url))
+  const naming = trackedFiles()
+    .filter((file) => file.startsWith('.claude/') && file !== self)
+    .filter((file) => /\.(md|mjs|js|json)$/.test(file))
+    .filter((file) => readFileSync(path.join(repoRoot, file), 'utf8').includes('code-simplifier:'))
+  assert.deepEqual(naming, [], 'name the repo-owned `simplifier` agent instead')
+})
+
 // architecture-map.md promises `.claude/rules/package-<name>.md` is path-scoped, and dev-flow.md
 // requires every new package to ship that rule. Neither is mechanical, and 6 of the 7 shipped
 // without the `paths:` frontmatter that makes the promise true — so every package's rule loaded

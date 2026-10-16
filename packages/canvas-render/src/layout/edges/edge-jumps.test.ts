@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
+import { computeEdgeJumps, EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
 const measure = createFakeMeasure()
 const fakeAppearance: SpatialAppearanceResolver = {
@@ -138,5 +139,83 @@ describe('line jumps', () => {
     }
     const scene = layoutSpatialCanvas(fan, options())
     expect(edgeById(scene.nodes, 'f2')?.jumps).toBeUndefined()
+  })
+})
+
+// A routed edge reduced to what the crossing search reads: its polyline.
+const routed = (id: string, path: readonly { x: number; y: number }[]): ResolvedEdgeNode => ({
+  kind: 'edge',
+  id,
+  path,
+  fromSide: 'right',
+  toSide: 'left',
+  fromEnd: 'none',
+  toEnd: 'arrow',
+})
+
+describe('computeEdgeJumps end clearance', () => {
+  it('draws no hop where a crossing sits closer than the arc to the segment end', () => {
+    const earlier = routed('a', [
+      { x: 97, y: -50 },
+      { x: 97, y: 50 },
+    ])
+    const later = routed('b', [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ])
+    expect(computeEdgeJumps([earlier, later]).get('b')).toBeUndefined()
+  })
+
+  it('still hops a crossing with a full arc of run on both sides', () => {
+    const x = 100 - (EDGE_JUMP_RADIUS_PX + 2)
+    const earlier = routed('a', [
+      { x, y: -50 },
+      { x, y: 50 },
+    ])
+    const later = routed('b', [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ])
+    expect(computeEdgeJumps([earlier, later]).get('b')).toEqual([{ segment: 0, x, y: 0 }])
+  })
+})
+
+describe('computeEdgeJumps order and paint order', () => {
+  it("orders one segment's hops along it, whatever order the edges were drawn in", () => {
+    const far = routed('far', [
+      { x: 80, y: -50 },
+      { x: 80, y: 50 },
+    ])
+    const near = routed('near', [
+      { x: 30, y: -50 },
+      { x: 30, y: 50 },
+    ])
+    const later = routed('later', [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ])
+    expect(computeEdgeJumps([far, near, later]).get('later')).toEqual([
+      { segment: 0, x: 30, y: 0 },
+      { segment: 0, x: 80, y: 0 },
+    ])
+  })
+
+  it('hops only over earlier edges: the middle of three does not hop over the last', () => {
+    const first = routed('first', [
+      { x: 500, y: 500 },
+      { x: 600, y: 500 },
+    ])
+    const middle = routed('middle', [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ])
+    const last = routed('last', [
+      { x: 50, y: -50 },
+      { x: 50, y: 50 },
+    ])
+    const jumps = computeEdgeJumps([first, middle, last])
+    expect(jumps.get('middle')).toBeUndefined()
+    expect(jumps.get('last')).toEqual([{ segment: 0, x: 50, y: 0 }])
   })
 })

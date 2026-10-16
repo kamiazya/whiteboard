@@ -99,6 +99,6 @@ describe('the browser versions backend files saves and restores', () => {
     const { backend, save, applyRestore } = recordingBackend({ bookmarkFails: true })
     await expect(backend.restore('ignored', 'sketch', 'v1')).resolves.toBeUndefined()
     expect(applyRestore).toHaveBeenCalledOnce()
-    expect(save).toHaveBeenCalledWith('ws-browser', 'sketch', { restoredFrom: 'v1' })
+    expect(save).toHaveBeenCalledWith('ws-browser', 'sketch', { auto: true, restoredFrom: 'v1' })
   })
 })

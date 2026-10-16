@@ -6,11 +6,10 @@
  * hand their workspaces to nobody, and the operator's `grant-member`
  * recovers a workspace whose owners are all deactivated.
  */
+import type { WorkspaceRole } from '@kamiazya/whiteboard-daemon-client/api-contracts/workspace-people'
 import type { ExpressionBuilder } from 'kysely'
 import type { DatabaseSchema } from '../store/db/schema.js'
 import type { TenantScoped } from '../store/db/tenant-database.js'
-
-type WorkspaceRole = 'owner' | 'member'
 
 export interface WorkspaceMember {
   readonly profile: { readonly id: string; readonly displayName: string }

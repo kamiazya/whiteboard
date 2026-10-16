@@ -5,8 +5,9 @@
  * carrying message a consumer's existing local error isolation can read.
  */
 import 'fake-indexeddb/auto'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startBootSequence } from './boot.js'
+import type { RuntimeConfig } from '@kamiazya/whiteboard-daemon-client/api-client'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { SERVER_KEEPER, startBootSequence } from './boot.js'
 import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './lib/browser-workspace-docs.js'
 import {
@@ -270,13 +271,17 @@ describe('startBootSequence — the page-load file sweep', () => {
       render: () => {},
     })
 
-  // Only a shell marked `keeper: 'server'` is one a server keeper serves.
+  it('compares against the marker the runtime-config schema declares', () => {
+    expectTypeOf<typeof SERVER_KEEPER>().toEqualTypeOf<NonNullable<RuntimeConfig['keeper']>>()
+  })
+
+  // Only a shell marked with the server keeper is one a server keeper serves.
   it.for([
     [undefined, true],
     [null, true],
     [{}, true],
     [{ keeper: 'daemon' }, true],
-    [{ keeper: 'server' }, false],
+    [{ keeper: SERVER_KEEPER }, false],
   ] as const)('with runtime config %j, schedules the sweep: %s', async ([config, scheduled]) => {
     ;(window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__ = config
     await boot()

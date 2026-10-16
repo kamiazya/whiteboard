@@ -3,11 +3,11 @@ import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import type { ResolvedGrant } from '../security/credential-resolver.js'
 import { grantCoversRoute } from './auth.js'
 
-// `grantCoversRoute` takes the route's DECISION rather than resolving it, and
-// this file is why. `daemon-token-only` is produced by no route in the
-// registry, so a policy that resolved a path internally could only be reached
-// by mocking — and it was not reached at all: inverting that branch left all
-// 487 route tests green when it was measured.
+// `grantCoversRoute` takes the route's DECISION rather than resolving it, so
+// every decision kind is judged here directly, against every credential kind,
+// rather than only through whichever routes happen to produce it. Before any
+// route produced `daemon-token-only`, inverting that branch left all 487
+// route tests green when it was measured.
 const grant = (kind: ResolvedGrant['kind'], scopes: ResolvedGrant['scopes']): ResolvedGrant => ({
   kind,
   scopes,
@@ -46,7 +46,7 @@ describe('grantCoversRoute — a narrow credential is judged by the decision', (
   })
 })
 
-// ADR-0043 decision 8's promoted rule, and the branch no route can reach.
+// ADR-0043 decision 8's promoted rule, and `/api/debug`'s bar.
 // A route whose purpose is handing out daemon-level authority must not be
 // reachable by a credential narrower than what it hands out, or that
 // credential can mint a path back to the full one.

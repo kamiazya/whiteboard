@@ -98,9 +98,11 @@ proxy. Do not build a claim on a search-result summary of them. The
 reachable, version-exact sources are all inside the installed package:
 
 ```bash
-D=$(dirname $(node -e "console.log(require.resolve('loro-crdt/package.json'))"))
-sed -n '/getOrCreateContainer/,+20p' "$D"/nodejs/loro_wasm.d.ts   # the deprecation, in full
-grep -i -B4 -A10 mergeable "$D"/CHANGELOG.md                       # when and why it changed
+# From the repo root: loro-crdt is not a root dependency, so resolve it from
+# the package that declares it.
+D=$(dirname "$(node -p "require.resolve('loro-crdt/package.json', { paths: ['packages/loro-adapter'] })")")
+sed -n '/@deprecated Use .ensureMergeable/,/getOrCreateContainer/p' "$D"/nodejs/loro_wasm.d.ts  # the deprecation, in full
+grep -i -B4 -A10 mergeable "$D"/CHANGELOG.md                                                   # when and why it changed
 ```
 
 The typings carry the semantics no summary does — that activation writes a
@@ -129,7 +131,7 @@ console.log('a write moves the frontier:', before !== fr(doc))  // must be true
 
 That calibration caught a wrong conclusion here: opening a container LOOKED
 free, and it is an op on both a root map and a tree node's data map. The
-`attachContentContainers` rationale in `loro-bridge.ts` stands because of
+`attachContentContainers` rationale in `workspace-tree.ts` stands because of
 it.
 
 The standing shape for a convergence question — used by

@@ -60,6 +60,8 @@ export interface CanvasCommands {
   readonly duplicateSelection: () => boolean
   readonly reorderSelection: (placement: 'forward' | 'backward' | 'front' | 'back') => void
   readonly groupSelection: (memberIds: readonly string[]) => void
+  /** Frames the selection in the viewport (Shift+2); everything when nothing is selected. */
+  readonly frameSelection: () => boolean
   readonly createNodeAt: (point: Point) => void
   readonly createGroupAtViewportCenter: (at?: Point) => void
   readonly openLinkNode: (node: SpatialNode) => void

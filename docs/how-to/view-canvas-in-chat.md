@@ -123,9 +123,12 @@ Ask your agent to view the canvas, or call the tool directly:
 }
 ```
 
-The result's `structuredContent` carries `{ workspaceId, documentId, scene, threads, references }`, where
-`threads` lists the comment threads pinned on the canvas, `references` maps each file node's reference to its resolved `{ label?, body? }` and
-`scene` is a
+The result's `structuredContent` carries `{ workspaceId, documentId, scene, threads, references, style?, themeFont? }`, where
+`threads` lists the comment threads pinned on the canvas, and `references` covers every reference the canvas makes — a file node's, and what a text node's
+markdown embeds or links — and maps each reference to what it resolves to, `{ documentId?, name?, body?, canvas? }` — `name` is the referenced
+document's display name, `body` is present for a markdown document and `canvas` (as JSON Canvas) for a
+spatial one. `style` echoes the style you asked for, and `themeFont` names the resolved theme's font
+family when the server knows where to fetch it. `scene` is a
 shape the canvas-viewer package's `parseViewerScene` accepts, so a supporting client
 renders it immediately. On a client without MCP Apps support, you see this JSON as
 the tool result instead of an inline view.
