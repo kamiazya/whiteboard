@@ -246,6 +246,18 @@ describe('LoroWorkspaceDocumentIndex folders', () => {
     expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a', 'c'])
   })
 
+  it('frees the path of a folder a delete emptied', async () => {
+    const index = await makeIndex()
+    await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'markdown' })
+    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+    await index.deleteDocument({ workspaceId: WS, path: 'a/b' })
+
+    // A folder left standing at `a` would occupy the path and refuse this.
+    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
+  })
+
   it('refuses to move one of two siblings onto the folder they share, and changes nothing', async () => {
     const index = await makeIndex()
     await index.createDocument({ workspaceId: WS, path: 'a/x', kind: 'markdown' })
