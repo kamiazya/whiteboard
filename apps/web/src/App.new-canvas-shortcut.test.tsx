@@ -22,6 +22,7 @@ import { App } from './App.js'
 import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 import { sharedFoldingBrowserIndex } from './lib/folding-browser-index.js'
 import type { ProviderState } from './lib/provider.js'
+import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // The real list page, imported so its lazy() settles in a microtask: it is
 // the page under test here.
 import './pages/BrowserIndexPage.js'
@@ -46,6 +47,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup()
+  Reflect.deleteProperty(window, 'launchQueue')
+  resetShellStatusForTests()
 })
 
 async function documentCount(): Promise<number> {
@@ -111,5 +114,76 @@ describe('the New canvas launcher shortcut', () => {
     renderAt(landed)
     await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
     await waitFor(async () => expect(await documentCount()).toBe(1))
+  })
+})
+
+// With the installed app already open, `launch_handler: focus-existing` only
+// focuses the window: the shortcut's URL arrives as LaunchParams on
+// `window.launchQueue` (WICG Web App Launch Handler), never as a navigation.
+describe('the New canvas launcher shortcut while the app is already open', () => {
+  type Consumer = (params: { targetURL?: string | null }) => void
+  function stubLaunchQueue(): { launch: (url: string) => void } {
+    let consumer: Consumer | undefined
+    Object.defineProperty(window, 'launchQueue', {
+      configurable: true,
+      value: { setConsumer: (next: Consumer) => (consumer = next) },
+    })
+    return {
+      launch(url) {
+        if (consumer === undefined) throw new Error('nothing consumes window.launchQueue')
+        const targetURL = new URL(url, window.location.origin).href
+        act(() => consumer?.({ targetURL }))
+      },
+    }
+  }
+
+  it('creates and opens a document from the list', async () => {
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('What will you make first?', {}, { timeout: 10_000 })
+
+    queue.launch(manifestShortcutUrl())
+
+    await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
+    expect(await documentCount()).toBe(1)
+    expect(carriesShortcutParam(router.state.location.search)).toBe(false)
+  })
+
+  it('creates and opens a second document from an open one', async () => {
+    const queue = stubLaunchQueue()
+    renderAt(manifestShortcutUrl())
+    await screen.findByTestId('browser-document-page', {}, { timeout: 10_000 })
+    const first = openedPath
+
+    queue.launch(manifestShortcutUrl())
+
+    await waitFor(async () => expect(await documentCount()).toBe(2), { timeout: 10_000 })
+    await waitFor(() => expect(openedPath).not.toBe(first))
+    expect(screen.getByTestId('browser-document-page')).toBeDefined()
+  })
+
+  it('a plain launch only focuses: it creates nothing and stays put', async () => {
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('What will you make first?', {}, { timeout: 10_000 })
+    const before = router.state.location
+
+    queue.launch('/')
+
+    expect(router.state.location).toBe(before)
+    expect(await documentCount()).toBe(0)
+  })
+
+  it('a tab holding a write that did not land stays where it is', async () => {
+    const queue = stubLaunchQueue()
+    const router = renderAt('/')
+    await screen.findByText('What will you make first?', {}, { timeout: 10_000 })
+    setShellConnection({ state: { keeper: 'browser', storage: 'failed' } })
+    const before = router.state.location
+
+    queue.launch(manifestShortcutUrl())
+
+    expect(router.state.location).toBe(before)
+    expect(await documentCount()).toBe(0)
   })
 })
