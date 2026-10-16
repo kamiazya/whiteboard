@@ -382,7 +382,26 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     )
   }
 
-  it("finds the browser jobs, and every one of them keeps a failure's traces", async () => {
+  /**
+   * A `toMatchScreenshot` failure writes its candidate PNG (a missing
+   * baseline's `-reference-`, a mismatch's `-actual-` and diff) under the
+   * repo-root `.vitest/attachments/`, never into the trace zip — and that PNG
+   * is the only way a contributor off linux gets a linux baseline. The
+   * directory is hidden, which upload-artifact skips unless told otherwise.
+   */
+  function uploadsScreenshotsOnFailure(job: Job): boolean {
+    return (job.steps ?? []).some(
+      (step) =>
+        /^actions\/upload-artifact@[0-9a-f]{40}$/.test(step.uses ?? '') &&
+        (step.if ?? '').includes('failure()') &&
+        String(step.with?.path ?? '')
+          .split('\n')
+          .some((line) => line.trim() === '.vitest/attachments/**/*.png') &&
+        step.with?.['include-hidden-files'] === true,
+    )
+  }
+
+  async function findBrowserJobs(): Promise<{ id: string; job: Job }[]> {
     const browser = { names: await browserProjectNames(), configs: await browserConfigPaths() }
     expect(browser.names.length).toBeGreaterThanOrEqual(3)
     expect(browser.configs).toContain('apps/web/vitest.browser.config.ts')
@@ -397,6 +416,11 @@ describe('workflows — a job that runs a browser project uploads its traces whe
         if (runsBrowserProject(job, browser)) browserJobs.push({ id: `${file}:${name}`, job })
       }
     }
+    return browserJobs
+  }
+
+  it("finds the browser jobs, and every one of them keeps a failure's traces", async () => {
+    const browserJobs = await findBrowserJobs()
     // The subject is present: a detector that stopped recognising the
     // commands would otherwise pass over an empty list.
     expect(browserJobs.map(({ id }) => id)).toEqual(
@@ -409,6 +433,18 @@ describe('workflows — a job that runs a browser project uploads its traces whe
     expect(
       unguarded,
       'upload `**/tmp/vitest-traces/**/*.trace.zip` under `if: failure()`, pinned by SHA',
+    ).toEqual([])
+  })
+
+  it("every browser job keeps a failure's screenshot PNGs", async () => {
+    const browserJobs = await findBrowserJobs()
+    expect(browserJobs.length).toBeGreaterThanOrEqual(2)
+    const unguarded = browserJobs
+      .filter(({ job }) => !uploadsScreenshotsOnFailure(job))
+      .map(({ id }) => id)
+    expect(
+      unguarded,
+      'upload `.vitest/attachments/**/*.png` with `include-hidden-files: true` under `if: failure()`',
     ).toEqual([])
   })
 
