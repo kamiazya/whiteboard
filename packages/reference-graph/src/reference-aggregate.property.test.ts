@@ -155,7 +155,11 @@ describe('ReferenceAggregate over a listing', () => {
         ),
       )
     }).length
+    // Each floor sits under the lowest count over two samples of 4,000 draws
+    // of this 400 (withBacklink min 213, median 250; ambiguous min 36, median
+    // 61), so the left tail does not reach it, while a generator that stops
+    // producing the arrangement still falls far below.
     expect(withBacklink, 'feeds with a backlink').toBeGreaterThan(150)
-    expect(ambiguous, 'feeds with a wikilink to a shared path').toBeGreaterThan(40)
+    expect(ambiguous, 'feeds with a wikilink to a shared path').toBeGreaterThan(25)
   })
 })

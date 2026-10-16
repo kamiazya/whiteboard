@@ -237,8 +237,11 @@ describe('the bounded context window', () => {
   })
 
   afterAllFloor(['resolves a context within the bound exactly as the unbounded resolver'], () => {
+    // Floors sit under the lowest of 40,000 sampled runs: `decidedPastHalf`
+    // had min 9 and median 28 there, so its floor is two thirds of that
+    // minimum rather than a value its own left tail reaches.
     expect(tally.scored).toBeGreaterThan(120)
-    expect(tally.decidedPastHalf).toBeGreaterThan(12)
+    expect(tally.decidedPastHalf).toBeGreaterThan(6)
   })
 })
 

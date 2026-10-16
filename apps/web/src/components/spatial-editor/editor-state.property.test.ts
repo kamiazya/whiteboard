@@ -1758,18 +1758,21 @@ class PressThenReplace implements fc.Command<Model, Real> {
 }
 
 /**
- * Select one node, then press a z-order key.
+ * Select one node, then press a key that acts on the selection: a z-order
+ * key, Cmd+D or Cmd+Shift+L.
  *
  * Its own command for the same reason `PressThenReplace` is: reorder is
  * only observable on a PROPER SUBSET of the document, and Cmd+A — the
  * cheapest way for a random sequence to acquire a selection — makes the
  * selection the whole canvas, where every placement is a no-op. Drawn
- * uniformly the effective-reorder count sat at 4 per 300 runs.
+ * uniformly the effective-reorder count sat at 4 per 300 runs. Cmd+D and
+ * Cmd+Shift+L need only a selection, yet drawn alone they met one so rarely
+ * that a whole run's count fell to 5 against a median of 20.
  */
-class PressThenReorder implements fc.Command<Model, Real> {
+class PressThen implements fc.Command<Model, Real> {
   constructor(
     private readonly index: number,
-    private readonly placement: 'forward' | 'backward' | 'front' | 'back',
+    private readonly then: Reorder | Duplicate | ToggleLock,
   ) {}
   check(): boolean {
     return true
@@ -1778,10 +1781,10 @@ class PressThenReorder implements fc.Command<Model, Real> {
     const node = pick(real, this.index)
     if (node === undefined) return
     pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
-    new Reorder(this.placement).run(model, real)
+    this.then.run(model, real)
   }
   toString(): string {
-    return `pressThenReorder(#${this.index},${this.placement})`
+    return `pressThen(#${this.index},${this.then})`
   }
 }
 
@@ -2437,10 +2440,13 @@ const allCommands = [
         },
       ),
     )
-    .map(([i, p]) => new PressThenReorder(i, p)),
+    .map(([i, p]) => new PressThen(i, new Reorder(p))),
   fc
     .tuple(indexArb, arrowArb, fc.boolean())
     .map(([i, d, large]) => new PressThenNudge(i, d, large)),
+  fc
+    .tuple(indexArb, fc.constantFrom(new Duplicate(), new ToggleLock()))
+    .map(([i, then]) => new PressThen(i, then)),
   fc
     .tuple(
       indexArb,
@@ -2713,14 +2719,14 @@ describe('editor composite state (command-based)', () => {
       )
       atLeast(stats.multiSelections, 150, 'multi-selection barely reached')
       atLeast(stats.nudges, 25, 'arrow-key nudges barely reached')
-      atLeast(stats.duplicates, 6, 'Cmd+D barely reached')
+      atLeast(stats.duplicates, 8, 'Cmd+D barely reached')
       atLeast(stats.reordersEffective, 15, 'z-order barely changed anything')
       atLeast(
         stats.stepReordersEffective,
         0,
         'forward/backward never stepped over an overlapping node',
       )
-      atLeast(stats.locksApplied, 5, 'Cmd+Shift+L barely locked anything')
+      atLeast(stats.locksApplied, 8, 'Cmd+Shift+L barely locked anything')
       atLeast(stats.selectAlls, 40, 'Cmd+A barely reached')
       atLeast(stats.edgeSelections, 28, 'edges barely ever selected')
       atLeast(stats.edgeDeletes, 0, 'no selected edge was ever deleted')
@@ -2826,9 +2832,9 @@ describe('directed arrangements behind the rare-chain floors', () => {
     }
     const census = run(
       overlapping,
-      new PressThenReorder(0, 'forward'),
+      new PressThen(0, new Reorder('forward')),
       // Forward moved n0 above n1, so n0 is now the second node in z-order.
-      new PressThenReorder(1, 'backward'),
+      new PressThen(1, new Reorder('backward')),
     )
     expect(census.stepReordersEffective).toBe(2)
   })
