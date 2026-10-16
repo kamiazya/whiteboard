@@ -17,7 +17,7 @@ import {
   useShellWorkspaceRows,
 } from '../../hooks/use-shell-workspace-rows.js'
 import { parseWorkspaceRoute, workspacePath } from '../../lib/app-routes.js'
-import { notKeepingAnnouncement } from '../../lib/connection-state.js'
+import { givenUpAnnouncement } from '../../lib/connection-state.js'
 import { getShellConnection, subscribeShellStatus } from '../../lib/shell-status-store.js'
 import { workspaceHandle, workspaceLabel } from '../../lib/workspace-handle.js'
 import type { KeeperWorkspaces } from '../../lib/workspace-switcher-source.js'
@@ -183,7 +183,7 @@ export function ServerModeShell({
   const shell = useShellWorkspaceRows(workspaces, useLocation().pathname)
   const connection = useSyncExternalStore(subscribeShellStatus, getShellConnection)
   const label = connectionLabel(connection?.state ?? null)
-  const announcement = notKeepingAnnouncement(connection?.state ?? null)
+  const announcement = givenUpAnnouncement(connection?.state ?? null)
   return (
     <header className="flex h-10 shrink-0 items-center gap-3 border-b bg-background px-chrome text-sm pointer-coarse:h-12">
       <Link to="/" className="text-muted-foreground hover:text-foreground">

@@ -1,15 +1,14 @@
 /**
  * What the connection popover EXPLAINS, one component per state it can be in.
  *
- * They are siblings rather than one switch because `syncOff` is not exclusive
- * with a keeper panel — a browser-kept document whose daemon session was
- * rejected states both — and each answers `null` for a state that is not its
- * own, so the order they render in is the order they are written in.
+ * They are siblings rather than one switch: each answers `null` for a state
+ * that is not its own, so the order they render in is the order they are
+ * written in.
  */
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { settingsPath } from '../../lib/app-routes.js'
-import type { ConnectionState } from '../../lib/connection-state.js'
+import { type ConnectionState, isNotKeeping, isSyncOff } from '../../lib/connection-state.js'
 import { REPLICA_SAVE_FAILED_COPY } from '../../lib/replica-state-copy.js'
 import { DaemonAddress } from './DaemonAddress.js'
 
@@ -172,21 +171,27 @@ export function ReplicaCopyPanel({ state }: Readonly<{ state: ConnectionState | 
   )
 }
 
-/** The daemon rejected the session: reconnecting is the only way back. */
+/**
+ * Sync off, drawn alike whether the daemon rejected a running session or no
+ * session ever opened. Only the first can hold edits (`isNotKeeping`), so
+ * only it says so; the page itself explains why one never opened, and a
+ * reload is no answer to a withdrawn membership.
+ */
 export function SyncOffPanel({
-  show,
+  state,
   onWorkInBrowser,
 }: {
-  show: boolean
+  state: ConnectionState | null
   onWorkInBrowser: (() => void) | undefined
 }) {
-  if (!show) return null
+  if (state === null || !isSyncOff(state)) return null
   return (
     <div className="flex flex-col gap-2 text-sm">
       <p className="font-medium">Live sync is off</p>
       <p className="text-muted-foreground">
-        The daemon rejected this session, so edits stay in this browser. Reload the page to connect
-        again.
+        {isNotKeeping(state)
+          ? 'The daemon rejected this session, so edits stay in this browser. Reload the page to connect again.'
+          : 'This document did not open from the daemon, so nothing is held in this browser.'}
       </p>
       <div className="mt-1 flex flex-col gap-1.5">
         {onWorkInBrowser && (

@@ -12,8 +12,9 @@
  * - daemon `reconnecting` — the session dropped and is retrying: filled
  *   amber cap over `wb-loader`'s travelling dash, the loader mark's own
  *   gesture on this exact path (BRAND.md reads it as "the pen is moving").
- * - browser or replica `failed` / daemon `sync-off` — the keeper is NOT
- *   keeping: the stroke sits broken and dimmed (`wb-mark-broken`). The
+ * - browser or replica `failed` / daemon `sync-off`, `write-failed` or
+ *   `not-opened` — drawn as the keeper giving up (`drawsGivenUp`): the
+ *   stroke sits broken and dimmed (`wb-mark-broken`). The
  *   daemon's cap is filled and the browser's (and replica's) is hollow, so
  *   the two read apart when both carry amber and the mark has no word to
  *   separate them. The word moves to the accessible name and the popover.
@@ -25,8 +26,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   type ConnectionState,
-  isNotKeeping,
-  isSyncOff,
+  drawsGivenUp,
   type SessionHealth,
 } from '../../lib/connection-state.js'
 import type { StorageHealth } from '../../lib/storage-health.js'
@@ -161,16 +161,15 @@ function MarkCap({ cap }: { cap: 'filled' | 'ring' | undefined }) {
 }
 
 /**
- * The stroke is broken while the keeper is not keeping, and for sync off
- * whether or not a session ever opened: the mark shows what the person sees,
- * not what the tab holds.
+ * The stroke is broken while the state is drawn given up (`drawsGivenUp`):
+ * the mark shows what the person sees, not what the tab holds.
  */
 export function ShellMark({ state, className }: ShellMarkProps) {
   const session = sessionOf(state)
   const storage = storageOf(state)
   const recovered = useRecoveryGesture(session)
   const cap = state === undefined ? undefined : capOf(state)
-  const broken = state !== undefined && (isNotKeeping(state) || isSyncOff(state))
+  const broken = state !== undefined && drawsGivenUp(state)
   // Gated on the session as well as on the flag. `useEffect` is PASSIVE — it
   // runs after paint — so between the render that carries the new session and
   // the effect that clears the flag there is a real painted frame showing the

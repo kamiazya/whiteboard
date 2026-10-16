@@ -80,9 +80,10 @@ export function isSyncOff(state: ConnectionState): boolean {
 /**
  * The keeper is not keeping: a refused browser write, a rejected daemon
  * session, a daemon write that has not landed, or a refused append to the
- * offline replica. All draw the broken mark, because all mean the same thing
- * to the person holding the document — what they type now is in this tab
- * and nowhere else.
+ * offline replica. All mean the same thing to the person holding the
+ * document — what they type now is in this tab and nowhere else — so this is
+ * the question every signal about what the tab HOLDS asks. How a state is
+ * DRAWN is `drawsGivenUp`, a wider set.
  */
 export function isNotKeeping(state: ConnectionState): boolean {
   if (state.keeper === 'daemon') {
@@ -104,13 +105,21 @@ export function asksForReturn(state: ConnectionState): boolean {
 }
 
 /**
- * What a live region says when the keeper stops keeping, in words about that
- * keeper; empty while it keeps. Spoken only for these and for sync off, never
- * for a reconnect blip, which read aloud mid-sentence is noise.
+ * Drawn as the keeper giving up — the broken mark, the live-region words:
+ * every not-keeping state, plus sync off whether or not a session ever
+ * opened. What the person SEES, not what the tab holds (`isNotKeeping`).
  */
-export function notKeepingAnnouncement(state: ConnectionState | null): string {
-  if (state === null) return ''
+export function drawsGivenUp(state: ConnectionState): boolean {
+  return isNotKeeping(state) || isSyncOff(state)
+}
+
+/**
+ * What a live region says while the state is drawn given up, in words about
+ * that keeper; empty otherwise. Never spoken for a reconnect blip, which
+ * read aloud mid-sentence is noise.
+ */
+export function givenUpAnnouncement(state: ConnectionState | null): string {
+  if (state === null || !drawsGivenUp(state)) return ''
   if (isSyncOff(state)) return 'Live sync off'
-  if (!isNotKeeping(state)) return ''
   return state.keeper === 'daemon' ? 'Changes not saved yet' : 'Writing to this browser failed'
 }

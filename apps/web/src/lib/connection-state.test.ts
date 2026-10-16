@@ -8,9 +8,10 @@ import { createAppBadgeWriter } from './app-badge.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import {
   type ConnectionState,
+  drawsGivenUp,
+  givenUpAnnouncement,
   isNotKeeping,
   isSyncOff,
-  notKeepingAnnouncement,
   type SessionHealth,
   sessionHealthOf,
 } from './connection-state.js'
@@ -51,9 +52,7 @@ describe('the daemon session a page reports', () => {
   it('reads a load that built no session as not-opened, drawn as sync-off', () => {
     expect(sessionHealthOf(false, 'idle', SAVED, true)).toBe('not-opened')
     expect(isSyncOff({ keeper: 'daemon', session: 'not-opened' })).toBe(true)
-    expect(notKeepingAnnouncement({ keeper: 'daemon', session: 'not-opened' })).toBe(
-      'Live sync off',
-    )
+    expect(givenUpAnnouncement({ keeper: 'daemon', session: 'not-opened' })).toBe('Live sync off')
   })
   // A credential refused mid-session may have stranded what was typed.
   it('reads a refused credential as sync-off even with no session built', () => {
@@ -72,22 +71,22 @@ describe('a keeper that is not keeping', () => {
   it('includes a refused write to the offline replica copy', () => {
     expect(isNotKeeping({ keeper: 'replica', storage: 'failed' })).toBe(true)
     expect(isNotKeeping({ keeper: 'replica', storage: 'ok' })).toBe(false)
-    expect(notKeepingAnnouncement({ keeper: 'replica', storage: 'failed' })).toBe(
+    expect(givenUpAnnouncement({ keeper: 'replica', storage: 'failed' })).toBe(
       'Writing to this browser failed',
     )
-    expect(notKeepingAnnouncement({ keeper: 'replica', storage: 'ok' })).toBe('')
+    expect(givenUpAnnouncement({ keeper: 'replica', storage: 'ok' })).toBe('')
   })
 
   it('is announced in words about its own keeper', () => {
-    expect(notKeepingAnnouncement({ keeper: 'browser', storage: 'failed' })).toBe(
+    expect(givenUpAnnouncement({ keeper: 'browser', storage: 'failed' })).toBe(
       'Writing to this browser failed',
     )
-    expect(notKeepingAnnouncement({ keeper: 'daemon', session: 'sync-off' })).toBe('Live sync off')
-    expect(notKeepingAnnouncement({ keeper: 'daemon', session: 'write-failed' })).toBe(
+    expect(givenUpAnnouncement({ keeper: 'daemon', session: 'sync-off' })).toBe('Live sync off')
+    expect(givenUpAnnouncement({ keeper: 'daemon', session: 'write-failed' })).toBe(
       'Changes not saved yet',
     )
-    expect(notKeepingAnnouncement({ keeper: 'daemon', session: 'synced' })).toBe('')
-    expect(notKeepingAnnouncement(null)).toBe('')
+    expect(givenUpAnnouncement({ keeper: 'daemon', session: 'synced' })).toBe('')
+    expect(givenUpAnnouncement(null)).toBe('')
   })
 })
 
@@ -167,5 +166,15 @@ describe('the tab-wide signals over every connection state', () => {
       reload: !nothingHeldInTab(),
       leave: leaving.defaultPrevented,
     }).toEqual(row)
+  })
+
+  // The named predicate is what a new drawn consumer calls, so it has to be
+  // the set the mark actually breaks for — and the live region speaks for
+  // exactly that set, no more.
+  it.each(
+    rows.map(([state, row]) => [JSON.stringify(state), state, row] as const),
+  )('%s is drawn given up exactly when the mark breaks', (_label, state, row) => {
+    expect(drawsGivenUp(state)).toBe(row.mark)
+    expect(givenUpAnnouncement(state) !== '').toBe(row.mark)
   })
 })
