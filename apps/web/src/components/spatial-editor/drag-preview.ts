@@ -125,7 +125,7 @@ export function computeDragPreview(
       // which fan-out, sliding, and exposed-side selection all contradict.
       const { canvas } = connect
       // Hovering the source keeps the connect armed rather than creating
-      // an edge (see reducePointerUpConnecting), so it previews like empty
+      // an edge (see `reducePointerUp`'s connecting arm), so it previews like empty
       // space: a phantom zero-size node at the pointer, whose every side
       // anchor IS the pointer.
       const hovered = hitTest(connect.selectableBoxes, livePoint)

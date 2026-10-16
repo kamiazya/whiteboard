@@ -171,7 +171,7 @@ export function useDragLayers({
     // Same embed options as the committed scene: a ghost that drops an
     // expanded miniature back to a bare card mid-drag reads as data loss.
     // The carried nodes' own comments ride the ghost too (see
-    // commentExtensionFor): they are drawn at the node's corner, and the
+    // `commentsFor`): they are drawn at the node's corner, and the
     // corner is what is moving.
     const ghostComments = commentsFor(canvas, carried, true)
     // A riding comment's bubble is placed against what the COMMITTED scene

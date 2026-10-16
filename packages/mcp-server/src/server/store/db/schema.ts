@@ -58,8 +58,8 @@ interface VersionsTable {
   attestation: string | null
 }
 
-// Single-row key/value store for daemon-runtime markers (currentWorkspaceId,
-// daemonPid, daemonStartedAt, etc.). Keeps the FS clean of tiny dot-files.
+// Key/value store for daemon-runtime markers (today only
+// `currentWorkspaceId`); the daemon's pid and start time live in daemon.json.
 interface RuntimeTable {
   key: string
   value: string | null
